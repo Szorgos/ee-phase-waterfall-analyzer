@@ -13,8 +13,8 @@ Az **Aether** (magyarul *éter*, ógörögül *αἰθήρ – aithér*, a szikr
 Az audiofil világban az éteriség (*airiness*) a szent grál: az a pillanat, amikor megszűnik a hangsugárzók és fejhallgatók fizikai jelenléte. A hangok nem a hangszórók membránjából szólnak, hanem testet öltenek a térben, kristálytiszta lebegéssel, mikrodinamikával és holografikus színpadképpel. 
 
 Az **AetherAudio** ezt a filozófiát egyesíti a modern digitális jelfeldolgozással:
-* **Analitikus transzparencia:** Zéró késleltetésű C++20 algoritmusok, minimálfázisú és lineáris fázisú szűrők fázistorzulás nélküli átvitele.
-* **Akusztikai látásmód:** A rejtett rezonanciák és FIR előcsengések (pre-ringing) leleplezése a 3D vízesés-spektrogramon keresztül.
+* **Analitikus transzparencia:** Alacsony késleltetésű C++20 algoritmusok; választható minimálfázisú (IIR vagy FIR), köztes és lineáris fázisú szűrők.
+* **Akusztikai látásmód:** A rejtett rezonanciák és a lineáris fázisú szűrők előcsengésének (pre-ringing) megjelenítése a 3D vízesés-spektrogramon.
 * **Akusztikai tisztaság:** Teljes kontroll a fázis, a térhatás és a csúcsértékek felett, hogy a zene pontosan úgy szólaljon meg, ahogyan megszületett.
 
 ---
@@ -27,7 +27,7 @@ Az **AetherAudio** ezt a filozófiát egyesíti a modern digitális jelfeldolgoz
 
 1. **Élő 3D Akusztikai Vízesés & Spektrogram (Top-Strip WebGL Engine):**
    * Valós idejű, 60 FPS gördülés állítható időszeletekkel (60 – 240 lépcső).
-   * **FIR Pre-ringing automatikus észlelés:** Ragyogó fehér lecsengési foltokkal és HUD jelvénnyel mutatja ki a lineáris fázisú szűrők által keltett előcsengést.
+   * **Előcsengés (pre-ringing) jelzése:** Ragyogó fehér lecsengési foltokkal és HUD jelvénnyel mutatja ki a lineáris fázisú szűrők által keltett előcsengést.
    * Állítható hőtérkép és nézőpontok (3D Izometrikus, Felülnézeti 2D Hőtérkép, Szembőli Spektrum).
 
 2. **2D Analitikus Fázis- és Csoportkésleltetés ($-\frac{d\phi}{d\omega}$):**
@@ -43,8 +43,8 @@ Az **AetherAudio** ezt a filozófiát egyesíti a modern digitális jelfeldolgoz
 4. **Kézi Mesterkapcsolók Minden Modulhoz (Ki/Bekapcsolható lánc):**
    * **Parametrikus EQ:** Szabadon állítható sávok minimálfázisú (IIR) és lineáris fázisú (FIR) móddal.
    * **Crossfeed Szimulátor:** Bauer bs2b, Jan Meier Corda és Studio Nearfield térhatás-profilok a fejhallgatós sztereó izoláció megszüntetésére.
-   * **Convolver (Partícionált FIR):** Zéró késleltetésű szobaimpulzus (WAV/IRS) betöltés és előnézet.
-   * **True Peak Limiter & Soft-Clipper:** ITU-R BS.1770-4 szabványú -1.0 dBTP plafon 4x Lanczos túlmintavételezéssel.
+   * **Convolver (Partícionált FIR):** IR (WAV/IRS) betöltés és előnézet; a feldolgozási késleltetés nem nő az IR hosszával (az IR saját késleltetése megmarad). Szobakorrekcióhoz mérésből tervezett korrekciós szűrőt tölts be (pl. REW), ne a szoba nyers impulzusválaszát.
+   * **True Peak Limiter & Soft-Clipper (opcionális):** BS.1770-szerű, túlmintavételezett (1x–8x) mintaközi csúcsbecslés, alapértelmezett -1,0 dBTP plafon. A túlvezérlés ellen elsősorban a teljes EQ-görbéhez igazított előerősítés véd; a limiter biztonsági háló, nem hallásvédelem.
    * **Bass Enhancer:** Pszichoakusztikai hiányzó alaphang szintézis membránkímélő 30 Hz-es szub-vágással.
 
 5. **Zármentes (Lock-free) C++20 Ringbuffer és PipeWire SPA Integráció:**

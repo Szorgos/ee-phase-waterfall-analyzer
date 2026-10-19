@@ -153,13 +153,13 @@
         <option value="180">180 lépcső (Mély)</option>
       </select>
 
-      <!-- EQ MÓDVÁLASZTÓ: HIVATALOS EASYFFECTS / LSP KÓDOKKAL (IIR, FFT, SPM, FIR) -->
+      <!-- EQ MÓDVÁLASZTÓ: topológia (IIR / FIR) és fáziskarakter (minimál / köztes / lineáris) -->
       <span class="ctrl-label">EQ Mód:</span>
       <select id="selectEqMode" class="mini-select">
-        <option value="iir" selected>IIR (Minimálfázis, 0 ms pre-ring)</option>
-        <option value="fir_lin">FFT (Lineáris fázisú FIR, szimmetrikus)</option>
-        <option value="fir_int">SPM (Köztes fázis / Split-Phase, 5% pre-ring)</option>
-        <option value="fir_min">FIR Min (Minimálfázisú FIR, 0 ms pre-ring)</option>
+        <option value="iir" selected>IIR (minimálfázisú biquad, nincs előcsengés)</option>
+        <option value="fir_lin">Lineáris fázisú FIR (késleltet, előcsenghet)</option>
+        <option value="fir_int">Köztes fázisú FIR (kisebb késleltetés és előcsengés)</option>
+        <option value="fir_min">Minimálfázisú FIR (nincs előcsengés)</option>
       </select>
 
       <!-- NYQUIST DECRAMPING TÚLMINTAVÉTELEZÉS -->
@@ -167,7 +167,7 @@
       <select id="selectDecramp" class="mini-select" title="Nyquist Decramping túlmintavételezés a magasfrekvenciás torzulás ellen">
         <option value="none">Ki (Cramped)</option>
         <option value="2x">2x Túlmintavételezés</option>
-        <option value="4x" selected>4x (Ajánlott)</option>
+        <option value="4x" selected>4x (jó kiindulópont)</option>
         <option value="8x">8x Extrém</option>
       </select>
 
@@ -321,10 +321,10 @@ Filter 2: ON PK Fc 120 Hz Gain -8.5 dB Q 4.20
 Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
 
         <div style="background:#1a1e24; border:1px solid #2e3846; border-radius:6px; padding:8px 12px; font-size:0.74rem; color:#aaa; display:flex; flex-direction:column; gap:3px;">
-          <div style="color:var(--ee-green); font-weight:700;">✅ Intelligens Preamp & ISP Védelem (Logout.hu standard):</div>
+          <div style="color:var(--ee-green); font-weight:700;">✅ Intelligens előerősítés (Preamp):</div>
           <div>• <strong>Ha a fájlban van Preamp:</strong> Pontosan azt használja, nincs dupla levonás!</div>
-          <div>• <strong>Ha a fájlban nincs Preamp:</strong> Automatikusan a maximális emelés ellenértékére állítja a védelmet.</div>
-          <div>• <strong>True Peak Limiter:</strong> Bekapcsolja a -1.0 dBTP limitert 4x Lanczos túlmintavételezéssel.</div>
+          <div>• <strong>Ha a fájlban nincs Preamp:</strong> A <em>teljes eredő EQ-görbe</em> csúcsából számolja (az átfedő sávok összegét is figyelembe véve), kis tartalékkal.</div>
+          <div>• <strong>Limiter:</strong> opcionális biztonsági háló; az import nem kapcsolja be. Helyes előerősítés mellett nincs rá szükség.</div>
         </div>
 
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:2px;">
@@ -433,11 +433,11 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
                 <option value="131072">131 072 taps (~2.73 s) - Részletes</option>
               </select>
               <div id="convTapsBadge" class="status-badge optimal">
-                ✅ Késleltetés: 0.0 ms (Zéró latency partíció)
+                ✅ Feldolgozási késleltetés: nem nő a tapszámmal
               </div>
             </div>
             <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
-              A partícionált feldolgozás megszünteti a hosszú FIR szűrők bemeneti késleltetését.
+              A particionált feldolgozás miatt a pufferelési késleltetés nem nő az IR hosszával. Az IR <em>saját</em> késleltetése (pl. egy lineáris fázisú szűrő csúcsa a közepén) viszont megmarad.
             </small>
           </div>
 
@@ -446,11 +446,11 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <span class="title">Fázis Feldolgozás</span>
             <div style="display:flex; flex-direction:column; gap:6px; margin-top:4px;">
               <select id="convPhaseMode" class="ee-select" onchange="updateConvolverSettings()">
-                <option value="min" selected>Minimálfázisúvá alakítás [Ajánlott]</option>
-                <option value="linear">Eredeti fázis (Linear / True IR)</option>
+                <option value="min" selected>Minimálfázisúvá alakítás (korrekciós szűrőhöz)</option>
+                <option value="linear">Eredeti fázis (zengetéshez, térszimulációhoz)</option>
               </select>
               <div id="convPhaseBadge" class="status-badge optimal">
-                ✅ 0 ms előcsengés (Nincs akusztikai pre-ring)
+                ✅ Nincs előcsengés (a zengetés jellegét megváltoztathatja)
               </div>
             </div>
             <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
@@ -497,7 +497,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
 
         <p class="module-desc">
           Megakadályozza, hogy az EQ-ban vagy a szobakorrekcióban végzett emelések miatt a DAC analóg rekonstrukciós szűrője digitális túlvezérlésbe fusson. 
-          Az állítható paramétereknél a <strong>zöld színjelzés</strong> jelöli a Logout.hu cikkünkben bemutatott optimális audiofil beállítást.
+          A túlvezérlés ellen elsősorban a helyes (a teljes EQ-görbéhez igazított) előerősítés véd; a limiter <strong>opcionális biztonsági háló</strong>, és nem hallásvédelmi eszköz. A <strong>zöld színjelzés</strong> jó kiinduló beállítást jelöl, nem garantált határértéket.
         </p>
 
         <div class="param-grid" style="grid-template-columns: repeat(3, 1fr);">
@@ -512,10 +512,10 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
               <input type="number" id="limiterCeilingInput" min="-6.0" max="0.0" step="0.1" value="-1.0" class="ee-input" style="width:60px;" oninput="updateLimiterCeiling(this.value, false)">
             </div>
             <div id="limiterCeilingBadge" class="status-badge optimal" style="margin-top:6px;">
-              ✅ Optimális (Kivédi a DAC inter-sample clip-et)
+              ✅ Jó kiindulópont (tartalék a mintaközi csúcsoknak)
             </div>
             <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
-              Ajánlás: -1.0 dBTP a legbiztonságosabb határérték minden DAC típushoz.
+              -1,0 dBTP konzervatív kiindulópont (EBU R 128). A tényleges true peak szintet a kimeneten mérd.
             </small>
           </div>
 
@@ -524,17 +524,17 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <span class="title">Túlmintavételezés (Oversampling)</span>
             <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
               <select id="limiterOversampling" class="ee-select" onchange="updateLimiterOversampling()">
-                <option value="1x">1x (Nincs túlmintavételezés - CPU kímélő)</option>
-                <option value="2x">2x Oversampling (Alapszintű ISP védelem)</option>
-                <option value="4x" selected>4x Lanczos [Ajánlott - Logout cikk standard]</option>
-                <option value="8x">8x Lanczos (Maximális stúdió precizitás)</option>
+                <option value="1x">1x (csak mintaérték-csúcs, CPU-kímélő)</option>
+                <option value="2x">2x true peak érzékelés</option>
+                <option value="4x" selected>4x true peak érzékelés (jó kiindulópont)</option>
+                <option value="8x">8x true peak érzékelés (pontosabb, több CPU)</option>
               </select>
               <div id="limiterOversamplingBadge" class="status-badge optimal">
-                ✅ 4x Lanczos: Zéró analóg túlcsordulás
+                ✅ 4x: mintaközi csúcsok becslése
               </div>
             </div>
             <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
-              A 4x Lanczos interpoláció az analóg hullámforma csúcsait is levadássza.
+              A detektor interpolációval becsli a mintaközi csúcsokat; ez csökkenti, de nem zárja ki a kimeneti túllépést.
             </small>
           </div>
 
@@ -1157,6 +1157,25 @@ function evalChain(f) {
   return { mag_db, phase_deg, delay_ms: tot_delay };
 }
 
+// A teljes eredő EQ-görbe legnagyobb erősítése (dB) 20 Hz – 20 kHz között.
+// Az átfedő sávok összeadódnak, ezért ez nagyobb lehet a legnagyobb egyedi sáv-gainnél.
+function curvePeakDb() {
+  let peak = -Infinity;
+  const N = 600;
+  for (let i = 0; i <= N; i++) {
+    const f = Math.pow(10, Math.log10(20) + (Math.log10(20000) - Math.log10(20)) * i / N);
+    const m = evalChain(f).mag_db;
+    if (m > peak) peak = m;
+  }
+  return peak;
+}
+// Negatív előerősítés a görbe csúcsához, ~0,3 dB tartalékkal, felfelé 0,5 dB-re kerekítve.
+function autoGuardPreamp() {
+  const pk = curvePeakDb();
+  if (!(pk > 0)) return 0.0;
+  return -Math.ceil((pk + 0.3) * 2) / 2;
+}
+
 const MIN_F = 20, MAX_F = 20000;
 const LOG_MIN = Math.log10(MIN_F), LOG_MAX = Math.log10(MAX_F);
 
@@ -1504,7 +1523,7 @@ function applyEqModeUi(mode) {
   if (sel) {
     sel.title = mode === 'fir_lin' ? "Lineáris fázis: ~85 ms késleltetés 48 kHz-en (8192 tap), szimmetrikus előcsengés"
               : mode === 'fir_int' ? "Köztes fázis: ~8,5 ms késleltetés, mérsékelt előcsengés"
-              : mode === 'fir_min' ? "Minimálfázisú FIR: 0 késleltetés, nincs előcsengés"
+              : mode === 'fir_min' ? "Minimálfázisú FIR: elhanyagolható késleltetés, nincs előcsengés"
               : "IIR biquad lánc: 0 késleltetés";
   }
 }
@@ -1760,9 +1779,9 @@ function applyParsedAutoEqProfile(text, modelName, sourceName) {
     }
   } else {
     // HA NEM VOLT PREAMP: csak akkor számol az Auto-Guard
-    if (maxBoostFound > 0) {
-      finalPreamp = -Math.round(maxBoostFound * 10) / 10;
-      preampNote = "A fájl nem tartalmazott preampot -> Auto-Guard állította be";
+    if (curvePeakDb() > 0.05) {
+      finalPreamp = autoGuardPreamp();
+      preampNote = "A fájl nem tartalmazott preampot -> Auto-Guard: a teljes EQ-görbe csúcsából, tartalékkal";
       const badgePreamp = document.getElementById("badgePreampOrigin");
       if (badgePreamp) {
         badgePreamp.className = "status-badge info";
@@ -1804,8 +1823,8 @@ function applyParsedAutoEqProfile(text, modelName, sourceName) {
         `• Preamp: ${finalPreamp.toFixed(1)} dB\n` +
         `  ↳ ${preampNote}\n` +
         `• Szűrősávok: ${nodes.length} db parametrikus pont\n` +
-        `• True Peak Limiter: -1.0 dBTP (4x Lanczos aktív)\n` +
-        `• Szűrési Mód: IIR Minimálfázis (0 ms pre-ringing)`);
+        `• Limiter: opcionális (beállítva: -1,0 dBTP, 4x; állapota nem változott)\n` +
+        `• Szűrési mód: IIR (minimálfázisú, nincs előcsengés)`);
 }
 
 document.getElementById("btnImportAutoEq").onclick = () => {
@@ -1897,9 +1916,9 @@ function processAutoEqImport() {
     }
   } else {
     // A FÁJL NEM TARTALMAZOTT PREAMPOT: csak ekkor számol az Auto-Guard!
-    if (maxBoostFound > 0) {
-      finalPreamp = -Math.round(maxBoostFound * 10) / 10;
-      preampNote = "A fájl nem tartalmazott preampot -> Auto-Guard állította be a kiemelések kivédésére";
+    if (curvePeakDb() > 0.05) {
+      finalPreamp = autoGuardPreamp();
+      preampNote = "A fájl nem tartalmazott preampot -> Auto-Guard: a teljes EQ-görbe csúcsából, tartalékkal";
       const badgePreamp = document.getElementById("badgePreampOrigin");
       if (badgePreamp) {
         badgePreamp.className = "status-badge info";
@@ -1925,16 +1944,11 @@ function processAutoEqImport() {
   setModuleActive('convolver', false);
   setModuleActive('bass', false);
 
-  let limiterInfo = "KIKAPCSOLVA (Nem volt kiemelés, a kimenet biztonságos)";
-  if (maxBoostFound > 0) {
-    setModuleActive('limiter', true);
-    updateLimiterCeiling(-1.0, false);
-    document.getElementById("limiterOversampling").value = "4x";
-    updateLimiterOversampling();
-    limiterInfo = "BEKAPCSOLVA (-1.0 dBTP plafon, 4x Lanczos védelem az emelések miatt)";
-  } else {
-    setModuleActive('limiter', false);
-  }
+  // A limiter opcionális biztonsági háló: az import csak beállítja, de nem kapcsolja be/ki.
+  updateLimiterCeiling(-1.0, false);
+  document.getElementById("limiterOversampling").value = "4x";
+  updateLimiterOversampling();
+  const limiterInfo = "opcionális (beállítva: -1,0 dBTP, 4x; állapota nem változott)";
 
   isFirMode = false;
   btnFirMode.innerText = "Mód: Minimálfázis (IIR)";
@@ -1949,9 +1963,9 @@ function processAutoEqImport() {
         `• Equalizer: BEKAPCSOLVA (${nodes.length} sáv aktív)\n` +
         `• Beállított Preamp: ${finalPreamp.toFixed(1)} dB\n` +
         `  ↳ ${preampNote}\n` +
-        `• True Peak Limiter: ${limiterInfo}\n` +
+        `• Limiter: ${limiterInfo}\n` +
         `• Crossfeed, Convolver, Bass Enhancer: KIKAPCSOLVA (Bármikor kézzel bekapcsolható)\n` +
-        `• Szűrési mód: Minimálfázis (IIR - 0 ms pre-ringing)`);
+        `• Szűrési mód: IIR (minimálfázisú, nincs előcsengés)`);
 }
 document.getElementById("btnDeleteNode").onclick = () => {
   if (nodes.length <= 1) return;
@@ -2192,22 +2206,22 @@ function updateConvolverSettings() {
   const tapsBadge = document.getElementById("convTapsBadge");
   if (taps === "16384") {
     tapsBadge.className = "status-badge info";
-    tapsBadge.innerText = "ℹ️ Késleltetés: 0.0 ms (Gyors reakció, kisebb felbontás)";
+    tapsBadge.innerText = "ℹ️ Rövidebb IR: kisebb mélyfrekvenciás felbontás";
   } else if (taps === "65536") {
     tapsBadge.className = "status-badge optimal";
-    tapsBadge.innerText = "✅ Késleltetés: 0.0 ms (Zéró latency partíció - Optimális)";
+    tapsBadge.innerText = "✅ Feldolgozási késleltetés: nem nő a tapszámmal";
   } else {
     tapsBadge.className = "status-badge info";
-    tapsBadge.innerText = "ℹ️ Késleltetés: 0.0 ms (Extrém szobakorrekciós felbontás)";
+    tapsBadge.innerText = "ℹ️ Hosszú IR: részletes szobakorrekcióhoz";
   }
 
   const phaseBadge = document.getElementById("convPhaseBadge");
   if (phase === "min") {
     phaseBadge.className = "status-badge optimal";
-    phaseBadge.innerText = "✅ 0 ms előcsengés (Nincs akusztikai pre-ring)";
+    phaseBadge.innerText = "✅ Nincs előcsengés (a zengetés jellegét megváltoztathatja)";
   } else {
     phaseBadge.className = "status-badge caution";
-    phaseBadge.innerText = "⚠️ Eredeti fázis (Enyhe előcsengés előfordulhat)";
+    phaseBadge.innerText = "⚠️ Eredeti fázis: az IR saját késleltetése és esetleges előcsengése megmarad";
   }
 
   drawConvWaveform();
@@ -2288,7 +2302,7 @@ function drawConvWaveform() {
     // 0 ms címke
     ctx.fillStyle = "#33d17a";
     ctx.font = "10px monospace";
-    ctx.fillText("0 ms (Tranziens csúcs - Zéró pre-ringing)", 35, 18);
+    ctx.fillText("Csúcs az elején – nincs előcsengés", 35, 18);
   } else {
     // Lineáris fázis: szimmetrikus impulzus a közepén (x = w / 2), előtte és utána is rezgésekkel!
     ctx.strokeStyle = "#ff7800";
@@ -2328,15 +2342,15 @@ function updateLimiterCeiling(val, fromSlider) {
 
   if (v <= -1.0) {
     badge.className = "status-badge optimal";
-    badge.innerText = "✅ Optimális (Kivédi a DAC inter-sample clip-et)";
+    badge.innerText = "✅ Jó kiindulópont (tartalék a mintaközi csúcsoknak)";
     lbl.style.color = "var(--ee-green)";
   } else if (v <= -0.4) {
     badge.className = "status-badge caution";
-    badge.innerText = "⚠️ Figyelem (Bizonyos DAC-oknál ISP előfordulhat)";
+    badge.innerText = "⚠️ Kis tartalék: mintaközi csúcsok átjuthatnak";
     lbl.style.color = "var(--ee-orange)";
   } else {
     badge.className = "status-badge danger";
-    badge.innerText = "❌ Veszélyes (0 dBFS közelében a DAC szűrője torzítani fog!)";
+    badge.innerText = "❌ Nincs tartalék: mintaközi csúcsok a kimeneten levágódhatnak";
     lbl.style.color = "#ed333b";
   }
 }
@@ -2346,16 +2360,16 @@ function updateLimiterOversampling() {
   const badge = document.getElementById("limiterOversamplingBadge");
   if (sel === "1x") {
     badge.className = "status-badge danger";
-    badge.innerText = "❌ Nincs túlmintavételezés (Inter-Sample Peak veszély!)";
+    badge.innerText = "⚠️ Csak mintaérték-csúcs: a mintaközi csúcsokat nem látja";
   } else if (sel === "2x") {
     badge.className = "status-badge caution";
-    badge.innerText = "⚠️ 2x Oversampling (Alapszintű ISP védelem)";
+    badge.innerText = "ℹ️ 2x: durvább mintaközi becslés";
   } else if (sel === "4x") {
     badge.className = "status-badge optimal";
-    badge.innerText = "✅ 4x Lanczos: Zéró analóg túlcsordulás [Ajánlott]";
+    badge.innerText = "✅ 4x: mintaközi csúcsok becslése";
   } else {
     badge.className = "status-badge info";
-    badge.innerText = "ℹ️ 8x Lanczos: Stúdió precizitás (Magasabb CPU)";
+    badge.innerText = "ℹ️ 8x: pontosabb becslés (több CPU)";
   }
 }
 
