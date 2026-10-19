@@ -1,54 +1,66 @@
 # AetherAudio • Windows 11 verzió
 
-A Linuxos PipeWire csomópont Windowsos párja. Két részből áll, amelyek külön-külön is működnek:
+## Telepítés (egy fájl, minden automatikus)
 
-| Fájl | Mi ez | Mit tud |
-|---|---|---|
-| `AetherAudio.exe` | Motor (konzolos alkalmazás) | Valódi FFT-spektrum a 3D vízeséshez, WebSocket híd a GUI-hoz (`ws://127.0.0.1:8080`), beállítások mentése |
-| `AetherAudio.dll` | Equalizer APO plugin (VST 2.4) | A DSP lánc (Preamp → EQ → Crossfeed → Limiter) az `audiodg.exe`-ben, élőben a GUI-ról vezérelve |
-| `gui\gui_integrated_system.html` | A meglévő felület | Ugyanaz, mint Linuxon; magától csatlakozik a motorhoz |
+Futtasd az **`AetherAudio-Setup.exe`**-t. A varázsló:
 
-> **Miért VST2 és nem VST3?** Az Equalizer APO csak VST 2.4 pluginokat tud betölteni. A plugin saját, a Steinberg SDK-tól független VST2 bináris interfészt használ (`windows/plugin/vst2_abi.hpp`).
+1. bemásolja a programot (alapból `C:\Program Files\AetherAudio`);
+2. felismeri az **Equalizer APO**-t. Ha nincs telepítve, felajánlja a letöltését (sourceforge.net) és elindítja a telepítőjét. Ott jelöld be azt a hangeszközt, amin zenét hallgatsz, a végén pedig indítsd újra a gépet;
+3. bemásolja a plugint az EQ APO `VSTPlugins\AetherAudio` mappájába, és a `config.txt` **végére** egyetlen sort tesz: `Include: AetherAudio.txt`. A saját szűrőid érintetlenek maradnak, a régi `config.txt`-ről mentés készül (`config.txt.aetheraudio-backup`);
+4. Start menü és asztali parancsikont, opcionálisan automatikus indítást hoz létre;
+5. bejegyzi magát a *Gépház → Alkalmazások* (Programok és szolgáltatások) listába, rendes eltávolítóval.
 
-## Két üzemmód
+Frissítéskor ugyanezt a telepítőt kell futtatni. A futó motort bezárja, és a zenelejátszás közben zárolt plugin-DLL-t is kicseréli: a régi példány félreáll, és újraindításkor törlődik.
 
-**1. Csak analízis (plugin nélkül).** Indítsd el az `AetherAudio.exe`-t. A motor WASAPI loopbackkel az alapértelmezett lejátszóeszköz kimenetét elemzi, eszközváltáskor automatikusan átáll. A GUI-n a jelvény: *„Élő analízis – WASAPI loopback”*. Ebben a módban a GUI DSP-beállításai **nem** hatnak a hangra (Windowson a rendszerhangot csak APO-n keresztül lehet módosítani).
+Az **eltávolító** visszavesz mindent: az `Include` sort, a plugint, a parancsikonokat, az automatikus indítást és a programmappát. A mentett beállítások törléséről külön rákérdez. Az Equalizer APO megmarad.
 
-**2. Teljes lánc (EQ APO pluginnal).** Ha az `AetherAudio.dll` benne van az Equalizer APO láncban, a motor automatikusan róla veszi a jelet. A vízesés pontosan a plugin helyén mér, a GUI-n állított preamp/EQ/crossfeed/limiter pedig élőben szól. Jelvény: *„Élő – EQ APO plugin • 48.0 kHz”*.
+Csendes telepítés (rendszergazdáknak):
 
-## Telepítés
+```
+AetherAudio-Setup.exe /S [/D=C:\Mappa] [/NOAPO] [/DOWNLOADAPO]
+"C:\Program Files\AetherAudio\Uninstall.exe" /uninstall /S
+```
 
-1. Telepítsd az [Equalizer APO](https://sourceforge.net/projects/equalizerapo/)-t, és a Device Selectorban válaszd ki a lejátszóeszközt.
-2. Futtasd a csomagban lévő `install_eqapo_plugin.ps1`-et (jobb klikk → *Futtatás PowerShell-lel*; rendszergazdai jogot kér). Ez:
-   - bemásolja a DLL-t ide: `C:\Program Files\EqualizerAPO\VSTPlugins\AetherAudio\`
-     (a felhasználói mappákat – pl. Letöltések – az `audiodg.exe` nem tudja olvasni, ezért kell ide);
-   - előkészíti a `C:\ProgramData\AetherAudio\` mappát (beállítások + plugin napló).
-3. Az Equalizer APO **Configuration Editorában**: `+` → *Plugins* → *VST plugin*, és válaszd ki a bemásolt `AetherAudio.dll`-t. Oda tedd a láncban, ahol mérni akarsz: a lánc **végére**, ha azt akarod látni, ami ténylegesen kimegy a DAC-ra. Mentés (Ctrl+S).
-4. Indítsd az `AetherAudio.exe`-t. Megnyitja a GUI-t az alapértelmezett böngészőben.
-
-A plugin alapállapotban **bit-pontosan átlátszó**: amíg a GUI-ban nem állítasz semmit, csak „lehallgat”. Ha az EQ APO-ban már van saját EQ-d (pl. AutoEq profil), ne kapcsold be mellé a GUI EQ-ját is, különben kétszer szól.
-
-### Plugin paraméterek (EQ APO szerkesztőben)
-- **Bypass** – a DSP lánc kikerülése (a jel ettől még megy az analizátorba).
-- **Remote** – BE: a GUI vezérli a láncot (alapértelmezés). KI: a plugin a betöltéskori mentett állapotnál marad.
-
-A GUI utolsó beállítása a `C:\ProgramData\AetherAudio\params.bin` fájlba mentődik; a plugin ezt tölti be indításkor, így a lánc akkor is él, ha az `AetherAudio.exe` nem fut.
+> Az `AetherAudio-Setup.exe` nincs digitálisan aláírva, ezért a Windows SmartScreen első indításkor figyelmeztethet: *További információ → Futtatás mindenképp*.
 
 ## Használat
 
-```
-AetherAudio.exe            # motor + GUI megnyitása
-AetherAudio.exe --no-gui   # csak motor (pl. automatikus indításhoz)
-```
+Az AetherAudio a **tálcán** (értesítési területen) fut, konzolablak nélkül:
 
-Automatikus indításhoz tegyél egy parancsikont a `--no-gui` kapcsolóval ide: `shell:startup`.
+- **kattintás / dupla kattintás** az ikonon: megnyílik a felület a böngészőben;
+- **jobb kattintás**: aktuális jelforrás, *Indítás a Windows-zal* ki/be, *Napló megnyitása*, *Kilépés*.
+
+A felület jelvénye mutatja, honnan jön a jel:
+
+| Jelvény | Jelentés |
+|---|---|
+| **Élő – EQ APO plugin • 48.0 kHz** | Teljes működés: a vízesés a lánc végén mér, a felületen állított DSP élőben szól |
+| **Élő analízis – WASAPI loopback** | Nincs aktív plugin: csak analízis, a DSP beállítások nem hatnak a hangra |
+| **Motor Offline (Szimuláció)** | Nem fut az `AetherAudio.exe` |
+
+A beállítások (EQ, modulok, betöltött impulzusválasz) a `C:\ProgramData\AetherAudio\` mappába mentődnek. A plugin onnan tölti be őket, így a lánc akkor is él, ha a motor nem fut.
+
+## DSP modulok
+
+| Modul | Megvalósítás |
+|---|---|
+| **EQ – IIR** | Biquad lánc (RBJ), 0 késleltetés |
+| **EQ – FFT (lineáris fázis)** | A teljes EQ görbéből tervezett szimmetrikus FIR (8192 tap 48 kHz-en). Késleltetés ~85 ms; a videó hangja ennyit csúszhat |
+| **EQ – SPM (köztes fázis)** | Fél-minimálfázisú FIR, ~8,5 ms késleltetés, mérsékelt előcsengés |
+| **EQ – FIR Min** | Minimálfázisú FIR (cepstrum módszer), 0 késleltetés |
+| **Crossfeed** | Bauer / Meier / Stúdió preset, vagy egyedi vágási frekvencia és szint |
+| **Convolver** | Egyenletesen partícionált FFT konvolver, 0 többletkésleltetéssel (az első 256 minta közvetlen konvolúcióval). WAV/IRS betöltés (16/24/32 bit, float), automatikus újramintavételezés a lejátszás mintavételére, opcionális minimálfázisúvá alakítás, csúcsra normalizálás + trim gain. Max. 262 144 minta |
+| **Bass Enhancer** | Pszichoakusztikai mélyhang: 2./3. felharmonikus generálás burkoló-normalizált Csebisev-polinomokkal, sávszűrés, 4. rendű mélyvágás |
+| **Limiter** | Plafon és felengedési idő a felületről |
+
+A FIR tervezés és az impulzusválasz-előkészítés külön háttérszálon fut. A kész szűrőt a hangszál zármentesen veszi át, egy blokknyi keresztúsztatással, így váltáskor nincs kattanás.
 
 ## Hibaelhárítás
 
-- **A jelvény „Motor Offline”**: nem fut az `AetherAudio.exe`, vagy a 8080-as portot más program foglalja (a motor ezt kiírja).
-- **Fut a plugin, de a motor loopbacket használ**: nézd meg a `C:\ProgramData\AetherAudio\plugin_status.txt` naplót. Itt látszik, hogy a plugin betöltődött-e, és a közös memóriát a *Global* (audiodg) vagy a *Local* névtérben hozta-e létre.
-- **Csend esetén**: az EQ APO szünetben nem hívja a plugint. Ilyenkor a vízesés lecseng, a forrás 10 percig plugin marad.
-- A híd csak a `127.0.0.1` címen figyel, tűzfalszabály nem kell, és a helyi hálózatról nem vezérelhető.
+- **Napló:** tálcaikon → *Napló megnyitása* (`%LOCALAPPDATA%\AetherAudio\engine.log`). A plugin naplója: `C:\ProgramData\AetherAudio\plugin_status.txt`. Itt látszik, hogy az `audiodg.exe` betöltötte-e, és milyen beállítással.
+- **„Élő analízis – WASAPI loopback” a plugin telepítése után:** frissen telepített Equalizer APO után újraindítás kell. Az EQ APO *Device Selector*-ában ellenőrizd, hogy a használt eszköz be van-e jelölve.
+- **Lejátszás szünetében** az EQ APO nem hívja a plugint; a vízesés ilyenkor lecseng, és ez nem hiba.
+- A motor csak a `127.0.0.1:8080` címen figyel, tűzfalszabály nem kell. Ha a port foglalt, indításkor üzenetet kapsz.
 
 ## Fordítás
 
@@ -56,7 +68,7 @@ Automatikus indításhoz tegyél egy parancsikont a `--no-gui` kapcsolóval ide:
 ```bash
 cmake -B build-win -S . -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_TOOLCHAIN_FILE=windows/toolchain-llvm-mingw.cmake -DLLVM_MINGW_ROOT=/opt/llvm-mingw
-cmake --build build-win
+cmake --build build-win      # -> AetherAudio-Setup.exe, AetherAudio.exe, AetherAudio.dll, tesztek
 ```
 
 **Windowson** (Visual Studio 2022 + CMake):
@@ -65,10 +77,11 @@ cmake -B build -S . -A x64
 cmake --build build --config Release
 ```
 
-Mindkét esetben az eredmény: `AetherAudio.exe`, `AetherAudio.dll`, valamint a tesztek (`test_core.exe` stb.). A MinGW-s binárisok statikusan linkeltek, csak a Windows saját DLL-jeit (UCRT) használják.
+Kipróbálás EQ APO nélkül: az `eqapo_host_sim.exe <AetherAudio.dll>` úgy tölti be a plugint, ahogy az Equalizer APO. Három tesztszinuszt küld át rajta, és másodpercenként kiírja a kimenő szinteket. Közben a motor felülete élőben vezérelhető.
 
 ## Ismert korlátok
 
-- A **Bass Enhancer** és a **Convolver** (IR betöltés) csak a GUI-ban létezik, a C++ láncban még nincs megvalósítva; a kapcsolójuk jelenleg nem változtat a hangon.
-- A GUI **FIR / lineáris fázisú** EQ módja és az előcsengés-jelölés szimuláció. Élő spektrumnál ezért nem rajzolódik rá a vízesésre.
-- Csak sztereó (2 csatornás) eszközre tervezve; többcsatornás eszköznél az EQ APO `Channel:` parancsával szűkítsd a plugint L/R-re.
+- A limiter mintaérték-alapú (sample peak). A felületen látható túlmintavételezés (true peak) és előretekintés (lookahead) beállítás még nem hat a C++ láncra; ugyanez igaz a fejléc „Decramp” választójára.
+- A crossfeed ITD (fej-késleltetés) mezője még nem hat; a vágási frekvencia és a szint igen.
+- Csak sztereó feldolgozás: többcsatornás eszköznél az EQ APO a plugint csatornapáronként példányosítja, az analizátor az első párt (L/R) mutatja.
+- Az alkalmazás és a telepítő nincs digitálisan aláírva.

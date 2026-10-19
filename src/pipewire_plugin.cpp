@@ -39,8 +39,7 @@ int main(int argc, char* argv[]) {
     current.set(kFlagLimiter, true);
     current.set(kFlagInitialized, true);
     current.crossfeedPreset = 0; // Bauer bs2b
-    node.pipeline.limiter.thresholdDb = -0.2;
-    node.pipeline.limiter.ceilingDb = -0.1;
+    current.limiterCeilingDb = -0.1f;
     node.params.write(current);
 
     std::cout << "[1] DSP lánc felkonfigurálva (-2 dB Preamp, Bauer Crossfeed, -0.1 dB True Peak Limiter).\n";
@@ -72,6 +71,8 @@ int main(int argc, char* argv[]) {
         node.params.write(p);
     };
     cb.statusFields = [&]() { return std::string("\"source\":\"PipeWire\",\"platform\":\"linux\""); };
+    cb.setIr = [&](IrData&& ir) { node.chain.submitIr(std::move(ir)); };
+    cb.getIr = [&]() { return node.chain.irCopy(); };
 
     WebSocketBridge bridge(8080);
     g_bridge = &bridge;

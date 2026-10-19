@@ -1,0 +1,31 @@
+#pragma code_page(65001)
+// Közös verzióinformáció (a CMake tölti ki)
+#include <winver.h>
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION     @AA_VER_COMMA@
+ PRODUCTVERSION  @AA_VER_COMMA@
+ FILEFLAGSMASK   0x3fL
+ FILEFLAGS       0x0L
+ FILEOS          VOS_NT_WINDOWS32
+ FILETYPE        @AA_FILETYPE@
+ FILESUBTYPE     0x0L
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040E04B0"
+    BEGIN
+      VALUE "CompanyName",      "AetherAudio\0"
+      VALUE "FileDescription",  "@AA_DESC@\0"
+      VALUE "FileVersion",      "@PROJECT_VERSION@\0"
+      VALUE "InternalName",     "@AA_NAME@\0"
+      VALUE "OriginalFilename", "@AA_FILE@\0"
+      VALUE "ProductName",      "AetherAudio\0"
+      VALUE "ProductVersion",   "@PROJECT_VERSION@\0"
+      VALUE "LegalCopyright",   "Sass Gergő – nyílt forráskód\0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x040E, 1200
+  END
+END

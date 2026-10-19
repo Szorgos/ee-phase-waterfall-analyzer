@@ -8,6 +8,9 @@
  *   2. WASAPI loopback – az alapértelmezett lejátszóeszköz kimenete (csak analízis, plugin nélkül).
  *
  * A GUI (gui_integrated_system.html) a ws://127.0.0.1:8080 hídon csatlakozik, ugyanúgy, mint Linuxon.
+ *
+ * Konzolablak nélküli háttéralkalmazás tálcaikonnal (dupla katt: felület, jobb klikk: menü).
+ * Kapcsolók: --background (indításkor nem nyitja meg a felületet), --console (naplózás konzolba), --port N
  */
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -33,21 +36,11 @@
 #include "param_apply.hpp"
 #include "../common/win_shared.hpp"
 #include "wasapi_loopback.hpp"
+#include "tray.hpp"
 
 using namespace ee_analyzer;
 
 namespace {
-
-std::atomic<bool> g_running{true};
-
-BOOL WINAPI consoleHandler(DWORD type) {
-    if (type == CTRL_C_EVENT || type == CTRL_BREAK_EVENT || type == CTRL_CLOSE_EVENT ||
-        type == CTRL_LOGOFF_EVENT || type == CTRL_SHUTDOWN_EVENT) {
-        g_running = false;
-        return TRUE;
-    }
-    return FALSE;
-}
 
 std::wstring exeDirectory() {
     wchar_t buf[MAX_PATH];
@@ -95,6 +88,10 @@ public:
                           << (mapping_.isGlobal() ? "Global" : "Local") << ").\n";
                 // A GUI-ban beállított, mentett lánc átadása a pluginnak
                 if (currentParams.has(kFlagInitialized)) mapping_.state()->params.write(currentParams);
+                {
+                    std::lock_guard<std::mutex> ik(irMutex_);
+                    if (!ir_.empty()) win::writeIrBlock(mapping_.state()->ir, ir_);
+                }
                 pluginReadPos_ = mapping_.state()->tap.writePos.load();
             }
         }
@@ -138,9 +135,54 @@ public:
         return loopback_.sampleRate();
     }
 
+    /** Új konvolver IR a GUI-ból: tárolás, mentés a pluginnak, és átadás a közös memórián. */
+    void setIr(IrData&& ir) {
+        {
+            std::lock_guard<std::mutex> ik(irMutex_);
+            ir_ = std::move(ir);
+            if (!win::saveIrFile(ir_)) std::cout << "[IR] Figyelem: az ir.bin nem menthető a ProgramData mappába.\n";
+        }
+        std::lock_guard<std::mutex> lk(mutex_);
+        if (mapping_.state()) {
+            std::lock_guard<std::mutex> ik(irMutex_);
+            if (ir_.empty()) {
+                // "Nincs IR" jelzése: üres blokk új sorszámmal
+                IrData none;
+                win::writeIrBlock(mapping_.state()->ir, none);
+            } else {
+                win::writeIrBlock(mapping_.state()->ir, ir_);
+            }
+        }
+    }
+
+    IrData irCopy() {
+        std::lock_guard<std::mutex> ik(irMutex_);
+        return ir_;
+    }
+
+    void loadStoredIr() {
+        IrData ir;
+        if (win::loadIrFile(ir)) {
+            std::cout << "[IR] Mentett impulzusválasz: " << ir.name << " (" << ir.frames() << " minta)\n";
+            std::lock_guard<std::mutex> ik(irMutex_);
+            ir_ = std::move(ir);
+        }
+    }
+
     void pushParams(const ParamData& p) {
         std::lock_guard<std::mutex> lk(mutex_);
         if (mapping_.state()) mapping_.state()->params.write(p);
+    }
+
+    /** Rövid, emberi leírás a tálcaikonhoz. */
+    std::wstring label() {
+        std::lock_guard<std::mutex> lk(mutex_);
+        if (pluginActive_ && mapping_.state()) {
+            wchar_t buf[96];
+            swprintf(buf, 96, L"EQ APO plugin (%.1f kHz)", mapping_.state()->sampleRate.load() / 1000.0);
+            return buf;
+        }
+        return L"WASAPI loopback – " + win::utf8ToWide(loopback_.deviceName());
     }
 
     std::string statusFields() {
@@ -191,29 +233,43 @@ private:
     uint64_t pluginReadPos_ = 0;
     uint64_t loopbackReadPos_ = 0;
     uint64_t lastPluginData_ = 0;
+    std::mutex irMutex_;
+    IrData ir_;
 };
 
 } // namespace
 
 int main(int argc, char** argv) {
-    SetConsoleOutputCP(CP_UTF8);
-    SetConsoleCtrlHandler(consoleHandler, TRUE);
+    const bool console = hasArg(argc, argv, "--console");
+    win::LogSink log(console);
 
     std::cout << "========================================================\n";
     std::cout << " AetherAudio • Fázis & Akusztikai Vízesés – Windows motor\n";
     std::cout << "========================================================\n\n";
 
     if (hasArg(argc, argv, "--help") || hasArg(argc, argv, "-h")) {
-        std::cout << "Használat: AetherAudio.exe [--no-gui] [--port N]\n"
-                     "  --no-gui   ne nyissa meg automatikusan a böngészős felületet\n"
-                     "  --port N   WebSocket port (alapértelmezés: 8080; a GUI a 8080-at használja)\n";
+        std::cout << "Használat: AetherAudio.exe [--background] [--console] [--port N]\n"
+                     "  --background  indításkor ne nyissa meg a felületet (automatikus indításhoz)\n"
+                     "  --console     naplózás konzolablakba a napló fájl helyett\n"
+                     "  --port N      WebSocket port (alapértelmezés: 8080; a GUI a 8080-at használja)\n";
         return 0;
     }
     int port = 8080;
     for (int i = 1; i + 1 < argc; ++i) {
         if (std::strcmp(argv[i], "--port") == 0) port = std::atoi(argv[i + 1]);
     }
-    const bool noGui = hasArg(argc, argv, "--no-gui");
+    const bool background = hasArg(argc, argv, "--background") || hasArg(argc, argv, "--no-gui");
+
+    // Egy példány felhasználónként: a második indítás csak a felületet nyitja meg
+    HANDLE single = CreateMutexW(nullptr, TRUE, L"Local\\AetherAudioEngine");
+    if (single && GetLastError() == ERROR_ALREADY_EXISTS) {
+        std::cout << "[Info] Már fut egy példány; csak a felület nyílik meg.\n";
+        if (!background) openGui();
+        CloseHandle(single);
+        return 0;
+    }
+
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     // Mentett beállítások (a GUI utolsó állapota)
     std::mutex paramMutex;
@@ -228,6 +284,7 @@ int main(int argc, char** argv) {
     loopback->start();
 
     SourceManager sources(*loopback);
+    sources.loadStoredIr();
     sources.poll(current);
 
     BridgeCallbacks cb;
@@ -244,27 +301,27 @@ int main(int argc, char** argv) {
         sources.pushParams(p);
     };
     cb.statusFields = [&]() { return sources.statusFields(); };
+    cb.setIr = [&](IrData&& ir) { sources.setIr(std::move(ir)); };
+    cb.getIr = [&]() { return sources.irCopy(); };
 
     WebSocketBridge bridge(port);
     if (!bridge.start(cb)) {
-        std::cout << "[Hiba] A WebSocket híd nem indult el. Valószínűleg már fut egy AetherAudio példány.\n";
-        if (!noGui) openGui();
+        std::cout << "[Hiba] A WebSocket híd nem indult el (a " << port << " port foglalt).\n";
+        MessageBoxW(nullptr,
+                    L"Az AetherAudio nem tudott elindulni, mert a 8080-as helyi portot egy másik program használja.\n\n"
+                    L"Zárd be azt a programot, majd indítsd újra az AetherAudio-t.",
+                    L"AetherAudio", MB_ICONWARNING | MB_OK);
         loopback->stop();
-        Sleep(3000);
         return 1;
     }
 
-    if (!noGui) openGui();
-    std::cout << "\nFut. Bezárás: Ctrl+C vagy az ablak bezárása.\n\n";
-
-    while (g_running) {
-        Sleep(250);
+    auto saveIfDue = [&](bool force) {
         ParamData snapshot;
         bool save = false;
         {
             std::lock_guard<std::mutex> lk(paramMutex);
             snapshot = current;
-            if (dirty && std::chrono::steady_clock::now() - lastChange > std::chrono::milliseconds(600)) {
+            if (dirty && (force || std::chrono::steady_clock::now() - lastChange > std::chrono::milliseconds(600))) {
                 dirty = false;
                 save = true;
             }
@@ -273,14 +330,30 @@ int main(int argc, char** argv) {
         if (save && !win::saveParamFile(snapshot)) {
             std::cout << "[Beállítások] Figyelem: a ProgramData\\AetherAudio\\params.bin nem írható.\n";
         }
+    };
+
+    win::TrayApp::Callbacks tcb;
+    tcb.openGui = [] { openGui(); };
+    tcb.openLog = [&] {
+        if (!log.path().empty()) ShellExecuteW(nullptr, L"open", log.path().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    };
+    tcb.onTimer = [&] { saveIfDue(false); };
+    tcb.statusText = [&] { return sources.label(); };
+    win::TrayApp tray(tcb);
+    if (!tray.create(GetModuleHandleW(nullptr))) {
+        std::cout << "[Hiba] A tálcaikon nem hozható létre.\n";
     }
+
+    if (!background) openGui();
+    std::cout << "Fut a háttérben (tálcaikon).\n";
+
+    tray.run();
 
     std::cout << "[Info] Leállítás...\n";
     bridge.stop();
     loopback->stop();
-    {
-        std::lock_guard<std::mutex> lk(paramMutex);
-        if (dirty) win::saveParamFile(current);
-    }
+    saveIfDue(true);
+    if (single) { ReleaseMutex(single); CloseHandle(single); }
+    CoUninitialize();
     return 0;
 }

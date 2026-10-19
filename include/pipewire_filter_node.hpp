@@ -7,8 +7,7 @@
 #include <iostream>
 #include <vector>
 
-#include "dsp_pipeline.hpp"
-#include "param_apply.hpp"
+#include "aether_chain.hpp"
 #include "tap_ring.hpp"
 
 namespace ee_analyzer {
@@ -37,7 +36,7 @@ public:
     PortData outPortL;
     PortData outPortR;
 
-    DspPipeline pipeline;
+    AetherChain chain;                     // teljes DSP lánc (háttérszálas FIR / konvolver)
     StereoTapRing<65536> visualizerTap;   // feldolgozott sztereó jel az analizátornak
     ParamBlock params;                     // GUI -> audio szál (seqlock)
     uint32_t appliedParamSeq = 0;
@@ -46,10 +45,9 @@ public:
     bool isRunning = false;
 
     PipeWireFilterNode(uint32_t sr = 48000)
-        : pipeline(sr), sampleRate(sr) {
-        preparePipeline(pipeline);
-        setPipelineSampleRate(pipeline, sr);
-        applyParams(pipeline, transparentParams());
+        : sampleRate(sr) {
+        chain.setSampleRate(sr);
+        chain.startWorker();
     }
 
     ~PipeWireFilterNode() {
@@ -203,6 +201,7 @@ public:
      * @brief Leállítás és erőforrások felszabadítása
      */
     void stop() {
+        chain.stopWorker();
         if (!isRunning) return;
         isRunning = false;
 
@@ -257,13 +256,13 @@ public:
             ParamData pd;
             uint32_t readSeq = 0;
             if (self->params.tryRead(pd, readSeq)) {
-                applyParams(self->pipeline, pd);
+                self->chain.applyParamsRT(pd);
                 self->appliedParamSeq = readSeq;
             }
         }
 
-        // Valós idejű DSP szűrés (Preamp -> EQ -> Crossfeed -> Convolver -> Limiter)
-        self->pipeline.processBlock(outL, outR, nSamples);
+        // Valós idejű DSP lánc (Preamp -> EQ -> Bass -> Crossfeed -> Convolver -> Limiter)
+        self->chain.process(outL, outR, nSamples);
 
         // Zármentes átadás az analizátor / 3D vízesés szálnak (sztereó)
         self->visualizerTap.write(outL, outR, nSamples);

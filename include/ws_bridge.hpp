@@ -24,6 +24,7 @@
 #include "spectrum.hpp"
 #include "param_block.hpp"
 #include "mini_json.hpp"
+#include "ir_data.hpp"
 
 namespace ee_analyzer {
 
@@ -38,7 +39,14 @@ struct BridgeCallbacks {
     std::function<void(const ParamData&)> setParams;
     /** Extra állapotmezők JSON-töredékként, pl. "\"source\":\"WASAPI\"" (opcionális). */
     std::function<std::string()> statusFields;
+    /** Új konvolver impulzusválasz a GUI-ból (üres IrData = törlés). */
+    std::function<void(IrData&&)> setIr;
+    /** A betöltött IR adatai (név, mintavétel, előnézet) az állapotüzenethez. */
+    std::function<IrData()> getIr;
 };
+
+/** A GUI által küldött IR maximális hossza (frame). */
+constexpr uint32_t kBridgeMaxIrFrames = 262144;
 
 class WebSocketBridge {
 public:
@@ -173,6 +181,8 @@ private:
         if (client_ != net::kInvalidSocket) net::closeSocket(client_);
         client_ = s;
         rxBuf_.clear();
+        fragBuf_.clear();
+        fragOpcode_ = 0;
         clientConnected_ = true;
         std::cout << "[WS Bridge] Grafikus felület csatlakozott.\n";
         sendText(buildStateMessage());
@@ -290,7 +300,7 @@ private:
             const long long n = net::recvSome(client_, buf, sizeof(buf));
             if (n > 0) {
                 rxBuf_.append(buf, static_cast<size_t>(n));
-                if (rxBuf_.size() > (1u << 20)) { dropClient("túl nagy üzenet"); return; }
+                if (rxBuf_.size() > (24u << 20)) { dropClient("túl nagy üzenet"); return; }
                 continue;
             }
             if (n == 0) { dropClient("kapcsolat bontva"); return; }
@@ -304,6 +314,7 @@ private:
             const uint8_t b0 = static_cast<uint8_t>(rxBuf_[0]);
             const uint8_t b1 = static_cast<uint8_t>(rxBuf_[1]);
             const uint8_t opcode = b0 & 0x0F;
+            const bool fin = (b0 & 0x80) != 0;
             const bool masked = (b1 & 0x80) != 0;
             uint64_t len = b1 & 0x7F;
             size_t hdr = 2;
@@ -317,7 +328,7 @@ private:
                 for (int i = 0; i < 8; ++i) len = (len << 8) | static_cast<uint8_t>(rxBuf_[2 + i]);
                 hdr = 10;
             }
-            if (len > (1u << 20)) { dropClient("túl nagy keret"); return; }
+            if (len > (20u << 20)) { dropClient("túl nagy keret"); return; }
             const size_t maskLen = masked ? 4 : 0;
             if (rxBuf_.size() < hdr + maskLen + len) return;
 
@@ -328,8 +339,28 @@ private:
             }
             rxBuf_.erase(0, hdr + maskLen + static_cast<size_t>(len));
 
+            // Töredezett üzenetek (a böngésző a nagy bináris üzeneteket több keretben küldheti)
+            if ((opcode == 0x1 || opcode == 0x2) && !fin) {
+                fragOpcode_ = opcode;
+                fragBuf_ = std::move(payload);
+                continue;
+            }
+            if (opcode == 0x0) {
+                if (fragOpcode_ == 0) continue; // váratlan folytatás: eldobjuk
+                fragBuf_ += payload;
+                if (fragBuf_.size() > (24u << 20)) { dropClient("túl nagy üzenet"); return; }
+                if (!fin) continue;
+                const uint8_t op = fragOpcode_;
+                fragOpcode_ = 0;
+                std::string full = std::move(fragBuf_);
+                fragBuf_.clear();
+                if (op == 0x1) handleMessage(full);
+                else handleBinary(full);
+                continue;
+            }
             switch (opcode) {
                 case 0x1: handleMessage(payload); break;       // szöveg
+                case 0x2: handleBinary(payload); break;        // bináris (IR feltöltés)
                 case 0x8: sendFrame(0x8, ""); dropClient("close keret"); return;
                 case 0x9: sendFrame(0xA, payload); break;      // ping -> pong
                 default: break;                                 // bináris / folytatás: figyelmen kívül
@@ -338,6 +369,23 @@ private:
     }
 
     // ------------------------------------------------------------------ protokoll
+    void handleBinary(const std::string& data) {
+        IrData ir;
+        if (!parseIrMessage(data, ir, kBridgeMaxIrFrames)) {
+            std::cout << "[WS Bridge] Érvénytelen IR üzenet (" << data.size() << " bájt).\n";
+            return;
+        }
+        std::cout << "[WS Bridge] Impulzusválasz érkezett: " << ir.name << " (" << ir.frames() << " minta, "
+                  << ir.sampleRate << " Hz, " << ir.channels() << " csatorna)\n";
+        if (cb_.setIr) cb_.setIr(std::move(ir));
+        sendText(buildStateMessage("ir"));
+    }
+
+    static double num(const json::Value& msg, const char* key, double def) {
+        const json::Value* v = msg.get(key);
+        return v ? v->numberOr(def) : def;
+    }
+
     void handleMessage(const std::string& text) {
         json::Value msg;
         if (!json::parse(text, msg)) return;
@@ -368,6 +416,38 @@ private:
             else changed = false;
         } else if (type == "set_crossfeed_preset" && val) {
             p.crossfeedPreset = static_cast<int32_t>(val->numberOr(0.0));
+            // A preset gombok a GUI-ban is ezeket az értékeket töltik be
+            static const float presets[3][2] = { { 700.0f, 4.5f }, { 650.0f, 6.0f }, { 600.0f, 3.5f } };
+            const int i = std::clamp(p.crossfeedPreset, 0, 2);
+            p.crossfeedCutoffHz = presets[i][0];
+            p.crossfeedFeedDb = presets[i][1];
+        } else if (type == "set_crossfeed") {
+            p.crossfeedCutoffHz = static_cast<float>(num(msg, "freq", p.crossfeedCutoffHz));
+            p.crossfeedFeedDb = static_cast<float>(num(msg, "level", p.crossfeedFeedDb));
+        } else if (type == "set_eq_mode" && val) {
+            const std::string m = val->stringOr("");
+            int mode = m == "fir_lin" ? 1 : m == "fir_int" ? 2 : m == "fir_min" ? 3 : m == "iir" ? 0
+                     : static_cast<int>(val->numberOr(0.0));
+            p.eqMode = std::clamp(mode, 0, 3);
+        } else if (type == "set_limiter") {
+            p.limiterCeilingDb = static_cast<float>(num(msg, "ceiling", p.limiterCeilingDb));
+            p.limiterReleaseMs = static_cast<float>(num(msg, "release", p.limiterReleaseMs));
+        } else if (type == "set_bass") {
+            p.bassCrossoverHz = static_cast<float>(num(msg, "crossover", p.bassCrossoverHz));
+            p.bassHarmonicsDb = static_cast<float>(num(msg, "harmonics", p.bassHarmonicsDb));
+            p.bassSubcutHz = static_cast<float>(num(msg, "subcut", p.bassSubcutHz));
+            if (const json::Value* t = msg.get("harmonicType")) {
+                const std::string ts = t->stringOr("both");
+                p.bassType = ts == "2nd" ? 1 : ts == "3rd" ? 2 : 0;
+            }
+        } else if (type == "set_convolver") {
+            p.convGainDb = static_cast<float>(num(msg, "gain", p.convGainDb));
+            p.convMaxTaps = static_cast<int32_t>(num(msg, "taps", p.convMaxTaps));
+            if (const json::Value* ph = msg.get("phase")) p.convPhaseMode = ph->stringOr("min") == "linear" ? 1 : 0;
+        } else if (type == "clear_ir") {
+            if (cb_.setIr) cb_.setIr(IrData{});
+            sendText(buildStateMessage("ir"));
+            return;
         } else if (type == "set_eq") {
             const json::Value* bands = msg.get("bands");
             if (!bands || bands->type != json::Value::Type::Array) return;
@@ -389,6 +469,16 @@ private:
             p.set(kFlagInitialized, true);
             cb_.setParams(p);
         }
+    }
+
+    static std::string jsonEscape(const std::string& in) {
+        std::string out;
+        for (char c : in) {
+            if (c == '"' || c == '\\') { out += '\\'; out += c; }
+            else if (static_cast<unsigned char>(c) < 0x20) out += ' ';
+            else out += c;
+        }
+        return out;
     }
 
     static void appendFloat(std::string& s, double v, int decimals) {
@@ -428,9 +518,12 @@ private:
         return s;
     }
 
-    std::string buildStateMessage() const {
+    /** @param reason "full" = teljes állapot (csatlakozáskor), "ir" = csak az IR változott */
+    std::string buildStateMessage(const char* reason = "full") const {
         ParamData p = cb_.getParams ? cb_.getParams() : ParamData{};
-        std::string s = "{\"type\":\"state\",\"initialized\":";
+        std::string s = "{\"type\":\"state\",\"reason\":\"";
+        s += reason;
+        s += "\",\"initialized\":";
         s += p.has(kFlagInitialized) ? "true" : "false";
         s += ",\"preamp\":";
         appendFloat(s, p.preampDb, 2);
@@ -441,6 +534,34 @@ private:
         s += ",\"limiter\":"; s += p.has(kFlagLimiter) ? "1" : "0";
         s += ",\"bass\":"; s += p.has(kFlagBass) ? "1" : "0";
         s += "},\"crossfeedPreset\":" + std::to_string(p.crossfeedPreset);
+        static const char* eqModes[] = { "iir", "fir_lin", "fir_int", "fir_min" };
+        s += ",\"eqMode\":\""; s += eqModes[std::clamp(p.eqMode, 0, 3)]; s += '"';
+        s += ",\"crossfeed\":{\"freq\":"; appendFloat(s, p.crossfeedCutoffHz, 1);
+        s += ",\"level\":"; appendFloat(s, p.crossfeedFeedDb, 2); s += '}';
+        s += ",\"limiter\":{\"ceiling\":"; appendFloat(s, p.limiterCeilingDb, 2);
+        s += ",\"release\":"; appendFloat(s, p.limiterReleaseMs, 1); s += '}';
+        static const char* bassTypes[] = { "both", "2nd", "3rd" };
+        s += ",\"bass\":{\"crossover\":"; appendFloat(s, p.bassCrossoverHz, 1);
+        s += ",\"harmonics\":"; appendFloat(s, p.bassHarmonicsDb, 2);
+        s += ",\"harmonicType\":\""; s += bassTypes[std::clamp(p.bassType, 0, 2)];
+        s += "\",\"subcut\":"; appendFloat(s, p.bassSubcutHz, 1); s += '}';
+        s += ",\"convolver\":{\"gain\":"; appendFloat(s, p.convGainDb, 2);
+        s += ",\"phase\":\""; s += p.convPhaseMode == 1 ? "linear" : "min";
+        s += "\",\"taps\":" + std::to_string(p.convMaxTaps) + '}';
+        if (cb_.getIr) {
+            IrData ir = cb_.getIr();
+            s += ",\"ir\":";
+            if (ir.empty()) {
+                s += "null";
+            } else {
+                s += "{\"name\":\"" + jsonEscape(ir.name) + "\",\"sr\":" + std::to_string(ir.sampleRate) +
+                     ",\"channels\":" + std::to_string(ir.channels()) + ",\"frames\":" + std::to_string(ir.frames()) +
+                     ",\"preview\":[";
+                const auto pv = ir.preview(400);
+                for (size_t i = 0; i < pv.size(); ++i) { if (i) s += ','; appendFloat(s, pv[i], 3); }
+                s += "]}";
+            }
+        }
         s += ",\"bands\":[";
         const uint32_t n = std::min(p.numBands, kMaxEqBands);
         for (uint32_t i = 0; i < n; ++i) {
@@ -464,6 +585,8 @@ private:
     net::socket_t listener_ = net::kInvalidSocket;
     net::socket_t client_ = net::kInvalidSocket;
     std::string rxBuf_;
+    std::string fragBuf_;
+    uint8_t fragOpcode_ = 0;
 };
 
 } // namespace ee_analyzer

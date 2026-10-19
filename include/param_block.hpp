@@ -39,6 +39,14 @@ struct EqBandPod {
     float q = 0.7071f;
 };
 
+/** EQ megvalósítási mód (a GUI "EQ Mód" választója). */
+enum class EqMode : int32_t {
+    Iir = 0,          // minimálfázisú IIR biquad lánc (0 késleltetés)
+    FirLinear = 1,    // lineáris fázisú FIR (szimmetrikus, késleltetés = taps/2)
+    FirSplit = 2,     // köztes (split) fázis, ~5% előcsengés
+    FirMinimum = 3,   // minimálfázisú FIR (0 késleltetés)
+};
+
 /** A teljes DSP beállítás egyetlen másolható pillanatképe. */
 struct ParamData {
     float preampDb = 0.0f;
@@ -46,6 +54,20 @@ struct ParamData {
     int32_t crossfeedPreset = 0; // 0 = Bauer, 1 = Meier, 2 = Studio
     uint32_t numBands = 0;
     EqBandPod bands[kMaxEqBands];
+
+    // --- v2 ---
+    int32_t eqMode = 0;               // EqMode
+    float crossfeedCutoffHz = 700.0f; // egyedi crossfeed (a preset gombok ezt állítják)
+    float crossfeedFeedDb = 4.5f;
+    float limiterCeilingDb = -1.0f;
+    float limiterReleaseMs = 50.0f;
+    float bassCrossoverHz = 80.0f;
+    float bassHarmonicsDb = 3.0f;
+    int32_t bassType = 0;             // 0 = 2.+3., 1 = csak 2., 2 = csak 3. felharmonikus
+    float bassSubcutHz = 30.0f;
+    float convGainDb = -3.0f;         // konvolver szint-illesztés (trim)
+    int32_t convPhaseMode = 0;        // 0 = minimálfázisúvá alakítás, 1 = eredeti fázis
+    int32_t convMaxTaps = 65536;      // az IR maximális hossza mintában
 
     bool has(uint32_t f) const { return (flags & f) != 0; }
     void set(uint32_t f, bool on) { flags = on ? (flags | f) : (flags & ~f); }
