@@ -113,8 +113,13 @@
       <div class="badge-app">EE</div>
       <span>EasyEffects • PipeWire Audio Routing</span>
     </div>
-    <div style="font-size:0.8rem; color:var(--ee-text-secondary);">
-      Kimenet: <strong>Speakers (DAC 768kHz)</strong>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span id="pipewireLiveBadge" class="status-badge" style="background:rgba(255,255,255,0.06); color:var(--ee-text-secondary); border:1px solid #444;">
+        ○ PipeWire Offline (Szimuláció)
+      </span>
+      <div style="font-size:0.8rem; color:var(--ee-text-secondary);">
+        Kimenet: <strong>Speakers (DAC 768kHz)</strong>
+      </div>
     </div>
   </header>
 
@@ -859,19 +864,27 @@ function animate3D() {
   const mask = new Uint8Array(FREQ_BINS);
   simFrame++;
 
-  // Zenei jel szimuláció
-  for (let f = 0; f < FREQ_BINS; f++) {
-    const sub = Math.sin(simFrame * 0.08 + f * 0.08) * 0.45 + 0.45;
-    const mid = Math.sin(simFrame * 0.12 - f * 0.15) * 0.3;
-    const noise = (Math.random() - 0.5) * 0.04;
-    slice[f] = Math.max(0, (f < 45 ? sub : mid) + noise);
+  // Zenei jel: élő PipeWire audio vagy szimuláció
+  if (isPipewireConnected && livePipewireSamples && livePipewireSamples.length > 0) {
+    for (let f = 0; f < FREQ_BINS; f++) {
+      const sampleIdx = Math.floor((f / FREQ_BINS) * livePipewireSamples.length);
+      const amp = Math.abs(livePipewireSamples[sampleIdx]) * 1.6;
+      slice[f] = Math.min(1.0, amp);
+    }
+  } else {
+    for (let f = 0; f < FREQ_BINS; f++) {
+      const sub = Math.sin(simFrame * 0.08 + f * 0.08) * 0.45 + 0.45;
+      const mid = Math.sin(simFrame * 0.12 - f * 0.15) * 0.3;
+      const noise = (Math.random() - 0.5) * 0.04;
+      slice[f] = Math.max(0, (f < 45 ? sub : mid) + noise);
 
-    // FIR előcsengési folt
-    if (isEqEnabled && isFirMode) {
-      const trPhase = simFrame % 40;
-      if (trPhase >= 33 && trPhase < 39 && (f >= 28 && f <= 32)) {
-        slice[f] = Math.min(1.0, slice[f] + 0.35);
-        mask[f] = 1;
+      // FIR előcsengési folt
+      if (isEqEnabled && isFirMode) {
+        const trPhase = simFrame % 40;
+        if (trPhase >= 33 && trPhase < 39 && (f >= 28 && f <= 32)) {
+          slice[f] = Math.min(1.0, slice[f] + 0.35);
+          mask[f] = 1;
+        }
       }
     }
   }
@@ -1337,6 +1350,7 @@ function setPreamp(val) {
     badge.className = "status-badge info";
   }
   drawEq();
+  sendParamToPipewire("set_preamp", currentPreamp);
 }
 
 document.getElementById("selectEqMode").onchange = (e) => {
@@ -2168,8 +2182,66 @@ function updateBassInfo() {
   }
 }
 
-// Induláskor háttérben előkészítjük a 8 850+ modellt tartalmazó teljes AutoEq indexet
-setTimeout(ensureAutoEqIndexLoaded, 100);
+// =========================================================================
+// PIPEWIRE ÉLŐ WEBSOCKET HÍD (ws://127.0.0.1:8080)
+// =========================================================================
+let pipewireWs = null;
+let isPipewireConnected = false;
+let livePipewireSamples = null;
+
+function initPipewireBridge() {
+  const badge = document.getElementById("pipewireLiveBadge");
+  try {
+    pipewireWs = new WebSocket("ws://127.0.0.1:8080");
+
+    pipewireWs.onopen = () => {
+      isPipewireConnected = true;
+      if (badge) {
+        badge.className = "status-badge optimal";
+        badge.innerHTML = "● PipeWire Live (Csatlakoztatva)";
+      }
+      console.log("[PipeWire Bridge] Élő C++ PipeWire szerverhez csatlakozva!");
+    };
+
+    pipewireWs.onmessage = (evt) => {
+      try {
+        const data = JSON.parse(evt.data);
+        if (data.type === "audio_levels" && data.samples) {
+          livePipewireSamples = data.samples;
+        }
+      } catch (err) {}
+    };
+
+    pipewireWs.onclose = () => {
+      isPipewireConnected = false;
+      if (badge) {
+        badge.className = "status-badge";
+        badge.style.background = "rgba(255,255,255,0.06)";
+        badge.style.color = "var(--ee-text-secondary)";
+        badge.innerHTML = "○ PipeWire Offline (Szimuláció)";
+      }
+      setTimeout(initPipewireBridge, 3000);
+    };
+
+    pipewireWs.onerror = () => {
+      pipewireWs.close();
+    };
+  } catch (e) {
+    setTimeout(initPipewireBridge, 3000);
+  }
+}
+
+function sendParamToPipewire(type, val) {
+  if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) {
+    pipewireWs.send(JSON.stringify({ type: type, val: val }));
+  }
+}
+
+// Induláskor háttérben előkészítjük a 8 850+ modellt tartalmazó teljes AutoEq indexet és csatlakozunk a PipeWire-hoz
+setTimeout(() => {
+  ensureAutoEqIndexLoaded();
+  initPipewireBridge();
+}, 100);
 </script>
 </body>
 </html>
