@@ -91,8 +91,8 @@
           <div class="stat-value" id="statCursorFreq">--- Hz</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Kurzor Késleltetés</div>
-          <div class="stat-value" id="statCursorDelay">--- ms</div>
+          <div class="stat-label">Kurzor Értékek</div>
+          <div class="stat-value" id="statCursorDelay" style="font-size:0.85rem;">---</div>
         </div>
       </div>
     </div>
@@ -208,18 +208,28 @@ function draw() {
 
   ctx.clearRect(0, 0, w, h);
 
-  // Rácsvonalak (Frekvencia logaritmikus: 20 Hz - 20 000 Hz)
+  // Margók a feliratoknak
+  const padLeft = 45 * dpr;
+  const padRight = 55 * dpr;
+  const padBottom = 24 * dpr;
+  const padTop = 15 * dpr;
+  const plotW = w - padLeft - padRight;
+  const plotH = h - padTop - padBottom;
+  const midY = padTop + plotH * 0.5; // 0 dB / 0 ms / 0°
+
+  // Logaritmikus frekvencia skála: 20 Hz - 20 000 Hz
   const minF = 20, maxF = 20000;
   const logMin = Math.log10(minF), logMax = Math.log10(maxF);
 
   function getX(f) {
-    return ((Math.log10(f) - logMin) / (logMax - logMin)) * w;
+    return padLeft + ((Math.log10(f) - logMin) / (logMax - logMin)) * plotW;
   }
   function getFreqAtX(x) {
-    return Math.pow(10, logMin + (x / w) * (logMax - logMin));
+    const normX = Math.max(0, Math.min(plotW, x - padLeft));
+    return Math.pow(10, logMin + (normX / plotW) * (logMax - logMin));
   }
 
-  // Függőleges frekvencia rács
+  // Függőleges frekvencia rácsvonalak
   const gridFreqs = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
   ctx.strokeStyle = "#162233";
   ctx.lineWidth = 1 * dpr;
@@ -229,25 +239,54 @@ function draw() {
   for (let gf of gridFreqs) {
     const x = getX(gf);
     ctx.beginPath();
-    ctx.moveTo(x, 0); ctx.lineTo(x, h);
+    ctx.moveTo(x, padTop); ctx.lineTo(x, padTop + plotH);
     ctx.stroke();
-    ctx.fillText((gf >= 1000 ? (gf/1000) + "k" : gf) + "Hz", x + 4 * dpr, h - 8 * dpr);
+    ctx.fillText((gf >= 1000 ? (gf/1000) + "k" : gf) + "Hz", x - 12 * dpr, h - 6 * dpr);
   }
 
-  // Vízszintes 0 dB / 0 ms vonal
-  const midY = h * 0.5;
-  ctx.strokeStyle = "#27384d";
-  ctx.lineWidth = 1.5 * dpr;
-  ctx.beginPath();
-  ctx.moveTo(0, midY); ctx.lineTo(w, midY);
-  ctx.stroke();
-  ctx.fillText("0 dB / 0 ms", 8 * dpr, midY - 6 * dpr);
+  // Vízszintes rácsvonalak és SKÁLÁK mindkét oldalon
+  // Skálatartományok: Gain: -18 dB .. +18 dB | Delay: -10 ms .. +10 ms | Fázis: -180° .. +180°
+  const yDivisions = [
+    { norm: -1.0, db: "+18 dB", delay: "+10 ms", deg: "+180°" },
+    { norm: -0.5, db: " +9 dB", delay: " +5 ms", deg: " +90°" },
+    { norm:  0.0, db: "  0 dB", delay: "  0 ms", deg: "   0°" },
+    { norm:  0.5, db: " -9 dB", delay: " -5 ms", deg: " -90°" },
+    { norm:  1.0, db: "-18 dB", delay: "-10 ms", deg: "-180°" }
+  ];
 
-  // Számoljuk ki a pontokat
+  for (let div of yDivisions) {
+    const y = midY + div.norm * (plotH * 0.45);
+
+    ctx.strokeStyle = (div.norm === 0) ? "#2b3d52" : "#141c28";
+    ctx.lineWidth = (div.norm === 0) ? 1.5 * dpr : 1 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(padLeft, y); ctx.lineTo(padLeft + plotW, y);
+    ctx.stroke();
+
+    // Bal skála (dB / ms)
+    ctx.fillStyle = (div.norm === 0) ? "#ffffff" : "#6f88a5";
+    ctx.textAlign = "right";
+    ctx.fillText(div.db, padLeft - 6 * dpr, y + 3 * dpr);
+
+    // Jobb skála (Fázisszög fokban: zöld)
+    ctx.fillStyle = "rgba(0, 230, 118, 0.85)";
+    ctx.textAlign = "left";
+    ctx.fillText(div.deg, padLeft + plotW + 8 * dpr, y + 3 * dpr);
+  }
+  ctx.textAlign = "left";
+
+  // Tengely címkék a sarkokban
+  ctx.fillStyle = "#8ba1b7";
+  ctx.font = (9 * dpr) + "px sans-serif";
+  ctx.fillText("▲ dB / ms (Bal)", 4 * dpr, padTop + 8 * dpr);
+  ctx.fillStyle = "var(--accent-green)";
+  ctx.fillText("▲ Fázis ° (Jobb)", padLeft + plotW + 6 * dpr, padTop + 8 * dpr);
+
+  // Pontok kiszámítása
   const points = [];
   let maxDelayFound = 0;
 
-  for (let px = 0; px <= w; px += 2 * dpr) {
+  for (let px = padLeft; px <= padLeft + plotW; px += 2 * dpr) {
     const f = getFreqAtX(px);
     const res = evalChain(f);
     points.push({ x: px, f, mag: res.mag_db, delay: res.delay_ms, phase: res.phase_deg });
@@ -256,24 +295,40 @@ function draw() {
 
   document.getElementById("statMaxDelay").innerText = maxDelayFound.toFixed(2) + " ms";
 
-  // 1. Amplitúdó rajzolása (Kék)
-  ctx.strokeStyle = "var(--accent-blue)";
-  ctx.lineWidth = 2.5 * dpr;
+  // 1. FÁZISSZÖG GÖRBE (° FOKBAN: Zöld pontozott)
+  ctx.strokeStyle = "rgba(0, 230, 118, 0.85)";
+  ctx.lineWidth = 1.8 * dpr;
+  ctx.setLineDash([4 * dpr, 3 * dpr]);
   ctx.beginPath();
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
-    const y = midY - (p.mag * (h * 0.025)); // 1 dB = 2.5% magasság
+    // -180° és +180° leképzése a magasságra
+    const y = midY - (p.phase / 180.0) * (plotH * 0.45);
     if (i === 0) ctx.moveTo(p.x, y); else ctx.lineTo(p.x, y);
   }
   ctx.stroke();
+  ctx.setLineDash([]);
 
-  // 2. Csoportkésleltetés rajzolása (Narancs púp)
+  // 2. CSOPORTKÉSLELTETÉS GÖRBE (ms: Narancssárga púp)
   ctx.strokeStyle = "var(--accent-orange)";
   ctx.lineWidth = 2.5 * dpr;
   ctx.beginPath();
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
-    const y = midY - (p.delay * (h * 0.035)); // 1 ms skálázás
+    // -10 ms és +10 ms leképzése
+    const y = midY - (p.delay / 10.0) * (plotH * 0.45);
+    if (i === 0) ctx.moveTo(p.x, y); else ctx.lineTo(p.x, y);
+  }
+  ctx.stroke();
+
+  // 3. AMPLITÚDÓ GÖRBE (dB: Kék vonal)
+  ctx.strokeStyle = "var(--accent-blue)";
+  ctx.lineWidth = 2.5 * dpr;
+  ctx.beginPath();
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    // -18 dB és +18 dB leképzése
+    const y = midY - (p.mag / 18.0) * (plotH * 0.45);
     if (i === 0) ctx.moveTo(p.x, y); else ctx.lineTo(p.x, y);
   }
   ctx.stroke();
@@ -284,13 +339,16 @@ function draw() {
     ctx.strokeStyle = "rgba(255,255,255,0.4)";
     ctx.setLineDash([3 * dpr, 3 * dpr]);
     ctx.beginPath();
-    ctx.moveTo(hx, 0); ctx.lineTo(hx, h);
+    ctx.moveTo(hx, padTop); ctx.lineTo(hx, padTop + plotH);
     ctx.stroke();
     ctx.setLineDash([]);
 
     const hRes = evalChain(hoverFreq);
     document.getElementById("statCursorFreq").innerText = hoverFreq.toFixed(1) + " Hz";
-    document.getElementById("statCursorDelay").innerText = hRes.delay_ms.toFixed(2) + " ms";
+    document.getElementById("statCursorDelay").innerHTML = 
+      `<span style="color:var(--accent-blue);">${hRes.mag_db >= 0 ? '+' : ''}${hRes.mag_db.toFixed(1)} dB</span> | ` +
+      `<span style="color:var(--accent-orange);">${hRes.delay_ms >= 0 ? '+' : ''}${hRes.delay_ms.toFixed(2)} ms</span> | ` +
+      `<span style="color:var(--accent-green);">${hRes.phase_deg >= 0 ? '+' : ''}${hRes.phase_deg.toFixed(1)}°</span>`;
   }
 }
 
@@ -298,16 +356,22 @@ function draw() {
 canvas.onmousemove = (e) => {
   const rect = canvas.getBoundingClientRect();
   const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const dpr = window.devicePixelRatio || 1;
+  const padLeft = 45 * dpr;
+  const padRight = 55 * dpr;
+  const plotW = canvas.width - padLeft - padRight;
+  
   const minF = 20, maxF = 20000;
   const logMin = Math.log10(minF), logMax = Math.log10(maxF);
-  hoverFreq = Math.pow(10, logMin + (mouseX / canvas.width) * (logMax - logMin));
+  const normX = Math.max(0, Math.min(plotW, mouseX - padLeft));
+  hoverFreq = Math.pow(10, logMin + (normX / plotW) * (logMax - logMin));
   draw();
 };
 
 canvas.onmouseleave = () => {
   hoverFreq = null;
   document.getElementById("statCursorFreq").innerText = "--- Hz";
-  document.getElementById("statCursorDelay").innerText = "--- ms";
+  document.getElementById("statCursorDelay").innerText = "---";
   draw();
 };
 
