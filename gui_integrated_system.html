@@ -52,9 +52,11 @@
   /* ======================================================= */
   .main-content { padding: 14px 18px; background: var(--ee-window-bg); display: flex; flex-direction: column; gap: 12px; }
   .plugin-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--ee-border); padding-bottom: 8px; font-size: 0.85rem; }
-  .tab-btn { padding: 6px 16px; border-radius: 6px; cursor: pointer; color: var(--ee-text-secondary); font-weight: 600; background: none; border: 1px solid transparent; transition: all 0.15s; }
+  .tab-btn { padding: 6px 14px; border-radius: 6px; cursor: pointer; color: var(--ee-text-secondary); font-weight: 600; background: none; border: 1px solid transparent; transition: all 0.15s; display: inline-flex; align-items: center; }
   .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.04); }
   .tab-btn.active { background: var(--ee-card-bg); color: #fff; border-color: var(--ee-border); }
+  .module-dot { font-size: 0.85rem; margin-right: 6px; color: #555; transition: all 0.15s; }
+  .module-dot.active { color: #33d17a; text-shadow: 0 0 6px rgba(51,209,122,0.6); }
 
   /* MODUL TARTALMAK */
   .tab-pane { display: none; flex-direction: column; gap: 10px; }
@@ -177,11 +179,11 @@
   <!-- ======================================================= -->
   <div class="main-content">
     <div class="plugin-tabs">
-      <button class="tab-btn active" onclick="switchTab('eq')">Equalizer (Paraméteres)</button>
-      <button class="tab-btn" onclick="switchTab('crossfeed')">Crossfeed (Fejhallgató Térhatás)</button>
-      <button class="tab-btn" onclick="switchTab('convolver')">Convolver (Szobakorrekció)</button>
-      <button class="tab-btn" onclick="switchTab('limiter')">Limiter (True Peak)</button>
-      <button class="tab-btn" onclick="switchTab('bass')">Bass Enhancer</button>
+      <button class="tab-btn active" id="tabBtn-eq" onclick="switchTab('eq')"><span class="module-dot active" id="dot-eq">●</span> Equalizer</button>
+      <button class="tab-btn" id="tabBtn-crossfeed" onclick="switchTab('crossfeed')"><span class="module-dot" id="dot-crossfeed">○</span> Crossfeed</button>
+      <button class="tab-btn" id="tabBtn-convolver" onclick="switchTab('convolver')"><span class="module-dot" id="dot-convolver">○</span> Convolver</button>
+      <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter')"><span class="module-dot" id="dot-limiter">○</span> Limiter</button>
+      <button class="tab-btn" id="tabBtn-bass" onclick="switchTab('bass')"><span class="module-dot" id="dot-bass">○</span> Bass Enhancer</button>
     </div>
 
     <!-- 1. TAB: EQUALIZER (A MÁR KÉSZ 2D FÁZIS- ÉS GÖRBERAJZOLÓVAL) -->
@@ -335,7 +337,13 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
     <!-- 1.5. TAB: CROSSFEED (FEJHALLGATÓ TÉRHATÁS SZIMULÁTOR) -->
     <div class="tab-pane" id="pane-crossfeed">
       <div class="module-card">
-        <h3>🎧 Crossfeed Szimulátor (Bauer bs2b / Meier Természetes Áthallás)</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <h3 style="margin:0;">🎧 Crossfeed Szimulátor (Bauer bs2b / Meier)</h3>
+            <span class="status-badge" id="badgeStatus-crossfeed" style="background:rgba(255,255,255,0.06); color:var(--ee-text-secondary); border:1px solid #444;">Kikapcsolva (Bypass)</span>
+          </div>
+          <button class="adw-btn" id="btnToggle-crossfeed" onclick="toggleModule('crossfeed')">KI</button>
+        </div>
         <p class="module-desc">
           Megszünteti a fejhallgatók „fej közepében szóló”, természetellenes sztereó izolációját. 
           Kiszámolja a fej akusztikai árnyékolását és késleltetését (ITD/ILD), így a zene nem a füleidben, hanem előtted, mint egy igazi stúdió hangfalpár szólal meg.
@@ -383,10 +391,14 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
     <div class="tab-pane" id="pane-convolver">
       <div class="module-card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-          <h3 style="margin:0;">📂 Convolver (Partícionált FIR Impulzusválasz Motor)</h3>
-          <div style="display:flex; gap:8px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <h3 style="margin:0;">📂 Convolver (Partícionált FIR Motor)</h3>
+            <span class="status-badge" id="badgeStatus-convolver" style="background:rgba(255,255,255,0.06); color:var(--ee-text-secondary); border:1px solid #444;">Kikapcsolva</span>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button class="adw-btn" id="btnToggle-convolver" onclick="toggleModule('convolver')">KI</button>
             <label class="adw-btn primary" style="background:#3584e4; cursor:pointer; font-size:0.78rem; display:inline-flex; align-items:center; gap:6px;">
-              📁 WAV / IRS Impulzus Tallózása...
+              📁 WAV / IRS Tallózása...
               <input type="file" id="convFileInput" accept=".wav,.irs" style="display:none;" onchange="handleConvFileSelect(event)">
             </label>
             <button class="adw-btn" onclick="loadSampleIr('room')" title="Teszt szobakorrekciós impulzus betöltése">Példa Szoba (48k)</button>
@@ -469,10 +481,16 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
     <div class="tab-pane" id="pane-limiter">
       <div class="module-card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-          <h3 style="margin:0;">🛡️ Limiter & Inter-Sample Peak (True Peak) Védelem</h3>
-          <span style="font-size:0.75rem; color:var(--ee-text-secondary);">
-            Standard: <strong style="color:var(--ee-green);">ITU-R BS.1770-4 / EBU R128</strong>
-          </span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <h3 style="margin:0;">🛡️ Limiter & True Peak Védelem</h3>
+            <span class="status-badge" id="badgeStatus-limiter" style="background:rgba(255,255,255,0.06); color:var(--ee-text-secondary); border:1px solid #444;">Kikapcsolva</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:0.75rem; color:var(--ee-text-secondary);">
+              Standard: <strong style="color:var(--ee-green);">ITU-R BS.1770-4</strong>
+            </span>
+            <button class="adw-btn" id="btnToggle-limiter" onclick="toggleModule('limiter')">KI</button>
+          </div>
         </div>
 
         <p class="module-desc">
@@ -587,10 +605,16 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
     <div class="tab-pane" id="pane-bass">
       <div class="module-card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-          <h3 style="margin:0;">🔊 Bass Enhancer (Pszichoakusztikai Mélyhang Generátor)</h3>
-          <span style="font-size:0.75rem; color:var(--ee-text-secondary);">
-            Elv: <strong style="color:var(--ee-curve-cyan);">Missing Fundamental (Hiányzó Alaphang)</strong>
-          </span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <h3 style="margin:0;">🔊 Bass Enhancer</h3>
+            <span class="status-badge" id="badgeStatus-bass" style="background:rgba(255,255,255,0.06); color:var(--ee-text-secondary); border:1px solid #444;">Kikapcsolva</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:0.75rem; color:var(--ee-text-secondary);">
+              Elv: <strong style="color:var(--ee-curve-cyan);">Missing Fundamental</strong>
+            </span>
+            <button class="adw-btn" id="btnToggle-bass" onclick="toggleModule('bass')">KI</button>
+          </div>
         </div>
 
         <p class="module-desc">
@@ -696,6 +720,70 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
 var pipewireWs = null;
 var isPipewireConnected = false;
 var livePipewireSamples = null;
+
+var currentEqMode = 'iir';
+var currentDecramp = '4x';
+var isEqEnabled = true;
+var isFirMode = false;
+var isCrossfeedEnabled = false;
+var isConvolverEnabled = false;
+var isLimiterEnabled = false;
+var isBassEnabled = false;
+var currentPreamp = 0.0;
+
+function setModuleActive(mod, active) {
+  if (mod === 'eq') isEqEnabled = active;
+  else if (mod === 'crossfeed') isCrossfeedEnabled = active;
+  else if (mod === 'convolver') isConvolverEnabled = active;
+  else if (mod === 'limiter') isLimiterEnabled = active;
+  else if (mod === 'bass') isBassEnabled = active;
+
+  const dot = document.getElementById('dot-' + mod);
+  if (dot) {
+    dot.className = active ? 'module-dot active' : 'module-dot';
+    dot.innerText = active ? '●' : '○';
+  }
+
+  const btn = document.getElementById('btnToggle-' + mod);
+  if (btn) {
+    btn.className = active ? 'adw-btn primary active' : 'adw-btn';
+    btn.innerText = active ? 'BE' : 'KI';
+  }
+
+  const badge = document.getElementById('badgeStatus-' + mod);
+  if (badge) {
+    badge.className = active ? 'status-badge optimal' : 'status-badge';
+    badge.innerText = active ? 'Bekapcsolva (Aktív)' : 'Kikapcsolva (Bypass)';
+    if (!active) {
+      badge.style.background = 'rgba(255,255,255,0.06)';
+      badge.style.color = 'var(--ee-text-secondary)';
+      badge.style.border = '1px solid #444';
+    } else {
+      badge.style.background = '';
+      badge.style.color = '';
+      badge.style.border = '';
+    }
+  }
+
+  const topEqBtn = document.getElementById('btnEqToggle');
+  if (mod === 'eq' && topEqBtn) {
+    topEqBtn.className = active ? 'mini-btn active' : 'mini-btn';
+    topEqBtn.innerText = active ? 'EQ: BE' : 'EQ: KI';
+  }
+
+  if (mod === 'eq' && typeof drawEq === 'function') drawEq();
+  sendParamToPipewire('set_module_' + mod, active ? 1 : 0);
+}
+
+function toggleModule(mod) {
+  let curr = false;
+  if (mod === 'eq') curr = isEqEnabled;
+  else if (mod === 'crossfeed') curr = isCrossfeedEnabled;
+  else if (mod === 'convolver') curr = isConvolverEnabled;
+  else if (mod === 'limiter') curr = isLimiterEnabled;
+  else if (mod === 'bass') curr = isBassEnabled;
+  setModuleActive(mod, !curr);
+}
 
 function sendParamToPipewire(type, val) {
   if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) {
@@ -1353,10 +1441,6 @@ function applyCrossfeedPreset(preset) {
 }
 
 // 4 EQ Mód és Decramp kezelők
-let currentEqMode = 'iir';
-let currentDecramp = '4x';
-let currentPreamp = 0.0;
-
 function setPreamp(val) {
   currentPreamp = parseFloat(val) || 0.0;
   const badge = document.getElementById("badgePreampOrigin");
@@ -1779,10 +1863,22 @@ function processAutoEqImport() {
   currentPreamp = finalPreamp;
   document.getElementById("inputPreamp").value = currentPreamp.toFixed(1);
 
-  // Limiter és IIR bekapcsolása
-  updateLimiterCeiling(-1.0, false);
-  document.getElementById("limiterOversampling").value = "4x";
-  updateLimiterOversampling();
+  // Modulok intelligens bekapcsolása (csak ami indokolt!):
+  setModuleActive('eq', true);
+  setModuleActive('crossfeed', false);
+  setModuleActive('convolver', false);
+  setModuleActive('bass', false);
+
+  let limiterInfo = "KIKAPCSOLVA (Nem volt kiemelés, a kimenet biztonságos)";
+  if (maxBoostFound > 0) {
+    setModuleActive('limiter', true);
+    updateLimiterCeiling(-1.0, false);
+    document.getElementById("limiterOversampling").value = "4x";
+    updateLimiterOversampling();
+    limiterInfo = "BEKAPCSOLVA (-1.0 dBTP plafon, 4x Lanczos védelem az emelések miatt)";
+  } else {
+    setModuleActive('limiter', false);
+  }
 
   isFirMode = false;
   btnFirMode.innerText = "Mód: Minimálfázis (IIR)";
@@ -1794,11 +1890,12 @@ function processAutoEqImport() {
   drawEq();
 
   alert(`✅ Sikeres Profil Létrehozás!\n\n` +
-        `• Beimportált EQ sávok: ${nodes.length} db\n` +
+        `• Equalizer: BEKAPCSOLVA (${nodes.length} sáv aktív)\n` +
         `• Beállított Preamp: ${finalPreamp.toFixed(1)} dB\n` +
         `  ↳ ${preampNote}\n` +
-        `• True Peak Limiter: -1.0 dBTP (4x Lanczos aktív)\n` +
-        `• Szűrési mód: Minimálfázis (IIR - Nulla pre-ringing)`);
+        `• True Peak Limiter: ${limiterInfo}\n` +
+        `• Crossfeed, Convolver, Bass Enhancer: KIKAPCSOLVA (Bármikor kézzel bekapcsolható)\n` +
+        `• Szűrési mód: Minimálfázis (IIR - 0 ms pre-ringing)`);
 }
 document.getElementById("btnDeleteNode").onclick = () => {
   if (nodes.length <= 1) return;
