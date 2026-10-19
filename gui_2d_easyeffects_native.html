@@ -55,6 +55,12 @@
 
   .actions-group { display: flex; gap: 8px; align-items: center; }
 
+  /* GNOME ADWAITA NUMERIKUS INPUTOK */
+  .ee-input { background: #1e1e1e; border: 1px solid var(--ee-border); color: #fff; padding: 4px 6px; border-radius: 6px; font-size: 0.85rem; font-family: monospace; font-weight: 600; text-align: right; outline: none; transition: border-color 0.15s; }
+  .ee-input:focus { border-color: var(--ee-accent-blue); box-shadow: 0 0 0 1px var(--ee-accent-blue); }
+  .ee-input::-webkit-inner-spin-button, .ee-input::-webkit-outer-spin-button { opacity: 0.4; }
+  .unit { font-size: 0.75rem; color: var(--ee-text-secondary); margin-left: 2px; }
+
   /* ADWAITA GOMBOK */
   .adw-btn { background: #383838; border: 1px solid var(--ee-border); color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; font-weight: 500; transition: all 0.15s ease; display: flex; align-items: center; gap: 6px; }
   .adw-btn:hover { background: #424242; border-color: var(--ee-border-active); }
@@ -98,10 +104,24 @@
 
   <div class="bottom-bar">
     <div class="node-readout">
-      <div style="font-weight:700;" id="selectedNodeTitle">Sáv #1</div>
-      <div class="stat-group"><span class="lbl">Frekvencia:</span><span class="num" id="lblFreq">60 Hz</span></div>
-      <div class="stat-group"><span class="lbl">Erősítés:</span><span class="num" id="lblGain" style="color:var(--ee-curve-primary);">+6.0 dB</span></div>
-      <div class="stat-group"><span class="lbl">Q-faktor:</span><span class="num" id="lblQ">1.41</span></div>
+      <div style="font-weight:700; min-width:140px;" id="selectedNodeTitle">Sáv #1</div>
+      
+      <div class="stat-group">
+        <label class="lbl" for="inputFreq">Frekvencia:</label>
+        <input type="number" id="inputFreq" min="20" max="20000" step="1" class="ee-input" style="width:75px;">
+        <span class="unit">Hz</span>
+      </div>
+
+      <div class="stat-group">
+        <label class="lbl" for="inputGain">Erősítés:</label>
+        <input type="number" id="inputGain" min="-24" max="24" step="0.1" class="ee-input" style="width:65px; color:var(--ee-curve-primary);">
+        <span class="unit">dB</span>
+      </div>
+
+      <div class="stat-group">
+        <label class="lbl" for="inputQ">Q-faktor:</label>
+        <input type="number" id="inputQ" min="0.1" max="15" step="0.05" class="ee-input" style="width:65px;">
+      </div>
       
       <button class="adw-btn danger" id="btnDeleteNode" title="Kijelölt sáv törlése">✕ Törlés</button>
     </div>
@@ -491,11 +511,57 @@ function updateUI() {
   if (sel) {
     document.getElementById("selectedNodeTitle").innerText = `Sáv #${nodes.indexOf(sel) + 1} (${sel.type.toUpperCase()})`;
     document.getElementById("selectedNodeTitle").style.color = sel.color;
-    document.getElementById("lblFreq").innerText = (sel.freq >= 1000 ? (sel.freq/1000).toFixed(1) + " kHz" : Math.round(sel.freq) + " Hz");
-    document.getElementById("lblGain").innerText = (sel.gain >= 0 ? "+" : "") + sel.gain.toFixed(1) + " dB";
-    document.getElementById("lblQ").innerText = sel.q.toFixed(2);
+    
+    // Csak akkor írjuk felül az input értékét, ha nem épp abba gépel a felhasználó!
+    if (document.activeElement !== inputFreq) {
+      inputFreq.value = Math.round(sel.freq);
+    }
+    if (document.activeElement !== inputGain) {
+      inputGain.value = sel.gain.toFixed(1);
+    }
+    if (document.activeElement !== inputQ) {
+      inputQ.value = sel.q.toFixed(2);
+    }
   }
 }
+
+// KÉTIRÁNYÚ SZINKRONIZÁCIÓ: Ha kézzel beírsz egy értéket, a pötty azonnal a helyére ugrik!
+const inputFreq = document.getElementById("inputFreq");
+const inputGain = document.getElementById("inputGain");
+const inputQ = document.getElementById("inputQ");
+
+inputFreq.oninput = () => {
+  const sel = nodes.find(n => n.id === selectedNodeId);
+  if (sel && inputFreq.value) {
+    const val = parseFloat(inputFreq.value);
+    if (!isNaN(val)) {
+      sel.freq = Math.max(20, Math.min(20000, val));
+      draw();
+    }
+  }
+};
+
+inputGain.oninput = () => {
+  const sel = nodes.find(n => n.id === selectedNodeId);
+  if (sel && inputGain.value) {
+    const val = parseFloat(inputGain.value);
+    if (!isNaN(val)) {
+      sel.gain = Math.max(-24, Math.min(24, val));
+      draw();
+    }
+  }
+};
+
+inputQ.oninput = () => {
+  const sel = nodes.find(n => n.id === selectedNodeId);
+  if (sel && inputQ.value) {
+    const val = parseFloat(inputQ.value);
+    if (!isNaN(val)) {
+      sel.q = Math.max(0.1, Math.min(15.0, val));
+      draw();
+    }
+  }
+};
 
 // Kapcsológombok
 const btnCurve = document.getElementById("btnCurve");
