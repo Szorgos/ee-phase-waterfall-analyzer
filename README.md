@@ -1,6 +1,6 @@
-# EasyEffects Valós Idejű Fázis- és Akusztikai Vízesés Analizátor (DSP Modul)
-**Projekt:** `ee-phase-waterfall-analyzer`  
-**Cél:** Professzionális, zéró késleltetésű C++20 DSP motor és valós idejű 3D akusztikai vízesés / 2D csoportkésleltetés-analizátor a Linux PipeWire és EasyEffects ökoszisztémához.
+# AetherAudio • Valós Idejű Fázis, Spektrum & Akusztikai Vízesés DSP Csomag
+**Projekt:** `AetherAudio` (korábbi kódnév: `ee-phase-waterfall-analyzer`)  
+**Cél:** Professzionális, zéró késleltetésű C++20 DSP motor és valós idejű 3D akusztikai vízesés / 2D fázis- és csoportkésleltetés-analizátor a Linux PipeWire és audiofil zenehallgató rendszerekhez.
 
 ---
 

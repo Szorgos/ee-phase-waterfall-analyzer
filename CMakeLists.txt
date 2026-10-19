@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
-project(ee_phase_waterfall_analyzer 
+project(aetheraudio 
     VERSION 1.0.0
-    DESCRIPTION "EasyEffects Real-time Phase, Group Delay & Acoustic Waterfall Analyzer"
+    DESCRIPTION "AetherAudio - Real-time Phase, Group Delay & Acoustic Waterfall DSP Suite"
     LANGUAGES CXX
 )
 
