@@ -44,10 +44,10 @@ A beállítások (EQ, modulok, betöltött impulzusválasz) a `C:\ProgramData\Ae
 
 | Modul | Megvalósítás |
 |---|---|
-| **EQ – IIR** | Biquad lánc (RBJ), 0 késleltetés |
-| **EQ – FFT (lineáris fázis)** | A teljes EQ görbéből tervezett szimmetrikus FIR (8192 tap 48 kHz-en). Késleltetés ~85 ms; a videó hangja ennyit csúszhat |
-| **EQ – SPM (köztes fázis)** | Fél-minimálfázisú FIR, ~8,5 ms késleltetés, mérsékelt előcsengés |
-| **EQ – FIR Min** | Minimálfázisú FIR (cepstrum módszer), 0 késleltetés |
+| **EQ – IIR** | Biquad lánc (RBJ), minimálfázisú, elhanyagolható többletkésleltetés |
+| **EQ – lineáris fázisú FIR** | A teljes EQ görbéből tervezett szimmetrikus FIR (8192 tap 48 kHz-en). Késleltetés ~85 ms; a videó hangja ennyit csúszhat |
+| **EQ – köztes fázisú FIR** | Részben minimálfázisú FIR, ~8,5 ms késleltetés, mérsékelt előcsengés |
+| **EQ – minimálfázisú FIR** | Minimálfázisú FIR (cepstrum módszer), elhanyagolható késleltetés, nincs előcsengés |
 | **EQ Decramp** | Ki / 2x / 4x / 8x: az IIR biquadok N-szeres mintavételen futnak (Kaiser-sinc fel/lemintavételezés, ~1,3 ms), így a Nyquist közeli menet nem „nyomódik össze”; FIR módban a cél-görbe kramp-mentes, többletköltség nélkül |
 | **Crossfeed** | Bauer / Meier / Stúdió preset, vagy egyedi vágási frekvencia, szint és ITD (fej-késleltetés, tört mintás késleltetővonal) |
 | **Convolver** | Egyenletesen partícionált FFT konvolver, 0 többletkésleltetéssel (az első 256 minta közvetlen konvolúcióval). WAV/IRS betöltés (16/24/32 bit, float), automatikus újramintavételezés a lejátszás mintavételére, opcionális minimálfázisúvá alakítás, csúcsra normalizálás + trim gain. Max. 262 144 minta |

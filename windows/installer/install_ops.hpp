@@ -36,7 +36,7 @@
 namespace aether_setup {
 
 constexpr const wchar_t* kAppName = L"AetherAudio";
-constexpr const wchar_t* kVersion = L"1.2.0";
+constexpr const wchar_t* kVersion = L"1.2.1";
 constexpr const wchar_t* kPublisher = L"AetherAudio (Sass Gergő)";
 constexpr const wchar_t* kUninstallKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AetherAudio";
 constexpr const wchar_t* kAppKey = L"Software\\AetherAudio";
