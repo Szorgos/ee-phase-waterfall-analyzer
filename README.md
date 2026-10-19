@@ -1,98 +1,128 @@
-# EasyEffects Valós Idejű Fázis- és Akusztikai Analizátor Plugin Tervezet
-**Projekt munkacím:** `ee-phase-waterfall-analyzer`  
-**Cél:** Az EasyEffects meglévő alapszintű spektrum-vizualizációjának leváltása egy valós idejű, hardveresen gyorsított fázis- és idő-frekvencia (vízesés/wavelet) analizátor modullal.
+# EasyEffects Valós Idejű Fázis- és Akusztikai Vízesés Analizátor (DSP Modul)
+**Projekt:** `ee-phase-waterfall-analyzer`  
+**Cél:** Professzionális, zéró késleltetésű C++20 DSP motor és valós idejű 3D akusztikai vízesés / 2D csoportkésleltetés-analizátor a Linux PipeWire és EasyEffects ökoszisztémához.
 
 ---
 
-## 1. Rendszerarchitektúra és Megközelítés
+## 🎧 Főbb Képességek és Funkciók
 
-A rendszer alapelve a **hangfeldolgozás (PipeWire) és a grafikai megjelenítés (GPU) szigorú szétválasztása**, garantálva, hogy a grafikus terhelés vagy lebegőpontos számítás soha ne okozhasson hangkimaradást (xrun).
+1. **Élő 3D Akusztikai Vízesés & Spektrogram (Top-Strip WebGL Engine):**
+   * Valós idejű, 60 FPS gördülés állítható időszeletekkel (60 – 240 lépcső).
+   * **FIR Pre-ringing automatikus észlelés:** Ragyogó fehér lecsengési foltokkal és HUD jelvénnyel mutatja ki a lineáris fázisú szűrők által keltett előcsengést.
+   * Állítható hőtérkép és nézőpontok (3D Izometrikus, Felülnézeti 2D Hőtérkép, Szembőli Spektrum).
+
+2. **2D Analitikus Fázis- és Csoportkésleltetés ($-\frac{d\phi}{d\omega}$):**
+   * Zárt matematikai képletű Biquad IIR kalkuláció (0% CPU terhelés).
+   * Interaktív, Pro-Q stílusú közvetlen pont-húzás a görbén és egérgörgős Q-faktor állítás.
+   * Kétirányú numerikus beviteli mezők ezredpontos értékekkel.
+
+3. **Beépített 8 850+ Fülhallgató AutoEq & Squiglink Adatbázis:**
+   * Teljes helyi index az összes elérhető audiofil referencia fül- és fejhallgatóval (Sennheiser, Beyerdynamic, Hifiman, Moondrop, Sony, AKG stb.).
+   * Élő kereső és közvetlen GitHub ParametricEQ letöltés egyetlen kattintással.
+   * **Intelligens Dupla-Preamp Védelem:** Ha a profil már tartalmaz negatív preampot, azt használja; ha nem, az Auto-Guard állítja be a pozitív kiemelések kivédésére.
+
+4. **Kézi Mesterkapcsolók Minden Modulhoz (Ki/Bekapcsolható lánc):**
+   * **Parametrikus EQ:** Szabadon állítható sávok minimálfázisú (IIR) és lineáris fázisú (FIR) móddal.
+   * **Crossfeed Szimulátor:** Bauer bs2b, Jan Meier Corda és Studio Nearfield térhatás-profilok a fejhallgatós sztereó izoláció megszüntetésére.
+   * **Convolver (Partícionált FIR):** Zéró késleltetésű szobaimpulzus (WAV/IRS) betöltés és előnézet.
+   * **True Peak Limiter & Soft-Clipper:** ITU-R BS.1770-4 szabványú -1.0 dBTP plafon 4x Lanczos túlmintavételezéssel.
+   * **Bass Enhancer:** Pszichoakusztikai hiányzó alaphang szintézis membránkímélő 30 Hz-es szub-vágással.
+
+5. **Zármentes (Lock-free) C++20 Ringbuffer és PipeWire SPA Integráció:**
+   * Zéró hangkimaradás (xrun-free): a grafikai terhelés soha nem akaszthatja meg a zenelejátszást.
+   * Kétirányú, valós idejű WebSocket híd (`ws://127.0.0.1:8080`) a Linuxos hangmotor és a felület között.
+
+---
+
+## 🚀 Telepítés Linuxon (Egyetlen Parancsból)
+
+A telepítő szkript automatikusan felismeri a disztribúciót, felrakja a szükséges csomagokat, lefordítja a C++ motort és regisztrálja az asztali alkalmazásikont.
+
+### 1. Klónozás és Telepítés:
+Nyiss meg egy terminált, és futtasd:
+
+```bash
+git clone https://github.com/<felhasznalonev>/ee-phase-waterfall-analyzer.git
+cd ee-phase-waterfall-analyzer
+chmod +x install.sh
+./install.sh
+```
+
+### 2. Támogatott Linux Disztribúciók:
+* **Ubuntu / Debian / Linux Mint / Pop!_OS:** `apt-get` csomagkezelővel
+* **Fedora / RHEL / CentOS:** `dnf` csomagkezelővel
+* **Arch Linux / Manjaro / EndeavourOS:** `pacman` csomagkezelővel
+* **openSUSE / SUSE:** `zypper` csomagkezelővel
+
+---
+
+## 🎮 Indítás és Használat
+
+A telepítés után kétféleképpen is elindíthatod a rendszert:
+
+1. **A Terminálból:**
+   ```bash
+   ./run.sh
+   ```
+   Ez azonnal elindítja a PipeWire C++ szűrőcsomópontot, és megnyitja a grafikus kezelőfelületet az alapértelmezett böngésződben.
+
+2. **A Linux Alkalmazásmenüből:**
+   Keresd meg a rendszer menüjében a **`EasyEffects Phase & Waterfall Analyzer`** ikont, és kattints rá!
+
+3. **Csatlakozási állapot:**
+   A fejlécben lévő zöld jelvény jelzi az élő kapcsolatot:
+   * **`● PipeWire Live (Csatlakoztatva)`**: A valós rendszerhang szűrése és 3D megjelenítése aktív.
+   * **`○ PipeWire Offline (Szimuláció)`**: Ha a PipeWire démon nem elérhető, a felület automatikusan a beépített tesztgenerátorra vált.
+
+---
+
+## 🛠️ Kézi Fordítás és Fejlesztői Környezet
+
+Ha kézzel szeretnéd lefordítani vagy módosítani a C++ motort:
+
+```bash
+# Függőségek (Ubuntu/Debian példa):
+sudo apt install build-essential cmake libpipewire-0.3-dev pkg-config
+
+# Fordítás:
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON
+cmake --build build -j$(nproc)
+
+# Tesztek futtatása:
+./build/test_math         # Zárt képletű csoportkésleltetés teszt
+./build/test_pipeline     # DSP lánc és limiter csillapítás teszt
+./build/test_ringbuffer   # 96 000 mintás többszálú zármentes átviteli teszt
+```
+
+---
+
+## 📂 Projektstruktúra
 
 ```
-   [Tidal / Hanglejátszó]
-             │
-             ▼
-    ┌─────────────────┐
-    │ PipeWire Audio  │ ──► [Kimenet a DAC felé]
-    └────────┬────────┘
-             │ (zéró-másolású gyűrűpuffer / Ringbuffer)
-             ▼
-   ┌──────────────────────────────────────────────────┐
-   │         EasyEffects Analizátor Modul             │
-   │                                                  │
-   │  ┌──────────────────────┐  ┌──────────────────┐  │
-   │  │ 1. Mód: Analitikus   │  │ 2. Mód: Élő 3D   │  │
-   │  │    Fázis / Késleltetés│  │    Vízesés       │  │
-   │  │    (2D XY Görbe)     │  │    (GPU Shader)  │  │
-   │  └──────────┬───────────┘  └─────────┬────────┘  │
-   └─────────────┼────────────────────────┼───────────┘
-                 │                        │
-                 ▼                        ▼
-       [GTK4 Cairo / Path]      [OpenGL / Vulkan Mesh]
-                 └───────────┬────────────┘
-                             ▼
-               [EasyEffects GUI Megjelenítő]
+├── CMakeLists.txt              # C++20 szabványos építőrendszer (Linux & Windows)
+├── install.sh                  # Univerzális Linux disztró-felismerő és telepítő szkript
+├── run.sh                      # Kényelmi futtató szkript (Web + PipeWire indítás)
+├── gui_integrated_system.html  # Teljes EasyEffects Adwaita grafikus felület és 3D WebGL
+├── autoeq_index.js             # 8 850+ modellt tartalmazó AutoEq fülhallgató adatbázis
+├── include/
+│   ├── biquad_analyzer.hpp     # Analitikus IIR szűrőmatematika és csoportkésleltetés
+│   ├── crossfeed.hpp           # Bauer bs2b és Jan Meier fejhallgatós térhatás motor
+│   ├── convolver.hpp           # Partícionált FIR impulzusválasz konvolúció
+│   ├── limiter.hpp             # True Peak limiter és analóg soft-clipper védelem
+│   ├── dsp_pipeline.hpp        # Integrált feldolgozási lánc (Preamp -> EQ -> CF -> Conv -> Limiter)
+│   ├── ringbuffer.hpp          # Zármentes SPSC körpuffer valós idejű hangátvitelhez
+│   ├── pipewire_filter_node.hpp# Natív Linux pw_filter audio csomópont
+│   ├── ws_bridge.hpp           # RFC 6455 élő WebSocket szerver a GUI összekötéséhez
+│   └── sha1_base64.hpp         # Független SHA-1 és Base64 modul a WS kézfogáshoz
+└── src/
+    ├── pipewire_plugin.cpp     # A PipeWire háttérszolgáltatás fő belépési pontja
+    ├── test_math.cpp           # Matematikai ellenőrző alkalmazás
+    ├── test_pipeline.cpp       # DSP integrációs tesztprogram
+    └── test_ringbuffer.cpp     # Többszálú valós idejű stabilitási tesztprogram
 ```
 
 ---
 
-## 2. Két Funkcionális Mód
-
-### A) 2D Analitikus Fázis- és Csoportkésleltetés Görbe (XY Nézet)
-* **Feladat:** Megmutatni, hogy az aktív pluginlánc (EQ, Convolver, Filterek) hol és mekkora fázistolást, illetve csoportkésleltetést okoz.
-* **Működési elv:** 
-  * Nem a valós zenei jelet elemzi, hanem közvetlenül az aktív szűrők átviteli függvényét ($H(z)$).
-  * A sávok frekvencia, erősítés (gain) és jósági tényező (Q) paramétereiből zárt matematikai képlettel azonnal kiszámítja a csoportkésleltetést:
-    $$\tau_g(\omega) = -\frac{d\phi(\omega)}{d\omega}$$
-* **Számítási igény:** Gyakorlatilag **0% CPU / GPU** terhelés. Azonnal reagál az EQ potméterek húzására.
-* **Megjelenítés:**
-  * **X tengely:** Frekvencia (20 Hz – 20 kHz, logaritmikus).
-  * **Y tengely:** Késleltetés ezredmásodpercben (ms) vagy fázisszög fokban (-180° és +180° között).
-  * **Referenciavonal:** 0 ms (ideális lineáris fázis).
-
----
-
-### B) 3D Valós Idejű Akusztikai Vízesés / Spektrogram (Waterfall Nézet)
-* **Feladat:** Élő Tidal / rendszerhang zenelejátszás közben valós időben kimutatni:
-  * A szobarezonanciák lecsengési idejét (búgó basszusok megmaradása az időben),
-  * Az éles FIR szűrők által keltett előcsengést (pre-ringing a tranziensek előtt).
-* **Működési elv:**
-  * Többpályás STFT (Short-Time Fourier Transform) vagy Morlet-Wavelet transzformáció.
-  * A mélyhangoknál (20–200 Hz) nagyobb időbeli felbontás a pontosságért, a magas hangoknál gyorsabb reakció.
-* **Számítási és Grafikai Architektúra:**
-  * **Adatátvitel:** Lock-free atomic ringbufferen keresztül másolódik a hangpuffer az elemző szálba.
-  * **Renderelés:** `GtkGLArea` (OpenGL) vagy Vulkan háttérmotor.
-  * A 3D háló magasságát és színezését (hőtérkép: kék $\to$ zöld $\to$ narancs $\to$ vörös) pixel shader végzi a GPU-n.
-* **Megjelenítés:**
-  * **X tengely:** Frekvencia (Hz).
-  * **Y tengely:** Idő (lefelé gördülő idővonal az elmúlt 500–1000 ms-ról).
-  * **Z tengely / Szín:** Hangnyomásszint (dBFS).
-
----
-
-## 3. Technológiai Stack és Függőségek
-
-| Komponens | Kiválasztott Technológia | Indoklás |
-| :--- | :--- | :--- |
-| **GUI Keretrendszer** | GTK4 / Libadwaita | Natív EasyEffects ökoszisztéma illeszkedés |
-| **Audió bemenet** | PipeWire SPA Plugin / Ringbuffer | Zéró másolás, valós idejű biztonság |
-| **Fázisszámítás** | Analitikus IIR/FIR Biquad Math | Mikroszekundumos válaszidő, minimális CPU |
-| **Idő-frekvencia FFT** | PocketFFT / VkFFT / FFTW3 | Gyors SIMD vagy GPU-alapú spektrumszámítás |
-| **3D Grafika** | Modern OpenGL (Core 3.3+) / Shader | 60 FPS folyamatos gördülés GPU terheléssel |
-
----
-
-## 4. Fejlesztési Mérföldkövek (Roadmap)
-
-1. **Mérföldkő: Matematikai Modell és Analitikus Fáziskalkulátor**
-   * Biquad szűrők (Peaking, Low-shelf, High-pass stb.) átviteli függvényének leprogramozása.
-   * Kaszkádosított (egymás után fűzött) szűrőlánc eredő fázismenete és csoportkésleltetése.
-2. **Mérföldkő: 2D XY Vektoros Megjelenítő**
-   * GTK4 felületen sima, dinamikus fázisgörbe kirajzolása valós idejű paraméterváltozásra.
-3. **Mérföldkő: PipeWire Ringbuffer és GPU Shader Pipeline**
-   * Zenei adat átvétele a háttérszálba a PipeWire-ból.
-   * OpenGL felület integrálása a GTK ablakba (GtkGLArea).
-4. **Mérföldkő: 3D Vízesés Háló és Hőtérkép Shader**
-   * Folyamatosan gördülő 3D felület létrehozása állítható lecsengési időablakkal.
-5. **Mérföldkő: EasyEffects Plugin Integráció**
-   * UI kapcsoló az RTA (hagyományos spektrum), a 2D Fázis és a 3D Vízesés nézetek között.
+## 📄 Licenc
+* A projekt forráskódja nyílt forráskódú (GPLv3 / MIT kompatibilis).
+* Az AutoEq index és profilok forrása az [AutoEq GitHub projekt](https://github.com/jaakkopasanen/AutoEq) (MIT Licenc).
