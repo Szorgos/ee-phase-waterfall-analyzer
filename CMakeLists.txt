@@ -14,7 +14,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 if(MSVC)
     add_compile_options(/W4 /O2 /fp:fast)
 else()
-    add_compile_options(-Wall -Wextra -Wpedantic -O3 -ffast-math)
+    add_compile_options(-Wall -Wextra -O3 -ffast-math)
 endif()
 
 # Fejlécek elérési útvonala
@@ -38,13 +38,18 @@ add_executable(test_ringbuffer src/test_ringbuffer.cpp)
 target_link_libraries(test_ringbuffer PRIVATE ee_dsp_core Threads::Threads)
 
 # Opciók későbbi modulokhoz (Linux PipeWire vagy Windows VST3)
-option(BUILD_PIPEWIRE_PLUGIN "PipeWire SPA modul fordítása Linuxra" OFF)
+option(BUILD_PIPEWIRE_PLUGIN "PipeWire SPA modul fordítása Linuxra" ON)
 option(BUILD_VST3_PLUGIN "VST3 beépülő modul fordítása" OFF)
 
 if(BUILD_PIPEWIRE_PLUGIN)
     message(STATUS "PipeWire SPA plugin építése engedélyezve")
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
+    if(PIPEWIRE_FOUND)
+        add_executable(pipewire_plugin src/pipewire_plugin.cpp)
+        target_include_directories(pipewire_plugin PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
+        target_link_libraries(pipewire_plugin PRIVATE ee_dsp_core ${PIPEWIRE_LIBRARIES} Threads::Threads)
+    endif()
 endif()
 
 if(BUILD_VST3_PLUGIN)
