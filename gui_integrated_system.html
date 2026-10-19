@@ -102,6 +102,7 @@
   .hp-card:hover { background: #282f3a; border-color: var(--ee-accent-blue); transform: translateY(-1px); }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="autoeq_index.js"></script>
 </head>
 <body>
 
@@ -1349,321 +1350,44 @@ document.getElementById("selectDecramp").onchange = (e) => {
 };
 
 // =========================================================================
-// AUTOEQ & SQUIGLINK ADATBÁZIS & ONLINE KERESŐ (TELJESEN LEGÁLIS & NYÍLT)
+// AUTOEQ & SQUIGLINK TELJES VALÓS ADATBÁZIS MOTOR (8 850+ MODELL)
 // =========================================================================
-const headphoneDatabase = [
-  {
-    id: "hd600",
-    name: "Sennheiser HD 600",
-    brand: "Sennheiser",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -5.5,
-    filters: [
-      { freq: 44, gain: 5.5, q: 1.4, type: "lowshelf" },
-      { freq: 1100, gain: -1.8, q: 2.0, type: "peaking" },
-      { freq: 3000, gain: -2.5, q: 2.8, type: "peaking" },
-      { freq: 5600, gain: -3.2, q: 4.5, type: "peaking" },
-      { freq: 8200, gain: 2.0, q: 3.0, type: "peaking" },
-      { freq: 10000, gain: 2.5, q: 0.7, type: "highshelf" }
-    ]
-  },
-  {
-    id: "hd650",
-    name: "Sennheiser HD 650 / HD 6XX",
-    brand: "Sennheiser",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -6.6,
-    filters: [
-      { freq: 35, gain: 6.6, q: 1.3, type: "lowshelf" },
-      { freq: 180, gain: -2.1, q: 1.5, type: "peaking" },
-      { freq: 1300, gain: -1.6, q: 2.2, type: "peaking" },
-      { freq: 5600, gain: -4.0, q: 4.0, type: "peaking" },
-      { freq: 8500, gain: 3.0, q: 2.5, type: "peaking" },
-      { freq: 10000, gain: 2.0, q: 0.7, type: "highshelf" }
-    ]
-  },
-  {
-    id: "hd560s",
-    name: "Sennheiser HD 560S",
-    brand: "Sennheiser",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -4.3,
-    filters: [
-      { freq: 40, gain: 4.3, q: 1.2, type: "lowshelf" },
-      { freq: 1350, gain: -1.8, q: 2.5, type: "peaking" },
-      { freq: 4800, gain: -3.5, q: 3.5, type: "peaking" },
-      { freq: 7200, gain: 2.0, q: 3.0, type: "peaking" }
-    ]
-  },
-  {
-    id: "hd800s",
-    name: "Sennheiser HD 800 S",
-    brand: "Sennheiser",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -5.9,
-    filters: [
-      { freq: 30, gain: 5.9, q: 1.2, type: "lowshelf" },
-      { freq: 1800, gain: 2.5, q: 2.0, type: "peaking" },
-      { freq: 5800, gain: -5.5, q: 4.5, type: "peaking" },
-      { freq: 10500, gain: -2.0, q: 2.5, type: "peaking" }
-    ]
-  },
-  {
-    id: "sundara",
-    name: "Hifiman Sundara (2020 Rev)",
-    brand: "Hifiman",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -6.2,
-    filters: [
-      { freq: 42, gain: 6.2, q: 1.1, type: "lowshelf" },
-      { freq: 700, gain: -1.2, q: 2.0, type: "peaking" },
-      { freq: 2100, gain: 2.4, q: 2.5, type: "peaking" },
-      { freq: 6100, gain: -3.5, q: 4.0, type: "peaking" },
-      { freq: 9500, gain: 2.0, q: 1.8, type: "peaking" }
-    ]
-  },
-  {
-    id: "edition_xs",
-    name: "Hifiman Edition XS",
-    brand: "Hifiman",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -5.1,
-    filters: [
-      { freq: 35, gain: 5.1, q: 1.2, type: "lowshelf" },
-      { freq: 1200, gain: 2.0, q: 2.5, type: "peaking" },
-      { freq: 3200, gain: -2.5, q: 3.0, type: "peaking" },
-      { freq: 7500, gain: -2.8, q: 4.0, type: "peaking" }
-    ]
-  },
-  {
-    id: "arya",
-    name: "Hifiman Arya Stealth Magnets",
-    brand: "Hifiman",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -4.8,
-    filters: [
-      { freq: 32, gain: 4.8, q: 1.2, type: "lowshelf" },
-      { freq: 1800, gain: 2.2, q: 2.2, type: "peaking" },
-      { freq: 3400, gain: -2.8, q: 3.2, type: "peaking" },
-      { freq: 5200, gain: -3.0, q: 4.5, type: "peaking" }
-    ]
-  },
-  {
-    id: "dt770",
-    name: "Beyerdynamic DT 770 Pro 80Ω",
-    brand: "Beyerdynamic",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -5.7,
-    filters: [
-      { freq: 120, gain: -3.8, q: 1.8, type: "peaking" },
-      { freq: 240, gain: 2.0, q: 2.0, type: "peaking" },
-      { freq: 3800, gain: 4.0, q: 2.2, type: "peaking" },
-      { freq: 5900, gain: -5.7, q: 4.5, type: "peaking" },
-      { freq: 8800, gain: -4.2, q: 3.5, type: "peaking" }
-    ]
-  },
-  {
-    id: "dt990",
-    name: "Beyerdynamic DT 990 Pro 250Ω",
-    brand: "Beyerdynamic",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -6.4,
-    filters: [
-      { freq: 45, gain: 6.4, q: 1.2, type: "lowshelf" },
-      { freq: 750, gain: 2.5, q: 1.8, type: "peaking" },
-      { freq: 4300, gain: 3.2, q: 2.5, type: "peaking" },
-      { freq: 5800, gain: -6.0, q: 4.5, type: "peaking" },
-      { freq: 8400, gain: -5.5, q: 3.8, type: "peaking" }
-    ]
-  },
-  {
-    id: "dt1990",
-    name: "Beyerdynamic DT 1990 Pro (A-Pads)",
-    brand: "Beyerdynamic",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -5.3,
-    filters: [
-      { freq: 40, gain: 5.3, q: 1.2, type: "lowshelf" },
-      { freq: 1100, gain: 1.8, q: 2.2, type: "peaking" },
-      { freq: 7200, gain: -5.0, q: 4.2, type: "peaking" },
-      { freq: 8400, gain: -4.5, q: 3.5, type: "peaking" }
-    ]
-  },
-  {
-    id: "m50x",
-    name: "Audio-Technica ATH-M50x",
-    brand: "Audio-Technica",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -4.8,
-    filters: [
-      { freq: 180, gain: -3.5, q: 1.5, type: "peaking" },
-      { freq: 350, gain: 2.0, q: 2.0, type: "peaking" },
-      { freq: 3600, gain: 4.8, q: 2.5, type: "peaking" },
-      { freq: 9200, gain: -4.0, q: 3.5, type: "peaking" }
-    ]
-  },
-  {
-    id: "k371",
-    name: "AKG K371",
-    brand: "AKG",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -3.2,
-    filters: [
-      { freq: 65, gain: -2.5, q: 1.8, type: "peaking" },
-      { freq: 4200, gain: 3.2, q: 2.5, type: "peaking" },
-      { freq: 8000, gain: -2.0, q: 3.0, type: "peaking" }
-    ]
-  },
-  {
-    id: "xm4",
-    name: "Sony WH-1000XM4 (ANC BE)",
-    brand: "Sony",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -6.1,
-    filters: [
-      { freq: 140, gain: -4.5, q: 1.2, type: "peaking" },
-      { freq: 650, gain: 2.5, q: 2.0, type: "peaking" },
-      { freq: 1800, gain: 4.0, q: 2.5, type: "peaking" },
-      { freq: 6200, gain: -3.0, q: 3.5, type: "peaking" },
-      { freq: 9800, gain: 3.5, q: 2.0, type: "peaking" }
-    ]
-  },
-  {
-    id: "airpods_pro_2",
-    name: "Apple AirPods Pro 2",
-    brand: "Apple",
-    source: "Squiglink (Crinacle)",
-    target: "IEF Neutral Target",
-    preamp: -3.5,
-    filters: [
-      { freq: 80, gain: -2.0, q: 1.5, type: "peaking" },
-      { freq: 2800, gain: 3.5, q: 2.2, type: "peaking" },
-      { freq: 6200, gain: -2.5, q: 3.5, type: "peaking" },
-      { freq: 10500, gain: 2.0, q: 1.5, type: "highshelf" }
-    ]
-  },
-  {
-    id: "chu2",
-    name: "Moondrop Chu II",
-    brand: "Moondrop",
-    source: "Squiglink (Super*Review)",
-    target: "Super IEF Neutral",
-    preamp: -4.2,
-    filters: [
-      { freq: 180, gain: -2.8, q: 1.4, type: "peaking" },
-      { freq: 2400, gain: 2.2, q: 2.0, type: "peaking" },
-      { freq: 5800, gain: -4.2, q: 3.8, type: "peaking" },
-      { freq: 11000, gain: 2.5, q: 1.2, type: "highshelf" }
-    ]
-  },
-  {
-    id: "blessing2_dusk",
-    name: "Moondrop Blessing 2 Dusk",
-    brand: "Moondrop",
-    source: "Squiglink (Crinacle)",
-    target: "Crinacle IEF Neutral + Bass",
-    preamp: -3.8,
-    filters: [
-      { freq: 55, gain: 2.5, q: 1.1, type: "lowshelf" },
-      { freq: 1200, gain: -1.5, q: 2.5, type: "peaking" },
-      { freq: 5800, gain: -3.8, q: 4.0, type: "peaking" },
-      { freq: 12000, gain: 3.0, q: 1.0, type: "highshelf" }
-    ]
-  },
-  {
-    id: "zero_red",
-    name: "Truthear x Crinacle Zero: RED",
-    brand: "Truthear",
-    source: "Squiglink (Crinacle)",
-    target: "IEF Neutral Target",
-    preamp: -3.6,
-    filters: [
-      { freq: 140, gain: -1.8, q: 1.6, type: "peaking" },
-      { freq: 3100, gain: 2.5, q: 2.5, type: "peaking" },
-      { freq: 6200, gain: -3.6, q: 3.5, type: "peaking" }
-    ]
-  },
-  {
-    id: "hexa",
-    name: "Truthear Hexa",
-    brand: "Truthear",
-    source: "Squiglink (Super*Review)",
-    target: "Super IEF Neutral",
-    preamp: -3.9,
-    filters: [
-      { freq: 45, gain: 3.9, q: 1.2, type: "lowshelf" },
-      { freq: 2800, gain: -2.0, q: 2.5, type: "peaking" },
-      { freq: 6500, gain: -3.2, q: 4.0, type: "peaking" }
-    ]
-  },
-  {
-    id: "waner",
-    name: "Tangzu Wan'er S.G",
-    brand: "Tangzu",
-    source: "Squiglink (Timmy Vangtan)",
-    target: "Vangtan Reference Target",
-    preamp: -3.5,
-    filters: [
-      { freq: 200, gain: -2.5, q: 1.5, type: "peaking" },
-      { freq: 3200, gain: 2.8, q: 2.2, type: "peaking" },
-      { freq: 6000, gain: -3.5, q: 3.8, type: "peaking" }
-    ]
-  },
-  {
-    id: "salnotes_zero",
-    name: "7Hz Salnotes Zero",
-    brand: "7Hz",
-    source: "Squiglink (Bad Guy Good Audio HBB)",
-    target: "HBB Target",
-    preamp: -4.1,
-    filters: [
-      { freq: 45, gain: 4.1, q: 1.1, type: "lowshelf" },
-      { freq: 1500, gain: -1.8, q: 2.0, type: "peaking" },
-      { freq: 5200, gain: -3.5, q: 4.0, type: "peaking" }
-    ]
-  },
-  {
-    id: "meze99",
-    name: "Meze 99 Classics",
-    brand: "Meze",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -7.2,
-    filters: [
-      { freq: 110, gain: -5.5, q: 1.2, type: "peaking" },
-      { freq: 600, gain: 3.5, q: 1.8, type: "peaking" },
-      { freq: 2200, gain: 4.5, q: 2.5, type: "peaking" },
-      { freq: 5800, gain: -4.0, q: 4.0, type: "peaking" }
-    ]
-  },
-  {
-    id: "lcdx",
-    name: "Audeze LCD-X (2021 Creator)",
-    brand: "Audeze",
-    source: "AutoEq (oratory1990)",
-    target: "Harman Over-Ear 2018",
-    preamp: -6.8,
-    filters: [
-      { freq: 35, gain: 5.5, q: 1.2, type: "lowshelf" },
-      { freq: 1200, gain: 2.5, q: 2.2, type: "peaking" },
-      { freq: 3800, gain: 6.8, q: 2.8, type: "peaking" },
-      { freq: 6100, gain: -4.5, q: 4.0, type: "peaking" }
-    ]
+let fullAutoEqIndex = (typeof window.AUTOEQ_GLOBAL_INDEX !== 'undefined') ? window.AUTOEQ_GLOBAL_INDEX : [];
+let currentFilteredResults = [];
+
+// Ha a helyi JS index még nem állna rendelkezésre, azonnal letöltjük a hivatalos GitHub INDEX.md-t:
+async function ensureAutoEqIndexLoaded() {
+  if (fullAutoEqIndex && fullAutoEqIndex.length > 0) {
+    updateIndexCountLabel();
+    return;
   }
-];
+  try {
+    const lbl = document.getElementById("lblResultCount");
+    if (lbl) lbl.innerText = "⏳ 8 850+ modell betöltése a GitHubról...";
+    const resp = await fetch('https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/INDEX.md');
+    const text = await resp.text();
+    const pattern = /^- \[(.*?)\]\(\.\/(.*?)\) by (.*)$/gm;
+    let match;
+    const list = [];
+    while ((match = pattern.exec(text)) !== null) {
+      list.push({ name: match[1], path: match[2], source: match[3] });
+    }
+    if (list.length > 0) {
+      fullAutoEqIndex = list;
+      updateIndexCountLabel();
+      filterHeadphones(document.getElementById("headphoneSearchInput").value);
+    }
+  } catch (err) {
+    console.warn("AutoEq GitHub lekérés hiba:", err);
+  }
+}
+
+function updateIndexCountLabel() {
+  const lbl = document.getElementById("lblResultCount");
+  if (lbl) {
+    lbl.innerText = `🟢 Valódi adatbázis: ${fullAutoEqIndex.length.toLocaleString('hu-HU')} eszköz elérhető`;
+  }
+}
 
 function switchModalTab(tabId) {
   document.getElementById("modalTabOnline").style.display = (tabId === 'online') ? 'flex' : 'none';
@@ -1676,39 +1400,48 @@ function renderHeadphones(items) {
   const container = document.getElementById("headphoneSearchResults");
   if (!container) return;
   container.innerHTML = "";
+  currentFilteredResults = items;
 
-  document.getElementById("lblResultCount").innerText = `${items.length} találat`;
+  const countBadge = document.getElementById("lblResultCount");
+  if (countBadge) {
+    countBadge.innerText = `${items.length.toLocaleString('hu-HU')} találat (összesen ${fullAutoEqIndex.length.toLocaleString('hu-HU')} modell)`;
+  }
 
   if (items.length === 0) {
     container.innerHTML = `
       <div style="background:#1e232b; border:1px dashed #3c4858; border-radius:8px; padding:20px; text-align:center; color:#aaa; font-size:0.8rem;">
-        Nem található ilyen modell a helyi indexben.<br>
-        <button class="adw-btn primary" style="margin-top:10px; font-size:0.75rem;" onclick="searchAutoEqOnline()">🌐 Keresés az élő AutoEq GitHub repóban...</button>
+        Nem található ilyen fejhallgató vagy fülhallgató a(z) <strong>${fullAutoEqIndex.length}</strong> modellt tartalmazó adatbázisban.<br>
+        Próbáld meg rövidebb kifejezéssel (pl. <em>HD 600</em>, <em>Sundara</em>, <em>Chu</em>, <em>Sony</em>, <em>Bose</em>, <em>Aero</em>).
       </div>`;
     return;
   }
 
-  items.forEach(hp => {
-    const isAutoEq = hp.source.includes("AutoEq");
-    const sourceBadge = isAutoEq ? 
-      `<span class="status-badge optimal" style="font-size:0.68rem;">AutoEq (${hp.source.split('(')[1] || ''}</span>` :
-      `<span class="status-badge info" style="font-size:0.68rem;">Squiglink (${hp.source.split('(')[1] || ''}</span>`;
+  // A DOM stabilitásához a legrelevánsabb első 60 találatot rendereljük azonnal
+  const displaySlice = items.slice(0, 60);
+
+  displaySlice.forEach((hp, idx) => {
+    const isOratory = hp.source.toLowerCase().includes("oratory");
+    const isCrinacle = hp.source.toLowerCase().includes("crinacle");
+    const isSuper = hp.source.toLowerCase().includes("super review");
+
+    let sourceClass = "optimal";
+    if (isCrinacle || isSuper) sourceClass = "info";
+    else if (!isOratory) sourceClass = "caution";
 
     const card = document.createElement("div");
     card.className = "hp-card";
     card.innerHTML = `
-      <div style="display:flex; flex-direction:column; gap:4px;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <strong style="color:#fff; font-size:0.88rem;">${hp.name}</strong>
-          ${sourceBadge}
+      <div style="display:flex; flex-direction:column; gap:4px; max-width:78%;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <strong style="color:#fff; font-size:0.86rem;">${hp.name}</strong>
+          <span class="status-badge ${sourceClass}" style="font-size:0.66rem;">${hp.source}</span>
         </div>
-        <div style="font-size:0.72rem; color:var(--ee-text-secondary); display:flex; gap:10px;">
-          <span>🎯 Cél: <strong style="color:#ddd;">${hp.target}</strong></span>
-          <span>• 🎚️ ${hp.filters.length} sáv</span>
-          <span>• 🛡️ Eredeti Preamp: <strong style="color:var(--ee-green);">${hp.preamp.toFixed(1)} dB</strong></span>
+        <div style="font-size:0.72rem; color:var(--ee-text-secondary); display:flex; gap:10px; flex-wrap:wrap;">
+          <span>📂 Könyvtár: <span style="font-family:monospace; color:#aaa;">${hp.path.split('/')[0]}</span></span>
+          <span style="color:var(--ee-green); font-weight:600;">• Zéró Dupla-Preamp védelem</span>
         </div>
       </div>
-      <button class="adw-btn primary" style="background:#2ec27e; border-color:#26a269; font-size:0.75rem; padding:4px 10px;" onclick="applyHeadphoneProfile('${hp.id}')">
+      <button class="adw-btn primary" id="btnLoad_${idx}" style="background:#2ec27e; border-color:#26a269; font-size:0.75rem; padding:5px 12px; white-space:nowrap;" onclick="loadRealAutoEqProfile(${idx})">
         ⚡ Betöltés
       </button>
     `;
@@ -1720,56 +1453,170 @@ function filterHeadphones(query) {
   const q = (query || "").toLowerCase().trim();
   const filter = document.getElementById("headphoneSourceFilter") ? document.getElementById("headphoneSourceFilter").value : "all";
 
-  const filtered = headphoneDatabase.filter(hp => {
-    const matchesQuery = hp.name.toLowerCase().includes(q) || hp.brand.toLowerCase().includes(q);
+  if (!fullAutoEqIndex || fullAutoEqIndex.length === 0) {
+    ensureAutoEqIndexLoaded();
+    return;
+  }
+
+  const filtered = fullAutoEqIndex.filter(hp => {
+    const matchesQuery = q === "" ? true : hp.name.toLowerCase().includes(q);
     if (!matchesQuery) return false;
 
-    if (filter === "autoeq") return hp.source.includes("AutoEq");
-    if (filter === "squig") return hp.source.includes("Squiglink");
+    if (filter === "autoeq") {
+      const s = hp.source.toLowerCase();
+      return s.includes("oratory") || s.includes("harman") || s.includes("rtings");
+    }
+    if (filter === "squig") {
+      const s = hp.source.toLowerCase();
+      return s.includes("crinacle") || s.includes("super review") || s.includes("timmy") || s.includes("hbb") || s.includes("tonedeaf");
+    }
     return true;
   });
 
   renderHeadphones(filtered);
 }
 
-function searchAutoEqOnline() {
-  const q = document.getElementById("headphoneSearchInput").value.trim();
-  alert(`🌐 Élő lekérdezés indítása a hivatalos AutoEq / Squiglink GitHub repóból a(z) "${q}" kifejezésre...\n\n(A funkció közvetlenül a raw.githubusercontent.com/jaakkopasanen/AutoEq indexét célozza).`);
+// VALÓS ONLINE EQ PROFIL BETÖLTÉSE KÖZVETLENÜL A GITHUBRÓL
+async function loadRealAutoEqProfile(idx) {
+  const hp = currentFilteredResults[idx];
+  if (!hp) return;
+
+  const btn = document.getElementById(`btnLoad_${idx}`);
+  if (btn) {
+    btn.innerText = "⏳ Letöltés...";
+    btn.disabled = true;
+  }
+
+  try {
+    const folderName = hp.path.split('/').pop();
+    // A hivatalos GitHub raw ParametricEQ elérési út
+    const url = `https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/${hp.path}/${folderName}%20ParametricEQ.txt`;
+
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status} - Nem található a ParametricEQ.txt a tárolóban.`);
+    }
+
+    const text = await resp.text();
+    applyParsedAutoEqProfile(text, hp.name, hp.source);
+  } catch (err) {
+    console.warn("Hiba a profil letöltésekor:", err);
+    // Ha a ParametricEQ.txt nem elérhető, megpróbáljuk a README.md-ből kinyerni
+    try {
+      const folderName = hp.path.split('/').pop();
+      const readmeUrl = `https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/${hp.path}/README.md`;
+      const resp2 = await fetch(readmeUrl);
+      if (resp2.ok) {
+        const text2 = await resp2.text();
+        applyParsedAutoEqProfile(text2, hp.name, hp.source);
+        return;
+      }
+    } catch (e2) {}
+    alert(`Nem sikerült közvetlenül letölteni a(z) "${hp.name}" fájlt a GitHubról:\n${err.message}`);
+    if (btn) {
+      btn.innerText = "⚡ Betöltés";
+      btn.disabled = false;
+    }
+  }
 }
 
-// BIZTONSÁGOS PROFIL BETÖLTÉS - KÖZVETLEN PREAMP VÉDELEMMEL, DUPLÁZÁS NÉLKÜL!
-function applyHeadphoneProfile(id) {
-  const hp = headphoneDatabase.find(h => h.id === id);
-  if (!hp) return;
+// INTELLIGENS PARSZOLÓ & PROFIL ALKALMAZÓ - DUPLA PREAMP KIZÁRÁSÁVAL!
+function applyParsedAutoEqProfile(text, modelName, sourceName) {
+  const lines = text.split("\n");
+  const parsedNodes = [];
+  let explicitPreamp = null;
+  let maxBoostFound = 0;
 
   const colorPalette = ["#3584e4", "#e01b24", "#ff7800", "#33d17a", "#9141ac", "#f6d32d", "#2ec27e", "#e66100", "#1c71d8"];
 
-  nodes = hp.filters.map((f, idx) => ({
-    id: Date.now() + Math.random() + idx,
-    freq: f.freq,
-    gain: f.gain,
-    q: f.q,
-    type: f.type,
-    color: colorPalette[idx % colorPalette.length]
-  }));
-  selectedNodeId = nodes[0].id;
+  lines.forEach((line) => {
+    const l = line.trim();
+    if (!l) return;
 
-  // 1. PREAMP PONTOS BEÁLLÍTÁSA A GYÁRI FORRÁSBÓL (NINCS DUPLA LEVONÁS!)
-  currentPreamp = hp.preamp;
-  document.getElementById("inputPreamp").value = currentPreamp.toFixed(1);
-  const badgePreamp = document.getElementById("badgePreampOrigin");
-  if (badgePreamp) {
-    badgePreamp.className = "status-badge optimal";
-    badgePreamp.innerText = `${hp.source.split(' ')[0]} Preamp (${currentPreamp.toFixed(1)} dB)`;
-    badgePreamp.title = "Gyári adatbázis Preamp közvetlenül beállítva - nincs dupla levonás!";
+    // Preamp keresése
+    const preampMatch = l.match(/Preamp:\s*([+-]?\d+(\.\d+)?)/i);
+    if (preampMatch) {
+      explicitPreamp = parseFloat(preampMatch[1]);
+      return;
+    }
+
+    // Szűrő sorok (PK, LSC, HSC, LP, HP)
+    const filterMatch = l.match(/Filter\s*\d+:\s*(ON|OFF)?\s*(PK|PEAK|LSC|LS|HSC|HS|LP|LPF|HP|HPF)\s*Fc\s*(\d+(\.\d+)?)\s*Hz\s*Gain\s*([+-]?\d+(\.\d+)?)\s*dB\s*Q\s*(\d+(\.\d+)?)/i);
+    if (filterMatch) {
+      const typeRaw = filterMatch[2].toUpperCase();
+      const freq = parseFloat(filterMatch[3]);
+      const gain = parseFloat(filterMatch[5]);
+      const q = parseFloat(filterMatch[7]);
+
+      let type = "peaking";
+      if (typeRaw === "LSC" || typeRaw === "LS") type = "lowshelf";
+      else if (typeRaw === "HSC" || typeRaw === "HS") type = "highshelf";
+      else if (typeRaw === "LP" || typeRaw === "LPF") type = "lowpass";
+      else if (typeRaw === "HP" || typeRaw === "HPF") type = "highpass";
+
+      if (gain > maxBoostFound) maxBoostFound = gain;
+
+      parsedNodes.push({
+        id: Date.now() + Math.random(),
+        freq: Math.round(freq),
+        gain: Math.round(gain * 10) / 10,
+        q: Math.round(q * 100) / 100,
+        type: type,
+        color: colorPalette[parsedNodes.length % colorPalette.length]
+      });
+    }
+  });
+
+  if (parsedNodes.length === 0) {
+    alert("Nem sikerült érvényes parametrikus EQ sávokat találni a letöltött fájlban!");
+    return;
   }
 
-  // 2. TRUE PEAK LIMITER AKTIVÁLÁSA (-1.0 dBTP, 4x Lanczos)
+  nodes = parsedNodes;
+  selectedNodeId = nodes[0].id;
+
+  // DUPLA PREAMP VÉDELEM:
+  let finalPreamp = 0.0;
+  let preampNote = "";
+
+  if (explicitPreamp !== null) {
+    // A FÁJLBÓL JÖTT A PREAMP: KIZÁRÓLAG EZT HASZNÁLJUK, NEM VONJUK LE MÉG EGYSZER!
+    finalPreamp = explicitPreamp;
+    preampNote = "Eredeti gyári Preamp közvetlenül beállítva (Nincs dupla levonás!)";
+    const badgePreamp = document.getElementById("badgePreampOrigin");
+    if (badgePreamp) {
+      badgePreamp.className = "status-badge optimal";
+      badgePreamp.innerText = `Gyári (${finalPreamp.toFixed(1)} dB)`;
+    }
+  } else {
+    // HA NEM VOLT PREAMP: csak akkor számol az Auto-Guard
+    if (maxBoostFound > 0) {
+      finalPreamp = -Math.round(maxBoostFound * 10) / 10;
+      preampNote = "A fájl nem tartalmazott preampot -> Auto-Guard állította be";
+      const badgePreamp = document.getElementById("badgePreampOrigin");
+      if (badgePreamp) {
+        badgePreamp.className = "status-badge info";
+        badgePreamp.innerText = `Auto-Guard (${finalPreamp.toFixed(1)} dB)`;
+      }
+    } else {
+      finalPreamp = 0.0;
+      preampNote = "0.0 dB (Nem volt kiemelés)";
+      const badgePreamp = document.getElementById("badgePreampOrigin");
+      if (badgePreamp) {
+        badgePreamp.className = "status-badge optimal";
+        badgePreamp.innerText = `0.0 dB (Tiszta jel)`;
+      }
+    }
+  }
+
+  currentPreamp = finalPreamp;
+  document.getElementById("inputPreamp").value = currentPreamp.toFixed(1);
+
+  // Limiter & Minimálfázis aktiválása
   updateLimiterCeiling(-1.0, false);
   document.getElementById("limiterOversampling").value = "4x";
   updateLimiterOversampling();
 
-  // 3. IIR MINIMÁLFÁZIS ALAPÉRTELMEZETTEN (0 ms pre-ringing)
   currentEqMode = 'iir';
   document.getElementById("selectEqMode").value = "iir";
   isFirMode = false;
@@ -1781,11 +1628,12 @@ function applyHeadphoneProfile(id) {
   updateEqUI();
   drawEq();
 
-  alert(`✅ Profil Sikeresen Betöltve!\n\n` +
-        `• Modell: ${hp.name}\n` +
-        `• Forrás: ${hp.source} (${hp.target})\n` +
-        `• Preamp: ${currentPreamp.toFixed(1)} dB [Gyári érték - Dupla levonás kizárva!]\n` +
-        `• Sávok száma: ${nodes.length} db parametrikus szűrő\n` +
+  alert(`✅ Valódi AutoEq Profil Betöltve!\n\n` +
+        `• Modell: ${modelName}\n` +
+        `• Mérési forrás: ${sourceName}\n` +
+        `• Preamp: ${finalPreamp.toFixed(1)} dB\n` +
+        `  ↳ ${preampNote}\n` +
+        `• Szűrősávok: ${nodes.length} db parametrikus pont\n` +
         `• True Peak Limiter: -1.0 dBTP (4x Lanczos aktív)\n` +
         `• Szűrési Mód: IIR Minimálfázis (0 ms pre-ringing)`);
 }
@@ -1793,6 +1641,7 @@ function applyHeadphoneProfile(id) {
 document.getElementById("btnImportAutoEq").onclick = () => {
   modalImport.style.display = "flex";
   switchModalTab('online');
+  ensureAutoEqIndexLoaded();
   filterHeadphones(document.getElementById("headphoneSearchInput").value);
   document.getElementById("headphoneSearchInput").focus();
 };
@@ -2318,6 +2167,9 @@ function updateBassInfo() {
     lbl.innerText = `${subcut} Hz – ${cross} Hz virtuális alaphangok`;
   }
 }
+
+// Induláskor háttérben előkészítjük a 8 850+ modellt tartalmazó teljes AutoEq indexet
+setTimeout(ensureAutoEqIndexLoaded, 100);
 </script>
 </body>
 </html>
