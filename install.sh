@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# EasyEffects Valós Idejű Fázis- és Akusztikai Vízesés Analizátor
+# AetherAudio - Valós Idejű Fázis- és Akusztikai Vízesés Analizátor DSP Rendszer
 # Univerzális Linux Telepítő és Build Szkript
 # Támogatott disztribúciók: Ubuntu, Debian, Fedora, Arch Linux, Manjaro, openSUSE
 # ==============================================================================
@@ -14,7 +14,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}====================================================================${NC}"
-echo -e "${GREEN}  EasyEffects Phase & Acoustic Waterfall Analyzer Telepítő${NC}"
+echo -e "${GREEN}  AetherAudio • Phase & Acoustic Waterfall DSP Telepítő${NC}"
 echo -e "${BLUE}====================================================================${NC}"
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -124,10 +124,10 @@ echo -e "\n${YELLOW}[5/5] Linux asztali menü bejegyzés létrehozása...${NC}"
 DESKTOP_DIR="${HOME}/.local/share/applications"
 mkdir -p "$DESKTOP_DIR"
 
-cat << EOF > "${DESKTOP_DIR}/ee-phase-waterfall.desktop"
+cat << EOF > "${DESKTOP_DIR}/aetheraudio.desktop"
 [Desktop Entry]
-Name=EasyEffects Phase & Waterfall Analyzer
-Comment=Real-time Phase, Group Delay & Acoustic Waterfall DSP Analyzer
+Name=AetherAudio DSP Suite
+Comment=AetherAudio - Real-time Phase, Group Delay & Acoustic Waterfall DSP Suite
 Exec=${PROJECT_DIR}/run.sh
 Icon=audio-card
 Terminal=true
@@ -135,12 +135,12 @@ Type=Application
 Categories=AudioVideo;Audio;AudioVideoEditing;
 EOF
 
-chmod +x "${DESKTOP_DIR}/ee-phase-waterfall.desktop"
+chmod +x "${DESKTOP_DIR}/aetheraudio.desktop"
 
 echo -e "\n${BLUE}====================================================================${NC}"
-echo -e "${GREEN}  SIKERES TELEPÍTÉS! A rendszer készen áll a használatra.${NC}"
+echo -e "${GREEN}  SIKERES TELEPÍTÉS! Az AetherAudio készen áll a használatra.${NC}"
 echo -e "${BLUE}====================================================================${NC}"
 echo -e "Indítás a terminálból:"
 echo -e "  ${YELLOW}./run.sh${NC}"
 echo -e "\nVagy keresd a Linux alkalmazásmenüdben:"
-echo -e "  ${GREEN}EasyEffects Phase & Waterfall Analyzer${NC}\n"
+echo -e "  ${GREEN}AetherAudio DSP Suite${NC}\n"
