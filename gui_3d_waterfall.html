@@ -272,13 +272,18 @@ function generateNextSpectrumSlice() {
   simFrame++;
 
   if (testMode === 'kick') {
-    const beatPhase = simFrame % 65;
+    const beatPhase = simFrame % 70;
     
-    // Diszkrét, halvány FIR fényhíd (Pre-ringing): nagyon lágy derengés, nem tolakodó
-    if (simPreRing && beatPhase >= 57 && beatPhase < 63) {
-      const ringAmp = Math.sin((beatPhase - 57) / 6.0 * Math.PI) * 0.18; // nagyon finom amplitúdó
-      slice[12] = ringAmp; // 80 Hz körüli diszkrét fénykontúr
-      slice[13] = ringAmp * 0.7;
+    // FIR Pre-ringing jelenség: az impulzus ELŐTT 4-6 időablakkal megjelenő rezgéshullám
+    if (simPreRing && beatPhase >= 58 && beatPhase < 68) {
+      // Szinuszos hullámzás, ami a fő ütéshez közeledve felerősödik
+      const progress = (beatPhase - 58) / 10.0;
+      const oscillation = Math.sin(progress * Math.PI * 3.0); // 3 rezgésciklus
+      const ringAmp = Math.abs(oscillation) * (0.15 + progress * 0.35); // jól kivehető magasság
+      slice[12] = ringAmp; // 80 Hz-es gerinc előtt
+      slice[11] = ringAmp * 0.8;
+      slice[13] = ringAmp * 0.8;
+      slice[18] = ringAmp * 0.4;
     }
 
     if (beatPhase === 0) {
