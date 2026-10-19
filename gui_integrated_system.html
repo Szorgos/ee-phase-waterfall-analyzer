@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EasyEffects • Teljes Rendszerintegrált Spektrum, Fázis & Vízesés Analizátor</title>
+<style>
+  :root {
+    --ee-window-bg: #242424;
+    --ee-view-bg: #1c1c1c;
+    --ee-card-bg: #303030;
+    --ee-border: #3c3c3c;
+    --ee-border-active: #505050;
+    --ee-accent-blue: #3584e4;
+    --ee-curve-cyan: #78aeed;
+    --ee-orange: #ff7800;
+    --ee-green: #33d17a;
+    --ee-purple: #b070ff;
+    --ee-destructive: #e01b24;
+    --ee-text-primary: #ffffff;
+    --ee-text-secondary: #9a9996;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Cantarell", "Segoe UI", Roboto, sans-serif; }
+  body { background: var(--ee-window-bg); color: var(--ee-text-primary); padding: 12px; user-select: none; }
+  .ee-window { max-width: 1240px; margin: 0 auto; background: var(--ee-window-bg); border: 1px solid var(--ee-border); border-radius: 12px; overflow: hidden; box-shadow: 0 12px 36px rgba(0,0,0,0.4); display: flex; flex-direction: column; }
+
+  header { background: var(--ee-card-bg); border-bottom: 1px solid var(--ee-border); padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; }
+  .title-group { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 0.95rem; }
+  .badge-app { background: var(--ee-accent-blue); padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; }
+
+  /* ======================================================= */
+  /* FELSŐ 3D VÍZESÉS SÁV                                   */
+  /* ======================================================= */
+  .top-spectrum-strip { position: relative; width: 100%; height: 230px; background: #0c0e12; border-bottom: 1px solid var(--ee-border); overflow: hidden; }
+  canvas#waterfallCanvas { width: 100%; height: 100%; display: block; }
+
+  .strip-overlay { position: absolute; top: 10px; left: 14px; display: flex; gap: 8px; pointer-events: none; }
+  .strip-badge { background: rgba(30, 30, 30, 0.85); backdrop-filter: blur(4px); border: 1px solid var(--ee-border); border-radius: 6px; padding: 4px 10px; font-size: 0.72rem; color: var(--ee-text-secondary); }
+  .strip-badge strong { color: #00f0ff; }
+
+  .strip-controls { position: absolute; top: 10px; right: 14px; display: flex; gap: 6px; align-items: center; z-index: 10; }
+  .mini-btn { background: rgba(45, 45, 45, 0.85); backdrop-filter: blur(4px); border: 1px solid var(--ee-border); color: #fff; padding: 4px 9px; border-radius: 5px; font-size: 0.73rem; cursor: pointer; font-weight: 600; transition: all 0.15s; }
+  .mini-btn:hover { background: #404040; border-color: var(--ee-accent-blue); }
+  .mini-btn.active { background: rgba(53, 132, 228, 0.25); border-color: var(--ee-accent-blue); color: #00f0ff; }
+
+  .ctrl-label { font-size: 0.72rem; color: var(--ee-text-secondary); margin-left: 4px; }
+  .mini-select { background: rgba(35, 35, 35, 0.9); border: 1px solid var(--ee-border); color: #fff; padding: 3px 6px; border-radius: 4px; font-size: 0.72rem; outline: none; }
+
+  /* ======================================================= */
+  /* ALSÓ FŐ PANEL: TABOK ÉS MODULOK                        */
+  /* ======================================================= */
+  .main-content { padding: 14px 18px; background: var(--ee-window-bg); display: flex; flex-direction: column; gap: 12px; }
+  .plugin-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--ee-border); padding-bottom: 8px; font-size: 0.85rem; }
+  .tab-btn { padding: 6px 16px; border-radius: 6px; cursor: pointer; color: var(--ee-text-secondary); font-weight: 600; background: none; border: 1px solid transparent; transition: all 0.15s; }
+  .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.04); }
+  .tab-btn.active { background: var(--ee-card-bg); color: #fff; border-color: var(--ee-border); }
+
+  /* MODUL TARTALMAK */
+  .tab-pane { display: none; flex-direction: column; gap: 10px; }
+  .tab-pane.active { display: flex; }
+
+  /* 2D EQ GRAFIKON */
+  .eq-canvas-wrapper { position: relative; background: var(--ee-view-bg); border: 1px solid var(--ee-border); border-radius: 8px; overflow: hidden; }
+  canvas#eqCanvas { display: block; width: 100%; height: 260px; cursor: crosshair; }
+
+  .eq-bottom-bar { background: var(--ee-card-bg); border: 1px solid var(--ee-border); border-radius: 8px; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; }
+  .node-readout { display: flex; align-items: center; gap: 14px; font-size: 0.85rem; }
+  .stat-group { display: flex; gap: 6px; align-items: center; }
+  .stat-group span.lbl { color: var(--ee-text-secondary); font-size: 0.75rem; }
+  .ee-input { background: #1e1e1e; border: 1px solid var(--ee-border); color: #fff; padding: 3px 6px; border-radius: 5px; font-size: 0.85rem; font-family: monospace; font-weight: 600; text-align: left; outline: none; }
+  .ee-select { background: #1e1e1e; border: 1px solid var(--ee-border); color: #fff; padding: 3px 6px; border-radius: 5px; font-size: 0.8rem; font-weight: 600; outline: none; }
+
+  .adw-btn { background: #383838; border: 1px solid var(--ee-border); color: #fff; padding: 5px 12px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; font-weight: 500; }
+  .adw-btn:hover { background: #444; }
+  .adw-btn.primary { background: var(--ee-accent-blue); border-color: var(--ee-accent-blue); font-weight: 600; }
+  .adw-btn.danger { color: #ff7b80; }
+  .adw-btn.active-opt { background: rgba(53, 132, 228, 0.2); border-color: var(--ee-accent-blue); color: var(--ee-curve-cyan); }
+
+  /* KÁRTYÁK A TÖBBI MODULHOZ */
+  .module-card { background: var(--ee-card-bg); border: 1px solid var(--ee-border); border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+  .module-card h3 { font-size: 1rem; color: #fff; display: flex; align-items: center; gap: 8px; }
+  .module-desc { font-size: 0.82rem; color: var(--ee-text-secondary); line-height: 1.4; }
+  .param-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 8px; }
+  .param-box { background: #262626; border: 1px solid var(--ee-border); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .param-box .title { font-size: 0.75rem; color: var(--ee-text-secondary); text-transform: uppercase; }
+  .param-box .val { font-size: 1.1rem; font-weight: 700; font-family: monospace; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<div class="ee-window">
+  <!-- FEJLÉC -->
+  <header>
+    <div class="title-group">
+      <div class="badge-app">EE</div>
+      <span>EasyEffects • PipeWire Audio Routing</span>
+    </div>
+    <div style="font-size:0.8rem; color:var(--ee-text-secondary);">
+      Kimenet: <strong>Speakers (DAC 768kHz)</strong>
+    </div>
+  </header>
+
+  <!-- ======================================================= -->
+  <!-- 1. KESKENY FELSŐ 3D VÍZESÉS SÁV                         -->
+  <!-- ======================================================= -->
+  <div class="top-spectrum-strip">
+    <canvas id="waterfallCanvas"></canvas>
+
+    <div class="strip-overlay">
+      <div class="strip-badge">
+        Top-Strip 3D: <strong id="lblResolution">160 sáv × 120 lépcső</strong>
+      </div>
+      <div class="strip-badge" id="hudPreRingBadge" style="display:none; color:#fff;">
+        <span id="hudGlowDot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#fff; margin-right:4px;"></span>
+        <strong>FIR Pre-ringing észlelve</strong>
+      </div>
+    </div>
+
+    <div class="strip-controls">
+      <!-- Időlépcsők állítása -->
+      <span class="ctrl-label">Idő:</span>
+      <select id="selectTimeSteps" class="mini-select">
+        <option value="60">60 lépcső (Gyors)</option>
+        <option value="120" selected>120 lépcső (Normál)</option>
+        <option value="180">180 lépcső (Mély)</option>
+      </select>
+
+      <!-- Pre-ringing színének állítása -->
+      <span class="ctrl-label">Pre-ring szín:</span>
+      <select id="selectGlowColor" class="mini-select">
+        <option value="white" selected>Fehér (Vakító)</option>
+        <option value="cyan">Jégkék (Diszkrét)</option>
+        <option value="gold">Arany (Meleg)</option>
+        <option value="magenta">Lila (Kontraszt)</option>
+      </select>
+
+      <button class="mini-btn active" id="btnEqBypass">EQ: BE</button>
+      <button class="mini-btn" id="btnFirMode">Mód: Minimálfázis (IIR)</button>
+      <button class="mini-btn" id="btnCameraAngle">Nézőpont: 3D</button>
+    </div>
+  </div>
+
+  <!-- ======================================================= -->
+  <!-- 2. ALSÓ RÉSZ: TELJES EASYFFECTS MODULKEZELŐ            -->
+  <!-- ======================================================= -->
+  <div class="main-content">
+    <div class="plugin-tabs">
+      <button class="tab-btn active" onclick="switchTab('eq')">Equalizer (Paraméteres)</button>
+      <button class="tab-btn" onclick="switchTab('convolver')">Convolver (Szobakorrekció)</button>
+      <button class="tab-btn" onclick="switchTab('limiter')">Limiter (True Peak)</button>
+      <button class="tab-btn" onclick="switchTab('bass')">Bass Enhancer</button>
+    </div>
+
+    <!-- 1. TAB: EQUALIZER (A MÁR KÉSZ 2D FÁZIS- ÉS GÖRBERAJZOLÓVAL) -->
+    <div class="tab-pane active" id="pane-eq">
+      <div class="eq-canvas-wrapper">
+        <canvas id="eqCanvas"></canvas>
+      </div>
+
+      <div class="eq-bottom-bar">
+        <div class="node-readout">
+          <div style="font-weight:700;" id="selectedNodeTitle">Sáv #1</div>
+
+          <div class="stat-group">
+            <span class="lbl">Típus:</span>
+            <select id="selectType" class="ee-select">
+              <option value="peaking">Harang (Peaking)</option>
+              <option value="lowshelf">Mély kiemelés (Low Shelf)</option>
+              <option value="highshelf">Magas kiemelés (High Shelf)</option>
+              <option value="lowpass">Mélyáteresztő (Low Pass)</option>
+              <option value="highpass">Felüláteresztő (High Pass)</option>
+            </select>
+          </div>
+
+          <div class="stat-group">
+            <span class="lbl">Freq:</span>
+            <input type="number" id="inputFreq" min="20" max="20000" step="1" class="ee-input" style="width:68px;">
+            <small style="color:var(--ee-text-secondary);">Hz</small>
+          </div>
+
+          <div class="stat-group">
+            <span class="lbl">Gain:</span>
+            <input type="number" id="inputGain" min="-24" max="24" step="0.1" class="ee-input" style="width:58px; color:var(--ee-curve-cyan);">
+            <small style="color:var(--ee-text-secondary);">dB</small>
+          </div>
+
+          <div class="stat-group">
+            <span class="lbl">Q:</span>
+            <input type="number" id="inputQ" min="0.1" max="15" step="0.05" class="ee-input" style="width:58px;">
+          </div>
+
+          <button class="adw-btn danger" id="btnDeleteNode">✕ Törlés</button>
+        </div>
+
+        <div style="display:flex; gap:6px;">
+          <button class="adw-btn primary" id="btnAddNode">+ Új Sáv</button>
+          <button class="adw-btn active-opt" id="btnToggleDelay">Késleltetés (ms)</button>
+          <button class="adw-btn active-opt" id="btnTogglePhase">Fázis (°)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. TAB: CONVOLVER (SZÓBAKORREKCIÓ & FIR) -->
+    <div class="tab-pane" id="pane-convolver">
+      <div class="module-card">
+        <h3>📂 Convolver (Partícionált FIR Impulzusválasz Motor)</h3>
+        <p class="module-desc">
+          Itt töltheted be a szobamérésből (pl. REW vagy Cavern QuickEQ) exportált <strong>szobakorrekciós WAV fájlt</strong>. 
+          A motor valós idejű particionált FFT-vel hajtja végre a konvolúciót zéró késleltetéssel.
+        </p>
+        <div class="param-grid">
+          <div class="param-box">
+            <span class="title">Betöltött szűrő</span>
+            <span class="val" style="color:var(--ee-green); font-size:0.95rem;">room_correction_48k.wav</span>
+          </div>
+          <div class="param-box">
+            <span class="title">FIR Tapszám / Hossz</span>
+            <span class="val">65 536 taps (1.36 s)</span>
+          </div>
+          <div class="param-box">
+            <span class="title">Szűrési Mód</span>
+            <span class="val" style="color:var(--ee-curve-cyan);">Minimum-Phase (Pre-ring mentes)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. TAB: LIMITER (TRUE PEAK / ISP VÉDELEM) -->
+    <div class="tab-pane" id="pane-limiter">
+      <div class="module-card">
+        <h3>🛡️ Limiter & Inter-Sample Peak (True Peak) Védelem</h3>
+        <p class="module-desc">
+          Megakadályozza, hogy az EQ-ban végzett emelések miatt a DAC digitális túlvezérlésbe fusson. 
+          A 4x-es túlmintavételezésű True Peak detektor levadássza a rejtett analóg csúcsokat.
+        </p>
+        <div class="param-grid">
+          <div class="param-box">
+            <span class="title">Maximális Plafon (Ceiling)</span>
+            <span class="val" style="color:#ff7800;">-1.0 dBTP</span>
+          </div>
+          <div class="param-box">
+            <span class="title">Túlmintavételezés</span>
+            <span class="val">4x Lanczos (Decramped)</span>
+          </div>
+          <div class="param-box">
+            <span class="title">Kivezérlés csillapítás</span>
+            <span class="val">0.0 dB (Tiszta jel)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. TAB: BASS ENHANCER -->
+    <div class="tab-pane" id="pane-bass">
+      <div class="module-card">
+        <h3>🔊 Bass Enhancer (Pszichoakusztikai Mélyhang Generátor)</h3>
+        <p class="module-desc">
+          Kisebb hangfalakhoz vagy mélyhiányos fejhallgatókhoz: nem pusztán hangerőt emel (ami membrántorzítást okozna), 
+          hanem felharmonikusokat generál, amit az agy mélyebb basszusként érzékel (Missing Fundamental elv).
+        </p>
+        <div class="param-grid">
+          <div class="param-box">
+            <span class="title">Keresztváltási Frekvencia</span>
+            <span class="val">80 Hz</span>
+          </div>
+          <div class="param-box">
+            <span class="title">Harmonikus Dúsítás</span>
+            <span class="val" style="color:var(--ee-curve-cyan);">2. és 3. Felharmonikus (+3 dB)</span>
+          </div>
+          <div class="param-box">
+            <span class="title">Mélyvágás (Sub-cut)</span>
+            <span class="val">30 Hz (Membránkímélő 24dB/oct)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// =========================================================================
+// TAB VÁLTÓ LOGIKA
+// =========================================================================
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+
+  event.currentTarget.classList.add('active');
+  document.getElementById('pane-' + tabId).classList.add('active');
+
+  if (tabId === 'eq') {
+    setTimeout(resizeEq, 20);
+  }
+}
+
+// =========================================================================
+// 1. TOP-STRIP 3D ENGINE (THREE.JS / WEBGL)
+// =========================================================================
+const wfCanvas = document.getElementById("waterfallCanvas");
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0c0e12);
+
+const camera = new THREE.PerspectiveCamera(38, wfCanvas.clientWidth / wfCanvas.clientHeight, 0.1, 1000);
+const cameraViews = [
+  { name: "3D Izometrikus", pos: [0, 26, 42], look: [0, 0, -8] },
+  { name: "Oldalsó Profil", pos: [-38, 18, 10], look: [0, 0, -8] },
+  { name: "Felülnézet", pos: [0, 48, -4], look: [0, 0, -5] }
+];
+let currentViewIdx = 0;
+setCamera(cameraViews[0]);
+
+function setCamera(v) {
+  camera.position.set(...v.pos);
+  camera.lookAt(...v.look);
+}
+
+const renderer = new THREE.WebGLRenderer({ canvas: wfCanvas, antialias: true });
+renderer.setSize(wfCanvas.clientWidth, wfCanvas.clientHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+const FREQ_BINS = 160;
+let TIME_SLICES = 120; // Alapértelmezett, de állítható!
+
+let geometry, mesh, wireMesh;
+const planeWidth = 76;
+const planeDepth = 60;
+
+function rebuildMesh() {
+  if (mesh) scene.remove(mesh);
+  if (wireMesh) scene.remove(wireMesh);
+
+  geometry = new THREE.PlaneGeometry(planeWidth, planeDepth, FREQ_BINS - 1, TIME_SLICES - 1);
+  geometry.rotateX(-Math.PI / 2);
+
+  const count = geometry.attributes.position.count;
+  const colors = new Float32Array(count * 3);
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  const material = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  const wireMaterial = new THREE.MeshBasicMaterial({ color: 0x1f2733, wireframe: true, transparent: true, opacity: 0.25 });
+
+  mesh = new THREE.Mesh(geometry, material);
+  wireMesh = new THREE.Mesh(geometry, wireMaterial);
+  scene.add(mesh);
+  scene.add(wireMesh);
+
+  // Mátrixok újraméretezése
+  waterfallData.length = 0;
+  preRingMask.length = 0;
+  for (let t = 0; t < TIME_SLICES; t++) {
+    waterfallData.push(new Float32Array(FREQ_BINS));
+    preRingMask.push(new Uint8Array(FREQ_BINS));
+  }
+  document.getElementById("lblResolution").innerText = `${FREQ_BINS} sáv × ${TIME_SLICES} lépcső`;
+}
+
+const grid = new THREE.GridHelper(planeWidth, 12, 0x3584e4, 0x181e26);
+grid.position.y = -0.05;
+grid.position.z = -5;
+scene.add(grid);
+
+const waterfallData = [];
+const preRingMask = [];
+rebuildMesh();
+
+// Állítható Glow Színek a Pre-ringinghez
+let glowColorType = 'white';
+function getGlowRgb() {
+  switch (glowColorType) {
+    case 'cyan': return [0.0, 0.94, 1.0];
+    case 'gold': return [1.0, 0.85, 0.2];
+    case 'magenta': return [1.0, 0.2, 0.8];
+    case 'white':
+    default: return [1.0, 1.0, 1.0];
+  }
+}
+
+function getHeatmapColor(val, isPreRing = false) {
+  if (isPreRing) return getGlowRgb();
+  const r = Math.max(0, Math.min(1, Math.sin(val * Math.PI - Math.PI / 2) * 0.5 + 0.5 + (val > 0.7 ? (val - 0.7) * 2.5 : 0)));
+  const g = Math.max(0, Math.min(1, Math.sin(val * Math.PI) * 1.1 - (val > 0.8 ? (val - 0.8) * 4 : 0)));
+  const b = Math.max(0, Math.min(1, (1.0 - val * 1.4)));
+  return [r, g, b];
+}
+
+let isEqEnabled = true;
+let isFirMode = false;
+let simFrame = 0;
+
+// Felhasználói beállítások eseménykezelői
+document.getElementById("selectTimeSteps").onchange = (e) => {
+  TIME_SLICES = parseInt(e.target.value);
+  rebuildMesh();
+};
+
+document.getElementById("selectGlowColor").onchange = (e) => {
+  glowColorType = e.target.value;
+  const rgb = getGlowRgb();
+  document.getElementById("hudGlowDot").style.background = `rgb(${rgb[0]*255}, ${rgb[1]*255}, ${rgb[2]*255})`;
+};
+
+const btnEqBypass = document.getElementById("btnEqBypass");
+btnEqBypass.onclick = () => {
+  isEqEnabled = !isEqEnabled;
+  btnEqBypass.innerText = isEqEnabled ? "EQ: BE" : "EQ: KI (Bypass)";
+  btnEqBypass.style.color = isEqEnabled ? "#00f0ff" : "var(--ee-text-secondary)";
+  document.getElementById("hudPreRingBadge").style.display = (isFirMode && isEqEnabled) ? "block" : "none";
+};
+
+const btnFirMode = document.getElementById("btnFirMode");
+btnFirMode.onclick = () => {
+  isFirMode = !isFirMode;
+  btnFirMode.innerText = isFirMode ? "Mód: Lineáris Fázis (FIR)" : "Mód: Minimálfázis (IIR)";
+  btnFirMode.classList.toggle("active", isFirMode);
+  document.getElementById("hudPreRingBadge").style.display = (isFirMode && isEqEnabled) ? "block" : "none";
+};
+
+const btnCameraAngle = document.getElementById("btnCameraAngle");
+btnCameraAngle.onclick = () => {
+  currentViewIdx = (currentViewIdx + 1) % cameraViews.length;
+  const v = cameraViews[currentViewIdx];
+  btnCameraAngle.innerText = "Nézőpont: " + v.name;
+  mesh.rotation.y = 0; wireMesh.rotation.y = 0; grid.rotation.y = 0;
+  setCamera(v);
+};
+
+// 3D Animációs Ciklus
+function animate3D() {
+  requestAnimationFrame(animate3D);
+
+  const slice = new Float32Array(FREQ_BINS);
+  const mask = new Uint8Array(FREQ_BINS);
+  simFrame++;
+
+  // Zenei jel szimuláció
+  for (let f = 0; f < FREQ_BINS; f++) {
+    const sub = Math.sin(simFrame * 0.08 + f * 0.08) * 0.45 + 0.45;
+    const mid = Math.sin(simFrame * 0.12 - f * 0.15) * 0.3;
+    const noise = (Math.random() - 0.5) * 0.04;
+    slice[f] = Math.max(0, (f < 45 ? sub : mid) + noise);
+
+    // FIR előcsengési folt
+    if (isEqEnabled && isFirMode) {
+      const trPhase = simFrame % 40;
+      if (trPhase >= 33 && trPhase < 39 && (f >= 28 && f <= 32)) {
+        slice[f] = Math.min(1.0, slice[f] + 0.35);
+        mask[f] = 1;
+      }
+    }
+  }
+
+  // EQ hatás
+  if (isEqEnabled) {
+    for (let f = 0; f < FREQ_BINS; f++) {
+      if (f >= 20 && f <= 32) slice[f] = Math.min(1.0, slice[f] * 1.35);
+      if (f >= 45 && f <= 60) slice[f] = slice[f] * 0.5;
+    }
+  }
+
+  const decayFactor = 0.88;
+  const prevSlice = waterfallData[0];
+  for (let f = 0; f < FREQ_BINS; f++) {
+    slice[f] = Math.max(slice[f], prevSlice[f] * decayFactor);
+  }
+
+  waterfallData.pop();
+  waterfallData.unshift(slice);
+  preRingMask.pop();
+  preRingMask.unshift(mask);
+
+  const pos = geometry.attributes.position.array;
+  const col = geometry.attributes.color.array;
+
+  for (let z = 0; z < TIME_SLICES; z++) {
+    const sData = waterfallData[z];
+    const sMask = preRingMask[z];
+    for (let x = 0; x < FREQ_BINS; x++) {
+      const idx = z * FREQ_BINS + x;
+      const y = sData[x];
+      const isPre = (sMask[x] === 1);
+
+      pos[idx * 3 + 1] = y * 8.5;
+      const rgb = getHeatmapColor(y, isPre);
+      col[idx * 3] = rgb[0];
+      col[idx * 3 + 1] = rgb[1];
+      col[idx * 3 + 2] = rgb[2];
+    }
+  }
+
+  geometry.attributes.position.needsUpdate = true;
+  geometry.attributes.color.needsUpdate = true;
+  renderer.render(scene, camera);
+}
+animate3D();
+
+// =========================================================================
+// 2. 2D EQUALIZER MOTOR (AZ ALSÓ PANELEN)
+// =========================================================================
+let nodes = [
+  { id: 1, freq: 60, gain: 6.0, q: 1.41, type: "peaking", color: "#3584e4" },
+  { id: 2, freq: 120, gain: -8.0, q: 4.5, type: "peaking", color: "#e01b24" },
+  { id: 3, freq: 2400, gain: -2.0, q: 2.0, type: "peaking", color: "#ff7800" },
+  { id: 4, freq: 9000, gain: 3.5, q: 0.71, type: "highshelf", color: "#33d17a" }
+];
+let selectedNodeId = 1;
+let draggedNode = null;
+
+let showDelay = true;
+let showPhase = true;
+
+const eqCanvas = document.getElementById("eqCanvas");
+const eqCtx = eqCanvas.getContext("2d");
+
+function resizeEq() {
+  eqCanvas.width = eqCanvas.clientWidth * window.devicePixelRatio;
+  eqCanvas.height = eqCanvas.clientHeight * window.devicePixelRatio;
+  drawEq();
+}
+window.addEventListener("resize", resizeEq);
+
+function evalBiquad(flt, f, sr = 48000) {
+  const w0 = 2 * Math.PI * flt.freq / sr;
+  const cos_w0 = Math.cos(w0);
+  const sin_w0 = Math.sin(w0);
+  const alpha = sin_w0 / (2 * flt.q);
+  const A = Math.pow(10, flt.gain / 40);
+
+  let b0, b1, b2, a0, a1, a2;
+  if (flt.type === "peaking") {
+    b0 = 1 + alpha * A; b1 = -2 * cos_w0; b2 = 1 - alpha * A;
+    a0 = 1 + alpha / A; a1 = -2 * cos_w0; a2 = 1 - alpha / A;
+  } else if (flt.type === "highshelf") {
+    const two_sqrt = 2 * Math.sqrt(A) * alpha;
+    b0 = A * ((A + 1) + (A - 1) * cos_w0 + two_sqrt);
+    b1 = -2 * A * ((A - 1) + (A + 1) * cos_w0);
+    b2 = A * ((A + 1) + (A - 1) * cos_w0 - two_sqrt);
+    a0 = (A + 1) - (A - 1) * cos_w0 + two_sqrt;
+    a1 = 2 * ((A - 1) + (A + 1) * cos_w0);
+    a2 = (A + 1) - (A - 1) * cos_w0 - two_sqrt;
+  } else if (flt.type === "lowshelf") {
+    const two_sqrt = 2 * Math.sqrt(A) * alpha;
+    b0 = A * ((A + 1) - (A - 1) * cos_w0 + two_sqrt);
+    b1 = 2 * A * ((A - 1) - (A + 1) * cos_w0);
+    b2 = A * ((A + 1) - (A - 1) * cos_w0 - two_sqrt);
+    a0 = (A + 1) + (A - 1) * cos_w0 + two_sqrt;
+    a1 = -2 * ((A - 1) + (A + 1) * cos_w0);
+    a2 = (A + 1) + (A - 1) * cos_w0 - two_sqrt;
+  } else if (flt.type === "lowpass") {
+    b0 = (1 - cos_w0) / 2; b1 = 1 - cos_w0; b2 = (1 - cos_w0) / 2;
+    a0 = 1 + alpha; a1 = -2 * cos_w0; a2 = 1 - alpha;
+  } else if (flt.type === "highpass") {
+    b0 = (1 + cos_w0) / 2; b1 = -(1 + cos_w0); b2 = (1 + cos_w0) / 2;
+    a0 = 1 + alpha; a1 = -2 * cos_w0; a2 = 1 - alpha;
+  } else {
+    return { re: 1, im: 0, phase: 0 };
+  }
+
+  const w = 2 * Math.PI * f / sr;
+  const z1_re = Math.cos(-w), z1_im = Math.sin(-w);
+  const z2_re = Math.cos(-2 * w), z2_im = Math.sin(-2 * w);
+
+  const num_re = (b0/a0) + (b1/a0) * z1_re + (b2/a0) * z2_re;
+  const num_im = (b1/a0) * z1_im + (b2/a0) * z2_im;
+  const den_re = 1 + (a1/a0) * z1_re + (a2/a0) * z2_re;
+  const den_im = (a1/a0) * z1_im + (a2/a0) * z2_im;
+
+  const den_mag2 = den_re * den_re + den_im * den_im;
+  const h_re = (num_re * den_re + num_im * den_im) / den_mag2;
+  const h_im = (num_im * den_re - num_re * den_im) / den_mag2;
+  return { re: h_re, im: h_im, phase: Math.atan2(h_im, h_re) };
+}
+
+function evalChain(f) {
+  let tot_re = 1, tot_im = 0, tot_delay = 0;
+  for (let flt of nodes) {
+    const h = evalBiquad(flt, f);
+    const new_re = tot_re * h.re - tot_im * h.im;
+    const new_im = tot_re * h.im + tot_im * h.re;
+    tot_re = new_re; tot_im = new_im;
+
+    const df = 0.5;
+    const p1 = evalBiquad(flt, Math.max(1, f - df)).phase;
+    let p2 = evalBiquad(flt, f + df).phase;
+    while (p2 - p1 > Math.PI) p2 -= 2 * Math.PI;
+    while (p2 - p1 < -Math.PI) p2 += 2 * Math.PI;
+    tot_delay += (-(p2 - p1) / (2 * Math.PI * 2 * df)) * 1000;
+  }
+  const mag_db = 20 * Math.log10(Math.max(1e-4, Math.hypot(tot_re, tot_im)));
+  const phase_deg = Math.atan2(tot_im, tot_re) * (180 / Math.PI);
+  return { mag_db, phase_deg, delay_ms: tot_delay };
+}
+
+const MIN_F = 20, MAX_F = 20000;
+const LOG_MIN = Math.log10(MIN_F), LOG_MAX = Math.log10(MAX_F);
+
+function getX(f, plotW, padLeft) {
+  return padLeft + ((Math.log10(f) - LOG_MIN) / (LOG_MAX - LOG_MIN)) * plotW;
+}
+function getFreq(x, plotW, padLeft) {
+  const norm = Math.max(0, Math.min(plotW, x - padLeft));
+  return Math.pow(10, LOG_MIN + (norm / plotW) * (LOG_MAX - LOG_MIN));
+}
+
+function drawEq() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = eqCanvas.width;
+  const h = eqCanvas.height;
+
+  eqCtx.clearRect(0, 0, w, h);
+
+  const padLeft = 46 * dpr;
+  const padRight = 50 * dpr;
+  const padTop = 16 * dpr;
+  const padBottom = 22 * dpr;
+  const plotW = w - padLeft - padRight;
+  const plotH = h - padTop - padBottom;
+  const midY = padTop + plotH * 0.5;
+
+  // Rács
+  eqCtx.strokeStyle = "#282828";
+  eqCtx.lineWidth = 1 * dpr;
+  const gridFreqs = [30, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
+  eqCtx.fillStyle = "#77767b";
+  eqCtx.font = (9.5 * dpr) + "px sans-serif";
+  eqCtx.textAlign = "center";
+
+  for (let gf of gridFreqs) {
+    const x = getX(gf, plotW, padLeft);
+    eqCtx.beginPath();
+    eqCtx.moveTo(x, padTop); eqCtx.lineTo(x, padTop + plotH);
+    eqCtx.stroke();
+    eqCtx.fillText((gf >= 1000 ? (gf/1000) + "k" : gf), x, padTop + plotH + 14 * dpr);
+  }
+
+  // Szintek
+  const levels = [{ db: 18, delay: 10 }, { db: 0, delay: 0 }, { db: -18, delay: -10 }];
+  eqCtx.textAlign = "right";
+  for (let lvl of levels) {
+    const y = midY - (lvl.db / 24.0) * (plotH * 0.45);
+    eqCtx.strokeStyle = (lvl.db === 0) ? "#454545" : "#282828";
+    eqCtx.beginPath();
+    eqCtx.moveTo(padLeft, y); eqCtx.lineTo(padLeft + plotW, y);
+    eqCtx.stroke();
+
+    eqCtx.fillStyle = (lvl.db === 0) ? "#ffffff" : "#77767b";
+    eqCtx.fillText((lvl.db > 0 ? "+" : "") + lvl.db + " dB", padLeft - 6 * dpr, y + 3 * dpr);
+
+    if (showDelay) {
+      eqCtx.textAlign = "left";
+      eqCtx.fillStyle = "#ff7800";
+      eqCtx.fillText((lvl.delay > 0 ? "+" : "") + lvl.delay + " ms", padLeft + plotW + 6 * dpr, y + 3 * dpr);
+      eqCtx.textAlign = "right";
+    }
+  }
+
+  const points = [];
+  for (let px = padLeft; px <= padLeft + plotW; px += 2 * dpr) {
+    const f = getFreq(px, plotW, padLeft);
+    points.push({ x: px, f, ...evalChain(f) });
+  }
+
+  // Fázis
+  if (showPhase) {
+    eqCtx.strokeStyle = "rgba(51, 209, 122, 0.75)";
+    eqCtx.lineWidth = 1.4 * dpr;
+    eqCtx.setLineDash([4 * dpr, 3 * dpr]);
+    eqCtx.beginPath();
+    for (let i = 0; i < points.length; i++) {
+      const y = midY - (points[i].phase_deg / 180.0) * (plotH * 0.45);
+      if (i === 0) eqCtx.moveTo(points[i].x, y); else eqCtx.lineTo(points[i].x, y);
+    }
+    eqCtx.stroke();
+    eqCtx.setLineDash([]);
+  }
+
+  // Késleltetés
+  if (showDelay) {
+    eqCtx.strokeStyle = "#ff7800";
+    eqCtx.lineWidth = 1.9 * dpr;
+    eqCtx.beginPath();
+    for (let i = 0; i < points.length; i++) {
+      const y = midY - (points[i].delay_ms / 10.0) * (plotH * 0.45);
+      if (i === 0) eqCtx.moveTo(points[i].x, y); else eqCtx.lineTo(points[i].x, y);
+    }
+    eqCtx.stroke();
+  }
+
+  // EQ Görbe
+  eqCtx.strokeStyle = "#78aeed";
+  eqCtx.lineWidth = 2.4 * dpr;
+  eqCtx.beginPath();
+  for (let i = 0; i < points.length; i++) {
+    const y = midY - (points[i].mag_db / 24.0) * (plotH * 0.45);
+    if (i === 0) eqCtx.moveTo(points[i].x, y); else eqCtx.lineTo(points[i].x, y);
+  }
+  eqCtx.stroke();
+
+  // Fogantyúk
+  nodes.forEach((node, index) => {
+    const nx = getX(node.freq, plotW, padLeft);
+    const ny = midY - (node.gain / 24.0) * (plotH * 0.45);
+    const isSelected = (node.id === selectedNodeId);
+
+    if (isSelected) {
+      eqCtx.strokeStyle = "#ffffff";
+      eqCtx.lineWidth = 2 * dpr;
+      eqCtx.beginPath();
+      eqCtx.arc(nx, ny, 9 * dpr, 0, Math.PI * 2);
+      eqCtx.stroke();
+    }
+
+    eqCtx.fillStyle = node.color;
+    eqCtx.beginPath();
+    eqCtx.arc(nx, ny, 5.5 * dpr, 0, Math.PI * 2);
+    eqCtx.fill();
+
+    eqCtx.fillStyle = "#ffffff";
+    eqCtx.font = "bold " + (7.5 * dpr) + "px sans-serif";
+    eqCtx.textAlign = "center";
+    eqCtx.fillText(index + 1, nx, ny + 2.5 * dpr);
+  });
+}
+
+// Drag & Drop az EQ-n
+eqCanvas.onmousedown = (e) => {
+  const rect = eqCanvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (eqCanvas.width / rect.width);
+  const y = (e.clientY - rect.top) * (eqCanvas.height / rect.height);
+  const dpr = window.devicePixelRatio || 1;
+  const padLeft = 46 * dpr;
+  const padRight = 50 * dpr;
+  const padTop = 16 * dpr;
+  const padBottom = 22 * dpr;
+  const plotW = eqCanvas.width - padLeft - padRight;
+  const plotH = eqCanvas.height - padTop - padBottom;
+  const midY = padTop + plotH * 0.5;
+
+  for (let n of nodes) {
+    const nx = getX(n.freq, plotW, padLeft);
+    const ny = midY - (n.gain / 24.0) * (plotH * 0.45);
+    if (Math.hypot(x - nx, y - ny) < 16 * dpr) {
+      draggedNode = n;
+      selectedNodeId = n.id;
+      updateEqUI();
+      drawEq();
+      return;
+    }
+  }
+};
+
+window.addEventListener("mousemove", (e) => {
+  if (draggedNode) {
+    const rect = eqCanvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (eqCanvas.width / rect.width);
+    const y = (e.clientY - rect.top) * (eqCanvas.height / rect.height);
+    const dpr = window.devicePixelRatio || 1;
+    const padLeft = 46 * dpr;
+    const padRight = 50 * dpr;
+    const padTop = 16 * dpr;
+    const padBottom = 22 * dpr;
+    const plotW = eqCanvas.width - padLeft - padRight;
+    const plotH = eqCanvas.height - padTop - padBottom;
+    const midY = padTop + plotH * 0.5;
+
+    const newFreq = getFreq(x, plotW, padLeft);
+    const newGain = -((y - midY) / (plotH * 0.45)) * 24.0;
+    draggedNode.freq = Math.max(20, Math.min(20000, newFreq));
+    draggedNode.gain = Math.max(-24, Math.min(24, Math.round(newGain * 10) / 10));
+    updateEqUI();
+    drawEq();
+  }
+});
+window.addEventListener("mouseup", () => { draggedNode = null; });
+
+eqCanvas.onwheel = (e) => {
+  e.preventDefault();
+  const selNode = nodes.find(n => n.id === selectedNodeId);
+  if (selNode) {
+    const delta = (e.deltaY > 0) ? -0.15 : 0.15;
+    selNode.q = Math.max(0.1, Math.min(15.0, Math.round((selNode.q + delta) * 100) / 100));
+    updateEqUI();
+    drawEq();
+  }
+};
+
+// UI Kötések
+const selectType = document.getElementById("selectType");
+const inputFreq = document.getElementById("inputFreq");
+const inputGain = document.getElementById("inputGain");
+const inputQ = document.getElementById("inputQ");
+
+selectType.onchange = () => {
+  const sel = nodes.find(n => n.id === selectedNodeId);
+  if (sel) { sel.type = selectType.value; drawEq(); }
+};
+inputFreq.oninput = () => {
+  const sel = nodes.find(n => n.id === selectedNodeId);
+  if (sel && inputFreq.value) { sel.freq = parseFloat(inputFreq.value); drawEq(); }
+};
+inputGain.oninput = () => {
+  const sel = nodes.find(n => n.id === selectedNodeId);
+  if (sel && inputGain.value) { sel.gain = parseFloat(inputGain.value); drawEq(); }
+};
+inputQ.oninput = () => {
+  const sel = nodes.find(n => n.id === selectedNodeId);
+  if (sel && inputQ.value) { sel.q = parseFloat(inputQ.value); drawEq(); }
+};
+
+document.getElementById("btnAddNode").onclick = () => {
+  const newId = Date.now();
+  nodes.push({ id: newId, freq: 1000, gain: 0, q: 1.41, type: "peaking", color: "#9141ac" });
+  selectedNodeId = newId;
+  updateEqUI();
+  drawEq();
+};
+document.getElementById("btnDeleteNode").onclick = () => {
+  if (nodes.length <= 1) return;
+  nodes = nodes.filter(n => n.id !== selectedNodeId);
+  selectedNodeId = nodes[0].id;
+  updateEqUI();
+  drawEq();
+};
+
+document.getElementById("btnToggleDelay").onclick = (e) => {
+  showDelay = !showDelay;
+  e.target.classList.toggle("active-opt", showDelay);
+  drawEq();
+};
+document.getElementById("btnTogglePhase").onclick = (e) => {
+  showPhase = !showPhase;
+  e.target.classList.toggle("active-opt", showPhase);
+  drawEq();
+};
+
+function updateEqUI() {
+  const sel = nodes.find(n => n.id === selectedNodeId);
+  if (sel) {
+    document.getElementById("selectedNodeTitle").innerText = `Sáv #${nodes.indexOf(sel) + 1}`;
+    document.getElementById("selectedNodeTitle").style.color = sel.color;
+    selectType.value = sel.type;
+    if (document.activeElement !== inputFreq) inputFreq.value = Math.round(sel.freq);
+    if (document.activeElement !== inputGain) inputGain.value = sel.gain.toFixed(1);
+    if (document.activeElement !== inputQ) inputQ.value = sel.q.toFixed(2);
+  }
+}
+
+updateEqUI();
+setTimeout(resizeEq, 50);
+</script>
+</body>
+</html>
