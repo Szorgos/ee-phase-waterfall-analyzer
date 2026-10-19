@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EasyEffects • Sonarworks SoundID Stílusú Fázis és Késleltetés Analizátor</title>
+<style>
+  /* SONARWORKS SOUNDID REFERENCE SZÍNPALETTA */
+  :root {
+    --sw-bg-base: #18191c;       /* Matt, prémium stúdiószürke */
+    --sw-bg-panel: #202226;      /* Finoman elváló kártyaháttér */
+    --sw-bg-card: #272a30;       /* Gombok és aktív elemek */
+    --sw-border: #31353d;        /* Diszkrét, vékony elválasztók */
+    --sw-border-active: #505663;
+    
+    /* Ikonikus Sonarworks színek */
+    --sw-yellow: #f5a623;        /* SoundID célgörbe / Fő sárga */
+    --sw-amber: #e08b16;
+    --sw-green: #00c48c;         /* Korrekció / Lapos válasz */
+    --sw-purple: #b070ff;        /* Fázis / Csoportkésleltetés */
+    --sw-blue: #3b82f6;          /* Bal csatorna / Segéd */
+    --sw-text-primary: #f3f4f6;  /* Tiszta fehér szöveg */
+    --sw-text-secondary: #9ca3af;/* Technikai leolvasó szürke */
+    --sw-grid: #282b32;          /* Nagyon diszkrét rácsháló */
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; }
+  body { background: var(--sw-bg-base); color: var(--sw-text-primary); padding: 18px; user-select: none; }
+  .container { max-width: 1220px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+  /* FEJLÉC: LETISZTULT STÚDIÓ DIZÁJN */
+  header { background: var(--sw-bg-panel); border: 1px solid var(--sw-border); border-radius: 8px; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+  .logo-area { display: flex; align-items: center; gap: 10px; }
+  .sw-badge { background: #f5a623; color: #111; font-weight: 800; font-size: 0.75rem; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.5px; }
+  h1 { font-size: 1.1rem; font-weight: 600; color: #fff; letter-spacing: -0.2px; }
+  .mode-indicator { font-size: 0.8rem; color: var(--sw-text-secondary); display: flex; align-items: center; gap: 6px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sw-green); }
+
+  /* GRAFIKUS TÉR */
+  .viewport-wrapper { position: relative; background: #141517; border: 1px solid var(--sw-border); border-radius: 8px; overflow: hidden; }
+  canvas#eqCanvas { display: block; width: 100%; height: 450px; cursor: crosshair; }
+
+  /* LEBEGŐ REFERENCIA SÁV (HUD) */
+  .hud-strip { position: absolute; top: 12px; right: 14px; background: rgba(24, 25, 28, 0.9); border: 1px solid var(--sw-border); border-radius: 6px; padding: 6px 14px; font-size: 0.75rem; display: flex; gap: 16px; pointer-events: none; }
+  .hud-val { color: #fff; font-family: monospace; font-weight: 600; }
+
+  /* ALSÓ VEZÉRLŐSÁV */
+  .bottom-bar { background: var(--sw-bg-panel); border: 1px solid var(--sw-border); border-radius: 8px; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+  
+  .node-readout { display: flex; align-items: center; gap: 24px; font-size: 0.85rem; }
+  .node-tag { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .node-pill { width: 12px; height: 12px; border-radius: 50%; background: var(--sw-yellow); }
+  .stat-group { display: flex; gap: 6px; align-items: baseline; }
+  .stat-group span.lbl { color: var(--sw-text-secondary); font-size: 0.75rem; }
+  .stat-group span.num { color: #fff; font-family: monospace; font-weight: 600; font-size: 0.95rem; }
+
+  .view-options { display: flex; gap: 8px; }
+  .sw-btn { background: var(--sw-bg-card); border: 1px solid var(--sw-border); color: var(--sw-text-secondary); padding: 7px 14px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; font-weight: 500; transition: all 0.15s ease; }
+  .sw-btn:hover { border-color: var(--sw-border-active); color: #fff; }
+  .sw-btn.active-yellow { background: rgba(245, 166, 35, 0.12); border-color: var(--sw-yellow); color: var(--sw-yellow); font-weight: 600; }
+  .sw-btn.active-purple { background: rgba(176, 112, 255, 0.12); border-color: var(--sw-purple); color: var(--sw-purple); font-weight: 600; }
+  .sw-btn.active-green { background: rgba(0, 196, 140, 0.12); border-color: var(--sw-green); color: var(--sw-green); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="logo-area">
+      <div class="sw-badge">EE</div>
+      <h1>EasyEffects <span>SoundID Reference Stílus</span></h1>
+    </div>
+    <div class="mode-indicator">
+      <div class="status-dot"></div>
+      <span>Valós idejű analitikus korrekció</span>
+    </div>
+  </header>
+
+  <div class="viewport-wrapper">
+    <canvas id="eqCanvas"></canvas>
+
+    <div class="hud-strip">
+      <div>Freq: <span class="hud-val" id="hudFreq">1000 Hz</span></div>
+      <div>Erősítés: <span class="hud-val" id="hudGain" style="color:var(--sw-yellow);">0.0 dB</span></div>
+      <div>Késleltetés: <span class="hud-val" id="hudDelay" style="color:var(--sw-purple);">0.00 ms</span></div>
+      <div>Fázis: <span class="hud-val" id="hudPhase" style="color:var(--sw-green);">0.0°</span></div>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="node-readout">
+      <div class="node-tag">
+        <div class="node-pill" id="selectedPill"></div>
+        <span id="selectedNodeTitle">Sáv #1 (Bell EQ)</span>
+      </div>
+      <div class="stat-group"><span class="lbl">Frekvencia:</span><span class="num" id="lblFreq">60 Hz</span></div>
+      <div class="stat-group"><span class="lbl">Erősítés:</span><span class="num" id="lblGain" style="color:var(--sw-yellow);">+6.0 dB</span></div>
+      <div class="stat-group"><span class="lbl">Q-faktor:</span><span class="num" id="lblQ">1.41</span></div>
+      <small style="color:var(--sw-text-secondary); margin-left:10px;">(Húzd a pontot az egérrel, tekerd a görgőt a sávszélességhez!)</small>
+    </div>
+
+    <div class="view-options">
+      <button class="sw-btn active-yellow" id="btnMag">Korrekciós Görbe (dB)</button>
+      <button class="sw-btn active-purple" id="btnDelay">Csoportkésleltetés (ms)</button>
+      <button class="sw-btn" id="btnPhase">Fázisszög (°)</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Szűrő csomópontok a Sonarworks színvilágával
+let nodes = [
+  { id: 1, freq: 65, gain: 5.5, q: 1.41, type: "peaking", color: "#f5a623" },
+  { id: 2, freq: 130, gain: -8.0, q: 4.5, type: "peaking", color: "#00c48c" },
+  { id: 3, freq: 2800, gain: -2.0, q: 2.2, type: "peaking", color: "#b070ff" },
+  { id: 4, freq: 9500, gain: 3.0, q: 0.71, type: "highshelf", color: "#3b82f6" }
+];
+
+let selectedNodeId = 1;
+let draggedNode = null;
+
+let showMag = true;
+let showDelay = true;
+let showPhase = false;
+
+const canvas = document.getElementById("eqCanvas");
+const ctx = canvas.getContext("2d");
+
+function resize() {
+  canvas.width = canvas.clientWidth * window.devicePixelRatio;
+  canvas.height = canvas.clientHeight * window.devicePixelRatio;
+  draw();
+}
+window.addEventListener("resize", resize);
+
+// Biquad szűrő matematika
+function evalBiquad(flt, f, sr = 48000) {
+  const w0 = 2 * Math.PI * flt.freq / sr;
+  const cos_w0 = Math.cos(w0);
+  const sin_w0 = Math.sin(w0);
+  const alpha = sin_w0 / (2 * flt.q);
+  const A = Math.pow(10, flt.gain / 40);
+
+  let b0, b1, b2, a0, a1, a2;
+  if (flt.type === "peaking") {
+    b0 = 1 + alpha * A;
+    b1 = -2 * cos_w0;
+    b2 = 1 - alpha * A;
+    a0 = 1 + alpha / A;
+    a1 = -2 * cos_w0;
+    a2 = 1 - alpha / A;
+  } else if (flt.type === "highshelf") {
+    const two_sqrtA_alpha = 2 * Math.sqrt(A) * alpha;
+    b0 = A * ((A + 1) + (A - 1) * cos_w0 + two_sqrtA_alpha);
+    b1 = -2 * A * ((A - 1) + (A + 1) * cos_w0);
+    b2 = A * ((A + 1) + (A - 1) * cos_w0 - two_sqrtA_alpha);
+    a0 = (A + 1) - (A - 1) * cos_w0 + two_sqrtA_alpha;
+    a1 = 2 * ((A - 1) + (A + 1) * cos_w0);
+    a2 = (A + 1) - (A - 1) * cos_w0 - two_sqrtA_alpha;
+  } else {
+    return { re: 1, im: 0, phase: 0 };
+  }
+
+  const w = 2 * Math.PI * f / sr;
+  const z1_re = Math.cos(-w), z1_im = Math.sin(-w);
+  const z2_re = Math.cos(-2 * w), z2_im = Math.sin(-2 * w);
+
+  const num_re = (b0/a0) + (b1/a0) * z1_re + (b2/a0) * z2_re;
+  const num_im = (b1/a0) * z1_im + (b2/a0) * z2_im;
+  const den_re = 1 + (a1/a0) * z1_re + (a2/a0) * z2_re;
+  const den_im = (a1/a0) * z1_im + (a2/a0) * z2_im;
+
+  const den_mag2 = den_re * den_re + den_im * den_im;
+  const h_re = (num_re * den_re + num_im * den_im) / den_mag2;
+  const h_im = (num_im * den_re - num_re * den_im) / den_mag2;
+
+  return { re: h_re, im: h_im, phase: Math.atan2(h_im, h_re) };
+}
+
+function evalChain(f) {
+  let tot_re = 1, tot_im = 0, tot_delay = 0;
+  for (let flt of nodes) {
+    const h = evalBiquad(flt, f);
+    const new_re = tot_re * h.re - tot_im * h.im;
+    const new_im = tot_re * h.im + tot_im * h.re;
+    tot_re = new_re; tot_im = new_im;
+
+    const df = 0.5;
+    const p1 = evalBiquad(flt, Math.max(1, f - df)).phase;
+    let p2 = evalBiquad(flt, f + df).phase;
+    while (p2 - p1 > Math.PI) p2 -= 2 * Math.PI;
+    while (p2 - p1 < -Math.PI) p2 += 2 * Math.PI;
+    tot_delay += (-(p2 - p1) / (2 * Math.PI * 2 * df)) * 1000;
+  }
+  const mag_db = 20 * Math.log10(Math.max(1e-4, Math.hypot(tot_re, tot_im)));
+  const phase_deg = Math.atan2(tot_im, tot_re) * (180 / Math.PI);
+  return { mag_db, phase_deg, delay_ms: tot_delay };
+}
+
+// Koordináta logaritmikus leképezések
+const MIN_F = 20, MAX_F = 20000;
+const LOG_MIN = Math.log10(MIN_F), LOG_MAX = Math.log10(MAX_F);
+
+function getX(f, plotW, padLeft) {
+  return padLeft + ((Math.log10(f) - LOG_MIN) / (LOG_MAX - LOG_MIN)) * plotW;
+}
+function getFreq(x, plotW, padLeft) {
+  const norm = Math.max(0, Math.min(plotW, x - padLeft));
+  return Math.pow(10, LOG_MIN + (norm / plotW) * (LOG_MAX - LOG_MIN));
+}
+
+// Fő rajzolás
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.width;
+  const h = canvas.height;
+
+  ctx.clearRect(0, 0, w, h);
+
+  const padLeft = 45 * dpr;
+  const padRight = 50 * dpr;
+  const padTop = 20 * dpr;
+  const padBottom = 28 * dpr;
+  const plotW = w - padLeft - padRight;
+  const plotH = h - padTop - padBottom;
+  const midY = padTop + plotH * 0.5;
+
+  // 1. Sonarworks-stílusú matt sötétszürke rács
+  ctx.strokeStyle = "#23262d";
+  ctx.lineWidth = 1 * dpr;
+
+  const gridFreqs = [30, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
+  ctx.fillStyle = "#6b7280";
+  ctx.font = (10 * dpr) + "px -apple-system, sans-serif";
+  ctx.textAlign = "center";
+
+  for (let gf of gridFreqs) {
+    const x = getX(gf, plotW, padLeft);
+    ctx.beginPath();
+    ctx.moveTo(x, padTop); ctx.lineTo(x, padTop + plotH);
+    ctx.stroke();
+    ctx.fillText((gf >= 1000 ? (gf/1000) + "k" : gf), x, padTop + plotH + 15 * dpr);
+  }
+
+  // Vízszintes decibel és milliszekundum szintek
+  const levels = [
+    { db: 18, delay: 10 },
+    { db: 12, delay: 6.6 },
+    { db: 6,  delay: 3.3 },
+    { db: 0,  delay: 0 },
+    { db: -6, delay: -3.3 },
+    { db: -12, delay: -6.6 },
+    { db: -18, delay: -10 }
+  ];
+
+  ctx.textAlign = "right";
+  for (let lvl of levels) {
+    const y = midY - (lvl.db / 24.0) * (plotH * 0.45);
+    ctx.strokeStyle = (lvl.db === 0) ? "#374151" : "#1f2228";
+    ctx.lineWidth = (lvl.db === 0) ? 1.5 * dpr : 1 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(padLeft, y); ctx.lineTo(padLeft + plotW, y);
+    ctx.stroke();
+
+    // Bal skála (dB)
+    ctx.fillStyle = (lvl.db === 0) ? "#f3f4f6" : "#6b7280";
+    ctx.fillText((lvl.db > 0 ? "+" : "") + lvl.db + " dB", padLeft - 6 * dpr, y + 3 * dpr);
+
+    // Jobb skála (Késleltetés ms - Sonarworks lila szín)
+    if (showDelay) {
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#9ca3af";
+      ctx.fillText((lvl.delay > 0 ? "+" : "") + lvl.delay.toFixed(1) + " ms", padLeft + plotW + 6 * dpr, y + 3 * dpr);
+      ctx.textAlign = "right";
+    }
+  }
+
+  // Pontok számítása
+  const points = [];
+  for (let px = padLeft; px <= padLeft + plotW; px += 2 * dpr) {
+    const f = getFreq(px, plotW, padLeft);
+    points.push({ x: px, f, ...evalChain(f) });
+  }
+
+  // 2. FÁZISSZÖG GÖRBE (Lágy mentazöld szaggatott)
+  if (showPhase) {
+    ctx.strokeStyle = "rgba(0, 196, 140, 0.75)";
+    ctx.lineWidth = 1.6 * dpr;
+    ctx.setLineDash([4 * dpr, 3 * dpr]);
+    ctx.beginPath();
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      const y = midY - (p.phase_deg / 180.0) * (plotH * 0.45);
+      if (i === 0) ctx.moveTo(p.x, y); else ctx.lineTo(p.x, y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // 3. CSOPORTKÉSLELTETÉS GÖRBE (Sonarworks Ametiszt-lila vonal)
+  if (showDelay) {
+    ctx.strokeStyle = "#b070ff";
+    ctx.lineWidth = 2.0 * dpr;
+    ctx.beginPath();
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      const y = midY - (p.delay_ms / 10.0) * (plotH * 0.45);
+      if (i === 0) ctx.moveTo(p.x, y); else ctx.lineTo(p.x, y);
+    }
+    ctx.stroke();
+  }
+
+  // 4. KORREKCIÓS GÖRBE (Ikonikus Sonarworks Meleg Sárga / Okker)
+  if (showMag) {
+    ctx.strokeStyle = "#f5a623";
+    ctx.lineWidth = 2.4 * dpr;
+    ctx.beginPath();
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      const y = midY - (p.mag_db / 24.0) * (plotH * 0.45);
+      if (i === 0) ctx.moveTo(p.x, y); else ctx.lineTo(p.x, y);
+    }
+    ctx.stroke();
+  }
+
+  // 5. KÖZVETLENÜL HÚZHATÓ FOGANTYÚK (Matt stúdió körök)
+  nodes.forEach((node, index) => {
+    const nx = getX(node.freq, plotW, padLeft);
+    const ny = midY - (node.gain / 24.0) * (plotH * 0.45);
+    const isSelected = (node.id === selectedNodeId);
+
+    // Kijelölési karika
+    if (isSelected) {
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      ctx.arc(nx, ny, 9 * dpr, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // A csomópont tömör köre
+    ctx.fillStyle = node.color;
+    ctx.beginPath();
+    ctx.arc(nx, ny, 5.5 * dpr, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Sorszám
+    ctx.fillStyle = "#111827";
+    ctx.font = "bold " + (7.5 * dpr) + "px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(index + 1, nx, ny + 2.5 * dpr);
+  });
+}
+
+// Interakciók: Pont mozgatás
+function getNodeAt(x, y) {
+  const dpr = window.devicePixelRatio || 1;
+  const padLeft = 45 * dpr;
+  const padRight = 50 * dpr;
+  const padTop = 20 * dpr;
+  const padBottom = 28 * dpr;
+  const plotW = canvas.width - padLeft - padRight;
+  const plotH = canvas.height - padTop - padBottom;
+  const midY = padTop + plotH * 0.5;
+
+  for (let n of nodes) {
+    const nx = getX(n.freq, plotW, padLeft);
+    const ny = midY - (n.gain / 24.0) * (plotH * 0.45);
+    if (Math.hypot(x - nx, y - ny) < 16 * dpr) return n;
+  }
+  return null;
+}
+
+canvas.onmousedown = (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+  const clicked = getNodeAt(x, y);
+  if (clicked) {
+    draggedNode = clicked;
+    selectedNodeId = clicked.id;
+    updateUI();
+    draw();
+  }
+};
+
+canvas.onmousemove = (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+  const dpr = window.devicePixelRatio || 1;
+  const padLeft = 45 * dpr;
+  const padRight = 50 * dpr;
+  const padTop = 20 * dpr;
+  const padBottom = 28 * dpr;
+  const plotW = canvas.width - padLeft - padRight;
+  const plotH = canvas.height - padTop - padBottom;
+  const midY = padTop + plotH * 0.5;
+
+  if (draggedNode) {
+    const newFreq = getFreq(x, plotW, padLeft);
+    const newGain = -((y - midY) / (plotH * 0.45)) * 24.0;
+    draggedNode.freq = Math.max(20, Math.min(20000, newFreq));
+    draggedNode.gain = Math.max(-24, Math.min(24, Math.round(newGain * 10) / 10));
+    updateUI();
+    draw();
+  }
+
+  // HUD leolvasás
+  const curF = getFreq(x, plotW, padLeft);
+  const res = evalChain(curF);
+  document.getElementById("hudFreq").innerText = (curF >= 1000 ? (curF/1000).toFixed(2) + " kHz" : curF.toFixed(0) + " Hz");
+  document.getElementById("hudGain").innerText = (res.mag_db >= 0 ? "+" : "") + res.mag_db.toFixed(1) + " dB";
+  document.getElementById("hudDelay").innerText = (res.delay_ms >= 0 ? "+" : "") + res.delay_ms.toFixed(2) + " ms";
+  document.getElementById("hudPhase").innerText = (res.phase_deg >= 0 ? "+" : "") + res.phase_deg.toFixed(1) + "°";
+};
+
+window.onmouseup = () => { draggedNode = null; };
+
+// Q-faktor állítás egérgörgővel
+canvas.onwheel = (e) => {
+  e.preventDefault();
+  const selNode = nodes.find(n => n.id === selectedNodeId);
+  if (selNode) {
+    const delta = (e.deltaY > 0) ? -0.15 : 0.15;
+    selNode.q = Math.max(0.2, Math.min(10.0, Math.round((selNode.q + delta) * 100) / 100));
+    updateUI();
+    draw();
+  }
+};
+
+function updateUI() {
+  const sel = nodes.find(n => n.id === selectedNodeId);
+  if (sel) {
+    document.getElementById("selectedPill").style.background = sel.color;
+    document.getElementById("selectedNodeTitle").innerText = `Sáv #${nodes.indexOf(sel) + 1} (${sel.type.toUpperCase()})`;
+    document.getElementById("lblFreq").innerText = (sel.freq >= 1000 ? (sel.freq/1000).toFixed(1) + " kHz" : Math.round(sel.freq) + " Hz");
+    document.getElementById("lblGain").innerText = (sel.gain >= 0 ? "+" : "") + sel.gain.toFixed(1) + " dB";
+    document.getElementById("lblQ").innerText = sel.q.toFixed(2);
+  }
+}
+
+// Gombok
+const btnMag = document.getElementById("btnMag");
+const btnDelay = document.getElementById("btnDelay");
+const btnPhase = document.getElementById("btnPhase");
+
+btnMag.onclick = () => {
+  showMag = !showMag;
+  btnMag.classList.toggle("active-yellow", showMag);
+  draw();
+};
+btnDelay.onclick = () => {
+  showDelay = !showDelay;
+  btnDelay.classList.toggle("active-purple", showDelay);
+  draw();
+};
+btnPhase.onclick = () => {
+  showPhase = !showPhase;
+  btnPhase.classList.toggle("active-green", showPhase);
+  draw();
+};
+
+updateUI();
+setTimeout(resize, 50);
+</script>
+</body>
+</html>
