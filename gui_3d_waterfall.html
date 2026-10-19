@@ -183,10 +183,11 @@ for (let t = 0; t < TIME_SLICES; t++) {
 }
 
 // Akusztikai szimuláció állapota
-let isPlaying = false;
+let isPlaying = true; // Alapértelmezetten elindul, ne kelljen külön rákattintani
 let testMode = 'kick'; // 'kick' or 'tone'
 let simPreRing = false;
 let isEqEnabled = true;
+let decayTime = 450; // Lecsengési időfaktor
 let simFrame = 0;
 
 // Egérkamera forgatás
