@@ -1,5 +1,6 @@
 #include <iostream>
 #include <csignal>
+#include <mutex>
 #include "pipewire_filter_node.hpp"
 #include "ws_bridge.hpp"
 
@@ -30,12 +31,17 @@ int main(int argc, char* argv[]) {
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
 
-    // Alapértelmezett audiofil profil betöltése a csomópontba
-    node.pipeline.preampGainDb = -2.0;
-    node.pipeline.crossfeed.setPreset(CrossfeedPreset::BauerDefault);
+    // Alapértelmezett audiofil profil (a GUI csatlakozáskor ezt veszi át)
+    std::mutex paramMutex;
+    ParamData current = transparentParams();
+    current.preampDb = -2.0f;
+    current.set(kFlagCrossfeed, true);
+    current.set(kFlagLimiter, true);
+    current.set(kFlagInitialized, true);
+    current.crossfeedPreset = 0; // Bauer bs2b
     node.pipeline.limiter.thresholdDb = -0.2;
     node.pipeline.limiter.ceilingDb = -0.1;
-    node.pipeline.updateEqCoefficients();
+    node.params.write(current);
 
     std::cout << "[1] DSP lánc felkonfigurálva (-2 dB Preamp, Bauer Crossfeed, -0.1 dB True Peak Limiter).\n";
 
@@ -53,9 +59,23 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    uint64_t readPos = 0;
+    BridgeCallbacks cb;
+    cb.pullAudio = [&](float* lr, size_t maxFrames) {
+        return readTapRing(node.visualizerTap, readPos, lr, maxFrames);
+    };
+    cb.sampleRate = [&]() { return static_cast<double>(node.sampleRate); };
+    cb.getParams = [&]() { std::lock_guard<std::mutex> lk(paramMutex); return current; };
+    cb.setParams = [&](const ParamData& p) {
+        std::lock_guard<std::mutex> lk(paramMutex);
+        current = p;
+        node.params.write(p);
+    };
+    cb.statusFields = [&]() { return std::string("\"source\":\"PipeWire\",\"platform\":\"linux\""); };
+
     WebSocketBridge bridge(8080);
     g_bridge = &bridge;
-    bridge.start(&node.pipeline, &node.visualizerRingBuffer);
+    bridge.start(cb);
 
     std::cout << "[4] Sikeresen csatlakozva! A csomópont aktívan szűri a hangot.\n";
     std::cout << "Nyomj Ctrl+C-t a leállításhoz.\n";

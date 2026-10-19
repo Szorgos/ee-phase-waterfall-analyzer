@@ -1,223 +1,469 @@
 #pragma once
-
-#include <iostream>
-#include <string>
-#include <vector>
-#include <thread>
+/**
+ * @file ws_bridge.hpp
+ * @brief Könnyűsúlyú, platformfüggetlen C++ WebSocket híd (RFC 6455) a hangmotor és a webes GUI között.
+ *
+ * - Csak a 127.0.0.1 címen figyel (a helyi hálózat felől nem vezérelhető).
+ * - A motor hangjából valódi FFT-spektrumot számol és ~60 FPS-sel küldi ("spectrum" üzenet).
+ * - A GUI vezérlőüzeneteit (preamp, modulkapcsolók, EQ sávok) ParamData-vá alakítja.
+ *
+ * Ugyanez a kód fut Linuxon (PipeWire csomópont) és Windowson (AetherAudio.exe).
+ */
 #include <atomic>
-#include <sstream>
-#include <cstring>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <fcntl.h>
+#include <chrono>
+#include <cstdio>
+#include <functional>
+#include <iostream>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
 
+#include "net_compat.hpp"
 #include "sha1_base64.hpp"
-#include "ringbuffer.hpp"
-#include "dsp_pipeline.hpp"
+#include "spectrum.hpp"
+#include "param_block.hpp"
+#include "mini_json.hpp"
 
 namespace ee_analyzer {
 
-/**
- * @brief Könnyűsúlyú C++ WebSocket híd (RFC 6455)
- * Közvetlen élő adatátviteli csatorna a PipeWire C++ motor és a Webes 3D felület között.
- */
+struct BridgeCallbacks {
+    /** Interleaved sztereó minták lehúzása a motorból (nem blokkolhat). */
+    std::function<size_t(float* lr, size_t maxFrames)> pullAudio;
+    /** A forrásjel aktuális mintavételi frekvenciája. */
+    std::function<double()> sampleRate;
+    /** Aktuális DSP beállítások. */
+    std::function<ParamData()> getParams;
+    /** Új DSP beállítások a GUI-ból. */
+    std::function<void(const ParamData&)> setParams;
+    /** Extra állapotmezők JSON-töredékként, pl. "\"source\":\"WASAPI\"" (opcionális). */
+    std::function<std::string()> statusFields;
+};
+
 class WebSocketBridge {
 public:
-    int serverFd = -1;
-    int clientFd = -1;
-    int port = 8080;
-    std::atomic<bool> isRunning{false};
-    std::thread serverThread;
+    explicit WebSocketBridge(int port = 8080) : port_(port) {}
+    ~WebSocketBridge() { stop(); }
 
-    DspPipeline* pipeline = nullptr;
-    LockFreeRingBuffer<float>* ringBuffer = nullptr;
+    WebSocketBridge(const WebSocketBridge&) = delete;
+    WebSocketBridge& operator=(const WebSocketBridge&) = delete;
 
-    WebSocketBridge(int p = 8080) : port(p) {}
-
-    ~WebSocketBridge() {
-        stop();
-    }
-
-    void start(DspPipeline* dsp, LockFreeRingBuffer<float>* rb) {
-        pipeline = dsp;
-        ringBuffer = rb;
-        isRunning = true;
-        serverThread = std::thread(&WebSocketBridge::runServer, this);
+    bool start(BridgeCallbacks cb) {
+        cb_ = std::move(cb);
+        if (!net::startup()) {
+            std::cerr << "[WS Bridge] Socket alrendszer indítása sikertelen!\n";
+            return false;
+        }
+        if (!openListener()) {
+            net::cleanup();
+            return false;
+        }
+        running_ = true;
+        thread_ = std::thread(&WebSocketBridge::run, this);
+        return true;
     }
 
     void stop() {
-        if (!isRunning) return;
-        isRunning = false;
-
-        if (clientFd >= 0) {
-            close(clientFd);
-            clientFd = -1;
-        }
-        if (serverFd >= 0) {
-            close(serverFd);
-            serverFd = -1;
-        }
-        if (serverThread.joinable()) {
-            serverThread.join();
-        }
+        if (!running_.exchange(false)) return;
+        if (thread_.joinable()) thread_.join();
+        net::closeSocket(client_);
+        client_ = net::kInvalidSocket;
+        net::closeSocket(listener_);
+        listener_ = net::kInvalidSocket;
+        net::cleanup();
     }
+
+    bool hasClient() const { return clientConnected_.load(); }
 
 private:
-    void runServer() {
-        serverFd = socket(AF_INET, SOCK_STREAM, 0);
-        if (serverFd < 0) {
+    // ------------------------------------------------------------------ hálózat
+    bool openListener() {
+        listener_ = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (listener_ == net::kInvalidSocket) {
             std::cerr << "[WS Bridge] Hiba a socket létrehozásakor!\n";
-            return;
+            return false;
         }
-
+#ifndef _WIN32
         int opt = 1;
-        setsockopt(serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
-        sockaddr_in address{};
-        address.sin_family = AF_INET;
-        address.sin_addr.s_addr = INADDR_ANY;
-        address.sin_port = htons(port);
-
-        if (bind(serverFd, (struct sockaddr*)&address, sizeof(address)) < 0) {
-            std::cerr << "[WS Bridge] Hiba a bind során a " << port << " porton!\n";
-            close(serverFd);
-            return;
+        setsockopt(listener_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+#else
+        BOOL excl = TRUE; // Windowson ne lehessen "ellopni" a portot
+        setsockopt(listener_, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&excl), sizeof(excl));
+#endif
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        addr.sin_port = htons(static_cast<uint16_t>(port_));
+        if (::bind(listener_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+            std::cerr << "[WS Bridge] A 127.0.0.1:" << port_ << " port foglalt (fut már egy példány?)\n";
+            net::closeSocket(listener_);
+            listener_ = net::kInvalidSocket;
+            return false;
         }
-
-        if (listen(serverFd, 1) < 0) {
+        if (::listen(listener_, 4) != 0) {
             std::cerr << "[WS Bridge] Listen hiba!\n";
-            close(serverFd);
-            return;
+            net::closeSocket(listener_);
+            listener_ = net::kInvalidSocket;
+            return false;
         }
+        net::setNonBlocking(listener_, true);
+        std::cout << "[WS Bridge] Élő WebSocket híd: ws://127.0.0.1:" << port_ << "\n";
+        return true;
+    }
 
-        std::cout << "[WS Bridge] Élő WebSocket híd készen áll a ws://127.0.0.1:" << port << " címen!\n";
+    void run() {
+        using clock = std::chrono::steady_clock;
+        SpectrumAnalyzer analyzer(4096, 160);
+        std::vector<float> chunk(8192 * 2);
+        auto lastSpectrum = clock::now();
+        auto lastStatus = clock::now();
+        bool freshAudio = false;
 
-        // Beállítjuk non-blocking módba, hogy a leállítás azonnal reagáljon
-        fcntl(serverFd, F_SETFL, O_NONBLOCK);
+        while (running_) {
+            acceptPending();
 
-        while (isRunning) {
-            sockaddr_in clientAddr{};
-            socklen_t addrLen = sizeof(clientAddr);
-            int newClient = accept(serverFd, (struct sockaddr*)&clientAddr, &addrLen);
-
-            if (newClient >= 0) {
-                std::cout << "[WS Bridge] Új grafikus felület kliens csatlakozott!\n";
-                if (performHandshake(newClient)) {
-                    clientFd = newClient;
-                    handleClientCommunication();
-                } else {
-                    close(newClient);
+            // 1. Hang lehúzása a motorból (akkor is, ha nincs kliens, hogy ne torlódjon fel)
+            if (cb_.pullAudio) {
+                size_t got;
+                while ((got = cb_.pullAudio(chunk.data(), chunk.size() / 2)) > 0) {
+                    analyzer.push(chunk.data(), got);
+                    freshAudio = true;
                 }
-            } else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
+
+            if (client_ != net::kInvalidSocket) {
+                const auto now = clock::now();
+                if (freshAudio && now - lastSpectrum >= std::chrono::milliseconds(16)) {
+                    const double sr = cb_.sampleRate ? cb_.sampleRate() : 48000.0;
+                    analyzer.compute(sr > 0 ? sr : 48000.0);
+                    sendText(buildSpectrumMessage(analyzer, sr));
+                    lastSpectrum = now;
+                    freshAudio = false;
+                }
+                if (now - lastStatus >= std::chrono::milliseconds(500)) {
+                    sendText(buildStatusMessage());
+                    lastStatus = now;
+                }
+                pumpIncoming();
+            }
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
     }
 
-    bool performHandshake(int sock) {
-        char buffer[2048] = {0};
-        ssize_t bytesRead = recv(sock, buffer, sizeof(buffer) - 1, 0);
-        if (bytesRead <= 0) return false;
+    void acceptPending() {
+        sockaddr_in ca{};
+#ifdef _WIN32
+        int len = sizeof(ca);
+#else
+        socklen_t len = sizeof(ca);
+#endif
+        net::socket_t s = ::accept(listener_, reinterpret_cast<sockaddr*>(&ca), &len);
+        if (s == net::kInvalidSocket) return;
 
-        std::string request(buffer, bytesRead);
-        const std::string keyHeader = "Sec-WebSocket-Key: ";
-        size_t keyPos = request.find(keyHeader);
-        if (keyPos == std::string::npos) return false;
+        net::setNonBlocking(s, false);
+        if (!performHandshake(s)) {
+            net::closeSocket(s);
+            return;
+        }
+        net::setNonBlocking(s, true);
+        net::setNoDelay(s);
 
-        size_t keyEnd = request.find("\r\n", keyPos);
-        std::string clientKey = request.substr(keyPos + keyHeader.length(), keyEnd - (keyPos + keyHeader.length()));
+        // Az új kliens váltja a régit (pl. GUI újratöltésekor)
+        if (client_ != net::kInvalidSocket) net::closeSocket(client_);
+        client_ = s;
+        rxBuf_.clear();
+        clientConnected_ = true;
+        std::cout << "[WS Bridge] Grafikus felület csatlakozott.\n";
+        sendText(buildStateMessage());
+    }
 
-        // RFC 6455 GUID konkatenálás és SHA1 hash készítés
+    bool performHandshake(net::socket_t sock) {
+        // Fejléc beolvasása (max 1 s, max 8 KB)
+#ifdef _WIN32
+        DWORD tv = 1000;
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+#else
+        timeval tv{1, 0};
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+#endif
+        std::string request;
+        char buffer[2048];
+        while (request.find("\r\n\r\n") == std::string::npos && request.size() < 8192) {
+            const long long n = net::recvSome(sock, buffer, sizeof(buffer));
+            if (n <= 0) return false;
+            request.append(buffer, static_cast<size_t>(n));
+        }
+
+        std::string key = headerValue(request, "sec-websocket-key");
+        if (key.empty()) {
+            const char* resp = "HTTP/1.1 426 Upgrade Required\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            net::sendSome(sock, resp, std::char_traits<char>::length(resp));
+            return false;
+        }
+
         const std::string magicGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-        std::vector<uint8_t> sha1Digest = Sha1::hash(clientKey + magicGuid);
-        std::string acceptKey = Base64::encode(sha1Digest);
+        std::vector<uint8_t> digest = Sha1::hash(key + magicGuid);
+        std::string acceptKey = Base64::encode(digest);
 
-        std::string response = 
+        std::string response =
             "HTTP/1.1 101 Switching Protocols\r\n"
             "Upgrade: websocket\r\n"
             "Connection: Upgrade\r\n"
             "Sec-WebSocket-Accept: " + acceptKey + "\r\n\r\n";
+        return sendAll(sock, response.data(), response.size());
+    }
 
-        send(sock, response.c_str(), response.length(), 0);
+    static std::string headerValue(const std::string& req, const std::string& nameLower) {
+        size_t pos = 0;
+        while (pos < req.size()) {
+            size_t eol = req.find("\r\n", pos);
+            if (eol == std::string::npos) eol = req.size();
+            std::string line = req.substr(pos, eol - pos);
+            size_t colon = line.find(':');
+            if (colon != std::string::npos) {
+                std::string name = line.substr(0, colon);
+                for (auto& c : name) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                if (name == nameLower) {
+                    std::string v = line.substr(colon + 1);
+                    const size_t a = v.find_first_not_of(" \t");
+                    const size_t b = v.find_last_not_of(" \t");
+                    return a == std::string::npos ? std::string() : v.substr(a, b - a + 1);
+                }
+            }
+            pos = eol + 2;
+        }
+        return {};
+    }
+
+    void dropClient(const char* why) {
+        if (client_ == net::kInvalidSocket) return;
+        net::closeSocket(client_);
+        client_ = net::kInvalidSocket;
+        clientConnected_ = false;
+        rxBuf_.clear();
+        std::cout << "[WS Bridge] Grafikus felület lecsatlakozott (" << why << ").\n";
+    }
+
+    /** Teljes puffer elküldése nem blokkoló socketen is (rövid várakozással). */
+    bool sendAll(net::socket_t s, const char* data, size_t len) {
+        size_t sent = 0;
+        int spins = 0;
+        while (sent < len) {
+            const long long n = net::sendSome(s, data + sent, len - sent);
+            if (n > 0) { sent += static_cast<size_t>(n); spins = 0; continue; }
+            if (n < 0 && net::wouldBlock() && ++spins < 200) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
+            return false;
+        }
         return true;
     }
 
-    void handleClientCommunication() {
-        fcntl(clientFd, F_SETFL, O_NONBLOCK);
-        std::vector<float> readChunk(512);
-
-        while (isRunning && clientFd >= 0) {
-            // 1. Ringbuffer olvasás és spektrum továbbítás a 3D vízesésnek
-            if (ringBuffer) {
-                size_t nRead = ringBuffer->read(readChunk.data(), readChunk.size());
-                if (nRead > 0) {
-                    // Egyszerűsített energia-eloszlás (16 frekvenciasáv) kiszámítása a 3D hálóhoz
-                    std::string msg = "{\"type\":\"audio_levels\",\"samples\":[";
-                    for (size_t i = 0; i < std::min(nRead, size_t(32)); ++i) {
-                        msg += std::to_string(readChunk[i]);
-                        if (i + 1 < std::min(nRead, size_t(32))) msg += ",";
-                    }
-                    msg += "]}";
-                    sendWsText(clientFd, msg);
-                }
-            }
-
-            // 2. Kliens üzenetek (paraméter-állítás) fogadása
-            char recvBuf[1024];
-            ssize_t n = recv(clientFd, recvBuf, sizeof(recvBuf), 0);
-            if (n > 0) {
-                // WebSocket frame dekódolás (RFC 6455 unmask)
-                if (static_cast<uint8_t>(recvBuf[0]) == 0x81) { // Text frame
-                    size_t len = recvBuf[1] & 0x7F;
-                    if (len <= 125 && n >= 6) {
-                        uint8_t mask[4] = { (uint8_t)recvBuf[2], (uint8_t)recvBuf[3], (uint8_t)recvBuf[4], (uint8_t)recvBuf[5] };
-                        std::string payload;
-                        for (size_t i = 0; i < len; ++i) {
-                            payload.push_back(recvBuf[6 + i] ^ mask[i % 4]);
-                        }
-                        parseClientMessage(payload);
-                    }
-                }
-            } else if (n == 0) {
-                // Kapcsolat bontva
-                close(clientFd);
-                clientFd = -1;
-                break;
-            }
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60 FPS
-        }
-    }
-
-    void parseClientMessage(const std::string& msg) {
-        // Gyors paraméter-feldolgozás (pl. Preamp vagy Bypass)
-        if (msg.find("set_preamp") != std::string::npos && pipeline) {
-            size_t valPos = msg.find("\"val\":");
-            if (valPos != std::string::npos) {
-                double val = std::stod(msg.substr(valPos + 6));
-                pipeline->preampGainDb = val;
-                std::cout << "[WS Bridge] Preamp frissítve a PipeWire láncban: " << val << " dB\n";
-            }
-        }
-    }
-
-    void sendWsText(int sock, const std::string& text) {
-        std::vector<uint8_t> frame;
-        frame.push_back(0x81); // Fin + Text opcode
-        size_t len = text.size();
-
+    void sendFrame(uint8_t opcode, const std::string& payload) {
+        if (client_ == net::kInvalidSocket) return;
+        std::string frame;
+        frame.reserve(payload.size() + 10);
+        frame.push_back(static_cast<char>(0x80 | opcode));
+        const uint64_t len = payload.size();
         if (len <= 125) {
-            frame.push_back(static_cast<uint8_t>(len));
-        } else if (len <= 65535) {
+            frame.push_back(static_cast<char>(len));
+        } else if (len <= 0xFFFF) {
             frame.push_back(126);
-            frame.push_back((len >> 8) & 0xFF);
-            frame.push_back(len & 0xFF);
+            frame.push_back(static_cast<char>((len >> 8) & 0xFF));
+            frame.push_back(static_cast<char>(len & 0xFF));
+        } else {
+            frame.push_back(127);
+            for (int i = 7; i >= 0; --i) frame.push_back(static_cast<char>((len >> (8 * i)) & 0xFF));
+        }
+        frame += payload;
+        if (!sendAll(client_, frame.data(), frame.size())) dropClient("küldési hiba");
+    }
+
+    void sendText(const std::string& text) { sendFrame(0x1, text); }
+
+    /** Beérkező WebSocket keretek feldolgozása (töredezett TCP olvasással is). */
+    void pumpIncoming() {
+        char buf[4096];
+        while (client_ != net::kInvalidSocket) {
+            const long long n = net::recvSome(client_, buf, sizeof(buf));
+            if (n > 0) {
+                rxBuf_.append(buf, static_cast<size_t>(n));
+                if (rxBuf_.size() > (1u << 20)) { dropClient("túl nagy üzenet"); return; }
+                continue;
+            }
+            if (n == 0) { dropClient("kapcsolat bontva"); return; }
+            if (net::wouldBlock()) break;
+            dropClient("olvasási hiba");
+            return;
         }
 
-        frame.insert(frame.end(), text.begin(), text.end());
-        send(sock, frame.data(), frame.size(), MSG_NOSIGNAL);
+        while (client_ != net::kInvalidSocket) {
+            if (rxBuf_.size() < 2) return;
+            const uint8_t b0 = static_cast<uint8_t>(rxBuf_[0]);
+            const uint8_t b1 = static_cast<uint8_t>(rxBuf_[1]);
+            const uint8_t opcode = b0 & 0x0F;
+            const bool masked = (b1 & 0x80) != 0;
+            uint64_t len = b1 & 0x7F;
+            size_t hdr = 2;
+            if (len == 126) {
+                if (rxBuf_.size() < 4) return;
+                len = (static_cast<uint8_t>(rxBuf_[2]) << 8) | static_cast<uint8_t>(rxBuf_[3]);
+                hdr = 4;
+            } else if (len == 127) {
+                if (rxBuf_.size() < 10) return;
+                len = 0;
+                for (int i = 0; i < 8; ++i) len = (len << 8) | static_cast<uint8_t>(rxBuf_[2 + i]);
+                hdr = 10;
+            }
+            if (len > (1u << 20)) { dropClient("túl nagy keret"); return; }
+            const size_t maskLen = masked ? 4 : 0;
+            if (rxBuf_.size() < hdr + maskLen + len) return;
+
+            std::string payload = rxBuf_.substr(hdr + maskLen, static_cast<size_t>(len));
+            if (masked) {
+                const char* m = rxBuf_.data() + hdr;
+                for (size_t i = 0; i < payload.size(); ++i) payload[i] ^= m[i % 4];
+            }
+            rxBuf_.erase(0, hdr + maskLen + static_cast<size_t>(len));
+
+            switch (opcode) {
+                case 0x1: handleMessage(payload); break;       // szöveg
+                case 0x8: sendFrame(0x8, ""); dropClient("close keret"); return;
+                case 0x9: sendFrame(0xA, payload); break;      // ping -> pong
+                default: break;                                 // bináris / folytatás: figyelmen kívül
+            }
+        }
     }
+
+    // ------------------------------------------------------------------ protokoll
+    void handleMessage(const std::string& text) {
+        json::Value msg;
+        if (!json::parse(text, msg)) return;
+        const json::Value* typeV = msg.get("type");
+        if (!typeV) return;
+        const std::string type = typeV->stringOr("");
+        const json::Value* val = msg.get("val");
+
+        if (type == "hello" || type == "get_state") {
+            sendText(buildStateMessage());
+            return;
+        }
+        if (!cb_.getParams || !cb_.setParams) return;
+
+        ParamData p = cb_.getParams();
+        bool changed = true;
+
+        if (type == "set_preamp" && val) {
+            p.preampDb = static_cast<float>(val->numberOr(0.0));
+        } else if (type.rfind("set_module_", 0) == 0 && val) {
+            const std::string mod = type.substr(11);
+            const bool on = val->numberOr(0.0) != 0.0;
+            if (mod == "eq") p.set(kFlagEq, on);
+            else if (mod == "crossfeed") p.set(kFlagCrossfeed, on);
+            else if (mod == "convolver") p.set(kFlagConvolver, on);
+            else if (mod == "limiter") p.set(kFlagLimiter, on);
+            else if (mod == "bass") p.set(kFlagBass, on);
+            else changed = false;
+        } else if (type == "set_crossfeed_preset" && val) {
+            p.crossfeedPreset = static_cast<int32_t>(val->numberOr(0.0));
+        } else if (type == "set_eq") {
+            const json::Value* bands = msg.get("bands");
+            if (!bands || bands->type != json::Value::Type::Array) return;
+            p.numBands = 0;
+            for (const auto& b : bands->arr) {
+                if (p.numBands >= kMaxEqBands) break;
+                EqBandPod& out = p.bands[p.numBands++];
+                const json::Value* t = b.get("type");
+                out.type = eqTypeFromName(t ? t->stringOr("peaking").c_str() : "peaking");
+                out.freq = static_cast<float>(b.get("freq") ? b.get("freq")->numberOr(1000.0) : 1000.0);
+                out.gainDb = static_cast<float>(b.get("gain") ? b.get("gain")->numberOr(0.0) : 0.0);
+                out.q = static_cast<float>(b.get("q") ? b.get("q")->numberOr(0.7071) : 0.7071);
+            }
+        } else {
+            changed = false;
+        }
+
+        if (changed) {
+            p.set(kFlagInitialized, true);
+            cb_.setParams(p);
+        }
+    }
+
+    static void appendFloat(std::string& s, double v, int decimals) {
+        char tmp[32];
+        std::snprintf(tmp, sizeof(tmp), "%.*f", decimals, v);
+        s += tmp;
+    }
+
+    std::string buildSpectrumMessage(const SpectrumAnalyzer& a, double sr) const {
+        std::string s;
+        s.reserve(a.numBands() * 14 + 64);
+        s += "{\"type\":\"spectrum\",\"sr\":";
+        appendFloat(s, sr, 0);
+        s += ",\"levels\":[";
+        const auto& lv = a.levels();
+        for (size_t i = 0; i < lv.size(); ++i) {
+            if (i) s += ',';
+            appendFloat(s, lv[i], 3);
+        }
+        s += "],\"phase\":[";
+        const auto& ph = a.phaseDegrees();
+        for (size_t i = 0; i < ph.size(); ++i) {
+            if (i) s += ',';
+            appendFloat(s, ph[i], 1);
+        }
+        s += "]}";
+        return s;
+    }
+
+    std::string buildStatusMessage() const {
+        std::string s = "{\"type\":\"status\"";
+        if (cb_.statusFields) {
+            std::string extra = cb_.statusFields();
+            if (!extra.empty()) { s += ','; s += extra; }
+        }
+        s += '}';
+        return s;
+    }
+
+    std::string buildStateMessage() const {
+        ParamData p = cb_.getParams ? cb_.getParams() : ParamData{};
+        std::string s = "{\"type\":\"state\",\"initialized\":";
+        s += p.has(kFlagInitialized) ? "true" : "false";
+        s += ",\"preamp\":";
+        appendFloat(s, p.preampDb, 2);
+        s += ",\"modules\":{";
+        s += "\"eq\":"; s += p.has(kFlagEq) ? "1" : "0";
+        s += ",\"crossfeed\":"; s += p.has(kFlagCrossfeed) ? "1" : "0";
+        s += ",\"convolver\":"; s += p.has(kFlagConvolver) ? "1" : "0";
+        s += ",\"limiter\":"; s += p.has(kFlagLimiter) ? "1" : "0";
+        s += ",\"bass\":"; s += p.has(kFlagBass) ? "1" : "0";
+        s += "},\"crossfeedPreset\":" + std::to_string(p.crossfeedPreset);
+        s += ",\"bands\":[";
+        const uint32_t n = std::min(p.numBands, kMaxEqBands);
+        for (uint32_t i = 0; i < n; ++i) {
+            if (i) s += ',';
+            s += "{\"type\":\"";
+            s += eqTypeName(p.bands[i].type);
+            s += "\",\"freq\":"; appendFloat(s, p.bands[i].freq, 2);
+            s += ",\"gain\":"; appendFloat(s, p.bands[i].gainDb, 2);
+            s += ",\"q\":"; appendFloat(s, p.bands[i].q, 3);
+            s += '}';
+        }
+        s += "]}";
+        return s;
+    }
+
+    int port_;
+    BridgeCallbacks cb_;
+    std::atomic<bool> running_{false};
+    std::atomic<bool> clientConnected_{false};
+    std::thread thread_;
+    net::socket_t listener_ = net::kInvalidSocket;
+    net::socket_t client_ = net::kInvalidSocket;
+    std::string rxBuf_;
 };
 
 } // namespace ee_analyzer

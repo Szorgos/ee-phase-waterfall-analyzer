@@ -104,7 +104,9 @@
   .hp-card { background: #22262e; border: 1px solid #333d4b; border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; transition: all 0.15s; }
   .hp-card:hover { background: #282f3a; border-color: var(--ee-accent-blue); transform: translateY(-1px); }
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- three.js: helyi példány (Windows csomag, offline), különben CDN -->
+<script src="three.min.js"></script>
+<script>if (!window.THREE) document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');</script>
 <script src="autoeq_index.js"></script>
 </head>
 <body>
@@ -114,11 +116,11 @@
   <header>
     <div class="title-group">
       <div class="badge-app" style="background: linear-gradient(135deg, #3584e4, #9a59b5); font-weight: 800; letter-spacing: 0.5px;">AETHER</div>
-      <span style="font-size: 1.02rem; font-weight: 700; background: linear-gradient(90deg, #ffffff, #78aeed); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">AetherAudio • PipeWire Audiofil DSP Rendszer</span>
+      <span style="font-size: 1.02rem; font-weight: 700; background: linear-gradient(90deg, #ffffff, #78aeed); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">AetherAudio • Audiofil DSP Rendszer</span>
     </div>
     <div style="display:flex; align-items:center; gap:12px;">
       <span id="pipewireLiveBadge" class="status-badge" style="background:rgba(255,255,255,0.06); color:var(--ee-text-secondary); border:1px solid #444;">
-        ○ PipeWire Offline (Szimuláció)
+        ○ Motor Offline (Szimuláció)
       </span>
       <div style="font-size:0.8rem; color:var(--ee-text-secondary);">
         Kimenet: <strong>Speakers (DAC 768kHz)</strong>
@@ -720,6 +722,12 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
 var pipewireWs = null;
 var isPipewireConnected = false;
 var livePipewireSamples = null;
+var liveSpectrumLevels = null;   // valódi FFT spektrum a motortól (0..1, 160 sáv)
+var liveSpectrumTime = 0;
+var engineStatus = null;         // utolsó "status" üzenet a motortól
+var suppressEngineSync = false;  // motor-állapot betöltése közben ne küldjünk vissza
+var lastSentPreamp = null;
+var eqSyncTimer = null;
 
 var currentEqMode = 'iir';
 var currentDecramp = '4x';
@@ -962,8 +970,15 @@ function animate3D() {
   const mask = new Uint8Array(FREQ_BINS);
   simFrame++;
 
-  // Zenei jel: élő PipeWire audio vagy szimuláció
-  if (isPipewireConnected && livePipewireSamples && livePipewireSamples.length > 0) {
+  // Zenei jel: valódi FFT spektrum a motortól, régi nyers minták, vagy szimuláció
+  const hasLiveSpectrum = isPipewireConnected && liveSpectrumLevels && liveSpectrumLevels.length > 0;
+  if (hasLiveSpectrum) {
+    const n = liveSpectrumLevels.length;
+    for (let f = 0; f < FREQ_BINS; f++) {
+      const idx = Math.min(n - 1, Math.floor((f / FREQ_BINS) * n));
+      slice[f] = Math.max(0, Math.min(1.0, liveSpectrumLevels[idx]));
+    }
+  } else if (isPipewireConnected && livePipewireSamples && livePipewireSamples.length > 0) {
     for (let f = 0; f < FREQ_BINS; f++) {
       const sampleIdx = Math.floor((f / FREQ_BINS) * livePipewireSamples.length);
       const amp = Math.abs(livePipewireSamples[sampleIdx]) * 1.6;
@@ -979,7 +994,8 @@ function animate3D() {
   }
 
   // FIR előcsengési folt (Pre-ringing): ragyogó fehér hullámok élő és szimulált jelnél is
-  const hasPreRing = isEqEnabled && (isFirMode || currentEqMode === 'fir_lin' || currentEqMode === 'fir_int');
+  // Élő spektrumnál a valódi jel már tartalmazza az EQ hatását: nem rajzolunk rá szimulált hatásokat
+  const hasPreRing = !hasLiveSpectrum && isEqEnabled && (isFirMode || currentEqMode === 'fir_lin' || currentEqMode === 'fir_int');
   if (hasPreRing) {
     const trPhase = simFrame % 35;
     if (trPhase >= 28 && trPhase < 34) {
@@ -990,8 +1006,8 @@ function animate3D() {
     }
   }
 
-  // EQ hatás
-  if (isEqEnabled) {
+  // EQ hatás (csak szimulációban)
+  if (isEqEnabled && !hasLiveSpectrum) {
     for (let f = 0; f < FREQ_BINS; f++) {
       if (f >= 20 && f <= 32) slice[f] = Math.min(1.0, slice[f] * 1.35);
       if (f >= 45 && f <= 60) slice[f] = slice[f] * 0.5;
@@ -1142,7 +1158,23 @@ function getFreq(x, plotW, padLeft) {
   return Math.pow(10, LOG_MIN + (norm / plotW) * (LOG_MAX - LOG_MIN));
 }
 
+function scheduleEqSync() {
+  if (suppressEngineSync || !isPipewireConnected) return;
+  if (eqSyncTimer) return;
+  eqSyncTimer = setTimeout(() => {
+    eqSyncTimer = null;
+    if (!pipewireWs || pipewireWs.readyState !== WebSocket.OPEN) return;
+    const bands = nodes.map(n => ({ type: n.type, freq: +n.freq, gain: +n.gain, q: +n.q }));
+    pipewireWs.send(JSON.stringify({ type: "set_eq", bands: bands }));
+    if (lastSentPreamp !== currentPreamp) {
+      lastSentPreamp = currentPreamp;
+      pipewireWs.send(JSON.stringify({ type: "set_preamp", val: currentPreamp }));
+    }
+  }, 40);
+}
+
 function drawEq() {
+  scheduleEqSync();
   const dpr = window.devicePixelRatio || 1;
   const w = eqCanvas.width;
   const h = eqCanvas.height;
@@ -1416,6 +1448,7 @@ txtAutoEqInput.oninput = () => {
 // CROSSFEED MESTER-BEÁLLÍTÁSOK (BAUER, MEIER, STUDIO)
 // =========================================================================
 function applyCrossfeedPreset(preset) {
+  sendParamToPipewire('set_crossfeed_preset', preset === 'meier' ? 1 : (preset === 'studio' ? 2 : 0));
   const f = document.getElementById("cfFreq");
   const l = document.getElementById("cfLevel");
   const d = document.getElementById("cfDelay");
@@ -1447,6 +1480,7 @@ function setPreamp(val) {
     badge.className = "status-badge info";
   }
   drawEq();
+  lastSentPreamp = currentPreamp;
   sendParamToPipewire("set_preamp", currentPreamp);
 }
 
@@ -2296,37 +2330,109 @@ function updateBassInfo() {
 // =========================================================================
 // PIPEWIRE ÉLŐ WEBSOCKET HÍD (ws://127.0.0.1:8080)
 // =========================================================================
-function initPipewireBridge() {
+function updateEngineBadge() {
   const badge = document.getElementById("pipewireLiveBadge");
+  if (!badge) return;
+  if (!isPipewireConnected) {
+    badge.className = "status-badge";
+    badge.style.background = "rgba(255,255,255,0.06)";
+    badge.style.color = "var(--ee-text-secondary)";
+    badge.style.border = "1px solid #444";
+    badge.innerHTML = "○ Motor Offline (Szimuláció)";
+    badge.title = "Indítsd el a motort: Linuxon ./run.sh, Windowson AetherAudio.exe";
+    return;
+  }
+  badge.style.background = "";
+  badge.style.color = "";
+  badge.style.border = "";
+  const st = engineStatus || {};
+  const src = st.source || "Motor";
+  const sr = st.sr ? ` • ${(st.sr / 1000).toFixed(1)} kHz` : "";
+  if (st.platform === "windows" && st.dspActive === false) {
+    badge.className = "status-badge info";
+    badge.innerHTML = `● Élő analízis – ${src}${sr}`;
+    badge.title = (st.device ? `Eszköz: ${st.device}\n` : "") +
+      "Csak analízis: a DSP beállítások az AetherAudio EQ APO plugin telepítése után hatnak a hangra.";
+  } else {
+    badge.className = "status-badge optimal";
+    badge.innerHTML = `● Élő – ${src}${sr}`;
+    badge.title = (typeof st.gr === "number" && st.gr < -0.05) ? `Limiter erősítéscsökkentés: ${st.gr.toFixed(1)} dB` : "";
+  }
+}
+
+// A motorban tárolt (mentett) DSP lánc betöltése a felületre
+function applyEngineState(st) {
+  suppressEngineSync = true;
+  try {
+    const colorPalette = ["#3584e4", "#e01b24", "#ff7800", "#33d17a", "#9141ac", "#f6d32d", "#2ec27e", "#e66100", "#1c71d8"];
+    if (st.initialized) {
+      if (Array.isArray(st.bands) && st.bands.length > 0) {
+        nodes = st.bands.map((b, i) => ({
+          id: i + 1, freq: b.freq, gain: b.gain, q: b.q, type: b.type,
+          color: colorPalette[i % colorPalette.length]
+        }));
+        selectedNodeId = nodes[0].id;
+      }
+      const mods = st.modules || {};
+      ['eq', 'crossfeed', 'convolver', 'limiter', 'bass'].forEach(m => {
+        if (m in mods) setModuleActive(m, !!mods[m]);
+      });
+      currentPreamp = typeof st.preamp === "number" ? st.preamp : 0.0;
+    } else {
+      // A motor még sosem kapott beállítást: biztonságos, sík alapállapot (ami a képen, az szól)
+      nodes.forEach(n => { n.gain = 0.0; });
+      ['crossfeed', 'convolver', 'limiter', 'bass'].forEach(m => setModuleActive(m, false));
+      setModuleActive('eq', true);
+      currentPreamp = 0.0;
+    }
+    const inp = document.getElementById("inputPreamp");
+    if (inp) inp.value = currentPreamp.toFixed(1);
+    lastSentPreamp = currentPreamp;
+    updateEqUI();
+    drawEq();
+  } finally {
+    suppressEngineSync = false;
+  }
+  if (!st.initialized) {
+    // a sík állapotot megerősítjük a motor felé
+    scheduleEqSync();
+    sendParamToPipewire("set_preamp", currentPreamp);
+  }
+}
+
+function initPipewireBridge() {
   try {
     pipewireWs = new WebSocket("ws://127.0.0.1:8080");
 
     pipewireWs.onopen = () => {
       isPipewireConnected = true;
-      if (badge) {
-        badge.className = "status-badge optimal";
-        badge.innerHTML = "● PipeWire Live (Csatlakoztatva)";
-      }
-      console.log("[PipeWire Bridge] Élő C++ PipeWire szerverhez csatlakozva!");
+      updateEngineBadge();
+      pipewireWs.send(JSON.stringify({ type: "hello", client: "gui_integrated_system" }));
+      console.log("[Motor Bridge] Élő C++ hangmotorhoz csatlakozva!");
     };
 
     pipewireWs.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data);
-        if (data.type === "audio_levels" && data.samples) {
-          livePipewireSamples = data.samples;
+        if (data.type === "spectrum" && data.levels) {
+          liveSpectrumLevels = data.levels;
+          liveSpectrumTime = performance.now();
+        } else if (data.type === "state") {
+          applyEngineState(data);
+        } else if (data.type === "status") {
+          engineStatus = data;
+          updateEngineBadge();
+        } else if (data.type === "audio_levels" && data.samples) {
+          livePipewireSamples = data.samples; // régi motorverzió kompatibilitás
         }
       } catch (err) {}
     };
 
     pipewireWs.onclose = () => {
       isPipewireConnected = false;
-      if (badge) {
-        badge.className = "status-badge";
-        badge.style.background = "rgba(255,255,255,0.06)";
-        badge.style.color = "var(--ee-text-secondary)";
-        badge.innerHTML = "○ PipeWire Offline (Szimuláció)";
-      }
+      liveSpectrumLevels = null;
+      engineStatus = null;
+      updateEngineBadge();
       setTimeout(initPipewireBridge, 3000);
     };
 
@@ -2338,7 +2444,7 @@ function initPipewireBridge() {
   }
 }
 
-// Induláskor háttérben előkészítjük a 8 850+ modellt tartalmazó teljes AutoEq indexet és csatlakozunk a PipeWire-hoz
+// Induláskor háttérben előkészítjük a 8 850+ modellt tartalmazó teljes AutoEq indexet és csatlakozunk a hangmotorhoz (PipeWire / Windows)
 setTimeout(() => {
   ensureAutoEqIndexLoaded();
   initPipewireBridge();

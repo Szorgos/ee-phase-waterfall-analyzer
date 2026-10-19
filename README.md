@@ -49,7 +49,7 @@ Az **AetherAudio** ezt a filozófiát egyesíti a modern digitális jelfeldolgoz
 
 5. **Zármentes (Lock-free) C++20 Ringbuffer és PipeWire SPA Integráció:**
    * Zéró hangkimaradás (xrun-free): a grafikai terhelés soha nem akaszthatja meg a zenelejátszást.
-   * Kétirányú, valós idejű WebSocket híd (`ws://127.0.0.1:8080`) a Linuxos hangmotor és a felület között.
+   * Kétirányú, valós idejű WebSocket híd (`ws://127.0.0.1:8080`) a hangmotor és a felület között: a motor valódi FFT spektrumot küld, a GUI pedig a preampot, a modulkapcsolókat és az EQ sávokat.
 
 ---
 
@@ -72,6 +72,12 @@ chmod +x install.sh
 * **Fedora / RHEL / CentOS:** `dnf` csomagkezelővel
 * **Arch Linux / Manjaro / EndeavourOS:** `pacman` csomagkezelővel
 * **openSUSE / SUSE:** `zypper` csomagkezelővel
+
+---
+
+## 🪟 Windows 11 verzió
+
+A `windows/` mappában a Windowsos motor (`AetherAudio.exe`, WASAPI loopback + WebSocket híd) és az **Equalizer APO** alá tölthető plugin (`AetherAudio.dll`, VST 2.4 ABI) található. A GUI ugyanaz, mint Linuxon. Részletek, telepítés és fordítás: **[windows/README_WINDOWS.md](windows/README_WINDOWS.md)**.
 
 ---
 
@@ -111,6 +117,7 @@ cmake --build build -j$(nproc)
 ./build/test_math         # Zárt képletű csoportkésleltetés teszt
 ./build/test_pipeline     # DSP lánc és limiter csillapítás teszt
 ./build/test_ringbuffer   # 96 000 mintás többszálú zármentes átviteli teszt
+./build/test_core         # FFT spektrum, seqlock, tap körpuffer, JSON, átlátszóság
 ```
 
 ---
@@ -131,13 +138,28 @@ cmake --build build -j$(nproc)
 │   ├── dsp_pipeline.hpp        # Integrált feldolgozási lánc (Preamp -> EQ -> CF -> Conv -> Limiter)
 │   ├── ringbuffer.hpp          # Zármentes SPSC körpuffer valós idejű hangátvitelhez
 │   ├── pipewire_filter_node.hpp# Natív Linux pw_filter audio csomópont
-│   ├── ws_bridge.hpp           # RFC 6455 élő WebSocket szerver a GUI összekötéséhez
+│   ├── ws_bridge.hpp           # RFC 6455 WebSocket híd (Linux + Windows), valódi FFT spektrummal
+│   ├── net_compat.hpp          # BSD socket / Winsock2 közös réteg
+│   ├── spectrum.hpp            # Hann-ablakos FFT, 160 logaritmikus sáv + L/R fázis
+│   ├── param_block.hpp         # Zármentes (seqlock) paraméterblokk GUI -> audio szál
+│   ├── param_apply.hpp         # Paraméterek alkalmazása a DSP láncra, foglalásmentesen
+│   ├── tap_ring.hpp            # Felülíró sztereó tap körpuffer (közös memóriában is)
+│   ├── shared_state.hpp        # Plugin <-> motor közös memória elrendezés (Windows)
+│   ├── mini_json.hpp           # Függőségmentes JSON olvasó a vezérlőüzenetekhez
 │   └── sha1_base64.hpp         # Független SHA-1 és Base64 modul a WS kézfogáshoz
-└── src/
-    ├── pipewire_plugin.cpp     # A PipeWire háttérszolgáltatás fő belépési pontja
-    ├── test_math.cpp           # Matematikai ellenőrző alkalmazás
-    ├── test_pipeline.cpp       # DSP integrációs tesztprogram
-    └── test_ringbuffer.cpp     # Többszálú valós idejű stabilitási tesztprogram
+├── src/
+│   ├── pipewire_plugin.cpp     # A PipeWire háttérszolgáltatás fő belépési pontja
+│   ├── test_core.cpp           # Közös mag teszt (FFT, seqlock, tap, JSON, átlátszóság)
+│   ├── test_math.cpp           # Matematikai ellenőrző alkalmazás
+│   ├── test_pipeline.cpp       # DSP integrációs tesztprogram
+│   └── test_ringbuffer.cpp     # Többszálú valós idejű stabilitási tesztprogram
+└── windows/
+    ├── README_WINDOWS.md       # Windows telepítés, használat, fordítás
+    ├── engine/                 # AetherAudio.exe (WASAPI loopback, plugin híd)
+    ├── plugin/                 # AetherAudio.dll Equalizer APO plugin (VST 2.4 ABI)
+    ├── common/win_shared.hpp   # Közös memória és beállítás-fájl (ProgramData)
+    ├── install_eqapo_plugin.ps1# Plugin telepítő az EQ APO VSTPlugins mappájába
+    └── toolchain-llvm-mingw.cmake # Keresztfordítás Linuxról
 ```
 
 ---
