@@ -55,11 +55,12 @@
 
   .actions-group { display: flex; gap: 8px; align-items: center; }
 
-  /* GNOME ADWAITA NUMERIKUS INPUTOK */
-  .ee-input { background: #1e1e1e; border: 1px solid var(--ee-border); color: #fff; padding: 4px 6px; border-radius: 6px; font-size: 0.85rem; font-family: monospace; font-weight: 600; text-align: right; outline: none; transition: border-color 0.15s; }
+  /* GNOME ADWAITA NUMERIKUS INPUTOK ÉS SELECT */
+  .ee-input { background: #1e1e1e; border: 1px solid var(--ee-border); color: #fff; padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; font-family: monospace; font-weight: 600; text-align: left; outline: none; transition: border-color 0.15s; }
   .ee-input:focus { border-color: var(--ee-accent-blue); box-shadow: 0 0 0 1px var(--ee-accent-blue); }
-  .ee-input::-webkit-inner-spin-button, .ee-input::-webkit-outer-spin-button { opacity: 0.4; }
-  .unit { font-size: 0.75rem; color: var(--ee-text-secondary); margin-left: 2px; }
+  .ee-select { background: #1e1e1e; border: 1px solid var(--ee-border); color: #fff; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; outline: none; cursor: pointer; }
+  .ee-select:focus { border-color: var(--ee-accent-blue); }
+  .unit { font-size: 0.75rem; color: var(--ee-text-secondary); margin-left: 3px; }
 
   /* ADWAITA GOMBOK */
   .adw-btn { background: #383838; border: 1px solid var(--ee-border); color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; font-weight: 500; transition: all 0.15s ease; display: flex; align-items: center; gap: 6px; }
@@ -104,23 +105,34 @@
 
   <div class="bottom-bar">
     <div class="node-readout">
-      <div style="font-weight:700; min-width:140px;" id="selectedNodeTitle">Sáv #1</div>
+      <div style="font-weight:700;" id="selectedNodeTitle">Sáv #1</div>
+
+      <div class="stat-group">
+        <label class="lbl" for="selectType">Típus:</label>
+        <select id="selectType" class="ee-select">
+          <option value="peaking">Harang (Peaking)</option>
+          <option value="lowshelf">Mély kiemelés (Low Shelf)</option>
+          <option value="highshelf">Magas kiemelés (High Shelf)</option>
+          <option value="lowpass">Mélyáteresztő (Low Pass)</option>
+          <option value="highpass">Felüláteresztő (High Pass)</option>
+        </select>
+      </div>
       
       <div class="stat-group">
         <label class="lbl" for="inputFreq">Frekvencia:</label>
-        <input type="number" id="inputFreq" min="20" max="20000" step="1" class="ee-input" style="width:75px;">
+        <input type="number" id="inputFreq" min="20" max="20000" step="1" class="ee-input" style="width:72px;">
         <span class="unit">Hz</span>
       </div>
 
       <div class="stat-group">
         <label class="lbl" for="inputGain">Erősítés:</label>
-        <input type="number" id="inputGain" min="-24" max="24" step="0.1" class="ee-input" style="width:65px; color:var(--ee-curve-primary);">
+        <input type="number" id="inputGain" min="-24" max="24" step="0.1" class="ee-input" style="width:62px; color:var(--ee-curve-primary);">
         <span class="unit">dB</span>
       </div>
 
       <div class="stat-group">
         <label class="lbl" for="inputQ">Q-faktor:</label>
-        <input type="number" id="inputQ" min="0.1" max="15" step="0.05" class="ee-input" style="width:65px;">
+        <input type="number" id="inputQ" min="0.1" max="15" step="0.05" class="ee-input" style="width:62px;">
       </div>
       
       <button class="adw-btn danger" id="btnDeleteNode" title="Kijelölt sáv törlése">✕ Törlés</button>
@@ -509,8 +521,13 @@ document.getElementById("btnDeleteNode").onclick = () => {
 function updateUI() {
   const sel = nodes.find(n => n.id === selectedNodeId);
   if (sel) {
-    document.getElementById("selectedNodeTitle").innerText = `Sáv #${nodes.indexOf(sel) + 1} (${sel.type.toUpperCase()})`;
+    document.getElementById("selectedNodeTitle").innerText = `Sáv #${nodes.indexOf(sel) + 1}`;
     document.getElementById("selectedNodeTitle").style.color = sel.color;
+
+    // Szűrőtípus beállítása a menüben
+    if (document.getElementById("selectType")) {
+      document.getElementById("selectType").value = sel.type;
+    }
     
     // Csak akkor írjuk felül az input értékét, ha nem épp abba gépel a felhasználó!
     if (document.activeElement !== inputFreq) {
@@ -526,9 +543,18 @@ function updateUI() {
 }
 
 // KÉTIRÁNYÚ SZINKRONIZÁCIÓ: Ha kézzel beírsz egy értéket, a pötty azonnal a helyére ugrik!
+const selectType = document.getElementById("selectType");
 const inputFreq = document.getElementById("inputFreq");
 const inputGain = document.getElementById("inputGain");
 const inputQ = document.getElementById("inputQ");
+
+selectType.onchange = () => {
+  const sel = nodes.find(n => n.id === selectedNodeId);
+  if (sel) {
+    sel.type = selectType.value;
+    draw();
+  }
+};
 
 inputFreq.oninput = () => {
   const sel = nodes.find(n => n.id === selectedNodeId);
