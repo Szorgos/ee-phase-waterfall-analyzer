@@ -127,17 +127,25 @@
         <option value="180">180 lépcső (Mély)</option>
       </select>
 
-      <!-- Pre-ringing színének állítása -->
-      <span class="ctrl-label">Pre-ring szín:</span>
-      <select id="selectGlowColor" class="mini-select">
-        <option value="white" selected>Fehér (Vakító)</option>
-        <option value="cyan">Jégkék (Diszkrét)</option>
-        <option value="gold">Arany (Meleg)</option>
-        <option value="magenta">Lila (Kontraszt)</option>
+      <!-- EQ MÓDVÁLASZTÓ: MINDKÉT ÉS MINDKÉT KÖZTES MÓD (ÖSSZESEN 4 MÓD) -->
+      <span class="ctrl-label">EQ Mód:</span>
+      <select id="selectEqMode" class="mini-select">
+        <option value="iir" selected>1. IIR (Minimálfázis, 0 ms pre-ring)</option>
+        <option value="fir_lin">2. FIR (Lineáris fázis, szimmetrikus)</option>
+        <option value="fir_int">3. Köztes Fázis (Intermediate, 5% pre-ring)</option>
+        <option value="fir_min">4. Minimálfázisú FIR (0 ms pre-ring)</option>
+      </select>
+
+      <!-- NYQUIST DECRAMPING TÚLMINTAVÉTELEZÉS -->
+      <span class="ctrl-label">Decramp:</span>
+      <select id="selectDecramp" class="mini-select" title="Nyquist Decramping túlmintavételezés a magasfrekvenciás torzulás ellen">
+        <option value="none">Ki (Cramped)</option>
+        <option value="2x">2x Túlmintavételezés</option>
+        <option value="4x" selected>4x Lanczos (Tökéletes)</option>
+        <option value="8x">8x Extrém</option>
       </select>
 
       <button class="mini-btn active" id="btnEqBypass">EQ: BE</button>
-      <button class="mini-btn" id="btnFirMode">Mód: Minimálfázis (IIR)</button>
       <button class="mini-btn" id="btnCameraAngle">Nézőpont: 3D</button>
     </div>
   </div>
@@ -216,7 +224,19 @@
         Illeszd be a fejhallgatód vagy hangfalad AutoEq / oratory1990 / Crinacle paraméteres EQ szövegét. A rendszer automatikusan belövi a negatív Preampot és a True Peak védelmet a Logout.hu cikkünk alapján!
       </p>
 
-      <textarea id="txtAutoEqInput" style="background:#1e1e1e; border:1px solid var(--ee-border); color:#fff; font-family:monospace; font-size:0.78rem; padding:10px; border-radius:6px; height:130px; resize:none; outline:none;" placeholder="Példa:
+      <div style="display:flex; justify-content:space-between; align-items:center; background:#242424; border:1px solid #3c3c3c; border-radius:6px; padding:8px 12px;">
+        <span style="font-size:0.75rem; color:var(--ee-text-secondary);">Fájl betöltése számítógépről (.txt / .csv):</span>
+        <label class="adw-btn primary" style="background:#3584e4; cursor:pointer; font-size:0.75rem; padding:4px 10px;">
+          📁 Fájl / Mappa Tallózása...
+          <input type="file" id="fileEqUpload" accept=".txt,.csv" style="display:none;" onchange="handleFileSelect(event)">
+        </label>
+      </div>
+
+      <div id="lblDetectedFormat" style="font-size:0.72rem; color:var(--ee-curve-cyan); font-weight:600; display:none;">
+        Észlelt formátum: <span id="detectedFormatName">AutoEq Parametrikus TXT</span>
+      </div>
+
+      <textarea id="txtAutoEqInput" style="background:#1e1e1e; border:1px solid var(--ee-border); color:#fff; font-family:monospace; font-size:0.78rem; padding:10px; border-radius:6px; height:120px; resize:none; outline:none;" placeholder="Vagy illeszd be ide közvetlenül a szöveget...
 Preamp: -6.2 dB
 Filter 1: ON PK Fc 65 Hz Gain 5.8 dB Q 1.41
 Filter 2: ON PK Fc 120 Hz Gain -8.5 dB Q 4.20
@@ -844,10 +864,66 @@ inputQ.oninput = () => {
 };
 
 // =========================================================================
-// AUTOEQ INTELLIGENS IMPORTÁLÓ ÉS PROFILGENERÁLÓ MOTOR (LOGOUT.HU STANDARD)
+// FÁJL TALLÓZÓ ÉS FORMÁTUM FELISMERŐ
 // =========================================================================
-const modalImport = document.getElementById("modalImport");
-const txtAutoEqInput = document.getElementById("txtAutoEqInput");
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const content = e.target.result;
+    txtAutoEqInput.value = content;
+    detectEqFormat(content);
+  };
+  reader.readAsText(file);
+}
+
+function detectEqFormat(text) {
+  const lbl = document.getElementById("lblDetectedFormat");
+  const name = document.getElementById("detectedFormatName");
+  lbl.style.display = "block";
+
+  if (text.includes("Filter") && text.includes("Fc") && text.includes("Gain")) {
+    name.innerText = "AutoEq / oratory1990 / Crinacle Paraméteres TXT";
+    name.style.color = "var(--ee-curve-cyan)";
+  } else if (text.includes("GraphicEQ:")) {
+    name.innerText = "EqualizerAPO GraphicEQ Vektor";
+    name.style.color = "var(--ee-green)";
+  } else if (text.includes("REW") || text.includes("Room EQ Wizard")) {
+    name.innerText = "REW (Room EQ Wizard) Exportált Szűrőfájl";
+    name.style.color = "var(--ee-orange)";
+  } else if (text.includes(",") && !text.includes(":")) {
+    name.innerText = "Squiglink CSV Frekvenciamenet";
+    name.style.color = "#ffd600";
+  } else {
+    name.innerText = "Általános Paraméteres EQ Lista";
+    name.style.color = "#fff";
+  }
+}
+
+txtAutoEqInput.oninput = () => {
+  if (txtAutoEqInput.value.trim()) {
+    detectEqFormat(txtAutoEqInput.value);
+  } else {
+    document.getElementById("lblDetectedFormat").style.display = "none";
+  }
+};
+
+// 4 EQ Mód és Decramp kezelők
+let currentEqMode = 'iir';
+let currentDecramp = '4x';
+
+document.getElementById("selectEqMode").onchange = (e) => {
+  currentEqMode = e.target.value;
+  // Csak a FIR és Köztes módoknál van előcsengés
+  const hasPreRing = (currentEqMode === 'fir_lin' || currentEqMode === 'fir_int');
+  document.getElementById("hudPreRingBadge").style.display = (hasPreRing && isEqEnabled) ? "block" : "none";
+};
+
+document.getElementById("selectDecramp").onchange = (e) => {
+  currentDecramp = e.target.value;
+};
 
 document.getElementById("btnImportAutoEq").onclick = () => {
   modalImport.style.display = "flex";
