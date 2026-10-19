@@ -46,7 +46,9 @@ inline FilterType toFilterType(int32_t t) {
 inline void applyParams(DspPipeline& p, const ParamData& d) {
     p.preampGainDb = std::clamp(static_cast<double>(d.preampDb), -60.0, 24.0);
 
-    const uint32_t n = d.has(kFlagEq) ? std::min(d.numBands, kMaxEqBands) : 0u;
+    // FIR módban az EQ-t a háttérszálban tervezett FIR végzi (AetherChain), az IIR lánc üres
+    const bool iirEq = d.has(kFlagEq) && d.eqMode == static_cast<int32_t>(EqMode::Iir);
+    const uint32_t n = iirEq ? std::min(d.numBands, kMaxEqBands) : 0u;
     p.eqChain.filters.resize(n);
     const double nyquist = p.sampleRate * 0.5;
     for (uint32_t i = 0; i < n; ++i) {
@@ -63,14 +65,29 @@ inline void applyParams(DspPipeline& p, const ParamData& d) {
     const bool cfOn = d.has(kFlagCrossfeed);
     if (cfOn && !p.crossfeed.enabled) p.crossfeed.reset();
     p.crossfeed.enabled = cfOn;
-    switch (d.crossfeedPreset) {
-        case 1: p.crossfeed.setPreset(CrossfeedPreset::MeierCorda); break;
-        case 2: p.crossfeed.setPreset(CrossfeedPreset::StudioNearfield); break;
-        default: p.crossfeed.setPreset(CrossfeedPreset::BauerDefault); break;
+    if (d.crossfeedCutoffHz > 0.0f) {
+        p.crossfeed.cutoffFreq = std::clamp(static_cast<double>(d.crossfeedCutoffHz), 200.0, 3000.0);
+        p.crossfeed.feedLevelDb = std::clamp(static_cast<double>(d.crossfeedFeedDb), 0.5, 20.0);
+        p.crossfeed.updateCoefficients();
+    } else {
+        switch (d.crossfeedPreset) {
+            case 1: p.crossfeed.setPreset(CrossfeedPreset::MeierCorda); break;
+            case 2: p.crossfeed.setPreset(CrossfeedPreset::StudioNearfield); break;
+            default: p.crossfeed.setPreset(CrossfeedPreset::BauerDefault); break;
+        }
     }
 
-    // A konvolver csak betöltött IR mellett dolgozik (a GUI-ból még nem tölthető be IR).
+    // Az egyszerű (közvetlen) FIR konvolver jelzője; az AetherChain a partícionált konvolvert használja.
     p.convolver.enabled = d.has(kFlagConvolver);
+
+    const double ceiling = std::clamp(static_cast<double>(d.limiterCeilingDb), -12.0, 0.0);
+    p.limiter.ceilingDb = ceiling;
+    p.limiter.thresholdDb = ceiling - 0.1;
+    const double rel = std::clamp(static_cast<double>(d.limiterReleaseMs), 1.0, 1000.0);
+    if (rel != p.limiter.releaseMs) {
+        p.limiter.releaseMs = rel;
+        p.limiter.updateParameters();
+    }
 
     const bool limOn = d.has(kFlagLimiter);
     if (limOn && !p.limiter.enabled) p.limiter.reset();

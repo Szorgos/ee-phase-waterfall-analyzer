@@ -77,7 +77,9 @@ chmod +x install.sh
 
 ## 🪟 Windows 11 verzió
 
-A `windows/` mappában a Windowsos motor (`AetherAudio.exe`, WASAPI loopback + WebSocket híd) és az **Equalizer APO** alá tölthető plugin (`AetherAudio.dll`, VST 2.4 ABI) található. A GUI ugyanaz, mint Linuxon. Részletek, telepítés és fordítás: **[windows/README_WINDOWS.md](windows/README_WINDOWS.md)**.
+Egyetlen telepítő: **`AetherAudio-Setup.exe`**. Felismeri (vagy letölti) az **Equalizer APO**-t, a plugint automatikusan a lánc végére illeszti, parancsikonokat és eltávolítót hoz létre. A motor tálcaikonos háttéralkalmazásként fut, a GUI ugyanaz, mint Linuxon. Részletek: **[windows/README_WINDOWS.md](windows/README_WINDOWS.md)**.
+
+A Linuxos és a Windowsos ág ugyanazt a C++ DSP láncot futtatja (`include/aether_chain.hpp`): IIR vagy FIR EQ (lineáris / köztes / minimálfázis), Bass Enhancer, crossfeed, partícionált FFT konvolver és limiter. A drága műveletek háttérszálon futnak, a csere kattanásmentes.
 
 ---
 
@@ -118,6 +120,7 @@ cmake --build build -j$(nproc)
 ./build/test_pipeline     # DSP lánc és limiter csillapítás teszt
 ./build/test_ringbuffer   # 96 000 mintás többszálú zármentes átviteli teszt
 ./build/test_core         # FFT spektrum, seqlock, tap körpuffer, JSON, átlátszóság
+./build/test_dsp          # Konvolver, FIR EQ, Bass Enhancer, limiter, teljes lánc
 ```
 
 ---
@@ -131,6 +134,10 @@ cmake --build build -j$(nproc)
 ├── gui_integrated_system.html  # Teljes EasyEffects Adwaita grafikus felület és 3D WebGL
 ├── autoeq_index.js             # 8 850+ modellt tartalmazó AutoEq fülhallgató adatbázis
 ├── include/
+│   ├── aether_chain.hpp        # Teljes DSP lánc háttérszállal (Linux + Windows közös mag)
+│   ├── partitioned_convolver.hpp # Zéró latency partícionált FFT konvolver
+│   ├── fir_design.hpp          # FIR EQ tervezés, IR újramintavételezés, minimálfázis
+│   ├── bass_enhancer.hpp       # Pszichoakusztikai mélyhang-kiemelő
 │   ├── biquad_analyzer.hpp     # Analitikus IIR szűrőmatematika és csoportkésleltetés
 │   ├── crossfeed.hpp           # Bauer bs2b és Jan Meier fejhallgatós térhatás motor
 │   ├── convolver.hpp           # Partícionált FIR impulzusválasz konvolúció
@@ -150,15 +157,19 @@ cmake --build build -j$(nproc)
 ├── src/
 │   ├── pipewire_plugin.cpp     # A PipeWire háttérszolgáltatás fő belépési pontja
 │   ├── test_core.cpp           # Közös mag teszt (FFT, seqlock, tap, JSON, átlátszóság)
+│   ├── test_dsp.cpp            # Konvolver, FIR EQ, Bass Enhancer, teljes lánc teszt
 │   ├── test_math.cpp           # Matematikai ellenőrző alkalmazás
 │   ├── test_pipeline.cpp       # DSP integrációs tesztprogram
 │   └── test_ringbuffer.cpp     # Többszálú valós idejű stabilitási tesztprogram
 └── windows/
     ├── README_WINDOWS.md       # Windows telepítés, használat, fordítás
-    ├── engine/                 # AetherAudio.exe (WASAPI loopback, plugin híd)
+    ├── engine/                 # AetherAudio.exe (tálcás motor, WASAPI loopback, plugin híd)
     ├── plugin/                 # AetherAudio.dll Equalizer APO plugin (VST 2.4 ABI)
-    ├── common/win_shared.hpp   # Közös memória és beállítás-fájl (ProgramData)
-    ├── install_eqapo_plugin.ps1# Plugin telepítő az EQ APO VSTPlugins mappájába
+    ├── installer/              # AetherAudio-Setup.exe telepítő és eltávolító
+    ├── tools/eqapo_host_sim.cpp# Teszt-hoszt: az EQ APO betöltési sorrendjét utánozza
+    ├── common/win_shared.hpp   # Közös memória, beállítás- és IR-fájl (ProgramData)
+    ├── resources/              # Ikon, manifestek, verzióinformáció
+    ├── third_party/three/      # three.js r128 (MIT) az offline GUI-hoz
     └── toolchain-llvm-mingw.cmake # Keresztfordítás Linuxról
 ```
 

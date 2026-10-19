@@ -3,7 +3,8 @@
  * @brief AetherAudio DSP plugin Equalizer APO-hoz (VST 2.4 bináris interfész).
  *
  * Mit csinál:
- *   - lefuttatja a projekt DSP láncát (Preamp -> EQ -> Crossfeed -> Convolver -> Limiter) az audiodg.exe-ben,
+ *   - lefuttatja a projekt DSP láncát (Preamp -> EQ (IIR/FIR) -> Bass Enhancer -> Crossfeed -> Convolver -> Limiter)
+ *     az audiodg.exe-ben; a FIR tervezés és az IR előkészítés saját háttérszálon fut,
  *   - a feldolgozott sztereó jelet közös memórián át átadja az AetherAudio.exe motornak (3D vízesés, fázis),
  *   - a GUI-ban állított beállításokat élőben átveszi a motortól (zármentes seqlock),
  *   - az utolsó beállítást a C:\ProgramData\AetherAudio\params.bin fájlból tölti be, így motor nélkül is
@@ -30,7 +31,7 @@
 #include <vector>
 
 #include "vst2_abi.hpp"
-#include "param_apply.hpp"
+#include "aether_chain.hpp"
 #include "../common/win_shared.hpp"
 
 using namespace ee_analyzer;
@@ -109,12 +110,13 @@ public:
 private:
     // ---------------------------------------------------------------- életciklus
     void open() {
-        preparePipeline(pipeline_);
         current_ = transparentParams();
 
         ParamData stored;
         const bool haveFile = win::loadParamFile(stored) && stored.has(kFlagInitialized);
         if (haveFile) current_ = stored;
+        IrData fileIr;
+        const bool haveIr = win::loadIrFile(fileIr);
 
         bool createdNew = false;
         if (mapping_.create(createdNew)) {
@@ -133,17 +135,33 @@ private:
             st->activeInstances.fetch_add(1);
             logStatus(std::string("plugin megnyitva, folyamat: ") + processName() + ", közös memória: " +
                       (mapping_.isGlobal() ? "Global" : "Local") + (createdNew ? " (új)" : " (meglévő)") +
-                      ", mentett beállítás: " + (haveFile ? "igen" : "nem"));
+                      ", mentett beállítás: " + (haveFile ? "igen" : "nem") + ", mentett IR: " +
+                      (haveIr ? fileIr.name : std::string("nincs")));
         } else {
             logStatus(std::string("plugin megnyitva, folyamat: ") + processName() +
                       ", HIBA: közös memória nem hozható létre (GetLastError=" + std::to_string(GetLastError()) + ")");
         }
 
-        setPipelineSampleRate(pipeline_, sampleRate_);
-        applyParams(pipeline_, current_);
+        chain_.setSampleRate(sampleRate_);
+        chain_.applyParamsRT(current_);
+        if (haveIr) chain_.submitIr(std::move(fileIr));
+        // Háttérszál: FIR tervezés + a motor által küldött új IR figyelése a közös memóriában
+        chain_.startWorker([this]() {
+            AetherSharedState* st = mapping_.state();
+            if (!st) return;
+            const uint32_t seq = st->ir.seq.load(std::memory_order_acquire);
+            if (seq == 0 || seq == lastIrSeq_ || (seq & 1u)) return;
+            IrData ir;
+            uint32_t readSeq = 0;
+            if (win::readIrBlock(st->ir, ir, readSeq)) {
+                lastIrSeq_ = readSeq;
+                chain_.submitIr(std::move(ir));
+            }
+        });
     }
 
     void close() {
+        chain_.stopWorker();
         if (mapping_.state()) {
             AetherSharedState* st = mapping_.state();
             if (st->activeInstances.load() > 0) st->activeInstances.fetch_sub(1);
@@ -156,8 +174,7 @@ private:
     void setSampleRate(float sr) {
         if (sr <= 0.0f) return;
         sampleRate_ = sr;
-        setPipelineSampleRate(pipeline_, sr);
-        applyParams(pipeline_, current_);
+        chain_.setSampleRate(sr);
     }
 
     // ---------------------------------------------------------------- hangfeldolgozás
@@ -187,14 +204,14 @@ private:
                 uint32_t readSeq = 0;
                 if (st->params.tryRead(pd, readSeq)) {
                     current_ = pd;
-                    applyParams(pipeline_, current_);
+                    chain_.applyParamsRT(current_);
                     appliedSeq_ = readSeq;
                 }
             }
         }
 
         if (!bypass_.load(std::memory_order_relaxed)) {
-            pipeline_.processBlock(outL, outR, static_cast<size_t>(n));
+            chain_.process(outL, outR, static_cast<size_t>(n));
         }
 
         // Lehallgatás az analizátornak: egyszerre csak egy példány ír (a többi hallgat)
@@ -208,10 +225,7 @@ private:
             if (mine) {
                 st->tap.write(outL, outR, static_cast<uint32_t>(n));
                 st->sampleRate.store(static_cast<uint32_t>(sampleRate_), std::memory_order_relaxed);
-                st->gainReductionDb.store(pipeline_.limiter.enabled
-                                              ? static_cast<float>(pipeline_.limiter.getGainReductionDb())
-                                              : 0.0f,
-                                          std::memory_order_relaxed);
+                st->gainReductionDb.store(static_cast<float>(chain_.gainReductionDb()), std::memory_order_relaxed);
                 st->ownerTickMs.store(now, std::memory_order_release);
             }
         }
@@ -239,7 +253,7 @@ private:
             case vst2::effSetSampleRate: setSampleRate(opt); return 0;
             case vst2::effSetBlockSize: return 0;
             case vst2::effMainsChanged:
-                if (value) pipeline_.reset();
+                if (value) chain_.reset();
                 return 0;
             case vst2::effGetParamName:
                 copyString(ptr, index == kParamBypass ? "Bypass" : index == kParamRemote ? "Remote" : "", 16);
@@ -320,8 +334,9 @@ public:
 private:
     vst2::AEffect effect_;
     [[maybe_unused]] vst2::HostCallback host_;
-    DspPipeline pipeline_;
+    AetherChain chain_;
     ParamData current_{};
+    uint32_t lastIrSeq_ = 0;
     uint32_t appliedSeq_ = 0;
     win::SharedMapping mapping_;
     uint32_t token_ = 1;

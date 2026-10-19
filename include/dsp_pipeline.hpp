@@ -85,26 +85,10 @@ public:
         if (bypassAll) return;
 
         // 1. Preamp erősítés (lineáris szorzó)
-        const float linearPreamp = static_cast<float>(std::pow(10.0, preampGainDb / 20.0));
-        if (std::abs(preampGainDb) > 0.001) {
-            for (size_t i = 0; i < numSamples; ++i) {
-                left[i] *= linearPreamp;
-                right[i] *= linearPreamp;
-            }
-        }
+        processPreamp(left, right, numSamples);
 
         // 2. Parametrikus EQ (IIR Biquad lánc csatornánként)
-        const size_t numFilters = eqCoeffs.size();
-        for (size_t f = 0; f < numFilters; ++f) {
-            const auto& c = eqCoeffs[f];
-            auto& stateL = eqStatesL[f];
-            auto& stateR = eqStatesR[f];
-
-            for (size_t i = 0; i < numSamples; ++i) {
-                left[i] = stateL.process(left[i], c);
-                right[i] = stateR.process(right[i], c);
-            }
-        }
+        processIirEq(left, right, numSamples);
 
         // 3. Crossfeed (fejhallgatós sztereó áthallás)
         if (crossfeed.enabled) {
@@ -119,6 +103,31 @@ public:
         // 5. Studio Limiter & Soft-Clipper (végső csúcsérték és DAC védelem)
         if (limiter.enabled) {
             limiter.processBlock(left, right, numSamples);
+        }
+    }
+
+    /** Preamp önállóan (az AetherChain lépésenként hívja). */
+    void processPreamp(float* left, float* right, size_t numSamples) {
+        if (std::abs(preampGainDb) > 0.001) {
+            const float linearPreamp = static_cast<float>(std::pow(10.0, preampGainDb / 20.0));
+            for (size_t i = 0; i < numSamples; ++i) {
+                left[i] *= linearPreamp;
+                right[i] *= linearPreamp;
+            }
+        }
+    }
+
+    /** IIR EQ lánc önállóan. */
+    void processIirEq(float* left, float* right, size_t numSamples) {
+        const size_t numFilters = eqCoeffs.size();
+        for (size_t f = 0; f < numFilters; ++f) {
+            const auto& c = eqCoeffs[f];
+            auto& stateL = eqStatesL[f];
+            auto& stateR = eqStatesR[f];
+            for (size_t i = 0; i < numSamples; ++i) {
+                left[i] = stateL.process(left[i], c);
+                right[i] = stateR.process(right[i], c);
+            }
         }
     }
 
