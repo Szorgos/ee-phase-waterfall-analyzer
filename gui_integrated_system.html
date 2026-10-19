@@ -85,6 +85,15 @@
   .param-box { background: #262626; border: 1px solid var(--ee-border); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
   .param-box .title { font-size: 0.75rem; color: var(--ee-text-secondary); text-transform: uppercase; }
   .param-box .val { font-size: 1.1rem; font-weight: 700; font-family: monospace; }
+
+  /* Interaktív paraméter mezők, Sliderek & Státusz badge-ek */
+  .param-slider { flex: 1; accent-color: var(--ee-accent-blue); cursor: pointer; }
+  .status-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; padding: 2px 7px; border-radius: 4px; font-weight: 600; width: fit-content; }
+  .status-badge.optimal { background: rgba(51, 209, 122, 0.18); color: #33d17a; border: 1px solid rgba(51, 209, 122, 0.4); }
+  .status-badge.warning { background: rgba(255, 120, 0, 0.18); color: #ff7800; border: 1px solid rgba(255, 120, 0, 0.4); }
+  .status-badge.caution { background: rgba(229, 165, 10, 0.18); color: #e5a50a; border: 1px solid rgba(229, 165, 10, 0.4); }
+  .status-badge.danger { background: rgba(237, 51, 59, 0.18); color: #ed333b; border: 1px solid rgba(237, 51, 59, 0.4); }
+  .status-badge.info { background: rgba(53, 132, 228, 0.18); color: #78aeed; border: 1px solid rgba(53, 132, 228, 0.4); }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
@@ -305,26 +314,87 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
       </div>
     </div>
 
-    <!-- 2. TAB: CONVOLVER (SZÓBAKORREKCIÓ & FIR) -->
+    <!-- 2. TAB: CONVOLVER (SZOBALORREKCIÓ & FIR) -->
     <div class="tab-pane" id="pane-convolver">
       <div class="module-card">
-        <h3>📂 Convolver (Partícionált FIR Impulzusválasz Motor)</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0;">📂 Convolver (Partícionált FIR Impulzusválasz Motor)</h3>
+          <div style="display:flex; gap:8px;">
+            <label class="adw-btn primary" style="background:#3584e4; cursor:pointer; font-size:0.78rem; display:inline-flex; align-items:center; gap:6px;">
+              📁 WAV / IRS Impulzus Tallózása...
+              <input type="file" id="convFileInput" accept=".wav,.irs" style="display:none;" onchange="handleConvFileSelect(event)">
+            </label>
+            <button class="adw-btn" onclick="loadSampleIr('room')" title="Teszt szobakorrekciós impulzus betöltése">Példa Szoba (48k)</button>
+            <button class="adw-btn" onclick="loadSampleIr('headphone')" title="Teszt fejhallgató HRIR impulzus betöltése">Példa Fejhallgató</button>
+          </div>
+        </div>
+
         <p class="module-desc">
-          Itt töltheted be a szobamérésből (pl. REW vagy Cavern QuickEQ) exportált <strong>szobakorrekciós WAV fájlt</strong>. 
-          A motor valós idejű particionált FFT-vel hajtja végre a konvolúciót zéró késleltetéssel.
+          Itt töltheted be a szobamérésből (pl. REW, Dirac vagy Cavern QuickEQ) exportált <strong>szobakorrekciós WAV / IRS fájlt</strong>. 
+          A motor valós idejű partícionált FFT konvolúciót végez zéró késleltetéssel.
         </p>
-        <div class="param-grid">
-          <div class="param-box">
-            <span class="title">Betöltött szűrő</span>
-            <span class="val" style="color:var(--ee-green); font-size:0.95rem;">room_correction_48k.wav</span>
+
+        <!-- Impulzusválasz grafikon mini előnézet -->
+        <div style="background:#16191f; border:1px solid var(--ee-border); border-radius:6px; padding:10px; display:flex; flex-direction:column; gap:6px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem;">
+            <span style="color:var(--ee-text-secondary); font-weight:600;">Valós idejű Impulzusválasz & Lecsengés előnézet:</span>
+            <span id="convIrInfo" style="color:var(--ee-curve-cyan); font-family:monospace; font-size:0.75rem;">room_correction_48k.wav (48 000 Hz, Sztereó, 24-bit)</span>
           </div>
+          <canvas id="convCanvas" height="85" style="width:100%; height:85px; background:#0c0e12; border-radius:4px; display:block;"></canvas>
+        </div>
+
+        <div class="param-grid" style="grid-template-columns: repeat(3, 1fr);">
+          <!-- 1. Partíció & Tapszám -->
           <div class="param-box">
-            <span class="title">FIR Tapszám / Hossz</span>
-            <span class="val">65 536 taps (1.36 s)</span>
+            <span class="title">FIR Partíció & Tapszám</span>
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:4px;">
+              <select id="convTaps" class="ee-select" onchange="updateConvolverSettings()">
+                <option value="16384">16 384 taps (~0.34 s) - Gyors</option>
+                <option value="65536" selected>65 536 taps (~1.36 s) [Ajánlott]</option>
+                <option value="131072">131 072 taps (~2.73 s) - Részletes</option>
+              </select>
+              <div id="convTapsBadge" class="status-badge optimal">
+                ✅ Késleltetés: 0.0 ms (Zéró latency partíció)
+              </div>
+            </div>
+            <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
+              A partícionált feldolgozás megszünteti a hosszú FIR szűrők bemeneti késleltetését.
+            </small>
           </div>
+
+          <!-- 2. Fázis transzformáció -->
           <div class="param-box">
-            <span class="title">Szűrési Mód</span>
-            <span class="val" style="color:var(--ee-curve-cyan);">Minimum-Phase (Pre-ring mentes)</span>
+            <span class="title">Fázis Feldolgozás</span>
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:4px;">
+              <select id="convPhaseMode" class="ee-select" onchange="updateConvolverSettings()">
+                <option value="min" selected>Minimálfázisúvá alakítás [Ajánlott]</option>
+                <option value="linear">Eredeti fázis (Linear / True IR)</option>
+              </select>
+              <div id="convPhaseBadge" class="status-badge optimal">
+                ✅ 0 ms előcsengés (Nincs akusztikai pre-ring)
+              </div>
+            </div>
+            <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
+              A Hilbert-transzformáció megszünteti az előcsengést a szobakorrekcióban.
+            </small>
+          </div>
+
+          <!-- 3. Gain & Auto-Normalizálás -->
+          <div class="param-box">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="title">Szint Illesztés (Trim Gain)</span>
+              <span id="lblConvGain" style="font-size:0.85rem; font-family:monospace; font-weight:700; color:var(--ee-green);">-3.0 dB</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+              <input type="range" id="convGainSlider" min="-18" max="6" step="0.5" value="-3.0" class="param-slider" oninput="syncConvGain(this.value, true)">
+              <input type="number" id="convGainInput" min="-18" max="6" step="0.5" value="-3.0" class="ee-input" style="width:58px;" oninput="syncConvGain(this.value, false)">
+            </div>
+            <div id="convGainBadge" class="status-badge optimal" style="margin-top:4px;">
+              ✅ Biztonságos szint (Nincs túlvezérlés)
+            </div>
+            <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
+              Kompenzálja a konvolúciós szűrő energia-kiemeléseit.
+            </small>
           </div>
         </div>
       </div>
@@ -333,23 +403,116 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
     <!-- 3. TAB: LIMITER (TRUE PEAK / ISP VÉDELEM) -->
     <div class="tab-pane" id="pane-limiter">
       <div class="module-card">
-        <h3>🛡️ Limiter & Inter-Sample Peak (True Peak) Védelem</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0;">🛡️ Limiter & Inter-Sample Peak (True Peak) Védelem</h3>
+          <span style="font-size:0.75rem; color:var(--ee-text-secondary);">
+            Standard: <strong style="color:var(--ee-green);">ITU-R BS.1770-4 / EBU R128</strong>
+          </span>
+        </div>
+
         <p class="module-desc">
-          Megakadályozza, hogy az EQ-ban végzett emelések miatt a DAC digitális túlvezérlésbe fusson. 
-          A 4x-es túlmintavételezésű True Peak detektor levadássza a rejtett analóg csúcsokat.
+          Megakadályozza, hogy az EQ-ban vagy a szobakorrekcióban végzett emelések miatt a DAC analóg rekonstrukciós szűrője digitális túlvezérlésbe fusson. 
+          Az állítható paramétereknél a <strong>zöld színjelzés</strong> jelöli a Logout.hu cikkünkben bemutatott optimális audiofil beállítást.
         </p>
-        <div class="param-grid">
+
+        <div class="param-grid" style="grid-template-columns: repeat(3, 1fr);">
+          <!-- 1. Ceiling (Plafon) -->
           <div class="param-box">
-            <span class="title">Maximális Plafon (Ceiling)</span>
-            <span class="val" style="color:#ff7800;">-1.0 dBTP</span>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="title">Maximális Plafon (Ceiling)</span>
+              <span id="lblLimiterCeiling" style="font-size:0.85rem; font-family:monospace; font-weight:700; color:var(--ee-green);">-1.0 dBTP</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+              <input type="range" id="limiterCeilingSlider" min="-6.0" max="0.0" step="0.1" value="-1.0" class="param-slider" oninput="updateLimiterCeiling(this.value, true)">
+              <input type="number" id="limiterCeilingInput" min="-6.0" max="0.0" step="0.1" value="-1.0" class="ee-input" style="width:60px;" oninput="updateLimiterCeiling(this.value, false)">
+            </div>
+            <div id="limiterCeilingBadge" class="status-badge optimal" style="margin-top:6px;">
+              ✅ Optimális (Kivédi a DAC inter-sample clip-et)
+            </div>
+            <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
+              Ajánlás: -1.0 dBTP a legbiztonságosabb határérték minden DAC típushoz.
+            </small>
           </div>
+
+          <!-- 2. Oversampling -->
           <div class="param-box">
-            <span class="title">Túlmintavételezés</span>
-            <span class="val">4x Lanczos (Decramped)</span>
+            <span class="title">Túlmintavételezés (Oversampling)</span>
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
+              <select id="limiterOversampling" class="ee-select" onchange="updateLimiterOversampling()">
+                <option value="1x">1x (Nincs túlmintavételezés - CPU kímélő)</option>
+                <option value="2x">2x Oversampling (Alapszintű ISP védelem)</option>
+                <option value="4x" selected>4x Lanczos [Ajánlott - Logout cikk standard]</option>
+                <option value="8x">8x Lanczos (Maximális stúdió precizitás)</option>
+              </select>
+              <div id="limiterOversamplingBadge" class="status-badge optimal">
+                ✅ 4x Lanczos: Zéró analóg túlcsordulás
+              </div>
+            </div>
+            <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
+              A 4x Lanczos interpoláció az analóg hullámforma csúcsait is levadássza.
+            </small>
           </div>
+
+          <!-- 3. Lookahead Buffer -->
           <div class="param-box">
-            <span class="title">Kivezérlés csillapítás</span>
-            <span class="val">0.0 dB (Tiszta jel)</span>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="title">Előretekintési Idő (Lookahead)</span>
+              <span id="lblLimiterLookahead" style="font-size:0.85rem; font-family:monospace; font-weight:700; color:var(--ee-green);">5.0 ms</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+              <input type="range" id="limiterLookaheadSlider" min="0.5" max="10.0" step="0.5" value="5.0" class="param-slider" oninput="updateLimiterLookahead(this.value, true)">
+              <input type="number" id="limiterLookaheadInput" min="0.5" max="10.0" step="0.5" value="5.0" class="ee-input" style="width:58px;" oninput="updateLimiterLookahead(this.value, false)">
+            </div>
+            <div id="limiterLookaheadBadge" class="status-badge optimal" style="margin-top:6px;">
+              ✅ Optimális (Kattogásmentes tranziensek)
+            </div>
+            <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
+              Megelőzi a gyors tranziensek torzulását a hullámforma vizsgálatával.
+            </small>
+          </div>
+
+          <!-- 4. Release Time -->
+          <div class="param-box">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="title">Lecsengési Idő (Release Time)</span>
+              <span id="lblLimiterRelease" style="font-size:0.85rem; font-family:monospace; font-weight:700; color:var(--ee-green);">50 ms</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+              <input type="range" id="limiterReleaseSlider" min="10" max="300" step="5" value="50" class="param-slider" oninput="updateLimiterRelease(this.value, true)">
+              <input type="number" id="limiterReleaseInput" min="10" max="300" step="5" value="50" class="ee-input" style="width:58px;" oninput="updateLimiterRelease(this.value, false)">
+            </div>
+            <div id="limiterReleaseBadge" class="status-badge optimal" style="margin-top:6px;">
+              ✅ Optimális (Pumpálásmentes zeneiség)
+            </div>
+            <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
+              30-80 ms között természetes a dinamika, elkerülve a hangerő-hullámzást.
+            </small>
+          </div>
+
+          <!-- 5. Kivezérlés & Gain Reduction Kijelző szimuláció -->
+          <div class="param-box" style="grid-column: span 2;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="title">Valós Idejű Dinamika & Csillapítás (Gain Reduction)</span>
+              <span id="lblLimiterGr" style="font-family:monospace; font-size:0.82rem; color:var(--ee-curve-cyan);">GR: 0.0 dB (Tiszta áteresztés)</span>
+            </div>
+            <!-- Dinamikus kivezérlésmérő sáv -->
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:0.7rem; width:45px; color:#aaa;">In/Out:</span>
+                <div style="flex:1; height:12px; background:#181e26; border-radius:3px; overflow:hidden; position:relative;">
+                  <div id="meterLevelBar" style="width:68%; height:100%; background:linear-gradient(90deg, #33d17a 75%, #ff7800 90%, #ed333b 100%); transition:width 0.1s;"></div>
+                  <div style="position:absolute; top:0; bottom:0; left:83.3%; width:2px; background:#fff;" title="Plafon (-1.0 dBTP)"></div>
+                </div>
+                <span style="font-size:0.72rem; font-family:monospace; color:#aaa;">-2.4 dBFS</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:0.7rem; width:45px; color:#aaa;">GR:</span>
+                <div style="flex:1; height:8px; background:#181e26; border-radius:3px; overflow:hidden;">
+                  <div id="meterGrBar" style="width:0%; height:100%; background:#ed333b; transition:width 0.1s;"></div>
+                </div>
+                <span style="font-size:0.72rem; font-family:monospace; color:#aaa;">0.0 dB</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -358,23 +521,103 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
     <!-- 4. TAB: BASS ENHANCER -->
     <div class="tab-pane" id="pane-bass">
       <div class="module-card">
-        <h3>🔊 Bass Enhancer (Pszichoakusztikai Mélyhang Generátor)</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0;">🔊 Bass Enhancer (Pszichoakusztikai Mélyhang Generátor)</h3>
+          <span style="font-size:0.75rem; color:var(--ee-text-secondary);">
+            Elv: <strong style="color:var(--ee-curve-cyan);">Missing Fundamental (Hiányzó Alaphang)</strong>
+          </span>
+        </div>
+
         <p class="module-desc">
-          Kisebb hangfalakhoz vagy mélyhiányos fejhallgatókhoz: nem pusztán hangerőt emel (ami membrántorzítást okozna), 
-          hanem felharmonikusokat generál, amit az agy mélyebb basszusként érzékel (Missing Fundamental elv).
+          Kisebb hangfalakhoz és mélyhiányos fejhallgatókhoz: nem pusztán hangerőt emel (ami membrántorzítást és akusztikai zörgést okozna), 
+          hanem felharmonikusokat generál, amit az agy a mély alaphang jelenléteként dekódol. A <strong>zöld színkódok</strong> a membránvédelem és a zenei tisztaság optimális egyensúlyát jelzik.
         </p>
-        <div class="param-grid">
+
+        <div class="param-grid" style="grid-template-columns: repeat(3, 1fr);">
+          <!-- 1. Keresztváltási Frekvencia -->
           <div class="param-box">
-            <span class="title">Keresztváltási Frekvencia</span>
-            <span class="val">80 Hz</span>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="title">Keresztváltási Frekvencia</span>
+              <span id="lblBassCrossover" style="font-size:0.85rem; font-family:monospace; font-weight:700; color:var(--ee-green);">80 Hz</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+              <input type="range" id="bassCrossoverSlider" min="40" max="160" step="5" value="80" class="param-slider" oninput="updateBassCrossover(this.value, true)">
+              <input type="number" id="bassCrossoverInput" min="40" max="160" step="5" value="80" class="ee-input" style="width:58px;" oninput="updateBassCrossover(this.value, false)">
+            </div>
+            <div id="bassCrossoverBadge" class="status-badge optimal" style="margin-top:6px;">
+              ✅ Optimális (Fejhallgatókhoz és monitorokhoz)
+            </div>
+            <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
+              60-90 Hz között ideális: alatta a hangszóró nem bírja, felette már énekhangba nyúl.
+            </small>
           </div>
+
+          <!-- 2. Harmonikus Dúsítás Szintje -->
           <div class="param-box">
-            <span class="title">Harmonikus Dúsítás</span>
-            <span class="val" style="color:var(--ee-curve-cyan);">2. és 3. Felharmonikus (+3 dB)</span>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="title">Harmonikus Dúsítás</span>
+              <span id="lblBassHarmonics" style="font-size:0.85rem; font-family:monospace; font-weight:700; color:var(--ee-green);">+3.0 dB</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+              <input type="range" id="bassHarmonicsSlider" min="0.0" max="12.0" step="0.5" value="3.0" class="param-slider" oninput="updateBassHarmonics(this.value, true)">
+              <input type="number" id="bassHarmonicsInput" min="0.0" max="12.0" step="0.5" value="3.0" class="ee-input" style="width:58px;" oninput="updateBassHarmonics(this.value, false)">
+            </div>
+            <div id="bassHarmonicsBadge" class="status-badge optimal" style="margin-top:6px;">
+              ✅ Optimális (Természetes mélyérzet színezés nélkül)
+            </div>
+            <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
+              +1 és +4 dB között telt, zenei hatás; +7 dB felett már művi hangzás és torzítás várható.
+            </small>
           </div>
+
+          <!-- 3. Felharmonikusok Összetétele -->
           <div class="param-box">
-            <span class="title">Mélyvágás (Sub-cut)</span>
-            <span class="val">30 Hz (Membránkímélő 24dB/oct)</span>
+            <span class="title">Generált Felharmonikusok</span>
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
+              <select id="bassHarmonicType" class="ee-select" onchange="updateBassHarmonicType()">
+                <option value="both" selected>2. és 3. Felharmonikus [Ajánlott]</option>
+                <option value="2nd">Csak 2. Felharmonikus (Meleg / Csöves jelleg)</option>
+                <option value="3rd">Csak 3. Felharmonikus (Kemény / Punchy)</option>
+              </select>
+              <div id="bassHarmonicTypeBadge" class="status-badge optimal">
+                ✅ Természetes arány (Oktáv + Kvint)
+              </div>
+            </div>
+            <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
+              A 2. és 3. felharmonikus keveréke adja az akusztikus hangszerek valósághű rezgését.
+            </small>
+          </div>
+
+          <!-- 4. Sub-cut Mélyvágó Szűrő (Driver Protection) -->
+          <div class="param-box">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="title">Mélyvágás (Sub-cut Védelem)</span>
+              <span id="lblBassSubcut" style="font-size:0.85rem; font-family:monospace; font-weight:700; color:var(--ee-green);">30 Hz</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+              <input type="range" id="bassSubcutSlider" min="15" max="50" step="1" value="30" class="param-slider" oninput="updateBassSubcut(this.value, true)">
+              <input type="number" id="bassSubcutInput" min="15" max="50" step="1" value="30" class="ee-input" style="width:58px;" oninput="updateBassSubcut(this.value, false)">
+            </div>
+            <div id="bassSubcutBadge" class="status-badge optimal" style="margin-top:6px;">
+              ✅ Membránkímélő (24 dB/oct meredekség)
+            </div>
+            <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
+              Levágja a hallhatatlan infrahangokat, felszabadítva a membránt a felesleges kilengésektől.
+            </small>
+          </div>
+
+          <!-- 5. Előnézet & Összegző infó -->
+          <div class="param-box" style="grid-column: span 2;">
+            <span class="title">Pszichoakusztikai Állapot és Hatás</span>
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px; font-size:0.8rem; line-height:1.4;">
+              <div style="color:var(--ee-curve-cyan); font-weight:600;">
+                🧠 Érzékelt mélytartomány: <span id="lblPerceivedBass">40 Hz – 80 Hz virtuális alaphangok</span>
+              </div>
+              <div style="color:#aaa;">
+                Aktivált védelmi lánc: <strong>Sub-cut (30 Hz HPF) ➔ Felharmonikus szintézis (+3.0 dB) ➔ True Peak Limiter (-1.0 dBTP)</strong>.
+                Ez a lánc biztosítja, hogy a hangszóró nem forrósodik fel és nem torzít, miközben a mélyérzet drasztikusan gazdagabb.
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -398,6 +641,8 @@ function switchTab(tabId, el) {
 
   if (tabId === 'eq') {
     setTimeout(resizeEq, 25);
+  } else if (tabId === 'convolver') {
+    setTimeout(drawConvWaveform, 25);
   }
 }
 
@@ -1142,6 +1387,370 @@ function updateEqUI() {
 
 updateEqUI();
 setTimeout(resizeEq, 50);
+
+// =========================================================================
+// 2. CONVOLVER MOTOR (FIR IMPULZUSVÁLASZ & MIN-PHASE TRANSZFORMÁCIÓ)
+// =========================================================================
+function handleConvFileSelect(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const sizeKb = (file.size / 1024).toFixed(1);
+  document.getElementById("convIrInfo").innerText = `${file.name} (${sizeKb} KB, Sztereó WAV)`;
+  drawConvWaveform();
+}
+
+function loadSampleIr(type) {
+  const info = document.getElementById("convIrInfo");
+  if (type === 'room') {
+    info.innerText = "room_correction_48k.wav (48 000 Hz, Sztereó, 24-bit)";
+  } else if (type === 'headphone') {
+    info.innerText = "harman_target_hrir.wav (48 000 Hz, Binaural HRIR, 24-bit)";
+  }
+  drawConvWaveform();
+}
+
+function updateConvolverSettings() {
+  const taps = document.getElementById("convTaps").value;
+  const phase = document.getElementById("convPhaseMode").value;
+  
+  const tapsBadge = document.getElementById("convTapsBadge");
+  if (taps === "16384") {
+    tapsBadge.className = "status-badge info";
+    tapsBadge.innerText = "ℹ️ Késleltetés: 0.0 ms (Gyors reakció, kisebb felbontás)";
+  } else if (taps === "65536") {
+    tapsBadge.className = "status-badge optimal";
+    tapsBadge.innerText = "✅ Késleltetés: 0.0 ms (Zéró latency partíció - Optimális)";
+  } else {
+    tapsBadge.className = "status-badge info";
+    tapsBadge.innerText = "ℹ️ Késleltetés: 0.0 ms (Extrém szobakorrekciós felbontás)";
+  }
+
+  const phaseBadge = document.getElementById("convPhaseBadge");
+  if (phase === "min") {
+    phaseBadge.className = "status-badge optimal";
+    phaseBadge.innerText = "✅ 0 ms előcsengés (Nincs akusztikai pre-ring)";
+  } else {
+    phaseBadge.className = "status-badge caution";
+    phaseBadge.innerText = "⚠️ Eredeti fázis (Enyhe előcsengés előfordulhat)";
+  }
+
+  drawConvWaveform();
+}
+
+function syncConvGain(val, fromSlider) {
+  const num = parseFloat(val);
+  const slider = document.getElementById("convGainSlider");
+  const input = document.getElementById("convGainInput");
+  const lbl = document.getElementById("lblConvGain");
+  const badge = document.getElementById("convGainBadge");
+
+  if (fromSlider) input.value = num.toFixed(1);
+  else slider.value = num;
+
+  lbl.innerText = `${num >= 0 ? '+' : ''}${num.toFixed(1)} dB`;
+
+  if (num <= 0) {
+    badge.className = "status-badge optimal";
+    badge.innerText = "✅ Biztonságos szint (Nincs túlvezérlés)";
+    lbl.style.color = "var(--ee-green)";
+  } else {
+    badge.className = "status-badge warning";
+    badge.innerText = "⚠️ Kiemelés (Limiter védelem szükséges)";
+    lbl.style.color = "var(--ee-orange)";
+  }
+}
+
+function drawConvWaveform() {
+  const canvas = document.getElementById("convCanvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width = canvas.clientWidth;
+  const h = canvas.height = canvas.clientHeight;
+
+  ctx.fillStyle = "#0c0e12";
+  ctx.fillRect(0, 0, w, h);
+
+  // Finom háló
+  ctx.strokeStyle = "#1b222c";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x < w; x += 40) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+  for (let y = 0; y < h; y += 20) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+  ctx.stroke();
+
+  // 0 dB középvonal
+  const cy = h / 2;
+  ctx.strokeStyle = "#253040";
+  ctx.beginPath();
+  ctx.moveTo(0, cy);
+  ctx.lineTo(w, cy);
+  ctx.stroke();
+
+  const phase = document.getElementById("convPhaseMode") ? document.getElementById("convPhaseMode").value : "min";
+
+  // Hullámforma rajzolása
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+
+  if (phase === "min") {
+    // Minimálfázis: az impulzus az elején (x=30) robban be, előtte tökéletesen 0, utána tiszta exponenciális csillapítás
+    ctx.strokeStyle = "#00f0ff";
+    for (let x = 0; x < w; x++) {
+      let y = cy;
+      if (x >= 30) {
+        const t = (x - 30) * 0.08;
+        const decay = Math.exp(-t * 0.45);
+        const osc = Math.cos(t * 4.2) * (h * 0.42);
+        y = cy - (osc * decay);
+      }
+      if (x === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // 0 ms címke
+    ctx.fillStyle = "#33d17a";
+    ctx.font = "10px monospace";
+    ctx.fillText("0 ms (Tranziens csúcs - Zéró pre-ringing)", 35, 18);
+  } else {
+    // Lineáris fázis: szimmetrikus impulzus a közepén (x = w / 2), előtte és utána is rezgésekkel!
+    ctx.strokeStyle = "#ff7800";
+    const center = Math.floor(w / 2);
+    for (let x = 0; x < w; x++) {
+      const dist = (x - center) * 0.08;
+      const sinc = Math.sin(dist * 3.5 || 0.001) / (dist * 3.5 || 0.001);
+      const envelope = Math.exp(-Math.abs(dist) * 0.25);
+      const y = cy - (sinc * envelope * (h * 0.42));
+      if (x === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // Előcsengés és utócsengés címkék
+    ctx.fillStyle = "#ff7800";
+    ctx.font = "10px monospace";
+    ctx.fillText("◄ Előcsengés (Pre-ringing)", center - 130, 20);
+    ctx.fillText("Utócsengés ►", center + 20, 20);
+  }
+}
+
+// =========================================================================
+// 3. LIMITER KEZELŐK (TRUE PEAK / ISP AJÁNLÁSOK ÉS SZÍNJELZÉSEK)
+// =========================================================================
+function updateLimiterCeiling(val, fromSlider) {
+  const v = parseFloat(val);
+  const slider = document.getElementById("limiterCeilingSlider");
+  const input = document.getElementById("limiterCeilingInput");
+  const lbl = document.getElementById("lblLimiterCeiling");
+  const badge = document.getElementById("limiterCeilingBadge");
+
+  if (fromSlider) input.value = v.toFixed(1);
+  else slider.value = v;
+
+  lbl.innerText = `${v.toFixed(1)} dBTP`;
+
+  if (v <= -1.0) {
+    badge.className = "status-badge optimal";
+    badge.innerText = "✅ Optimális (Kivédi a DAC inter-sample clip-et)";
+    lbl.style.color = "var(--ee-green)";
+  } else if (v <= -0.4) {
+    badge.className = "status-badge caution";
+    badge.innerText = "⚠️ Figyelem (Bizonyos DAC-oknál ISP előfordulhat)";
+    lbl.style.color = "var(--ee-orange)";
+  } else {
+    badge.className = "status-badge danger";
+    badge.innerText = "❌ Veszélyes (0 dBFS közelében a DAC szűrője torzítani fog!)";
+    lbl.style.color = "#ed333b";
+  }
+}
+
+function updateLimiterOversampling() {
+  const sel = document.getElementById("limiterOversampling").value;
+  const badge = document.getElementById("limiterOversamplingBadge");
+  if (sel === "1x") {
+    badge.className = "status-badge danger";
+    badge.innerText = "❌ Nincs túlmintavételezés (Inter-Sample Peak veszély!)";
+  } else if (sel === "2x") {
+    badge.className = "status-badge caution";
+    badge.innerText = "⚠️ 2x Oversampling (Alapszintű ISP védelem)";
+  } else if (sel === "4x") {
+    badge.className = "status-badge optimal";
+    badge.innerText = "✅ 4x Lanczos: Zéró analóg túlcsordulás [Ajánlott]";
+  } else {
+    badge.className = "status-badge info";
+    badge.innerText = "ℹ️ 8x Lanczos: Stúdió precizitás (Magasabb CPU)";
+  }
+}
+
+function updateLimiterLookahead(val, fromSlider) {
+  const v = parseFloat(val);
+  const slider = document.getElementById("limiterLookaheadSlider");
+  const input = document.getElementById("limiterLookaheadInput");
+  const lbl = document.getElementById("lblLimiterLookahead");
+  const badge = document.getElementById("limiterLookaheadBadge");
+
+  if (fromSlider) input.value = v.toFixed(1);
+  else slider.value = v;
+
+  lbl.innerText = `${v.toFixed(1)} ms`;
+
+  if (v >= 3.0 && v <= 6.0) {
+    badge.className = "status-badge optimal";
+    badge.innerText = "✅ Optimális (Kattogásmentes tranziensek)";
+    lbl.style.color = "var(--ee-green)";
+  } else if (v < 3.0) {
+    badge.className = "status-badge caution";
+    badge.innerText = "⚠️ Kis puffer: gyors tranzienseknél torzulhat";
+    lbl.style.color = "var(--ee-orange)";
+  } else {
+    badge.className = "status-badge info";
+    badge.innerText = "ℹ️ Nagy puffer: megnövekedett késleltetés";
+    lbl.style.color = "#78aeed";
+  }
+}
+
+function updateLimiterRelease(val, fromSlider) {
+  const v = parseFloat(val);
+  const slider = document.getElementById("limiterReleaseSlider");
+  const input = document.getElementById("limiterReleaseInput");
+  const lbl = document.getElementById("lblLimiterRelease");
+  const badge = document.getElementById("limiterReleaseBadge");
+
+  if (fromSlider) input.value = Math.round(v);
+  else slider.value = v;
+
+  lbl.innerText = `${Math.round(v)} ms`;
+
+  if (v >= 30 && v <= 80) {
+    badge.className = "status-badge optimal";
+    badge.innerText = "✅ Optimális (Pumpálásmentes zeneiség)";
+    lbl.style.color = "var(--ee-green)";
+  } else if (v < 30) {
+    badge.className = "status-badge warning";
+    badge.innerText = "⚠️ Gyors: mélyhangoknál enyhe torzítás léphet fel";
+    lbl.style.color = "var(--ee-orange)";
+  } else {
+    badge.className = "status-badge caution";
+    badge.innerText = "⚠️ Hosszú lecsengés: hallható zenei hangerő-hullámzás";
+    lbl.style.color = "#e5a50a";
+  }
+}
+
+// =========================================================================
+// 4. BASS ENHANCER KEZELŐK (PSZICHOAKUSZTIKAI BEÁLLÍTÁSOK & MEMBRÁNVÉDELEM)
+// =========================================================================
+function updateBassCrossover(val, fromSlider) {
+  const v = parseFloat(val);
+  const slider = document.getElementById("bassCrossoverSlider");
+  const input = document.getElementById("bassCrossoverInput");
+  const lbl = document.getElementById("lblBassCrossover");
+  const badge = document.getElementById("bassCrossoverBadge");
+
+  if (fromSlider) input.value = Math.round(v);
+  else slider.value = v;
+
+  lbl.innerText = `${Math.round(v)} Hz`;
+
+  if (v >= 60 && v <= 90) {
+    badge.className = "status-badge optimal";
+    badge.innerText = "✅ Optimális (Fejhallgatókhoz és monitorokhoz)";
+    lbl.style.color = "var(--ee-green)";
+  } else if (v < 60) {
+    badge.className = "status-badge caution";
+    badge.innerText = "⚠️ Alacsony sáv: kis membránok nem tudnak rezonálni";
+    lbl.style.color = "#e5a50a";
+  } else {
+    badge.className = "status-badge warning";
+    badge.innerText = "⚠️ Felső sáv: emberi beszédhangokba is belenyúlhat";
+    lbl.style.color = "var(--ee-orange)";
+  }
+  updateBassInfo();
+}
+
+function updateBassHarmonics(val, fromSlider) {
+  const v = parseFloat(val);
+  const slider = document.getElementById("bassHarmonicsSlider");
+  const input = document.getElementById("bassHarmonicsInput");
+  const lbl = document.getElementById("lblBassHarmonics");
+  const badge = document.getElementById("bassHarmonicsBadge");
+
+  if (fromSlider) input.value = v.toFixed(1);
+  else slider.value = v;
+
+  lbl.innerText = `${v >= 0 ? '+' : ''}${v.toFixed(1)} dB`;
+
+  if (v >= 1.0 && v <= 4.0) {
+    badge.className = "status-badge optimal";
+    badge.innerText = "✅ Optimális (Természetes mélyérzet színezés nélkül)";
+    lbl.style.color = "var(--ee-green)";
+  } else if (v > 4.0 && v <= 7.0) {
+    badge.className = "status-badge caution";
+    badge.innerText = "⚠️ Karakteres, meleg dúsítás (Figyelj a tisztaságra)";
+    lbl.style.color = "#e5a50a";
+  } else if (v > 7.0) {
+    badge.className = "status-badge danger";
+    badge.innerText = "❌ Veszélyes (Művi felharmonikusok és membrántúlterhelés)";
+    lbl.style.color = "#ed333b";
+  } else {
+    badge.className = "status-badge info";
+    badge.innerText = "ℹ️ Minimális hatás (Inaktív dúsítás)";
+    lbl.style.color = "#aaa";
+  }
+  updateBassInfo();
+}
+
+function updateBassHarmonicType() {
+  const val = document.getElementById("bassHarmonicType").value;
+  const badge = document.getElementById("bassHarmonicTypeBadge");
+  if (val === "both") {
+    badge.className = "status-badge optimal";
+    badge.innerText = "✅ Természetes arány (Oktáv + Kvint)";
+  } else if (val === "2nd") {
+    badge.className = "status-badge info";
+    badge.innerText = "ℹ️ Meleg / Csöves jelleg (Csak páros 2. harmonikus)";
+  } else {
+    badge.className = "status-badge caution";
+    badge.innerText = "⚠️ Kemény / Punchy (Csak páratlan 3. harmonikus)";
+  }
+  updateBassInfo();
+}
+
+function updateBassSubcut(val, fromSlider) {
+  const v = parseFloat(val);
+  const slider = document.getElementById("bassSubcutSlider");
+  const input = document.getElementById("bassSubcutInput");
+  const lbl = document.getElementById("lblBassSubcut");
+  const badge = document.getElementById("bassSubcutBadge");
+
+  if (fromSlider) input.value = Math.round(v);
+  else slider.value = v;
+
+  lbl.innerText = `${Math.round(v)} Hz`;
+
+  if (v >= 25 && v <= 35) {
+    badge.className = "status-badge optimal";
+    badge.innerText = "✅ Membránkímélő (24 dB/oct meredekség)";
+    lbl.style.color = "var(--ee-green)";
+  } else if (v < 25) {
+    badge.className = "status-badge caution";
+    badge.innerText = "⚠️ Alacsony szub-védelem: a membrán feleslegesen kilenghet";
+    lbl.style.color = "#e5a50a";
+  } else {
+    badge.className = "status-badge warning";
+    badge.innerText = "⚠️ Magas vágás: elveszhet a valódi mélyhang";
+    lbl.style.color = "var(--ee-orange)";
+  }
+  updateBassInfo();
+}
+
+function updateBassInfo() {
+  const cross = document.getElementById("bassCrossoverSlider") ? document.getElementById("bassCrossoverSlider").value : 80;
+  const subcut = document.getElementById("bassSubcutSlider") ? document.getElementById("bassSubcutSlider").value : 30;
+  const lbl = document.getElementById("lblPerceivedBass");
+  if (lbl) {
+    lbl.innerText = `${subcut} Hz – ${cross} Hz virtuális alaphangok`;
+  }
+}
 </script>
 </body>
 </html>
