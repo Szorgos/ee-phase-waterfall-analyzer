@@ -64,14 +64,15 @@
   .eq-canvas-wrapper { position: relative; background: var(--ee-view-bg); border: 1px solid var(--ee-border); border-radius: 8px; overflow: hidden; }
   canvas#eqCanvas { display: block; width: 100%; height: 260px; cursor: crosshair; }
 
-  .eq-bottom-bar { background: var(--ee-card-bg); border: 1px solid var(--ee-border); border-radius: 8px; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; }
-  .node-readout { display: flex; align-items: center; gap: 14px; font-size: 0.85rem; }
-  .stat-group { display: flex; gap: 6px; align-items: center; }
-  .stat-group span.lbl { color: var(--ee-text-secondary); font-size: 0.75rem; }
-  .ee-input { background: #1e1e1e; border: 1px solid var(--ee-border); color: #fff; padding: 3px 6px; border-radius: 5px; font-size: 0.85rem; font-family: monospace; font-weight: 600; text-align: left; outline: none; }
-  .ee-select { background: #1e1e1e; border: 1px solid var(--ee-border); color: #fff; padding: 3px 6px; border-radius: 5px; font-size: 0.8rem; font-weight: 600; outline: none; }
+  .eq-bottom-bar { background: var(--ee-card-bg); border: 1px solid var(--ee-border); border-radius: 8px; padding: 7px 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .node-readout { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; flex-wrap: wrap; }
+  .actions-group { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .stat-group { display: flex; gap: 4px; align-items: center; }
+  .stat-group span.lbl { color: var(--ee-text-secondary); font-size: 0.72rem; }
+  .ee-input { background: #1e1e1e; border: 1px solid var(--ee-border); color: #fff; padding: 2px 5px; border-radius: 4px; font-size: 0.8rem; font-family: monospace; font-weight: 600; text-align: left; outline: none; }
+  .ee-select { background: #1e1e1e; border: 1px solid var(--ee-border); color: #fff; padding: 2px 5px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; outline: none; }
 
-  .adw-btn { background: #383838; border: 1px solid var(--ee-border); color: #fff; padding: 5px 12px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; font-weight: 500; }
+  .adw-btn { background: #383838; border: 1px solid var(--ee-border); color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: 500; white-space: nowrap; }
   .adw-btn:hover { background: #444; }
   .adw-btn.primary { background: var(--ee-accent-blue); border-color: var(--ee-accent-blue); font-weight: 600; }
   .adw-btn.danger { color: #ff7b80; }
@@ -888,14 +889,17 @@ function animate3D() {
       const mid = Math.sin(simFrame * 0.12 - f * 0.15) * 0.3;
       const noise = (Math.random() - 0.5) * 0.04;
       slice[f] = Math.max(0, (f < 45 ? sub : mid) + noise);
+    }
+  }
 
-      // FIR előcsengési folt
-      if (isEqEnabled && isFirMode) {
-        const trPhase = simFrame % 40;
-        if (trPhase >= 33 && trPhase < 39 && (f >= 28 && f <= 32)) {
-          slice[f] = Math.min(1.0, slice[f] + 0.35);
-          mask[f] = 1;
-        }
+  // FIR előcsengési folt (Pre-ringing): ragyogó fehér hullámok élő és szimulált jelnél is
+  const hasPreRing = isEqEnabled && (isFirMode || currentEqMode === 'fir_lin' || currentEqMode === 'fir_int');
+  if (hasPreRing) {
+    const trPhase = simFrame % 35;
+    if (trPhase >= 28 && trPhase < 34) {
+      for (let f = 26; f <= 36; f++) {
+        slice[f] = Math.min(1.0, slice[f] + 0.5);
+        mask[f] = 1;
       }
     }
   }
@@ -1367,6 +1371,7 @@ function setPreamp(val) {
 document.getElementById("selectEqMode").onchange = (e) => {
   currentEqMode = e.target.value;
   const hasPreRing = (currentEqMode === 'fir_lin' || currentEqMode === 'fir_int');
+  isFirMode = hasPreRing;
   document.getElementById("hudPreRingBadge").style.display = (hasPreRing && isEqEnabled) ? "block" : "none";
 };
 
