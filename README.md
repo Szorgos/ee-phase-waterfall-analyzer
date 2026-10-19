@@ -19,6 +19,10 @@ Az **AetherAudio** ezt a filozófiát egyesíti a modern digitális jelfeldolgoz
 
 ---
 
+> 💡 **Ennyit a bullshitről – most pedig lássuk a kőkemény technikai valóságot és a szoftver tudását!**
+
+---
+
 ## 🎧 Főbb Képességek és Funkciók
 
 1. **Élő 3D Akusztikai Vízesés & Spektrogram (Top-Strip WebGL Engine):**
