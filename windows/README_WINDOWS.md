@@ -48,10 +48,11 @@ A beállítások (EQ, modulok, betöltött impulzusválasz) a `C:\ProgramData\Ae
 | **EQ – FFT (lineáris fázis)** | A teljes EQ görbéből tervezett szimmetrikus FIR (8192 tap 48 kHz-en). Késleltetés ~85 ms; a videó hangja ennyit csúszhat |
 | **EQ – SPM (köztes fázis)** | Fél-minimálfázisú FIR, ~8,5 ms késleltetés, mérsékelt előcsengés |
 | **EQ – FIR Min** | Minimálfázisú FIR (cepstrum módszer), 0 késleltetés |
-| **Crossfeed** | Bauer / Meier / Stúdió preset, vagy egyedi vágási frekvencia és szint |
+| **EQ Decramp** | Ki / 2x / 4x / 8x: az IIR biquadok N-szeres mintavételen futnak (Kaiser-sinc fel/lemintavételezés, ~1,3 ms), így a Nyquist közeli menet nem „nyomódik össze”; FIR módban a cél-görbe kramp-mentes, többletköltség nélkül |
+| **Crossfeed** | Bauer / Meier / Stúdió preset, vagy egyedi vágási frekvencia, szint és ITD (fej-késleltetés, tört mintás késleltetővonal) |
 | **Convolver** | Egyenletesen partícionált FFT konvolver, 0 többletkésleltetéssel (az első 256 minta közvetlen konvolúcióval). WAV/IRS betöltés (16/24/32 bit, float), automatikus újramintavételezés a lejátszás mintavételére, opcionális minimálfázisúvá alakítás, csúcsra normalizálás + trim gain. Max. 262 144 minta |
 | **Bass Enhancer** | Pszichoakusztikai mélyhang: 2./3. felharmonikus generálás burkoló-normalizált Csebisev-polinomokkal, sávszűrés, 4. rendű mélyvágás |
-| **Limiter** | Plafon és felengedési idő a felületről |
+| **Limiter** | True peak: 1x / 2x / 4x / 8x túlmintavételezett (Lanczos) csúcsdetektor, 0,5–10 ms lookahead (csúcstartás + simítás: a beavatkozás a csúcs előtt kész), exponenciális felengedés, biztonsági vágás a plafonnál. Késleltetés = lookahead + 3 minta |
 
 A FIR tervezés és az impulzusválasz-előkészítés külön háttérszálon fut. A kész szűrőt a hangszál zármentesen veszi át, egy blokknyi keresztúsztatással, így váltáskor nincs kattanás.
 
@@ -81,7 +82,6 @@ Kipróbálás EQ APO nélkül: az `eqapo_host_sim.exe <AetherAudio.dll>` úgy t�
 
 ## Ismert korlátok
 
-- A limiter mintaérték-alapú (sample peak). A felületen látható túlmintavételezés (true peak) és előretekintés (lookahead) beállítás még nem hat a C++ láncra; ugyanez igaz a fejléc „Decramp” választójára.
-- A crossfeed ITD (fej-késleltetés) mezője még nem hat; a vágási frekvencia és a szint igen.
 - Csak sztereó feldolgozás: többcsatornás eszköznél az EQ APO a plugint csatornapáronként példányosítja, az analizátor az első párt (L/R) mutatja.
-- Az alkalmazás és a telepítő nincs digitálisan aláírva.
+- A késleltetéssel járó beállítások (lineáris fázisú FIR EQ, limiter lookahead, decramp) összeadódnak; videónézéshez az IIR EQ és rövid lookahead ajánlott.
+- Az alkalmazás és a telepítő nincs digitálisan aláírva (lásd fent).
