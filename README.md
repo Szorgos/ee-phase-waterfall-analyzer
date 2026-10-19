@@ -1,6 +1,21 @@
 # AetherAudio • Valós Idejű Fázis, Spektrum & Akusztikai Vízesés DSP Csomag
-**Projekt:** `AetherAudio` (korábbi kódnév: `ee-phase-waterfall-analyzer`)  
+**Projekt:** `AetherAudio`  
 **Cél:** Professzionális, zéró késleltetésű C++20 DSP motor és valós idejű 3D akusztikai vízesés / 2D fázis- és csoportkésleltetés-analizátor a Linux PipeWire és audiofil zenehallgató rendszerekhez.
+
+---
+
+### ✨ A Név Eredete és Filozófiája
+
+> *„Az éter nem más, mint a tökéletes transzparencia: amikor a technika láthatatlanná válik, és csak a zene marad a térben lebegve.”*
+
+Az **Aether** (magyarul *éter*, ógörögül *αἰθήρ – aithér*, a szikrázó, tiszta ragyogásból ered) a klasszikus mitológiában és filozófiában az **ötödik elem**, a kvintesszencia: a mennyei, romolhatatlan szféra, amit a csillagok között az istenek lélegeznek be. A 19. századi fizika úgy tartotta, hogy az éter az a mindent átható, láthatatlan és súlytalan rugalmas közeg, amelyben a fény és az elektromágneses hullámok akadálytalanul terjednek a kozmoszban.
+
+Az audiofil világban az éteriség (*airiness*) a szent grál: az a pillanat, amikor megszűnik a hangsugárzók és fejhallgatók fizikai jelenléte. A hangok nem a hangszórók membránjából szólnak, hanem testet öltenek a térben, kristálytiszta lebegéssel, mikrodinamikával és holografikus színpadképpel. 
+
+Az **AetherAudio** ezt a filozófiát egyesíti a modern digitális jelfeldolgozással:
+* **Analitikus transzparencia:** Zéró késleltetésű C++20 algoritmusok, minimálfázisú és lineáris fázisú szűrők fázistorzulás nélküli átvitele.
+* **Akusztikai látásmód:** A rejtett rezonanciák és FIR előcsengések (pre-ringing) leleplezése a 3D vízesés-spektrogramon keresztül.
+* **Akusztikai tisztaság:** Teljes kontroll a fázis, a térhatás és a csúcsértékek felett, hogy a zene pontosan úgy szólaljon meg, ahogyan megszületett.
 
 ---
 
