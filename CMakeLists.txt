@@ -32,6 +32,11 @@ target_link_libraries(test_math PRIVATE ee_dsp_core)
 add_executable(test_pipeline src/test_pipeline.cpp)
 target_link_libraries(test_pipeline PRIVATE ee_dsp_core)
 
+# 4. Tesztalkalmazás: Zármentes Körpuffer (Valós idejű Audio -> 3D Grafika szálátvitel)
+find_package(Threads REQUIRED)
+add_executable(test_ringbuffer src/test_ringbuffer.cpp)
+target_link_libraries(test_ringbuffer PRIVATE ee_dsp_core Threads::Threads)
+
 # Opciók későbbi modulokhoz (Linux PipeWire vagy Windows VST3)
 option(BUILD_PIPEWIRE_PLUGIN "PipeWire SPA modul fordítása Linuxra" OFF)
 option(BUILD_VST3_PLUGIN "VST3 beépülő modul fordítása" OFF)
