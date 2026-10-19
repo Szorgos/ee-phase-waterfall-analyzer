@@ -237,7 +237,7 @@
 
     <div class="actions-group">
       <!-- AUTOEQ IMPORT GOMB -->
-      <button class="adw-btn primary" id="btnImportAutoEq" style="background:#2ec27e; border-color:#26a269;" title="AutoEq és Squiglink kereső, profilok és mérések böngészése">🌐 AutoEq & Squiglink Adatbázis</button>
+      <button class="adw-btn primary" id="btnImportAutoEq" style="background:#2ec27e; border-color:#26a269;" title="AutoEq kereső és fájl / szöveges profil importáló">🌐 AutoEq Kereső & Import</button>
 
       <!-- ÚJ PONT HOZZÁADÁSA GOMB -->
       <button class="adw-btn primary" id="btnAddNode">+ Új Sáv</button>
@@ -254,16 +254,16 @@
       <!-- Modál Fejléc -->
       <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #333d4b; padding-bottom:10px;">
         <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:1.15rem; font-weight:700; color:#fff;">🎧 AutoEq & Squiglink Profilkezelő</span>
-          <span class="status-badge optimal" style="font-size:0.68rem;">Legális & Nyílt Adatbázisok</span>
+          <span style="font-size:1.15rem; font-weight:700; color:#fff;">🎧 AutoEq & Profil Importáló</span>
+          <span class="status-badge optimal" style="font-size:0.68rem;">Hivatalos AutoEq GitHub & Manuális Profilok</span>
         </div>
         <button onclick="closeImportModal()" style="background:none; border:none; color:#aaa; font-size:1.3rem; cursor:pointer;" title="Bezárás">✕</button>
       </div>
 
       <!-- Modál Fülválasztó -->
       <div style="display:flex; gap:10px; border-bottom:1px solid #333d4b; padding-bottom:2px;">
-        <button class="modal-tab-btn active" id="tabBtnOnline" onclick="switchModalTab('online')">🌐 Fejhallgató Kereső (AutoEq & Squiglink)</button>
-        <button class="modal-tab-btn" id="tabBtnManual" onclick="switchModalTab('manual')">📁 Fájl / Szöveg Importálás (.txt, .csv)</button>
+        <button class="modal-tab-btn active" id="tabBtnOnline" onclick="switchModalTab('online')">🌐 AutoEq Fejhallgató Kereső (8 850+ modell)</button>
+        <button class="modal-tab-btn" id="tabBtnManual" onclick="switchModalTab('manual')">📁 Kézi Fájl / Szöveg Import (Squiglink, REW, APO)</button>
       </div>
 
       <!-- 1. BELSŐ TAB: ONLINE FEJHALLGATÓ KERESŐ -->

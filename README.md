@@ -35,10 +35,10 @@ Az **AetherAudio** ezt a filozófiát egyesíti a modern digitális jelfeldolgoz
    * Interaktív, Pro-Q stílusú közvetlen pont-húzás a görbén és egérgörgős Q-faktor állítás.
    * Kétirányú numerikus beviteli mezők ezredpontos értékekkel.
 
-3. **Beépített 8 850+ Fülhallgató AutoEq & Squiglink Adatbázis:**
-   * Teljes helyi index az összes elérhető audiofil referencia fül- és fejhallgatóval (Sennheiser, Beyerdynamic, Hifiman, Moondrop, Sony, AKG stb.).
-   * Élő kereső és közvetlen GitHub ParametricEQ letöltés egyetlen kattintással.
-   * **Intelligens Dupla-Preamp Védelem:** Ha a profil már tartalmaz negatív preampot, azt használja; ha nem, az Auto-Guard állítja be a pozitív kiemelések kivédésére.
+3. **8 850+ Fejhallgató AutoEq Profil Kereső & Kézi Importálás:**
+   * **Valós AutoEq Adatbázis Integráció:** A Jaakko Pasanen-féle hivatalos AutoEq tároló több mint 8 850 fül- és fejhallgatójának (oratory1990, Crinacle, Rtings stb.) élő keresése és profil-letöltése közvetlenül a GitHubról egyetlen kattintással.
+   * **Univerzális Kézi Importáló (Squiglink / REW / EqualizerAPO):** A Squiglinkről vagy más mérésekből exportált CSV és TXT görbék, illetve REW / APO szűrők közvetlen beillesztése és automatikus felismerése manuális módban.
+   * **Intelligens Dupla-Preamp Védelem:** Ha az importált profil már tartalmaz negatív preampot, azt használja; ha nem, az Auto-Guard állítja be a pozitív kiemelések kivédésére.
 
 4. **Kézi Mesterkapcsolók Minden Modulhoz (Ki/Bekapcsolható lánc):**
    * **Parametrikus EQ:** Szabadon állítható sávok minimálfázisú (IIR) és lineáris fázisú (FIR) móddal.
