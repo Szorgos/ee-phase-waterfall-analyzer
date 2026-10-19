@@ -17,6 +17,11 @@ else()
     add_compile_options(-Wall -Wextra -O3 -ffast-math)
 endif()
 
+# MinGW alatt minden bináris statikus C++ futtatókörnyezettel készül (nincs extra DLL-függőség)
+if(MINGW)
+    add_link_options(-static)
+endif()
+
 # Fejlécek elérési útvonala
 set(EE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
@@ -37,11 +42,40 @@ find_package(Threads REQUIRED)
 add_executable(test_ringbuffer src/test_ringbuffer.cpp)
 target_link_libraries(test_ringbuffer PRIVATE ee_dsp_core Threads::Threads)
 
-# Opciók későbbi modulokhoz (Linux PipeWire vagy Windows VST3)
-option(BUILD_PIPEWIRE_PLUGIN "PipeWire SPA modul fordítása Linuxra" ON)
-option(BUILD_VST3_PLUGIN "VST3 beépülő modul fordítása" OFF)
+# 5. Tesztalkalmazás: közös mag (FFT spektrum, paraméterblokk, tap körpuffer, JSON)
+add_executable(test_core src/test_core.cpp)
+target_link_libraries(test_core PRIVATE ee_dsp_core Threads::Threads)
 
-if(BUILD_PIPEWIRE_PLUGIN)
+if(WIN32)
+    # ------------------------------------------------------------------
+    # Windows: AetherAudio.exe motor + AetherAudio.dll (Equalizer APO plugin, VST 2.4 ABI)
+    # ------------------------------------------------------------------
+    option(BUILD_WINDOWS_ENGINE "AetherAudio.exe Windows motor (WASAPI loopback + plugin híd)" ON)
+    option(BUILD_EQAPO_PLUGIN "AetherAudio.dll Equalizer APO plugin (VST 2.4 bináris interfész)" ON)
+    set(BUILD_PIPEWIRE_PLUGIN OFF CACHE BOOL "" FORCE)
+
+    if(BUILD_WINDOWS_ENGINE)
+        add_executable(AetherAudio windows/engine/aether_engine.cpp)
+        target_link_libraries(AetherAudio PRIVATE ee_dsp_core ws2_32 ole32 oleaut32 shell32 advapi32)
+        target_compile_definitions(AetherAudio PRIVATE UNICODE _UNICODE)
+    endif()
+
+    if(BUILD_EQAPO_PLUGIN)
+        add_library(AetherAudioPlugin SHARED windows/plugin/aether_vst2.cpp windows/plugin/aether_vst2.def)
+        set_target_properties(AetherAudioPlugin PROPERTIES OUTPUT_NAME "AetherAudio" PREFIX "")
+        target_link_libraries(AetherAudioPlugin PRIVATE ee_dsp_core advapi32)
+        if(MSVC)
+            # Statikus MSVC futtatókörnyezet (/MT)
+            set_property(TARGET AetherAudioPlugin PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+            set_property(TARGET AetherAudio PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+        endif()
+    endif()
+endif()
+
+# Opciók későbbi modulokhoz (Linux PipeWire)
+option(BUILD_PIPEWIRE_PLUGIN "PipeWire SPA modul fordítása Linuxra" ON)
+
+if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32)
     message(STATUS "PipeWire SPA plugin építése engedélyezve")
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
@@ -52,8 +86,4 @@ if(BUILD_PIPEWIRE_PLUGIN)
     endif()
 endif()
 
-if(BUILD_VST3_PLUGIN)
-    message(STATUS "VST3 plugin építése engedélyezve")
-endif()
-
-message(STATUS "EasyEffects C++ DSP Engine sikeresen konfigurálva.")
+message(STATUS "AetherAudio C++ DSP Engine sikeresen konfigurálva.")

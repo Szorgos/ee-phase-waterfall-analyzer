@@ -8,7 +8,8 @@
 #include <vector>
 
 #include "dsp_pipeline.hpp"
-#include "ringbuffer.hpp"
+#include "param_apply.hpp"
+#include "tap_ring.hpp"
 
 namespace ee_analyzer {
 
@@ -37,13 +38,19 @@ public:
     PortData outPortR;
 
     DspPipeline pipeline;
-    LockFreeRingBuffer<float> visualizerRingBuffer;
+    StereoTapRing<65536> visualizerTap;   // feldolgozott sztereó jel az analizátornak
+    ParamBlock params;                     // GUI -> audio szál (seqlock)
+    uint32_t appliedParamSeq = 0;
 
     uint32_t sampleRate = 48000;
     bool isRunning = false;
 
     PipeWireFilterNode(uint32_t sr = 48000)
-        : pipeline(sr), visualizerRingBuffer(16384), sampleRate(sr) {}
+        : pipeline(sr), sampleRate(sr) {
+        preparePipeline(pipeline);
+        setPipelineSampleRate(pipeline, sr);
+        applyParams(pipeline, transparentParams());
+    }
 
     ~PipeWireFilterNode() {
         stop();
@@ -244,11 +251,22 @@ public:
             std::fill(outR, outR + nSamples, 0.0f);
         }
 
+        // GUI-ból érkezett új beállítások átvétele (nem blokkoló seqlock olvasás)
+        const uint32_t seq = self->params.currentSeq();
+        if (seq != self->appliedParamSeq) {
+            ParamData pd;
+            uint32_t readSeq = 0;
+            if (self->params.tryRead(pd, readSeq)) {
+                applyParams(self->pipeline, pd);
+                self->appliedParamSeq = readSeq;
+            }
+        }
+
         // Valós idejű DSP szűrés (Preamp -> EQ -> Crossfeed -> Convolver -> Limiter)
         self->pipeline.processBlock(outL, outR, nSamples);
 
-        // Zármentes átadás az analizátor / 3D vízesés szálnak
-        self->visualizerRingBuffer.write(outL, nSamples);
+        // Zármentes átadás az analizátor / 3D vízesés szálnak (sztereó)
+        self->visualizerTap.write(outL, outR, nSamples);
     }
 };
 
