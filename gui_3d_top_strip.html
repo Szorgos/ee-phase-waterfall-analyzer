@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EasyEffects • Integrált 3D Felső Sáv Spektrum & Vízesés Analizátor</title>
+<style>
+  /* EASYFFECTS / GNOME ADWAITA SÖTÉT TÉMA */
+  :root {
+    --ee-window-bg: #242424;
+    --ee-view-bg: #1c1c1c;
+    --ee-card-bg: #303030;
+    --ee-border: #3c3c3c;
+    --ee-accent-blue: #3584e4;
+    --ee-curve-cyan: #00f0ff;
+    --ee-orange: #ff7800;
+    --ee-green: #33d17a;
+    --ee-text-primary: #ffffff;
+    --ee-text-secondary: #9a9996;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Cantarell", "Segoe UI", Roboto, sans-serif; }
+  body { background: var(--ee-window-bg); color: var(--ee-text-primary); padding: 12px; user-select: none; }
+  .ee-window { max-width: 1200px; margin: 0 auto; background: var(--ee-window-bg); border: 1px solid var(--ee-border); border-radius: 12px; overflow: hidden; box-shadow: 0 12px 36px rgba(0,0,0,0.4); display: flex; flex-direction: column; }
+
+  /* ADWAITA ABLAK FEJLÉC */
+  header { background: var(--ee-card-bg); border-bottom: 1px solid var(--ee-border); padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; }
+  .title-group { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 0.95rem; }
+  .badge-app { background: var(--ee-accent-blue); padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; }
+
+  /* =========================================================================
+     A FELSŐ KESKENY VIZUALIZÁCIÓS SÁV (EASYFFECTS NATÍV HELYE: ~220px magasság)
+     ========================================================================= */
+  .top-spectrum-strip { position: relative; width: 100%; height: 230px; background: #0c0e12; border-bottom: 1px solid var(--ee-border); overflow: hidden; }
+  canvas#waterfallCanvas { width: 100%; height: 100%; display: block; }
+
+  /* FELSŐ SÁV HUD & VEZÉRLŐK */
+  .strip-overlay { position: absolute; top: 10px; left: 14px; display: flex; gap: 10px; pointer-events: none; }
+  .strip-badge { background: rgba(30, 30, 30, 0.85); backdrop-filter: blur(4px); border: 1px solid var(--ee-border); border-radius: 6px; padding: 4px 10px; font-size: 0.72rem; color: var(--ee-text-secondary); }
+  .strip-badge strong { color: var(--ee-curve-cyan); }
+
+  .strip-controls { position: absolute; top: 10px; right: 14px; display: flex; gap: 8px; z-index: 10; }
+  .mini-btn { background: rgba(45, 45, 45, 0.85); backdrop-filter: blur(4px); border: 1px solid var(--ee-border); color: #fff; padding: 5px 10px; border-radius: 5px; font-size: 0.75rem; cursor: pointer; font-weight: 600; transition: all 0.15s; }
+  .mini-btn:hover { background: #404040; border-color: var(--ee-accent-blue); }
+  .mini-btn.active { background: rgba(53, 132, 228, 0.25); border-color: var(--ee-accent-blue); color: var(--ee-curve-cyan); }
+
+  /* ALSÓ FŐ PANEL (EASYFFECTS PLUGIN TARTALOM) */
+  .main-content { padding: 16px 20px; background: var(--ee-window-bg); display: flex; flex-direction: column; gap: 14px; }
+  .plugin-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--ee-border); padding-bottom: 10px; font-size: 0.85rem; }
+  .tab-item { padding: 6px 14px; border-radius: 6px; cursor: pointer; color: var(--ee-text-secondary); font-weight: 500; }
+  .tab-item.active { background: var(--ee-card-bg); color: #fff; font-weight: 700; border: 1px solid var(--ee-border); }
+
+  .mock-controls { background: var(--ee-card-bg); border: 1px solid var(--ee-border); border-radius: 8px; padding: 14px; font-size: 0.85rem; color: var(--ee-text-secondary); display: flex; justify-content: space-between; align-items: center; }
+  .mock-title { font-weight: 700; color: #fff; }
+</style>
+<!-- Three.js GPU WebGL motor -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<div class="ee-window">
+  <!-- ABLAK FEJLÉC -->
+  <header>
+    <div class="title-group">
+      <div class="badge-app">EE</div>
+      <span>EasyEffects • PipeWire Audio Routing</span>
+    </div>
+    <div style="font-size:0.8rem; color:var(--ee-text-secondary);">
+      Output: <strong>Speakers (DAC 768kHz)</strong>
+    </div>
+  </header>
+
+  <!-- ======================================================= -->
+  <!-- A KESKENY FELSŐ SÁV (3D ULTRA-NAGY FELBONTÁSÚ VÍZESÉS)    -->
+  <!-- ======================================================= -->
+  <div class="top-spectrum-strip">
+    <canvas id="waterfallCanvas"></canvas>
+
+    <div class="strip-overlay">
+      <div class="strip-badge">
+        Nézet: <strong>3D Top-Strip Waterfall</strong> (160 sáv × 120 időlépcső)
+      </div>
+      <div class="strip-badge" id="hudPreRingBadge" style="display:none; color:#fff; border-color:var(--ee-curve-cyan);">
+        ⚪ <strong>FIR Pre-ringing észlelve</strong> (Fehér izzás)
+      </div>
+    </div>
+
+    <div class="strip-controls">
+      <button class="mini-btn active" id="btnEqBypass">EQ: BE</button>
+      <button class="mini-btn" id="btnFirMode">Mód: Minimálfázis (IIR)</button>
+      <button class="mini-btn" id="btnSignalType">Jel: Zene</button>
+      <button class="mini-btn" id="btnCameraAngle">Nézőpont: 3D Izometrikus</button>
+    </div>
+  </div>
+
+  <!-- ALSÓ RÉSZ: AZ EASYFFECTS MEGSZOKOTT MODULTERÜLETE -->
+  <div class="main-content">
+    <div class="plugin-tabs">
+      <div class="tab-item active">Equalizer (Paraméteres)</div>
+      <div class="tab-item">Convolver (Szobakorrekció)</div>
+      <div class="tab-item">Limiter</div>
+      <div class="tab-item">Bass Enhancer</div>
+    </div>
+
+    <div class="mock-controls">
+      <div>
+        <span class="mock-title">Valós Idejű Fázis és Hullámforma Szinkronizáció</span>
+        <div style="font-size:0.75rem; margin-top:2px;">A fenti keskeny sáv 100%-ban GPU-ról fut, nulla terhelést adva a PipeWire audió motornak.</div>
+      </div>
+      <div style="font-family:monospace; font-size:0.8rem; color:var(--ee-green);">● PipeWire Buffer: 128 samples (2.7 ms)</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// =========================================================================
+// ULTRA-HIGH RESOLUTION 3D TOP-STRIP ENGINE (THREE.JS / WEBGL)
+// =========================================================================
+const canvas = document.getElementById("waterfallCanvas");
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0c0e12);
+
+// Kamera: Alacsony profilú perspektíva a keskeny sávhoz
+const camera = new THREE.PerspectiveCamera(38, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+
+// Kameraállások
+const cameraViews = [
+  { name: "3D Izometrikus", pos: [0, 26, 42], look: [0, 0, -8] },
+  { name: "Oldalsó Profil", pos: [-38, 18, 10], look: [0, 0, -8] },
+  { name: "Felülnézet (Hőtérkép)", pos: [0, 48, -4], look: [0, 0, -5] }
+];
+let currentViewIdx = 0;
+setCamera(cameraViews[0]);
+
+function setCamera(v) {
+  camera.position.set(...v.pos);
+  camera.lookAt(...v.look);
+}
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+// =========================================================================
+// FELBONTÁSNÖVELÉS:
+// A kisebb magasság miatt felszabadult GPU kapacitást a felbontásra fordítjuk:
+// 80 sáv helyett 160 SÁV (dupla részletesség!)
+// 90 szelet helyett 120 IDŐLÉPCSŐ (finomabb gördülés!)
+// =========================================================================
+const FREQ_BINS = 160;   // 20 Hz - 20 000 Hz nagy felbontás
+const TIME_SLICES = 120; // Hosszú, ultra-sima időbeli gördülés
+
+const planeWidth = 76;
+const planeDepth = 60;
+
+const geometry = new THREE.PlaneGeometry(planeWidth, planeDepth, FREQ_BINS - 1, TIME_SLICES - 1);
+geometry.rotateX(-Math.PI / 2);
+
+const count = geometry.attributes.position.count;
+const colors = new Float32Array(count * 3);
+geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+const material = new THREE.MeshBasicMaterial({
+  vertexColors: true,
+  wireframe: false,
+  side: THREE.DoubleSide
+});
+
+// Hajszálvékony, modern stúdió drótváz
+const wireMaterial = new THREE.MeshBasicMaterial({
+  color: 0x1f2733,
+  wireframe: true,
+  transparent: true,
+  opacity: 0.25
+});
+
+const mesh = new THREE.Mesh(geometry, material);
+const wireMesh = new THREE.Mesh(geometry, wireMaterial);
+scene.add(mesh);
+scene.add(wireMesh);
+
+// Fények és referencia rács
+const grid = new THREE.GridHelper(planeWidth, 12, 0x3584e4, 0x181e26);
+grid.position.y = -0.05;
+grid.position.z = -5;
+scene.add(grid);
+
+// Hőtérkép színezés (Adwaita/Sonarworks stílus: kék -> cián -> zöld -> sárga -> vörös)
+function getHeatmapColor(val, isPreRing = false) {
+  if (isPreRing) {
+    return [1.0, 1.0, 1.0]; // Izzó tiszta fehér pont a FIR előcsengéshez
+  }
+  // Normál hőtérkép
+  const r = Math.max(0, Math.min(1, Math.sin(val * Math.PI - Math.PI / 2) * 0.5 + 0.5 + (val > 0.7 ? (val - 0.7) * 2.5 : 0)));
+  const g = Math.max(0, Math.min(1, Math.sin(val * Math.PI) * 1.1 - (val > 0.8 ? (val - 0.8) * 4 : 0)));
+  const b = Math.max(0, Math.min(1, (1.0 - val * 1.4)));
+  return [r, g, b];
+}
+
+// Mátrix pufferek
+const waterfallData = [];
+const preRingMask = [];
+for (let t = 0; t < TIME_SLICES; t++) {
+  waterfallData.push(new Float32Array(FREQ_BINS));
+  preRingMask.push(new Uint8Array(FREQ_BINS));
+}
+
+// Állapotok
+let isEqEnabled = true;
+let isFirMode = false; // false = IIR, true = FIR pre-ringinggel
+let signalType = 'music'; // 'music' or 'transient'
+let simFrame = 0;
+
+// Interaktív egérmozgatás a keskeny sávban
+let isDragging = false, prevX = 0, prevY = 0;
+canvas.onmousedown = (e) => { isDragging = true; prevX = e.clientX; prevY = e.clientY; };
+window.onmouseup = () => { isDragging = false; };
+canvas.onmousemove = (e) => {
+  if (isDragging) {
+    const dx = e.clientX - prevX;
+    const dy = e.clientY - prevY;
+    mesh.rotation.y += dx * 0.006;
+    wireMesh.rotation.y += dx * 0.006;
+    grid.rotation.y += dx * 0.006;
+    camera.position.y = Math.max(8, Math.min(60, camera.position.y - dy * 0.25));
+    camera.lookAt(0, 0, -8);
+    prevX = e.clientX; prevY = e.clientY;
+  }
+};
+canvas.onwheel = (e) => {
+  e.preventDefault();
+  camera.position.z = Math.max(15, Math.min(90, camera.position.z + e.deltaY * 0.05));
+};
+
+window.onresize = () => {
+  camera.aspect = canvas.clientWidth / canvas.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+};
+
+// UI Gombok
+const btnEqBypass = document.getElementById("btnEqBypass");
+const btnFirMode = document.getElementById("btnFirMode");
+const btnSignalType = document.getElementById("btnSignalType");
+const btnCameraAngle = document.getElementById("btnCameraAngle");
+const hudPreRingBadge = document.getElementById("hudPreRingBadge");
+
+btnEqBypass.onclick = () => {
+  isEqEnabled = !isEqEnabled;
+  btnEqBypass.innerText = isEqEnabled ? "EQ: BE" : "EQ: KI (Bypass)";
+  btnEqBypass.style.color = isEqEnabled ? "var(--ee-curve-cyan)" : "var(--ee-text-secondary)";
+};
+
+btnFirMode.onclick = () => {
+  isFirMode = !isFirMode;
+  btnFirMode.innerText = isFirMode ? "Mód: Lineáris Fázis (FIR)" : "Mód: Minimálfázis (IIR)";
+  btnFirMode.classList.toggle("active", isFirMode);
+  hudPreRingBadge.style.display = (isFirMode && isEqEnabled) ? "block" : "none";
+};
+
+btnSignalType.onclick = () => {
+  signalType = (signalType === 'music') ? 'transient' : 'music';
+  btnSignalType.innerText = (signalType === 'music') ? "Jel: Zene" : "Jel: Dobütés";
+};
+
+btnCameraAngle.onclick = () => {
+  currentViewIdx = (currentViewIdx + 1) % cameraViews.length;
+  const v = cameraViews[currentViewIdx];
+  btnCameraAngle.innerText = "Nézőpont: " + v.name;
+  mesh.rotation.y = 0; wireMesh.rotation.y = 0; grid.rotation.y = 0;
+  setCamera(v);
+};
+
+// Spektrumszelet generátor (Nagy felbontású 160 sávos zenei jel)
+function getNextSlice() {
+  const slice = new Float32Array(FREQ_BINS);
+  const mask = new Uint8Array(FREQ_BINS);
+  simFrame++;
+
+  if (signalType === 'transient') {
+    const phase = simFrame % 60;
+    // FIR Pre-ringing: csak ha EQ BE és FIR mód van!
+    if (isEqEnabled && isFirMode && phase >= 50 && phase < 58) {
+      const prog = (phase - 50) / 8.0;
+      const osc = Math.abs(Math.sin(prog * Math.PI * 2.5)) * (0.2 + prog * 0.4);
+      slice[24] = osc; slice[25] = osc * 0.9; slice[26] = osc * 0.7; // ~80 Hz
+      mask[24] = 1; mask[25] = 1; mask[26] = 1;
+    }
+    if (phase === 0) {
+      slice[18] = 0.95; slice[25] = 1.0; slice[45] = 0.7; slice[80] = 0.5; slice[120] = 0.35;
+    }
+  } else {
+    // Folytonos zenei hullámzás 160 sávon
+    for (let f = 0; f < FREQ_BINS; f++) {
+      const sub = Math.sin(simFrame * 0.08 + f * 0.08) * 0.45 + 0.45;
+      const mid = Math.sin(simFrame * 0.12 - f * 0.15) * 0.3;
+      const noise = (Math.random() - 0.5) * 0.04;
+      slice[f] = Math.max(0, (f < 45 ? sub : mid) + noise);
+
+      // Zenei tranzienseknél felvillanó fehér folt
+      if (isEqEnabled && isFirMode) {
+        const trPhase = simFrame % 40;
+        if (trPhase >= 33 && trPhase < 39 && (f >= 28 && f <= 32)) {
+          slice[f] = Math.min(1.0, slice[f] + 0.35);
+          mask[f] = 1;
+        }
+      }
+    }
+  }
+
+  // EQ módosítás (pl. 80 Hz emelés, 250 Hz vágás)
+  if (isEqEnabled) {
+    for (let f = 0; f < FREQ_BINS; f++) {
+      if (f >= 20 && f <= 32) slice[f] = Math.min(1.0, slice[f] * 1.35); // Bass boost
+      if (f >= 45 && f <= 60) slice[f] = slice[f] * 0.5;                 // Mud cut
+    }
+  }
+
+  return { slice, mask };
+}
+
+// 60 FPS Render loop
+function animate() {
+  requestAnimationFrame(animate);
+
+  const { slice, mask } = getNextSlice();
+
+  // Lecsengés faktor
+  const decayFactor = 0.88;
+  const prevSlice = waterfallData[0];
+  for (let f = 0; f < FREQ_BINS; f++) {
+    slice[f] = Math.max(slice[f], prevSlice[f] * decayFactor);
+  }
+
+  waterfallData.pop();
+  waterfallData.unshift(slice);
+  preRingMask.pop();
+  preRingMask.unshift(mask);
+
+  const pos = geometry.attributes.position.array;
+  const col = geometry.attributes.color.array;
+
+  for (let z = 0; z < TIME_SLICES; z++) {
+    const sData = waterfallData[z];
+    const sMask = preRingMask[z];
+    for (let x = 0; x < FREQ_BINS; x++) {
+      const idx = z * FREQ_BINS + x;
+      const y = sData[x];
+      const isPre = (sMask[x] === 1);
+
+      // A keskeny sávhoz igazított elegáns domborzat magasság (max 8.5 egység)
+      pos[idx * 3 + 1] = y * 8.5;
+
+      const rgb = getHeatmapColor(y, isPre);
+      col[idx * 3] = rgb[0];
+      col[idx * 3 + 1] = rgb[1];
+      col[idx * 3 + 2] = rgb[2];
+    }
+  }
+
+  geometry.attributes.position.needsUpdate = true;
+  geometry.attributes.color.needsUpdate = true;
+
+  renderer.render(scene, camera);
+}
+
+// Indítás
+animate();
+</script>
+</body>
+</html>
