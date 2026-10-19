@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EasyEffects Analitikus Fázis- és Késleltetés-megjelenítő (2D Prototípus)</title>
+<style>
+  :root {
+    --bg-main: #0e131b;
+    --bg-card: #151d2a;
+    --bg-input: #1d2738;
+    --accent-blue: #00f0ff;
+    --accent-orange: #ff9800;
+    --accent-green: #00e676;
+    --accent-red: #ff3860;
+    --text-white: #f0f4f8;
+    --text-dim: #8ba1b7;
+    --border: #243449;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { background: var(--bg-main); color: var(--text-white); padding: 18px; }
+  .wrapper { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+  header { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-size: 1.3rem; font-weight: 700; color: #fff; }
+  header h1 span { color: var(--accent-blue); }
+  .badge { background: rgba(0, 240, 255, 0.15); color: var(--accent-blue); padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; }
+
+  .main-grid { display: grid; grid-template-columns: 1fr 340px; gap: 16px; }
+  @media (max-width: 950px) { .main-grid { grid-template-columns: 1fr; } }
+
+  .graph-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .graph-header { display: flex; justify-content: space-between; align-items: center; }
+  .graph-title { font-size: 1rem; font-weight: 600; color: var(--text-white); }
+  .legend { display: flex; gap: 16px; font-size: 0.8rem; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-line { width: 14px; height: 3px; border-radius: 2px; }
+
+  canvas { width: 100%; height: 380px; background: #080c12; border: 1px solid var(--border); border-radius: 8px; display: block; cursor: crosshair; }
+
+  .sidebar { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .sidebar h2 { font-size: 1rem; color: var(--accent-blue); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+
+  .filter-list { display: flex; flex-direction: column; gap: 10px; max-height: 440px; overflow-y: auto; padding-right: 4px; }
+  .filter-item { background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem; }
+  .filter-header { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+  .filter-header button.del-btn { background: none; border: none; color: var(--accent-red); cursor: pointer; font-size: 1rem; }
+
+  .param-row { display: grid; grid-template-columns: 60px 1fr 45px; gap: 8px; align-items: center; font-size: 0.8rem; color: var(--text-dim); }
+  input[type="range"] { -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px; background: #2f445e; outline: none; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--accent-blue); cursor: pointer; }
+
+  .add-btn { background: rgba(0, 240, 255, 0.1); border: 1px dashed var(--accent-blue); color: var(--accent-blue); padding: 8px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; text-align: center; }
+  .add-btn:hover { background: rgba(0, 240, 255, 0.2); }
+
+  .stats-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; text-align: center; }
+  .stat-label { font-size: 0.75rem; color: var(--text-dim); }
+  .stat-value { font-size: 1rem; font-weight: 700; color: #fff; font-family: monospace; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+  <header>
+    <h1>EasyEffects • <span>2D Fázis & Csoportkésleltetés Analizátor</span></h1>
+    <div class="badge">Analitikus Motor: 0% CPU Terhelés</div>
+  </header>
+
+  <div class="main-grid">
+    <!-- BAL OLDAL: A NAGY GRAFIKON -->
+    <div class="graph-card">
+      <div class="graph-header">
+        <div class="graph-title">Frekvenciamenet és Fáziscsúszás (20 Hz – 20 kHz)</div>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-line" style="background:var(--accent-blue);"></div> Amplitúdó (dB)</div>
+          <div class="legend-item"><div class="legend-line" style="background:var(--accent-orange);"></div> Csoportkésleltetés (ms)</div>
+          <div class="legend-item"><div class="legend-line" style="background:#5b7391; border-top:1px dashed #fff;"></div> Fázisszög (°)</div>
+        </div>
+      </div>
+
+      <canvas id="mainCanvas"></canvas>
+
+      <div class="stats-bar">
+        <div class="stat-card">
+          <div class="stat-label">Max. Késleltetési Púp</div>
+          <div class="stat-value" id="statMaxDelay" style="color:var(--accent-orange);">+0.0 ms</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Kurzor Frekvencia</div>
+          <div class="stat-value" id="statCursorFreq">--- Hz</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Kurzor Késleltetés</div>
+          <div class="stat-value" id="statCursorDelay">--- ms</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- JOBB OLDAL: SZŰRŐK ÉS PARAMÉTEREK -->
+    <div class="sidebar">
+      <h2>Aktív EasyEffects EQ Sávok</h2>
+      
+      <div class="filter-list" id="filterList">
+        <!-- Dinamikusan generált szűrőkártyák -->
+      </div>
+
+      <button class="add-btn" id="btnAddFilter">+ Új EQ Sáv Hozzáadása</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Szűrőmodell adatszerkezet
+let filters = [
+  { id: 1, type: "peaking", freq: 60, q: 1.414, gain: 6.0 },
+  { id: 2, type: "peaking", freq: 120, q: 5.0, gain: -9.0 },
+  { id: 3, type: "highshelf", freq: 8000, q: 0.707, gain: 3.0 }
+];
+
+const canvas = document.getElementById("mainCanvas");
+const ctx = canvas.getContext("2d");
+let hoverFreq = null;
+
+function resizeCanvas() {
+  canvas.width = canvas.clientWidth * window.devicePixelRatio;
+  canvas.height = canvas.clientHeight * window.devicePixelRatio;
+  draw();
+}
+window.addEventListener("resize", resizeCanvas);
+
+// Biquad matematika JavaScriptben (megegyezik a C++ motorral)
+function evalBiquad(flt, f, sr = 48000) {
+  const w0 = 2 * Math.PI * flt.freq / sr;
+  const cos_w0 = Math.cos(w0);
+  const sin_w0 = Math.sin(w0);
+  const alpha = sin_w0 / (2 * flt.q);
+  const A = Math.pow(10, flt.gain / 40);
+
+  let b0, b1, b2, a0, a1, a2;
+  if (flt.type === "peaking") {
+    b0 = 1 + alpha * A;
+    b1 = -2 * cos_w0;
+    b2 = 1 - alpha * A;
+    a0 = 1 + alpha / A;
+    a1 = -2 * cos_w0;
+    a2 = 1 - alpha / A;
+  } else if (flt.type === "highshelf") {
+    const two_sqrtA_alpha = 2 * Math.sqrt(A) * alpha;
+    b0 = A * ((A + 1) + (A - 1) * cos_w0 + two_sqrtA_alpha);
+    b1 = -2 * A * ((A - 1) + (A + 1) * cos_w0);
+    b2 = A * ((A + 1) + (A - 1) * cos_w0 - two_sqrtA_alpha);
+    a0 = (A + 1) - (A - 1) * cos_w0 + two_sqrtA_alpha;
+    a1 = 2 * ((A - 1) + (A + 1) * cos_w0);
+    a2 = (A + 1) - (A - 1) * cos_w0 - two_sqrtA_alpha;
+  } else {
+    return { re: 1, im: 0, phase: 0 };
+  }
+
+  // H(e^-jw) kiértékelés
+  const w = 2 * Math.PI * f / sr;
+  const z1_re = Math.cos(-w), z1_im = Math.sin(-w);
+  const z2_re = Math.cos(-2 * w), z2_im = Math.sin(-2 * w);
+
+  const num_re = (b0/a0) + (b1/a0) * z1_re + (b2/a0) * z2_re;
+  const num_im = (b1/a0) * z1_im + (b2/a0) * z2_im;
+
+  const den_re = 1 + (a1/a0) * z1_re + (a2/a0) * z2_re;
+  const den_im = (a1/a0) * z1_im + (a2/a0) * z2_im;
+
+  const den_mag2 = den_re * den_re + den_im * den_im;
+  const h_re = (num_re * den_re + num_im * den_im) / den_mag2;
+  const h_im = (num_im * den_re - num_re * den_im) / den_mag2;
+
+  const phase = Math.atan2(h_im, h_re);
+  return { re: h_re, im: h_im, phase };
+}
+
+function evalChain(f) {
+  let tot_re = 1, tot_im = 0;
+  let tot_delay = 0;
+
+  for (let flt of filters) {
+    const h = evalBiquad(flt, f);
+    const new_re = tot_re * h.re - tot_im * h.im;
+    const new_im = tot_re * h.im + tot_im * h.re;
+    tot_re = new_re; tot_im = new_im;
+
+    // Numerikus deriválás a késleltetéshez
+    const df = 0.5;
+    const p1 = evalBiquad(flt, Math.max(1, f - df)).phase;
+    let p2 = evalBiquad(flt, f + df).phase;
+    while (p2 - p1 > Math.PI) p2 -= 2 * Math.PI;
+    while (p2 - p1 < -Math.PI) p2 += 2 * Math.PI;
+    tot_delay += (-(p2 - p1) / (2 * Math.PI * 2 * df)) * 1000;
+  }
+
+  const mag_db = 20 * Math.log10(Math.max(1e-4, Math.hypot(tot_re, tot_im)));
+  const phase_deg = Math.atan2(tot_im, tot_re) * (180 / Math.PI);
+  return { mag_db, phase_deg, delay_ms: tot_delay };
+}
+
+// Rajzolás
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.width;
+  const h = canvas.height;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Rácsvonalak (Frekvencia logaritmikus: 20 Hz - 20 000 Hz)
+  const minF = 20, maxF = 20000;
+  const logMin = Math.log10(minF), logMax = Math.log10(maxF);
+
+  function getX(f) {
+    return ((Math.log10(f) - logMin) / (logMax - logMin)) * w;
+  }
+  function getFreqAtX(x) {
+    return Math.pow(10, logMin + (x / w) * (logMax - logMin));
+  }
+
+  // Függőleges frekvencia rács
+  const gridFreqs = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
+  ctx.strokeStyle = "#162233";
+  ctx.lineWidth = 1 * dpr;
+  ctx.fillStyle = "#5c7391";
+  ctx.font = (10 * dpr) + "px monospace";
+
+  for (let gf of gridFreqs) {
+    const x = getX(gf);
+    ctx.beginPath();
+    ctx.moveTo(x, 0); ctx.lineTo(x, h);
+    ctx.stroke();
+    ctx.fillText((gf >= 1000 ? (gf/1000) + "k" : gf) + "Hz", x + 4 * dpr, h - 8 * dpr);
+  }
+
+  // Vízszintes 0 dB / 0 ms vonal
+  const midY = h * 0.5;
+  ctx.strokeStyle = "#27384d";
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.beginPath();
+  ctx.moveTo(0, midY); ctx.lineTo(w, midY);
+  ctx.stroke();
+  ctx.fillText("0 dB / 0 ms", 8 * dpr, midY - 6 * dpr);
+
+  // Számoljuk ki a pontokat
+  const points = [];
+  let maxDelayFound = 0;
+
+  for (let px = 0; px <= w; px += 2 * dpr) {
+    const f = getFreqAtX(px);
+    const res = evalChain(f);
+    points.push({ x: px, f, mag: res.mag_db, delay: res.delay_ms, phase: res.phase_deg });
+    if (Math.abs(res.delay_ms) > maxDelayFound) maxDelayFound = Math.abs(res.delay_ms);
+  }
+
+  document.getElementById("statMaxDelay").innerText = maxDelayFound.toFixed(2) + " ms";
+
+  // 1. Amplitúdó rajzolása (Kék)
+  ctx.strokeStyle = "var(--accent-blue)";
+  ctx.lineWidth = 2.5 * dpr;
+  ctx.beginPath();
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const y = midY - (p.mag * (h * 0.025)); // 1 dB = 2.5% magasság
+    if (i === 0) ctx.moveTo(p.x, y); else ctx.lineTo(p.x, y);
+  }
+  ctx.stroke();
+
+  // 2. Csoportkésleltetés rajzolása (Narancs púp)
+  ctx.strokeStyle = "var(--accent-orange)";
+  ctx.lineWidth = 2.5 * dpr;
+  ctx.beginPath();
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const y = midY - (p.delay * (h * 0.035)); // 1 ms skálázás
+    if (i === 0) ctx.moveTo(p.x, y); else ctx.lineTo(p.x, y);
+  }
+  ctx.stroke();
+
+  // Kurzor pozíció visszajelzés
+  if (hoverFreq !== null) {
+    const hx = getX(hoverFreq);
+    ctx.strokeStyle = "rgba(255,255,255,0.4)";
+    ctx.setLineDash([3 * dpr, 3 * dpr]);
+    ctx.beginPath();
+    ctx.moveTo(hx, 0); ctx.lineTo(hx, h);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const hRes = evalChain(hoverFreq);
+    document.getElementById("statCursorFreq").innerText = hoverFreq.toFixed(1) + " Hz";
+    document.getElementById("statCursorDelay").innerText = hRes.delay_ms.toFixed(2) + " ms";
+  }
+}
+
+// Egérmozgás kezelése
+canvas.onmousemove = (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const minF = 20, maxF = 20000;
+  const logMin = Math.log10(minF), logMax = Math.log10(maxF);
+  hoverFreq = Math.pow(10, logMin + (mouseX / canvas.width) * (logMax - logMin));
+  draw();
+};
+
+canvas.onmouseleave = () => {
+  hoverFreq = null;
+  document.getElementById("statCursorFreq").innerText = "--- Hz";
+  document.getElementById("statCursorDelay").innerText = "--- ms";
+  draw();
+};
+
+// UI szűrőpanel felépítése
+function renderSidebar() {
+  const container = document.getElementById("filterList");
+  container.innerHTML = "";
+
+  filters.forEach((flt, index) => {
+    const div = document.createElement("div");
+    div.className = "filter-item";
+    div.innerHTML = `
+      <div class="filter-header">
+        <span>Sáv #${index + 1} (${flt.type.toUpperCase()})</span>
+        <button class="del-btn" onclick="removeFilter(${flt.id})">×</button>
+      </div>
+      <div class="param-row">
+        <span>Freq:</span>
+        <input type="range" min="20" max="20000" value="${flt.freq}" oninput="updateFlt(${flt.id}, 'freq', this.value)">
+        <span>${flt.freq >= 1000 ? (flt.freq/1000).toFixed(1)+'k' : flt.freq}Hz</span>
+      </div>
+      <div class="param-row">
+        <span>Gain:</span>
+        <input type="range" min="-18" max="18" step="0.5" value="${flt.gain}" oninput="updateFlt(${flt.id}, 'gain', this.value)">
+        <span>${flt.gain > 0 ? '+'+flt.gain : flt.gain}dB</span>
+      </div>
+      <div class="param-row">
+        <span>Q:</span>
+        <input type="range" min="0.2" max="10" step="0.1" value="${flt.q}" oninput="updateFlt(${flt.id}, 'q', this.value)">
+        <span>${flt.q}</span>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+window.updateFlt = (id, param, val) => {
+  const f = filters.find(x => x.id === id);
+  if (f) {
+    f[param] = parseFloat(val);
+    renderSidebar();
+    draw();
+  }
+};
+
+window.removeFilter = (id) => {
+  filters = filters.filter(x => x.id !== id);
+  renderSidebar();
+  draw();
+};
+
+document.getElementById("btnAddFilter").onclick = () => {
+  const newId = Date.now();
+  filters.push({ id: newId, type: "peaking", freq: 1000, q: 1.414, gain: 0.0 });
+  renderSidebar();
+  draw();
+};
+
+// Indítás
+renderSidebar();
+setTimeout(resizeCanvas, 50);
+</script>
+</body>
+</html>
