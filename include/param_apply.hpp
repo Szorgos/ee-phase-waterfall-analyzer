@@ -24,7 +24,7 @@ inline void setPipelineSampleRate(DspPipeline& p, double sr) {
     p.eqChain.sampleRate = sr;
     for (auto& f : p.eqChain.filters) f.sampleRate = sr;
     p.crossfeed.sampleRate = sr;
-    p.crossfeed.updateCoefficients();
+    p.crossfeed.prepareDelay();
     p.convolver.sampleRate = sr;
     p.limiter.sampleRate = sr;
     p.limiter.updateParameters();
@@ -65,6 +65,7 @@ inline void applyParams(DspPipeline& p, const ParamData& d) {
     const bool cfOn = d.has(kFlagCrossfeed);
     if (cfOn && !p.crossfeed.enabled) p.crossfeed.reset();
     p.crossfeed.enabled = cfOn;
+    p.crossfeed.delayMs = std::clamp(static_cast<double>(d.crossfeedDelayMs), 0.0, 1.0);
     if (d.crossfeedCutoffHz > 0.0f) {
         p.crossfeed.cutoffFreq = std::clamp(static_cast<double>(d.crossfeedCutoffHz), 200.0, 3000.0);
         p.crossfeed.feedLevelDb = std::clamp(static_cast<double>(d.crossfeedFeedDb), 0.5, 20.0);

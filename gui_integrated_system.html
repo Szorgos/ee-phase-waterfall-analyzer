@@ -167,7 +167,7 @@
       <select id="selectDecramp" class="mini-select" title="Nyquist Decramping túlmintavételezés a magasfrekvenciás torzulás ellen">
         <option value="none">Ki (Cramped)</option>
         <option value="2x">2x Túlmintavételezés</option>
-        <option value="4x" selected>4x Lanczos (Tökéletes)</option>
+        <option value="4x" selected>4x (Ajánlott)</option>
         <option value="8x">8x Extrém</option>
       </select>
 
@@ -1084,7 +1084,8 @@ function resizeEq() {
 }
 window.addEventListener("resize", resizeEq);
 
-function evalBiquad(flt, f, sr = 48000) {
+// Decramp: a motor a biquadokat N-szeres mintavételen futtatja, így a görbe is ott számolandó
+function evalBiquad(flt, f, sr = 48000 * (parseInt(currentDecramp) || 1)) {
   const w0 = 2 * Math.PI * flt.freq / sr;
   const cos_w0 = Math.cos(w0);
   const sin_w0 = Math.sin(w0);
@@ -1514,6 +1515,8 @@ document.getElementById("selectEqMode").onchange = (e) => {
 
 document.getElementById("selectDecramp").onchange = (e) => {
   currentDecramp = e.target.value;
+  sendEngine({ type: "set_decramp", val: currentDecramp });
+  drawEq();
 };
 
 // =========================================================================
@@ -2538,10 +2541,12 @@ function sendBass() {
                harmonicType: (document.getElementById("bassHarmonicType") || {}).value || "both", subcut: numVal("bassSubcutInput", 30) });
 }
 function sendLimiter() {
-  sendEngine({ type: "set_limiter", ceiling: numVal("limiterCeilingInput", -1), release: numVal("limiterReleaseInput", 50) });
+  sendEngine({ type: "set_limiter", ceiling: numVal("limiterCeilingInput", -1), release: numVal("limiterReleaseInput", 50),
+               lookahead: numVal("limiterLookaheadInput", 5),
+               oversampling: (document.getElementById("limiterOversampling") || {}).value || "4x" });
 }
 function sendCrossfeed() {
-  sendEngine({ type: "set_crossfeed", freq: numVal("cfFreq", 700), level: numVal("cfLevel", 4.5) });
+  sendEngine({ type: "set_crossfeed", freq: numVal("cfFreq", 700), level: numVal("cfLevel", 4.5), delay: numVal("cfDelay", 0.29) });
 }
 var convGainTimer = null;
 function sendConvolver() {
@@ -2555,13 +2560,13 @@ function sendConvolver() {
     window[name] = function () { const r = orig.apply(this, arguments); after(); return r; };
   };
   ["updateBassCrossover", "updateBassHarmonics", "updateBassHarmonicType", "updateBassSubcut"].forEach(n => wrap(n, sendBass));
-  ["updateLimiterCeiling", "updateLimiterRelease"].forEach(n => wrap(n, sendLimiter));
+  ["updateLimiterCeiling", "updateLimiterRelease", "updateLimiterLookahead", "updateLimiterOversampling"].forEach(n => wrap(n, sendLimiter));
   wrap("updateConvolverSettings", sendConvolver);
   wrap("syncConvGain", () => {
     if (convGainTimer) clearTimeout(convGainTimer);
     convGainTimer = setTimeout(sendConvolver, 60);
   });
-  ["cfFreq", "cfLevel"].forEach(id => {
+  ["cfFreq", "cfLevel", "cfDelay"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("input", sendCrossfeed);
   });
@@ -2575,6 +2580,7 @@ function pushAllToEngine() {
     sendParamToPipewire('set_module_' + m, on ? 1 : 0);
   });
   sendEngine({ type: "set_eq_mode", val: currentEqMode });
+  sendEngine({ type: "set_decramp", val: currentDecramp });
   sendBass(); sendLimiter(); sendCrossfeed(); sendConvolver();
   lastSentPreamp = currentPreamp;
   sendParamToPipewire("set_preamp", currentPreamp);
@@ -2647,10 +2653,13 @@ function applyEngineState(st) {
       });
       currentPreamp = typeof st.preamp === "number" ? st.preamp : 0.0;
       if (st.eqMode) applyEqModeUi(st.eqMode);
-      if (st.crossfeed) { setInput("cfFreq", st.crossfeed.freq); setInput("cfLevel", st.crossfeed.level); }
+      if (st.crossfeed) { setInput("cfFreq", st.crossfeed.freq); setInput("cfLevel", st.crossfeed.level); setInput("cfDelay", st.crossfeed.delay); }
+      if (st.decramp) { currentDecramp = st.decramp; setInput("selectDecramp", st.decramp); }
       if (st.limiter) {
         if (typeof updateLimiterCeiling === "function") (setInput("limiterCeilingSlider", st.limiter.ceiling), updateLimiterCeiling(st.limiter.ceiling, true));
         if (typeof updateLimiterRelease === "function") (setInput("limiterReleaseSlider", st.limiter.release), updateLimiterRelease(st.limiter.release, true));
+        if (typeof updateLimiterLookahead === "function" && st.limiter.lookahead !== undefined) (setInput("limiterLookaheadSlider", st.limiter.lookahead), updateLimiterLookahead(st.limiter.lookahead, true));
+        if (st.limiter.oversampling) { setInput("limiterOversampling", st.limiter.oversampling); if (typeof updateLimiterOversampling === "function") updateLimiterOversampling(); }
       }
       if (st.bass) {
         if (typeof updateBassCrossover === "function") (setInput("bassCrossoverSlider", st.bass.crossover), updateBassCrossover(st.bass.crossover, true));

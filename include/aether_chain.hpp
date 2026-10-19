@@ -24,6 +24,8 @@
 #include "dsp_pipeline.hpp"
 #include "param_apply.hpp"
 #include "bass_enhancer.hpp"
+#include "true_peak_limiter.hpp"
+#include "oversampler.hpp"
 #include "partitioned_convolver.hpp"
 #include "fir_design.hpp"
 #include "ir_data.hpp"
@@ -37,6 +39,7 @@ public:
     AetherChain() {
         preparePipeline(pipe_);
         for (auto* v : { &aL_, &aR_, &bL_, &bR_ }) v->assign(kChunk, 0.0f);
+        limiter_.prepare(48000.0);
         current_ = transparentParams();
         applyParamsInternal(current_);
     }
@@ -60,6 +63,8 @@ public:
     void setSampleRate(double sr) {
         if (sr <= 0) return;
         setPipelineSampleRate(pipe_, sr);
+        limiter_.prepare(sr);
+        oversampler_.reset();
         bass_.sampleRate = sr;
         bass_.update();
         bass_.reset();
@@ -127,13 +132,16 @@ public:
         }
     }
 
-    double gainReductionDb() const { return pipe_.limiter.enabled ? pipe_.limiter.getGainReductionDb() : 0.0; }
+    double gainReductionDb() const { return limiter_.enabled ? limiter_.gainReductionDb() : 0.0; }
+    size_t limiterLatencySamples() const { return limiter_.enabled ? limiter_.latencySamples() : 0; }
     bool firEqActive() const { return eqStage_.active != nullptr; }
     bool convolverActive() const { return irStage_.active != nullptr; }
     size_t eqLatencySamples() const { return eqLatency_.load(); }
 
     void reset() {
         pipe_.reset();
+        limiter_.reset();
+        oversampler_.reset();
         bass_.reset();
         if (eqStage_.active) eqStage_.active->reset();
         if (irStage_.active) irStage_.active->reset();
@@ -155,6 +163,25 @@ private:
         ParamData iir = d;
         iir.eqMode = static_cast<int32_t>(EqMode::Iir);
         applyParams(pipe_, iir);
+
+        // Decramp: az IIR biquadok N-szeres mintavételre tervezve, N-szeres rátán futnak
+        decramp_ = d.eqDecramp >= 8 ? 8 : d.eqDecramp >= 4 ? 4 : d.eqDecramp >= 2 ? 2 : 1;
+        if (decramp_ > 1) {
+            for (auto& f : pipe_.eqChain.filters) f.sampleRate = pipe_.sampleRate * decramp_;
+            pipe_.updateEqCoefficients();
+        }
+        if (decramp_ != lastDecramp_) {
+            oversampler_.reset();
+            for (size_t f = 0; f < pipe_.eqStatesL.size(); ++f) { pipe_.eqStatesL[f].reset(); pipe_.eqStatesR[f].reset(); }
+            lastDecramp_ = decramp_;
+        }
+
+        // True peak limiter (a régi mintaérték-limiter helyett)
+        pipe_.limiter.enabled = false;
+        const bool limOn = d.has(kFlagLimiter);
+        if (limOn && !limiter_.enabled) limiter_.reset();
+        limiter_.enabled = limOn;
+        limiter_.configure(d.limiterCeilingDb, d.limiterReleaseMs, d.limiterLookaheadMs, d.limiterOversample);
 
         bass_.enabled = d.has(kFlagBass);
         bass_.crossoverHz = d.bassCrossoverHz;
@@ -206,7 +233,11 @@ private:
         runStage(eqStage_, L, R, m,
                  [this, wasFir](float* l, float* r, size_t k) {
                      if (wasFir) { for (size_t f = 0; f < pipe_.eqStatesL.size(); ++f) { pipe_.eqStatesL[f].reset(); pipe_.eqStatesR[f].reset(); } }
-                     pipe_.processIirEq(l, r, k);
+                     if (decramp_ > 1 && !pipe_.eqCoeffs.empty()) {
+                         oversampler_.process(l, r, k, decramp_, [this](float* L2, float* R2, size_t n2) { pipe_.processIirEq(L2, R2, n2); });
+                     } else {
+                         pipe_.processIirEq(l, r, k);
+                     }
                  },
                  [](PartitionedConvolver* c, float* l, float* r, size_t k) { c->process(l, r, k); });
 
@@ -222,17 +253,18 @@ private:
                      for (size_t i = 0; i < k; ++i) { l[i] *= g; r[i] *= g; }
                  });
 
-        if (pipe_.limiter.enabled) pipe_.limiter.processBlock(L, R, m);
+        limiter_.process(L, R, m);
     }
 
     // ------------------------------------------------------------ háttérszál
     struct EqKey {
         int32_t mode = -1;
+        int32_t decramp = 1;
         uint32_t numBands = 0;
         EqBandPod bands[kMaxEqBands]{};
         double sr = 0;
         bool operator==(const EqKey& o) const {
-            return mode == o.mode && numBands == o.numBands && sr == o.sr &&
+            return mode == o.mode && decramp == o.decramp && numBands == o.numBands && sr == o.sr &&
                    std::memcmp(bands, o.bands, sizeof(EqBandPod) * numBands) == 0;
         }
     };
@@ -290,6 +322,7 @@ private:
             const bool firOn = d.has(kFlagEq) && d.eqMode != static_cast<int32_t>(EqMode::Iir) && d.numBands > 0;
             if (firOn) {
                 want.mode = d.eqMode;
+                want.decramp = d.eqDecramp >= 8 ? 8 : d.eqDecramp >= 4 ? 4 : d.eqDecramp >= 2 ? 2 : 1;
                 want.numBands = std::min(d.numBands, kMaxEqBands);
                 std::memcpy(want.bands, d.bands, sizeof(EqBandPod) * want.numBands);
                 want.sr = sr;
@@ -298,12 +331,14 @@ private:
                 std::vector<BiquadFilter> filters;
                 for (uint32_t i = 0; i < want.numBands; ++i) {
                     const EqBandPod& b = want.bands[i];
+                    // Decramp: a cél-amplitúdómenet az N-szeres rátára tervezett (közel analóg) szűrőké
                     filters.emplace_back(toFilterType(b.type), std::clamp(static_cast<double>(b.freq), 10.0, sr * 0.49),
                                          std::clamp(static_cast<double>(b.q), 0.05, 40.0),
-                                         std::clamp(static_cast<double>(b.gainDb), -30.0, 30.0), sr);
+                                         std::clamp(static_cast<double>(b.gainDb), -30.0, 30.0), sr * want.decramp);
                 }
                 size_t lat = 0;
-                std::vector<float> h = designEqFir(filters, sr, static_cast<FirPhase>(want.mode), recommendedEqFirTaps(sr), &lat);
+                std::vector<float> h = designEqFir(filters, sr, static_cast<FirPhase>(want.mode), recommendedEqFirTaps(sr), &lat,
+                                                   want.decramp);
                 auto* conv = new PartitionedConvolver();
                 conv->build(h, {});
                 publish(eqStage_, conv);
@@ -365,6 +400,9 @@ private:
     // valós idejű állapot
     DspPipeline pipe_;
     BassEnhancer bass_;
+    TruePeakLimiter limiter_;
+    Oversampler oversampler_;
+    int decramp_ = 1, lastDecramp_ = 1;
     ParamData current_;
     float convGain_ = 1.0f;
     std::vector<float> aL_, aR_, bL_, bR_;

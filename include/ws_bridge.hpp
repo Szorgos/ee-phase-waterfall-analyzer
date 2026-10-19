@@ -424,14 +424,27 @@ private:
         } else if (type == "set_crossfeed") {
             p.crossfeedCutoffHz = static_cast<float>(num(msg, "freq", p.crossfeedCutoffHz));
             p.crossfeedFeedDb = static_cast<float>(num(msg, "level", p.crossfeedFeedDb));
+            p.crossfeedDelayMs = static_cast<float>(num(msg, "delay", p.crossfeedDelayMs));
         } else if (type == "set_eq_mode" && val) {
             const std::string m = val->stringOr("");
             int mode = m == "fir_lin" ? 1 : m == "fir_int" ? 2 : m == "fir_min" ? 3 : m == "iir" ? 0
                      : static_cast<int>(val->numberOr(0.0));
             p.eqMode = std::clamp(mode, 0, 3);
+        } else if (type == "set_decramp" && val) {
+            // "none" / "2x" / "4x" / "8x"
+            const std::string v = val->stringOr("");
+            p.eqDecramp = v == "none" ? 1 : v.empty() ? static_cast<int32_t>(val->numberOr(4.0)) : std::max(1, std::atoi(v.c_str()));
+            p.eqDecramp = std::clamp(p.eqDecramp, 1, 8);
         } else if (type == "set_limiter") {
             p.limiterCeilingDb = static_cast<float>(num(msg, "ceiling", p.limiterCeilingDb));
             p.limiterReleaseMs = static_cast<float>(num(msg, "release", p.limiterReleaseMs));
+            p.limiterLookaheadMs = static_cast<float>(num(msg, "lookahead", p.limiterLookaheadMs));
+            if (const json::Value* os = msg.get("oversampling")) {
+                // "1x" / "2x" / "4x" / "8x" vagy szám
+                p.limiterOversample = std::clamp(static_cast<int32_t>(os->type == json::Value::Type::String
+                                                                          ? std::atoi(os->str.c_str())
+                                                                          : os->numberOr(4.0)), 1, 8);
+            }
         } else if (type == "set_bass") {
             p.bassCrossoverHz = static_cast<float>(num(msg, "crossover", p.bassCrossoverHz));
             p.bassHarmonicsDb = static_cast<float>(num(msg, "harmonics", p.bassHarmonicsDb));
@@ -537,9 +550,13 @@ private:
         static const char* eqModes[] = { "iir", "fir_lin", "fir_int", "fir_min" };
         s += ",\"eqMode\":\""; s += eqModes[std::clamp(p.eqMode, 0, 3)]; s += '"';
         s += ",\"crossfeed\":{\"freq\":"; appendFloat(s, p.crossfeedCutoffHz, 1);
-        s += ",\"level\":"; appendFloat(s, p.crossfeedFeedDb, 2); s += '}';
+        s += ",\"level\":"; appendFloat(s, p.crossfeedFeedDb, 2);
+        s += ",\"delay\":"; appendFloat(s, p.crossfeedDelayMs, 3); s += '}';
+        s += ",\"decramp\":\""; s += p.eqDecramp <= 1 ? std::string("none") : std::to_string(p.eqDecramp) + "x"; s += '"';
         s += ",\"limiter\":{\"ceiling\":"; appendFloat(s, p.limiterCeilingDb, 2);
-        s += ",\"release\":"; appendFloat(s, p.limiterReleaseMs, 1); s += '}';
+        s += ",\"release\":"; appendFloat(s, p.limiterReleaseMs, 1);
+        s += ",\"lookahead\":"; appendFloat(s, p.limiterLookaheadMs, 2);
+        s += ",\"oversampling\":\"" + std::to_string(p.limiterOversample) + "x\"}";
         static const char* bassTypes[] = { "both", "2nd", "3rd" };
         s += ",\"bass\":{\"crossover\":"; appendFloat(s, p.bassCrossoverHz, 1);
         s += ",\"harmonics\":"; appendFloat(s, p.bassHarmonicsDb, 2);

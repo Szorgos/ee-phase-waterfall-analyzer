@@ -59,7 +59,7 @@ inline size_t recommendedEqFirTaps(double sr) {
  * @param latency [ki] a szűrő csoportkésleltetése mintában (lineáris: taps/2, köztes: ~5%, minimál: 0)
  */
 inline std::vector<float> designEqFir(const std::vector<BiquadFilter>& filters, double sr, FirPhase phase,
-                                      size_t taps, size_t* latency = nullptr) {
+                                      size_t taps, size_t* latency = nullptr, int decramp = 1) {
     using namespace fir_detail;
     (void)sr; // a szűrők már a megadott mintavételi frekvenciára vannak hangolva
     taps = nextPow2(std::max<size_t>(taps, 512));
@@ -71,7 +71,8 @@ inline std::vector<float> designEqFir(const std::vector<BiquadFilter>& filters, 
     // Amplitúdómenet a P pontos rácson (Hermitikus: |H(k)| = |H(P-k)|)
     std::vector<double> mag(P, 1.0);
     for (size_t k = 0; k <= P / 2; ++k) {
-        const double w = 2.0 * kPi * static_cast<double>(k) / static_cast<double>(P);
+        // decramp > 1: a szűrők N-szeres mintavételre vannak tervezve, az alapsávban értékeljük ki
+        const double w = 2.0 * kPi * static_cast<double>(k) / static_cast<double>(P) / std::max(1, decramp);
         const std::complex<double> z1 = std::polar(1.0, -w), z2 = std::polar(1.0, -2.0 * w);
         std::complex<double> h(1.0, 0.0);
         for (const auto& c : co) h *= (c.b0 + c.b1 * z1 + c.b2 * z2) / (1.0 + c.a1 * z1 + c.a2 * z2);

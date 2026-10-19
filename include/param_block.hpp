@@ -69,6 +69,12 @@ struct ParamData {
     int32_t convPhaseMode = 0;        // 0 = minimálfázisúvá alakítás, 1 = eredeti fázis
     int32_t convMaxTaps = 65536;      // az IR maximális hossza mintában
 
+    // --- v3 ---
+    int32_t limiterOversample = 4;    // true peak detektor: 1, 2, 4, 8
+    float limiterLookaheadMs = 5.0f;  // 0.5 .. 10 ms
+    float crossfeedDelayMs = 0.29f;   // ITD: az áthalló jel késleltetése
+    int32_t eqDecramp = 4;            // EQ "decramping": 1 = ki, 2 / 4 / 8 = túlmintavételezés
+
     bool has(uint32_t f) const { return (flags & f) != 0; }
     void set(uint32_t f, bool on) { flags = on ? (flags | f) : (flags & ~f); }
 };

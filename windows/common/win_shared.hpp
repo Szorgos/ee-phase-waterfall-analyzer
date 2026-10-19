@@ -13,6 +13,7 @@
 #include <sddl.h>
 #include <new>
 #include <cstring>
+#include <cstddef>
 #include <string>
 #include <vector>
 #include "shared_state.hpp"
@@ -128,7 +129,7 @@ private:
 // ---------------------------------------------------------------- tartós beállítások
 
 constexpr uint32_t kParamFileMagic = 0x50454141; // 'AAEP'
-constexpr uint32_t kParamFileVersion = 2;
+constexpr uint32_t kParamFileVersion = 3;
 
 struct ParamFile {
     uint32_t magic;
@@ -163,16 +164,22 @@ inline bool loadParamFile(ParamData& out) {
     HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (f == INVALID_HANDLE_VALUE) return false;
-    ParamFile pf{};
+    std::vector<char> buf(sizeof(ParamFile) + 1024);
     DWORD read = 0;
-    const BOOL ok = ReadFile(f, &pf, sizeof(pf), &read, nullptr);
+    const BOOL ok = ReadFile(f, buf.data(), static_cast<DWORD>(buf.size()), &read, nullptr);
     CloseHandle(f);
-    if (!ok || read != sizeof(pf) || pf.magic != kParamFileMagic || pf.version != kParamFileVersion ||
-        pf.size != sizeof(ParamData)) {
+    if (!ok || read < 12) return false;
+    uint32_t hdr[3];
+    std::memcpy(hdr, buf.data(), sizeof(hdr));
+    // Régebbi verziók (v2) is betölthetők: a ParamData csak a végén bővül, az új mezők alapértéket kapnak
+    if (hdr[0] != kParamFileMagic || hdr[1] < 2 || hdr[1] > kParamFileVersion || hdr[2] > sizeof(ParamData) ||
+        read < 12 + hdr[2] || hdr[2] < offsetof(ParamData, eqMode)) {
         return false;
     }
-    if (pf.data.numBands > kMaxEqBands) pf.data.numBands = kMaxEqBands;
-    out = pf.data;
+    ParamData d{};
+    std::memcpy(&d, buf.data() + 12, hdr[2]);
+    if (d.numBands > kMaxEqBands) d.numBands = kMaxEqBands;
+    out = d;
     return true;
 }
 

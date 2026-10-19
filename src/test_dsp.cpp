@@ -246,6 +246,113 @@ static void testChain() {
     c.stopWorker();
 }
 
+static void testTruePeakAndMore() {
+    std::printf("[5] True peak limiter, crossfeed ITD, EQ decramp, túlmintavételező\n");
+    const double sr = 48000;
+    // Mintaközi csúcs: fs/4 szinusz 45°-os fázissal -> a minták 0.707*A-n, a valódi csúcs A
+    auto runLim = [&](int os, double& gr, double& truePeakDb) {
+        TruePeakLimiter lim;
+        lim.prepare(sr);
+        lim.enabled = true;
+        lim.configure(-3.0, 50.0, 5.0, os);
+        std::vector<float> l(9600), r(9600);
+        for (size_t i = 0; i < l.size(); ++i) l[i] = r[i] = static_cast<float>(0.9 * std::sin(kPi / 2 * i + kPi / 4));
+        lim.process(l.data(), r.data(), l.size());
+        gr = lim.gainReductionDb();
+        double mx = 0;
+        for (size_t i = 4800; i < l.size(); ++i) mx = std::max(mx, static_cast<double>(std::abs(l[i])));
+        truePeakDb = 20 * std::log10(mx * std::sqrt(2.0)); // fs/4 szinusz: valódi csúcs = minta-csúcs * sqrt(2)
+    };
+    double gr1, tp1, gr4, tp4;
+    runLim(1, gr1, tp1);
+    runLim(4, gr4, tp4);
+    CHECK(tp1 > -3.0 + 2.0, "1x (mintaérték) detektor: a valódi csúcs %.2f dBTP, túllépi a -3 dB plafont (várt viselkedés)", tp1);
+    CHECK(tp4 <= -2.8 && gr4 < -1.5, "4x true peak detektor: valódi csúcs %.2f dBTP (plafon -3), GR %.2f dB", tp4, gr4);
+
+    // Lookahead: hirtelen 20 dB-es ugrás -> a kimenet sosem lépi túl a plafont, és nincs kemény vágás
+    {
+        TruePeakLimiter lim;
+        lim.prepare(sr);
+        lim.enabled = true;
+        lim.configure(-6.0, 80.0, 5.0, 4);
+        std::vector<float> l(24000), r(24000);
+        for (size_t i = 0; i < l.size(); ++i) {
+            const double a = i < 12000 ? 0.05 : 0.95;
+            l[i] = r[i] = static_cast<float>(a * std::sin(2 * kPi * 997 * i / sr));
+        }
+        lim.process(l.data(), r.data(), l.size());
+        const float ceil = static_cast<float>(std::pow(10.0, -6.0 / 20.0));
+        size_t atCeil = 0;
+        float mx = 0;
+        for (float v : l) { mx = std::max(mx, std::abs(v)); if (std::abs(v) >= ceil * 0.9999f) ++atCeil; }
+        CHECK(mx <= ceil + 1e-6f && atCeil < 5, "lookahead 5 ms: csúcs %.2f dBFS (plafon -6), plafonra vágott minta: %zu", 20 * std::log10(mx), atCeil);
+        // késleltetés = lookahead + 3 minta
+        TruePeakLimiter l2;
+        l2.prepare(sr);
+        l2.enabled = true;
+        l2.configure(0.0, 50.0, 2.0, 4);
+        std::vector<float> a(512, 0.0f), b(512, 0.0f);
+        a[0] = b[0] = 0.5f;
+        l2.process(a.data(), b.data(), a.size());
+        size_t pk = 0;
+        for (size_t i = 0; i < a.size(); ++i) if (std::abs(a[i]) > std::abs(a[pk])) pk = i;
+        CHECK(pk == l2.latencySamples() && pk == 96 + 3, "késleltetés: %zu minta (2 ms lookahead + 3)", pk);
+    }
+
+    // Crossfeed ITD: az áthalló jel késleltetve érkezik
+    {
+        CrossfeedProcessor cf(sr);
+        cf.prepareDelay();
+        cf.delayMs = 0.5;
+        cf.updateCoefficients();
+        std::vector<float> l(256, 0.0f), r(256, 0.0f);
+        l[0] = 1.0f;
+        cf.processBlock(l.data(), r.data(), l.size());
+        size_t first = 0;
+        while (first < r.size() && std::abs(r[first]) < 1e-7f) ++first;
+        CHECK(first == 24, "ITD 0,5 ms: a jobb csatornán az áthallás a %zu. mintánál indul (48 kHz: 24)", first);
+    }
+
+    // Decramp: 15 kHz-es +6 dB magas polc 48 kHz-en; referencia = 768 kHz-re tervezett (közel analóg) szűrő
+    {
+        BiquadFilter ref(FilterType::HighShelf, 15000, 0.71, 6.0, 768000);
+        const double refDb = 20 * std::log10(std::abs(ref.evaluateTransferFunction(19000)));
+        double err[2];
+        int idx = 0;
+        for (int dc : { 1, 4 }) {
+            AetherChain c;
+            c.setSampleRate(sr);
+            ParamData d = transparentParams();
+            d.set(kFlagEq, true);
+            d.eqDecramp = dc;
+            d.numBands = 1;
+            d.bands[0] = { static_cast<int32_t>(EqBandType::HighShelf), 15000.0f, 6.0f, 0.71f };
+            c.applyParamsRT(d);
+            std::vector<float> l(24000), r(24000);
+            for (size_t i = 0; i < l.size(); ++i) l[i] = r[i] = static_cast<float>(0.1 * std::sin(2 * kPi * 19000 * i / sr));
+            c.process(l.data(), r.data(), l.size());
+            err[idx++] = 20 * std::log10(toneAmp(l, 12000, 19000, sr) / 0.1) - refDb;
+        }
+        CHECK(std::abs(err[1]) < 0.25 && std::abs(err[0]) > std::abs(err[1]),
+              "decramp: 19 kHz-en eltérés az analóg menettől: 1x %.2f dB, 4x %.2f dB", err[0], err[1]);
+    }
+
+    // Túlmintavételező: sík átvitel a hallható sávban
+    {
+        Oversampler os;
+        double worst = 0;
+        for (double f : { 100.0, 1000.0, 10000.0, 18000.0, 19500.0 }) {
+            std::vector<float> l(24000), r(24000);
+            for (size_t i = 0; i < l.size(); ++i) l[i] = r[i] = static_cast<float>(0.1 * std::sin(2 * kPi * f * i / sr));
+            os.reset();
+            os.process(l.data(), r.data(), l.size(), 4, [](float*, float*, size_t) {});
+            worst = std::max(worst, std::abs(20 * std::log10(toneAmp(l, 12000, f, sr) / 0.1)));
+        }
+        CHECK(worst < 0.1, "4x túlmintavételező: max. eltérés 100 Hz - 19,5 kHz: %.3f dB, késleltetés %.1f minta",
+              worst, os.latencySamples(4));
+    }
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" AetherAudio DSP modulteszt\n");
@@ -254,6 +361,7 @@ int main() {
     testFirDesign();
     testBass();
     testChain();
+    testTruePeakAndMore();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }
