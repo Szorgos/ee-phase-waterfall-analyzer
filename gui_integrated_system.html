@@ -691,6 +691,17 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
 </div>
 
 <script>
+// Globális PipeWire WebSocket híd változók (hoisting & TDZ védelem)
+var pipewireWs = null;
+var isPipewireConnected = false;
+var livePipewireSamples = null;
+
+function sendParamToPipewire(type, val) {
+  if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) {
+    pipewireWs.send(JSON.stringify({ type: type, val: val }));
+  }
+}
+
 // =========================================================================
 // TAB VÁLTÓ LOGIKA
 // =========================================================================
@@ -2185,10 +2196,6 @@ function updateBassInfo() {
 // =========================================================================
 // PIPEWIRE ÉLŐ WEBSOCKET HÍD (ws://127.0.0.1:8080)
 // =========================================================================
-let pipewireWs = null;
-let isPipewireConnected = false;
-let livePipewireSamples = null;
-
 function initPipewireBridge() {
   const badge = document.getElementById("pipewireLiveBadge");
   try {
@@ -2228,12 +2235,6 @@ function initPipewireBridge() {
     };
   } catch (e) {
     setTimeout(initPipewireBridge, 3000);
-  }
-}
-
-function sendParamToPipewire(type, val) {
-  if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) {
-    pipewireWs.send(JSON.stringify({ type: type, val: val }));
   }
 }
 
