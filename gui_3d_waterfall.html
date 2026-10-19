@@ -168,18 +168,25 @@ const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
 scene.add(ambientLight);
 
 // Hőtérkép színátmenet (dB szinthez rendelés: -60 dB-től 0 dB-ig)
-function getHeatmapColor(val) {
-  // val 0.0 (csend) és 1.0 (csúcs) között
+function getHeatmapColor(val, isPreRing = false) {
+  // Ha ez a pont egy azonosított FIR Pre-ringing komponens, tiszta fehér/jégkék izzást kap!
+  if (isPreRing) {
+    return [1.0, 1.0, 1.0]; // Izzó tiszta fehér
+  }
+
+  // Normál hőtérkép: kék -> zöld -> sárga -> vörös
   const r = Math.max(0, Math.min(1, Math.sin(val * Math.PI - Math.PI / 2) * 0.5 + 0.5 + (val > 0.7 ? (val - 0.7) * 2.5 : 0)));
   const g = Math.max(0, Math.min(1, Math.sin(val * Math.PI) * 1.1 - (val > 0.8 ? (val - 0.8) * 4 : 0)));
   const b = Math.max(0, Math.min(1, (1.0 - val * 1.4)));
   return [r, g, b];
 }
 
-// 2D Puffermátrix a vízesés adatainak tárolásához
+// 2D Puffermátrix az amplitúdónak és a pre-ring maszkoknak
 const waterfallData = [];
+const preRingMask = [];
 for (let t = 0; t < TIME_SLICES; t++) {
   waterfallData.push(new Float32Array(FREQ_BINS));
+  preRingMask.push(new Uint8Array(FREQ_BINS));
 }
 
 // Akusztikai szimuláció állapota
@@ -269,54 +276,60 @@ document.getElementById('btnAudioToggle').onclick = () => {
 // Egy új frekvenciaspektrum szelet generálása (Időpont = most)
 function generateNextSpectrumSlice() {
   const slice = new Float32Array(FREQ_BINS);
+  const mask = new Uint8Array(FREQ_BINS);
   simFrame++;
 
   if (testMode === 'kick') {
     const beatPhase = simFrame % 70;
     
-    // FIR Pre-ringing jelenség: az impulzus ELŐTT 4-6 időablakkal megjelenő rezgéshullám
+    // FIR Pre-ringing: fehér foltként izzik a dobütés előtt!
     if (simPreRing && beatPhase >= 58 && beatPhase < 68) {
-      // Szinuszos hullámzás, ami a fő ütéshez közeledve felerősödik
       const progress = (beatPhase - 58) / 10.0;
-      const oscillation = Math.sin(progress * Math.PI * 3.0); // 3 rezgésciklus
-      const ringAmp = Math.abs(oscillation) * (0.15 + progress * 0.35); // jól kivehető magasság
-      slice[12] = ringAmp; // 80 Hz-es gerinc előtt
+      const oscillation = Math.sin(progress * Math.PI * 3.0);
+      const ringAmp = Math.abs(oscillation) * (0.2 + progress * 0.4);
+      slice[12] = ringAmp;
       slice[11] = ringAmp * 0.8;
       slice[13] = ringAmp * 0.8;
-      slice[18] = ringAmp * 0.4;
+      mask[11] = 1; mask[12] = 1; mask[13] = 1; // FEHÉR JELÖLÉS!
     }
 
     if (beatPhase === 0) {
-      // Dobütés alap spektrum
-      slice[8] = 0.85;  // 50 Hz
-      slice[12] = 0.95; // 80 Hz
-      slice[18] = 0.65; // 150 Hz
-      slice[35] = 0.45; // 1 kHz dobtest
-      slice[55] = 0.3;  // 4 kHz pergőcsattanás
+      slice[8] = 0.85; slice[12] = 0.95; slice[18] = 0.65; slice[35] = 0.45; slice[55] = 0.3;
     }
   } else {
-    // Folytonos zenei jel
+    // FOLYTONOS ZENEI JEL
+    const beatTrigger = (simFrame % 45 === 0);
+
     for (let f = 0; f < FREQ_BINS; f++) {
       const bassWave = Math.sin(simFrame * 0.08 + f * 0.2) * 0.4 + 0.4;
       const midWave = Math.sin(simFrame * 0.15 - f * 0.3) * 0.25;
       const noise = (Math.random() - 0.5) * 0.06;
       slice[f] = Math.max(0, (f < 25 ? bassWave : midWave) + noise);
-    }
-  }
 
-  // Ha az EQ be van kapcsolva, alkalmazzuk a szűrő hatását az élő jelre!
-  // Példa: 80 Hz-es basszuskiemelés (+4 dB), 200 Hz-es dobozhang vágás (-6 dB)
-  if (isEqEnabled) {
-    for (let f = 0; f < FREQ_BINS; f++) {
-      if (f >= 10 && f <= 15) {
-        slice[f] = Math.min(1.0, slice[f] * 1.35); // Basszus emelés
-      } else if (f >= 20 && f <= 28) {
-        slice[f] = slice[f] * 0.55; // Rezonancia vágás
+      // Ha be van kapcsolva a FIR szűrő, a zenei tranziensek (hirtelen ugrások) ELŐTT
+      // fehér foltok villannak fel az idővonalon, jelezve az előcsengést a sűrű zenében!
+      if (simPreRing) {
+        const transPhase = simFrame % 45;
+        if (transPhase >= 38 && transPhase < 44 && (f === 14 || f === 15 || f === 30 || f === 31)) {
+          slice[f] = Math.min(1.0, slice[f] + 0.3);
+          mask[f] = 1; // FEHÉR FOLT A ZENÉBEN!
+        }
       }
     }
   }
 
-  return slice;
+  // EQ hatás alkalmazása
+  if (isEqEnabled) {
+    for (let f = 0; f < FREQ_BINS; f++) {
+      if (f >= 10 && f <= 15) {
+        slice[f] = Math.min(1.0, slice[f] * 1.35);
+      } else if (f >= 20 && f <= 28) {
+        slice[f] = slice[f] * 0.55;
+      }
+    }
+  }
+
+  return { slice, mask };
 }
 
 // Fő renderelési ciklus (60 FPS GPU-n)
@@ -325,9 +338,9 @@ function animate() {
 
   if (isPlaying) {
     // 1. Gördítjük a vízesés pufferét az időben
-    const newSlice = generateNextSpectrumSlice();
+    const { slice: newSlice, mask: newMask } = generateNextSpectrumSlice();
     
-    // A régi szeletek lecsengése (szobaakusztikai decay)
+    // A régi szeletek lecsengése
     const decayFactor = Math.exp(-1.0 / (decayTime * 0.06));
     const prevSlice = waterfallData[0];
 
@@ -335,8 +348,10 @@ function animate() {
       newSlice[f] = Math.max(newSlice[f], prevSlice[f] * decayFactor);
     }
 
-    waterfallData.pop(); // Legrégebbi szelet kiesik a végén
-    waterfallData.unshift(newSlice); // Új szelet bejön a legelejére
+    waterfallData.pop();
+    waterfallData.unshift(newSlice);
+    preRingMask.pop();
+    preRingMask.unshift(newMask);
 
     // 2. Frissítjük a 3D geometriát a GPU csúcspufferben
     const positions = geometry.attributes.position.array;
@@ -344,15 +359,17 @@ function animate() {
 
     for (let z = 0; z < TIME_SLICES; z++) {
       const sliceData = waterfallData[z];
+      const sliceMask = preRingMask[z];
+
       for (let x = 0; x < FREQ_BINS; x++) {
         const vertexIndex = (z * FREQ_BINS + x);
-        const yVal = sliceData[x]; // Amplitúdó
+        const yVal = sliceData[x];
+        const isPre = (sliceMask[x] === 1);
 
-        // Magasság beállítása (Z tengely az idő, Y a magasság)
-        positions[vertexIndex * 3 + 1] = yVal * 14.0; // Magassági skálázás
+        positions[vertexIndex * 3 + 1] = yVal * 14.0;
 
-        // Hőtérkép színének kiszámítása a magasság alapján
-        const rgb = getHeatmapColor(yVal);
+        // Ha pre-ringing, tiszta vakító fehér csúcs lesz!
+        const rgb = getHeatmapColor(yVal, isPre);
         colorAttr[vertexIndex * 3] = rgb[0];
         colorAttr[vertexIndex * 3 + 1] = rgb[1];
         colorAttr[vertexIndex * 3 + 2] = rgb[2];
