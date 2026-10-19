@@ -72,23 +72,28 @@
     <button class="audio-btn" id="btnAudioToggle">▶ Élő Hang Tesztjel Indítása</button>
 
     <div class="ctrl-row">
+      <label>EasyEffects EQ Állapot:</label>
+      <button class="btn active" id="btnEqToggle" style="background:#00e676; color:#000; font-weight:700; width:100px;">EQ BE</button>
+    </div>
+
+    <div class="ctrl-row">
       <label>Tesztjel típusa:</label>
     </div>
     <div class="btn-grp">
-      <button class="btn active" id="btnModeKick">Pergő/Lábdob ütés<br><small>(Tranziens lecsengés)</small></button>
+      <button class="btn active" id="btnModeKick">Pergő/Lábdob ütés<br><small>(Tranziens impulzus)</small></button>
       <button class="btn" id="btnModeTone">Folytonos zenei jel<br><small>(Spektrum hegyvonulat)</small></button>
     </div>
 
     <div class="ctrl-row" style="margin-top:6px;">
-      <label>Pre-ringing szimuláció (FIR):</label>
-      <input type="checkbox" id="chkPreRing">
+      <label>FIR Szűrő Mód:</label>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span id="lblFirMode" style="font-size:0.75rem; color:var(--text-dim);">Minimálfázis</span>
+        <input type="checkbox" id="chkPreRing">
+      </div>
     </div>
-
-    <div class="ctrl-row">
-      <label>Szoba lecsengési idő (RT60):</label>
-      <span id="lblDecay" style="color:var(--accent-orange); font-family:monospace;">450 ms</span>
+    <div style="font-size:0.7rem; color:#5c7391; line-height:1.2;">
+      Bekapcsolva: halvány, diszkrét lebegő kontúr jelzi az éles FIR előcsengést.
     </div>
-    <input type="range" id="paramDecay" min="100" max="1200" step="50" value="450" style="width:100%;">
 
     <div>
       <div class="color-bar"></div>
@@ -181,7 +186,7 @@ for (let t = 0; t < TIME_SLICES; t++) {
 let isPlaying = false;
 let testMode = 'kick'; // 'kick' or 'tone'
 let simPreRing = false;
-let decayTime = 450;
+let isEqEnabled = true;
 let simFrame = 0;
 
 // Egérkamera forgatás
@@ -224,6 +229,20 @@ window.addEventListener('resize', () => {
 });
 
 // UI Kezelők
+const btnEqToggle = document.getElementById('btnEqToggle');
+btnEqToggle.onclick = () => {
+  isEqEnabled = !isEqEnabled;
+  if (isEqEnabled) {
+    btnEqToggle.innerText = "EQ BE";
+    btnEqToggle.style.background = "#00e676";
+    btnEqToggle.style.color = "#000";
+  } else {
+    btnEqToggle.innerText = "EQ KI (Bypass)";
+    btnEqToggle.style.background = "#2c3e55";
+    btnEqToggle.style.color = "#8ba1b7";
+  }
+};
+
 document.getElementById('btnModeKick').onclick = (e) => {
   testMode = 'kick';
   document.getElementById('btnModeKick').classList.add('active');
@@ -236,11 +255,10 @@ document.getElementById('btnModeTone').onclick = (e) => {
 };
 document.getElementById('chkPreRing').onchange = (e) => {
   simPreRing = e.target.checked;
+  document.getElementById('lblFirMode').innerText = simPreRing ? "Lineáris Fázis (FIR)" : "Minimálfázis (IIR)";
+  document.getElementById('lblFirMode').style.color = simPreRing ? "var(--accent-cyan)" : "var(--text-dim)";
 };
-document.getElementById('paramDecay').oninput = (e) => {
-  decayTime = parseInt(e.target.value);
-  document.getElementById('lblDecay').innerText = decayTime + " ms";
-};
+
 document.getElementById('btnAudioToggle').onclick = () => {
   isPlaying = !isPlaying;
   document.getElementById('btnAudioToggle').innerText = isPlaying ? "⏸ Szimuláció Megállítása" : "▶ Élő Hang Tesztjel Indítása";
@@ -253,31 +271,42 @@ function generateNextSpectrumSlice() {
   simFrame++;
 
   if (testMode === 'kick') {
-    // 60 képkockánként (másodpercenként 1x) egy éles impulzus
     const beatPhase = simFrame % 65;
     
-    // Ha van Pre-ringing szimuláció, a dobütés ELŐTT már nő az energia!
-    if (simPreRing && beatPhase >= 55 && beatPhase < 60) {
-      const ringAmp = (beatPhase - 55) / 5.0 * 0.5;
-      slice[12] = ringAmp * (0.8 + 0.2 * Math.sin(simFrame * 2)); // 60-120 Hz pre-ringing
-      slice[13] = ringAmp * 0.6;
+    // Diszkrét, halvány FIR fényhíd (Pre-ringing): nagyon lágy derengés, nem tolakodó
+    if (simPreRing && beatPhase >= 57 && beatPhase < 63) {
+      const ringAmp = Math.sin((beatPhase - 57) / 6.0 * Math.PI) * 0.18; // nagyon finom amplitúdó
+      slice[12] = ringAmp; // 80 Hz körüli diszkrét fénykontúr
+      slice[13] = ringAmp * 0.7;
     }
 
     if (beatPhase === 0) {
-      // Maga a dobütés: hatalmas szub-basszus tüske + felharmonikusok
-      slice[8] = 0.95;  // 50 Hz
-      slice[12] = 1.0;  // 80 Hz
-      slice[18] = 0.7;  // 150 Hz
-      slice[35] = 0.5;  // 1 kHz dobtest
+      // Dobütés alap spektrum
+      slice[8] = 0.85;  // 50 Hz
+      slice[12] = 0.95; // 80 Hz
+      slice[18] = 0.65; // 150 Hz
+      slice[35] = 0.45; // 1 kHz dobtest
       slice[55] = 0.3;  // 4 kHz pergőcsattanás
     }
   } else {
-    // Folytonos zene: vándorló spektrumgerincek
+    // Folytonos zenei jel
     for (let f = 0; f < FREQ_BINS; f++) {
       const bassWave = Math.sin(simFrame * 0.08 + f * 0.2) * 0.4 + 0.4;
       const midWave = Math.sin(simFrame * 0.15 - f * 0.3) * 0.25;
-      const noise = (Math.random() - 0.5) * 0.08;
+      const noise = (Math.random() - 0.5) * 0.06;
       slice[f] = Math.max(0, (f < 25 ? bassWave : midWave) + noise);
+    }
+  }
+
+  // Ha az EQ be van kapcsolva, alkalmazzuk a szűrő hatását az élő jelre!
+  // Példa: 80 Hz-es basszuskiemelés (+4 dB), 200 Hz-es dobozhang vágás (-6 dB)
+  if (isEqEnabled) {
+    for (let f = 0; f < FREQ_BINS; f++) {
+      if (f >= 10 && f <= 15) {
+        slice[f] = Math.min(1.0, slice[f] * 1.35); // Basszus emelés
+      } else if (f >= 20 && f <= 28) {
+        slice[f] = slice[f] * 0.55; // Rezonancia vágás
+      }
     }
   }
 
