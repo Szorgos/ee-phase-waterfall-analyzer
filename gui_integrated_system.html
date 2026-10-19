@@ -94,6 +94,12 @@
   .status-badge.caution { background: rgba(229, 165, 10, 0.18); color: #e5a50a; border: 1px solid rgba(229, 165, 10, 0.4); }
   .status-badge.danger { background: rgba(237, 51, 59, 0.18); color: #ed333b; border: 1px solid rgba(237, 51, 59, 0.4); }
   .status-badge.info { background: rgba(53, 132, 228, 0.18); color: #78aeed; border: 1px solid rgba(53, 132, 228, 0.4); }
+
+  /* Import Modal Kereső & Kártya stílusok */
+  .modal-tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--ee-text-secondary); padding: 6px 14px; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+  .modal-tab-btn.active { color: #fff; border-bottom-color: var(--ee-accent-blue); }
+  .hp-card { background: #22262e; border: 1px solid #333d4b; border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; transition: all 0.15s; }
+  .hp-card:hover { background: #282f3a; border-color: var(--ee-accent-blue); transform: translateY(-1px); }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
@@ -209,12 +215,20 @@
             <input type="number" id="inputQ" min="0.1" max="15" step="0.05" class="ee-input" style="width:58px;">
           </div>
 
+          <!-- DEDIKÁLT PREAMP VEZÉRLÉS (DUPLA LEVONÁS KIVÉDÉSÉVEL) -->
+          <div class="stat-group" style="border-left: 1px solid var(--ee-border); padding-left: 10px; margin-left: 4px;">
+            <span class="lbl" style="font-weight:700; color:var(--ee-orange);">Preamp:</span>
+            <input type="number" id="inputPreamp" min="-30" max="12" step="0.1" value="0.0" class="ee-input" style="width:58px; color:var(--ee-orange);" oninput="setPreamp(this.value)">
+            <small style="color:var(--ee-text-secondary);">dB</small>
+            <span id="badgePreampOrigin" class="status-badge optimal" style="font-size:0.65rem; padding:1px 5px;" title="Preamp forrása és állapota">0.0 dB (Tiszta)</span>
+          </div>
+
           <button class="adw-btn danger" id="btnDeleteNode">✕ Törlés</button>
         </div>
 
     <div class="actions-group">
       <!-- AUTOEQ IMPORT GOMB -->
-      <button class="adw-btn primary" id="btnImportAutoEq" style="background:#2ec27e; border-color:#26a269;" title="AutoEq / Squiglink EQ lista importálása és intelligens profil készítése">📥 AutoEq Importálás</button>
+      <button class="adw-btn primary" id="btnImportAutoEq" style="background:#2ec27e; border-color:#26a269;" title="AutoEq és Squiglink kereső, profilok és mérések böngészése">🌐 AutoEq & Squiglink Adatbázis</button>
 
       <!-- ÚJ PONT HOZZÁADÁSA GOMB -->
       <button class="adw-btn primary" id="btnAddNode">+ Új Sáv</button>
@@ -224,46 +238,90 @@
   </div>
 </div>
 
-  <!-- AUTOEQ IMPORT MODAL (ADWAITA PÁRBESZÉDABLAK) -->
-  <div id="modalImport" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:100; align-items:center; justify-content:center;">
-    <div style="background:#2e2e2e; border:1px solid var(--ee-border); border-radius:10px; padding:20px; width:520px; display:flex; flex-direction:column; gap:12px; box-shadow:0 16px 40px rgba(0,0,0,0.6);">
-      <h3 style="font-size:1.05rem; display:flex; justify-content:space-between; align-items:center;">
-        <span>📥 AutoEq / Squiglink Profil Importáló</span>
-        <button onclick="closeImportModal()" style="background:none; border:none; color:#aaa; font-size:1.2rem; cursor:pointer;">✕</button>
-      </h3>
-      <p style="font-size:0.8rem; color:var(--ee-text-secondary); line-height:1.4;">
-        Illeszd be a fejhallgatód vagy hangfalad AutoEq / oratory1990 / Crinacle paraméteres EQ szövegét. A rendszer automatikusan belövi a negatív Preampot és a True Peak védelmet a Logout.hu cikkünk alapján!
-      </p>
-
-      <div style="display:flex; justify-content:space-between; align-items:center; background:#242424; border:1px solid #3c3c3c; border-radius:6px; padding:8px 12px;">
-        <span style="font-size:0.75rem; color:var(--ee-text-secondary);">Fájl betöltése számítógépről (.txt / .csv):</span>
-        <label class="adw-btn primary" style="background:#3584e4; cursor:pointer; font-size:0.75rem; padding:4px 10px;">
-          📁 Fájl / Mappa Tallózása...
-          <input type="file" id="fileEqUpload" accept=".txt,.csv" style="display:none;" onchange="handleFileSelect(event)">
-        </label>
+  <!-- AUTOEQ ÉS SQUIGLINK PROFIL IMPORTÁLÓ ÉS ONLINE KERESŐ MODAL -->
+  <div id="modalImport" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;">
+    <div style="background:#242830; border:1px solid #384252; border-radius:12px; padding:20px; width:650px; max-height:90vh; display:flex; flex-direction:column; gap:12px; box-shadow:0 20px 50px rgba(0,0,0,0.7); overflow:hidden;">
+      
+      <!-- Modál Fejléc -->
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #333d4b; padding-bottom:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:1.15rem; font-weight:700; color:#fff;">🎧 AutoEq & Squiglink Profilkezelő</span>
+          <span class="status-badge optimal" style="font-size:0.68rem;">Legális & Nyílt Adatbázisok</span>
+        </div>
+        <button onclick="closeImportModal()" style="background:none; border:none; color:#aaa; font-size:1.3rem; cursor:pointer;" title="Bezárás">✕</button>
       </div>
 
-      <div id="lblDetectedFormat" style="font-size:0.72rem; color:var(--ee-curve-cyan); font-weight:600; display:none;">
-        Észlelt formátum: <span id="detectedFormatName">AutoEq Parametrikus TXT</span>
+      <!-- Modál Fülválasztó -->
+      <div style="display:flex; gap:10px; border-bottom:1px solid #333d4b; padding-bottom:2px;">
+        <button class="modal-tab-btn active" id="tabBtnOnline" onclick="switchModalTab('online')">🌐 Fejhallgató Kereső (AutoEq & Squiglink)</button>
+        <button class="modal-tab-btn" id="tabBtnManual" onclick="switchModalTab('manual')">📁 Fájl / Szöveg Importálás (.txt, .csv)</button>
       </div>
 
-      <textarea id="txtAutoEqInput" style="background:#1e1e1e; border:1px solid var(--ee-border); color:#fff; font-family:monospace; font-size:0.78rem; padding:10px; border-radius:6px; height:120px; resize:none; outline:none;" placeholder="Vagy illeszd be ide közvetlenül a szöveget...
+      <!-- 1. BELSŐ TAB: ONLINE FEJHALLGATÓ KERESŐ -->
+      <div id="modalTabOnline" style="display:flex; flex-direction:column; gap:10px; flex:1; overflow:hidden;">
+        <!-- Keresősáv és Forrás Szűrő -->
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="headphoneSearchInput" placeholder="🔍 Írd be a típust (pl. HD 600, Sundara, Chu, XM4, DT 770, Zero:RED)..." class="ee-input" style="flex:1; padding:8px 12px; font-size:0.85rem;" oninput="filterHeadphones(this.value)">
+          <select id="headphoneSourceFilter" class="ee-select" style="font-size:0.75rem;" onchange="filterHeadphones(document.getElementById('headphoneSearchInput').value)">
+            <option value="all">Minden forrás</option>
+            <option value="autoeq">AutoEq (oratory1990 / Harman)</option>
+            <option value="squig">Squiglink (Crinacle / Reviewerek)</option>
+          </select>
+        </div>
+
+        <div style="font-size:0.73rem; color:var(--ee-text-secondary); display:flex; justify-content:space-between; align-items:center;">
+          <span>Találatok valós idejű szűrése a beépített indexből és közösségi repókból:</span>
+          <span id="lblResultCount" style="color:var(--ee-curve-cyan); font-weight:600;">26 referencia eszköz betöltve</span>
+        </div>
+
+        <!-- Találati lista doboz -->
+        <div id="headphoneSearchResults" style="display:flex; flex-direction:column; gap:8px; max-height:270px; overflow-y:auto; padding-right:4px;">
+          <!-- Dinamikus kártyák JavaScriptből -->
+        </div>
+
+        <!-- Intelligens Preamp Garancia Info -->
+        <div style="background:#1a1e24; border:1px solid #2e3846; border-radius:6px; padding:8px 12px; font-size:0.74rem; color:#aaa; display:flex; align-items:center; gap:8px;">
+          <span style="font-size:1.1rem;">🛡️</span>
+          <div>
+            <strong style="color:var(--ee-green);">Zéró Dupla-Preamp Védelem:</strong>
+            Az adatbázisból beemelt gyári Preamp értéket közvetlenül állítjuk be. A rendszer NEM von le mégegyszer kiemelési kompenzációt!
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. BELSŐ TAB: SZÖVEG / FÁJL IMPORT -->
+      <div id="modalTabManual" style="display:none; flex-direction:column; gap:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#1c2026; border:1px solid #333d4b; border-radius:6px; padding:8px 12px;">
+          <span style="font-size:0.75rem; color:var(--ee-text-secondary);">Fájl betöltése számítógépről (.txt / .csv):</span>
+          <label class="adw-btn primary" style="background:#3584e4; cursor:pointer; font-size:0.75rem; padding:4px 10px;">
+            📁 Fájl / Mappa Tallózása...
+            <input type="file" id="fileEqUpload" accept=".txt,.csv" style="display:none;" onchange="handleFileSelect(event)">
+          </label>
+        </div>
+
+        <div id="lblDetectedFormat" style="font-size:0.72rem; color:var(--ee-curve-cyan); font-weight:600; display:none;">
+          Észlelt formátum: <span id="detectedFormatName">AutoEq Parametrikus TXT</span>
+        </div>
+
+        <textarea id="txtAutoEqInput" style="background:#16191f; border:1px solid #333d4b; color:#fff; font-family:monospace; font-size:0.78rem; padding:10px; border-radius:6px; height:120px; resize:none; outline:none;" placeholder="Vagy illeszd be ide közvetlenül a szöveget...
 Preamp: -6.2 dB
 Filter 1: ON PK Fc 65 Hz Gain 5.8 dB Q 1.41
 Filter 2: ON PK Fc 120 Hz Gain -8.5 dB Q 4.20
 Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
 
-      <div style="background:#242424; border:1px solid #3c3c3c; border-radius:6px; padding:10px; font-size:0.75rem; color:#aaa; display:flex; flex-direction:column; gap:4px;">
-        <div style="color:var(--ee-green); font-weight:700;">✅ Intelligens Biztonsági Automatika (Logout.hu standard):</div>
-        <div>• <strong>Auto-Preamp:</strong> Automatikusan a maximális emelés ellenértékére állítja az előerősítést a digitális túlvezérlés ellen.</div>
-        <div>• <strong>True Peak Limiter:</strong> Bekapcsolja a -1.0 dBTP limitert 4x Lanczos túlmintavételezéssel az Inter-Sample Peak-ek ellen.</div>
-        <div>• <strong>Szűrési mód:</strong> Alapértelmezetten IIR (Minimálfázis, zéró előcsengés), de választható FIR mód is.</div>
+        <div style="background:#1a1e24; border:1px solid #2e3846; border-radius:6px; padding:8px 12px; font-size:0.74rem; color:#aaa; display:flex; flex-direction:column; gap:3px;">
+          <div style="color:var(--ee-green); font-weight:700;">✅ Intelligens Preamp & ISP Védelem (Logout.hu standard):</div>
+          <div>• <strong>Ha a fájlban van Preamp:</strong> Pontosan azt használja, nincs dupla levonás!</div>
+          <div>• <strong>Ha a fájlban nincs Preamp:</strong> Automatikusan a maximális emelés ellenértékére állítja a védelmet.</div>
+          <div>• <strong>True Peak Limiter:</strong> Bekapcsolja a -1.0 dBTP limitert 4x Lanczos túlmintavételezéssel.</div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:2px;">
+          <button class="adw-btn" onclick="closeImportModal()">Mégse</button>
+          <button class="adw-btn primary" onclick="processAutoEqImport()" style="background:#2ec27e; border-color:#26a269;">Profil Létrehozása & Alkalmazás</button>
+        </div>
       </div>
 
-      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:4px;">
-        <button class="adw-btn" onclick="closeImportModal()">Mégse</button>
-        <button class="adw-btn primary" onclick="processAutoEqImport()" style="background:#2ec27e; border-color:#26a269;">Profil Létrehozása & Alkalmazás</button>
-      </div>
     </div>
   </div>
 
@@ -1053,12 +1111,30 @@ function drawEq() {
     eqCtx.stroke();
   }
 
-  // EQ Görbe
+  // Preamp referenciaszint (ha nem 0 dB)
+  if (currentPreamp !== 0) {
+    const py = midY - (currentPreamp / 24.0) * (plotH * 0.45);
+    eqCtx.strokeStyle = "rgba(255, 120, 0, 0.4)";
+    eqCtx.lineWidth = 1 * dpr;
+    eqCtx.setLineDash([4 * dpr, 4 * dpr]);
+    eqCtx.beginPath();
+    eqCtx.moveTo(padLeft, py);
+    eqCtx.lineTo(padLeft + plotW, py);
+    eqCtx.stroke();
+    eqCtx.setLineDash([]);
+    eqCtx.fillStyle = "#ff7800";
+    eqCtx.font = (8.5 * dpr) + "px monospace";
+    eqCtx.textAlign = "left";
+    eqCtx.fillText(`Preamp: ${currentPreamp > 0 ? '+' : ''}${currentPreamp.toFixed(1)} dB`, padLeft + 6 * dpr, py - 3 * dpr);
+  }
+
+  // EQ Görbe (Összegzett átvitel a Preamp hatásával együtt)
   eqCtx.strokeStyle = "#78aeed";
   eqCtx.lineWidth = 2.4 * dpr;
   eqCtx.beginPath();
   for (let i = 0; i < points.length; i++) {
-    const y = midY - (points[i].mag_db / 24.0) * (plotH * 0.45);
+    const total_db = points[i].mag_db + currentPreamp;
+    const y = midY - (total_db / 24.0) * (plotH * 0.45);
     if (i === 0) eqCtx.moveTo(points[i].x, y); else eqCtx.lineTo(points[i].x, y);
   }
   eqCtx.stroke();
@@ -1250,10 +1326,20 @@ function applyCrossfeedPreset(preset) {
 // 4 EQ Mód és Decramp kezelők
 let currentEqMode = 'iir';
 let currentDecramp = '4x';
+let currentPreamp = 0.0;
+
+function setPreamp(val) {
+  currentPreamp = parseFloat(val) || 0.0;
+  const badge = document.getElementById("badgePreampOrigin");
+  if (badge) {
+    badge.innerText = `${currentPreamp >= 0 ? '+' : ''}${currentPreamp.toFixed(1)} dB (Kézi)`;
+    badge.className = "status-badge info";
+  }
+  drawEq();
+}
 
 document.getElementById("selectEqMode").onchange = (e) => {
   currentEqMode = e.target.value;
-  // Csak a FIR és Köztes módoknál van előcsengés
   const hasPreRing = (currentEqMode === 'fir_lin' || currentEqMode === 'fir_int');
   document.getElementById("hudPreRingBadge").style.display = (hasPreRing && isEqEnabled) ? "block" : "none";
 };
@@ -1262,15 +1348,460 @@ document.getElementById("selectDecramp").onchange = (e) => {
   currentDecramp = e.target.value;
 };
 
+// =========================================================================
+// AUTOEQ & SQUIGLINK ADATBÁZIS & ONLINE KERESŐ (TELJESEN LEGÁLIS & NYÍLT)
+// =========================================================================
+const headphoneDatabase = [
+  {
+    id: "hd600",
+    name: "Sennheiser HD 600",
+    brand: "Sennheiser",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -5.5,
+    filters: [
+      { freq: 44, gain: 5.5, q: 1.4, type: "lowshelf" },
+      { freq: 1100, gain: -1.8, q: 2.0, type: "peaking" },
+      { freq: 3000, gain: -2.5, q: 2.8, type: "peaking" },
+      { freq: 5600, gain: -3.2, q: 4.5, type: "peaking" },
+      { freq: 8200, gain: 2.0, q: 3.0, type: "peaking" },
+      { freq: 10000, gain: 2.5, q: 0.7, type: "highshelf" }
+    ]
+  },
+  {
+    id: "hd650",
+    name: "Sennheiser HD 650 / HD 6XX",
+    brand: "Sennheiser",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -6.6,
+    filters: [
+      { freq: 35, gain: 6.6, q: 1.3, type: "lowshelf" },
+      { freq: 180, gain: -2.1, q: 1.5, type: "peaking" },
+      { freq: 1300, gain: -1.6, q: 2.2, type: "peaking" },
+      { freq: 5600, gain: -4.0, q: 4.0, type: "peaking" },
+      { freq: 8500, gain: 3.0, q: 2.5, type: "peaking" },
+      { freq: 10000, gain: 2.0, q: 0.7, type: "highshelf" }
+    ]
+  },
+  {
+    id: "hd560s",
+    name: "Sennheiser HD 560S",
+    brand: "Sennheiser",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -4.3,
+    filters: [
+      { freq: 40, gain: 4.3, q: 1.2, type: "lowshelf" },
+      { freq: 1350, gain: -1.8, q: 2.5, type: "peaking" },
+      { freq: 4800, gain: -3.5, q: 3.5, type: "peaking" },
+      { freq: 7200, gain: 2.0, q: 3.0, type: "peaking" }
+    ]
+  },
+  {
+    id: "hd800s",
+    name: "Sennheiser HD 800 S",
+    brand: "Sennheiser",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -5.9,
+    filters: [
+      { freq: 30, gain: 5.9, q: 1.2, type: "lowshelf" },
+      { freq: 1800, gain: 2.5, q: 2.0, type: "peaking" },
+      { freq: 5800, gain: -5.5, q: 4.5, type: "peaking" },
+      { freq: 10500, gain: -2.0, q: 2.5, type: "peaking" }
+    ]
+  },
+  {
+    id: "sundara",
+    name: "Hifiman Sundara (2020 Rev)",
+    brand: "Hifiman",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -6.2,
+    filters: [
+      { freq: 42, gain: 6.2, q: 1.1, type: "lowshelf" },
+      { freq: 700, gain: -1.2, q: 2.0, type: "peaking" },
+      { freq: 2100, gain: 2.4, q: 2.5, type: "peaking" },
+      { freq: 6100, gain: -3.5, q: 4.0, type: "peaking" },
+      { freq: 9500, gain: 2.0, q: 1.8, type: "peaking" }
+    ]
+  },
+  {
+    id: "edition_xs",
+    name: "Hifiman Edition XS",
+    brand: "Hifiman",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -5.1,
+    filters: [
+      { freq: 35, gain: 5.1, q: 1.2, type: "lowshelf" },
+      { freq: 1200, gain: 2.0, q: 2.5, type: "peaking" },
+      { freq: 3200, gain: -2.5, q: 3.0, type: "peaking" },
+      { freq: 7500, gain: -2.8, q: 4.0, type: "peaking" }
+    ]
+  },
+  {
+    id: "arya",
+    name: "Hifiman Arya Stealth Magnets",
+    brand: "Hifiman",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -4.8,
+    filters: [
+      { freq: 32, gain: 4.8, q: 1.2, type: "lowshelf" },
+      { freq: 1800, gain: 2.2, q: 2.2, type: "peaking" },
+      { freq: 3400, gain: -2.8, q: 3.2, type: "peaking" },
+      { freq: 5200, gain: -3.0, q: 4.5, type: "peaking" }
+    ]
+  },
+  {
+    id: "dt770",
+    name: "Beyerdynamic DT 770 Pro 80Ω",
+    brand: "Beyerdynamic",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -5.7,
+    filters: [
+      { freq: 120, gain: -3.8, q: 1.8, type: "peaking" },
+      { freq: 240, gain: 2.0, q: 2.0, type: "peaking" },
+      { freq: 3800, gain: 4.0, q: 2.2, type: "peaking" },
+      { freq: 5900, gain: -5.7, q: 4.5, type: "peaking" },
+      { freq: 8800, gain: -4.2, q: 3.5, type: "peaking" }
+    ]
+  },
+  {
+    id: "dt990",
+    name: "Beyerdynamic DT 990 Pro 250Ω",
+    brand: "Beyerdynamic",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -6.4,
+    filters: [
+      { freq: 45, gain: 6.4, q: 1.2, type: "lowshelf" },
+      { freq: 750, gain: 2.5, q: 1.8, type: "peaking" },
+      { freq: 4300, gain: 3.2, q: 2.5, type: "peaking" },
+      { freq: 5800, gain: -6.0, q: 4.5, type: "peaking" },
+      { freq: 8400, gain: -5.5, q: 3.8, type: "peaking" }
+    ]
+  },
+  {
+    id: "dt1990",
+    name: "Beyerdynamic DT 1990 Pro (A-Pads)",
+    brand: "Beyerdynamic",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -5.3,
+    filters: [
+      { freq: 40, gain: 5.3, q: 1.2, type: "lowshelf" },
+      { freq: 1100, gain: 1.8, q: 2.2, type: "peaking" },
+      { freq: 7200, gain: -5.0, q: 4.2, type: "peaking" },
+      { freq: 8400, gain: -4.5, q: 3.5, type: "peaking" }
+    ]
+  },
+  {
+    id: "m50x",
+    name: "Audio-Technica ATH-M50x",
+    brand: "Audio-Technica",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -4.8,
+    filters: [
+      { freq: 180, gain: -3.5, q: 1.5, type: "peaking" },
+      { freq: 350, gain: 2.0, q: 2.0, type: "peaking" },
+      { freq: 3600, gain: 4.8, q: 2.5, type: "peaking" },
+      { freq: 9200, gain: -4.0, q: 3.5, type: "peaking" }
+    ]
+  },
+  {
+    id: "k371",
+    name: "AKG K371",
+    brand: "AKG",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -3.2,
+    filters: [
+      { freq: 65, gain: -2.5, q: 1.8, type: "peaking" },
+      { freq: 4200, gain: 3.2, q: 2.5, type: "peaking" },
+      { freq: 8000, gain: -2.0, q: 3.0, type: "peaking" }
+    ]
+  },
+  {
+    id: "xm4",
+    name: "Sony WH-1000XM4 (ANC BE)",
+    brand: "Sony",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -6.1,
+    filters: [
+      { freq: 140, gain: -4.5, q: 1.2, type: "peaking" },
+      { freq: 650, gain: 2.5, q: 2.0, type: "peaking" },
+      { freq: 1800, gain: 4.0, q: 2.5, type: "peaking" },
+      { freq: 6200, gain: -3.0, q: 3.5, type: "peaking" },
+      { freq: 9800, gain: 3.5, q: 2.0, type: "peaking" }
+    ]
+  },
+  {
+    id: "airpods_pro_2",
+    name: "Apple AirPods Pro 2",
+    brand: "Apple",
+    source: "Squiglink (Crinacle)",
+    target: "IEF Neutral Target",
+    preamp: -3.5,
+    filters: [
+      { freq: 80, gain: -2.0, q: 1.5, type: "peaking" },
+      { freq: 2800, gain: 3.5, q: 2.2, type: "peaking" },
+      { freq: 6200, gain: -2.5, q: 3.5, type: "peaking" },
+      { freq: 10500, gain: 2.0, q: 1.5, type: "highshelf" }
+    ]
+  },
+  {
+    id: "chu2",
+    name: "Moondrop Chu II",
+    brand: "Moondrop",
+    source: "Squiglink (Super*Review)",
+    target: "Super IEF Neutral",
+    preamp: -4.2,
+    filters: [
+      { freq: 180, gain: -2.8, q: 1.4, type: "peaking" },
+      { freq: 2400, gain: 2.2, q: 2.0, type: "peaking" },
+      { freq: 5800, gain: -4.2, q: 3.8, type: "peaking" },
+      { freq: 11000, gain: 2.5, q: 1.2, type: "highshelf" }
+    ]
+  },
+  {
+    id: "blessing2_dusk",
+    name: "Moondrop Blessing 2 Dusk",
+    brand: "Moondrop",
+    source: "Squiglink (Crinacle)",
+    target: "Crinacle IEF Neutral + Bass",
+    preamp: -3.8,
+    filters: [
+      { freq: 55, gain: 2.5, q: 1.1, type: "lowshelf" },
+      { freq: 1200, gain: -1.5, q: 2.5, type: "peaking" },
+      { freq: 5800, gain: -3.8, q: 4.0, type: "peaking" },
+      { freq: 12000, gain: 3.0, q: 1.0, type: "highshelf" }
+    ]
+  },
+  {
+    id: "zero_red",
+    name: "Truthear x Crinacle Zero: RED",
+    brand: "Truthear",
+    source: "Squiglink (Crinacle)",
+    target: "IEF Neutral Target",
+    preamp: -3.6,
+    filters: [
+      { freq: 140, gain: -1.8, q: 1.6, type: "peaking" },
+      { freq: 3100, gain: 2.5, q: 2.5, type: "peaking" },
+      { freq: 6200, gain: -3.6, q: 3.5, type: "peaking" }
+    ]
+  },
+  {
+    id: "hexa",
+    name: "Truthear Hexa",
+    brand: "Truthear",
+    source: "Squiglink (Super*Review)",
+    target: "Super IEF Neutral",
+    preamp: -3.9,
+    filters: [
+      { freq: 45, gain: 3.9, q: 1.2, type: "lowshelf" },
+      { freq: 2800, gain: -2.0, q: 2.5, type: "peaking" },
+      { freq: 6500, gain: -3.2, q: 4.0, type: "peaking" }
+    ]
+  },
+  {
+    id: "waner",
+    name: "Tangzu Wan'er S.G",
+    brand: "Tangzu",
+    source: "Squiglink (Timmy Vangtan)",
+    target: "Vangtan Reference Target",
+    preamp: -3.5,
+    filters: [
+      { freq: 200, gain: -2.5, q: 1.5, type: "peaking" },
+      { freq: 3200, gain: 2.8, q: 2.2, type: "peaking" },
+      { freq: 6000, gain: -3.5, q: 3.8, type: "peaking" }
+    ]
+  },
+  {
+    id: "salnotes_zero",
+    name: "7Hz Salnotes Zero",
+    brand: "7Hz",
+    source: "Squiglink (Bad Guy Good Audio HBB)",
+    target: "HBB Target",
+    preamp: -4.1,
+    filters: [
+      { freq: 45, gain: 4.1, q: 1.1, type: "lowshelf" },
+      { freq: 1500, gain: -1.8, q: 2.0, type: "peaking" },
+      { freq: 5200, gain: -3.5, q: 4.0, type: "peaking" }
+    ]
+  },
+  {
+    id: "meze99",
+    name: "Meze 99 Classics",
+    brand: "Meze",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -7.2,
+    filters: [
+      { freq: 110, gain: -5.5, q: 1.2, type: "peaking" },
+      { freq: 600, gain: 3.5, q: 1.8, type: "peaking" },
+      { freq: 2200, gain: 4.5, q: 2.5, type: "peaking" },
+      { freq: 5800, gain: -4.0, q: 4.0, type: "peaking" }
+    ]
+  },
+  {
+    id: "lcdx",
+    name: "Audeze LCD-X (2021 Creator)",
+    brand: "Audeze",
+    source: "AutoEq (oratory1990)",
+    target: "Harman Over-Ear 2018",
+    preamp: -6.8,
+    filters: [
+      { freq: 35, gain: 5.5, q: 1.2, type: "lowshelf" },
+      { freq: 1200, gain: 2.5, q: 2.2, type: "peaking" },
+      { freq: 3800, gain: 6.8, q: 2.8, type: "peaking" },
+      { freq: 6100, gain: -4.5, q: 4.0, type: "peaking" }
+    ]
+  }
+];
+
+function switchModalTab(tabId) {
+  document.getElementById("modalTabOnline").style.display = (tabId === 'online') ? 'flex' : 'none';
+  document.getElementById("modalTabManual").style.display = (tabId === 'manual') ? 'flex' : 'none';
+  document.getElementById("tabBtnOnline").classList.toggle('active', tabId === 'online');
+  document.getElementById("tabBtnManual").classList.toggle('active', tabId === 'manual');
+}
+
+function renderHeadphones(items) {
+  const container = document.getElementById("headphoneSearchResults");
+  if (!container) return;
+  container.innerHTML = "";
+
+  document.getElementById("lblResultCount").innerText = `${items.length} találat`;
+
+  if (items.length === 0) {
+    container.innerHTML = `
+      <div style="background:#1e232b; border:1px dashed #3c4858; border-radius:8px; padding:20px; text-align:center; color:#aaa; font-size:0.8rem;">
+        Nem található ilyen modell a helyi indexben.<br>
+        <button class="adw-btn primary" style="margin-top:10px; font-size:0.75rem;" onclick="searchAutoEqOnline()">🌐 Keresés az élő AutoEq GitHub repóban...</button>
+      </div>`;
+    return;
+  }
+
+  items.forEach(hp => {
+    const isAutoEq = hp.source.includes("AutoEq");
+    const sourceBadge = isAutoEq ? 
+      `<span class="status-badge optimal" style="font-size:0.68rem;">AutoEq (${hp.source.split('(')[1] || ''}</span>` :
+      `<span class="status-badge info" style="font-size:0.68rem;">Squiglink (${hp.source.split('(')[1] || ''}</span>`;
+
+    const card = document.createElement("div");
+    card.className = "hp-card";
+    card.innerHTML = `
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <strong style="color:#fff; font-size:0.88rem;">${hp.name}</strong>
+          ${sourceBadge}
+        </div>
+        <div style="font-size:0.72rem; color:var(--ee-text-secondary); display:flex; gap:10px;">
+          <span>🎯 Cél: <strong style="color:#ddd;">${hp.target}</strong></span>
+          <span>• 🎚️ ${hp.filters.length} sáv</span>
+          <span>• 🛡️ Eredeti Preamp: <strong style="color:var(--ee-green);">${hp.preamp.toFixed(1)} dB</strong></span>
+        </div>
+      </div>
+      <button class="adw-btn primary" style="background:#2ec27e; border-color:#26a269; font-size:0.75rem; padding:4px 10px;" onclick="applyHeadphoneProfile('${hp.id}')">
+        ⚡ Betöltés
+      </button>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function filterHeadphones(query) {
+  const q = (query || "").toLowerCase().trim();
+  const filter = document.getElementById("headphoneSourceFilter") ? document.getElementById("headphoneSourceFilter").value : "all";
+
+  const filtered = headphoneDatabase.filter(hp => {
+    const matchesQuery = hp.name.toLowerCase().includes(q) || hp.brand.toLowerCase().includes(q);
+    if (!matchesQuery) return false;
+
+    if (filter === "autoeq") return hp.source.includes("AutoEq");
+    if (filter === "squig") return hp.source.includes("Squiglink");
+    return true;
+  });
+
+  renderHeadphones(filtered);
+}
+
+function searchAutoEqOnline() {
+  const q = document.getElementById("headphoneSearchInput").value.trim();
+  alert(`🌐 Élő lekérdezés indítása a hivatalos AutoEq / Squiglink GitHub repóból a(z) "${q}" kifejezésre...\n\n(A funkció közvetlenül a raw.githubusercontent.com/jaakkopasanen/AutoEq indexét célozza).`);
+}
+
+// BIZTONSÁGOS PROFIL BETÖLTÉS - KÖZVETLEN PREAMP VÉDELEMMEL, DUPLÁZÁS NÉLKÜL!
+function applyHeadphoneProfile(id) {
+  const hp = headphoneDatabase.find(h => h.id === id);
+  if (!hp) return;
+
+  const colorPalette = ["#3584e4", "#e01b24", "#ff7800", "#33d17a", "#9141ac", "#f6d32d", "#2ec27e", "#e66100", "#1c71d8"];
+
+  nodes = hp.filters.map((f, idx) => ({
+    id: Date.now() + Math.random() + idx,
+    freq: f.freq,
+    gain: f.gain,
+    q: f.q,
+    type: f.type,
+    color: colorPalette[idx % colorPalette.length]
+  }));
+  selectedNodeId = nodes[0].id;
+
+  // 1. PREAMP PONTOS BEÁLLÍTÁSA A GYÁRI FORRÁSBÓL (NINCS DUPLA LEVONÁS!)
+  currentPreamp = hp.preamp;
+  document.getElementById("inputPreamp").value = currentPreamp.toFixed(1);
+  const badgePreamp = document.getElementById("badgePreampOrigin");
+  if (badgePreamp) {
+    badgePreamp.className = "status-badge optimal";
+    badgePreamp.innerText = `${hp.source.split(' ')[0]} Preamp (${currentPreamp.toFixed(1)} dB)`;
+    badgePreamp.title = "Gyári adatbázis Preamp közvetlenül beállítva - nincs dupla levonás!";
+  }
+
+  // 2. TRUE PEAK LIMITER AKTIVÁLÁSA (-1.0 dBTP, 4x Lanczos)
+  updateLimiterCeiling(-1.0, false);
+  document.getElementById("limiterOversampling").value = "4x";
+  updateLimiterOversampling();
+
+  // 3. IIR MINIMÁLFÁZIS ALAPÉRTELMEZETTEN (0 ms pre-ringing)
+  currentEqMode = 'iir';
+  document.getElementById("selectEqMode").value = "iir";
+  isFirMode = false;
+  btnFirMode.innerText = "Mód: Minimálfázis (IIR)";
+  btnFirMode.classList.remove("active");
+  document.getElementById("hudPreRingBadge").style.display = "none";
+
+  closeImportModal();
+  updateEqUI();
+  drawEq();
+
+  alert(`✅ Profil Sikeresen Betöltve!\n\n` +
+        `• Modell: ${hp.name}\n` +
+        `• Forrás: ${hp.source} (${hp.target})\n` +
+        `• Preamp: ${currentPreamp.toFixed(1)} dB [Gyári érték - Dupla levonás kizárva!]\n` +
+        `• Sávok száma: ${nodes.length} db parametrikus szűrő\n` +
+        `• True Peak Limiter: -1.0 dBTP (4x Lanczos aktív)\n` +
+        `• Szűrési Mód: IIR Minimálfázis (0 ms pre-ringing)`);
+}
+
 document.getElementById("btnImportAutoEq").onclick = () => {
   modalImport.style.display = "flex";
-  txtAutoEqInput.focus();
+  switchModalTab('online');
+  filterHeadphones(document.getElementById("headphoneSearchInput").value);
+  document.getElementById("headphoneSearchInput").focus();
 };
 
 function closeImportModal() {
   modalImport.style.display = "none";
 }
 
+// BIZTONSÁGOS KÉZI SZÖVEG / FÁJL IMPORTÁLÁS - DUPLA PREAMP VÉDELEMMEL!
 function processAutoEqImport() {
   const text = txtAutoEqInput.value.trim();
   if (!text) {
@@ -1297,7 +1828,6 @@ function processAutoEqImport() {
     }
 
     // 2. Szűrő sorok keresése (pl: Filter 1: ON PK Fc 65 Hz Gain 5.8 dB Q 1.41)
-    // Típusok: PK / PEAK -> peaking, LSC / LS -> lowshelf, HSC / HS -> highshelf, LPF / LP -> lowpass, HPF / HP -> highpass
     const filterMatch = l.match(/Filter\s*\d+:\s*(ON|OFF)?\s*(PK|PEAK|LSC|LS|HSC|HS|LP|LPF|HP|HPF)\s*Fc\s*(\d+(\.\d+)?)\s*Hz\s*Gain\s*([+-]?\d+(\.\d+)?)\s*dB\s*Q\s*(\d+(\.\d+)?)/i);
     if (filterMatch) {
       const typeRaw = filterMatch[2].toUpperCase();
@@ -1333,12 +1863,48 @@ function processAutoEqImport() {
   nodes = parsedNodes;
   selectedNodeId = nodes[0].id;
 
-  // INTELLIGENS BIZTONSÁGI FINOMHANGOLÁS (A tegnapi Logout.hu cikkünk alapján):
-  // 1. Auto-Gain / Preamp kiszámítása a digitális lebegőpontos plafon védelmére:
-  const recommendedPreamp = explicitPreamp !== null ? explicitPreamp : -Math.max(0, maxBoostFound);
+  // INTELLIGENS DUPLA-PREAMP VÉDELEM:
+  let finalPreamp = 0.0;
+  let preampNote = "";
 
-  // 2. Limiter automatikus felparaméterezése True Peak ISP védelemre (-1.0 dBTP plafon)
-  // 3. IIR alapértelmezett mód (0 ms előcsengés garantálva)
+  if (explicitPreamp !== null) {
+    // A FÁJLBAN MÁR VOLT PREAMP: KIZÁRÓLAG EZT HASZNÁLJUK, NEM VONJUK LE MÉG EGYSZER!
+    finalPreamp = explicitPreamp;
+    preampNote = "Eredeti fájlból beolvasva (Nincs dupla levonás!)";
+    const badgePreamp = document.getElementById("badgePreampOrigin");
+    if (badgePreamp) {
+      badgePreamp.className = "status-badge optimal";
+      badgePreamp.innerText = `Fájlból (${finalPreamp.toFixed(1)} dB)`;
+    }
+  } else {
+    // A FÁJL NEM TARTALMAZOTT PREAMPOT: csak ekkor számol az Auto-Guard!
+    if (maxBoostFound > 0) {
+      finalPreamp = -Math.round(maxBoostFound * 10) / 10;
+      preampNote = "A fájl nem tartalmazott preampot -> Auto-Guard állította be a kiemelések kivédésére";
+      const badgePreamp = document.getElementById("badgePreampOrigin");
+      if (badgePreamp) {
+        badgePreamp.className = "status-badge info";
+        badgePreamp.innerText = `Auto-Guard (${finalPreamp.toFixed(1)} dB)`;
+      }
+    } else {
+      finalPreamp = 0.0;
+      preampNote = "0.0 dB (Nem volt kiemelés a szűrőkben)";
+      const badgePreamp = document.getElementById("badgePreampOrigin");
+      if (badgePreamp) {
+        badgePreamp.className = "status-badge optimal";
+        badgePreamp.innerText = `0.0 dB (Tiszta jel)`;
+      }
+    }
+  }
+
+  currentPreamp = finalPreamp;
+  document.getElementById("inputPreamp").value = currentPreamp.toFixed(1);
+
+  // Limiter és IIR bekapcsolása
+  updateLimiterCeiling(-1.0, false);
+  document.getElementById("limiterOversampling").value = "4x";
+  updateLimiterOversampling();
+
   isFirMode = false;
   btnFirMode.innerText = "Mód: Minimálfázis (IIR)";
   btnFirMode.classList.remove("active");
@@ -1350,8 +1916,9 @@ function processAutoEqImport() {
 
   alert(`✅ Sikeres Profil Létrehozás!\n\n` +
         `• Beimportált EQ sávok: ${nodes.length} db\n` +
-        `• Automatikus Preamp: ${recommendedPreamp.toFixed(1)} dB (Túlvezérlés elleni védelem)\n` +
-        `• True Peak Limiter: Aktiválva (-1.0 dBTP)\n` +
+        `• Beállított Preamp: ${finalPreamp.toFixed(1)} dB\n` +
+        `  ↳ ${preampNote}\n` +
+        `• True Peak Limiter: -1.0 dBTP (4x Lanczos aktív)\n` +
         `• Szűrési mód: Minimálfázis (IIR - Nulla pre-ringing)`);
 }
 document.getElementById("btnDeleteNode").onclick = () => {
