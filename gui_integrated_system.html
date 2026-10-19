@@ -495,41 +495,56 @@ let isFirMode = false;
 let simFrame = 0;
 
 // Felhasználói beállítások eseménykezelői
-document.getElementById("selectTimeSteps").onchange = (e) => {
-  TIME_SLICES = parseInt(e.target.value);
-  rebuildMesh();
-};
+const selTime = document.getElementById("selectTimeSteps");
+if (selTime) {
+  selTime.onchange = (e) => {
+    TIME_SLICES = parseInt(e.target.value);
+    rebuildMesh();
+  };
+}
 
-document.getElementById("selectGlowColor").onchange = (e) => {
-  glowColorType = e.target.value;
-  const rgb = getGlowRgb();
-  document.getElementById("hudGlowDot").style.background = `rgb(${rgb[0]*255}, ${rgb[1]*255}, ${rgb[2]*255})`;
-};
+const selGlow = document.getElementById("selectGlowColor");
+if (selGlow) {
+  selGlow.onchange = (e) => {
+    glowColorType = e.target.value;
+    const rgb = getGlowRgb();
+    const dot = document.getElementById("hudGlowDot");
+    if (dot) dot.style.background = `rgb(${rgb[0]*255}, ${rgb[1]*255}, ${rgb[2]*255})`;
+  };
+}
 
 const btnEqBypass = document.getElementById("btnEqBypass");
-btnEqBypass.onclick = () => {
-  isEqEnabled = !isEqEnabled;
-  btnEqBypass.innerText = isEqEnabled ? "EQ: BE" : "EQ: KI (Bypass)";
-  btnEqBypass.style.color = isEqEnabled ? "#00f0ff" : "var(--ee-text-secondary)";
-  document.getElementById("hudPreRingBadge").style.display = (isFirMode && isEqEnabled) ? "block" : "none";
-};
+if (btnEqBypass) {
+  btnEqBypass.onclick = () => {
+    isEqEnabled = !isEqEnabled;
+    btnEqBypass.innerText = isEqEnabled ? "EQ: BE" : "EQ: KI (Bypass)";
+    btnEqBypass.style.color = isEqEnabled ? "#00f0ff" : "var(--ee-text-secondary)";
+    const prBadge = document.getElementById("hudPreRingBadge");
+    if (prBadge) prBadge.style.display = (isFirMode && isEqEnabled) ? "block" : "none";
+  };
+}
 
 const btnFirMode = document.getElementById("btnFirMode");
-btnFirMode.onclick = () => {
-  isFirMode = !isFirMode;
-  btnFirMode.innerText = isFirMode ? "Mód: Lineáris Fázis (FIR)" : "Mód: Minimálfázis (IIR)";
-  btnFirMode.classList.toggle("active", isFirMode);
-  document.getElementById("hudPreRingBadge").style.display = (isFirMode && isEqEnabled) ? "block" : "none";
-};
+if (btnFirMode) {
+  btnFirMode.onclick = () => {
+    isFirMode = !isFirMode;
+    btnFirMode.innerText = isFirMode ? "Mód: Lineáris Fázis (FIR)" : "Mód: Minimálfázis (IIR)";
+    btnFirMode.classList.toggle("active", isFirMode);
+    const prBadge = document.getElementById("hudPreRingBadge");
+    if (prBadge) prBadge.style.display = (isFirMode && isEqEnabled) ? "block" : "none";
+  };
+}
 
 const btnCameraAngle = document.getElementById("btnCameraAngle");
-btnCameraAngle.onclick = () => {
-  currentViewIdx = (currentViewIdx + 1) % cameraViews.length;
-  const v = cameraViews[currentViewIdx];
-  btnCameraAngle.innerText = "Nézőpont: " + v.name;
-  mesh.rotation.y = 0; wireMesh.rotation.y = 0; grid.rotation.y = 0;
-  setCamera(v);
-};
+if (btnCameraAngle) {
+  btnCameraAngle.onclick = () => {
+    currentViewIdx = (currentViewIdx + 1) % cameraViews.length;
+    const v = cameraViews[currentViewIdx];
+    btnCameraAngle.innerText = "Nézőpont: " + v.name;
+    mesh.rotation.y = 0; wireMesh.rotation.y = 0; grid.rotation.y = 0;
+    setCamera(v);
+  };
+}
 
 // 3D Animációs Ciklus
 function animate3D() {
