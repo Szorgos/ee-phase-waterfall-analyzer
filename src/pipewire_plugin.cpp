@@ -1,13 +1,18 @@
 #include <iostream>
 #include <csignal>
 #include "pipewire_filter_node.hpp"
+#include "ws_bridge.hpp"
 
 using namespace ee_analyzer;
 
 static PipeWireFilterNode* g_node = nullptr;
+static WebSocketBridge* g_bridge = nullptr;
 
 void signalHandler(int sig) {
-    std::cout << "\n[Info] Leállítási szignál érkezett (" << sig << "), PipeWire csomópont bontása...\n";
+    std::cout << "\n[Info] Leállítási szignál érkezett (" << sig << "), PipeWire csomópont és híd bontása...\n";
+    if (g_bridge) {
+        g_bridge->stop();
+    }
     if (g_node) {
         g_node->stop();
     }
@@ -48,9 +53,14 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    WebSocketBridge bridge(8080);
+    g_bridge = &bridge;
+    bridge.start(&node.pipeline, &node.visualizerRingBuffer);
+
     std::cout << "[4] Sikeresen csatlakozva! A csomópont aktívan szűri a hangot.\n";
     std::cout << "Nyomj Ctrl+C-t a leállításhoz.\n";
 
     node.run();
+    bridge.stop();
     return 0;
 }
