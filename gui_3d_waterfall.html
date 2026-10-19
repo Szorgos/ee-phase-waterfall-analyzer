@@ -282,8 +282,8 @@ function generateNextSpectrumSlice() {
   if (testMode === 'kick') {
     const beatPhase = simFrame % 70;
     
-    // FIR Pre-ringing: fehér foltként izzik a dobütés előtt!
-    if (simPreRing && beatPhase >= 58 && beatPhase < 68) {
+    // FIR Pre-ringing: CSAK AKKOR létezhet, ha az EQ BE van kapcsolva ÉS a FIR szűrő aktív!
+    if (isEqEnabled && simPreRing && beatPhase >= 58 && beatPhase < 68) {
       const progress = (beatPhase - 58) / 10.0;
       const oscillation = Math.sin(progress * Math.PI * 3.0);
       const ringAmp = Math.abs(oscillation) * (0.2 + progress * 0.4);
@@ -306,9 +306,8 @@ function generateNextSpectrumSlice() {
       const noise = (Math.random() - 0.5) * 0.06;
       slice[f] = Math.max(0, (f < 25 ? bassWave : midWave) + noise);
 
-      // Ha be van kapcsolva a FIR szűrő, a zenei tranziensek (hirtelen ugrások) ELŐTT
-      // fehér foltok villannak fel az idővonalon, jelezve az előcsengést a sűrű zenében!
-      if (simPreRing) {
+      // FIR Pre-ringing fehér folt: CSAK AKKOR jelenik meg, ha az EQ BE van kapcsolva!
+      if (isEqEnabled && simPreRing) {
         const transPhase = simFrame % 45;
         if (transPhase >= 38 && transPhase < 44 && (f === 14 || f === 15 || f === 30 || f === 31)) {
           slice[f] = Math.min(1.0, slice[f] + 0.3);
