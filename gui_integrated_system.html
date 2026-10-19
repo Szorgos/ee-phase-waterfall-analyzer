@@ -254,6 +254,9 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
         <button class="adw-btn" onclick="closeImportModal()">Mégse</button>
         <button class="adw-btn primary" onclick="processAutoEqImport()" style="background:#2ec27e; border-color:#26a269;">Profil Létrehozása & Alkalmazás</button>
       </div>
+    </div>
+  </div>
+
     <!-- 1.5. TAB: CROSSFEED (FEJHALLGATÓ TÉRHATÁS SZIMULÁTOR) -->
     <div class="tab-pane" id="pane-crossfeed">
       <div class="module-card">
@@ -383,15 +386,17 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
 // =========================================================================
 // TAB VÁLTÓ LOGIKA
 // =========================================================================
-function switchTab(tabId) {
+function switchTab(tabId, el) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
 
-  event.currentTarget.classList.add('active');
-  document.getElementById('pane-' + tabId).classList.add('active');
+  const activeBtn = el || (window.event ? window.event.currentTarget : null);
+  if (activeBtn) activeBtn.classList.add('active');
+  const targetPane = document.getElementById('pane-' + tabId);
+  if (targetPane) targetPane.classList.add('active');
 
   if (tabId === 'eq') {
-    setTimeout(resizeEq, 20);
+    setTimeout(resizeEq, 25);
   }
 }
 
