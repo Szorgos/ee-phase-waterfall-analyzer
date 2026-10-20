@@ -53,6 +53,18 @@ Az **AetherAudio** ezt a filozófiát egyesíti a modern digitális jelfeldolgoz
 
 ---
 
+## 🪟 Telepítés és Indítás Windows alatt
+
+1. **Letöltés:**
+   * Töltsd le a legfrissebb **`AetherAudio-Windows-x64.zip`** csomagot a GitHub [Releases](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases) fülről, és csomagold ki bárhová.
+2. **Telepítés és Parancsikon (Egyszeri lépés):**
+   * Kattints duplán az **`install_windows.bat`** fájlra. Ez létrehoz egy kényelmes **AetherAudio DSP Suite** parancsikont az Asztalon.
+3. **Indítás:**
+   * Indítsd el a parancsikont az Asztalról, vagy kattints duplán a **`run_windows.bat`** fájlra!
+   * Az AetherAudio azonnal elindul a böngésződben (Chrome, Edge, Firefox).
+
+---
+
 ## 🚀 Telepítés Linuxon (Egyetlen Parancsból)
 
 A telepítő szkript automatikusan felismeri a disztribúciót, felrakja a szükséges csomagokat, lefordítja a C++ motort és regisztrálja az asztali alkalmazásikont.

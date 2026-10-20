@@ -1,0 +1,149 @@
+name: Build & Package Windows & Linux Releases
+
+on:
+  push:
+    branches: [ master, main ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # --------------------------------------------------------------------------
+  # 1. WINDOWS BUILD & PACKAGE
+  # --------------------------------------------------------------------------
+  build-windows:
+    name: Build & Package Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC & CMake
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure CMake (Windows)
+        run: |
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=OFF
+
+      - name: Build C++ Test & DSP Binaries
+        run: |
+          cmake --build build --config Release
+
+      - name: Assemble Windows Portable Package
+        shell: pwsh
+        run: |
+          $pkgDir = "AetherAudio-Windows-x64"
+          New-Item -ItemType Directory -Path $pkgDir -Force
+
+          # HTML és adatbázis fájlok másolása
+          Copy-Item "gui_integrated_system.html" "$pkgDir/"
+          Copy-Item "autoeq_index.js" "$pkgDir/"
+          Copy-Item "autoeq_index.json" "$pkgDir/"
+          Copy-Item "README.md" "$pkgDir/"
+          Copy-Item "LICENSE" "$pkgDir/"
+
+          # Windowsos indító és telepítő szkriptek
+          Copy-Item "run_windows.bat" "$pkgDir/"
+          Copy-Item "install_windows.bat" "$pkgDir/"
+
+          # Lefordított C++ binárisok (Release mappa MSVC esetén)
+          New-Item -ItemType Directory -Path "$pkgDir/bin" -Force
+          if (Test-Path "build/Release") {
+            Copy-Item "build/Release/*.exe" "$pkgDir/bin/"
+          } elseif (Test-Path "build/*.exe") {
+            Copy-Item "build/*.exe" "$pkgDir/bin/"
+          }
+
+          # ZIP archívum készítése
+          Compress-Archive -Path "$pkgDir/*" -DestinationPath "AetherAudio-Windows-x64.zip" -Force
+          Write-Host "AetherAudio-Windows-x64.zip sikeresen elkészült."
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AetherAudio-Windows-x64
+          path: AetherAudio-Windows-x64.zip
+
+  # --------------------------------------------------------------------------
+  # 2. LINUX BUILD & PACKAGE
+  # --------------------------------------------------------------------------
+  build-linux:
+    name: Build & Package Linux
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libpipewire-0.3-dev pkg-config
+
+      - name: Configure CMake (Linux)
+        run: |
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON
+
+      - name: Build C++ & PipeWire Module
+        run: |
+          cmake --build build -j$(nproc)
+
+      - name: Assemble Linux Portable Package
+        run: |
+          PKG_DIR="AetherAudio-Linux-x64"
+          mkdir -p "$PKG_DIR/bin"
+          
+          # GUI & adatok
+          cp gui_integrated_system.html "$PKG_DIR/"
+          cp autoeq_index.js "$PKG_DIR/"
+          cp autoeq_index.json "$PKG_DIR/"
+          cp README.md "$PKG_DIR/"
+          cp LICENSE "$PKG_DIR/"
+          cp install.sh "$PKG_DIR/"
+
+          # Binárisok
+          cp build/pipewire_plugin "$PKG_DIR/bin/" 2>/dev/null || true
+          cp build/test_* "$PKG_DIR/bin/" 2>/dev/null || true
+
+          # Készítsünk tar.gz-t
+          tar -czvf "AetherAudio-Linux-x64.tar.gz" -C "$PKG_DIR" .
+
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AetherAudio-Linux-x64
+          path: AetherAudio-Linux-x64.tar.gz
+
+  # --------------------------------------------------------------------------
+  # 3. AUTOMATIC GITHUB RELEASE (Verziócímke vagy Manual trigger esetén)
+  # --------------------------------------------------------------------------
+  release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AetherAudio-Windows-x64
+
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AetherAudio-Linux-x64
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            AetherAudio-Windows-x64.zip
+            AetherAudio-Linux-x64.tar.gz
+          draft: false
+          prerelease: false
+          generate_release_notes: true
