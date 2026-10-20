@@ -66,14 +66,23 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
 
 ## 🚀 Telepítés Linuxon (Egyetlen Parancsból)
 
-### Fedora: kész RPM csomag
+### Fedora: COPR-tárolóból (ajánlott, automatikus frissítéssel)
+
+```bash
+sudo dnf copr enable nlali/aqulify
+sudo dnf install aqulify
+```
+
+Fedora 43, 44, 45 és rawhide (x86_64 és aarch64). A tároló engedélyezése után az Aqulify a **Discoverben** és a **GNOME Szoftverben** is megjelenik, és a frissítései a rendszerfrissítésekkel együtt érkeznek. Projektoldal: [copr.fedorainfracloud.org/coprs/nlali/aqulify](https://copr.fedorainfracloud.org/coprs/nlali/aqulify/)
+
+### Fedora: kész RPM csomag (tároló nélkül)
 A [legújabb kiadásnál](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest) töltsd le az `aqulify-<verzió>.fc<NN>.x86_64.rpm` fájlt, majd:
 
 ```bash
 sudo dnf install ./aqulify-*.x86_64.rpm
 ```
 
-A csomag a rendszerbe telepít (menü, ikon, Discover / GNOME Szoftver adatlap), a motor bejelentkezéskor magától indul (`systemctl --user status aqulify`). Eltávolítás: `sudo dnf remove aqulify`. A COPR-tárolóból (automatikus frissítésekkel) hamarosan elérhető.
+A csomag a rendszerbe telepít (menü, ikon, Discover / GNOME Szoftver adatlap), a motor bejelentkezéskor magától indul (`systemctl --user status aqulify`). Eltávolítás: `sudo dnf remove aqulify`.
 
 ### Bármely disztribúció: telepítő szkript
 A telepítő szkript automatikusan felismeri a disztribúciót, felrakja a szükséges csomagokat, lefordítja a C++ motort és regisztrálja az asztali alkalmazásikont (a saját mappádba, root jog nélkül).
