@@ -196,7 +196,7 @@ Free code signing provided by [SignPath.io](https://about.signpath.io/), certifi
 
 - **Szerepek:** fejlesztő (committer), ellenőrző (reviewer) és jóváhagyó (approver): [Szorgos](https://github.com/Szorgos) (Sass Gergő).
 - **Mit írunk alá:** csak az ebben a tárolóban lévő forrásból, a GitHub Actions `Release` workflow-ján fordított fájlokat. Minden aláírási kérést a jóváhagyó egyenként hagy jóvá.
-- **Adatvédelem:** az AetherAudio nem küld adatot más gépre, csak ha a felhasználó kifejezetten kéri. Az AetherAudio fejhallgató-kereső letölti az AutoEq profilokat a GitHubról, a „Támogatás” gomb pedig a Revolut oldalát nyitja meg.
+- **Adatvédelem:** az AetherAudio nem gyűjt és nem küld személyes adatot. Hálózatot csak ezekre használ: a felület a GitHubról tölti le az AutoEq fejhallgató-listát és a kiválasztott profilt, a „Támogatás” gomb pedig a Revolut oldalát nyitja meg a böngészőben.
 
 Részletek a beállításhoz: [docs/code-signing.md](docs/code-signing.md).
 
