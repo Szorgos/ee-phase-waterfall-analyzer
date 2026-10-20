@@ -65,7 +65,7 @@ jobs:
             ${{ steps.name.outputs.file }}
             ${{ steps.name.outputs.file }}.sha256
 
-      - name: GitHub Release (kézi indítás verziószámmal: új címke + kiadás)
+      - name: "GitHub Release (kézi indításkor verziószámmal: új címke és kiadás)"
         if: github.event_name == 'workflow_dispatch' && inputs.version != ''
         uses: softprops/action-gh-release@v2
         with:
