@@ -1,4 +1,8 @@
-### Újdonságok (1.4.6)
+### Újdonságok (1.4.7)
+- **Frekvenciaskála:** köztes feliratok (30, 300, 3k, 15k) és sűrűbb osztás 10–20 kHz között (12k, 14k, 15k, 16k, 18k).
+- **Vízesés fejléc:** a jobb felső beállítások keskeny ablakban több sorba tördelnek, és nem takarják el a bal felső „Top-Strip 3D” feliratot; halvány sötét hátteret kaptak, így felülnézetben is olvashatók.
+
+### Az 1.4.6 újdonságai
 - **Frekvenciaskála a 3D vízesés alatt** (20 Hz – 20 kHz): a vízesés alsó éléhez igazodik, így a csúcsok frekvenciája leolvasható; a 3D és a felülnézetben látszik, oldalnézetben (ahol a frekvencia a mélységbe mutat) rejtve.
 
 ### Az 1.4.5 újdonságai

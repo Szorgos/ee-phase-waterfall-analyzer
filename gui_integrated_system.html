@@ -74,7 +74,11 @@
   .aether-toast { position: fixed; right: 18px; bottom: 18px; z-index: 9999; max-width: 420px; background: #1f2a1f; border: 1px solid #2ec27e; color: #e8ffe8; border-radius: 8px; padding: 10px 14px; font-size: 0.8rem; white-space: pre-line; box-shadow: 0 6px 24px rgba(0,0,0,0.45); opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; pointer-events: none; }
   .aether-toast.show { opacity: 1; transform: translateY(0); }
 
-  .strip-controls { position: absolute; top: 10px; right: 14px; display: flex; gap: 6px; align-items: center; z-index: 10; }
+  /* A bal felső felirat (Top-Strip 3D) helyét szabadon hagyja; keskeny ablakban több sorba tördel */
+  .strip-controls { position: absolute; top: 10px; right: 14px; left: 250px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; row-gap: 6px; align-items: center; z-index: 10; pointer-events: none; }
+  .strip-controls > * { pointer-events: auto; }
+  .strip-controls .ctrl-group { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; background: rgba(12,14,18,0.55); border-radius: 6px; padding: 1px 2px; }
+  .strip-controls select.mini-select { max-width: 290px; text-overflow: ellipsis; }
   .mini-btn { background: rgba(45, 45, 45, 0.85); backdrop-filter: blur(4px); border: 1px solid var(--ee-border); color: #fff; padding: 4px 9px; border-radius: 5px; font-size: 0.73rem; cursor: pointer; font-weight: 600; transition: all 0.15s; }
   .mini-btn:hover { background: #404040; border-color: var(--ee-accent-blue); }
   .mini-btn.active { background: rgba(53, 132, 228, 0.25); border-color: var(--ee-accent-blue); color: #00f0ff; }
@@ -252,33 +256,33 @@
 
     <div class="strip-controls">
       <!-- Időlépcsők állítása -->
-      <span class="ctrl-label">Idő:</span>
+      <span class="ctrl-group"><span class="ctrl-label">Idő:</span>
       <select id="selectTimeSteps" class="mini-select">
         <option value="60">60 lépcső (Gyors)</option>
         <option value="120" selected>120 lépcső (Normál)</option>
         <option value="180">180 lépcső (Mély)</option>
-      </select>
+      </select></span>
 
       <!-- EQ MÓDVÁLASZTÓ: topológia (IIR / FIR) és fáziskarakter (minimál / köztes / lineáris) -->
-      <span class="ctrl-label">EQ Mód:</span>
+      <span class="ctrl-group"><span class="ctrl-label">EQ Mód:</span>
       <select id="selectEqMode" class="mini-select">
         <option value="iir" selected>IIR (minimálfázisú biquad, nincs előcsengés)</option>
         <option value="fir_lin">Lineáris fázisú FIR (késleltet, előcsenghet)</option>
         <option value="fir_int">Köztes fázisú FIR (kisebb késleltetés és előcsengés)</option>
         <option value="fir_min">Minimálfázisú FIR (nincs előcsengés)</option>
-      </select>
+      </select></span>
 
       <!-- NYQUIST DECRAMPING TÚLMINTAVÉTELEZÉS -->
-      <span class="ctrl-label">Decramp:</span>
+      <span class="ctrl-group"><span class="ctrl-label">Decramp:</span>
       <select id="selectDecramp" class="mini-select" title="Nyquist Decramping túlmintavételezés a magasfrekvenciás torzulás ellen">
         <option value="none">Ki (Cramped)</option>
         <option value="2x">2x Túlmintavételezés</option>
         <option value="4x" selected>4x (jó kiindulópont)</option>
         <option value="8x">8x Extrém</option>
-      </select>
+      </select></span>
 
-      <button class="mini-btn active" id="btnEqBypass">EQ: BE</button>
-      <button class="mini-btn" id="btnCameraAngle">Nézőpont: 3D</button>
+      <span class="ctrl-group"><button class="mini-btn active" id="btnEqBypass">EQ: BE</button>
+      <button class="mini-btn" id="btnCameraAngle">Nézőpont: 3D</button></span>
     </div>
   </div>
 
@@ -1089,7 +1093,9 @@ const freqScaleCanvas = document.getElementById("freqScaleCanvas");
 const freqScaleCtx = freqScaleCanvas ? freqScaleCanvas.getContext("2d") : null;
 let freqScaleKey = "";
 const FS_MAJOR = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
-const FS_MINOR = [30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000, 7000, 8000, 9000];
+const FS_MID = [30, 300, 3000, 15000];   // köztes feliratok (halványabbak; ütközéskor elmaradnak)
+const FS_MINOR = [30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000, 7000, 8000, 9000,
+                  12000, 14000, 15000, 16000, 18000];
 const _fsVec = new THREE.Vector3();
 
 /** Egy frekvencia képernyő-x koordinátája ott, ahol a vízesés alja a skála felső szélénél van. */
@@ -1146,23 +1152,26 @@ function drawFreqScale(force) {
     const x = Math.round(freqScreenX(f, w, h, edgeY)) + 0.5;
     c.beginPath(); c.moveTo(x, baseY - 2); c.lineTo(x, baseY + 2); c.stroke();
   }
-  // Fő osztások feliratokkal (a fülgombok szürkéjénél kicsit világosabb árnyalat)
-  c.font = "600 10.5px sans-serif";
+  // Fő osztások feliratokkal (a fülgombok szürkéjénél kicsit világosabb árnyalat), köztes feliratok halványabban
   c.textAlign = "center";
   c.textBaseline = "top";
-  let lastRight = -1e9;
-  for (const f of FS_MAJOR) {
-    const xr = freqScreenX(f, w, h, edgeY);
+  const labels = FS_MAJOR.map(f => ({ f, major: true })).concat(FS_MID.map(f => ({ f, major: false })));
+  const placed = [];
+  const fmt = (f) => f >= 1000 ? (f / 1000) + "k" : String(f);
+  for (const L of labels) {                     // előbb a fő feliratok, utána a köztesek a szabad helyekre
+    const xr = freqScreenX(L.f, w, h, edgeY);
     const x = Math.round(xr) + 0.5;
-    c.strokeStyle = "rgba(205, 204, 201, 0.75)";
-    c.beginPath(); c.moveTo(x, baseY - 4); c.lineTo(x, baseY + 3); c.stroke();
-    const label = f >= 1000 ? (f / 1000) + "k" : String(f);
+    c.strokeStyle = L.major ? "rgba(205, 204, 201, 0.75)" : "rgba(205, 204, 201, 0.5)";
+    c.beginPath(); c.moveTo(x, baseY - (L.major ? 4 : 3)); c.lineTo(x, baseY + 3); c.stroke();
+    c.font = L.major ? "600 10.5px sans-serif" : "500 9.5px sans-serif";
+    const label = fmt(L.f);
     const tw = c.measureText(label).width;
-    let tx = Math.min(w - tw / 2 - 2, Math.max(tw / 2 + 2, xr));
-    if (tx - tw / 2 < lastRight + 6) continue;   // ütköző feliratot kihagyjuk (keskeny ablak)
-    c.fillStyle = "#b9b8b5";
-    c.fillText(label, tx, baseY + 5);
-    lastRight = tx + tw / 2;
+    const tx = Math.min(w - tw / 2 - 2, Math.max(tw / 2 + 2, xr));
+    const l = tx - tw / 2 - 5, r = tx + tw / 2 + 5;
+    if (placed.some(p => l < p.r && r > p.l)) continue;   // ütköző feliratot kihagyjuk (keskeny ablak)
+    c.fillStyle = L.major ? "#b9b8b5" : "rgba(185, 184, 181, 0.62)";
+    c.fillText(label, tx, baseY + (L.major ? 5 : 6));
+    placed.push({ l, r });
   }
   c.fillStyle = "rgba(185, 184, 181, 0.55)";
   c.textAlign = "left";
