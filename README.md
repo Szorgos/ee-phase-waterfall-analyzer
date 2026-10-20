@@ -66,7 +66,17 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
 
 ## 🚀 Telepítés Linuxon (Egyetlen Parancsból)
 
-A telepítő szkript automatikusan felismeri a disztribúciót, felrakja a szükséges csomagokat, lefordítja a C++ motort és regisztrálja az asztali alkalmazásikont.
+### Fedora: kész RPM csomag
+A [legújabb kiadásnál](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest) töltsd le az `aqulify-<verzió>.fc<NN>.x86_64.rpm` fájlt, majd:
+
+```bash
+sudo dnf install ./aqulify-*.x86_64.rpm
+```
+
+A csomag a rendszerbe telepít (menü, ikon, Discover / GNOME Szoftver adatlap), a motor bejelentkezéskor magától indul (`systemctl --user status aqulify`). Eltávolítás: `sudo dnf remove aqulify`. A COPR-tárolóból (automatikus frissítésekkel) hamarosan elérhető.
+
+### Bármely disztribúció: telepítő szkript
+A telepítő szkript automatikusan felismeri a disztribúciót, felrakja a szükséges csomagokat, lefordítja a C++ motort és regisztrálja az asztali alkalmazásikont (a saját mappádba, root jog nélkül).
 
 ### 1. Letöltés és Telepítés:
 A [legújabb kiadásnál](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest) töltsd le az `Aqulify-Linux-<verzió>.tar.gz` csomagot, majd:

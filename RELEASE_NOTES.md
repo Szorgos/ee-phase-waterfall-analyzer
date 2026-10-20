@@ -1,4 +1,8 @@
-### Újdonságok (1.5.0) – az AetherAudio új neve: Aqulify
+### Újdonságok (1.5.1)
+- **Fedora RPM csomag** minden kiadásnál (`aqulify-<verzió>.fc<NN>.x86_64.rpm`): `sudo dnf install ./aqulify-*.rpm`. Rendszerszintű telepítés menüvel, ikonnal, AppStream adatlappal (Discover / GNOME Szoftver) és automatikusan induló motorral.
+- Előkészítve a Fedora COPR-tároló (automatikus frissítés `dnf`-fel és a Discoverből).
+
+### Az 1.5.0 újdonságai – az AetherAudio új neve: Aqulify
 - **Névváltás:** a program mostantól **Aqulify** (az „AetherAudio” nevet más hangszoftverek is használják). A GitHub-tároló címe nem változik.
 - **Automatikus átállás frissítéskor:**
   - *Windows:* az `Aqulify-Setup.exe` eltávolítja a régi AetherAudio-t (futó program, Equalizer APO plugin sora – így nem fut két plugin egymás után –, parancsikonok, automatikus indítás), és átveszi a beállításokat, a konvolver IR-t és az EQ profilokat.
