@@ -176,5 +176,6 @@ cmake --build build -j$(nproc)
 ---
 
 ## 📄 Licenc
-* A projekt forráskódja nyílt forráskódú (GPLv3 / MIT kompatibilis).
+* Az AetherAudio a **GNU GPL-3.0** licenc alatt érhető el (lásd: [LICENSE](LICENSE)).
+* Beépített külső összetevők: [three.js](https://threejs.org/) (MIT), [webview/webview](https://github.com/webview/webview) (MIT), Microsoft WebView2 SDK fejlécek (BSD-3-Clause).
 * Az AutoEq index és profilok forrása az [AutoEq GitHub projekt](https://github.com/jaakkopasanen/AutoEq) (MIT Licenc).
