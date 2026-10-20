@@ -22,8 +22,30 @@
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Cantarell", "Segoe UI", Roboto, sans-serif; }
-  body { background: var(--ee-window-bg); color: var(--ee-text-primary); padding: 12px; user-select: none; }
-  .ee-window { max-width: 1240px; margin: 0 auto; background: var(--ee-window-bg); border: 1px solid var(--ee-border); border-radius: 12px; overflow: hidden; box-shadow: 0 12px 36px rgba(0,0,0,0.4); display: flex; flex-direction: column; }
+  html, body {
+    width: 100%;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    background: var(--ee-window-bg);
+    color: var(--ee-text-primary);
+    user-select: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    color-scheme: dark;
+  }
+  .ee-window {
+    width: 100%;
+    min-height: 100vh;
+    max-width: none;
+    margin: 0;
+    background: var(--ee-window-bg);
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+  }
 
   header { background: var(--ee-card-bg); border-bottom: 1px solid var(--ee-border); padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; }
   .title-group { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 0.95rem; }
@@ -32,7 +54,7 @@
   /* ======================================================= */
   /* FELSŐ 3D VÍZESÉS SÁV                                   */
   /* ======================================================= */
-  .top-spectrum-strip { position: relative; width: 100%; height: 230px; background: #0c0e12; border-bottom: 1px solid var(--ee-border); overflow: hidden; }
+  .top-spectrum-strip { position: relative; width: 100%; height: clamp(230px, 32vh, 420px); background: #0c0e12; border-bottom: 1px solid var(--ee-border); overflow: hidden; }
   canvas#waterfallCanvas { width: 100%; height: 100%; display: block; }
 
   .strip-overlay { position: absolute; top: 10px; left: 14px; display: flex; gap: 8px; pointer-events: none; }
@@ -45,12 +67,44 @@
   .mini-btn.active { background: rgba(53, 132, 228, 0.25); border-color: var(--ee-accent-blue); color: #00f0ff; }
 
   .ctrl-label { font-size: 0.72rem; color: var(--ee-text-secondary); margin-left: 4px; }
-  .mini-select { background: rgba(35, 35, 35, 0.9); border: 1px solid var(--ee-border); color: #fff; padding: 3px 6px; border-radius: 4px; font-size: 0.72rem; outline: none; }
+  
+  /* SÖTÉT SELECT ÉS DROPDOWN STÍLUSOK (WebKitGTK Natív Fehér Hátterének Megszüntetése) */
+  select, input, textarea, button {
+    color-scheme: dark !important;
+  }
+  select.mini-select, select.ee-select {
+    background-color: #242832 !important;
+    color: #ffffff !important;
+    border: 1px solid #434c5e !important;
+    border-radius: 5px !important;
+    padding: 3px 22px 3px 8px !important;
+    font-size: 0.73rem !important;
+    font-weight: 600 !important;
+    outline: none !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2300f0ff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 6px center !important;
+    cursor: pointer !important;
+  }
+  select.mini-select:hover, select.ee-select:hover {
+    border-color: var(--ee-accent-blue) !important;
+  }
+  select.mini-select:focus, select.ee-select:focus {
+    border-color: #00f0ff !important;
+    box-shadow: 0 0 0 2px rgba(0, 240, 255, 0.25) !important;
+  }
+  select.mini-select option, select.ee-select option {
+    background-color: #1a1e26 !important;
+    color: #ffffff !important;
+    padding: 4px 8px !important;
+  }
 
   /* ======================================================= */
   /* ALSÓ FŐ PANEL: TABOK ÉS MODULOK                        */
   /* ======================================================= */
-  .main-content { padding: 14px 18px; background: var(--ee-window-bg); display: flex; flex-direction: column; gap: 12px; }
+  .main-content { flex: 1; padding: 14px 20px 24px 20px; background: var(--ee-window-bg); display: flex; flex-direction: column; gap: 12px; }
   .plugin-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--ee-border); padding-bottom: 8px; font-size: 0.85rem; }
   .tab-btn { padding: 6px 14px; border-radius: 6px; cursor: pointer; color: var(--ee-text-secondary); font-weight: 600; background: none; border: 1px solid transparent; transition: all 0.15s; display: inline-flex; align-items: center; }
   .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.04); }
@@ -64,15 +118,30 @@
 
   /* 2D EQ GRAFIKON */
   .eq-canvas-wrapper { position: relative; background: var(--ee-view-bg); border: 1px solid var(--ee-border); border-radius: 8px; overflow: hidden; }
-  canvas#eqCanvas { display: block; width: 100%; height: 260px; cursor: crosshair; }
+  canvas#eqCanvas { display: block; width: 100%; height: clamp(260px, 34vh, 440px); cursor: crosshair; }
 
   .eq-bottom-bar { background: var(--ee-card-bg); border: 1px solid var(--ee-border); border-radius: 8px; padding: 7px 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
   .node-readout { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; flex-wrap: wrap; }
   .actions-group { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .stat-group { display: flex; gap: 4px; align-items: center; }
   .stat-group span.lbl { color: var(--ee-text-secondary); font-size: 0.72rem; }
-  .ee-input { background: #1e1e1e; border: 1px solid var(--ee-border); color: #fff; padding: 2px 5px; border-radius: 4px; font-size: 0.8rem; font-family: monospace; font-weight: 600; text-align: left; outline: none; }
-  .ee-select { background: #1e1e1e; border: 1px solid var(--ee-border); color: #fff; padding: 2px 5px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; outline: none; }
+  .ee-input, input[type="number"], input[type="text"] {
+    background-color: #1a1e26 !important;
+    border: 1px solid #434c5e !important;
+    color: #ffffff !important;
+    padding: 3px 6px !important;
+    border-radius: 4px !important;
+    font-size: 0.8rem !important;
+    font-family: monospace !important;
+    font-weight: 600 !important;
+    text-align: left !important;
+    outline: none !important;
+    color-scheme: dark !important;
+  }
+  .ee-input:focus, input[type="number"]:focus, input[type="text"]:focus {
+    border-color: #00f0ff !important;
+    box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.4) !important;
+  }
 
   .adw-btn { background: #383838; border: 1px solid var(--ee-border); color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: 500; white-space: nowrap; }
   .adw-btn:hover { background: #444; }
@@ -1077,12 +1146,24 @@ let showPhase = true;
 const eqCanvas = document.getElementById("eqCanvas");
 const eqCtx = eqCanvas.getContext("2d");
 
-function resizeEq() {
-  eqCanvas.width = eqCanvas.clientWidth * window.devicePixelRatio;
-  eqCanvas.height = eqCanvas.clientHeight * window.devicePixelRatio;
-  drawEq();
+function resizeAllViews() {
+  if (typeof wfCanvas !== "undefined" && wfCanvas && typeof renderer !== "undefined" && renderer && typeof camera !== "undefined" && camera) {
+    const w = wfCanvas.clientWidth;
+    const h = wfCanvas.clientHeight;
+    if (w > 0 && h > 0) {
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h, false);
+    }
+  }
+  if (typeof eqCanvas !== "undefined" && eqCanvas) {
+    eqCanvas.width = eqCanvas.clientWidth * window.devicePixelRatio;
+    eqCanvas.height = eqCanvas.clientHeight * window.devicePixelRatio;
+    if (typeof drawEq === "function") drawEq();
+  }
 }
-window.addEventListener("resize", resizeEq);
+function resizeEq() { resizeAllViews(); }
+window.addEventListener("resize", resizeAllViews);
 
 // Decramp: a motor a biquadokat N-szeres mintavételen futtatja, így a görbe is ott számolandó
 function evalBiquad(flt, f, sr = 48000 * (parseInt(currentDecramp) || 1)) {

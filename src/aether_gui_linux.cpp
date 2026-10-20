@@ -68,6 +68,10 @@ int main() {
         w.set_size(1480, 940, WEBVIEW_HINT_NONE);
         w.set_size(1000, 640, WEBVIEW_HINT_MIN);
         if (auto win = w.window(); win.ok()) {
+            GtkSettings* settings = gtk_settings_get_default();
+            if (settings) {
+                g_object_set(settings, "gtk-application-prefer-dark-theme", TRUE, nullptr);
+            }
             gtk_window_set_icon_name(GTK_WINDOW(win.value()), "aetheraudio");
             std::string iconFile = folder + "/../../icons/hicolor/256x256/apps/aetheraudio.png";
             if (fileExists(iconFile)) {
