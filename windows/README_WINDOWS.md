@@ -48,17 +48,13 @@ A felület saját ablakban fut (`AqulifyGui.exe`, Microsoft WebView2 – a Windo
 
 | Modul | Megvalósítás |
 |---|---|
-| **EQ – IIR** | Biquad lánc (RBJ), minimálfázisú, elhanyagolható többletkésleltetés |
-| **EQ – lineáris fázisú FIR** | A teljes EQ görbéből tervezett szimmetrikus FIR (8192 tap 48 kHz-en). Késleltetés ~85 ms; a videó hangja ennyit csúszhat |
-| **EQ – köztes fázisú FIR** | Részben minimálfázisú FIR, ~8,5 ms késleltetés, mérsékelt előcsengés |
-| **EQ – minimálfázisú FIR** | Minimálfázisú FIR (cepstrum módszer), elhanyagolható késleltetés, nincs előcsengés |
-| **EQ Decramp** | Ki / 2x / 4x / 8x: az IIR biquadok N-szeres mintavételen futnak (Kaiser-sinc fel/lemintavételezés, ~1,3 ms), így a Nyquist közeli menet nem „nyomódik össze”; FIR módban a cél-görbe kramp-mentes, többletköltség nélkül |
-| **Crossfeed** | Bauer / Meier / Stúdió preset, vagy egyedi vágási frekvencia, szint és ITD (fej-késleltetés, tört mintás késleltetővonal) |
-| **Convolver** | Egyenletesen partícionált FFT konvolver, 0 többletkésleltetéssel (az első 256 minta közvetlen konvolúcióval). WAV/IRS betöltés (16/24/32 bit, float), automatikus újramintavételezés a lejátszás mintavételére, opcionális minimálfázisúvá alakítás, csúcsra normalizálás + trim gain. Max. 262 144 minta |
-| **Bass Enhancer** | Pszichoakusztikai mélyhang: 2./3. felharmonikus generálás burkoló-normalizált Csebisev-polinomokkal, sávszűrés, 4. rendű mélyvágás |
-| **Limiter** | True peak: 1x / 2x / 4x / 8x túlmintavételezett (Lanczos) csúcsdetektor, 0,5–10 ms lookahead (csúcstartás + simítás: a beavatkozás a csúcs előtt kész), exponenciális felengedés, biztonsági vágás a plafonnál. Késleltetés = lookahead + 3 minta |
+| **EQ** | LSP Parametric Equalizer (lsp-dsp-units): IIR, FIR, FFT és SPM mód; sávonként 12 típus, RLC / BWC / LRX / APO szűrőmód, x1–x4 meredekség; decramp (Off, x2–x8, 44,1 kHz-hez viszonyítva) |
+| **Crossfeed** | libbs2b: Bauer bs2b (700 Hz / 4,5 dB), Jan Meier (650 Hz / 9,5 dB), közeltéri stúdió (600 Hz / 3,5 dB) vagy egyedi vágási frekvencia és szint |
+| **Convolver** | zita-convolver (FFTW3); WAV/IRS betöltés (16/24/32 bit, float), újramintavételezés SpeexDSP-vel, IR szélesség, autogain, dry / wet. Max. 262 144 minta |
+| **Bass Enhancer** | Calf Bass Enhancer: amount, harmonics, scope, floor, blend, listen |
+| **Limiter** | LSP Limiter: 12 mód, túlmintavételezés (True Peak is), dither, lookahead / attack / release, stereo link, gain boost, ALR |
 
-A FIR tervezés és az impulzusválasz-előkészítés külön háttérszálon fut. A kész szűrőt a hangszál zármentesen veszi át, egy blokknyi keresztúsztatással, így váltáskor nincs kattanás.
+Az impulzusválasz előkészítése és a konvolver indítása külön háttérszálon fut. A kész konvolvert a hangszál zármentesen veszi át, egy blokknyi keresztúsztatással, így váltáskor nincs kattanás.
 
 ## Hibaelhárítás
 
@@ -72,14 +68,16 @@ A FIR tervezés és az impulzusválasz-előkészítés külön háttérszálon f
 
 **Linuxról keresztfordítva** ([llvm-mingw](https://github.com/mstorsjo/llvm-mingw)):
 ```bash
+# FFTW 3.3.10 forrás (https://www.fftw.org/fftw-3.3.10.tar.gz) kicsomagolva, pl. ../fftw-3.3.10
 cmake -B build-win -S . -G Ninja -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_TOOLCHAIN_FILE=windows/toolchain-llvm-mingw.cmake -DLLVM_MINGW_ROOT=/opt/llvm-mingw
+      -DCMAKE_TOOLCHAIN_FILE=windows/toolchain-llvm-mingw.cmake -DLLVM_MINGW_ROOT=/opt/llvm-mingw \
+      -DAQULIFY_FFTW_SOURCE_DIR=../fftw-3.3.10
 cmake --build build-win      # -> Aqulify-Setup.exe, Aqulify.exe, Aqulify.dll, tesztek
 ```
 
 **Windowson** (Visual Studio 2022 + CMake):
 ```powershell
-cmake -B build -S . -A x64
+cmake -B build -S . -A x64 -DAQULIFY_FFTW_SOURCE_DIR=..\fftw-3.3.10
 cmake --build build --config Release
 ```
 
@@ -88,5 +86,5 @@ Kipróbálás EQ APO nélkül: az `eqapo_host_sim.exe <Aqulify.dll>` úgy tölti
 ## Ismert korlátok
 
 - Csak sztereó feldolgozás: többcsatornás eszköznél az EQ APO a plugint csatornapáronként példányosítja, az analizátor az első párt (L/R) mutatja.
-- A késleltetéssel járó beállítások (lineáris fázisú FIR EQ, limiter lookahead, decramp) összeadódnak; videónézéshez az IIR EQ és rövid lookahead ajánlott.
+- A késleltetéssel járó beállítások (FIR / FFT / SPM EQ, limiter lookahead, decramp) összeadódnak; videónézéshez az IIR EQ és rövid lookahead ajánlott.
 - Aláíratlan kiadásnál az Intelligens alkalmazásvezérlés letilthatja a programot (lásd fent).

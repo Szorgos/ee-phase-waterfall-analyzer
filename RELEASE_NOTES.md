@@ -1,4 +1,12 @@
-### Újdonságok (1.5.3)
+### Újdonságok (1.6.0) – az EasyEffects DSP könyvtárai
+- **Equalizer:** LSP Parametric Equalizer (mint az EasyEffects-ben): IIR, FIR, FFT és SPM mód; sávonként 12 típus, RLC / BWC / LRX / APO szűrőmód és x1–x4 meredekség; decramp Off, x2, x3, x4, x6, x8 (44,1 kHz-hez viszonyítva). A görbét a motor számolja ugyanazokkal a szűrőkkel. Az AutoEq / APO import APO (DR) sávokat hoz létre; a korábbi profilok sávjai is APO (DR) módban töltődnek be, így a hangolásuk megmarad.
+- **Limiter:** LSP Limiter: 12 mód, túlmintavételezés (True Peak is), dither, lookahead, attack, release, stereo link, gain boost, ALR, bemeneti és kimeneti erősítés.
+- **Bass Enhancer:** Calf Bass Enhancer (amount, harmonics, scope, floor, blend, listen).
+- **Crossfeed:** libbs2b: Bauer bs2b (700 Hz / 4,5 dB), Jan Meier (650 Hz / 9,5 dB), közeltéri stúdió (600 Hz / 3,5 dB).
+- **Convolver:** zita-convolver (FFTW3), IR újramintavételezés SpeexDSP-vel, IR szélesség, autogain, dry / wet.
+- A korábbi beállítások (params.bin) frissítéskor átkerülnek az új paraméterekre.
+
+### Az 1.5.3 újdonságai
 - **Javítva: crossfeed szint.** A középre kevert mély hangok eddig +3 dB-t kaptak (túlvezérlés, limiter-munka), a középhangok 1 kHz körül ~5,5 dB-t vesztettek. Most Bauer bs2b szerinti szűrés, mono jelre ~0 dB.
 - **Frekvenciaskála:** jelek mutatják, milyen tartományt fog át a zene (alsó és felső határ, néhány másodpercig megmaradnak).
 

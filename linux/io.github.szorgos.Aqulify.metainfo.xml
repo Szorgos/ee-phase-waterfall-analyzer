@@ -17,11 +17,11 @@
       processing does to the signal.
     </p>
     <ul>
-      <li>Parametric EQ with up to 32 bands: IIR, or minimum, intermediate and linear phase FIR</li>
+      <li>Parametric EQ with up to 32 bands (LSP): IIR, FIR, FFT and SPM modes</li>
       <li>One-click import of headphone correction profiles from the open AutoEq database</li>
       <li>EQ profiles that are saved automatically and can be selected after a restart</li>
-      <li>Crossfeed, partitioned convolver for room or headphone impulse responses, bass enhancer</li>
-      <li>Oversampled true peak limiter with automatic preamp against clipping</li>
+      <li>Crossfeed (libbs2b), convolver for room or headphone impulse responses (zita-convolver), bass enhancer (Calf)</li>
+      <li>Limiter (LSP) with true peak oversampling and automatic preamp against clipping</li>
     </ul>
     <p xml:lang="hu">
       Az Aqulify egy „Aqulify” nevű virtuális hangkimenetet hoz létre a PipeWire-ben. Ami ezen szól, egy

@@ -6,14 +6,24 @@
  * Kizárólag POD típusokat és címfüggetlen (lock-free) atomikat tartalmaz, ezért
  * folyamatok közötti közös memóriában (Windows: audiodg.exe <-> Aqulify.exe)
  * is biztonságosan használható.
+ *
+ * A modulok paraméterei az EasyEffects beállításaival egyeznek (ugyanaz a jelentés, mértékegység,
+ * tartomány és alapérték), mert ugyanazokat a DSP könyvtárakat hajtják meg:
+ *   EQ: LSP Parametric Equalizer x32, Limiter: LSP Limiter Stereo, Bass Enhancer: Calf,
+ *   Crossfeed: libbs2b, Convolver: zita-convolver.
  */
+#include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
 namespace ee_analyzer {
 
 constexpr uint32_t kMaxEqBands = 32;
+
+/** A params.bin fájl és a közös memória paraméter-formátumának verziója. */
+constexpr uint32_t kParamLayoutVersion = 4;
 
 enum ParamFlags : uint32_t {
     kFlagEq        = 1u << 0,
@@ -24,56 +34,85 @@ enum ParamFlags : uint32_t {
     kFlagInitialized = 1u << 31, // a GUI legalább egyszer beállította
 };
 
+/** EasyEffects / LSP sávtípus ("bandTypeLabels") */
 enum class EqBandType : int32_t {
-    Peaking = 0,
-    LowShelf = 1,
-    HighShelf = 2,
-    LowPass = 3,
-    HighPass = 4,
+    Off = 0, Bell = 1, HiPass = 2, HiShelf = 3, LoPass = 4, LoShelf = 5, Notch = 6,
+    Resonance = 7, AllPass = 8, BandPass = 9, LadderPass = 10, LadderRej = 11,
 };
+constexpr int32_t kEqBandTypeCount = 12;
+
+/** EasyEffects / LSP sáv szűrőmód ("bandModeLabels") */
+enum class EqFilterMode : int32_t {
+    RlcBt = 0, RlcMt = 1, BwcBt = 2, BwcMt = 3, LrxBt = 4, LrxMt = 5, ApoDr = 6,
+};
+constexpr int32_t kEqFilterModeCount = 7;
+
+/** EasyEffects / LSP EQ üzemmód ("modeLabels": IIR, FIR, FFT, SPM) */
+enum class EqMode : int32_t { Iir = 0, Fir = 1, Fft = 2, Spm = 3 };
 
 struct EqBandPod {
-    int32_t type = 0;
-    float freq = 1000.0f;
-    float gainDb = 0.0f;
-    float q = 0.7071f;
-};
-
-/** EQ megvalósítási mód (a GUI "EQ Mód" választója). */
-enum class EqMode : int32_t {
-    Iir = 0,          // minimálfázisú IIR biquad lánc (0 késleltetés)
-    FirLinear = 1,    // lineáris fázisú FIR (szimmetrikus, késleltetés = taps/2)
-    FirSplit = 2,     // köztes (split) fázis, ~5% előcsengés
-    FirMinimum = 3,   // minimálfázisú FIR (0 késleltetés)
+    int32_t type = 1;        // EqBandType
+    int32_t mode = 0;        // EqFilterMode
+    int32_t slope = 0;       // 0..3 = x1..x4
+    float freq = 1000.0f;    // Hz (10 .. 24000)
+    float gainDb = 0.0f;     // dB (-36 .. 36)
+    float q = 4.36f;         // 0 .. 100
+    float width = 4.0f;      // oktáv (0 .. 12): sávszélesség a sáváteresztő/létra típusoknál
+    int32_t reserved = 0;
 };
 
 /** A teljes DSP beállítás egyetlen másolható pillanatképe. */
 struct ParamData {
-    float preampDb = 0.0f;
+    float preampDb = 0.0f;       // az EQ bemeneti erősítése (EasyEffects: Equalizer "inputGain")
     uint32_t flags = 0;          // ParamFlags
-    int32_t crossfeedPreset = 0; // 0 = Bauer, 1 = Meier, 2 = Studio
+    int32_t crossfeedPreset = 0; // csak a felületnek: 0 = Bauer bs2b, 1 = Jan Meier, 2 = közeltéri stúdió, 3 = egyedi
     uint32_t numBands = 0;
     EqBandPod bands[kMaxEqBands];
 
-    // --- v2 ---
-    int32_t eqMode = 0;               // EqMode
-    float crossfeedCutoffHz = 700.0f; // egyedi crossfeed (a preset gombok ezt állítják)
-    float crossfeedFeedDb = 4.5f;
-    float limiterCeilingDb = -1.0f;
-    float limiterReleaseMs = 50.0f;
-    float bassCrossoverHz = 80.0f;
-    float bassHarmonicsDb = 3.0f;
-    int32_t bassType = 0;             // 0 = 2.+3., 1 = csak 2., 2 = csak 3. felharmonikus
-    float bassSubcutHz = 30.0f;
-    float convGainDb = -3.0f;         // konvolver szint-illesztés (trim)
-    int32_t convPhaseMode = 0;        // 0 = minimálfázisúvá alakítás, 1 = eredeti fázis
-    int32_t convMaxTaps = 65536;      // az IR maximális hossza mintában
+    // --- Equalizer (LSP para_equalizer) ---
+    int32_t eqMode = 0;          // EqMode
+    int32_t eqDecramp = 3;       // 0 = Off, 1 = x2, 2 = x3, 3 = x4, 4 = x6, 5 = x8 (44,1 kHz-hez viszonyítva)
 
-    // --- v3 ---
-    int32_t limiterOversample = 4;    // true peak detektor: 1, 2, 4, 8
-    float limiterLookaheadMs = 5.0f;  // 0.5 .. 10 ms
-    float crossfeedDelayMs = 0.29f;   // ITD: az áthalló jel késleltetése
-    int32_t eqDecramp = 4;            // EQ "decramping": 1 = ki, 2 / 4 / 8 = túlmintavételezés
+    // --- Crossfeed (libbs2b) ---
+    float crossfeedFcut = 700.0f;  // Hz (300 .. 2000)
+    float crossfeedFeedDb = 4.5f;  // dB (1 .. 15)
+
+    // --- Limiter (LSP limiter_stereo) ---
+    int32_t limMode = 0;           // 0..11: Herm/Exp/Line × Thin/Wide/Tail/Duck
+    int32_t limOversampling = 22;  // 0..22: None, Half x2/16 bit ... Full x8/24 bit, True Peak/16 bit, True Peak/24 bit
+    int32_t limDither = 0;         // 0..8: None, 7, 8, 11, 12, 15, 16, 23, 24 bit
+    float limThresholdDb = -1.0f;  // -48 .. 0
+    float limLookaheadMs = 5.0f;   // 0,1 .. 20
+    float limAttackMs = 5.0f;      // 0,25 .. 20
+    float limReleaseMs = 5.0f;     // 0,25 .. 20
+    int32_t limGainBoost = 0;
+    float limStereoLink = 100.0f;  // %
+    int32_t limAlr = 0;
+    float limAlrAttackMs = 5.0f;   // 0,1 .. 200
+    float limAlrReleaseMs = 50.0f; // 10 .. 1000
+    float limAlrKneeDb = 0.0f;     // -12 .. 12
+    float limAlrKneeSmoothDb = -5.0f; // -48 .. 0
+    float limInputGainDb = 0.0f;
+    float limOutputGainDb = 0.0f;
+
+    // --- Bass Enhancer (Calf) ---
+    float bassAmountDb = 0.0f;     // -100 .. 36 (lineáris "amount" port dB-ben)
+    float bassHarmonics = 8.5f;    // 0,1 .. 10 ("drive")
+    float bassScopeHz = 100.0f;    // 10 .. 250 ("freq")
+    float bassFloorHz = 20.0f;     // 10 .. 120
+    float bassBlend = 0.0f;        // -10 .. 10
+    int32_t bassFloorActive = 0;
+    int32_t bassListen = 0;
+    float bassInputGainDb = 0.0f;
+    float bassOutputGainDb = 0.0f;
+
+    // --- Convolver (zita-convolver) ---
+    int32_t convIrWidth = 100;     // % (0 .. 200)
+    int32_t convAutogain = 1;
+    float convDryDb = -100.0f;     // -100 (= ki) .. 20
+    float convWetDb = 0.0f;        // -100 (= ki) .. 20
+    float convInputGainDb = 0.0f;
+    float convOutputGainDb = 0.0f;
 
     bool has(uint32_t f) const { return (flags & f) != 0; }
     void set(uint32_t f, bool on) { flags = on ? (flags | f) : (flags & ~f); }
@@ -113,24 +152,123 @@ struct ParamBlock {
     uint32_t currentSeq() const { return seq.load(std::memory_order_acquire); }
 };
 
-/** GUI típusnév ("peaking", "lowshelf" ...) -> EqBandType */
-inline int32_t eqTypeFromName(const char* name) {
-    if (!name) return 0;
-    if (std::strcmp(name, "lowshelf") == 0) return static_cast<int32_t>(EqBandType::LowShelf);
-    if (std::strcmp(name, "highshelf") == 0) return static_cast<int32_t>(EqBandType::HighShelf);
-    if (std::strcmp(name, "lowpass") == 0) return static_cast<int32_t>(EqBandType::LowPass);
-    if (std::strcmp(name, "highpass") == 0) return static_cast<int32_t>(EqBandType::HighPass);
-    return static_cast<int32_t>(EqBandType::Peaking);
+/** Átlátszó (bit-pontosan érintetlen) alapállapot: minden modul kikapcsolva. */
+inline ParamData transparentParams() {
+    ParamData d{};
+    d.preampDb = 0.0f;
+    d.flags = 0;
+    d.numBands = 0;
+    return d;
 }
 
-inline const char* eqTypeName(int32_t t) {
-    switch (static_cast<EqBandType>(t)) {
-        case EqBandType::LowShelf: return "lowshelf";
-        case EqBandType::HighShelf: return "highshelf";
-        case EqBandType::LowPass: return "lowpass";
-        case EqBandType::HighPass: return "highpass";
-        default: return "peaking";
+/** Értékhatárok (EasyEffects beállítási tartományai); a hídból és a fájlból érkező adatra is. */
+inline void sanitizeParams(ParamData& d) {
+    auto cl = [](float& v, float lo, float hi, float def) { v = (v == v) ? std::clamp(v, lo, hi) : def; };
+    auto ci = [](int32_t& v, int32_t lo, int32_t hi) { v = std::clamp(v, lo, hi); };
+    cl(d.preampDb, -36.0f, 36.0f, 0.0f);
+    if (d.numBands > kMaxEqBands) d.numBands = kMaxEqBands;
+    for (uint32_t i = 0; i < kMaxEqBands; ++i) {
+        EqBandPod& b = d.bands[i];
+        ci(b.type, 0, kEqBandTypeCount - 1);
+        ci(b.mode, 0, kEqFilterModeCount - 1);
+        ci(b.slope, 0, 3);
+        cl(b.freq, 10.0f, 24000.0f, 1000.0f);
+        cl(b.gainDb, -36.0f, 36.0f, 0.0f);
+        cl(b.q, 0.0f, 100.0f, 4.36f);
+        cl(b.width, 0.0f, 12.0f, 4.0f);
     }
+    ci(d.eqMode, 0, 3);
+    ci(d.eqDecramp, 0, 5);
+    ci(d.crossfeedPreset, 0, 3);
+    cl(d.crossfeedFcut, 300.0f, 2000.0f, 700.0f);
+    cl(d.crossfeedFeedDb, 1.0f, 15.0f, 4.5f);
+    ci(d.limMode, 0, 11);
+    ci(d.limOversampling, 0, 22);
+    ci(d.limDither, 0, 8);
+    cl(d.limThresholdDb, -48.0f, 0.0f, -1.0f);
+    cl(d.limLookaheadMs, 0.1f, 20.0f, 5.0f);
+    cl(d.limAttackMs, 0.25f, 20.0f, 5.0f);
+    cl(d.limReleaseMs, 0.25f, 20.0f, 5.0f);
+    cl(d.limStereoLink, 0.0f, 100.0f, 100.0f);
+    cl(d.limAlrAttackMs, 0.1f, 200.0f, 5.0f);
+    cl(d.limAlrReleaseMs, 10.0f, 1000.0f, 50.0f);
+    cl(d.limAlrKneeDb, -12.0f, 12.0f, 0.0f);
+    cl(d.limAlrKneeSmoothDb, -48.0f, 0.0f, -5.0f);
+    cl(d.limInputGainDb, -36.0f, 36.0f, 0.0f);
+    cl(d.limOutputGainDb, -36.0f, 36.0f, 0.0f);
+    cl(d.bassAmountDb, -100.0f, 36.0f, 0.0f);
+    cl(d.bassHarmonics, 0.1f, 10.0f, 8.5f);
+    cl(d.bassScopeHz, 10.0f, 250.0f, 100.0f);
+    cl(d.bassFloorHz, 10.0f, 120.0f, 20.0f);
+    cl(d.bassBlend, -10.0f, 10.0f, 0.0f);
+    cl(d.bassInputGainDb, -36.0f, 36.0f, 0.0f);
+    cl(d.bassOutputGainDb, -36.0f, 36.0f, 0.0f);
+    ci(d.convIrWidth, 0, 200);
+    cl(d.convDryDb, -100.0f, 20.0f, -100.0f);
+    cl(d.convWetDb, -100.0f, 20.0f, 0.0f);
+    cl(d.convInputGainDb, -36.0f, 36.0f, 0.0f);
+    cl(d.convOutputGainDb, -36.0f, 36.0f, 0.0f);
+}
+
+// ------------------------------------------------------------------ régi (v2/v3) params.bin átvétele
+
+namespace legacy {
+struct EqBandPodV3 { int32_t type; float freq; float gainDb; float q; };
+struct ParamDataV3 {
+    float preampDb; uint32_t flags; int32_t crossfeedPreset; uint32_t numBands; EqBandPodV3 bands[kMaxEqBands];
+    int32_t eqMode; float crossfeedCutoffHz; float crossfeedFeedDb; float limiterCeilingDb; float limiterReleaseMs;
+    float bassCrossoverHz; float bassHarmonicsDb; int32_t bassType; float bassSubcutHz; float convGainDb;
+    int32_t convPhaseMode; int32_t convMaxTaps;
+    int32_t limiterOversample; float limiterLookaheadMs; float crossfeedDelayMs; int32_t eqDecramp;
+};
+} // namespace legacy
+
+/**
+ * Paraméterfájl tartalmának betöltése (a 12 bájtos fejléc után).
+ * v4: közvetlen másolat. v2/v3: a régi saját DSP beállításai a megfelelő EasyEffects paraméterekre:
+ * a régi RBJ biquad sávok "APO (DR)" szűrőmódot kapnak (ugyanaz a hangolás), a többi az alapértéket.
+ */
+inline bool loadParamBytes(const char* bytes, size_t len, uint32_t version, uint32_t size, ParamData& out) {
+    if (size > len) return false;
+    if (version == kParamLayoutVersion) {
+        if (size != sizeof(ParamData)) return false;
+        ParamData d{};
+        std::memcpy(static_cast<void*>(&d), bytes, sizeof(ParamData));
+        sanitizeParams(d);
+        out = d;
+        return true;
+    }
+    if (version < 2 || version > 3) return false;
+    if (size < offsetof(legacy::ParamDataV3, eqMode) + sizeof(int32_t) || size > sizeof(legacy::ParamDataV3)) return false;
+    legacy::ParamDataV3 o{};
+    o.crossfeedCutoffHz = 700.0f; o.crossfeedFeedDb = 4.5f; o.limiterCeilingDb = -1.0f;
+    o.limiterLookaheadMs = 5.0f; o.eqDecramp = 4;
+    std::memcpy(&o, bytes, size);
+    ParamData d{};
+    d.preampDb = o.preampDb;
+    d.flags = o.flags & (kFlagEq | kFlagCrossfeed | kFlagConvolver | kFlagLimiter | kFlagBass | kFlagInitialized);
+    d.numBands = std::min(o.numBands, kMaxEqBands);
+    static const int32_t typeMap[5] = { 1 /*Peaking->Bell*/, 5 /*LowShelf*/, 3 /*HighShelf*/, 4 /*LowPass*/, 2 /*HighPass*/ };
+    for (uint32_t i = 0; i < d.numBands; ++i) {
+        const legacy::EqBandPodV3& b = o.bands[i];
+        EqBandPod& n = d.bands[i];
+        n.type = typeMap[std::clamp(b.type, 0, 4)];
+        n.mode = static_cast<int32_t>(EqFilterMode::ApoDr);
+        n.slope = 0;
+        n.freq = b.freq;
+        n.gainDb = b.gainDb;
+        n.q = b.q;
+    }
+    d.eqMode = o.eqMode == 0 ? 0 : 1;
+    d.eqDecramp = o.eqDecramp >= 8 ? 5 : o.eqDecramp >= 4 ? 3 : o.eqDecramp >= 2 ? 1 : 0;
+    d.crossfeedPreset = std::clamp(o.crossfeedPreset, 0, 2);
+    d.crossfeedFcut = o.crossfeedCutoffHz;
+    d.crossfeedFeedDb = o.crossfeedFeedDb;
+    d.limThresholdDb = o.limiterCeilingDb;
+    d.limLookaheadMs = o.limiterLookaheadMs;
+    sanitizeParams(d);
+    out = d;
+    return true;
 }
 
 } // namespace ee_analyzer

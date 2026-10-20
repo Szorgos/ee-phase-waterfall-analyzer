@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "spectrum.hpp"
-#include "param_apply.hpp"
+#include "param_block.hpp"
 #include "tap_ring.hpp"
 #include "mini_json.hpp"
 
@@ -62,51 +62,55 @@ static void testSpectrum() {
     CHECK(mx == 0.0f, "csendnél minden sáv 0");
 }
 
-static void testTransparentAndEq() {
-    std::printf("[2] DSP lánc paraméterezése\n");
-    DspPipeline p(48000.0);
-    preparePipeline(p);
-    setPipelineSampleRate(p, 48000.0);
-    applyParams(p, transparentParams());
-
-    std::mt19937 rng(42);
-    std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
-    std::vector<float> L(1024), R(1024);
-    for (auto& v : L) v = dist(rng);
-    for (auto& v : R) v = dist(rng);
-    std::vector<float> L0 = L, R0 = R;
-    p.processBlock(L.data(), R.data(), L.size());
-    CHECK(std::memcmp(L.data(), L0.data(), L.size() * 4) == 0 && std::memcmp(R.data(), R0.data(), R.size() * 4) == 0,
-          "alapállapot bit-pontosan átlátszó");
-
-    // +6 dB peaking 1 kHz-en: szinusz erősítése
+static void testParamFile() {
+    std::printf("[2] Paraméterfájl (v4 és régi v3 átvétele)\n");
+    // v4: változatlan visszaolvasás
     ParamData d = transparentParams();
     d.set(kFlagEq, true);
-    d.numBands = 1;
-    d.bands[0] = { static_cast<int32_t>(EqBandType::Peaking), 1000.0f, 6.0f, 1.0f };
-    const size_t cap = p.eqChain.filters.capacity();
-    applyParams(p, d);
-    CHECK(p.eqChain.filters.capacity() == cap, "applyParams nem foglal memóriát (kapacitás %zu)", cap);
-    p.reset();
-    std::vector<float> s(48000), s2(48000);
-    for (size_t i = 0; i < s.size(); ++i) s[i] = s2[i] = static_cast<float>(0.1 * std::sin(2.0 * kPi * 1000.0 * i / 48000.0));
-    p.processBlock(s.data(), s2.data(), s.size());
-    double rms = 0;
-    for (size_t i = 24000; i < 48000; ++i) rms += s[i] * s[i];
-    rms = std::sqrt(rms / 24000);
-    const double gainDb = 20 * std::log10(rms / (0.1 / std::sqrt(2.0)));
-    CHECK(std::abs(gainDb - 6.0) < 0.1, "1 kHz +6 dB peaking mért erősítése %.2f dB", gainDb);
+    d.numBands = 2;
+    d.bands[0].type = static_cast<int32_t>(EqBandType::Bell);
+    d.bands[0].mode = static_cast<int32_t>(EqFilterMode::BwcMt);
+    d.bands[0].slope = 2;
+    d.bands[0].freq = 1000.0f; d.bands[0].gainDb = 6.0f; d.bands[0].q = 1.0f;
+    d.bands[1].type = static_cast<int32_t>(EqBandType::LadderPass);
+    d.bands[1].width = 2.5f;
+    d.eqMode = static_cast<int32_t>(EqMode::Spm);
+    d.crossfeedFeedDb = 9.5f;
+    ParamData r{};
+    CHECK(loadParamBytes(reinterpret_cast<const char*>(&d), sizeof(d), kParamLayoutVersion, sizeof(d), r) &&
+              std::memcmp(&r, &d, sizeof(d)) == 0, "v4 paraméterblokk bájtra azonosan visszaolvasva");
 
-    // Preamp + limiter
-    d.preampDb = -3.0f;
-    d.set(kFlagLimiter, true);
-    applyParams(p, d);
-    CHECK(std::abs(p.preampGainDb + 3.0) < 1e-9 && p.limiter.enabled && !p.crossfeed.enabled, "preamp/limiter/crossfeed jelzők");
+    // v3: a régi RBJ sávok "APO (DR)" módú EasyEffects sávokká válnak
+    legacy::ParamDataV3 o{};
+    o.preampDb = -4.0f;
+    o.flags = kFlagEq | kFlagLimiter;
+    o.numBands = 2;
+    o.bands[0] = { 0, 105.0f, 5.5f, 0.7f };   // Peaking
+    o.bands[1] = { 2, 8000.0f, -3.0f, 0.71f }; // HighShelf
+    o.eqMode = 0;
+    o.limiterCeilingDb = -1.5f;
+    o.eqDecramp = 4;
+    o.crossfeedCutoffHz = 650.0f;
+    o.crossfeedFeedDb = 6.0f;
+    ParamData m{};
+    const bool ok = loadParamBytes(reinterpret_cast<const char*>(&o), sizeof(o), 3, sizeof(o), m);
+    CHECK(ok && m.numBands == 2 && m.bands[0].type == static_cast<int32_t>(EqBandType::Bell) &&
+              m.bands[1].type == static_cast<int32_t>(EqBandType::HiShelf) &&
+              m.bands[0].mode == static_cast<int32_t>(EqFilterMode::ApoDr) && m.bands[0].freq == 105.0f &&
+              m.bands[1].gainDb == -3.0f && m.preampDb == -4.0f && m.has(kFlagEq) && m.has(kFlagLimiter),
+          "v3 sávok, preamp és modulok átvéve");
+    CHECK(m.limThresholdDb == -1.5f && m.eqDecramp == 3 && m.crossfeedFcut == 650.0f && m.crossfeedFeedDb == 6.0f,
+          "v3 limiter plafon -> küszöb, decramp 4x -> x4, crossfeed átvéve");
 
-    // Mintavételi frekvencia váltás 44.1 kHz-re
-    setPipelineSampleRate(p, 44100.0);
-    applyParams(p, d);
-    CHECK(p.eqChain.filters[0].sampleRate == 44100.0, "SR váltás továbbjut a szűrőkre");
+    // Határok (EasyEffects tartományok)
+    ParamData x{};
+    x.numBands = 99;
+    x.bands[0].type = 77; x.bands[0].freq = 5.0f; x.bands[0].q = 500.0f;
+    x.limOversampling = 40; x.crossfeedFeedDb = 0.0f; x.convIrWidth = 999;
+    sanitizeParams(x);
+    CHECK(x.numBands == kMaxEqBands && x.bands[0].type == kEqBandTypeCount - 1 && x.bands[0].freq == 10.0f &&
+              x.bands[0].q == 100.0f && x.limOversampling == 22 && x.crossfeedFeedDb == 1.0f && x.convIrWidth == 200,
+          "tartományon kívüli értékek levágva");
 }
 
 static void testSeqlock() {
@@ -171,7 +175,7 @@ int main() {
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
     std::printf("========================================================\n");
     testSpectrum();
-    testTransparentAndEq();
+    testParamFile();
     testSeqlock();
     testTapRing();
     testJson();

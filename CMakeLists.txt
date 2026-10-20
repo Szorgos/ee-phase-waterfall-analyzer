@@ -1,14 +1,21 @@
 cmake_minimum_required(VERSION 3.20)
 project(aqulify 
-    VERSION 1.5.3
+    VERSION 1.6.0
     DESCRIPTION "Aqulify - Real-time Phase, Group Delay & Acoustic Waterfall DSP Suite"
-    LANGUAGES CXX
+    LANGUAGES C CXX
 )
 
 # C++20 szabvány megkövetelése
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Az EasyEffects DSP könyvtárai (LSP, Calf, libbs2b, SpeexDSP, zita-convolver, FFTW) a saját
+# fordítási kapcsolóikkal, ezért a projekt kapcsolói előtt kerülnek be
+if(MINGW)
+    add_link_options(-static)
+endif()
+add_subdirectory(third_party)
 
 # Fordítási figyelmeztetések és optimalizációk
 if(MSVC)
@@ -17,25 +24,24 @@ else()
     add_compile_options(-Wall -Wextra -O3 -ffast-math)
 endif()
 
-# MinGW alatt minden bináris statikus C++ futtatókörnyezettel készül (nincs extra DLL-függőség)
-if(MINGW)
-    add_link_options(-static)
-endif()
+# MinGW alatt minden bináris statikus C++ futtatókörnyezettel készül (nincs extra DLL-függőség): lásd fent
 
 # Fejlécek elérési útvonala
 set(EE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # 1. DSP Mag Könyvtár (Platformfüggetlen Interface könyvtár)
+add_library(aqulify_ee STATIC src/ee_dsp_lsp.cpp src/ee_dsp_misc.cpp src/ee_dsp_convolver.cpp)
+target_include_directories(aqulify_ee PUBLIC ${EE_INCLUDE_DIR})
+target_link_libraries(aqulify_ee PUBLIC aq_lsp aq_calf aq_bs2b aq_speex aq_zita)
+set_target_properties(aqulify_ee PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(NOT MSVC)
+    # A könyvtárakból átvett jelfeldolgozó kód az eredetivel azonos lebegőpontos szabályokkal fusson
+    target_compile_options(aqulify_ee PRIVATE -fno-fast-math)
+endif()
+
 add_library(ee_dsp_core INTERFACE)
 target_include_directories(ee_dsp_core INTERFACE ${EE_INCLUDE_DIR})
-
-# 2. Tesztalkalmazás: Analitikus Biquad & Fáziskalkulátor
-add_executable(test_math src/test_math.cpp)
-target_link_libraries(test_math PRIVATE ee_dsp_core)
-
-# 3. Tesztalkalmazás: Teljes DSP Pipeline (EQ + Crossfeed + Limiter)
-add_executable(test_pipeline src/test_pipeline.cpp)
-target_link_libraries(test_pipeline PRIVATE ee_dsp_core)
+target_link_libraries(ee_dsp_core INTERFACE aqulify_ee)
 
 # 4. Tesztalkalmazás: Zármentes Körpuffer (Valós idejű Audio -> 3D Grafika szálátvitel)
 find_package(Threads REQUIRED)

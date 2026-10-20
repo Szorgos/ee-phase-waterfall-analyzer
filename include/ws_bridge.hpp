@@ -10,6 +10,7 @@
  * Ugyanez a kód fut Linuxon (PipeWire csomópont) és Windowson (Aqulify.exe).
  */
 #include <atomic>
+#include <cmath>
 #include <chrono>
 #include <cstdio>
 #include <functional>
@@ -26,6 +27,7 @@
 #include "param_block.hpp"
 #include "mini_json.hpp"
 #include "ir_data.hpp"
+#include "ee_dsp.hpp"
 
 namespace ee_analyzer {
 
@@ -455,6 +457,7 @@ private:
         ParamData p = cb_.getParams();
         bool changed = true;
 
+        bool eqChanged = false;
         if (type == "set_preamp" && val) {
             p.preampDb = static_cast<float>(val->numberOr(0.0));
         } else if (type.rfind("set_module_", 0) == 0 && val) {
@@ -466,52 +469,59 @@ private:
             else if (mod == "limiter") p.set(kFlagLimiter, on);
             else if (mod == "bass") p.set(kFlagBass, on);
             else changed = false;
-        } else if (type == "set_crossfeed_preset" && val) {
-            p.crossfeedPreset = static_cast<int32_t>(val->numberOr(0.0));
-            // A preset gombok a GUI-ban is ezeket az értékeket töltik be
-            static const float presets[3][2] = { { 700.0f, 4.5f }, { 650.0f, 6.0f }, { 600.0f, 3.5f } };
-            const int i = std::clamp(p.crossfeedPreset, 0, 2);
-            p.crossfeedCutoffHz = presets[i][0];
-            p.crossfeedFeedDb = presets[i][1];
         } else if (type == "set_crossfeed") {
-            p.crossfeedCutoffHz = static_cast<float>(num(msg, "freq", p.crossfeedCutoffHz));
-            p.crossfeedFeedDb = static_cast<float>(num(msg, "level", p.crossfeedFeedDb));
-            p.crossfeedDelayMs = static_cast<float>(num(msg, "delay", p.crossfeedDelayMs));
+            p.crossfeedFcut = static_cast<float>(num(msg, "fcut", p.crossfeedFcut));
+            p.crossfeedFeedDb = static_cast<float>(num(msg, "feed", p.crossfeedFeedDb));
+            p.crossfeedPreset = static_cast<int32_t>(num(msg, "preset", p.crossfeedPreset));
         } else if (type == "set_eq_mode" && val) {
             const std::string m = val->stringOr("");
-            int mode = m == "fir_lin" ? 1 : m == "fir_int" ? 2 : m == "fir_min" ? 3 : m == "iir" ? 0
-                     : static_cast<int>(val->numberOr(0.0));
+            const int mode = m == "iir" ? 0 : m == "fir" ? 1 : m == "fft" ? 2 : m == "spm" ? 3
+                           : static_cast<int>(val->numberOr(0.0));
             p.eqMode = std::clamp(mode, 0, 3);
+            eqChanged = true;
         } else if (type == "set_decramp" && val) {
-            // "none" / "2x" / "4x" / "8x"
-            const std::string v = val->stringOr("");
-            p.eqDecramp = v == "none" ? 1 : v.empty() ? static_cast<int32_t>(val->numberOr(4.0)) : std::max(1, std::atoi(v.c_str()));
-            p.eqDecramp = std::clamp(p.eqDecramp, 1, 8);
+            p.eqDecramp = std::clamp(static_cast<int32_t>(val->numberOr(0.0)), 0, 5);
+            eqChanged = true;
         } else if (type == "set_limiter") {
-            p.limiterCeilingDb = static_cast<float>(num(msg, "ceiling", p.limiterCeilingDb));
-            p.limiterReleaseMs = static_cast<float>(num(msg, "release", p.limiterReleaseMs));
-            p.limiterLookaheadMs = static_cast<float>(num(msg, "lookahead", p.limiterLookaheadMs));
-            if (const json::Value* os = msg.get("oversampling")) {
-                // "1x" / "2x" / "4x" / "8x" vagy szám
-                p.limiterOversample = std::clamp(static_cast<int32_t>(os->type == json::Value::Type::String
-                                                                          ? std::atoi(os->str.c_str())
-                                                                          : os->numberOr(4.0)), 1, 8);
-            }
+            p.limMode = static_cast<int32_t>(num(msg, "mode", p.limMode));
+            p.limOversampling = static_cast<int32_t>(num(msg, "oversampling", p.limOversampling));
+            p.limDither = static_cast<int32_t>(num(msg, "dither", p.limDither));
+            p.limThresholdDb = static_cast<float>(num(msg, "threshold", p.limThresholdDb));
+            p.limLookaheadMs = static_cast<float>(num(msg, "lookahead", p.limLookaheadMs));
+            p.limAttackMs = static_cast<float>(num(msg, "attack", p.limAttackMs));
+            p.limReleaseMs = static_cast<float>(num(msg, "release", p.limReleaseMs));
+            p.limGainBoost = num(msg, "boost", p.limGainBoost) != 0.0 ? 1 : 0;
+            p.limStereoLink = static_cast<float>(num(msg, "stereoLink", p.limStereoLink));
+            p.limAlr = num(msg, "alr", p.limAlr) != 0.0 ? 1 : 0;
+            p.limAlrAttackMs = static_cast<float>(num(msg, "alrAttack", p.limAlrAttackMs));
+            p.limAlrReleaseMs = static_cast<float>(num(msg, "alrRelease", p.limAlrReleaseMs));
+            p.limAlrKneeDb = static_cast<float>(num(msg, "alrKnee", p.limAlrKneeDb));
+            p.limAlrKneeSmoothDb = static_cast<float>(num(msg, "alrKneeSmooth", p.limAlrKneeSmoothDb));
+            p.limInputGainDb = static_cast<float>(num(msg, "inputGain", p.limInputGainDb));
+            p.limOutputGainDb = static_cast<float>(num(msg, "outputGain", p.limOutputGainDb));
         } else if (type == "set_bass") {
-            p.bassCrossoverHz = static_cast<float>(num(msg, "crossover", p.bassCrossoverHz));
-            p.bassHarmonicsDb = static_cast<float>(num(msg, "harmonics", p.bassHarmonicsDb));
-            p.bassSubcutHz = static_cast<float>(num(msg, "subcut", p.bassSubcutHz));
-            if (const json::Value* t = msg.get("harmonicType")) {
-                const std::string ts = t->stringOr("both");
-                p.bassType = ts == "2nd" ? 1 : ts == "3rd" ? 2 : 0;
-            }
+            p.bassAmountDb = static_cast<float>(num(msg, "amount", p.bassAmountDb));
+            p.bassHarmonics = static_cast<float>(num(msg, "harmonics", p.bassHarmonics));
+            p.bassScopeHz = static_cast<float>(num(msg, "scope", p.bassScopeHz));
+            p.bassFloorHz = static_cast<float>(num(msg, "floor", p.bassFloorHz));
+            p.bassBlend = static_cast<float>(num(msg, "blend", p.bassBlend));
+            p.bassFloorActive = num(msg, "floorActive", p.bassFloorActive) != 0.0 ? 1 : 0;
+            p.bassListen = num(msg, "listen", p.bassListen) != 0.0 ? 1 : 0;
+            p.bassInputGainDb = static_cast<float>(num(msg, "inputGain", p.bassInputGainDb));
+            p.bassOutputGainDb = static_cast<float>(num(msg, "outputGain", p.bassOutputGainDb));
         } else if (type == "set_convolver") {
-            p.convGainDb = static_cast<float>(num(msg, "gain", p.convGainDb));
-            p.convMaxTaps = static_cast<int32_t>(num(msg, "taps", p.convMaxTaps));
-            if (const json::Value* ph = msg.get("phase")) p.convPhaseMode = ph->stringOr("min") == "linear" ? 1 : 0;
+            p.convIrWidth = static_cast<int32_t>(num(msg, "irWidth", p.convIrWidth));
+            p.convAutogain = num(msg, "autogain", p.convAutogain) != 0.0 ? 1 : 0;
+            p.convDryDb = static_cast<float>(num(msg, "dry", p.convDryDb));
+            p.convWetDb = static_cast<float>(num(msg, "wet", p.convWetDb));
+            p.convInputGainDb = static_cast<float>(num(msg, "inputGain", p.convInputGainDb));
+            p.convOutputGainDb = static_cast<float>(num(msg, "outputGain", p.convOutputGainDb));
         } else if (type == "clear_ir") {
             if (cb_.setIr) cb_.setIr(IrData{});
             sendText(buildStateMessage("ir"));
+            return;
+        } else if (type == "get_eq_response") {
+            sendText(buildEqResponseMessage(p));
             return;
         } else if (type == "set_eq") {
             const json::Value* bands = msg.get("bands");
@@ -520,19 +530,25 @@ private:
             for (const auto& b : bands->arr) {
                 if (p.numBands >= kMaxEqBands) break;
                 EqBandPod& out = p.bands[p.numBands++];
-                const json::Value* t = b.get("type");
-                out.type = eqTypeFromName(t ? t->stringOr("peaking").c_str() : "peaking");
-                out.freq = static_cast<float>(b.get("freq") ? b.get("freq")->numberOr(1000.0) : 1000.0);
-                out.gainDb = static_cast<float>(b.get("gain") ? b.get("gain")->numberOr(0.0) : 0.0);
-                out.q = static_cast<float>(b.get("q") ? b.get("q")->numberOr(0.7071) : 0.7071);
+                out = EqBandPod{};
+                out.type = static_cast<int32_t>(num(b, "type", 1.0));
+                out.mode = static_cast<int32_t>(num(b, "mode", 0.0));
+                out.slope = static_cast<int32_t>(num(b, "slope", 0.0));
+                out.freq = static_cast<float>(num(b, "freq", 1000.0));
+                out.gainDb = static_cast<float>(num(b, "gain", 0.0));
+                out.q = static_cast<float>(num(b, "q", 4.36));
+                out.width = static_cast<float>(num(b, "width", 4.0));
             }
+            eqChanged = true;
         } else {
             changed = false;
         }
 
         if (changed) {
             p.set(kFlagInitialized, true);
+            sanitizeParams(p);
             cb_.setParams(p);
+            if (eqChanged) sendText(buildEqResponseMessage(p));
         }
     }
 
@@ -579,6 +595,30 @@ private:
         return s;
     }
 
+    /** Az EQ eredő frekvenciamenete az LSP szűrőkkel (a felület görbéje ebből rajzol). */
+    std::string buildEqResponseMessage(const ParamData& p) const {
+        constexpr size_t kPoints = 256;
+        double sr = cb_.sampleRate ? cb_.sampleRate() : 48000.0;
+        if (!(sr >= 8000.0)) sr = 48000.0;
+        float f[kPoints], mag[kPoints], ph[kPoints];
+        for (size_t i = 0; i < kPoints; ++i)
+            f[i] = static_cast<float>(10.0 * std::pow(2200.0, static_cast<double>(i) / (kPoints - 1))); // 10 Hz .. 22 kHz
+        size_t latency = 0;
+        ee::Equalizer::response(p, static_cast<uint32_t>(sr), f, kPoints, mag, ph, &latency);
+        std::string s = "{\"type\":\"eq_response\",\"sr\":";
+        appendFloat(s, sr, 0);
+        s += ",\"mode\":" + std::to_string(p.eqMode);
+        s += ",\"latency\":" + std::to_string(latency);
+        s += ",\"freq\":[";
+        for (size_t i = 0; i < kPoints; ++i) { if (i) s += ','; appendFloat(s, f[i], 2); }
+        s += "],\"mag\":[";
+        for (size_t i = 0; i < kPoints; ++i) { if (i) s += ','; appendFloat(s, mag[i], 3); }
+        s += "],\"phase\":[";
+        for (size_t i = 0; i < kPoints; ++i) { if (i) s += ','; appendFloat(s, ph[i], 2); }
+        s += "]}";
+        return s;
+    }
+
     std::string buildStatusMessage() const {
         std::string s = "{\"type\":\"status\"";
         if (cb_.statusFields) {
@@ -605,24 +645,41 @@ private:
         s += ",\"limiter\":"; s += p.has(kFlagLimiter) ? "1" : "0";
         s += ",\"bass\":"; s += p.has(kFlagBass) ? "1" : "0";
         s += "},\"crossfeedPreset\":" + std::to_string(p.crossfeedPreset);
-        static const char* eqModes[] = { "iir", "fir_lin", "fir_int", "fir_min" };
-        s += ",\"eqMode\":\""; s += eqModes[std::clamp(p.eqMode, 0, 3)]; s += '"';
-        s += ",\"crossfeed\":{\"freq\":"; appendFloat(s, p.crossfeedCutoffHz, 1);
-        s += ",\"level\":"; appendFloat(s, p.crossfeedFeedDb, 2);
-        s += ",\"delay\":"; appendFloat(s, p.crossfeedDelayMs, 3); s += '}';
-        s += ",\"decramp\":\""; s += p.eqDecramp <= 1 ? std::string("none") : std::to_string(p.eqDecramp) + "x"; s += '"';
-        s += ",\"limiter\":{\"ceiling\":"; appendFloat(s, p.limiterCeilingDb, 2);
-        s += ",\"release\":"; appendFloat(s, p.limiterReleaseMs, 1);
-        s += ",\"lookahead\":"; appendFloat(s, p.limiterLookaheadMs, 2);
-        s += ",\"oversampling\":\"" + std::to_string(p.limiterOversample) + "x\"}";
-        static const char* bassTypes[] = { "both", "2nd", "3rd" };
-        s += ",\"bass\":{\"crossover\":"; appendFloat(s, p.bassCrossoverHz, 1);
-        s += ",\"harmonics\":"; appendFloat(s, p.bassHarmonicsDb, 2);
-        s += ",\"harmonicType\":\""; s += bassTypes[std::clamp(p.bassType, 0, 2)];
-        s += "\",\"subcut\":"; appendFloat(s, p.bassSubcutHz, 1); s += '}';
-        s += ",\"convolver\":{\"gain\":"; appendFloat(s, p.convGainDb, 2);
-        s += ",\"phase\":\""; s += p.convPhaseMode == 1 ? "linear" : "min";
-        s += "\",\"taps\":" + std::to_string(p.convMaxTaps) + '}';
+        s += ",\"eqMode\":" + std::to_string(p.eqMode);
+        s += ",\"decramp\":" + std::to_string(p.eqDecramp);
+        s += ",\"crossfeed\":{\"fcut\":"; appendFloat(s, p.crossfeedFcut, 1);
+        s += ",\"feed\":"; appendFloat(s, p.crossfeedFeedDb, 2); s += '}';
+        s += ",\"limiter\":{\"mode\":" + std::to_string(p.limMode);
+        s += ",\"oversampling\":" + std::to_string(p.limOversampling);
+        s += ",\"dither\":" + std::to_string(p.limDither);
+        s += ",\"threshold\":"; appendFloat(s, p.limThresholdDb, 2);
+        s += ",\"lookahead\":"; appendFloat(s, p.limLookaheadMs, 3);
+        s += ",\"attack\":"; appendFloat(s, p.limAttackMs, 3);
+        s += ",\"release\":"; appendFloat(s, p.limReleaseMs, 3);
+        s += ",\"boost\":" + std::to_string(p.limGainBoost);
+        s += ",\"stereoLink\":"; appendFloat(s, p.limStereoLink, 1);
+        s += ",\"alr\":" + std::to_string(p.limAlr);
+        s += ",\"alrAttack\":"; appendFloat(s, p.limAlrAttackMs, 2);
+        s += ",\"alrRelease\":"; appendFloat(s, p.limAlrReleaseMs, 1);
+        s += ",\"alrKnee\":"; appendFloat(s, p.limAlrKneeDb, 2);
+        s += ",\"alrKneeSmooth\":"; appendFloat(s, p.limAlrKneeSmoothDb, 2);
+        s += ",\"inputGain\":"; appendFloat(s, p.limInputGainDb, 2);
+        s += ",\"outputGain\":"; appendFloat(s, p.limOutputGainDb, 2); s += '}';
+        s += ",\"bass\":{\"amount\":"; appendFloat(s, p.bassAmountDb, 2);
+        s += ",\"harmonics\":"; appendFloat(s, p.bassHarmonics, 2);
+        s += ",\"scope\":"; appendFloat(s, p.bassScopeHz, 1);
+        s += ",\"floor\":"; appendFloat(s, p.bassFloorHz, 1);
+        s += ",\"blend\":"; appendFloat(s, p.bassBlend, 2);
+        s += ",\"floorActive\":" + std::to_string(p.bassFloorActive);
+        s += ",\"listen\":" + std::to_string(p.bassListen);
+        s += ",\"inputGain\":"; appendFloat(s, p.bassInputGainDb, 2);
+        s += ",\"outputGain\":"; appendFloat(s, p.bassOutputGainDb, 2); s += '}';
+        s += ",\"convolver\":{\"irWidth\":" + std::to_string(p.convIrWidth);
+        s += ",\"autogain\":" + std::to_string(p.convAutogain);
+        s += ",\"dry\":"; appendFloat(s, p.convDryDb, 2);
+        s += ",\"wet\":"; appendFloat(s, p.convWetDb, 2);
+        s += ",\"inputGain\":"; appendFloat(s, p.convInputGainDb, 2);
+        s += ",\"outputGain\":"; appendFloat(s, p.convOutputGainDb, 2); s += '}';
         if (cb_.getIr) {
             IrData ir = cb_.getIr();
             s += ",\"ir\":";
@@ -641,11 +698,13 @@ private:
         const uint32_t n = std::min(p.numBands, kMaxEqBands);
         for (uint32_t i = 0; i < n; ++i) {
             if (i) s += ',';
-            s += "{\"type\":\"";
-            s += eqTypeName(p.bands[i].type);
-            s += "\",\"freq\":"; appendFloat(s, p.bands[i].freq, 2);
-            s += ",\"gain\":"; appendFloat(s, p.bands[i].gainDb, 2);
-            s += ",\"q\":"; appendFloat(s, p.bands[i].q, 3);
+            const EqBandPod& b = p.bands[i];
+            s += "{\"type\":" + std::to_string(b.type) + ",\"mode\":" + std::to_string(b.mode) +
+                 ",\"slope\":" + std::to_string(b.slope);
+            s += ",\"freq\":"; appendFloat(s, b.freq, 2);
+            s += ",\"gain\":"; appendFloat(s, b.gainDb, 2);
+            s += ",\"q\":"; appendFloat(s, b.q, 3);
+            s += ",\"width\":"; appendFloat(s, b.width, 3);
             s += '}';
         }
         s += "]}";

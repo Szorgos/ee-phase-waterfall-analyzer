@@ -1,7 +1,10 @@
-// DSP modulteszt: partícionált konvolver, FIR EQ tervezés, Bass Enhancer, teljes lánc háttérszállal.
+// DSP modulteszt: az EasyEffects-szel egyező modulok (LSP EQ és limiter, Calf Bass Enhancer, bs2b crossfeed,
+// zita-convolver) és a teljes lánc a háttérszállal.
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <cstdio>
+#include <cstring>
 #include <random>
 #include <vector>
 
@@ -14,7 +17,7 @@ static int g_fail = 0;
 
 static constexpr double kPi = 3.14159265358979323846;
 
-/** Goertzel: adott frekvencia amplitúdója a jelben. */
+/** Goertzel: adott frekvencia amplitúdója a jelben (Hann ablakkal). */
 static double toneAmp(const std::vector<float>& x, size_t from, double f, double sr) {
     const size_t n = x.size() - from;
     std::complex<double> acc(0, 0);
@@ -25,360 +28,335 @@ static double toneAmp(const std::vector<float>& x, size_t from, double f, double
     return 2.0 * std::abs(acc) / (n * 0.5);
 }
 
-static void testConvolver() {
-    std::printf("[1] Partícionált konvolver = közvetlen konvolúció\n");
-    std::mt19937 rng(7);
-    std::normal_distribution<float> nd(0.0f, 0.3f);
-    std::vector<float> hl(5000), hr(3333);
-    for (size_t i = 0; i < hl.size(); ++i) hl[i] = nd(rng) * std::exp(-static_cast<float>(i) / 900.0f);
-    for (size_t i = 0; i < hr.size(); ++i) hr[i] = nd(rng) * std::exp(-static_cast<float>(i) / 500.0f);
-    const size_t N = 20000;
-    std::vector<float> xl(N), xr(N);
-    for (auto& v : xl) v = nd(rng);
-    for (auto& v : xr) v = nd(rng);
+static std::vector<float> sine(double f, double amp, size_t n, double sr) {
+    std::vector<float> s(n);
+    for (size_t i = 0; i < n; ++i) s[i] = static_cast<float>(amp * std::sin(2.0 * kPi * f * i / sr));
+    return s;
+}
 
-    PartitionedConvolver pc;
-    pc.build(hl, hr);
-    std::vector<float> yl = xl, yr = xr;
-    // változó blokkméretek, mint egy valódi hosztban
-    size_t off = 0, k = 0;
-    const size_t sizes[] = { 1, 480, 37, 256, 1023, 64, 999 };
-    while (off < N) {
-        const size_t m = std::min(sizes[k++ % 7], N - off);
-        pc.process(yl.data() + off, yr.data() + off, m);
-        off += m;
+/** Feldolgozás változó blokkokban (mint egy hoszt). */
+template <class F>
+static void runBlocks(F&& fn, std::vector<float>& L, std::vector<float>& R, size_t block) {
+    for (size_t off = 0; off < L.size(); off += block) {
+        const size_t m = std::min(block, L.size() - off);
+        fn(L.data() + off, R.data() + off, m);
     }
-    double maxErr = 0.0;
-    for (size_t n = 0; n < N; n += 7) {
-        double rl = 0, rr = 0;
-        for (size_t i = 0; i < hl.size() && i <= n; ++i) rl += static_cast<double>(hl[i]) * xl[n - i];
-        for (size_t i = 0; i < hr.size() && i <= n; ++i) rr += static_cast<double>(hr[i]) * xr[n - i];
-        maxErr = std::max({ maxErr, std::abs(rl - yl[n]), std::abs(rr - yr[n]) });
+}
+
+static ParamData bellParams(int32_t mode, int32_t eqMode = 0, int32_t decramp = 0) {
+    ParamData d = transparentParams();
+    d.set(kFlagEq, true);
+    d.numBands = 1;
+    d.bands[0].type = static_cast<int32_t>(EqBandType::Bell);
+    d.bands[0].mode = mode;
+    d.bands[0].freq = 1000.0f;
+    d.bands[0].gainDb = 6.0f;
+    d.bands[0].q = 1.0f;
+    d.eqMode = eqMode;
+    d.eqDecramp = decramp;
+    return d;
+}
+
+static void testEqualizer() {
+    std::printf("[1] Equalizer (LSP para_equalizer)\n");
+    const double sr = 48000.0;
+    // Decramp: a 44,1 kHz-es referenciához viszonyított túlmintavételezés (calc_decramping)
+    CHECK(ee::Equalizer::decrampFactor(0, 48000) == 1 && ee::Equalizer::decrampFactor(1, 48000) == 2 &&
+              ee::Equalizer::decrampFactor(3, 48000) == 4 && ee::Equalizer::decrampFactor(4, 48000) == 6 &&
+              ee::Equalizer::decrampFactor(5, 48000) == 8 && ee::Equalizer::decrampFactor(3, 96000) == 2 &&
+              ee::Equalizer::decrampFactor(2, 44100) == 3 && ee::Equalizer::decrampFactor(5, 192000) == 2,
+          "decramp tényezők (48k: 1/2/4/6/8, 96k x4 -> 2, 44,1k x3 -> 3, 192k x8 -> 2)");
+
+    const char* modeNames[] = { "IIR", "FIR", "FFT", "SPM" };
+    for (int eqMode = 0; eqMode < 4; ++eqMode) {
+        for (int fm : { 0, 6 }) {
+            ee::Equalizer eq;
+            eq.setSampleRate(48000);
+            eq.update(bellParams(fm, eqMode, eqMode <= 1 ? 3 : 0));
+            std::vector<float> L = sine(1000.0, 0.1, 96000, sr), R = L;
+            runBlocks([&](float* l, float* r, size_t m) { eq.process(l, r, m); }, L, R, 512);
+            const double g = 20 * std::log10(toneAmp(L, 48000, 1000.0, sr) / 0.1);
+            CHECK(std::abs(g - 6.0) < 0.25, "%s, %s: +6 dB harang 1 kHz-en mérve %.2f dB (késleltetés %zu minta)",
+                  modeNames[eqMode], fm == 0 ? "RLC (BT)" : "APO (DR)", g, eq.latency());
+        }
     }
-    CHECK(maxErr < 2e-4, "max eltérés a közvetlen konvolúciótól: %.2e (L 5000, R 3333 tap, vegyes blokkméret)", maxErr);
 
-    // Nulla késleltetés: egységimpulzusra az IR jön ki az első mintától
-    PartitionedConvolver pc2;
-    pc2.build(hl, {});
-    std::vector<float> il(6000, 0.0f), ir(6000, 0.0f);
-    il[0] = ir[0] = 1.0f;
-    pc2.process(il.data(), ir.data(), il.size());
-    double e = 0;
-    for (size_t i = 0; i < hl.size(); ++i) e = std::max(e, static_cast<double>(std::abs(il[i] - hl[i])));
-    CHECK(e < 1e-5 && std::abs(ir[100] - hl[100]) < 1e-5, "impulzusválasz minta-pontosan, 0 késleltetéssel (eltérés %.1e, mono IR mindkét csatornán)", e);
+    // Frekvenciamenet (a felület görbéje) = mért erősítés
+    {
+        ParamData d = bellParams(0);
+        d.bands[0].type = static_cast<int32_t>(EqBandType::HiPass);
+        d.bands[0].freq = 200.0f;
+        d.bands[0].slope = 1; // x2
+        float f[3] = { 50.0f, 1000.0f, 5000.0f }, mag[3], ph[3];
+        ee::Equalizer::response(d, 48000, f, 3, mag, ph);
+        ee::Equalizer eq;
+        eq.setSampleRate(48000);
+        eq.update(d);
+        std::vector<float> L = sine(50.0, 0.1, 96000, sr), R = L;
+        runBlocks([&](float* l, float* r, size_t m) { eq.process(l, r, m); }, L, R, 480);
+        const double g = 20 * std::log10(toneAmp(L, 48000, 50.0, sr) / 0.1);
+        CHECK(std::abs(mag[0] - g) < 0.5 && mag[0] < -30.0 && std::abs(mag[1]) < 0.5,
+              "felüláteresztő 200 Hz x2: görbe 50 Hz-en %.1f dB, mérve %.1f dB, 1 kHz-en %.2f dB", mag[0], g, mag[1]);
+    }
+
+    // Sávszélességes típus (létra): a width paraméter adja a két sarokfrekvenciát (center / 2^(w/2), center * 2^(w/2));
+    // a "Ladder-rej" a sávon kívül alkalmazza az erősítést
+    {
+        ParamData d = bellParams(0);
+        d.bands[0].type = static_cast<int32_t>(EqBandType::LadderRej);
+        d.bands[0].gainDb = -12.0f;
+        d.bands[0].width = 2.0f; // 500 .. 2000 Hz
+        float f[3] = { 100.0f, 1000.0f, 8000.0f }, mag[3], ph[3];
+        ee::Equalizer::response(d, 48000, f, 3, mag, ph);
+        CHECK(mag[0] < -10.0 && mag[2] < -10.0 && std::abs(mag[1]) < 2.0,
+              "Ladder-rej 1 kHz ±1 oktáv, -12 dB: 100 Hz %.1f / 1 kHz %.1f / 8 kHz %.1f dB", mag[0], mag[1], mag[2]);
+        d.bands[0].type = static_cast<int32_t>(EqBandType::LadderPass);
+        ee::Equalizer::response(d, 48000, f, 3, mag, ph);
+        CHECK(mag[1] < -10.0 && std::abs(mag[0]) < 2.0 && std::abs(mag[2]) < 2.0,
+              "Ladder-pass ugyanígy: 100 Hz %.1f / 1 kHz %.1f / 8 kHz %.1f dB", mag[0], mag[1], mag[2]);
+    }
 }
 
-static std::vector<BiquadFilter> testFilters(double sr) {
-    return { BiquadFilter(FilterType::LowShelf, 105.0, 0.71, 5.5, sr),
-             BiquadFilter(FilterType::PeakingEQ, 1000.0, 1.0, 6.0, sr),
-             BiquadFilter(FilterType::PeakingEQ, 3500.0, 2.0, -4.0, sr),
-             BiquadFilter(FilterType::HighShelf, 10000.0, 0.71, 2.0, sr) };
+static void testLimiter() {
+    std::printf("[2] Limiter (LSP limiter_stereo)\n");
+    const double sr = 48000.0;
+    ee::Limiter lim;
+    lim.setSampleRate(48000);
+    ParamData d = transparentParams();
+    d.limThresholdDb = -1.0f;
+    d.limOversampling = 22; // True Peak / 24 bit
+    lim.update(d);
+    std::vector<float> L = sine(997.0, 2.0, 96000, sr), R = sine(997.0, 1.0, 96000, sr);
+    runBlocks([&](float* l, float* r, size_t m) { lim.process(l, r, m); }, L, R, 480);
+    float pk = 0;
+    for (size_t i = 24000; i < L.size(); ++i) pk = std::max({ pk, std::abs(L[i]), std::abs(R[i]) });
+    const double pkDb = 20 * std::log10(pk);
+    CHECK(pkDb < -0.9 && pkDb > -1.6, "+6 dBFS szinusz -> csúcs %.2f dBFS (küszöb -1 dB)", pkDb);
+    CHECK(lim.gainReductionDb() > 6.0, "erősítéscsökkentés %.1f dB", lim.gainReductionDb());
+    // Stereo link 100%: a jobb csatorna ugyanannyit csillapodik
+    const double rl = toneAmp(R, 48000, 997.0, sr) / toneAmp(L, 48000, 997.0, sr);
+    CHECK(std::abs(20 * std::log10(rl) + 6.02) < 0.3, "100%%-os csatolás: R/L arány %.2f dB (várt -6,02)", 20 * std::log10(rl));
+    CHECK(lim.latency() > 0, "késleltetés %zu minta (lookahead + túlmintavételezés)", lim.latency());
+
+    // Gain boost: a küszöb 0 dBFS-re emelve
+    d.limGainBoost = 1;
+    lim.update(d);
+    L = sine(997.0, 2.0, 96000, sr); R = L;
+    runBlocks([&](float* l, float* r, size_t m) { lim.process(l, r, m); }, L, R, 480);
+    pk = 0;
+    for (size_t i = 24000; i < L.size(); ++i) pk = std::max(pk, std::abs(L[i]));
+    CHECK(20 * std::log10(pk) > -0.6 && 20 * std::log10(pk) < 0.3, "gain boost: csúcs %.2f dBFS", 20 * std::log10(pk));
+
+    // Csend alatt nincs csillapítás
+    ee::Limiter lim2;
+    lim2.setSampleRate(48000);
+    d.limGainBoost = 0;
+    lim2.update(d);
+    std::vector<float> q = sine(440.0, 0.25, 48000, sr), q2 = q;
+    std::vector<float> ql = q, qr = q;
+    runBlocks([&](float* l, float* r, size_t m) { lim2.process(l, r, m); }, ql, qr, 256);
+    const double g = 20 * std::log10(toneAmp(ql, 24000, 440.0, sr) / 0.25);
+    CHECK(std::abs(g) < 0.05, "küszöb alatti jel érintetlen (%.3f dB)", g);
 }
 
-static double firMagDb(const std::vector<float>& h, double f, double sr) {
-    std::complex<double> acc(0, 0);
-    for (size_t i = 0; i < h.size(); ++i) acc += static_cast<double>(h[i]) * std::polar(1.0, -2 * kPi * f * i / sr);
-    return 20 * std::log10(std::abs(acc));
-}
-
-static void testFirDesign() {
-    std::printf("[2] FIR EQ tervezés (8192 tap, 48 kHz)\n");
-    const double sr = 48000;
-    auto filters = testFilters(sr);
-    FilterChain chain;
-    chain.filters = filters;
-    const double freqs[] = { 60, 105, 300, 1000, 3500, 8000, 12000, 16000 };
-    struct M { FirPhase p; const char* name; size_t expLat; };
-    for (M m : { M{ FirPhase::Linear, "lineáris", 4096 }, M{ FirPhase::Intermediate, "köztes", 409 }, M{ FirPhase::Minimum, "minimál", 0 } }) {
-        size_t lat = 999999;
-        auto h = designEqFir(filters, sr, m.p, 8192, &lat);
-        double worst = 0;
-        for (double f : freqs) worst = std::max(worst, std::abs(firMagDb(h, f, sr) - chain.magnitudeDbAt(f)));
-        size_t peak = 0;
-        for (size_t i = 0; i < h.size(); ++i) if (std::abs(h[i]) > std::abs(h[peak])) peak = i;
-        CHECK(worst < 0.35 && lat == m.expLat, "%s: amplitúdóhiba max %.3f dB, késleltetés %zu minta, csúcs a %zu. mintánál",
-              m.name, worst, lat, peak);
-        if (m.p == FirPhase::Linear) {
-            double asym = 0;
-            for (size_t i = 1; i < 4096; ++i) asym = std::max(asym, static_cast<double>(std::abs(h[4096 - i] - h[4096 + i])));
-            CHECK(asym < 1e-6, "lineáris fázis: szimmetrikus impulzus (aszimmetria %.1e)", asym);
-        }
-        if (m.p == FirPhase::Minimum) {
-            double e = 0, e100 = 0;
-            for (size_t i = 0; i < h.size(); ++i) { e += h[i] * h[i]; if (i < 100) e100 += h[i] * h[i]; }
-            CHECK(e100 / e > 0.9, "minimálfázis: az energia %.1f%%-a az első 100 mintában (nincs előcsengés)", 100 * e100 / e);
-        }
+static void testCrossfeed() {
+    std::printf("[3] Crossfeed (libbs2b)\n");
+    const double sr = 48000.0;
+    struct P { const char* name; float fcut, feed; };
+    for (P p : { P{ "Bauer bs2b", 700.0f, 4.5f }, P{ "Jan Meier", 650.0f, 9.5f }, P{ "közeltéri stúdió", 600.0f, 3.5f } }) {
+        ee::Crossfeed cf;
+        cf.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.crossfeedFcut = p.fcut;
+        d.crossfeedFeedDb = p.feed;
+        cf.update(d);
+        // Csak bal csatorna, 40 Hz: az áthallás szintje = feed
+        std::vector<float> L = sine(40.0, 0.2, 96000, sr), R(96000, 0.0f);
+        runBlocks([&](float* l, float* r, size_t m) { cf.process(l, r, m); }, L, R, 512);
+        const double x = 20 * std::log10(toneAmp(R, 48000, 40.0, sr) / toneAmp(L, 48000, 40.0, sr));
+        // Monó jel szintje mélyen változatlan
+        cf.reset();
+        std::vector<float> M = sine(40.0, 0.2, 96000, sr), M2 = M;
+        runBlocks([&](float* l, float* r, size_t m) { cf.process(l, r, m); }, M, M2, 512);
+        const double mono = 20 * std::log10(toneAmp(M, 48000, 40.0, sr) / 0.2);
+        CHECK(std::abs(x + p.feed) < 0.6 && std::abs(mono) < 0.3,
+              "%s (%.0f Hz / %.1f dB): áthallás 40 Hz-en %.2f dB, monó szint %.2f dB", p.name, p.fcut, p.feed, x, mono);
     }
 }
 
 static void testBass() {
-    std::printf("[3] Bass Enhancer\n");
-    const double sr = 48000;
-    std::vector<float> x(sr), y;
-    for (size_t i = 0; i < x.size(); ++i) x[i] = static_cast<float>(0.3 * std::sin(2 * kPi * 50 * i / sr));
-    for (int type = 0; type < 3; ++type) {
-        BassEnhancer b;
-        b.enabled = true; b.sampleRate = sr; b.crossoverHz = 80; b.harmonicsDb = 6; b.subcutHz = 30;
-        b.type = static_cast<BassEnhancer::Harmonics>(type);
-        b.update();
-        std::vector<float> l = x, r = x;
-        b.process(l.data(), r.data(), l.size());
-        const double a1 = toneAmp(l, 24000, 50, sr), a2 = toneAmp(l, 24000, 100, sr), a3 = toneAmp(l, 24000, 150, sr);
-        const char* names[] = { "2.+3.", "csak 2.", "csak 3." };
-        const bool ok = (type == 0 && a2 > 0.02 && a3 > 0.01) || (type == 1 && a2 > 0.02 && a3 < a2 * 0.1) ||
-                        (type == 2 && a3 > 0.01 && a2 < a3 * 0.1);
-        CHECK(ok, "%s felharmonikus: 50 Hz %.3f, 100 Hz %.3f, 150 Hz %.3f", names[type], a1, a2, a3);
+    std::printf("[4] Bass Enhancer (Calf)\n");
+    const double sr = 48000.0;
+    ee::BassEnhancer be;
+    be.setSampleRate(48000);
+    ParamData d = transparentParams();
+    d.bassAmountDb = 0.0f;   // EasyEffects alapértékek
+    d.bassHarmonics = 8.5f;
+    d.bassScopeHz = 100.0f;
+    be.update(d);
+    std::vector<float> L = sine(50.0, 0.3, 96000, sr), R = L;
+    runBlocks([&](float* l, float* r, size_t m) { be.process(l, r, m); }, L, R, 512);
+    const double h2 = toneAmp(L, 48000, 100.0, sr), h3 = toneAmp(L, 48000, 150.0, sr);
+    CHECK(h2 > 1e-3 || h3 > 1e-3, "50 Hz -> felharmonikusok: 100 Hz %.1f dB, 150 Hz %.1f dB",
+          20 * std::log10(h2 / 0.3 + 1e-12), 20 * std::log10(h3 / 0.3 + 1e-12));
+    be.reset();
+    std::vector<float> H = sine(3000.0, 0.3, 96000, sr), H2 = H;
+    runBlocks([&](float* l, float* r, size_t m) { be.process(l, r, m); }, H, H2, 512);
+    const double g = 20 * std::log10(toneAmp(H, 48000, 3000.0, sr) / 0.3);
+    CHECK(std::abs(g) < 0.3, "3 kHz (a scope felett) szintje %.2f dB", g);
+    // Listen: csak a generált felharmonikusok szólnak
+    d.bassListen = 1;
+    be.update(d);
+    std::vector<float> Q = sine(3000.0, 0.3, 48000, sr), Q2 = Q;
+    runBlocks([&](float* l, float* r, size_t m) { be.process(l, r, m); }, Q, Q2, 512);
+    CHECK(toneAmp(Q, 24000, 3000.0, sr) < 0.01, "listen: a 3 kHz-es bemenet nem hallatszik");
+}
+
+static void testConvolver() {
+    std::printf("[5] Convolver (zita-convolver)\n");
+    std::mt19937 rng(7);
+    std::normal_distribution<float> nd(0.0f, 0.3f);
+    std::vector<float> hl(5000), hr(5000);
+    for (size_t i = 0; i < hl.size(); ++i) hl[i] = nd(rng) * std::exp(-static_cast<float>(i) / 900.0f);
+    for (size_t i = 0; i < hr.size(); ++i) hr[i] = nd(rng) * std::exp(-static_cast<float>(i) / 500.0f);
+
+    // Kernel: 100%-os szélesség és autogain nélkül változatlan
+    ee::ConvKernel k = ee::prepareConvKernel(hl, hr, 48000, 48000, 100, false);
+    CHECK(k.valid() && k.left == hl && k.right == hr, "kernel 100%% szélességgel, autogain nélkül változatlan");
+    ee::ConvKernel k0 = ee::prepareConvKernel(hl, hr, 48000, 48000, 0, false);
+    CHECK(std::abs(k0.left[100] - (hl[100] + hr[100])) < 1e-6, "0%% szélesség: L = LL + RR (monó)");
+    ee::ConvKernel ka = ee::prepareConvKernel(hl, hr, 48000, 48000, 100, true);
+    double pl = 0, pr = 0;
+    for (size_t i = 0; i < ka.left.size(); ++i) { pl += ka.left[i] * ka.left[i]; pr += ka.right[i] * ka.right[i]; }
+    CHECK(std::abs(std::max(pl, pr) - 1.0) < 1e-3 || std::max(pl, pr) < 1.0, "autogain: legnagyobb energia %.3f", std::max(pl, pr));
+    ee::ConvKernel kr = ee::prepareConvKernel(hl, {}, 44100, 48000, 100, false);
+    CHECK(kr.rate == 48000 && kr.left.size() > 5300 && kr.left == kr.right, "44,1 -> 48 kHz (SpeexDSP), monó -> sztereó: %zu minta",
+          kr.left.size());
+
+    const size_t N = 24000;
+    std::vector<float> xl(N), xr(N);
+    for (auto& v : xl) v = nd(rng);
+    for (auto& v : xr) v = nd(rng);
+    for (uint32_t q : { 256u, 480u }) {
+        ee::ZitaInstance zi;
+        const bool ok = zi.init(k, q);
+        std::vector<float> yl = xl, yr = xr;
+        if (ok) runBlocks([&](float* l, float* r, size_t m) { if (m == q) zi.process(l, r, m); else std::fill_n(l, m, 0.0f), std::fill_n(r, m, 0.0f); }, yl, yr, q);
+        // Késleltetés keresése (kettőhatvány blokknál 0, különben a FIFO miatt több)
+        size_t best = 0;
+        double bestErr = 1e9;
+        for (size_t lag = 0; lag <= 512; ++lag) {
+            double err = 0;
+            for (size_t n = 6000; n < 6200; ++n) {
+                double rl = 0;
+                for (size_t i = 0; i < hl.size() && i <= n - lag; ++i) rl += static_cast<double>(hl[i]) * xl[n - lag - i];
+                err = std::max(err, std::abs(rl - yl[n]));
+            }
+            if (err < bestErr) { bestErr = err; best = lag; }
+            if (err < 1e-4) break;
+        }
+        double maxErr = 0;
+        for (size_t n = 8000; n < N - 1000; n += 13) {
+            double rl = 0, rr = 0;
+            for (size_t i = 0; i < hl.size() && i <= n - best; ++i) rl += static_cast<double>(hl[i]) * xl[n - best - i];
+            for (size_t i = 0; i < hr.size() && i <= n - best; ++i) rr += static_cast<double>(hr[i]) * xr[n - best - i];
+            maxErr = std::max({ maxErr, std::abs(rl - yl[n]), std::abs(rr - yr[n]) });
+        }
+        CHECK(ok && maxErr < 2e-4 && (q != 256 || best == 0),
+              "blokk %u: eltérés a közvetlen konvolúciótól %.2e, késleltetés %zu minta", q, maxErr, best);
     }
-    BassEnhancer b;
-    b.enabled = true; b.sampleRate = sr; b.harmonicsDb = 0; b.subcutHz = 30; b.update();
-    std::vector<float> l(sr), r(sr);
-    for (size_t i = 0; i < l.size(); ++i) l[i] = r[i] = static_cast<float>(0.3 * std::sin(2 * kPi * 15 * i / sr));
-    b.process(l.data(), r.data(), l.size());
-    const double a15 = toneAmp(l, 24000, 15, sr);
-    CHECK(20 * std::log10(a15 / 0.3) < -12, "mélyvágás (30 Hz): 15 Hz csillapítása %.1f dB", 20 * std::log10(a15 / 0.3));
 }
 
 static void testChain() {
-    std::printf("[4] Teljes lánc háttérszállal (FIR EQ, konvolver, keresztúsztatás)\n");
-    const double sr = 48000;
-    AetherChain c;
-    c.setSampleRate(sr);
-    c.startWorker();
+    std::printf("[6] Teljes lánc (háttérszál, konvolver csere)\n");
+    const double sr = 48000.0;
+    AetherChain chain;
+    chain.setSampleRate(sr);
+    chain.startWorker();
 
-    ParamData d = transparentParams();
-    d.set(kFlagEq, true);
-    d.eqMode = static_cast<int32_t>(EqMode::FirLinear);
-    d.numBands = 1;
-    d.bands[0] = { static_cast<int32_t>(EqBandType::Peaking), 1000.0f, 6.0f, 1.0f };
-    c.applyParamsRT(d);
-    CHECK(c.waitIdle(), "háttérszál elkészítette a FIR-t");
+    // Alapállapot: bit-pontosan átlátszó
+    std::mt19937 rng(3);
+    std::uniform_real_distribution<float> u(-0.9f, 0.9f);
+    std::vector<float> L(4800), R(4800);
+    for (auto& v : L) v = u(rng);
+    for (auto& v : R) v = u(rng);
+    std::vector<float> L0 = L, R0 = R;
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 480);
+    CHECK(L == L0 && R == R0, "kikapcsolt modulok: bit-pontosan érintetlen");
 
-    std::vector<float> l(sr), r(sr);
-    auto run = [&](double f) {
-        for (size_t i = 0; i < l.size(); ++i) l[i] = r[i] = static_cast<float>(0.1 * std::sin(2 * kPi * f * i / sr));
-        c.process(l.data(), r.data(), l.size());
-    };
-    run(1000);
-    CHECK(c.firEqActive() && c.eqLatencySamples() == 4096, "lineáris FIR aktív, késleltetés %zu minta (%.1f ms)",
-          c.eqLatencySamples(), c.eqLatencySamples() * 1000.0 / sr);
-    const double g = 20 * std::log10(toneAmp(l, 24000, 1000, sr) / 0.1);
-    CHECK(std::abs(g - 6.0) < 0.2, "1 kHz +6 dB FIR-rel mérve: %.2f dB", g);
+    // EQ + preamp
+    ParamData d = bellParams(0);
+    d.preampDb = -6.0f;
+    chain.applyParamsRT(d);
+    std::vector<float> s = sine(1000.0, 0.1, 48000, sr), s2 = s;
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, s, s2, 480);
+    const double g = 20 * std::log10(toneAmp(s, 24000, 1000.0, sr) / 0.1);
+    CHECK(std::abs(g) < 0.3, "-6 dB preamp + 6 dB harang: %.2f dB", g);
 
-    // Vissza IIR-re: a FIR leáll, az IIR veszi át
-    d.eqMode = static_cast<int32_t>(EqMode::Iir);
-    c.applyParamsRT(d);
-    c.waitIdle();
-    run(1000);
-    const double g2 = 20 * std::log10(toneAmp(l, 24000, 1000, sr) / 0.1);
-    CHECK(!c.firEqActive() && std::abs(g2 - 6.0) < 0.1, "IIR módban: %.2f dB, FIR kikapcsolva", g2);
-
-    // Konvolver: késleltetett impulzus IR (eredeti fázis) -> a jel 100 mintával később jelenik meg
-    std::vector<float> irv(1000, 0.0f);
-    irv[100] = 0.5f;
-    c.submitIr(IrData::fromInterleaved(irv.data(), 1000, 1, 48000, "teszt.wav"));
-    d.set(kFlagEq, false);
+    // Konvolver: késleltetett, felezett impulzus
+    IrData ir;
+    ir.sampleRate = 48000;
+    ir.name = "teszt";
+    ir.left.assign(2000, 0.0f);
+    ir.left[10] = 0.5f;
+    chain.submitIr(ir);
+    d = transparentParams();
     d.set(kFlagConvolver, true);
-    d.convPhaseMode = 1;
-    d.convGainDb = 0.0f;
-    c.applyParamsRT(d);
-    c.waitIdle();
-    std::fill(l.begin(), l.end(), 0.0f);
-    std::fill(r.begin(), r.end(), 0.0f);
-    c.process(l.data(), r.data(), 2048); // keresztúsztatás lefut
-    std::fill(l.begin(), l.end(), 0.0f);
-    l[0] = 1.0f;
-    c.process(l.data(), r.data(), 2048);
-    size_t pk = 0;
-    for (size_t i = 0; i < 2048; ++i) if (std::abs(l[i]) > std::abs(l[pk])) pk = i;
-    CHECK(c.convolverActive() && pk == 100 && std::abs(l[pk] - 1.0f) < 1e-3,
-          "konvolver: impulzus a %zu. mintán, szint %.3f (normalizált 0 dB csúcs)", pk, l[pk]);
+    d.convAutogain = 0;
+    chain.applyParamsRT(d);
+    std::vector<float> z(480, 0.0f), z2(480, 0.0f);
+    chain.process(z.data(), z2.data(), z.size()); // a blokkméret átadása a háttérszálnak
+    const bool idle = chain.waitIdle();
+    for (int i = 0; i < 3; ++i) chain.process(z.data(), z2.data(), z.size()); // átvétel + keresztúsztatás
+    std::vector<float> x(4800, 0.0f), x2(4800, 0.0f);
+    x[1000] = 1.0f;
+    x2[1000] = 1.0f;
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, x, x2, 480);
+    // 480 nem kettő hatványa: 256-os zita blokk + FIFO -> a válasz késhet
+    size_t at = 0;
+    for (size_t i = 0; i < x.size(); ++i) if (std::abs(x[i]) > 0.25f) { at = i; break; }
+    CHECK(idle && chain.convolverActive() && std::abs(x[at] - 0.5f) < 1e-4 && std::abs(x2[at] - 0.5f) < 1e-4 && at >= 1010,
+          "impulzus: 0,5 amplitúdó a %zu. mintán (IR késleltetés 10 + blokkillesztés %zu)", at, at - 1010);
 
-    // Minimálfázisú átalakítás: a késleltetés eltűnik
-    d.convPhaseMode = 0;
-    c.applyParamsRT(d);
-    c.waitIdle();
-    std::fill(l.begin(), l.end(), 0.0f);
-    c.process(l.data(), r.data(), 2048);
-    std::fill(l.begin(), l.end(), 0.0f);
-    l[0] = 1.0f;
-    c.process(l.data(), r.data(), 2048);
-    pk = 0;
-    for (size_t i = 0; i < 2048; ++i) if (std::abs(l[i]) > std::abs(l[pk])) pk = i;
-    CHECK(pk < 3, "minimálfázisúvá alakított IR csúcsa a %zu. mintán (előtte 100)", pk);
+    // Dry / wet keverés (EasyEffects: out = wet * konvolvált + dry * bemenet)
+    d.convDryDb = 0.0f;
+    d.convWetDb = -100.0f;
+    chain.applyParamsRT(d);
+    std::vector<float> w = sine(500.0, 0.2, 9600, sr), w2 = w;
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, w, w2, 480);
+    const double gd = 20 * std::log10(toneAmp(w, 4800, 500.0, sr) / 0.2);
+    CHECK(std::abs(gd) < 0.05, "csak dry: %.3f dB", gd);
 
-    // Kikapcsolás: a lánc újra átlátszó
+    // Kikapcsolás
     d.set(kFlagConvolver, false);
-    c.applyParamsRT(d);
-    c.waitIdle();
-    c.process(l.data(), r.data(), 2048);
-    std::vector<float> t(4096), t0;
-    for (size_t i = 0; i < t.size(); ++i) t[i] = static_cast<float>(std::sin(i * 0.01));
-    t0 = t;
-    std::vector<float> tr = t;
-    c.process(t.data(), tr.data(), t.size());
-    double diff = 0;
-    for (size_t i = 0; i < t.size(); ++i) diff = std::max(diff, static_cast<double>(std::abs(t[i] - t0[i])));
-    CHECK(!c.convolverActive() && diff == 0.0, "minden kikapcsolva -> bit-pontosan átlátszó (eltérés %.1e)", diff);
+    chain.applyParamsRT(d);
+    chain.waitIdle();
+    for (int i = 0; i < 3; ++i) chain.process(z.data(), z2.data(), z.size());
+    CHECK(!chain.convolverActive(), "konvolver kikapcsolva");
 
-    // Limiter a láncban: -6 dB plafon, 0.9 amplitúdójú szinusz
-    {
-        ParamData ld = transparentParams();
-        ld.limiterCeilingDb = -6.0f;
-        ld.set(kFlagLimiter, true);
-        c.applyParamsRT(ld);
-        std::vector<float> a(9600), b(9600);
-        for (size_t i = 0; i < a.size(); ++i) a[i] = b[i] = static_cast<float>(0.9 * std::sin(2 * kPi * 440 * i / sr));
-        c.process(a.data(), b.data(), a.size());
-        float mx = 0;
-        for (size_t i = 4800; i < a.size(); ++i) mx = std::max(mx, std::abs(a[i]));
-        CHECK(20 * std::log10(mx) <= -5.9 && c.gainReductionDb() < -4.5, "limiter: csúcs %.2f dBFS (plafon -6), GR %.1f dB",
-              20 * std::log10(mx), c.gainReductionDb());
-        c.applyParamsRT(transparentParams());
-    }
-
-    // Újramintavételezés: 96 kHz-es IR 48 kHz-re
-    std::vector<float> s96(9600);
-    for (size_t i = 0; i < s96.size(); ++i) s96[i] = static_cast<float>(std::sin(2 * kPi * 1000 * i / 96000.0));
-    auto s48 = resampleIr(s96, 96000, 48000);
-    double err = 0;
-    for (size_t i = 200; i < s48.size() - 200; ++i) err = std::max(err, std::abs(s48[i] - std::sin(2 * kPi * 1000 * i / 48000.0)));
-    CHECK(s48.size() == 4800 && err < 1e-3, "IR újramintavételezés 96k -> 48k: %zu minta, hiba %.1e", s48.size(), err);
-    c.stopWorker();
-}
-
-static void testTruePeakAndMore() {
-    std::printf("[5] True peak limiter, crossfeed ITD, EQ decramp, túlmintavételező\n");
-    const double sr = 48000;
-    // Mintaközi csúcs: fs/4 szinusz 45°-os fázissal -> a minták 0.707*A-n, a valódi csúcs A
-    auto runLim = [&](int os, double& gr, double& truePeakDb) {
-        TruePeakLimiter lim;
-        lim.prepare(sr);
-        lim.enabled = true;
-        lim.configure(-3.0, 50.0, 5.0, os);
-        std::vector<float> l(9600), r(9600);
-        for (size_t i = 0; i < l.size(); ++i) l[i] = r[i] = static_cast<float>(0.9 * std::sin(kPi / 2 * i + kPi / 4));
-        lim.process(l.data(), r.data(), l.size());
-        gr = lim.gainReductionDb();
-        double mx = 0;
-        for (size_t i = 4800; i < l.size(); ++i) mx = std::max(mx, static_cast<double>(std::abs(l[i])));
-        truePeakDb = 20 * std::log10(mx * std::sqrt(2.0)); // fs/4 szinusz: valódi csúcs = minta-csúcs * sqrt(2)
-    };
-    double gr1, tp1, gr4, tp4;
-    runLim(1, gr1, tp1);
-    runLim(4, gr4, tp4);
-    CHECK(tp1 > -3.0 + 2.0, "1x (mintaérték) detektor: a valódi csúcs %.2f dBTP, túllépi a -3 dB plafont (várt viselkedés)", tp1);
-    CHECK(tp4 <= -2.8 && gr4 < -1.5, "4x true peak detektor: valódi csúcs %.2f dBTP (plafon -3), GR %.2f dB", tp4, gr4);
-
-    // Lookahead: hirtelen 20 dB-es ugrás -> a kimenet sosem lépi túl a plafont, és nincs kemény vágás
-    {
-        TruePeakLimiter lim;
-        lim.prepare(sr);
-        lim.enabled = true;
-        lim.configure(-6.0, 80.0, 5.0, 4);
-        std::vector<float> l(24000), r(24000);
-        for (size_t i = 0; i < l.size(); ++i) {
-            const double a = i < 12000 ? 0.05 : 0.95;
-            l[i] = r[i] = static_cast<float>(a * std::sin(2 * kPi * 997 * i / sr));
-        }
-        lim.process(l.data(), r.data(), l.size());
-        const float ceil = static_cast<float>(std::pow(10.0, -6.0 / 20.0));
-        size_t atCeil = 0;
-        float mx = 0;
-        for (float v : l) { mx = std::max(mx, std::abs(v)); if (std::abs(v) >= ceil * 0.9999f) ++atCeil; }
-        CHECK(mx <= ceil + 1e-6f && atCeil < 5, "lookahead 5 ms: csúcs %.2f dBFS (plafon -6), plafonra vágott minta: %zu", 20 * std::log10(mx), atCeil);
-        // késleltetés = lookahead + 3 minta
-        TruePeakLimiter l2;
-        l2.prepare(sr);
-        l2.enabled = true;
-        l2.configure(0.0, 50.0, 2.0, 4);
-        std::vector<float> a(512, 0.0f), b(512, 0.0f);
-        a[0] = b[0] = 0.5f;
-        l2.process(a.data(), b.data(), a.size());
-        size_t pk = 0;
-        for (size_t i = 0; i < a.size(); ++i) if (std::abs(a[i]) > std::abs(a[pk])) pk = i;
-        CHECK(pk == l2.latencySamples() && pk == 96 + 3, "késleltetés: %zu minta (2 ms lookahead + 3)", pk);
-    }
-
-    // Crossfeed ITD: az áthalló jel késleltetve érkezik
-    {
-        CrossfeedProcessor cf(sr);
-        cf.prepareDelay();
-        cf.delayMs = 0.5;
-        cf.updateCoefficients();
-        std::vector<float> l(256, 0.0f), r(256, 0.0f);
-        l[0] = 1.0f;
-        cf.processBlock(l.data(), r.data(), l.size());
-        size_t first = 0;
-        while (first < r.size() && std::abs(r[first]) < 1e-7f) ++first;
-        // A 700 Hz-es aluláteresztő maga ~0,227 ms futásidőt ad; a késleltetővonal csak a különbséget pótolja
-        const size_t want = static_cast<size_t>((0.5 - 1000.0 / (2.0 * 3.14159265358979 * 700.0)) * 1e-3 * sr);
-        CHECK(first == want, "ITD 0,5 ms: a késleltetővonal %zu minta (várt %zu, a szűrő futásideje nélkül)", first, want);
-    }
-
-    // Crossfeed szint: középre kevert (mono) mély hang nem erősödik (korábban +3 dB volt)
-    {
-        CrossfeedProcessor cf(sr);
-        cf.prepareDelay();
-        cf.delayMs = 0.29;
-        cf.updateCoefficients();
-        std::vector<float> l(48000), r(48000);
-        for (size_t i = 0; i < l.size(); ++i) l[i] = r[i] = static_cast<float>(0.5 * std::sin(2.0 * 3.14159265358979 * 60.0 * i / sr));
-        cf.processBlock(l.data(), r.data(), l.size());
-        float pk = 0;
-        for (size_t i = 24000; i < l.size(); ++i) pk = std::max(pk, std::abs(l[i]));
-        const double g = 20 * std::log10(pk / 0.5);
-        CHECK(std::abs(g) < 0.3, "crossfeed: 60 Hz mono szint %.2f dB (várt ~0 dB)", g);
-    }
-
-    // Decramp: 15 kHz-es +6 dB magas polc 48 kHz-en; referencia = 768 kHz-re tervezett (közel analóg) szűrő
-    {
-        BiquadFilter ref(FilterType::HighShelf, 15000, 0.71, 6.0, 768000);
-        const double refDb = 20 * std::log10(std::abs(ref.evaluateTransferFunction(19000)));
-        double err[2];
-        int idx = 0;
-        for (int dc : { 1, 4 }) {
-            AetherChain c;
-            c.setSampleRate(sr);
-            ParamData d = transparentParams();
-            d.set(kFlagEq, true);
-            d.eqDecramp = dc;
-            d.numBands = 1;
-            d.bands[0] = { static_cast<int32_t>(EqBandType::HighShelf), 15000.0f, 6.0f, 0.71f };
-            c.applyParamsRT(d);
-            std::vector<float> l(24000), r(24000);
-            for (size_t i = 0; i < l.size(); ++i) l[i] = r[i] = static_cast<float>(0.1 * std::sin(2 * kPi * 19000 * i / sr));
-            c.process(l.data(), r.data(), l.size());
-            err[idx++] = 20 * std::log10(toneAmp(l, 12000, 19000, sr) / 0.1) - refDb;
-        }
-        CHECK(std::abs(err[1]) < 0.25 && std::abs(err[0]) > std::abs(err[1]),
-              "decramp: 19 kHz-en eltérés az analóg menettől: 1x %.2f dB, 4x %.2f dB", err[0], err[1]);
-    }
-
-    // Túlmintavételező: sík átvitel a hallható sávban
-    {
-        Oversampler os;
-        double worst = 0;
-        for (double f : { 100.0, 1000.0, 10000.0, 18000.0, 19500.0 }) {
-            std::vector<float> l(24000), r(24000);
-            for (size_t i = 0; i < l.size(); ++i) l[i] = r[i] = static_cast<float>(0.1 * std::sin(2 * kPi * f * i / sr));
-            os.reset();
-            os.process(l.data(), r.data(), l.size(), 4, [](float*, float*, size_t) {});
-            worst = std::max(worst, std::abs(20 * std::log10(toneAmp(l, 12000, f, sr) / 0.1)));
-        }
-        CHECK(worst < 0.1, "4x túlmintavételező: max. eltérés 100 Hz - 19,5 kHz: %.3f dB, késleltetés %.1f minta",
-              worst, os.latencySamples(4));
-    }
+    // Limiter a láncban
+    d = transparentParams();
+    d.set(kFlagLimiter, true);
+    chain.applyParamsRT(d);
+    std::vector<float> h = sine(997.0, 1.5, 48000, sr), h2 = h;
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, h, h2, 480);
+    float pk = 0;
+    for (size_t i = 24000; i < h.size(); ++i) pk = std::max(pk, std::abs(h[i]));
+    CHECK(20 * std::log10(pk) < -0.9 && chain.gainReductionDb() < -3.0, "limiter: csúcs %.2f dBFS, GR %.1f dB",
+          20 * std::log10(pk), chain.gainReductionDb());
+    chain.stopWorker();
 }
 
 int main() {
     std::printf("========================================================\n");
-    std::printf(" Aqulify DSP modulteszt\n");
+    std::printf(" Aqulify DSP modulteszt (EasyEffects könyvtárak)\n");
     std::printf("========================================================\n");
-    testConvolver();
-    testFirDesign();
+    testEqualizer();
+    testLimiter();
+    testCrossfeed();
     testBass();
+    testConvolver();
     testChain();
-    testTruePeakAndMore();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

@@ -30,7 +30,7 @@ jobs:
       - name: Függőségek
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config libpipewire-0.3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y ninja-build pkg-config libpipewire-0.3-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Fordítás (motor, felület, tesztek)
         run: |
@@ -38,7 +38,7 @@ jobs:
           cmake --build build -j"$(nproc)"
           test -x build/aqulify-engine
           test -x build/aqulify-gui
-          for t in test_math test_pipeline test_ringbuffer test_core test_dsp; do ./build/$t; done
+          for t in test_ringbuffer test_core test_dsp; do ./build/$t; done
 
       - name: Linux telepítő csomag
         id: pkg
@@ -103,20 +103,32 @@ jobs:
             https://github.com/mstorsjo/llvm-mingw/releases/download/20250924/${LLVM_MINGW}.tar.xz
           sudo tar -xf /tmp/llvm-mingw.tar.xz -C /opt
           sudo ln -s /opt/${LLVM_MINGW} /opt/llvm-mingw
-          sudo apt-get install -y ninja-build
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config libfftw3-dev
+
+      - name: FFTW 3.3.10 forrás (a Windows binárisokba statikusan épül)
+        run: |
+          for i in 1 2 3; do curl -fsSL -o /tmp/fftw.tar.gz https://www.fftw.org/fftw-3.3.10.tar.gz && break; sleep 15; done
+          got=$(sha256sum /tmp/fftw.tar.gz | cut -d' ' -f1)
+          want=56c932549852cddcfafdab3820b0200c7742675be92179e59e6215b340e26467
+          if [ "$got" != "$want" ]; then echo "::error title=FFTW::sha256 eltérés: $got"; exit 1; fi
+          tar -xzf /tmp/fftw.tar.gz -C "$RUNNER_TEMP"
 
       - name: Fordítás
         run: |
           cmake -B build-win -S . -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE=windows/toolchain-llvm-mingw.cmake -DLLVM_MINGW_ROOT=/opt/llvm-mingw
-          cmake --build build-win -j"$(nproc)"
+            -DCMAKE_TOOLCHAIN_FILE=windows/toolchain-llvm-mingw.cmake -DLLVM_MINGW_ROOT=/opt/llvm-mingw \
+            -DAQULIFY_FFTW_SOURCE_DIR="$RUNNER_TEMP/fftw-3.3.10"
+          cmake --build build-win -j"$(nproc)" > build-win.log 2>&1 || {
+            msg=$(grep -E "error|Error" build-win.log | tail -n 30 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Windows build::${msg}"; exit 1; }
 
       - name: Közös DSP tesztek (Linux)
         run: |
           cmake -B build-test -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=OFF
           cmake --build build-test -j"$(nproc)"
           fail=0
-          for t in test_math test_pipeline test_ringbuffer test_core test_dsp; do
+          for t in test_ringbuffer test_core test_dsp; do
             echo "::group::$t"
             if ./build-test/$t; then echo "$t: OK"; else echo "::error::$t sikertelen"; fail=1; fi
             echo "::endgroup::"

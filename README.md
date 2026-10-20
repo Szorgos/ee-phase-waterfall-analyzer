@@ -23,7 +23,7 @@
 > ℹ️ **Névváltás:** a program 1.4.8-ig **AetherAudio** néven futott. Mivel ezt a nevet más hangszoftverek is használják, **Aqulify** lett az új neve. A korábbi telepítés frissítéskor automatikusan átáll: a beállítások, az EQ profilok és a konvolver IR megmaradnak.
 
 Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
-* **Analitikus transzparencia:** Alacsony késleltetésű C++20 algoritmusok; választható minimálfázisú (IIR vagy FIR), köztes és lineáris fázisú szűrők.
+* **Analitikus transzparencia:** Az EasyEffects DSP könyvtárai (LSP, Calf, libbs2b, SpeexDSP, zita-convolver); IIR, FIR, FFT és SPM EQ mód.
 * **Akusztikai látásmód:** A rejtett rezonanciák és a lineáris fázisú szűrők előcsengésének (pre-ringing) megjelenítése a 3D vízesés-spektrogramon.
 * **Akusztikai tisztaság:** Teljes kontroll a fázis, a térhatás és a csúcsértékek felett, hogy a zene pontosan úgy szólaljon meg, ahogyan megszületett.
 
@@ -37,7 +37,7 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
 
 1. **Élő 3D Akusztikai Vízesés & Spektrogram (Top-Strip WebGL Engine):**
    * Valós idejű, 60 FPS gördülés állítható időszeletekkel (60 – 240 lépcső).
-   * **Előcsengés (pre-ringing) jelzése:** Lineáris / köztes fázisú FIR módban egy diszkrét felirat jelzi, hogy előcsengés lehetséges. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik; a program nem nagyítja fel.
+   * **Előcsengés (pre-ringing) jelzése:** FIR / FFT / SPM (lineáris fázisú) módban egy diszkrét felirat jelzi, hogy előcsengés lehetséges. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik; a program nem nagyítja fel.
    * Állítható hőtérkép és nézőpontok (3D Izometrikus, Felülnézeti 2D Hőtérkép, Szembőli Spektrum).
 
 2. **2D Analitikus Fázis- és Csoportkésleltetés ($-\frac{d\phi}{d\omega}$):**
@@ -52,11 +52,11 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
    * **Automatikus preamp (dupla levonás nélkül):** Induláskor 0 dB. Ha az EQ-görbe klippelne, a preamp magától a görbe csúcsához igazodik (és a limiter bekapcsol). Ha az importált profil tartalmaz preampot, pontosan azt használja; ha nem, az automatika állítja be.
 
 4. **Kézi Mesterkapcsolók Minden Modulhoz (Ki/Bekapcsolható lánc):**
-   * **Parametrikus EQ:** Szabadon állítható sávok minimálfázisú (IIR) és lineáris fázisú (FIR) móddal.
-   * **Crossfeed Szimulátor:** Bauer bs2b, Jan Meier Corda és Studio Nearfield térhatás-profilok a fejhallgatós sztereó izoláció megszüntetésére.
-   * **Convolver (Partícionált FIR):** IR (WAV/IRS) betöltés és előnézet; a feldolgozási késleltetés nem nő az IR hosszával (az IR saját késleltetése megmarad). Szobakorrekcióhoz mérésből tervezett korrekciós szűrőt tölts be (pl. REW), ne a szoba nyers impulzusválaszát.
-   * **True Peak Limiter & Soft-Clipper:** BS.1770-szerű, túlmintavételezett (1x–8x) mintaközi csúcsbecslés, alapértelmezett -1,0 dBTP plafon. A túlvezérlés ellen elsősorban a teljes EQ-görbéhez igazított előerősítés véd; a limiter biztonsági háló (negatív preampú profil importjakor vagy betöltésekor automatikusan bekapcsol), nem hallásvédelem.
-   * **Bass Enhancer:** Pszichoakusztikai hiányzó alaphang szintézis membránkímélő 30 Hz-es szub-vágással.
+   * **Parametrikus EQ (LSP Parametric Equalizer):** legfeljebb 32 sáv, 12 szűrőtípus, RLC / BWC / LRX / APO szűrőmód, x1–x4 meredekség; IIR, FIR, FFT és SPM mód, decramp.
+   * **Crossfeed Szimulátor (libbs2b):** Bauer bs2b (700 Hz / 4,5 dB), Jan Meier (650 Hz / 9,5 dB) és közeltéri stúdió (600 Hz / 3,5 dB) profil a fejhallgatós sztereó izoláció megszüntetésére.
+   * **Convolver (zita-convolver):** IR (WAV/IRS) betöltés és előnézet, IR szélesség, autogain, dry / wet; a feldolgozási késleltetés nem nő az IR hosszával (az IR saját késleltetése megmarad). Szobakorrekcióhoz mérésből tervezett korrekciós szűrőt tölts be (pl. REW), ne a szoba nyers impulzusválaszát.
+   * **Limiter (LSP Limiter):** 12 mód, túlmintavételezés (True Peak is), dither, lookahead / attack / release, ALR; alapértelmezés: -1,0 dB küszöb, True Peak / 24 bit. A túlvezérlés ellen elsősorban a teljes EQ-görbéhez igazított előerősítés véd; a limiter biztonsági háló (negatív preampú profil importjakor vagy betöltésekor automatikusan bekapcsol), nem hallásvédelem.
+   * **Bass Enhancer (Calf):** pszichoakusztikai hiányzó alaphang szintézis (amount, harmonics, scope, floor, blend).
 
 5. **Zármentes (Lock-free) C++20 Ringbuffer és PipeWire SPA Integráció:**
    * Zéró hangkimaradás (xrun-free): a grafikai terhelés soha nem akaszthatja meg a zenelejátszást.
@@ -128,7 +128,7 @@ Az Aqulify ingyenes, egyszemélyes nyílt forrású projekt, ezért a Windows-te
 
 Ha a Windows-figyelmeztetéseket nem szeretnéd megkerülni, a **Linux-verzió** forrásból fordul (`./install.sh`), ott ilyen korlát nincs.
 
-A Linuxos és a Windowsos ág ugyanazt a C++ DSP láncot futtatja (`include/aether_chain.hpp`): IIR vagy FIR EQ (lineáris / köztes / minimálfázis), Bass Enhancer, crossfeed, partícionált FFT konvolver és limiter. A drága műveletek háttérszálon futnak, a csere kattanásmentes.
+A Linuxos és a Windowsos ág ugyanazt a C++ DSP láncot futtatja (`include/aether_chain.hpp`): LSP equalizer (IIR / FIR / FFT / SPM), Calf Bass Enhancer, libbs2b crossfeed, zita-convolver és LSP limiter. A drága műveletek háttérszálon futnak, a csere kattanásmentes.
 
 ---
 
@@ -155,7 +155,7 @@ Ha kézzel szeretnéd lefordítani vagy módosítani a C++ motort:
 
 ```bash
 # Függőségek (Ubuntu/Debian példa):
-sudo apt install build-essential cmake libpipewire-0.3-dev pkg-config
+sudo apt install build-essential cmake libpipewire-0.3-dev libfftw3-dev pkg-config
 
 # Fordítás (a saját ablakhoz: libgtk-3-dev libwebkit2gtk-4.1-dev):
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON
@@ -163,11 +163,9 @@ cmake --build build -j$(nproc)
 ./build/aqulify-engine        # motor kézi indítása (Ctrl+C: leállítás)
 
 # Tesztek futtatása:
-./build/test_math         # Zárt képletű csoportkésleltetés teszt
-./build/test_pipeline     # DSP lánc és limiter csillapítás teszt
 ./build/test_ringbuffer   # 96 000 mintás többszálú zármentes átviteli teszt
-./build/test_core         # FFT spektrum, seqlock, tap körpuffer, JSON, átlátszóság
-./build/test_dsp          # Konvolver, FIR EQ, Bass Enhancer, limiter, teljes lánc
+./build/test_core         # FFT spektrum, paraméterfájl, seqlock, tap körpuffer, JSON
+./build/test_dsp          # EQ, limiter, crossfeed, bass enhancer, konvolver, teljes lánc
 ```
 
 ---
@@ -182,14 +180,7 @@ cmake --build build -j$(nproc)
 ├── autoeq_index.js             # 8 850+ modellt tartalmazó AutoEq fülhallgató adatbázis
 ├── include/
 │   ├── aether_chain.hpp        # Teljes DSP lánc háttérszállal (Linux + Windows közös mag)
-│   ├── partitioned_convolver.hpp # Zéró latency partícionált FFT konvolver
-│   ├── fir_design.hpp          # FIR EQ tervezés, IR újramintavételezés, minimálfázis
-│   ├── bass_enhancer.hpp       # Pszichoakusztikai mélyhang-kiemelő
-│   ├── biquad_analyzer.hpp     # Analitikus IIR szűrőmatematika és csoportkésleltetés
-│   ├── crossfeed.hpp           # Bauer bs2b és Jan Meier fejhallgatós térhatás motor
-│   ├── convolver.hpp           # Partícionált FIR impulzusválasz konvolúció
-│   ├── limiter.hpp             # True Peak limiter és analóg soft-clipper védelem
-│   ├── dsp_pipeline.hpp        # Integrált feldolgozási lánc (Preamp -> EQ -> CF -> Conv -> Limiter)
+│   ├── ee_dsp.hpp              # EQ, limiter, bass enhancer, crossfeed, konvolver (src/ee_dsp_*.cpp)
 │   ├── ringbuffer.hpp          # Zármentes SPSC körpuffer valós idejű hangátvitelhez
 │   ├── pipewire_sink_node.hpp  # Linux: „Aqulify” virtuális kimenet (két pw_stream, filter-chain mintára)
 │   ├── linux_store.hpp         # Linux: beállítások és IR mentése (~/.config/aqulify)
@@ -197,7 +188,6 @@ cmake --build build -j$(nproc)
 │   ├── net_compat.hpp          # BSD socket / Winsock2 közös réteg
 │   ├── spectrum.hpp            # Hann-ablakos FFT, 160 logaritmikus sáv + L/R fázis
 │   ├── param_block.hpp         # Zármentes (seqlock) paraméterblokk GUI -> audio szál
-│   ├── param_apply.hpp         # Paraméterek alkalmazása a DSP láncra, foglalásmentesen
 │   ├── tap_ring.hpp            # Felülíró sztereó tap körpuffer (közös memóriában is)
 │   ├── shared_state.hpp        # Plugin <-> motor közös memória elrendezés (Windows)
 │   ├── mini_json.hpp           # Függőségmentes JSON olvasó a vezérlőüzenetekhez
@@ -205,11 +195,13 @@ cmake --build build -j$(nproc)
 ├── src/
 │   ├── pipewire_plugin.cpp     # Linux motor (aqulify-engine) belépési pontja
 │   ├── aether_gui_linux.cpp    # Linux felület saját ablakban (WebKitGTK)
-│   ├── test_core.cpp           # Közös mag teszt (FFT, seqlock, tap, JSON, átlátszóság)
-│   ├── test_dsp.cpp            # Konvolver, FIR EQ, Bass Enhancer, teljes lánc teszt
-│   ├── test_math.cpp           # Matematikai ellenőrző alkalmazás
-│   ├── test_pipeline.cpp       # DSP integrációs tesztprogram
+│   ├── ee_dsp_lsp.cpp          # Equalizer és Limiter (LSP)
+│   ├── ee_dsp_misc.cpp         # Bass Enhancer (Calf) és Crossfeed (libbs2b)
+│   ├── ee_dsp_convolver.cpp    # Convolver (zita-convolver, SpeexDSP)
+│   ├── test_core.cpp           # Közös mag teszt (FFT, paraméterfájl, seqlock, tap, JSON)
+│   ├── test_dsp.cpp            # DSP modulok és teljes lánc teszt
 │   └── test_ringbuffer.cpp     # Többszálú valós idejű stabilitási tesztprogram
+├── third_party/                # LSP, Calf, libbs2b, SpeexDSP, zita-convolver (forrás, licencekkel)
 └── windows/
     ├── README_WINDOWS.md       # Windows telepítés, használat, fordítás
     ├── engine/                 # Aqulify.exe (tálcás motor, WASAPI loopback, plugin híd)

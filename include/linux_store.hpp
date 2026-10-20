@@ -25,7 +25,7 @@
 namespace ee_analyzer::linux_store {
 
 constexpr uint32_t kParamMagic = 0x50454141; // 'AAEP'
-constexpr uint32_t kParamVersion = 3;
+constexpr uint32_t kParamVersion = kParamLayoutVersion;
 constexpr uint32_t kIrMagic = 0x46524941;    // 'AIRF'
 
 inline std::string configDir(bool create) {
@@ -74,14 +74,8 @@ inline bool loadParams(ParamData& out) {
     if (b.size() < 12) return false;
     uint32_t hdr[3];
     std::memcpy(hdr, b.data(), 12);
-    if (hdr[0] != kParamMagic || hdr[1] < 2 || hdr[1] > kParamVersion || hdr[2] > sizeof(ParamData) ||
-        b.size() < 12 + hdr[2] || hdr[2] < offsetof(ParamData, eqMode))
-        return false;
-    ParamData d{};
-    std::memcpy(&d, b.data() + 12, hdr[2]);
-    if (d.numBands > kMaxEqBands) d.numBands = kMaxEqBands;
-    out = d;
-    return true;
+    if (hdr[0] != kParamMagic) return false;
+    return loadParamBytes(b.data() + 12, b.size() - 12, hdr[1], hdr[2], out);
 }
 
 inline bool saveIr(const IrData& ir) {

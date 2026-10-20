@@ -36,7 +36,7 @@
 #include <cstring>
 
 #include "ws_bridge.hpp"
-#include "param_apply.hpp"
+#include "param_block.hpp"
 #include "../common/win_shared.hpp"
 #include "wasapi_loopback.hpp"
 #include "tray.hpp"

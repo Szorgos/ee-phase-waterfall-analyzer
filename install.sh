@@ -46,24 +46,24 @@ GUI_PKGS_OK=1
 case "$ID_ALL" in
     *ubuntu*|*debian*)
         sudo apt-get update
-        sudo apt-get install -y build-essential cmake pkg-config libpipewire-0.3-dev pipewire
+        sudo apt-get install -y build-essential cmake pkg-config libpipewire-0.3-dev libfftw3-dev pipewire
         sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev \
             || sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev || GUI_PKGS_OK=0
         ;;
     *fedora*|*rhel*|*centos*)
-        sudo dnf install -y gcc-c++ cmake pkgconf pipewire-devel pipewire
+        sudo dnf install -y gcc gcc-c++ cmake pkgconf pipewire-devel fftw-devel pipewire
         sudo dnf install -y gtk3-devel webkit2gtk4.1-devel || GUI_PKGS_OK=0
         ;;
     *arch*|*manjaro*|*endeavouros*)
-        sudo pacman -S --needed --noconfirm base-devel cmake pkgconf pipewire
+        sudo pacman -S --needed --noconfirm base-devel cmake pkgconf pipewire fftw
         sudo pacman -S --needed --noconfirm gtk3 webkit2gtk-4.1 || GUI_PKGS_OK=0
         ;;
     *suse*)
-        sudo zypper install -y gcc-c++ cmake pkg-config pipewire-devel pipewire
+        sudo zypper install -y gcc gcc-c++ cmake pkg-config pipewire-devel fftw3-devel pipewire
         sudo zypper install -y gtk3-devel webkit2gtk3-devel || GUI_PKGS_OK=0
         ;;
     *)
-        warn "Ismeretlen disztribúció ($ID). Kell: C++20 fordító, cmake, pkg-config, libpipewire-0.3 fejlesztői csomag;"
+        warn "Ismeretlen disztribúció ($ID). Kell: C/C++20 fordító, cmake, pkg-config, libpipewire-0.3 és fftw3 (float) fejlesztői csomag;"
         warn "a saját ablakhoz: gtk3 és webkit2gtk-4.1 (vagy 4.0) fejlesztői csomag."
         ;;
 esac

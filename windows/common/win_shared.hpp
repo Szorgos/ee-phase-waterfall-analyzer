@@ -129,7 +129,7 @@ private:
 // ---------------------------------------------------------------- tartós beállítások
 
 constexpr uint32_t kParamFileMagic = 0x50454141; // 'AAEP'
-constexpr uint32_t kParamFileVersion = 3;
+constexpr uint32_t kParamFileVersion = kParamLayoutVersion;
 
 struct ParamFile {
     uint32_t magic;
@@ -171,16 +171,9 @@ inline bool loadParamFile(ParamData& out) {
     if (!ok || read < 12) return false;
     uint32_t hdr[3];
     std::memcpy(hdr, buf.data(), sizeof(hdr));
-    // Régebbi verziók (v2) is betölthetők: a ParamData csak a végén bővül, az új mezők alapértéket kapnak
-    if (hdr[0] != kParamFileMagic || hdr[1] < 2 || hdr[1] > kParamFileVersion || hdr[2] > sizeof(ParamData) ||
-        read < 12 + hdr[2] || hdr[2] < offsetof(ParamData, eqMode)) {
-        return false;
-    }
-    ParamData d{};
-    std::memcpy(&d, buf.data() + 12, hdr[2]);
-    if (d.numBands > kMaxEqBands) d.numBands = kMaxEqBands;
-    out = d;
-    return true;
+    // Régebbi verziók (v2, v3) is betölthetők: a régi beállítások az új paraméterekre kerülnek
+    if (hdr[0] != kParamFileMagic) return false;
+    return loadParamBytes(buf.data() + 12, read - 12, hdr[1], hdr[2], out);
 }
 
 inline bool saveParamFile(const ParamData& d) {
