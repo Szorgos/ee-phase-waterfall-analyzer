@@ -1,4 +1,7 @@
-### Újdonságok (1.4.5)
+### Újdonságok (1.4.6)
+- **Frekvenciaskála a 3D vízesés alatt** (20 Hz – 20 kHz): a vízesés alsó éléhez igazodik, így a csúcsok frekvenciája leolvasható; a 3D és a felülnézetben látszik, oldalnézetben (ahol a frekvencia a mélységbe mutat) rejtve.
+
+### Az 1.4.5 újdonságai
 - **Javítva: „+ Új Sáv” gomb** – eddig nem csinált semmit. Az új sáv 0 dB-lel a legnagyobb üres frekvenciatartományba kerül (legfeljebb 32 sáv); dupla kattintással a görbén a kattintás helyére is tehetsz új sávot.
 - **Javítva: EQ-görbe kirajzolása magas polcszűrőnél (high shelf)** – a felület hibás képlettel számolta, ezért a teljes kék görbe több tíz dB-lel lejjebb, gyakran a képen kívül látszott (a hangot nem érintette, a motor helyesen számolt). Most a görbe pontosan követi a sávok mozgatását.
 

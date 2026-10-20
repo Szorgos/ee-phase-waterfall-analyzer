@@ -56,6 +56,8 @@
   /* ======================================================= */
   .top-spectrum-strip { position: relative; width: 100%; height: clamp(230px, 32vh, 420px); background: #0c0e12; border-bottom: 1px solid var(--ee-border); overflow: hidden; }
   canvas#waterfallCanvas { width: 100%; height: 100%; display: block; }
+  .freq-scale { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 30px; pointer-events: none;
+                background: linear-gradient(to top, rgba(12,14,18,0.94) 0%, rgba(12,14,18,0.75) 55%, rgba(12,14,18,0) 100%); }
 
   .strip-overlay { position: absolute; top: 10px; left: 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; pointer-events: none; }
   .strip-badge { background: rgba(30, 30, 30, 0.85); backdrop-filter: blur(4px); border: 1px solid var(--ee-border); border-radius: 6px; padding: 4px 10px; font-size: 0.72rem; color: var(--ee-text-secondary); }
@@ -236,6 +238,8 @@
   <!-- ======================================================= -->
   <div class="top-spectrum-strip">
     <canvas id="waterfallCanvas"></canvas>
+    <!-- Frekvenciaskála a vízesés első (alsó) éléhez igazítva -->
+    <canvas id="freqScaleCanvas" class="freq-scale" aria-hidden="true"></canvas>
 
     <div class="strip-overlay">
       <div class="strip-badge">
@@ -1078,9 +1082,98 @@ if (btnCameraAngle) {
   };
 }
 
+
+// ---------------------------------------------------------------- frekvenciaskála a vízesés alatt
+// A spektrum 160 logaritmikus sávja 20 Hz – 20 kHz (spectrum.hpp); a mesh x-oszlopai ezek a sávok.
+const freqScaleCanvas = document.getElementById("freqScaleCanvas");
+const freqScaleCtx = freqScaleCanvas ? freqScaleCanvas.getContext("2d") : null;
+let freqScaleKey = "";
+const FS_MAJOR = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+const FS_MINOR = [30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000, 7000, 8000, 9000];
+const _fsVec = new THREE.Vector3();
+
+/** Egy frekvencia képernyő-x koordinátája ott, ahol a vízesés alja a skála felső szélénél van. */
+function freqScreenX(freq, w, h, edgeY) {
+  const frac = Math.max(0, Math.min(1, ((Math.log10(freq) - Math.log10(20)) / 3 * FREQ_BINS - 0.5) / (FREQ_BINS - 1)));
+  const x3 = -planeWidth / 2 + planeWidth * frac;
+  const proj = (z) => { _fsVec.set(x3, 0, z).project(camera); return { x: (_fsVec.x + 1) / 2 * w, y: (1 - _fsVec.y) / 2 * h }; };
+  let p = proj(planeDepth / 2);                 // a mesh első éle
+  if (p.y > edgeY) {                            // ha a képen kívül esik: a látható alsó szélhez keresünk z-t
+    let lo = -planeDepth / 2, hi = planeDepth / 2;
+    for (let i = 0; i < 24; i++) {
+      const mid = (lo + hi) / 2;
+      if (proj(mid).y > edgeY) hi = mid; else lo = mid;
+    }
+    p = proj(lo);
+  }
+  return p.x;
+}
+
+function drawFreqScale(force) {
+  if (!freqScaleCtx) return;
+  const w = wfCanvas.clientWidth, h = wfCanvas.clientHeight;
+  const sh = 30;                                // .freq-scale magassága (rejtve a clientHeight 0 lenne)
+  const key = `${w}x${h}|${currentViewIdx}`;
+  if (!force && key === freqScaleKey) return;
+  freqScaleKey = key;
+  camera.updateMatrixWorld();
+  const dpr = window.devicePixelRatio || 1;
+  freqScaleCanvas.width = Math.round(w * dpr);
+  freqScaleCanvas.height = Math.round(sh * dpr);
+  const c = freqScaleCtx;
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, w, sh);
+  // Oldalnézetben a frekvenciatengely a mélységbe mutat: ott nincs értelme a skálának
+  if (w <= 0 || h <= 0 || cameraViews[currentViewIdx].name === "Oldalsó Profil") { freqScaleCanvas.style.display = "none"; return; }
+  freqScaleCanvas.style.display = "block";
+  const edgeY = h - sh;                         // a skála felső széle a vízesés-vásznon
+  const x0 = freqScreenX(20, w, h, edgeY), x1 = freqScreenX(20000, w, h, edgeY);
+  const baseY = 9.5;
+
+  // Alapvonal a vízesés színátmenetével (kék → türkiz → zöld → sárga → narancs), visszafogottan
+  const grad = c.createLinearGradient(x0, 0, x1, 0);
+  [[0, "#2a5cff"], [0.25, "#00c8e0"], [0.5, "#3ddc84"], [0.75, "#f6d32d"], [1, "#ff7a1a"]].forEach(([o, col]) => grad.addColorStop(o, col));
+  c.globalAlpha = 0.55;
+  c.strokeStyle = grad;
+  c.lineWidth = 1.5;
+  c.beginPath(); c.moveTo(x0, baseY); c.lineTo(x1, baseY); c.stroke();
+  c.globalAlpha = 1;
+
+  // Kis osztások
+  c.strokeStyle = "rgba(190, 189, 186, 0.35)";
+  c.lineWidth = 1;
+  for (const f of FS_MINOR) {
+    const x = Math.round(freqScreenX(f, w, h, edgeY)) + 0.5;
+    c.beginPath(); c.moveTo(x, baseY - 2); c.lineTo(x, baseY + 2); c.stroke();
+  }
+  // Fő osztások feliratokkal (a fülgombok szürkéjénél kicsit világosabb árnyalat)
+  c.font = "600 10.5px sans-serif";
+  c.textAlign = "center";
+  c.textBaseline = "top";
+  let lastRight = -1e9;
+  for (const f of FS_MAJOR) {
+    const xr = freqScreenX(f, w, h, edgeY);
+    const x = Math.round(xr) + 0.5;
+    c.strokeStyle = "rgba(205, 204, 201, 0.75)";
+    c.beginPath(); c.moveTo(x, baseY - 4); c.lineTo(x, baseY + 3); c.stroke();
+    const label = f >= 1000 ? (f / 1000) + "k" : String(f);
+    const tw = c.measureText(label).width;
+    let tx = Math.min(w - tw / 2 - 2, Math.max(tw / 2 + 2, xr));
+    if (tx - tw / 2 < lastRight + 6) continue;   // ütköző feliratot kihagyjuk (keskeny ablak)
+    c.fillStyle = "#b9b8b5";
+    c.fillText(label, tx, baseY + 5);
+    lastRight = tx + tw / 2;
+  }
+  c.fillStyle = "rgba(185, 184, 181, 0.55)";
+  c.textAlign = "left";
+  c.font = "10px sans-serif";
+  if (x0 > 34) c.fillText("Hz", Math.max(4, x0 - 28), baseY + 5);
+}
+
 // 3D Animációs Ciklus
 function animate3D() {
   requestAnimationFrame(animate3D);
+  drawFreqScale(false);
 
   const slice = new Float32Array(FREQ_BINS);
   const mask = new Uint8Array(FREQ_BINS);
