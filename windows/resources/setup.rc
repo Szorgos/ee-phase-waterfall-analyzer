@@ -1,0 +1,5 @@
+#include <windows.h>
+1 ICON "aether.ico"
+1 RT_MANIFEST "setup.manifest"
+#include "setup_version.rc"
+#include "setup_payload.rc"

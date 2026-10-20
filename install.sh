@@ -1,146 +1,173 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# AetherAudio - Valós Idejű Fázis- és Akusztikai Vízesés Analizátor DSP Rendszer
-# Univerzális Linux Telepítő és Build Szkript
-# Támogatott disztribúciók: Ubuntu, Debian, Fedora, Arch Linux, Manjaro, openSUSE
+# AetherAudio – telepítő Linuxra (PipeWire)
+#
+# Mit csinál:
+#   1. telepíti a fordításhoz szükséges csomagokat (sudo jelszót kérhet),
+#   2. lefordítja a motort (és ha lehet, a saját ablakos felületet),
+#   3. felmásolja a felhasználó saját mappájába (~/.local), root jog nélkül,
+#   4. beállítja, hogy a motor bejelentkezéskor automatikusan induljon (systemd felhasználói szolgáltatás),
+#   5. menübejegyzést készít ("AetherAudio"),
+#   6. kérésre az "AetherAudio" eszközt teszi meg alapértelmezett hangkimenetnek.
+#
+# Eltávolítás: ./uninstall.sh
+# Támogatott: Ubuntu / Debian / Mint / Pop!_OS, Fedora, Arch / Manjaro / EndeavourOS, openSUSE
 # ==============================================================================
+set -euo pipefail
 
-set -e
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-echo -e "${BLUE}====================================================================${NC}"
-echo -e "${GREEN}  AetherAudio • Phase & Acoustic Waterfall DSP Telepítő${NC}"
-echo -e "${BLUE}====================================================================${NC}"
+RED='\033[0;31m'; GREEN='\033[0;32m'; BLUE='\033[0;34m'; YELLOW='\033[1;33m'; NC='\033[0m'
+say()  { echo -e "${YELLOW}$*${NC}"; }
+ok()   { echo -e "${GREEN}✓ $*${NC}"; }
+warn() { echo -e "${YELLOW}! $*${NC}"; }
+die()  { echo -e "${RED}[Hiba] $*${NC}"; exit 1; }
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_DIR"
 
-# 1. Linux Disztribúció Felismerése
-echo -e "\n${YELLOW}[1/5] Linux disztribúció és csomagkezelő detektálása...${NC}"
+PREFIX="${HOME}/.local"
+BIN_DIR="${PREFIX}/bin"
+SHARE_DIR="${PREFIX}/share/aetheraudio"
+GUI_DIR="${SHARE_DIR}/gui"
+UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+APP_DIR="${PREFIX}/share/applications"
+ICON_DIR="${PREFIX}/share/icons/hicolor/256x256/apps"
 
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    OS=$ID
-    LIKE=$ID_LIKE
+echo -e "${BLUE}====================================================================${NC}"
+echo -e "${GREEN}  AetherAudio – telepítés Linuxra${NC}"
+echo -e "${BLUE}====================================================================${NC}"
+
+[ "$(id -u)" -eq 0 ] && [ -z "${AETHER_ALLOW_ROOT:-}" ] && die "Ne rootként futtasd! A saját felhasználóddal indítsd (a csomagokhoz sudo jelszót fog kérni)."
+
+# ------------------------------------------------------------------ 1. csomagok
+say "\n[1/6] Szükséges csomagok telepítése..."
+. /etc/os-release 2>/dev/null || die "Nem állapítható meg a disztribúció (/etc/os-release)."
+ID_ALL="${ID:-} ${ID_LIKE:-}"
+GUI_PKGS_OK=1
+case "$ID_ALL" in
+    *ubuntu*|*debian*)
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake pkg-config libpipewire-0.3-dev pipewire
+        sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev \
+            || sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev || GUI_PKGS_OK=0
+        ;;
+    *fedora*|*rhel*|*centos*)
+        sudo dnf install -y gcc-c++ cmake pkgconf pipewire-devel pipewire
+        sudo dnf install -y gtk3-devel webkit2gtk4.1-devel || GUI_PKGS_OK=0
+        ;;
+    *arch*|*manjaro*|*endeavouros*)
+        sudo pacman -S --needed --noconfirm base-devel cmake pkgconf pipewire
+        sudo pacman -S --needed --noconfirm gtk3 webkit2gtk-4.1 || GUI_PKGS_OK=0
+        ;;
+    *suse*)
+        sudo zypper install -y gcc-c++ cmake pkg-config pipewire-devel pipewire
+        sudo zypper install -y gtk3-devel webkit2gtk3-devel || GUI_PKGS_OK=0
+        ;;
+    *)
+        warn "Ismeretlen disztribúció ($ID). Kell: C++20 fordító, cmake, pkg-config, libpipewire-0.3 fejlesztői csomag;"
+        warn "a saját ablakhoz: gtk3 és webkit2gtk-4.1 (vagy 4.0) fejlesztői csomag."
+        ;;
+esac
+[ "$GUI_PKGS_OK" = 1 ] || warn "A WebKitGTK csomag nem települt: a felület böngészőben fog megnyílni."
+
+command -v pw-cli >/dev/null 2>&1 || warn "A pw-cli nem található. Biztosan PipeWire a hangrendszered?"
+
+# ------------------------------------------------------------------ 2. fordítás
+say "\n[2/6] Fordítás..."
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON
+cmake --build build -j"$(nproc)" --target aetheraudio-engine
+[ -x build/aetheraudio-engine ] || die "A motor fordítása sikertelen."
+ok "Motor: build/aetheraudio-engine"
+HAVE_GUI=0
+if cmake --build build -j"$(nproc)" --target aetheraudio-gui 2>/dev/null && [ -x build/aetheraudio-gui ]; then
+    HAVE_GUI=1
+    ok "Saját ablakos felület: build/aetheraudio-gui"
 else
-    echo -e "${RED}[Hiba] Nem sikerült meghatározni a Linux disztribúciót!${NC}"
-    exit 1
+    warn "A saját ablakos felület nem fordult le; a menüpont böngészőben nyitja meg a felületet."
 fi
 
-echo -e "Észlelt rendszer: ${GREEN}${NAME} (${OS})${NC}"
-
-# 2. Szükséges Csomagok Telepítése
-echo -e "\n${YELLOW}[2/5] Rendszerfüggőségek telepítése (C++20, CMake, PipeWire)...${NC}"
-
-install_dependencies() {
-    case "$OS" in
-        ubuntu|debian|linuxmint|pop)
-            echo "Ubuntu/Debian alapú rendszer észlelve, apt használata..."
-            sudo apt-get update
-            sudo apt-get install -y build-essential cmake libpipewire-0.3-dev pkg-config pipewire pipewire-bin
-            ;;
-        fedora|rhel|centos)
-            echo "Fedora/RHEL alapú rendszer észlelve, dnf használata..."
-            sudo dnf install -y gcc-c++ cmake pipewire-devel pkgconf pipewire
-            ;;
-        arch|manjaro|endeavouros)
-            echo "Arch Linux alapú rendszer észlelve, pacman használata..."
-            sudo pacman -S --needed --noconfirm base-devel cmake pipewire pkgconf
-            ;;
-        opensuse*|suse)
-            echo "openSUSE alapú rendszer észlelve, zypper használata..."
-            sudo zypper install -y gcc-c++ cmake pipewire-devel pkg-config pipewire
-            ;;
-        *)
-            if [[ "$LIKE" == *"debian"* || "$LIKE" == *"ubuntu"* ]]; then
-                sudo apt-get update && sudo apt-get install -y build-essential cmake libpipewire-0.3-dev pkg-config pipewire
-            elif [[ "$LIKE" == *"arch"* ]]; then
-                sudo pacman -S --needed --noconfirm base-devel cmake pipewire pkgconf
-            elif [[ "$LIKE" == *"fedora"* ]]; then
-                sudo dnf install -y gcc-c++ cmake pipewire-devel pkgconf pipewire
-            else
-                echo -e "${YELLOW}[Figyelem] Ismeretlen disztribúció. Kérlek győződj meg róla, hogy a libpipewire-0.3 és cmake telepítve van!${NC}"
-            fi
-            ;;
-    esac
-}
-
-install_dependencies
-
-# 3. C++ Motor Fordítása CMake-kel
-echo -e "\n${YELLOW}[3/5] Natív C++ DSP és PipeWire motor fordítása...${NC}"
-cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON
-cmake --build build -j"$(nproc)"
-
-if [ -f "build/pipewire_plugin" ]; then
-    echo -e "${GREEN}✓ C++ bináris sikeresen lefordult: build/pipewire_plugin${NC}"
+# ------------------------------------------------------------------ 3. fájlok
+say "\n[3/6] Fájlok másolása (${PREFIX})..."
+# Futó motor leállítása frissítéskor
+systemctl --user stop aetheraudio.service >/dev/null 2>&1 || true
+mkdir -p "$BIN_DIR" "$GUI_DIR" "$APP_DIR" "$ICON_DIR" "$UNIT_DIR"
+install -m 755 build/aetheraudio-engine "$BIN_DIR/aetheraudio-engine"
+install -m 644 gui_integrated_system.html autoeq_index.js "$GUI_DIR/"
+install -m 644 windows/third_party/three/three.min.js "$GUI_DIR/three.min.js"
+install -m 644 windows/third_party/three/LICENSE "$GUI_DIR/three.js-LICENSE.txt"
+install -m 644 linux/aetheraudio.png "$ICON_DIR/aetheraudio.png"
+if [ "$HAVE_GUI" = 1 ]; then
+    install -m 755 build/aetheraudio-gui "$BIN_DIR/aetheraudio-gui"
 else
-    echo -e "${RED}[Hiba] A fordítás sikertelen volt!${NC}"
-    exit 1
-fi
-
-# 4. Kényelmi Indítószkript (run.sh) Létrehozása
-echo -e "\n${YELLOW}[4/5] Kényelmi futtató környezet előkészítése...${NC}"
-cat << 'EOF' > run.sh
+    cat > "$BIN_DIR/aetheraudio-gui" <<EOF
 #!/usr/bin/env bash
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$PROJECT_DIR"
-
-echo "=== EasyEffects Phase & Waterfall Analyzer Indítása ==="
-
-# Háttér webszerver indítása a GUI-hoz (ha szükséges)
-if command -v python3 &>/dev/null; then
-    python3 -m http.server 3000 --directory "$PROJECT_DIR" &>/dev/null &
-    HTTP_PID=$!
-    echo "[OK] Helyi HTTP szerver elindítva (PID: $HTTP_PID)"
-fi
-
-# Böngésző megnyitása a grafikus felülettel
-URL="http://localhost:3000/gui_integrated_system.html"
-if command -v xdg-open &>/dev/null; then
-    xdg-open "$URL" &>/dev/null &
-elif command -v sensible-browser &>/dev/null; then
-    sensible-browser "$URL" &>/dev/null &
-fi
-
-# PipeWire C++ DSP motor futtatása az előtérben
-echo "[OK] PipeWire DSP szűrő csatlakoztatása..."
-./build/pipewire_plugin
-
-# Kilépéskor leállítjuk a webszervert is
-if [ -n "$HTTP_PID" ]; then
-    kill "$HTTP_PID" 2>/dev/null || true
-fi
+# AetherAudio felület böngészőben (a saját ablakhoz telepítsd a webkit2gtk fejlesztői csomagot, és futtasd újra az install.sh-t)
+exec xdg-open "file://${GUI_DIR}/gui_integrated_system.html"
 EOF
-chmod +x run.sh
+    chmod 755 "$BIN_DIR/aetheraudio-gui"
+fi
+ok "Fájlok a helyükön."
 
-# 5. Linux Asztali Ikon és Alkalmazásmenü (.desktop) Regisztráció
-echo -e "\n${YELLOW}[5/5] Linux asztali menü bejegyzés létrehozása...${NC}"
-DESKTOP_DIR="${HOME}/.local/share/applications"
-mkdir -p "$DESKTOP_DIR"
+# ------------------------------------------------------------------ 4. automatikus indítás
+say "\n[4/6] Automatikus indítás beállítása (systemd felhasználói szolgáltatás)..."
+cat > "$UNIT_DIR/aetheraudio.service" <<EOF
+[Unit]
+Description=AetherAudio DSP motor (virtuális "AetherAudio" hangkimenet)
+After=pipewire.service wireplumber.service
+Wants=pipewire.service
 
-cat << EOF > "${DESKTOP_DIR}/aetheraudio.desktop"
+[Service]
+ExecStart=${BIN_DIR}/aetheraudio-engine
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+EOF
+if systemctl --user daemon-reload 2>/dev/null && systemctl --user enable --now aetheraudio.service; then
+    ok "A motor fut, és bejelentkezéskor magától elindul."
+else
+    warn "A systemd felhasználói szolgáltatás nem érhető el. Indítsd kézzel: ${BIN_DIR}/aetheraudio-engine &"
+fi
+
+# ------------------------------------------------------------------ 5. menübejegyzés
+say "\n[5/6] Menübejegyzés..."
+cat > "$APP_DIR/aetheraudio.desktop" <<EOF
 [Desktop Entry]
-Name=AetherAudio DSP Suite
-Comment=AetherAudio - Real-time Phase, Group Delay & Acoustic Waterfall DSP Suite
-Exec=${PROJECT_DIR}/run.sh
-Icon=audio-card
-Terminal=true
 Type=Application
-Categories=AudioVideo;Audio;AudioVideoEditing;
+Name=AetherAudio
+GenericName=Hangkorrekció és akusztikai vízesés
+Comment=Parametrikus EQ, konvolver, crossfeed és true peak limiter a PipeWire-hez, élő 3D vízesés-analizátorral
+Exec=${BIN_DIR}/aetheraudio-gui
+Icon=aetheraudio
+Terminal=false
+Categories=AudioVideo;Audio;
+StartupWMClass=AetherAudio
 EOF
+update-desktop-database "$APP_DIR" >/dev/null 2>&1 || true
+gtk-update-icon-cache -q "${PREFIX}/share/icons/hicolor" >/dev/null 2>&1 || true
+# régi (0.x) telepítés maradványa
+rm -f "$PROJECT_DIR/run.sh" 2>/dev/null || true
+ok "A menüben: AetherAudio"
 
-chmod +x "${DESKTOP_DIR}/aetheraudio.desktop"
+# ------------------------------------------------------------------ 6. alapértelmezett kimenet
+say "\n[6/6] Alapértelmezett hangkimenet"
+echo "Az alkalmazások hangja akkor megy át az AetherAudio-n, ha az \"AetherAudio\" a kimeneti eszköz."
+read -r -p "Beállítsam most alapértelmezettnek? [i/N] " ans || ans=""
+if [[ "$ans" =~ ^[iIyY]$ ]]; then
+    sleep 1
+    if pw-metadata 0 default.configured.audio.sink '{ "name": "aetheraudio_sink" }' Spa:String:JSON >/dev/null 2>&1; then
+        ok "Az \"AetherAudio\" lett az alapértelmezett kimenet."
+    else
+        warn "Nem sikerült; állítsd be a Hangbeállításokban (Kimenet: AetherAudio)."
+    fi
+else
+    echo "Később a Hangbeállításokban választhatod ki (Kimenet: AetherAudio)."
+fi
 
 echo -e "\n${BLUE}====================================================================${NC}"
-echo -e "${GREEN}  SIKERES TELEPÍTÉS! Az AetherAudio készen áll a használatra.${NC}"
+echo -e "${GREEN}  Kész! Az AetherAudio telepítve.${NC}"
 echo -e "${BLUE}====================================================================${NC}"
-echo -e "Indítás a terminálból:"
-echo -e "  ${YELLOW}./run.sh${NC}"
-echo -e "\nVagy keresd a Linux alkalmazásmenüdben:"
-echo -e "  ${GREEN}AetherAudio DSP Suite${NC}\n"
+echo "  Felület:        menü → AetherAudio  (vagy: aetheraudio-gui)"
+echo "  Motor állapota: systemctl --user status aetheraudio"
+echo "  Napló:          journalctl --user -u aetheraudio -f"
+echo "  Eltávolítás:    ./uninstall.sh"

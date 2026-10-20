@@ -1,0 +1,88 @@
+# Kiadás: GitHub-on egy Release közzétételekor (vagy "v*" címke feltöltésekor) lefordítja a Windows
+# telepítőt, és a Release-hez csatolja. Kézzel is indítható (Actions → Release → Run workflow):
+# ilyenkor csak letölthető munkatermék (artifact) készül.
+name: Release
+
+on:
+  push:
+    tags: [ "v*" ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Verzió kiadáshoz (pl. 1.3.0). Üresen hagyva csak letölthető munkatermék készül."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    runs-on: ubuntu-24.04
+    env:
+      LLVM_MINGW: llvm-mingw-20250924-ucrt-ubuntu-22.04-x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: llvm-mingw letöltése (Linuxról Windowsra fordító)
+        run: |
+          curl -sSL -o /tmp/llvm-mingw.tar.xz \
+            https://github.com/mstorsjo/llvm-mingw/releases/download/20250924/${LLVM_MINGW}.tar.xz
+          sudo tar -xf /tmp/llvm-mingw.tar.xz -C /opt
+          sudo ln -s /opt/${LLVM_MINGW} /opt/llvm-mingw
+          sudo apt-get install -y ninja-build
+
+      - name: Fordítás
+        run: |
+          cmake -B build-win -S . -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=windows/toolchain-llvm-mingw.cmake -DLLVM_MINGW_ROOT=/opt/llvm-mingw
+          cmake --build build-win -j"$(nproc)"
+
+      - name: Közös DSP tesztek (Linux)
+        run: |
+          cmake -B build-test -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=OFF
+          cmake --build build-test -j"$(nproc)"
+          for t in test_math test_pipeline test_ringbuffer test_core test_dsp; do ./build-test/$t; done
+
+      - name: Telepítő elnevezése
+        id: name
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then VER="${GITHUB_REF_NAME#v}"
+          elif [ -n "${{ inputs.version }}" ]; then VER="${{ inputs.version }}"
+          else VER="dev-${GITHUB_SHA::7}"; fi
+          echo "ver=${VER}" >> "$GITHUB_OUTPUT"
+          cp build-win/AetherAudio-Setup.exe "AetherAudio-Setup-${VER}.exe"
+          sha256sum "AetherAudio-Setup-${VER}.exe" > "AetherAudio-Setup-${VER}.exe.sha256"
+          echo "file=AetherAudio-Setup-${VER}.exe" >> "$GITHUB_OUTPUT"
+
+      - name: Feltöltés munkatermékként
+        uses: actions/upload-artifact@v4
+        with:
+          name: AetherAudio-Windows
+          path: |
+            ${{ steps.name.outputs.file }}
+            ${{ steps.name.outputs.file }}.sha256
+
+      - name: "GitHub Release (kézi indításkor verziószámmal: új címke és kiadás)"
+        if: github.event_name == 'workflow_dispatch' && inputs.version != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: AetherAudio ${{ inputs.version }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            ${{ steps.name.outputs.file }}
+            ${{ steps.name.outputs.file }}.sha256
+
+      - name: GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: AetherAudio ${{ github.ref_name }}
+          body_path: ${{ github.event_name == 'push' && 'RELEASE_NOTES.md' || '' }}
+          files: |
+            ${{ steps.name.outputs.file }}
+            ${{ steps.name.outputs.file }}.sha256

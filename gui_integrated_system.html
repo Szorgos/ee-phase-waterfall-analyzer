@@ -104,7 +104,9 @@
   .hp-card { background: #22262e; border: 1px solid #333d4b; border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; transition: all 0.15s; }
   .hp-card:hover { background: #282f3a; border-color: var(--ee-accent-blue); transform: translateY(-1px); }
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- three.js: helyi példány (Windows csomag, offline), különben CDN -->
+<script src="three.min.js"></script>
+<script>if (!window.THREE) document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');</script>
 <script src="autoeq_index.js"></script>
 </head>
 <body>
@@ -114,11 +116,11 @@
   <header>
     <div class="title-group">
       <div class="badge-app" style="background: linear-gradient(135deg, #3584e4, #9a59b5); font-weight: 800; letter-spacing: 0.5px;">AETHER</div>
-      <span style="font-size: 1.02rem; font-weight: 700; background: linear-gradient(90deg, #ffffff, #78aeed); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">AetherAudio • PipeWire Audiofil DSP Rendszer</span>
+      <span style="font-size: 1.02rem; font-weight: 700; background: linear-gradient(90deg, #ffffff, #78aeed); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">AetherAudio • Audiofil DSP Rendszer</span>
     </div>
     <div style="display:flex; align-items:center; gap:12px;">
       <span id="pipewireLiveBadge" class="status-badge" style="background:rgba(255,255,255,0.06); color:var(--ee-text-secondary); border:1px solid #444;">
-        ○ PipeWire Offline (Szimuláció)
+        ○ Motor Offline (Szimuláció)
       </span>
       <div style="font-size:0.8rem; color:var(--ee-text-secondary);">
         Kimenet: <strong>Speakers (DAC 768kHz)</strong>
@@ -151,13 +153,13 @@
         <option value="180">180 lépcső (Mély)</option>
       </select>
 
-      <!-- EQ MÓDVÁLASZTÓ: HIVATALOS EASYFFECTS / LSP KÓDOKKAL (IIR, FFT, SPM, FIR) -->
+      <!-- EQ MÓDVÁLASZTÓ: topológia (IIR / FIR) és fáziskarakter (minimál / köztes / lineáris) -->
       <span class="ctrl-label">EQ Mód:</span>
       <select id="selectEqMode" class="mini-select">
-        <option value="iir" selected>IIR (Minimálfázis, 0 ms pre-ring)</option>
-        <option value="fir_lin">FFT (Lineáris fázisú FIR, szimmetrikus)</option>
-        <option value="fir_int">SPM (Köztes fázis / Split-Phase, 5% pre-ring)</option>
-        <option value="fir_min">FIR Min (Minimálfázisú FIR, 0 ms pre-ring)</option>
+        <option value="iir" selected>IIR (minimálfázisú biquad, nincs előcsengés)</option>
+        <option value="fir_lin">Lineáris fázisú FIR (késleltet, előcsenghet)</option>
+        <option value="fir_int">Köztes fázisú FIR (kisebb késleltetés és előcsengés)</option>
+        <option value="fir_min">Minimálfázisú FIR (nincs előcsengés)</option>
       </select>
 
       <!-- NYQUIST DECRAMPING TÚLMINTAVÉTELEZÉS -->
@@ -165,7 +167,7 @@
       <select id="selectDecramp" class="mini-select" title="Nyquist Decramping túlmintavételezés a magasfrekvenciás torzulás ellen">
         <option value="none">Ki (Cramped)</option>
         <option value="2x">2x Túlmintavételezés</option>
-        <option value="4x" selected>4x Lanczos (Tökéletes)</option>
+        <option value="4x" selected>4x (jó kiindulópont)</option>
         <option value="8x">8x Extrém</option>
       </select>
 
@@ -319,10 +321,10 @@ Filter 2: ON PK Fc 120 Hz Gain -8.5 dB Q 4.20
 Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
 
         <div style="background:#1a1e24; border:1px solid #2e3846; border-radius:6px; padding:8px 12px; font-size:0.74rem; color:#aaa; display:flex; flex-direction:column; gap:3px;">
-          <div style="color:var(--ee-green); font-weight:700;">✅ Intelligens Preamp & ISP Védelem (Logout.hu standard):</div>
+          <div style="color:var(--ee-green); font-weight:700;">✅ Intelligens előerősítés (Preamp):</div>
           <div>• <strong>Ha a fájlban van Preamp:</strong> Pontosan azt használja, nincs dupla levonás!</div>
-          <div>• <strong>Ha a fájlban nincs Preamp:</strong> Automatikusan a maximális emelés ellenértékére állítja a védelmet.</div>
-          <div>• <strong>True Peak Limiter:</strong> Bekapcsolja a -1.0 dBTP limitert 4x Lanczos túlmintavételezéssel.</div>
+          <div>• <strong>Ha a fájlban nincs Preamp:</strong> A <em>teljes eredő EQ-görbe</em> csúcsából számolja (az átfedő sávok összegét is figyelembe véve), kis tartalékkal.</div>
+          <div>• <strong>Limiter:</strong> opcionális biztonsági háló; az import nem kapcsolja be. Helyes előerősítés mellett nincs rá szükség.</div>
         </div>
 
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:2px;">
@@ -431,11 +433,11 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
                 <option value="131072">131 072 taps (~2.73 s) - Részletes</option>
               </select>
               <div id="convTapsBadge" class="status-badge optimal">
-                ✅ Késleltetés: 0.0 ms (Zéró latency partíció)
+                ✅ Feldolgozási késleltetés: nem nő a tapszámmal
               </div>
             </div>
             <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
-              A partícionált feldolgozás megszünteti a hosszú FIR szűrők bemeneti késleltetését.
+              A particionált feldolgozás miatt a pufferelési késleltetés nem nő az IR hosszával. Az IR <em>saját</em> késleltetése (pl. egy lineáris fázisú szűrő csúcsa a közepén) viszont megmarad.
             </small>
           </div>
 
@@ -444,11 +446,11 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <span class="title">Fázis Feldolgozás</span>
             <div style="display:flex; flex-direction:column; gap:6px; margin-top:4px;">
               <select id="convPhaseMode" class="ee-select" onchange="updateConvolverSettings()">
-                <option value="min" selected>Minimálfázisúvá alakítás [Ajánlott]</option>
-                <option value="linear">Eredeti fázis (Linear / True IR)</option>
+                <option value="min" selected>Minimálfázisúvá alakítás (korrekciós szűrőhöz)</option>
+                <option value="linear">Eredeti fázis (zengetéshez, térszimulációhoz)</option>
               </select>
               <div id="convPhaseBadge" class="status-badge optimal">
-                ✅ 0 ms előcsengés (Nincs akusztikai pre-ring)
+                ✅ Nincs előcsengés (a zengetés jellegét megváltoztathatja)
               </div>
             </div>
             <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
@@ -495,7 +497,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
 
         <p class="module-desc">
           Megakadályozza, hogy az EQ-ban vagy a szobakorrekcióban végzett emelések miatt a DAC analóg rekonstrukciós szűrője digitális túlvezérlésbe fusson. 
-          Az állítható paramétereknél a <strong>zöld színjelzés</strong> jelöli a Logout.hu cikkünkben bemutatott optimális audiofil beállítást.
+          A túlvezérlés ellen elsősorban a helyes (a teljes EQ-görbéhez igazított) előerősítés véd; a limiter <strong>opcionális biztonsági háló</strong>, és nem hallásvédelmi eszköz. A <strong>zöld színjelzés</strong> jó kiinduló beállítást jelöl, nem garantált határértéket.
         </p>
 
         <div class="param-grid" style="grid-template-columns: repeat(3, 1fr);">
@@ -510,10 +512,10 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
               <input type="number" id="limiterCeilingInput" min="-6.0" max="0.0" step="0.1" value="-1.0" class="ee-input" style="width:60px;" oninput="updateLimiterCeiling(this.value, false)">
             </div>
             <div id="limiterCeilingBadge" class="status-badge optimal" style="margin-top:6px;">
-              ✅ Optimális (Kivédi a DAC inter-sample clip-et)
+              ✅ Jó kiindulópont (tartalék a mintaközi csúcsoknak)
             </div>
             <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
-              Ajánlás: -1.0 dBTP a legbiztonságosabb határérték minden DAC típushoz.
+              -1,0 dBTP konzervatív kiindulópont (EBU R 128). A tényleges true peak szintet a kimeneten mérd.
             </small>
           </div>
 
@@ -522,17 +524,17 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <span class="title">Túlmintavételezés (Oversampling)</span>
             <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
               <select id="limiterOversampling" class="ee-select" onchange="updateLimiterOversampling()">
-                <option value="1x">1x (Nincs túlmintavételezés - CPU kímélő)</option>
-                <option value="2x">2x Oversampling (Alapszintű ISP védelem)</option>
-                <option value="4x" selected>4x Lanczos [Ajánlott - Logout cikk standard]</option>
-                <option value="8x">8x Lanczos (Maximális stúdió precizitás)</option>
+                <option value="1x">1x (csak mintaérték-csúcs, CPU-kímélő)</option>
+                <option value="2x">2x true peak érzékelés</option>
+                <option value="4x" selected>4x true peak érzékelés (jó kiindulópont)</option>
+                <option value="8x">8x true peak érzékelés (pontosabb, több CPU)</option>
               </select>
               <div id="limiterOversamplingBadge" class="status-badge optimal">
-                ✅ 4x Lanczos: Zéró analóg túlcsordulás
+                ✅ 4x: mintaközi csúcsok becslése
               </div>
             </div>
             <small style="color:var(--ee-text-secondary); font-size:0.7rem; margin-top:3px;">
-              A 4x Lanczos interpoláció az analóg hullámforma csúcsait is levadássza.
+              A detektor interpolációval becsli a mintaközi csúcsokat; ez csökkenti, de nem zárja ki a kimeneti túllépést.
             </small>
           </div>
 
@@ -720,6 +722,12 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
 var pipewireWs = null;
 var isPipewireConnected = false;
 var livePipewireSamples = null;
+var liveSpectrumLevels = null;   // valódi FFT spektrum a motortól (0..1, 160 sáv)
+var liveSpectrumTime = 0;
+var engineStatus = null;         // utolsó "status" üzenet a motortól
+var suppressEngineSync = false;  // motor-állapot betöltése közben ne küldjünk vissza
+var lastSentPreamp = null;
+var eqSyncTimer = null;
 
 var currentEqMode = 'iir';
 var currentDecramp = '4x';
@@ -785,7 +793,16 @@ function toggleModule(mod) {
   setModuleActive(mod, !curr);
 }
 
+/** Tetszőleges vezérlőüzenet a motornak (motor-állapot betöltése közben néma). */
+function sendEngine(obj) {
+  if (suppressEngineSync) return;
+  if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) {
+    pipewireWs.send(JSON.stringify(obj));
+  }
+}
+
 function sendParamToPipewire(type, val) {
+  if (suppressEngineSync) return;
   if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) {
     pipewireWs.send(JSON.stringify({ type: type, val: val }));
   }
@@ -924,7 +941,7 @@ if (selGlow) {
 const btnEqBypass = document.getElementById("btnEqBypass");
 if (btnEqBypass) {
   btnEqBypass.onclick = () => {
-    isEqEnabled = !isEqEnabled;
+    setModuleActive('eq', !isEqEnabled);
     btnEqBypass.innerText = isEqEnabled ? "EQ: BE" : "EQ: KI (Bypass)";
     btnEqBypass.style.color = isEqEnabled ? "#00f0ff" : "var(--ee-text-secondary)";
     const prBadge = document.getElementById("hudPreRingBadge");
@@ -962,8 +979,15 @@ function animate3D() {
   const mask = new Uint8Array(FREQ_BINS);
   simFrame++;
 
-  // Zenei jel: élő PipeWire audio vagy szimuláció
-  if (isPipewireConnected && livePipewireSamples && livePipewireSamples.length > 0) {
+  // Zenei jel: valódi FFT spektrum a motortól, régi nyers minták, vagy szimuláció
+  const hasLiveSpectrum = isPipewireConnected && liveSpectrumLevels && liveSpectrumLevels.length > 0;
+  if (hasLiveSpectrum) {
+    const n = liveSpectrumLevels.length;
+    for (let f = 0; f < FREQ_BINS; f++) {
+      const idx = Math.min(n - 1, Math.floor((f / FREQ_BINS) * n));
+      slice[f] = Math.max(0, Math.min(1.0, liveSpectrumLevels[idx]));
+    }
+  } else if (isPipewireConnected && livePipewireSamples && livePipewireSamples.length > 0) {
     for (let f = 0; f < FREQ_BINS; f++) {
       const sampleIdx = Math.floor((f / FREQ_BINS) * livePipewireSamples.length);
       const amp = Math.abs(livePipewireSamples[sampleIdx]) * 1.6;
@@ -979,7 +1003,8 @@ function animate3D() {
   }
 
   // FIR előcsengési folt (Pre-ringing): ragyogó fehér hullámok élő és szimulált jelnél is
-  const hasPreRing = isEqEnabled && (isFirMode || currentEqMode === 'fir_lin' || currentEqMode === 'fir_int');
+  // Élő spektrumnál a valódi jel már tartalmazza az EQ hatását: nem rajzolunk rá szimulált hatásokat
+  const hasPreRing = !hasLiveSpectrum && isEqEnabled && (isFirMode || currentEqMode === 'fir_lin' || currentEqMode === 'fir_int');
   if (hasPreRing) {
     const trPhase = simFrame % 35;
     if (trPhase >= 28 && trPhase < 34) {
@@ -990,8 +1015,8 @@ function animate3D() {
     }
   }
 
-  // EQ hatás
-  if (isEqEnabled) {
+  // EQ hatás (csak szimulációban)
+  if (isEqEnabled && !hasLiveSpectrum) {
     for (let f = 0; f < FREQ_BINS; f++) {
       if (f >= 20 && f <= 32) slice[f] = Math.min(1.0, slice[f] * 1.35);
       if (f >= 45 && f <= 60) slice[f] = slice[f] * 0.5;
@@ -1059,7 +1084,8 @@ function resizeEq() {
 }
 window.addEventListener("resize", resizeEq);
 
-function evalBiquad(flt, f, sr = 48000) {
+// Decramp: a motor a biquadokat N-szeres mintavételen futtatja, így a görbe is ott számolandó
+function evalBiquad(flt, f, sr = 48000 * (parseInt(currentDecramp) || 1)) {
   const w0 = 2 * Math.PI * flt.freq / sr;
   const cos_w0 = Math.cos(w0);
   const sin_w0 = Math.sin(w0);
@@ -1131,6 +1157,25 @@ function evalChain(f) {
   return { mag_db, phase_deg, delay_ms: tot_delay };
 }
 
+// A teljes eredő EQ-görbe legnagyobb erősítése (dB) 20 Hz – 20 kHz között.
+// Az átfedő sávok összeadódnak, ezért ez nagyobb lehet a legnagyobb egyedi sáv-gainnél.
+function curvePeakDb() {
+  let peak = -Infinity;
+  const N = 600;
+  for (let i = 0; i <= N; i++) {
+    const f = Math.pow(10, Math.log10(20) + (Math.log10(20000) - Math.log10(20)) * i / N);
+    const m = evalChain(f).mag_db;
+    if (m > peak) peak = m;
+  }
+  return peak;
+}
+// Negatív előerősítés a görbe csúcsához, ~0,3 dB tartalékkal, felfelé 0,5 dB-re kerekítve.
+function autoGuardPreamp() {
+  const pk = curvePeakDb();
+  if (!(pk > 0)) return 0.0;
+  return -Math.ceil((pk + 0.3) * 2) / 2;
+}
+
 const MIN_F = 20, MAX_F = 20000;
 const LOG_MIN = Math.log10(MIN_F), LOG_MAX = Math.log10(MAX_F);
 
@@ -1142,7 +1187,23 @@ function getFreq(x, plotW, padLeft) {
   return Math.pow(10, LOG_MIN + (norm / plotW) * (LOG_MAX - LOG_MIN));
 }
 
+function scheduleEqSync() {
+  if (suppressEngineSync || !isPipewireConnected) return;
+  if (eqSyncTimer) return;
+  eqSyncTimer = setTimeout(() => {
+    eqSyncTimer = null;
+    if (!pipewireWs || pipewireWs.readyState !== WebSocket.OPEN) return;
+    const bands = nodes.map(n => ({ type: n.type, freq: +n.freq, gain: +n.gain, q: +n.q }));
+    pipewireWs.send(JSON.stringify({ type: "set_eq", bands: bands }));
+    if (lastSentPreamp !== currentPreamp) {
+      lastSentPreamp = currentPreamp;
+      pipewireWs.send(JSON.stringify({ type: "set_preamp", val: currentPreamp }));
+    }
+  }, 40);
+}
+
 function drawEq() {
+  scheduleEqSync();
   const dpr = window.devicePixelRatio || 1;
   const w = eqCanvas.width;
   const h = eqCanvas.height;
@@ -1416,6 +1477,7 @@ txtAutoEqInput.oninput = () => {
 // CROSSFEED MESTER-BEÁLLÍTÁSOK (BAUER, MEIER, STUDIO)
 // =========================================================================
 function applyCrossfeedPreset(preset) {
+  sendParamToPipewire('set_crossfeed_preset', preset === 'meier' ? 1 : (preset === 'studio' ? 2 : 0));
   const f = document.getElementById("cfFreq");
   const l = document.getElementById("cfLevel");
   const d = document.getElementById("cfDelay");
@@ -1447,18 +1509,33 @@ function setPreamp(val) {
     badge.className = "status-badge info";
   }
   drawEq();
+  lastSentPreamp = currentPreamp;
   sendParamToPipewire("set_preamp", currentPreamp);
 }
 
-document.getElementById("selectEqMode").onchange = (e) => {
-  currentEqMode = e.target.value;
+function applyEqModeUi(mode) {
+  currentEqMode = mode;
+  const sel = document.getElementById("selectEqMode");
+  if (sel && sel.value !== mode) sel.value = mode;
   const hasPreRing = (currentEqMode === 'fir_lin' || currentEqMode === 'fir_int');
   isFirMode = hasPreRing;
   document.getElementById("hudPreRingBadge").style.display = (hasPreRing && isEqEnabled) ? "block" : "none";
+  if (sel) {
+    sel.title = mode === 'fir_lin' ? "Lineáris fázis: ~85 ms késleltetés 48 kHz-en (8192 tap), szimmetrikus előcsengés"
+              : mode === 'fir_int' ? "Köztes fázis: ~8,5 ms késleltetés, mérsékelt előcsengés"
+              : mode === 'fir_min' ? "Minimálfázisú FIR: elhanyagolható késleltetés, nincs előcsengés"
+              : "IIR biquad lánc: 0 késleltetés";
+  }
+}
+document.getElementById("selectEqMode").onchange = (e) => {
+  applyEqModeUi(e.target.value);
+  sendEngine({ type: "set_eq_mode", val: e.target.value });
 };
 
 document.getElementById("selectDecramp").onchange = (e) => {
   currentDecramp = e.target.value;
+  sendEngine({ type: "set_decramp", val: currentDecramp });
+  drawEq();
 };
 
 // =========================================================================
@@ -1702,9 +1779,9 @@ function applyParsedAutoEqProfile(text, modelName, sourceName) {
     }
   } else {
     // HA NEM VOLT PREAMP: csak akkor számol az Auto-Guard
-    if (maxBoostFound > 0) {
-      finalPreamp = -Math.round(maxBoostFound * 10) / 10;
-      preampNote = "A fájl nem tartalmazott preampot -> Auto-Guard állította be";
+    if (curvePeakDb() > 0.05) {
+      finalPreamp = autoGuardPreamp();
+      preampNote = "A fájl nem tartalmazott preampot -> Auto-Guard: a teljes EQ-görbe csúcsából, tartalékkal";
       const badgePreamp = document.getElementById("badgePreampOrigin");
       if (badgePreamp) {
         badgePreamp.className = "status-badge info";
@@ -1746,8 +1823,8 @@ function applyParsedAutoEqProfile(text, modelName, sourceName) {
         `• Preamp: ${finalPreamp.toFixed(1)} dB\n` +
         `  ↳ ${preampNote}\n` +
         `• Szűrősávok: ${nodes.length} db parametrikus pont\n` +
-        `• True Peak Limiter: -1.0 dBTP (4x Lanczos aktív)\n` +
-        `• Szűrési Mód: IIR Minimálfázis (0 ms pre-ringing)`);
+        `• Limiter: opcionális (beállítva: -1,0 dBTP, 4x; állapota nem változott)\n` +
+        `• Szűrési mód: IIR (minimálfázisú, nincs előcsengés)`);
 }
 
 document.getElementById("btnImportAutoEq").onclick = () => {
@@ -1839,9 +1916,9 @@ function processAutoEqImport() {
     }
   } else {
     // A FÁJL NEM TARTALMAZOTT PREAMPOT: csak ekkor számol az Auto-Guard!
-    if (maxBoostFound > 0) {
-      finalPreamp = -Math.round(maxBoostFound * 10) / 10;
-      preampNote = "A fájl nem tartalmazott preampot -> Auto-Guard állította be a kiemelések kivédésére";
+    if (curvePeakDb() > 0.05) {
+      finalPreamp = autoGuardPreamp();
+      preampNote = "A fájl nem tartalmazott preampot -> Auto-Guard: a teljes EQ-görbe csúcsából, tartalékkal";
       const badgePreamp = document.getElementById("badgePreampOrigin");
       if (badgePreamp) {
         badgePreamp.className = "status-badge info";
@@ -1867,16 +1944,11 @@ function processAutoEqImport() {
   setModuleActive('convolver', false);
   setModuleActive('bass', false);
 
-  let limiterInfo = "KIKAPCSOLVA (Nem volt kiemelés, a kimenet biztonságos)";
-  if (maxBoostFound > 0) {
-    setModuleActive('limiter', true);
-    updateLimiterCeiling(-1.0, false);
-    document.getElementById("limiterOversampling").value = "4x";
-    updateLimiterOversampling();
-    limiterInfo = "BEKAPCSOLVA (-1.0 dBTP plafon, 4x Lanczos védelem az emelések miatt)";
-  } else {
-    setModuleActive('limiter', false);
-  }
+  // A limiter opcionális biztonsági háló: az import csak beállítja, de nem kapcsolja be/ki.
+  updateLimiterCeiling(-1.0, false);
+  document.getElementById("limiterOversampling").value = "4x";
+  updateLimiterOversampling();
+  const limiterInfo = "opcionális (beállítva: -1,0 dBTP, 4x; állapota nem változott)";
 
   isFirMode = false;
   btnFirMode.innerText = "Mód: Minimálfázis (IIR)";
@@ -1891,9 +1963,9 @@ function processAutoEqImport() {
         `• Equalizer: BEKAPCSOLVA (${nodes.length} sáv aktív)\n` +
         `• Beállított Preamp: ${finalPreamp.toFixed(1)} dB\n` +
         `  ↳ ${preampNote}\n` +
-        `• True Peak Limiter: ${limiterInfo}\n` +
+        `• Limiter: ${limiterInfo}\n` +
         `• Crossfeed, Convolver, Bass Enhancer: KIKAPCSOLVA (Bármikor kézzel bekapcsolható)\n` +
-        `• Szűrési mód: Minimálfázis (IIR - 0 ms pre-ringing)`);
+        `• Szűrési mód: IIR (minimálfázisú, nincs előcsengés)`);
 }
 document.getElementById("btnDeleteNode").onclick = () => {
   if (nodes.length <= 1) return;
@@ -1932,22 +2004,199 @@ setTimeout(resizeEq, 50);
 // =========================================================================
 // 2. CONVOLVER MOTOR (FIR IMPULZUSVÁLASZ & MIN-PHASE TRANSZFORMÁCIÓ)
 // =========================================================================
-function handleConvFileSelect(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const sizeKb = (file.size / 1024).toFixed(1);
-  document.getElementById("convIrInfo").innerText = `${file.name} (${sizeKb} KB, Sztereó WAV)`;
-  drawConvWaveform();
+// Az aktuálisan betöltött IR (a böngészőben dekódolva) vagy a motortól kapott előnézet
+var convIrLocal = null;    // { name, sr, channels: [Float32Array, ...] }
+var convIrRemote = null;   // { name, sr, channels, frames, preview: [...] } a motor állapotából
+
+function describeIr(name, sr, ch, frames) {
+  const sec = frames / sr;
+  return `${name} (${sr.toLocaleString('hu-HU')} Hz, ${ch === 1 ? 'Mono' : 'Sztereó'}, ${frames.toLocaleString('hu-HU')} minta = ${sec.toFixed(2)} s)`;
 }
 
-function loadSampleIr(type) {
-  const info = document.getElementById("convIrInfo");
-  if (type === 'room') {
-    info.innerText = "room_correction_48k.wav (48 000 Hz, Sztereó, 24-bit)";
-  } else if (type === 'headphone') {
-    info.innerText = "harman_target_hrir.wav (48 000 Hz, Binaural HRIR, 24-bit)";
+/** WAV/IRS dekódolás natív mintavételen (PCM 16/24/32 bit, float 32/64, WAVE_FORMAT_EXTENSIBLE). */
+function decodeWavNative(buf) {
+  const dv = new DataView(buf);
+  const tag = (o) => String.fromCharCode(dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3));
+  if (buf.byteLength < 44 || tag(0) !== 'RIFF' || tag(8) !== 'WAVE') return null;
+  let off = 12, fmt = null, dataOff = -1, dataLen = 0;
+  while (off + 8 <= buf.byteLength) {
+    const id = tag(off), len = dv.getUint32(off + 4, true);
+    if (id === 'fmt ') {
+      let format = dv.getUint16(off + 8, true);
+      const channels = dv.getUint16(off + 10, true), sr = dv.getUint32(off + 12, true);
+      const bits = dv.getUint16(off + 22, true);
+      if (format === 0xFFFE && len >= 40) format = dv.getUint16(off + 32, true);
+      fmt = { format, channels, sr, bits };
+    } else if (id === 'data') {
+      dataOff = off + 8; dataLen = Math.min(len, buf.byteLength - dataOff);
+    }
+    off += 8 + len + (len & 1);
   }
+  if (!fmt || dataOff < 0 || fmt.channels < 1) return null;
+  const bps = fmt.bits / 8, frames = Math.floor(dataLen / (bps * fmt.channels));
+  const useCh = Math.min(fmt.channels, 2);
+  const chans = [];
+  for (let c = 0; c < useCh; c++) chans.push(new Float32Array(frames));
+  for (let i = 0; i < frames; i++) {
+    for (let c = 0; c < useCh; c++) {
+      const p = dataOff + (i * fmt.channels + c) * bps;
+      let v = 0;
+      if (fmt.format === 3 && fmt.bits === 32) v = dv.getFloat32(p, true);
+      else if (fmt.format === 3 && fmt.bits === 64) v = dv.getFloat64(p, true);
+      else if (fmt.format === 1 && fmt.bits === 16) v = dv.getInt16(p, true) / 32768;
+      else if (fmt.format === 1 && fmt.bits === 24) {
+        let x = dv.getUint8(p) | (dv.getUint8(p + 1) << 8) | (dv.getUint8(p + 2) << 16);
+        if (x & 0x800000) x |= ~0xFFFFFF;
+        v = x / 8388608;
+      } else if (fmt.format === 1 && fmt.bits === 32) v = dv.getInt32(p, true) / 2147483648;
+      else if (fmt.format === 1 && fmt.bits === 8) v = (dv.getUint8(p) - 128) / 128;
+      else return null;
+      chans[c][i] = v;
+    }
+  }
+  return { sr: fmt.sr, channels: chans };
+}
+
+const CONV_MAX_FRAMES = 262144;
+
+function setConvIr(name, sr, channels) {
+  if (channels[0].length > CONV_MAX_FRAMES) channels = channels.map(c => c.slice(0, CONV_MAX_FRAMES));
+  convIrLocal = { name, sr, channels };
+  convIrRemote = null;
+  document.getElementById("convIrInfo").innerText = describeIr(name, sr, channels.length, channels[0].length);
   drawConvWaveform();
+  uploadIrToEngine();
+}
+
+/** Bináris IR üzenet: "AEIR" | v1 | sr | csatornák | frame-ek | névhossz | név | float32 interleaved */
+function uploadIrToEngine() {
+  if (!convIrLocal || !pipewireWs || !isPipewireConnected || pipewireWs.readyState !== WebSocket.OPEN) return;
+  const ir = convIrLocal, ch = ir.channels.length, frames = ir.channels[0].length;
+  const nameBytes = new TextEncoder().encode(ir.name).slice(0, 1000);
+  const buf = new ArrayBuffer(24 + nameBytes.length + frames * ch * 4);
+  const dv = new DataView(buf);
+  [0x41, 0x45, 0x49, 0x52].forEach((b, i) => dv.setUint8(i, b));
+  dv.setUint32(4, 1, true); dv.setUint32(8, ir.sr, true); dv.setUint32(12, ch, true);
+  dv.setUint32(16, frames, true); dv.setUint32(20, nameBytes.length, true);
+  new Uint8Array(buf, 24, nameBytes.length).set(nameBytes);
+  let p = 24 + nameBytes.length;
+  for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) { dv.setFloat32(p, ir.channels[c][i], true); p += 4; }
+  pipewireWs.send(buf);
+}
+
+async function handleConvFileSelect(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const info = document.getElementById("convIrInfo");
+  info.innerText = `${file.name} betöltése...`;
+  try {
+    const buf = await file.arrayBuffer();
+    let dec = decodeWavNative(buf);
+    if (!dec) {
+      // Egyéb formátum: a böngésző dekódolója (a környezet mintavételére konvertál)
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const ab = await ctx.decodeAudioData(buf.slice(0));
+      const chans = [];
+      for (let c = 0; c < Math.min(2, ab.numberOfChannels); c++) chans.push(ab.getChannelData(c).slice());
+      dec = { sr: ab.sampleRate, channels: chans };
+      ctx.close();
+    }
+    setConvIr(file.name, dec.sr, dec.channels);
+    if (!isConvolverEnabled) setModuleActive('convolver', true);
+  } catch (err) {
+    info.innerText = `Nem sikerült beolvasni: ${file.name}`;
+    alert("A fájl nem olvasható impulzusválaszként (WAV/IRS kell).\n" + err);
+  }
+  e.target.value = "";
+}
+
+/** Szintetikus példa impulzusválaszok (valódi adat, a motor is ezt kapja). */
+function loadSampleIr(type) {
+  const sr = 48000;
+  let seed = 12345;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff * 2 - 1; };
+  if (type === 'room') {
+    // Kis szoba: direkt hang + korai visszaverődések + exponenciálisan lecsengő, sötétedő utózengés (RT60 ~ 0,45 s)
+    const n = Math.round(sr * 0.6), L = new Float32Array(n), R = new Float32Array(n);
+    L[0] = R[0] = 1.0;
+    [[0.0043, 0.45, 0.40], [0.0071, 0.32, 0.36], [0.0110, 0.25, 0.28], [0.0157, 0.18, 0.21]].forEach(([t, a, b]) => {
+      L[Math.round(t * sr)] += a; R[Math.round((t + 0.0007) * sr)] += b;
+    });
+    let lpL = 0, lpR = 0;
+    for (let i = Math.round(0.012 * sr); i < n; i++) {
+      const t = i / sr, env = 0.12 * Math.exp(-6.9 * t / 0.45);
+      const k = Math.min(0.95, 0.35 + t * 1.2);
+      lpL = k * lpL + (1 - k) * rnd(); lpR = k * lpR + (1 - k) * rnd();
+      L[i] += env * lpL * 3; R[i] += env * lpR * 3;
+    }
+    setConvIr("pelda_szoba_48k.wav", sr, [L, R]);
+  } else {
+    // Fejhallgató "kivezető" IR: rövid, enyhe magas-lágyítás és két halk korai visszaverődés (~3 ms)
+    const n = 1024, L = new Float32Array(n), R = new Float32Array(n);
+    const taps = [0.62, 0.24, 0.09, 0.03];
+    for (let i = 0; i < taps.length; i++) { L[i] = taps[i]; R[i] = taps[i]; }
+    L[Math.round(0.0021 * sr)] += 0.08; R[Math.round(0.0024 * sr)] += 0.08;
+    L[Math.round(0.0034 * sr)] += 0.04; R[Math.round(0.0031 * sr)] += 0.04;
+    setConvIr("pelda_fejhallgato_48k.wav", sr, [L, R]);
+  }
+  if (!isConvolverEnabled) setModuleActive('convolver', true);
+}
+
+/** Valódi IR rajzolása (helyi minták vagy a motor előnézete). true, ha rajzolt. */
+function drawRealIrWaveform(canvas) {
+  if (!convIrLocal && !convIrRemote) return false;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width = canvas.clientWidth;
+  const h = canvas.height = canvas.clientHeight;
+  ctx.fillStyle = "#0c0e12";
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "#1b222c";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x < w; x += 40) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+  for (let y = 0; y < h; y += 20) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+  ctx.stroke();
+  const cy = h / 2;
+  ctx.font = "10px monospace";
+  if (convIrLocal) {
+    const colors = ["#00f0ff", "#ff7800"];
+    let peak = 1e-9;
+    convIrLocal.channels.forEach(c => { for (let i = 0; i < c.length; i++) peak = Math.max(peak, Math.abs(c[i])); });
+    convIrLocal.channels.forEach((c, ci) => {
+      ctx.strokeStyle = colors[ci];
+      ctx.globalAlpha = ci === 0 ? 1 : 0.7;
+      ctx.beginPath();
+      const per = c.length / w;
+      for (let x = 0; x < w; x++) {
+        let mn = 0, mx = 0;
+        const a = Math.floor(x * per), b = Math.max(a + 1, Math.floor((x + 1) * per));
+        for (let i = a; i < b && i < c.length; i++) { mn = Math.min(mn, c[i]); mx = Math.max(mx, c[i]); }
+        ctx.moveTo(x, cy - (mx / peak) * h * 0.45);
+        ctx.lineTo(x, cy - (mn / peak) * h * 0.45 + 0.5);
+      }
+      ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#9aa4b2";
+    ctx.fillText(`${(convIrLocal.channels[0].length / convIrLocal.sr * 1000).toFixed(0)} ms`, w - 60, h - 6);
+  } else {
+    // Motor előnézet: burkológörbe dB-ben (-60..0)
+    const pv = convIrRemote.preview || [];
+    ctx.fillStyle = "rgba(0,240,255,0.35)";
+    ctx.strokeStyle = "#00f0ff";
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    pv.forEach((v, i) => ctx.lineTo(i / Math.max(1, pv.length - 1) * w, h - v * (h - 6)));
+    ctx.lineTo(w, h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#9aa4b2";
+    ctx.fillText("Burkológörbe (dB) – a motorban tárolt IR", 8, 14);
+  }
+  const phase = document.getElementById("convPhaseMode") ? document.getElementById("convPhaseMode").value : "min";
+  ctx.fillStyle = phase === "min" ? "#33d17a" : "#ff7800";
+  ctx.fillText(phase === "min" ? "A motor minimálfázisúvá alakítja (nincs előcsengés)" : "Eredeti fázis", 8, h - 6);
+  return true;
 }
 
 function updateConvolverSettings() {
@@ -1957,22 +2206,22 @@ function updateConvolverSettings() {
   const tapsBadge = document.getElementById("convTapsBadge");
   if (taps === "16384") {
     tapsBadge.className = "status-badge info";
-    tapsBadge.innerText = "ℹ️ Késleltetés: 0.0 ms (Gyors reakció, kisebb felbontás)";
+    tapsBadge.innerText = "ℹ️ Rövidebb IR: kisebb mélyfrekvenciás felbontás";
   } else if (taps === "65536") {
     tapsBadge.className = "status-badge optimal";
-    tapsBadge.innerText = "✅ Késleltetés: 0.0 ms (Zéró latency partíció - Optimális)";
+    tapsBadge.innerText = "✅ Feldolgozási késleltetés: nem nő a tapszámmal";
   } else {
     tapsBadge.className = "status-badge info";
-    tapsBadge.innerText = "ℹ️ Késleltetés: 0.0 ms (Extrém szobakorrekciós felbontás)";
+    tapsBadge.innerText = "ℹ️ Hosszú IR: részletes szobakorrekcióhoz";
   }
 
   const phaseBadge = document.getElementById("convPhaseBadge");
   if (phase === "min") {
     phaseBadge.className = "status-badge optimal";
-    phaseBadge.innerText = "✅ 0 ms előcsengés (Nincs akusztikai pre-ring)";
+    phaseBadge.innerText = "✅ Nincs előcsengés (a zengetés jellegét megváltoztathatja)";
   } else {
     phaseBadge.className = "status-badge caution";
-    phaseBadge.innerText = "⚠️ Eredeti fázis (Enyhe előcsengés előfordulhat)";
+    phaseBadge.innerText = "⚠️ Eredeti fázis: az IR saját késleltetése és esetleges előcsengése megmarad";
   }
 
   drawConvWaveform();
@@ -2004,6 +2253,7 @@ function syncConvGain(val, fromSlider) {
 function drawConvWaveform() {
   const canvas = document.getElementById("convCanvas");
   if (!canvas) return;
+  if (drawRealIrWaveform(canvas)) return;
   const ctx = canvas.getContext("2d");
   const w = canvas.width = canvas.clientWidth;
   const h = canvas.height = canvas.clientHeight;
@@ -2052,7 +2302,7 @@ function drawConvWaveform() {
     // 0 ms címke
     ctx.fillStyle = "#33d17a";
     ctx.font = "10px monospace";
-    ctx.fillText("0 ms (Tranziens csúcs - Zéró pre-ringing)", 35, 18);
+    ctx.fillText("Csúcs az elején – nincs előcsengés", 35, 18);
   } else {
     // Lineáris fázis: szimmetrikus impulzus a közepén (x = w / 2), előtte és utána is rezgésekkel!
     ctx.strokeStyle = "#ff7800";
@@ -2092,15 +2342,15 @@ function updateLimiterCeiling(val, fromSlider) {
 
   if (v <= -1.0) {
     badge.className = "status-badge optimal";
-    badge.innerText = "✅ Optimális (Kivédi a DAC inter-sample clip-et)";
+    badge.innerText = "✅ Jó kiindulópont (tartalék a mintaközi csúcsoknak)";
     lbl.style.color = "var(--ee-green)";
   } else if (v <= -0.4) {
     badge.className = "status-badge caution";
-    badge.innerText = "⚠️ Figyelem (Bizonyos DAC-oknál ISP előfordulhat)";
+    badge.innerText = "⚠️ Kis tartalék: mintaközi csúcsok átjuthatnak";
     lbl.style.color = "var(--ee-orange)";
   } else {
     badge.className = "status-badge danger";
-    badge.innerText = "❌ Veszélyes (0 dBFS közelében a DAC szűrője torzítani fog!)";
+    badge.innerText = "❌ Nincs tartalék: mintaközi csúcsok a kimeneten levágódhatnak";
     lbl.style.color = "#ed333b";
   }
 }
@@ -2110,16 +2360,16 @@ function updateLimiterOversampling() {
   const badge = document.getElementById("limiterOversamplingBadge");
   if (sel === "1x") {
     badge.className = "status-badge danger";
-    badge.innerText = "❌ Nincs túlmintavételezés (Inter-Sample Peak veszély!)";
+    badge.innerText = "⚠️ Csak mintaérték-csúcs: a mintaközi csúcsokat nem látja";
   } else if (sel === "2x") {
     badge.className = "status-badge caution";
-    badge.innerText = "⚠️ 2x Oversampling (Alapszintű ISP védelem)";
+    badge.innerText = "ℹ️ 2x: durvább mintaközi becslés";
   } else if (sel === "4x") {
     badge.className = "status-badge optimal";
-    badge.innerText = "✅ 4x Lanczos: Zéró analóg túlcsordulás [Ajánlott]";
+    badge.innerText = "✅ 4x: mintaközi csúcsok becslése";
   } else {
     badge.className = "status-badge info";
-    badge.innerText = "ℹ️ 8x Lanczos: Stúdió precizitás (Magasabb CPU)";
+    badge.innerText = "ℹ️ 8x: pontosabb becslés (több CPU)";
   }
 }
 
@@ -2294,51 +2544,244 @@ function updateBassInfo() {
 }
 
 // =========================================================================
-// PIPEWIRE ÉLŐ WEBSOCKET HÍD (ws://127.0.0.1:8080)
+// ÉLŐ WEBSOCKET HÍD (ws://127.0.0.1:47810–47814, Linuxon 8080)
 // =========================================================================
-function initPipewireBridge() {
+// =========================================================================
+// MODULOK BEKÖTÉSE A MOTORHOZ (Bass, Limiter, Crossfeed, Convolver)
+// =========================================================================
+function numVal(id, def) { const el = document.getElementById(id); const v = el ? parseFloat(el.value) : NaN; return isNaN(v) ? def : v; }
+function sendBass() {
+  sendEngine({ type: "set_bass", crossover: numVal("bassCrossoverInput", 80), harmonics: numVal("bassHarmonicsInput", 3),
+               harmonicType: (document.getElementById("bassHarmonicType") || {}).value || "both", subcut: numVal("bassSubcutInput", 30) });
+}
+function sendLimiter() {
+  sendEngine({ type: "set_limiter", ceiling: numVal("limiterCeilingInput", -1), release: numVal("limiterReleaseInput", 50),
+               lookahead: numVal("limiterLookaheadInput", 5),
+               oversampling: (document.getElementById("limiterOversampling") || {}).value || "4x" });
+}
+function sendCrossfeed() {
+  sendEngine({ type: "set_crossfeed", freq: numVal("cfFreq", 700), level: numVal("cfLevel", 4.5), delay: numVal("cfDelay", 0.29) });
+}
+var convGainTimer = null;
+function sendConvolver() {
+  sendEngine({ type: "set_convolver", gain: numVal("convGainInput", -3), taps: numVal("convTaps", 65536),
+               phase: (document.getElementById("convPhaseMode") || {}).value || "min" });
+}
+(function wrapModuleUpdaters() {
+  const wrap = (name, after) => {
+    const orig = window[name];
+    if (typeof orig !== "function") return;
+    window[name] = function () { const r = orig.apply(this, arguments); after(); return r; };
+  };
+  ["updateBassCrossover", "updateBassHarmonics", "updateBassHarmonicType", "updateBassSubcut"].forEach(n => wrap(n, sendBass));
+  ["updateLimiterCeiling", "updateLimiterRelease", "updateLimiterLookahead", "updateLimiterOversampling"].forEach(n => wrap(n, sendLimiter));
+  wrap("updateConvolverSettings", sendConvolver);
+  wrap("syncConvGain", () => {
+    if (convGainTimer) clearTimeout(convGainTimer);
+    convGainTimer = setTimeout(sendConvolver, 60);
+  });
+  ["cfFreq", "cfLevel", "cfDelay"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", sendCrossfeed);
+  });
+})();
+
+/** A teljes felületi állapot elküldése a motornak. */
+function pushAllToEngine() {
+  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass'].forEach(m => {
+    const on = m === 'eq' ? isEqEnabled : m === 'crossfeed' ? isCrossfeedEnabled : m === 'convolver' ? isConvolverEnabled
+             : m === 'limiter' ? isLimiterEnabled : isBassEnabled;
+    sendParamToPipewire('set_module_' + m, on ? 1 : 0);
+  });
+  sendEngine({ type: "set_eq_mode", val: currentEqMode });
+  sendEngine({ type: "set_decramp", val: currentDecramp });
+  sendBass(); sendLimiter(); sendCrossfeed(); sendConvolver();
+  lastSentPreamp = currentPreamp;
+  sendParamToPipewire("set_preamp", currentPreamp);
+  scheduleEqSync();
+}
+
+function setInput(id, v) { const el = document.getElementById(id); if (el && v !== undefined && v !== null) el.value = v; }
+
+function updateEngineBadge() {
   const badge = document.getElementById("pipewireLiveBadge");
+  if (!badge) return;
+  if (!isPipewireConnected) {
+    badge.className = "status-badge";
+    badge.style.background = "rgba(255,255,255,0.06)";
+    badge.style.color = "var(--ee-text-secondary)";
+    badge.style.border = "1px solid #444";
+    badge.innerHTML = "○ Motor Offline (Szimuláció)";
+    badge.title = "Indítsd el a motort: Linuxon systemctl --user start aetheraudio, Windowson AetherAudio.exe";
+    return;
+  }
+  badge.style.background = "";
+  badge.style.color = "";
+  badge.style.border = "";
+  const st = engineStatus || {};
+  const src = st.source || "Motor";
+  const sr = st.sr ? ` • ${(st.sr / 1000).toFixed(1)} kHz` : "";
+  if (st.platform === "windows" && st.dspActive === false) {
+    badge.className = "status-badge info";
+    badge.innerHTML = `● Élő analízis – ${src}${sr}`;
+    badge.title = (st.device ? `Eszköz: ${st.device}\n` : "") +
+      "Csak analízis: a DSP beállítások az AetherAudio EQ APO plugin telepítése után hatnak a hangra.";
+  } else {
+    badge.className = "status-badge optimal";
+    badge.innerHTML = `● Élő – ${src}${sr}`;
+    badge.title = (typeof st.gr === "number" && st.gr < -0.05) ? `Limiter erősítéscsökkentés: ${st.gr.toFixed(1)} dB` : "";
+  }
+}
+
+// A motorban tárolt impulzusválasz megjelenítése
+function applyEngineIr(st) {
+  if (st.ir) {
+    if (!convIrLocal || convIrLocal.name !== st.ir.name) {
+      convIrLocal = null;
+      convIrRemote = st.ir;
+    }
+    document.getElementById("convIrInfo").innerText = describeIr(st.ir.name, st.ir.sr, st.ir.channels, st.ir.frames);
+  } else if (st.ir === null && !convIrLocal) {
+    convIrRemote = null;
+    document.getElementById("convIrInfo").innerText = "Nincs betöltött impulzusválasz – tallózz egy WAV/IRS fájlt";
+  }
+  drawConvWaveform();
+}
+
+// A motorban tárolt (mentett) DSP lánc betöltése a felületre
+function applyEngineState(st) {
+  suppressEngineSync = true;
   try {
-    pipewireWs = new WebSocket("ws://127.0.0.1:8080");
+    const colorPalette = ["#3584e4", "#e01b24", "#ff7800", "#33d17a", "#9141ac", "#f6d32d", "#2ec27e", "#e66100", "#1c71d8"];
+    if (st.initialized) {
+      if (Array.isArray(st.bands) && st.bands.length > 0) {
+        nodes = st.bands.map((b, i) => ({
+          id: i + 1, freq: b.freq, gain: b.gain, q: b.q, type: b.type,
+          color: colorPalette[i % colorPalette.length]
+        }));
+        selectedNodeId = nodes[0].id;
+      }
+      const mods = st.modules || {};
+      ['eq', 'crossfeed', 'convolver', 'limiter', 'bass'].forEach(m => {
+        if (m in mods) setModuleActive(m, !!mods[m]);
+      });
+      currentPreamp = typeof st.preamp === "number" ? st.preamp : 0.0;
+      if (st.eqMode) applyEqModeUi(st.eqMode);
+      if (st.crossfeed) { setInput("cfFreq", st.crossfeed.freq); setInput("cfLevel", st.crossfeed.level); setInput("cfDelay", st.crossfeed.delay); }
+      if (st.decramp) { currentDecramp = st.decramp; setInput("selectDecramp", st.decramp); }
+      if (st.limiter) {
+        if (typeof updateLimiterCeiling === "function") (setInput("limiterCeilingSlider", st.limiter.ceiling), updateLimiterCeiling(st.limiter.ceiling, true));
+        if (typeof updateLimiterRelease === "function") (setInput("limiterReleaseSlider", st.limiter.release), updateLimiterRelease(st.limiter.release, true));
+        if (typeof updateLimiterLookahead === "function" && st.limiter.lookahead !== undefined) (setInput("limiterLookaheadSlider", st.limiter.lookahead), updateLimiterLookahead(st.limiter.lookahead, true));
+        if (st.limiter.oversampling) { setInput("limiterOversampling", st.limiter.oversampling); if (typeof updateLimiterOversampling === "function") updateLimiterOversampling(); }
+      }
+      if (st.bass) {
+        if (typeof updateBassCrossover === "function") (setInput("bassCrossoverSlider", st.bass.crossover), updateBassCrossover(st.bass.crossover, true));
+        if (typeof updateBassHarmonics === "function") (setInput("bassHarmonicsSlider", st.bass.harmonics), updateBassHarmonics(st.bass.harmonics, true));
+        setInput("bassHarmonicType", st.bass.harmonicType);
+        if (typeof updateBassHarmonicType === "function") updateBassHarmonicType();
+        if (typeof updateBassSubcut === "function") (setInput("bassSubcutSlider", st.bass.subcut), updateBassSubcut(st.bass.subcut, true));
+      }
+      if (st.convolver) {
+        setInput("convTaps", String(st.convolver.taps));
+        setInput("convPhaseMode", st.convolver.phase);
+        if (typeof updateConvolverSettings === "function") updateConvolverSettings();
+        if (typeof syncConvGain === "function") (setInput("convGainSlider", st.convolver.gain), syncConvGain(st.convolver.gain, true));
+      }
+    } else {
+      // A motor még sosem kapott beállítást: biztonságos, sík alapállapot (ami a képen, az szól)
+      nodes.forEach(n => { n.gain = 0.0; });
+      ['crossfeed', 'convolver', 'limiter', 'bass'].forEach(m => setModuleActive(m, false));
+      setModuleActive('eq', true);
+      currentPreamp = 0.0;
+    }
+    const inp = document.getElementById("inputPreamp");
+    if (inp) inp.value = currentPreamp.toFixed(1);
+    applyEngineIr(st);
+    lastSentPreamp = currentPreamp;
+    updateEqUI();
+    drawEq();
+  } finally {
+    suppressEngineSync = false;
+  }
+  if (!st.initialized) {
+    // A motor még üres: a felület (biztonságos, sík) állapotát teljes egészében átadjuk
+    pushAllToEngine();
+  }
+  // Offline betöltött IR feltöltése, ha a motorban még nincs meg
+  if (convIrLocal && (!st.ir || st.ir.name !== convIrLocal.name)) uploadIrToEngine();
+}
+
+// A motor az első szabad portot használja ebből a listából (Windows: aether_engine.cpp, Linux: 8080)
+const ENGINE_PORTS = [47810, 47811, 47812, 47813, 47814, 8080];
+let enginePortIdx = 0;
+let engineVerified = false;
+
+function initPipewireBridge() {
+  try {
+    const port = ENGINE_PORTS[enginePortIdx];
+    engineVerified = false;
+    pipewireWs = new WebSocket("ws://127.0.0.1:" + port);
+    const thisWs = pipewireWs;
+    // Ha 2,5 s alatt nem jön motor-üzenet (vagy a kézfogás beragad), ez nem az AetherAudio motor: továbblépünk
+    setTimeout(() => { if (thisWs === pipewireWs && !engineVerified && thisWs.readyState !== WebSocket.CLOSED) thisWs.close(); }, 2500);
 
     pipewireWs.onopen = () => {
       isPipewireConnected = true;
-      if (badge) {
-        badge.className = "status-badge optimal";
-        badge.innerHTML = "● PipeWire Live (Csatlakoztatva)";
-      }
-      console.log("[PipeWire Bridge] Élő C++ PipeWire szerverhez csatlakozva!");
+      updateEngineBadge();
+      pipewireWs.send(JSON.stringify({ type: "hello", client: "gui_integrated_system" }));
+      console.log("[Motor Bridge] Élő C++ hangmotorhoz csatlakozva!");
     };
 
     pipewireWs.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data);
-        if (data.type === "audio_levels" && data.samples) {
-          livePipewireSamples = data.samples;
+        if (data && (data.type === "state" || data.type === "status" || data.type === "spectrum")) engineVerified = true;
+        if (data.type === "spectrum" && data.levels) {
+          liveSpectrumLevels = data.levels;
+          liveSpectrumTime = performance.now();
+        } else if (data.type === "state") {
+          // Teljes állapotot csak csatlakozáskor veszünk át; utána a GUI a forrás, a motor csak az IR-t jelzi vissza
+          if (data.reason === "ir") applyEngineIr(data);
+          else applyEngineState(data);
+        } else if (data.type === "status") {
+          engineStatus = data;
+          updateEngineBadge();
+          const grLbl = document.getElementById("lblLimiterGr");
+          if (grLbl && typeof data.gr === "number") {
+            grLbl.innerText = data.gr < -0.05 ? `GR: ${data.gr.toFixed(1)} dB (élő)` : "GR: 0.0 dB (Tiszta áteresztés, élő)";
+            const bar = document.getElementById("meterGrBar");
+            if (bar) bar.style.width = Math.min(100, -data.gr * 8) + "%";
+          }
+        } else if (data.type === "audio_levels" && data.samples) {
+          livePipewireSamples = data.samples; // régi motorverzió kompatibilitás
         }
       } catch (err) {}
     };
 
     pipewireWs.onclose = () => {
       isPipewireConnected = false;
-      if (badge) {
-        badge.className = "status-badge";
-        badge.style.background = "rgba(255,255,255,0.06)";
-        badge.style.color = "var(--ee-text-secondary)";
-        badge.innerHTML = "○ PipeWire Offline (Szimuláció)";
+      liveSpectrumLevels = null;
+      engineStatus = null;
+      updateEngineBadge();
+      if (engineVerified) {
+        setTimeout(initPipewireBridge, 3000);           // ugyanazon a porton újrakapcsolódás
+      } else {
+        enginePortIdx = (enginePortIdx + 1) % ENGINE_PORTS.length;
+        setTimeout(initPipewireBridge, enginePortIdx === 0 ? 3000 : 150);
       }
-      setTimeout(initPipewireBridge, 3000);
     };
 
     pipewireWs.onerror = () => {
       pipewireWs.close();
     };
   } catch (e) {
-    setTimeout(initPipewireBridge, 3000);
+    enginePortIdx = (enginePortIdx + 1) % ENGINE_PORTS.length;
+    setTimeout(initPipewireBridge, enginePortIdx === 0 ? 3000 : 150);
   }
 }
 
-// Induláskor háttérben előkészítjük a 8 850+ modellt tartalmazó teljes AutoEq indexet és csatlakozunk a PipeWire-hoz
+// Induláskor háttérben előkészítjük a 8 850+ modellt tartalmazó teljes AutoEq indexet és csatlakozunk a hangmotorhoz (PipeWire / Windows)
 setTimeout(() => {
   ensureAutoEqIndexLoaded();
   initPipewireBridge();

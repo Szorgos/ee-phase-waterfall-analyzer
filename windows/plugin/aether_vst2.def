@@ -1,0 +1,4 @@
+LIBRARY AetherAudio
+EXPORTS
+    VSTPluginMain
+    main=VSTPluginMain
