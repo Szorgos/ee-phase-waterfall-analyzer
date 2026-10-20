@@ -1,4 +1,8 @@
-### Újdonságok (1.4.7)
+### Újdonságok (1.4.8)
+- **Linux saját ablak:** a számmezők (Freq, Gain, Q, Preamp stb.) értéke nem csúszik ki jobbra – a GTK léptetőgombok helyett görgővel és a fel/le nyilakkal lehet léptetni.
+- **Nincs hatástalan gomb:** a profil átnevezése/törlése csak akkor látszik, ha van aktív profil; az utolsó EQ-sávnál a Törlés gomb láthatóan tiltott; a crossfeed profilgombok a késleltetést is átadják a motornak, és szólnak, ha a modul ki van kapcsolva.
+
+### Az 1.4.7 újdonságai
 - **Frekvenciaskála:** köztes feliratok (30, 300, 3k, 15k) és sűrűbb osztás 10–20 kHz között (12k, 14k, 15k, 16k, 18k).
 - **Vízesés fejléc:** a jobb felső beállítások keskeny ablakban több sorba tördelnek, és nem takarják el a bal felső „Top-Strip 3D” feliratot; halvány sötét hátteret kaptak, így felülnézetben is olvashatók.
 

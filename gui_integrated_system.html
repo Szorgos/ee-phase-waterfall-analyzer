@@ -56,6 +56,11 @@
   /* ======================================================= */
   .top-spectrum-strip { position: relative; width: 100%; height: clamp(230px, 32vh, 420px); background: #0c0e12; border-bottom: 1px solid var(--ee-border); overflow: hidden; }
   canvas#waterfallCanvas { width: 100%; height: 100%; display: block; }
+  /* Linux saját ablak (WebKitGTK): a GTK-s léptetőgombok elvennék a helyet a számtól, ezért ott elrejtjük őket
+     (a léptetés görgővel és a fel/le nyilakkal megy) */
+  html.wkgtk input[type="number"] { -webkit-appearance: textfield; appearance: textfield; }
+  html.wkgtk input[type="number"]::-webkit-inner-spin-button,
+  html.wkgtk input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; display: none; }
   .freq-scale { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 30px; pointer-events: none;
                 background: linear-gradient(to top, rgba(12,14,18,0.94) 0%, rgba(12,14,18,0.75) 55%, rgba(12,14,18,0) 100%); }
 
@@ -221,8 +226,8 @@
       <span class="preset-lbl">Profil:</span>
       <select id="selectPreset" class="mini-select preset-select" onchange="onPresetSelected(this.value)"></select>
       <button class="mini-btn" onclick="savePresetAs()" title="Mentés új profilként">＋</button>
-      <button class="mini-btn" onclick="renamePreset()" title="Aktív profil átnevezése">✎</button>
-      <button class="mini-btn" onclick="deletePreset()" title="Aktív profil törlése">🗑</button>
+      <button class="mini-btn" id="btnPresetRename" onclick="renamePreset()" title="Aktív profil átnevezése">✎</button>
+      <button class="mini-btn" id="btnPresetDelete" onclick="deletePreset()" title="Aktív profil törlése">🗑</button>
     </div>
     <div style="display:flex; align-items:center; gap:12px;">
       <button id="btnSupport" class="support-link" onclick="toggleSupport(event)" title="Az AetherAudio ingyenes (donateware). Ha hasznos, egy kis támogatással segítheted a fejlesztést.">♥ Támogatás</button>
@@ -1087,6 +1092,24 @@ if (btnCameraAngle) {
 }
 
 
+
+// ---------------------------------------------------------------- Linux saját ablak (WebKitGTK) sajátosságai
+(function () {
+  const ua = navigator.userAgent;
+  const isWebKitGtk = /AppleWebKit/.test(ua) && !/Chrome|Chromium|Edg\//.test(ua) && /Linux|X11/.test(ua);
+  if (!isWebKitGtk) return;
+  document.documentElement.classList.add("wkgtk");
+  // Görgővel léptetés a fókuszban lévő vagy egér alatti számmezőn (a rejtett léptetőgombok helyett)
+  document.addEventListener("wheel", (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement) || el.type !== "number" || el.disabled) return;
+    e.preventDefault();
+    if (e.deltaY < 0) el.stepUp(); else el.stepDown();
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }, { passive: false });
+})();
+
 // ---------------------------------------------------------------- frekvenciaskála a vízesés alatt
 // A spektrum 160 logaritmikus sávja 20 Hz – 20 kHz (spectrum.hpp); a mesh x-oszlopai ezek a sávok.
 const freqScaleCanvas = document.getElementById("freqScaleCanvas");
@@ -1765,6 +1788,8 @@ function applyCrossfeedPreset(preset) {
     l.value = 3.5;
     d.value = 0.35;
   }
+  sendCrossfeed();   // a késleltetés is a motorba kerül
+  if (!isCrossfeedEnabled) showToast("Crossfeed profil beállítva. A hatáshoz kapcsold be a Crossfeed modult (KI → BE).", 3500);
 }
 
 // 4 EQ Mód és Decramp kezelők
@@ -2297,6 +2322,15 @@ eqCanvas.addEventListener("dblclick", (e) => {
   addEqNode(Math.round(getFreq(x, plotW, padLeft)), -((y - midY) / (plotH * 0.45)) * 24.0);
 });
 
+function updateDeleteNodeButton() {
+  const b = document.getElementById("btnDeleteNode");
+  if (!b) return;
+  const can = nodes.length > 1;
+  b.disabled = !can;
+  b.style.opacity = can ? "" : "0.45";
+  b.style.cursor = can ? "" : "not-allowed";
+  b.title = can ? "A kijelölt sáv törlése" : "Az utolsó sáv nem törölhető (0 dB-re állítva hatástalan)";
+}
 document.getElementById("btnDeleteNode").onclick = () => {
   if (nodes.length <= 1) return;
   nodes = nodes.filter(n => n.id !== selectedNodeId);
@@ -2317,6 +2351,7 @@ document.getElementById("btnTogglePhase").onclick = (e) => {
 };
 
 function updateEqUI() {
+  if (typeof updateDeleteNodeButton === "function") updateDeleteNodeButton();
   const sel = nodes.find(n => n.id === selectedNodeId);
   if (sel) {
     document.getElementById("selectedNodeTitle").innerText = `Sáv #${nodes.indexOf(sel) + 1}`;
@@ -3329,6 +3364,11 @@ function refreshPresetUi() {
   });
   sel.value = activePresetName || "";
   sel.title = activePresetName ? `Aktív profil: ${activePresetName}` : "Nincs aktív profil";
+  // Átnevezés / törlés csak akkor látszik, ha van mit (ne legyen hatástalan gomb)
+  ["btnPresetRename", "btnPresetDelete"].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.style.display = activePresetName ? "" : "none";
+  });
 }
 
 function uniquePresetName(base) {
