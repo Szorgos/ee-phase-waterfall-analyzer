@@ -72,6 +72,14 @@ void openGui() {
                                            dir + L"\\gui_integrated_system.html",
                                            dir + L"\\..\\gui_integrated_system.html" }) {
         if (fileExists(candidate)) {
+            // Saját alkalmazásablak az Edge-dzsel (--app: fülek és címsor nélkül); végső tartalék a böngésző
+            std::wstring url = L"file:///" + candidate;
+            for (auto& c : url) if (c == L'\\') c = L'/';
+            const std::wstring args = L"--app=\"" + url + L"\" --window-size=1480,940";
+            if (reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", L"msedge.exe", args.c_str(), nullptr, SW_SHOWNORMAL)) > 32) {
+                std::cout << "[GUI] Felület megnyitva saját ablakban (Edge alkalmazásmód).\n";
+                return;
+            }
             ShellExecuteW(nullptr, L"open", candidate.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             std::cout << "[GUI] Grafikus felület megnyitva az alapértelmezett böngészőben.\n";
             return;

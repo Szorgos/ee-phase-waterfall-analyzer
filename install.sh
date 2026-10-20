@@ -78,11 +78,14 @@ cmake --build build -j"$(nproc)" --target aetheraudio-engine
 [ -x build/aetheraudio-engine ] || die "A motor fordítása sikertelen."
 ok "Motor: build/aetheraudio-engine"
 HAVE_GUI=0
-if cmake --build build -j"$(nproc)" --target aetheraudio-gui 2>/dev/null && [ -x build/aetheraudio-gui ]; then
+if cmake --build build -j"$(nproc)" --target aetheraudio-gui > build/gui-build.log 2>&1 && [ -x build/aetheraudio-gui ]; then
     HAVE_GUI=1
     ok "Saját ablakos felület: build/aetheraudio-gui"
 else
-    warn "A saját ablakos felület nem fordult le; a menüpont böngészőben nyitja meg a felületet."
+    tail -n 15 build/gui-build.log 2>/dev/null || true
+    warn "A saját ablakos (WebKitGTK) felület nem fordult le (részletek: build/gui-build.log)."
+    warn "Tartalék: Chromium alapú böngésző alkalmazásablaka, ha nincs ilyen, az alapértelmezett böngésző."
+    warn "Javítás: telepítsd a gtk3 és webkit2gtk-4.1 fejlesztői csomagot, majd futtasd újra az ./install.sh-t."
 fi
 
 # ------------------------------------------------------------------ 3. fájlok
@@ -102,8 +105,15 @@ if [ "$HAVE_GUI" = 1 ]; then
 else
     cat > "$BIN_DIR/aetheraudio-gui" <<EOF
 #!/usr/bin/env bash
-# AetherAudio felület böngészőben (a saját ablakhoz telepítsd a webkit2gtk fejlesztői csomagot, és futtasd újra az install.sh-t)
-exec xdg-open "file://${GUI_DIR}/gui_integrated_system.html"
+# AetherAudio felület WebKitGTK nélkül (a beépített saját ablakhoz telepítsd a webkit2gtk fejlesztői csomagot,
+# és futtasd újra az install.sh-t). Chromium alapú böngésző alkalmazásablaka (--app), végső esetben xdg-open.
+URL="file://${GUI_DIR}/gui_integrated_system.html"
+for b in chromium chromium-browser google-chrome google-chrome-stable brave-browser microsoft-edge vivaldi; do
+    if command -v "\$b" >/dev/null 2>&1; then
+        exec "\$b" --app="\$URL" --class=AetherAudio --window-size=1480,940
+    fi
+done
+exec xdg-open "\$URL"
 EOF
     chmod 755 "$BIN_DIR/aetheraudio-gui"
 fi

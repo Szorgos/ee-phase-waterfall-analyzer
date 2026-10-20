@@ -3,8 +3,8 @@
  * @brief AetherAudio felület saját ablakban Linuxon (WebKitGTK, a webview/webview 0.12.0 könyvtárral).
  *
  * A gui_integrated_system.html-t keresi (sorrendben): $AETHERAUDIO_GUI_DIR, <bináris>/../share/aetheraudio/gui,
- * ~/.local/share/aetheraudio/gui, <bináris> mappája. Ha a WebKitGTK ablak nem indul, az alapértelmezett
- * böngészőben nyitja meg (xdg-open).
+ * ~/.local/share/aetheraudio/gui, <bináris> mappája. Ha a WebKitGTK ablak nem indul, Chromium alapú
+ * böngésző alkalmazásablakában (--app), végső esetben az alapértelmezett böngészőben nyitja meg (xdg-open).
  */
 #include "webview/webview.h"
 
@@ -45,7 +45,32 @@ std::string findGuiFolder() {
     return {};
 }
 
+/** Program keresése a PATH-ban. */
+bool inPath(const std::string& prog) {
+    const char* path = std::getenv("PATH");
+    std::string p = path ? path : "/usr/local/bin:/usr/bin:/bin";
+    size_t start = 0;
+    while (start <= p.size()) {
+        const size_t end = p.find(':', start);
+        const std::string dir = p.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        if (!dir.empty() && access((dir + "/" + prog).c_str(), X_OK) == 0) return true;
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    return false;
+}
+
+/**
+ * Tartalék WebKitGTK nélkül: saját alkalmazásablak Chromium alapú böngészővel (--app: nincsenek fülek és
+ * címsor); csak ha ilyen nincs telepítve, akkor nyílik meg az alapértelmezett böngészőben (xdg-open).
+ */
 int openInBrowser(const std::string& url) {
+    for (const char* b : { "chromium", "chromium-browser", "google-chrome", "google-chrome-stable",
+                           "brave-browser", "microsoft-edge", "vivaldi" }) {
+        if (!inPath(b)) continue;
+        const std::string cmd = std::string(b) + " --app='" + url + "' --class=AetherAudio --window-size=1480,940 >/dev/null 2>&1 &";
+        if (std::system(cmd.c_str()) == 0) return 0;
+    }
     const std::string cmd = "xdg-open '" + url + "' >/dev/null 2>&1 &";
     return std::system(cmd.c_str()) == 0 ? 0 : 1;
 }

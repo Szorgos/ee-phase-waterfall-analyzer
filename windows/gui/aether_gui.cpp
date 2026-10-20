@@ -60,7 +60,10 @@ std::string toUtf8(const std::wstring& w) {
     return s;
 }
 
-/** Tartalék: a felület megnyitása az alapértelmezett böngészőben. */
+/**
+ * Tartalék WebView2 nélkül: a felület saját alkalmazásablakban az Edge-dzsel (--app: nincsenek fülek és
+ * címsor), és csak ha az sem indul, az alapértelmezett böngészőben.
+ */
 int openInBrowser(const std::wstring& guiFolder) {
     if (guiFolder.empty()) {
         MessageBoxW(nullptr, L"A felület fájljai (gui\\gui_integrated_system.html) nem találhatók.\n"
@@ -68,6 +71,11 @@ int openInBrowser(const std::wstring& guiFolder) {
         return 1;
     }
     const std::wstring html = guiFolder + L"\\gui_integrated_system.html";
+    std::wstring url = L"file:///" + html;
+    for (auto& c : url) if (c == L'\\') c = L'/';
+    const std::wstring args = L"--app=\"" + url + L"\" --window-size=1480,940";
+    if (reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", L"msedge.exe", args.c_str(), nullptr, SW_SHOWNORMAL)) > 32)
+        return 0;
     ShellExecuteW(nullptr, L"open", html.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     return 0;
 }
