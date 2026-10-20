@@ -1,10 +1,13 @@
-# Kiadás: egy "v*" címke (pl. v1.3.0) feltöltésekor lefordítja a Windows telepítőt,
-# és GitHub Release-t készít belőle. Kézzel is indítható (Actions → Release → Run workflow).
+# Kiadás: GitHub-on egy Release közzétételekor (vagy "v*" címke feltöltésekor) lefordítja a Windows
+# telepítőt, és a Release-hez csatolja. Kézzel is indítható (Actions → Release → Run workflow):
+# ilyenkor csak letölthető munkatermék (artifact) készül.
 name: Release
 
 on:
   push:
     tags: [ "v*" ]
+  release:
+    types: [ published ]
   workflow_dispatch:
 
 permissions:
@@ -60,7 +63,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: AetherAudio ${{ github.ref_name }}
-          body_path: RELEASE_NOTES.md
+          body_path: ${{ github.event_name == 'push' && 'RELEASE_NOTES.md' || '' }}
           files: |
             ${{ steps.name.outputs.file }}
             ${{ steps.name.outputs.file }}.sha256
