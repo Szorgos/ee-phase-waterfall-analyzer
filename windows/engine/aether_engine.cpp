@@ -60,6 +60,14 @@ bool fileExists(const std::wstring& p) {
 
 void openGui() {
     const std::wstring dir = exeDirectory();
+    // Saját ablakos felület (WebView2); ha nincs meg, a böngészős megnyitás a tartalék
+    const std::wstring app = dir + L"\\AetherAudioGui.exe";
+    if (fileExists(app)) {
+        if (reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", app.c_str(), nullptr, dir.c_str(), SW_SHOWNORMAL)) > 32) {
+            std::cout << "[GUI] Felület megnyitva saját ablakban.\n";
+            return;
+        }
+    }
     for (const std::wstring& candidate : { dir + L"\\gui\\gui_integrated_system.html",
                                            dir + L"\\gui_integrated_system.html",
                                            dir + L"\\..\\gui_integrated_system.html" }) {

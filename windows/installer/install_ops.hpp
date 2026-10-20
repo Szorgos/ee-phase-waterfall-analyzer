@@ -36,7 +36,7 @@
 namespace aether_setup {
 
 constexpr const wchar_t* kAppName = L"AetherAudio";
-constexpr const wchar_t* kVersion = L"1.2.2";
+constexpr const wchar_t* kVersion = L"1.3.0";
 constexpr const wchar_t* kPublisher = L"AetherAudio (Sass Gergő)";
 constexpr const wchar_t* kUninstallKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AetherAudio";
 constexpr const wchar_t* kAppKey = L"Software\\AetherAudio";
@@ -548,7 +548,7 @@ inline bool createShortcut(const std::wstring& lnk, const std::wstring& target, 
     return ok;
 }
 
-/** A futó motor(ok) bezárása (tálcaablak WM_CLOSE, végső esetben a folyamat leállítása). */
+/** A futó motor(ok) és felület(ek) bezárása (tálcaablak WM_CLOSE, végső esetben a folyamat leállítása). */
 inline void closeRunningEngine(const std::wstring& exePath) {
     for (int round = 0; round < 3; ++round) {
         HWND w = nullptr;
@@ -561,12 +561,20 @@ inline void closeRunningEngine(const std::wstring& exePath) {
     PROCESSENTRY32W pe{};
     pe.dwSize = sizeof(pe);
     for (BOOL ok = Process32FirstW(snap, &pe); ok; ok = Process32NextW(snap, &pe)) {
-        if (_wcsicmp(pe.szExeFile, L"AetherAudio.exe") != 0) continue;
+        const bool isEngine = _wcsicmp(pe.szExeFile, L"AetherAudio.exe") == 0;
+        const bool isGui = _wcsicmp(pe.szExeFile, L"AetherAudioGui.exe") == 0;
+        if (!isEngine && !isGui) continue;
         HANDLE p = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, pe.th32ProcessID);
         if (!p) continue;
         wchar_t img[MAX_PATH];
         DWORD n = MAX_PATH;
-        if (QueryFullProcessImageNameW(p, 0, img, &n) && (exePath.empty() || _wcsicmp(img, exePath.c_str()) == 0)) {
+        // A felület (AetherAudioGui.exe) ugyanabban a mappában van, mint a motor
+        std::wstring want = exePath;
+        if (isGui && !want.empty()) {
+            const size_t sl = want.find_last_of(L"\\/");
+            want = (sl == std::wstring::npos ? std::wstring() : want.substr(0, sl + 1)) + L"AetherAudioGui.exe";
+        }
+        if (QueryFullProcessImageNameW(p, 0, img, &n) && (want.empty() || _wcsicmp(img, want.c_str()) == 0)) {
             TerminateProcess(p, 0);
             WaitForSingleObject(p, 3000);
         }
