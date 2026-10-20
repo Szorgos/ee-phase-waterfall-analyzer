@@ -70,13 +70,20 @@ Az **AetherAudio** ezt a filozófiát egyesíti a modern digitális jelfeldolgoz
 
 A telepítő szkript automatikusan felismeri a disztribúciót, felrakja a szükséges csomagokat, lefordítja a C++ motort és regisztrálja az asztali alkalmazásikont.
 
-### 1. Klónozás és Telepítés:
-Nyiss meg egy terminált, és futtasd:
+### 1. Letöltés és Telepítés:
+A [legújabb kiadásnál](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest) töltsd le az `AetherAudio-Linux-<verzió>.tar.gz` csomagot, majd:
 
 ```bash
-git clone https://github.com/<felhasznalonev>/ee-phase-waterfall-analyzer.git
+tar xzf AetherAudio-Linux-*.tar.gz
+cd AetherAudio-Linux-*/
+./install.sh
+```
+
+Vagy a fejlesztői változat a GitHubról (frissítés: `git pull`, majd újra `./install.sh`):
+
+```bash
+git clone https://github.com/Szorgos/ee-phase-waterfall-analyzer.git
 cd ee-phase-waterfall-analyzer
-chmod +x install.sh
 ./install.sh
 ```
 

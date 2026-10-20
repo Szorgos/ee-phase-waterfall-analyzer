@@ -19,7 +19,47 @@ permissions:
   contents: write
 
 jobs:
+  # Linux: fordítási ellenőrzés (motor + saját ablakos felület + tesztek) és a telepítő csomag (forrás + install.sh)
+  linux-package:
+    runs-on: ubuntu-24.04
+    outputs:
+      file: ${{ steps.pkg.outputs.file }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Függőségek
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config libpipewire-0.3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Fordítás (motor, felület, tesztek)
+        run: |
+          cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON
+          cmake --build build -j"$(nproc)"
+          test -x build/aetheraudio-engine
+          test -x build/aetheraudio-gui
+          for t in test_math test_pipeline test_ringbuffer test_core test_dsp; do ./build/$t; done
+
+      - name: Linux telepítő csomag
+        id: pkg
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then VER="${GITHUB_REF_NAME#v}"
+          elif [ -n "${{ inputs.version }}" ]; then VER="${{ inputs.version }}"
+          else VER="dev-${GITHUB_SHA::7}"; fi
+          NAME="AetherAudio-Linux-${VER}"
+          git archive --format=tar.gz --prefix="${NAME}/" -o "${NAME}.tar.gz" HEAD
+          sha256sum "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256"
+          echo "file=${NAME}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AetherAudio-Linux
+          path: |
+            ${{ steps.pkg.outputs.file }}
+            ${{ steps.pkg.outputs.file }}.sha256
+
   windows-installer:
+    needs: linux-package
     runs-on: ubuntu-24.04
     env:
       LLVM_MINGW: llvm-mingw-20250924-ucrt-ubuntu-22.04-x86_64
@@ -133,6 +173,11 @@ jobs:
             ${{ steps.name.outputs.file }}
             ${{ steps.name.outputs.file }}.sha256
 
+      - name: Linux csomag átvétele a kiadáshoz
+        uses: actions/download-artifact@v4
+        with:
+          name: AetherAudio-Linux
+
       - name: "GitHub Release (kézi indításkor verziószámmal: új címke és kiadás)"
         if: github.event_name == 'workflow_dispatch' && inputs.version != ''
         uses: softprops/action-gh-release@v2
@@ -145,6 +190,8 @@ jobs:
             ${{ steps.name.outputs.file }}
             ${{ steps.name.outputs.file }}.sha256
             AetherAudio-Setup.exe
+            ${{ needs.linux-package.outputs.file }}
+            ${{ needs.linux-package.outputs.file }}.sha256
 
       - name: GitHub Release
         if: github.ref_type == 'tag'
@@ -156,3 +203,5 @@ jobs:
             ${{ steps.name.outputs.file }}
             ${{ steps.name.outputs.file }}.sha256
             AetherAudio-Setup.exe
+            ${{ needs.linux-package.outputs.file }}
+            ${{ needs.linux-package.outputs.file }}.sha256
