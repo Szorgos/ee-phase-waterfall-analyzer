@@ -1,0 +1,66 @@
+# Kiadás: egy "v*" címke (pl. v1.3.0) feltöltésekor lefordítja a Windows telepítőt,
+# és GitHub Release-t készít belőle. Kézzel is indítható (Actions → Release → Run workflow).
+name: Release
+
+on:
+  push:
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    runs-on: ubuntu-24.04
+    env:
+      LLVM_MINGW: llvm-mingw-20250924-ucrt-ubuntu-22.04-x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: llvm-mingw letöltése (Linuxról Windowsra fordító)
+        run: |
+          curl -sSL -o /tmp/llvm-mingw.tar.xz \
+            https://github.com/mstorsjo/llvm-mingw/releases/download/20250924/${LLVM_MINGW}.tar.xz
+          sudo tar -xf /tmp/llvm-mingw.tar.xz -C /opt
+          sudo ln -s /opt/${LLVM_MINGW} /opt/llvm-mingw
+          sudo apt-get install -y ninja-build
+
+      - name: Fordítás
+        run: |
+          cmake -B build-win -S . -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=windows/toolchain-llvm-mingw.cmake -DLLVM_MINGW_ROOT=/opt/llvm-mingw
+          cmake --build build-win -j"$(nproc)"
+
+      - name: Közös DSP tesztek (Linux)
+        run: |
+          cmake -B build-test -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=OFF
+          cmake --build build-test -j"$(nproc)"
+          for t in test_math test_pipeline test_ringbuffer test_core test_dsp; do ./build-test/$t; done
+
+      - name: Telepítő elnevezése
+        id: name
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          [ "$GITHUB_REF_TYPE" = "tag" ] || VER="dev-${GITHUB_SHA::7}"
+          cp build-win/AetherAudio-Setup.exe "AetherAudio-Setup-${VER}.exe"
+          sha256sum "AetherAudio-Setup-${VER}.exe" > "AetherAudio-Setup-${VER}.exe.sha256"
+          echo "file=AetherAudio-Setup-${VER}.exe" >> "$GITHUB_OUTPUT"
+
+      - name: Feltöltés munkatermékként
+        uses: actions/upload-artifact@v4
+        with:
+          name: AetherAudio-Windows
+          path: |
+            ${{ steps.name.outputs.file }}
+            ${{ steps.name.outputs.file }}.sha256
+
+      - name: GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: AetherAudio ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            ${{ steps.name.outputs.file }}
+            ${{ steps.name.outputs.file }}.sha256
