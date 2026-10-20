@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(aetheraudio 
-    VERSION 1.2.1
+    VERSION 1.2.2
     DESCRIPTION "AetherAudio - Real-time Phase, Group Delay & Acoustic Waterfall DSP Suite"
     LANGUAGES CXX
 )
@@ -77,7 +77,7 @@ if(WIN32)
     if(BUILD_WINDOWS_ENGINE)
         add_executable(AetherAudio WIN32 windows/engine/aether_engine.cpp ${EE_RES_DIR}/engine.rc)
         target_include_directories(AetherAudio PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR})
-        target_link_libraries(AetherAudio PRIVATE ee_dsp_core ws2_32 ole32 oleaut32 shell32 advapi32 user32 uuid)
+        target_link_libraries(AetherAudio PRIVATE ee_dsp_core ws2_32 iphlpapi ole32 oleaut32 shell32 advapi32 user32 uuid)
         target_compile_definitions(AetherAudio PRIVATE UNICODE _UNICODE)
         if(MSVC)
             target_link_options(AetherAudio PRIVATE /ENTRY:mainCRTStartup /MANIFEST:NO)

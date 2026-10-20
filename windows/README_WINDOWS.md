@@ -61,7 +61,7 @@ A FIR tervezés és az impulzusválasz-előkészítés külön háttérszálon f
 - **Napló:** tálcaikon → *Napló megnyitása* (`%LOCALAPPDATA%\AetherAudio\engine.log`). A plugin naplója: `C:\ProgramData\AetherAudio\plugin_status.txt`. Itt látszik, hogy az `audiodg.exe` betöltötte-e, és milyen beállítással.
 - **„Élő analízis – WASAPI loopback” a plugin telepítése után:** frissen telepített Equalizer APO után újraindítás kell. Az EQ APO *Device Selector*-ában ellenőrizd, hogy a használt eszköz be van-e jelölve.
 - **Lejátszás szünetében** az EQ APO nem hívja a plugint; a vízesés ilyenkor lecseng, és ez nem hiba.
-- A motor csak a `127.0.0.1:8080` címen figyel, tűzfalszabály nem kell. Ha a port foglalt, indításkor üzenetet kapsz.
+- A motor csak a `127.0.0.1` címen figyel (az első szabad port a 47810–47814 tartományból, végső tartalékként 8080), tűzfalszabály nem kell. A felület magától megtalálja. Ha mind foglalt, az indítási üzenet megnevezi a portot használó programot.
 
 ## Fordítás
 
