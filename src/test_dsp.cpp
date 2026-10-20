@@ -310,7 +310,24 @@ static void testTruePeakAndMore() {
         cf.processBlock(l.data(), r.data(), l.size());
         size_t first = 0;
         while (first < r.size() && std::abs(r[first]) < 1e-7f) ++first;
-        CHECK(first == 24, "ITD 0,5 ms: a jobb csatornán az áthallás a %zu. mintánál indul (48 kHz: 24)", first);
+        // A 700 Hz-es aluláteresztő maga ~0,227 ms futásidőt ad; a késleltetővonal csak a különbséget pótolja
+        const size_t want = static_cast<size_t>((0.5 - 1000.0 / (2.0 * 3.14159265358979 * 700.0)) * 1e-3 * sr);
+        CHECK(first == want, "ITD 0,5 ms: a késleltetővonal %zu minta (várt %zu, a szűrő futásideje nélkül)", first, want);
+    }
+
+    // Crossfeed szint: középre kevert (mono) mély hang nem erősödik (korábban +3 dB volt)
+    {
+        CrossfeedProcessor cf(sr);
+        cf.prepareDelay();
+        cf.delayMs = 0.29;
+        cf.updateCoefficients();
+        std::vector<float> l(48000), r(48000);
+        for (size_t i = 0; i < l.size(); ++i) l[i] = r[i] = static_cast<float>(0.5 * std::sin(2.0 * 3.14159265358979 * 60.0 * i / sr));
+        cf.processBlock(l.data(), r.data(), l.size());
+        float pk = 0;
+        for (size_t i = 24000; i < l.size(); ++i) pk = std::max(pk, std::abs(l[i]));
+        const double g = 20 * std::log10(pk / 0.5);
+        CHECK(std::abs(g) < 0.3, "crossfeed: 60 Hz mono szint %.2f dB (várt ~0 dB)", g);
     }
 
     // Decramp: 15 kHz-es +6 dB magas polc 48 kHz-en; referencia = 768 kHz-re tervezett (közel analóg) szűrő

@@ -1154,7 +1154,9 @@ function drawFreqScale(force) {
   const dpr = window.devicePixelRatio || 1;
   freqScaleCanvas.width = Math.round(w * dpr);
   freqScaleCanvas.height = Math.round(sh * dpr);
-  const c = freqScaleCtx;
+  fsStatic.width = freqScaleCanvas.width;
+  fsStatic.height = freqScaleCanvas.height;
+  const c = fsStatic.getContext("2d");
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   c.clearRect(0, 0, w, sh);
   // Oldalnézetben a frekvenciatengely a mélységbe mutat: ott nincs értelme a skálának
@@ -1163,6 +1165,7 @@ function drawFreqScale(force) {
   const edgeY = h - sh;                         // a skála felső széle a vízesés-vásznon
   const x0 = freqScreenX(20, w, h, edgeY), x1 = freqScreenX(20000, w, h, edgeY);
   const baseY = 9.5;
+  fsGeom = { w, h, edgeY, baseY, dpr, x0, x1 };
 
   // Alapvonal a vízesés színátmenetével (kék → türkiz → zöld → sárga → narancs), visszafogottan
   const grad = c.createLinearGradient(x0, 0, x1, 0);
@@ -1207,10 +1210,77 @@ function drawFreqScale(force) {
   if (x0 > 34) c.fillText("Hz", Math.max(4, x0 - 28), baseY + 5);
 }
 
+// ---------------------------------------------------------------- a zenei jel frekvenciatartománya (ottragadó jelek)
+// A spektrum legalsó és legfelső, a zenében ténylegesen jelen lévő sávját mutatja a skálán. A jelek a
+// szélső értéken „ottragadnak”, és csak néhány másodperc után, lassan húzódnak vissza.
+const fsStatic = document.createElement("canvas");
+let fsGeom = null;
+const FS_RANGE = { lo: null, hi: null, loHoldUntil: 0, hiHoldUntil: 0, last: 0 };
+const FS_HOLD_MS = 4000;          // ennyi ideig marad a szélső érték
+const FS_RETURN_BANDS_PER_S = 6;  // utána ilyen lassan húzódik vissza (160 sáv = 3 dekád)
+
+function bandFreq(b) { return 20 * Math.pow(1000, (b + 0.5) / FREQ_BINS); }
+
+function updateFreqRange(levels, now) {
+  const dt = FS_RANGE.last ? Math.min(0.2, (now - FS_RANGE.last) / 1000) : 0;
+  FS_RANGE.last = now;
+  let lo = -1, hi = -1;
+  if (levels && levels.length) {
+    let mx = 0;
+    for (let i = 0; i < levels.length; i++) mx = Math.max(mx, levels[i]);
+    // jelen lévőnek számít: -66 dBFS fölött és a pillanatnyi csúcstól legfeljebb 48 dB-re (0..1 = -90..0 dBFS)
+    const thr = Math.max(24 / 90, mx - 48 / 90);
+    if (mx > 24 / 90) {
+      for (let i = 0; i < levels.length; i++) if (levels[i] >= thr) { if (lo < 0) lo = i; hi = i; }
+      const scale = FREQ_BINS / levels.length;
+      lo *= scale; hi *= scale;
+    }
+  }
+  if (lo >= 0) {
+    if (FS_RANGE.lo === null || lo <= FS_RANGE.lo) { FS_RANGE.lo = lo; FS_RANGE.loHoldUntil = now + FS_HOLD_MS; }
+    if (FS_RANGE.hi === null || hi >= FS_RANGE.hi) { FS_RANGE.hi = hi; FS_RANGE.hiHoldUntil = now + FS_HOLD_MS; }
+  }
+  // Tartás után lassú visszahúzódás a jelenlegi tartomány felé (csend esetén is ott maradnak, csak halványulnak)
+  if (FS_RANGE.lo !== null && now > FS_RANGE.loHoldUntil && lo >= 0 && FS_RANGE.lo < lo)
+    FS_RANGE.lo = Math.min(lo, FS_RANGE.lo + FS_RETURN_BANDS_PER_S * dt);
+  if (FS_RANGE.hi !== null && now > FS_RANGE.hiHoldUntil && hi >= 0 && FS_RANGE.hi > hi)
+    FS_RANGE.hi = Math.max(hi, FS_RANGE.hi - FS_RETURN_BANDS_PER_S * dt);
+}
+
+function drawFreqScaleFrame(levels) {
+  if (!freqScaleCtx || !fsGeom || freqScaleCanvas.style.display === "none") return;
+  const now = performance.now();
+  updateFreqRange(levels, now);
+  const g = fsGeom, c = freqScaleCtx;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, freqScaleCanvas.width, freqScaleCanvas.height);
+  c.drawImage(fsStatic, 0, 0);
+  if (FS_RANGE.lo === null) return;
+  c.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
+  const xl = freqScreenX(bandFreq(FS_RANGE.lo), g.w, g.h, g.edgeY);
+  const xh = freqScreenX(bandFreq(FS_RANGE.hi), g.w, g.h, g.edgeY);
+  const live = !!levels;
+  // a lefedett tartomány halvány sávja az alapvonalon
+  c.fillStyle = live ? "rgba(0, 240, 255, 0.10)" : "rgba(0, 240, 255, 0.05)";
+  c.fillRect(xl, g.baseY - 2.5, Math.max(1, xh - xl), 5);
+  // ottragadó jelek: picike függőleges vonal mindkét irányba az alapvonaltól
+  c.strokeStyle = live ? "rgba(0, 240, 255, 0.95)" : "rgba(0, 240, 255, 0.45)";
+  c.lineWidth = 1.5;
+  for (const x of [xl, xh]) {
+    const xx = Math.round(x) + 0.5;
+    c.beginPath(); c.moveTo(xx, g.baseY - 6); c.lineTo(xx, g.baseY + 6); c.stroke();
+  }
+}
+
 // 3D Animációs Ciklus
 function animate3D() {
   requestAnimationFrame(animate3D);
   drawFreqScale(false);
+  {
+    const fresh = isPipewireConnected && liveSpectrumLevels && liveSpectrumLevels.length > 0 &&
+                  (performance.now() - liveSpectrumTime < 450);
+    drawFreqScaleFrame(fresh ? liveSpectrumLevels : null);
+  }
 
   const slice = new Float32Array(FREQ_BINS);
   const mask = new Uint8Array(FREQ_BINS);

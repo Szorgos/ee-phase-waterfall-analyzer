@@ -1,4 +1,8 @@
-### Újdonságok (1.5.2)
+### Újdonságok (1.5.3)
+- **Javítva: crossfeed szint.** A középre kevert mély hangok eddig +3 dB-t kaptak (túlvezérlés, limiter-munka), a középhangok 1 kHz körül ~5,5 dB-t vesztettek. Most Bauer bs2b szerinti szűrés, mono jelre ~0 dB.
+- **Frekvenciaskála:** jelek mutatják, milyen tartományt fog át a zene (alsó és felső határ, néhány másodpercig megmaradnak).
+
+### Az 1.5.2 újdonságai
 - **Linux:** a felület indításkor elindítja a motort, ha az nem fut (a csomag telepítése után így nem marad „Motor Offline”).
 - **Linux:** sötét ablakcímsor a felület színeivel.
 

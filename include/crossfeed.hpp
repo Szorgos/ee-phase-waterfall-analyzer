@@ -37,32 +37,26 @@ public:
     size_t delayPos = 0;
     float delaySamples = 0.0f;
 
-    // Kiszámított szűrőegyütthatók
-    double b0 = 1.0, a1 = 0.0;
+    // Kiszámított szűrőegyütthatók (Bauer bs2b: aluláteresztő áthallás + felül-polcos direkt ág)
+    double a0Lo = 0.0, b1Lo = 0.0;            // áthalló ág: 1-pólusú aluláteresztő
+    double a0Hi = 1.0, a1Hi = 0.0, b1Hi = 0.0; // direkt ág: 1. rendű felül-polc
+    double gain = 1.0;                        // szintkiegyenlítés: középre kevert (mono) jelnél ~0 dB
+    // régi mezőnevek (tesztek, felület): a mélyfrekvenciás áthallás és a direkt szint
     double directGain = 1.0;
     double crossGain = 0.0;
+
+    // Belső állapot
+    double hiL = 0.0, hiR = 0.0, inL1 = 0.0, inR1 = 0.0;
 
     CrossfeedProcessor(double sr = 48000.0) : sampleRate(sr) {
         setPreset(CrossfeedPreset::BauerDefault);
     }
 
-    /**
-     * @brief Előre definiált profil beállítása
-     */
     void setPreset(CrossfeedPreset preset) {
         switch (preset) {
-            case CrossfeedPreset::BauerDefault:
-                cutoffFreq = 700.0;
-                feedLevelDb = 4.5;
-                break;
-            case CrossfeedPreset::MeierCorda:
-                cutoffFreq = 650.0;
-                feedLevelDb = 6.0;
-                break;
-            case CrossfeedPreset::StudioNearfield:
-                cutoffFreq = 800.0;
-                feedLevelDb = 3.5;
-                break;
+            case CrossfeedPreset::BauerDefault:    cutoffFreq = 700.0; feedLevelDb = 4.5; break;
+            case CrossfeedPreset::MeierCorda:      cutoffFreq = 650.0; feedLevelDb = 6.0; break;
+            case CrossfeedPreset::StudioNearfield: cutoffFreq = 800.0; feedLevelDb = 3.5; break;
         }
         updateCoefficients();
     }
@@ -77,44 +71,54 @@ public:
     }
 
     /**
-     * @brief Szűrőegyütthatók frissítése a mintavételi frekvencia és paraméterek alapján
+     * Együtthatók a libbs2b képletei szerint. A feedLevelDb a mély- és magasfrekvenciás áthallás
+     * különbsége; a teljes erősítés úgy van skálázva, hogy a középre kevert (mono) jel szintje
+     * ne nőjön (korábban a mély hangok +3 dB-t kaptak, ami túlvezérléshez/limiter-munkához vezetett).
      */
     void updateCoefficients() {
         if (sampleRate <= 0.0) return;
+        const double pi = 3.14159265358979323846;
+        const double feed = std::clamp(feedLevelDb, 1.0, 15.0);
+        const double fcLo = std::clamp(cutoffFreq, 200.0, 2000.0);
+        const double gbLo = feed * -5.0 / 6.0 - 3.0;
+        const double gbHi = feed / 6.0 - 3.0;
+        const double gLo = std::pow(10.0, gbLo / 20.0);
+        const double gHi = 1.0 - std::pow(10.0, gbHi / 20.0);
+        const double fcHi = fcLo * std::pow(2.0, (gbLo - 20.0 * std::log10(gHi)) / 12.0);
+
+        double x = std::exp(-2.0 * pi * fcLo / sampleRate);
+        b1Lo = x;
+        a0Lo = gLo * (1.0 - x);
+        x = std::exp(-2.0 * pi * fcHi / sampleRate);
+        b1Hi = x;
+        a0Hi = 1.0 - gHi * (1.0 - x);
+        a1Hi = -x;
+        gain = 1.0 / (1.0 - gHi + gLo);
+        directGain = gain * (1.0 - gHi);   // tájékoztató: mély hangok direkt szintje
+        crossGain = gain * gLo;            // tájékoztató: mély hangok áthallási szintje
+
+        // ITD: az aluláteresztő szűrő saját futásideje (~1/(2·pi·fc)) már késleltet; csak a különbséget adjuk hozzá
         if (!delayL.empty()) {
+            const double lpDelayMs = 1000.0 / (2.0 * pi * fcLo);
+            const double extra = std::max(0.0, delayMs - lpDelayMs) * 1e-3 * sampleRate;
             const double maxD = static_cast<double>(delayL.size() - 3);
-            delaySamples = static_cast<float>(std::clamp(delayMs * 1e-3 * sampleRate, 0.0, maxD));
+            delaySamples = static_cast<float>(std::clamp(extra, 0.0, maxD));
         } else {
             delaySamples = 0.0f;
         }
-
-        // Normált vágási körfrekvencia
-        const double pi = 3.14159265358979323846;
-        const double omega = 2.0 * pi * cutoffFreq / sampleRate;
-
-        // Egyszerű 1-pólusú aluláteresztő tag az áthalló komponenshez: y[n] = (1 - alpha)*x[n] + alpha*y[n-1]
-        const double alpha = std::exp(-omega);
-        b0 = 1.0 - alpha;
-        a1 = alpha;
-
-        // Lineáris áthallási szint és kompenzáló direkt szint
-        crossGain = std::pow(10.0, -feedLevelDb / 20.0);
-        directGain = 1.0 - (crossGain * 0.3); // Kismértékű szintkiegyenlítés a monó felhalmozódás ellen
     }
 
-    /**
-     * @brief Egy sztereó minta valós idejű feldolgozása
-     * @param inOutL Bal csatorna minta (-1.0 ... +1.0)
-     * @param inOutR Jobb csatorna minta (-1.0 ... +1.0)
-     */
     void process(float& inOutL, float& inOutR) {
         if (!enabled) return;
+        const double l = inOutL, r = inOutR;
+        // áthalló ág (aluláteresztett)
+        filterStateL = a0Lo * l + b1Lo * filterStateL;
+        filterStateR = a0Lo * r + b1Lo * filterStateR;
+        // direkt ág (felül-polc)
+        hiL = a0Hi * l + a1Hi * inL1 + b1Hi * hiL;
+        hiR = a0Hi * r + a1Hi * inR1 + b1Hi * hiR;
+        inL1 = l; inR1 = r;
 
-        // Aluláteresztett áthallási komponensek
-        filterStateL = b0 * inOutL + a1 * filterStateL;
-        filterStateR = b0 * inOutR + a1 * filterStateR;
-
-        // ITD: az áthalló jel tört késleltetése (lineáris interpoláció; a jel már aluláteresztett)
         double crossFromR = filterStateR, crossFromL = filterStateL;
         if (!delayL.empty() && delaySamples > 0.0f) {
             const size_t n = delayL.size();
@@ -127,15 +131,8 @@ public:
             crossFromR = delayR[i0] + frac * (delayR[i1] - delayR[i0]);
             delayPos = (delayPos + 1) % n;
         }
-
-        // Keresztcsatornás keverés:
-        // Új bal = direkt bal + szűrt (késleltetett) jobb áthallás
-        // Új jobb = direkt jobb + szűrt (késleltetett) bal áthallás
-        const float newL = static_cast<float>(directGain * inOutL + crossGain * crossFromR);
-        const float newR = static_cast<float>(directGain * inOutR + crossGain * crossFromL);
-
-        inOutL = newL;
-        inOutR = newR;
+        inOutL = static_cast<float>((hiL + crossFromR) * gain);
+        inOutR = static_cast<float>((hiR + crossFromL) * gain);
     }
 
     /**
@@ -154,6 +151,7 @@ public:
     void reset() {
         filterStateL = 0.0;
         filterStateR = 0.0;
+        hiL = hiR = inL1 = inR1 = 0.0;
         std::fill(delayL.begin(), delayL.end(), 0.0f);
         std::fill(delayR.begin(), delayR.end(), 0.0f);
     }
