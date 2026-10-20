@@ -28,7 +28,7 @@
 
 namespace {
 
-/** Hibanapló a felülethez: %LOCALAPPDATA%\\AetherAudio\\gui.log (miért nem indult a saját ablak). */
+/** Hibanapló a felülethez: %LOCALAPPDATA%\AetherAudio\gui.log (miért nem indult a saját ablak). */
 void guiLog(const std::string& msg) {
     PWSTR p = nullptr;
     if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p)) || !p) return;
@@ -193,8 +193,8 @@ void runWindow(const std::wstring& guiFolder) {
 }
 
 /**
- * A WebView2 adatmappája: %LOCALAPPDATA%\\AetherAudio\\<név>. A WEBVIEW2_USER_DATA_FOLDER felülírja a
- * webview könyvtár alapértelmezését (%APPDATA%\\AetherAudioGui.exe), amely egy korábbi, rendszergazdaként
+ * A WebView2 adatmappája: %LOCALAPPDATA%\AetherAudio\<név>. A WEBVIEW2_USER_DATA_FOLDER felülírja a
+ * webview könyvtár alapértelmezését (%APPDATA%\AetherAudioGui.exe), amely egy korábbi, rendszergazdaként
  * futott példány után nem írható lehet, és ilyenkor a WebView2 nem indul.
  */
 void useWebViewDataFolder(const wchar_t* name, bool reset) {
