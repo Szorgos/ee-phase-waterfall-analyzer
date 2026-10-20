@@ -99,6 +99,18 @@ cd ee-phase-waterfall-analyzer
 
 Egyetlen telepítő: **`AetherAudio-Setup.exe`**. Felismeri (vagy letölti) az **Equalizer APO**-t, a plugint automatikusan a lánc végére illeszti, parancsikonokat és eltávolítót hoz létre. A motor tálcaikonos háttéralkalmazásként fut, a GUI ugyanaz, mint Linuxon. Részletek: **[windows/README_WINDOWS.md](windows/README_WINDOWS.md)**.
 
+### ⚠️ A telepítő nincs digitálisan aláírva – így indíthatod el
+
+Az AetherAudio ingyenes, egyszemélyes nyílt forrású projekt, ezért a Windows-telepítőnek egyelőre nincs kódaláíró tanúsítványa (a SignPath Foundation ingyenes programja csak már ismertebb projekteket fogad, egy fizetős tanúsítvány pedig évente 50–300 € körül van). A program ettől nem veszélyes: a teljes forráskód nyilvános, a telepítőt a GitHub Actions fordítja nyilvános naplóval, és minden kiadás mellett ott az ellenőrzőösszeg. A Windows viszont az aláíratlan, még kevesek által letöltött programokra figyelmeztet.
+
+1. **Letöltéskor** a böngésző (Edge, Chrome) jelezheti, hogy a fájlt „ritkán töltik le”: *… → Megtartás* (Edge-ben: *Továbbiak megjelenítése → Megtartás mindenképp*).
+2. **Ellenőrizd a fájlt (ajánlott):** PowerShellben `Get-FileHash .\AetherAudio-Setup-<verzió>.exe` – az eredménynek egyeznie kell a kiadás `.sha256` fájljában lévő értékkel.
+3. **Indításkor** a SmartScreen „A Windows megvédte a számítógépet” ablakot mutat: *További információ → Futtatás mindenképp*.
+4. **Intelligens alkalmazásvezérlés (Smart App Control):** ha be van kapcsolva, az aláíratlan programokat (az Equalizer APO-ba töltött plugint is) kivétel nélkül letiltja, egyedi engedélyezésre nincs lehetőség. Ilyenkor csak a kikapcsolása segít: *Windows biztonság → Alkalmazás- és böngészővezérlés → Intelligens alkalmazásvezérlés beállításai → Ki*. A 2026 tavaszi Windows 11 frissítések óta ez később újra bekapcsolható, régebbi rendszeren a visszakapcsoláshoz a Windows újratelepítése kellett – ezt mérlegeld.
+5. Ha a **Microsoft Defender** tévesen kártevőnek jelölné, kérlek jelezd egy GitHub-hibajegyben; a fájlt a Microsoftnak is be lehet küldeni felülvizsgálatra (microsoft.com/wdsi/filesubmission).
+
+Ha a Windows-figyelmeztetéseket nem szeretnéd megkerülni, a **Linux-verzió** forrásból fordul (`./install.sh`), ott ilyen korlát nincs.
+
 A Linuxos és a Windowsos ág ugyanazt a C++ DSP láncot futtatja (`include/aether_chain.hpp`): IIR vagy FIR EQ (lineáris / köztes / minimálfázis), Bass Enhancer, crossfeed, partícionált FFT konvolver és limiter. A drága műveletek háttérszálon futnak, a csere kattanásmentes.
 
 ---
@@ -197,9 +209,7 @@ cmake --build build -j$(nproc)
 
 ## 🔏 Kódaláírási szabályzat (Code signing policy)
 
-A Windows kiadásokat (`AetherAudio-Setup.exe`, valamint a benne lévő `AetherAudio.exe`, `AetherAudioGui.exe` és `AetherAudio.dll`) aláírva tesszük közzé.
-
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+**Jelenleg a Windows kiadások aláírás nélkül jelennek meg** (lásd: [A telepítő nincs digitálisan aláírva](#️-a-telepítő-nincs-digitálisan-aláírva--így-indíthatod-el)). A kiadási folyamat fel van készítve az aláírásra (`AetherAudio-Setup.exe`, valamint a benne lévő `AetherAudio.exe`, `AetherAudioGui.exe` és `AetherAudio.dll`); amint lesz tanúsítvány, az alábbi szabályok szerint írjuk alá őket.
 
 - **Szerepek:** fejlesztő (committer), ellenőrző (reviewer) és jóváhagyó (approver): [Szorgos](https://github.com/Szorgos) (Sass Gergő).
 - **Mit írunk alá:** csak az ebben a tárolóban lévő forrásból, a GitHub Actions `Release` workflow-ján fordított fájlokat. Minden aláírási kérést a jóváhagyó egyenként hagy jóvá.

@@ -21,7 +21,7 @@ AetherAudio-Setup.exe /S [/D=C:\Mappa] [/NOAPO] [/DOWNLOADAPO]
 "C:\Program Files\AetherAudio\Uninstall.exe" /uninstall /S
 ```
 
-> A kódaláírás (SignPath Foundation) bevezetés alatt áll. Amíg egy kiadás nincs aláírva, a Windows SmartScreen figyelmeztethet (*További információ → Futtatás mindenképp*), és az Intelligens alkalmazásvezérlés (Smart App Control) le is tilthatja a programot.
+> A telepítő jelenleg nincs digitálisan aláírva. A Windows SmartScreen figyelmeztethet (*További információ → Futtatás mindenképp*), a bekapcsolt Intelligens alkalmazásvezérlés (Smart App Control) pedig le is tiltja a programot. Lépésenkénti leírás, ellenőrzőösszeg és a Smart App Control kezelése: [README – A telepítő nincs digitálisan aláírva](../README.md#️-a-telepítő-nincs-digitálisan-aláírva--így-indíthatod-el).
 
 ## Használat
 
