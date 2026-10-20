@@ -121,6 +121,17 @@ if(WIN32)
     if(BUILD_WINDOWS_SETUP AND BUILD_WINDOWS_ENGINE AND BUILD_EQAPO_PLUGIN)
         # A beágyazandó fájlok egy átmeneti mappába kerülnek; a .rc fix útvonalakkal hivatkozik rájuk
         set(EE_PAYLOAD_DIR ${CMAKE_CURRENT_BINARY_DIR}/payload)
+        # Aláírt kiadáshoz: a motor, a felület és a plugin a SignPath által aláírt példányból kerül a telepítőbe
+        set(EE_SIGNED_BINARIES_DIR "" CACHE PATH "Aláírt AetherAudio.exe / AetherAudioGui.exe / AetherAudio.dll mappája (üres: a most fordított fájlok)")
+        if(EE_SIGNED_BINARIES_DIR)
+            set(EE_SRC_ENGINE ${EE_SIGNED_BINARIES_DIR}/AetherAudio.exe)
+            set(EE_SRC_PLUGIN ${EE_SIGNED_BINARIES_DIR}/AetherAudio.dll)
+            set(EE_SRC_GUIAPP ${EE_SIGNED_BINARIES_DIR}/AetherAudioGui.exe)
+        else()
+            set(EE_SRC_ENGINE $<TARGET_FILE:AetherAudio>)
+            set(EE_SRC_PLUGIN $<TARGET_FILE:AetherAudioPlugin>)
+            set(EE_SRC_GUIAPP $<TARGET_FILE:AetherAudioGui>)
+        endif()
         set(EE_PAYLOAD_SOURCES
             ${CMAKE_CURRENT_SOURCE_DIR}/gui_integrated_system.html
             ${CMAKE_CURRENT_SOURCE_DIR}/autoeq_index.js
@@ -130,9 +141,9 @@ if(WIN32)
         add_custom_command(
             OUTPUT ${EE_PAYLOAD_DIR}/payload.stamp
             COMMAND ${CMAKE_COMMAND} -E make_directory ${EE_PAYLOAD_DIR}
-            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:AetherAudio> ${EE_PAYLOAD_DIR}/engine.bin
-            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:AetherAudioPlugin> ${EE_PAYLOAD_DIR}/plugin.bin
-            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:AetherAudioGui> ${EE_PAYLOAD_DIR}/guiapp.bin
+            COMMAND ${CMAKE_COMMAND} -E copy ${EE_SRC_ENGINE} ${EE_PAYLOAD_DIR}/engine.bin
+            COMMAND ${CMAKE_COMMAND} -E copy ${EE_SRC_PLUGIN} ${EE_PAYLOAD_DIR}/plugin.bin
+            COMMAND ${CMAKE_COMMAND} -E copy ${EE_SRC_GUIAPP} ${EE_PAYLOAD_DIR}/guiapp.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/gui_integrated_system.html ${EE_PAYLOAD_DIR}/gui.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/autoeq_index.js ${EE_PAYLOAD_DIR}/autoeq.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js ${EE_PAYLOAD_DIR}/three.bin

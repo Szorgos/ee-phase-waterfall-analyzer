@@ -23,6 +23,8 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       LLVM_MINGW: llvm-mingw-20250924-ucrt-ubuntu-22.04-x86_64
+      # Kódaláírás (SignPath Foundation): csak ha a SIGNPATH_API_TOKEN titok be van állítva (docs/code-signing.md)
+      SIGNPATH_ENABLED: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,6 +53,64 @@ jobs:
             echo "::endgroup::"
           done
           exit $fail
+
+      # ---------------------------------------------------------------- kódaláírás (SignPath)
+      # 1. kör: a motor, a felület és az Equalizer APO plugin aláírása
+      - name: Aláíratlan programfájlok feltöltése (aláíráshoz)
+        if: env.SIGNPATH_ENABLED == 'true'
+        id: upload-binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-binaries
+          path: |
+            build-win/AetherAudio.exe
+            build-win/AetherAudioGui.exe
+            build-win/AetherAudio.dll
+
+      - name: Programfájlok aláírása (SignPath)
+        if: env.SIGNPATH_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'aetheraudio' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: binaries
+          github-artifact-id: ${{ steps.upload-binaries.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-binaries
+
+      # 2. kör: a telepítő újraépítése az aláírt fájlokkal, majd a telepítő aláírása
+      - name: Telepítő újraépítése az aláírt fájlokkal
+        if: env.SIGNPATH_ENABLED == 'true'
+        run: |
+          cmake -B build-win -S . -DEE_SIGNED_BINARIES_DIR="$PWD/signed-binaries"
+          cmake --build build-win --target AetherAudioSetup
+
+      - name: Aláíratlan telepítő feltöltése (aláíráshoz)
+        if: env.SIGNPATH_ENABLED == 'true'
+        id: upload-setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-setup
+          path: build-win/AetherAudio-Setup.exe
+
+      - name: Telepítő aláírása (SignPath)
+        if: env.SIGNPATH_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'aetheraudio' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.upload-setup.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-setup
+
+      - name: Aláírt telepítő átvétele
+        if: env.SIGNPATH_ENABLED == 'true'
+        run: cp signed-setup/AetherAudio-Setup.exe build-win/AetherAudio-Setup.exe
 
       - name: Telepítő elnevezése
         id: name

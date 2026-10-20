@@ -188,6 +188,18 @@ cmake --build build -j$(nproc)
 
 ---
 
+## 🔏 Kódaláírási szabályzat (Code signing policy)
+
+A Windows kiadásokat (`AetherAudio-Setup.exe`, valamint a benne lévő `AetherAudio.exe`, `AetherAudioGui.exe` és `AetherAudio.dll`) aláírva tesszük közzé.
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+
+- **Szerepek:** fejlesztő (committer), ellenőrző (reviewer) és jóváhagyó (approver): [Szorgos](https://github.com/Szorgos) (Sass Gergő).
+- **Mit írunk alá:** csak az ebben a tárolóban lévő forrásból, a GitHub Actions `Release` workflow-ján fordított fájlokat. Minden aláírási kérést a jóváhagyó egyenként hagy jóvá.
+- **Adatvédelem:** az AetherAudio nem küld adatot más gépre, csak ha a felhasználó kifejezetten kéri. Az AetherAudio fejhallgató-kereső letölti az AutoEq profilokat a GitHubról, a „Támogatás” gomb pedig a Revolut oldalát nyitja meg.
+
+Részletek a beállításhoz: [docs/code-signing.md](docs/code-signing.md).
+
 ## 📄 Licenc
 
 Ez a projekt a **GNU General Public License v3.0 (GPL-3.0)** alatt érhető el.

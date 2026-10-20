@@ -21,7 +21,7 @@ AetherAudio-Setup.exe /S [/D=C:\Mappa] [/NOAPO] [/DOWNLOADAPO]
 "C:\Program Files\AetherAudio\Uninstall.exe" /uninstall /S
 ```
 
-> Az `AetherAudio-Setup.exe` nincs digitálisan aláírva, ezért a Windows SmartScreen első indításkor figyelmeztethet: *További információ → Futtatás mindenképp*.
+> A kódaláírás (SignPath Foundation) bevezetés alatt áll. Amíg egy kiadás nincs aláírva, a Windows SmartScreen figyelmeztethet (*További információ → Futtatás mindenképp*), és az Intelligens alkalmazásvezérlés (Smart App Control) le is tilthatja a programot.
 
 ## Használat
 
@@ -89,4 +89,4 @@ Kipróbálás EQ APO nélkül: az `eqapo_host_sim.exe <AetherAudio.dll>` úgy t�
 
 - Csak sztereó feldolgozás: többcsatornás eszköznél az EQ APO a plugint csatornapáronként példányosítja, az analizátor az első párt (L/R) mutatja.
 - A késleltetéssel járó beállítások (lineáris fázisú FIR EQ, limiter lookahead, decramp) összeadódnak; videónézéshez az IIR EQ és rövid lookahead ajánlott.
-- Az alkalmazás és a telepítő nincs digitálisan aláírva (lásd fent).
+- Aláíratlan kiadásnál az Intelligens alkalmazásvezérlés letilthatja a programot (lásd fent).
