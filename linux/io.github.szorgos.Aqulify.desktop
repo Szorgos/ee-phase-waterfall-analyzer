@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Aqulify
+GenericName=Equalizer and acoustic waterfall analyzer
+GenericName[hu]=Hangkorrekció és akusztikai vízesés
+Comment=Parametric EQ, convolver, crossfeed and true peak limiter for PipeWire with a live 3D waterfall analyzer
+Comment[hu]=Parametrikus EQ, konvolver, crossfeed és true peak limiter a PipeWire-hez, élő 3D vízesés-analizátorral
+Exec=aqulify-gui
+Icon=aqulify
+Terminal=false
+Categories=AudioVideo;Audio;Mixer;
+Keywords=equalizer;eq;autoeq;pipewire;headphone;crossfeed;convolver;limiter;spectrum;analyzer;
+StartupWMClass=Aqulify

@@ -1,0 +1,2 @@
+# Aqulify: the DSP engine starts automatically at login (systemd user service)
+enable aqulify.service

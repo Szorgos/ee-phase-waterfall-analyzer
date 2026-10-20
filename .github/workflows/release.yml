@@ -58,8 +58,35 @@ jobs:
             ${{ steps.pkg.outputs.file }}
             ${{ steps.pkg.outputs.file }}.sha256
 
+  # Fedora RPM (ugyanaz a spec és SRPM-készítés, amit a COPR használ): ellenőrzi a csomagolást, és a kiadáshoz csatolja
+  fedora-rpm:
+    runs-on: ubuntu-24.04
+    container: fedora:latest
+    outputs:
+      file: ${{ steps.rpm.outputs.file }}
+    steps:
+      - name: Eszközök
+        run: dnf -y install git make rpm-build dnf-plugins-core
+      - uses: actions/checkout@v4
+      - name: SRPM és RPM építése
+        id: rpm
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          make -f .copr/Makefile srpm outdir="$PWD/srpm"
+          dnf -y builddep srpm/*.src.rpm
+          rpmbuild --rebuild --define "_rpmdir $PWD/rpm" srpm/*.src.rpm
+          f=$(ls rpm/x86_64/aqulify-[0-9]*.x86_64.rpm | head -1)
+          cp "$f" . && sha256sum "$(basename "$f")" > "$(basename "$f").sha256"
+          echo "file=$(basename "$f")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Aqulify-Fedora
+          path: |
+            ${{ steps.rpm.outputs.file }}
+            ${{ steps.rpm.outputs.file }}.sha256
+
   windows-installer:
-    needs: linux-package
+    needs: [linux-package, fedora-rpm]
     runs-on: ubuntu-24.04
     env:
       LLVM_MINGW: llvm-mingw-20250924-ucrt-ubuntu-22.04-x86_64
@@ -178,6 +205,11 @@ jobs:
         with:
           name: Aqulify-Linux
 
+      - name: Fedora RPM átvétele a kiadáshoz
+        uses: actions/download-artifact@v4
+        with:
+          name: Aqulify-Fedora
+
       - name: "GitHub Release (kézi indításkor verziószámmal: új címke és kiadás)"
         if: github.event_name == 'workflow_dispatch' && inputs.version != ''
         uses: softprops/action-gh-release@v2
@@ -192,6 +224,8 @@ jobs:
             Aqulify-Setup.exe
             ${{ needs.linux-package.outputs.file }}
             ${{ needs.linux-package.outputs.file }}.sha256
+            ${{ needs.fedora-rpm.outputs.file }}
+            ${{ needs.fedora-rpm.outputs.file }}.sha256
 
       - name: GitHub Release
         if: github.ref_type == 'tag'
@@ -205,3 +239,5 @@ jobs:
             Aqulify-Setup.exe
             ${{ needs.linux-package.outputs.file }}
             ${{ needs.linux-package.outputs.file }}.sha256
+            ${{ needs.fedora-rpm.outputs.file }}
+            ${{ needs.fedora-rpm.outputs.file }}.sha256

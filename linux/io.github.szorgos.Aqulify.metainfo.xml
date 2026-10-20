@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2026 Sass Gergő (Szorgos) -->
+<component type="desktop-application">
+  <id>io.github.szorgos.Aqulify</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Aqulify</name>
+  <summary>Headphone EQ, convolver and limiter with a live 3D waterfall</summary>
+  <summary xml:lang="hu">Fejhallgató-EQ, konvolver és limiter élő 3D vízeséssel</summary>
+  <developer id="io.github.szorgos">
+    <name>Sass Gergő (Szorgos)</name>
+  </developer>
+  <description>
+    <p>
+      Aqulify creates a virtual “Aqulify” audio output on PipeWire. Everything played through it passes a
+      low-latency DSP chain, and a live 3D acoustic waterfall, phase and group delay view shows what the
+      processing does to the signal.
+    </p>
+    <ul>
+      <li>Parametric EQ with up to 32 bands: IIR, or minimum, intermediate and linear phase FIR</li>
+      <li>One-click import of headphone correction profiles from the open AutoEq database</li>
+      <li>EQ profiles that are saved automatically and can be selected after a restart</li>
+      <li>Crossfeed, partitioned convolver for room or headphone impulse responses, bass enhancer</li>
+      <li>Oversampled true peak limiter with automatic preamp against clipping</li>
+    </ul>
+    <p xml:lang="hu">
+      Az Aqulify egy „Aqulify” nevű virtuális hangkimenetet hoz létre a PipeWire-ben. Ami ezen szól, egy
+      alacsony késleltetésű DSP láncon halad át, az élő 3D akusztikai vízesés, a fázis- és a
+      csoportkésleltetés-nézet pedig megmutatja, mit tesz a feldolgozás a jellel.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.szorgos.Aqulify.desktop</launchable>
+  <icon type="stock">aqulify</icon>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Live 3D waterfall and parametric EQ with an AutoEq headphone profile</caption>
+      <image>https://raw.githubusercontent.com/Szorgos/ee-phase-waterfall-analyzer/master/docs/screenshots/aqulify-main.png</image>
+    </screenshot>
+  </screenshots>
+  <url type="homepage">https://github.com/Szorgos/ee-phase-waterfall-analyzer</url>
+  <url type="bugtracker">https://github.com/Szorgos/ee-phase-waterfall-analyzer/issues</url>
+  <url type="donation">https://revolut.me/gergoqhg6</url>
+  <url type="vcs-browser">https://github.com/Szorgos/ee-phase-waterfall-analyzer</url>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+  </categories>
+  <keywords>
+    <keyword>equalizer</keyword>
+    <keyword>AutoEq</keyword>
+    <keyword>PipeWire</keyword>
+    <keyword>headphone</keyword>
+    <keyword>crossfeed</keyword>
+    <keyword>convolver</keyword>
+  </keywords>
+  <provides>
+    <binary>aqulify-gui</binary>
+    <binary>aqulify-engine</binary>
+  </provides>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="@VERSION@" date="@DATE@">
+      <url type="details">https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/tag/v@VERSION@</url>
+    </release>
+  </releases>
+</component>
