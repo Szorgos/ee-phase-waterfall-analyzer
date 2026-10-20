@@ -1,4 +1,8 @@
-### Újdonságok (1.4.4)
+### Újdonságok (1.4.5)
+- **Javítva: „+ Új Sáv” gomb** – eddig nem csinált semmit. Az új sáv 0 dB-lel a legnagyobb üres frekvenciatartományba kerül (legfeljebb 32 sáv); dupla kattintással a görbén a kattintás helyére is tehetsz új sávot.
+- **Javítva: EQ-görbe kirajzolása magas polcszűrőnél (high shelf)** – a felület hibás képlettel számolta, ezért a teljes kék görbe több tíz dB-lel lejjebb, gyakran a képen kívül látszott (a hangot nem érintette, a motor helyesen számolt). Most a görbe pontosan követi a sávok mozgatását.
+
+### Az 1.4.4 újdonságai
 - **Automatikus preamp:** induláskor 0 dB. Ha az EQ-görbe klippelne, a preamp magától a görbe csúcsához igazodik (visszavett kiemelésnél vissza is megy, legfeljebb 0 dB-ig), és a limiter bekapcsol. Importnál a fájlban megadott preamp pontosan megmarad; ha a fájlban nincs preamp, az automatika állítja be. A kézzel beírt vagy profilban mentett preamp addig marad, amíg az EQ nem klippel.
 
 ### Az 1.4.3 újdonságai

@@ -345,7 +345,7 @@
       <button class="adw-btn primary" id="btnImportAutoEq" style="background:#2ec27e; border-color:#26a269;" title="AutoEq kereső és fájl / szöveges profil importáló">🌐 AutoEq Kereső & Import</button>
 
       <!-- ÚJ PONT HOZZÁADÁSA GOMB -->
-      <button class="adw-btn primary" id="btnAddNode">+ Új Sáv</button>
+      <button class="adw-btn primary" id="btnAddNode" title="Új EQ sáv (0 dB) a legnagyobb üres frekvenciasávba. Dupla kattintás a görbén: új sáv a kattintás helyén.">+ Új Sáv</button>
       <button class="adw-btn active-opt" id="btnToggleDelay">Késleltetés (ms)</button>
       <button class="adw-btn active-opt" id="btnTogglePhase">Fázis (°)</button>
     </div>
@@ -1199,7 +1199,7 @@ function evalBiquad(flt, f, sr = 48000 * (parseInt(currentDecramp) || 1)) {
     b1 = -2 * A * ((A - 1) + (A + 1) * cos_w0);
     b2 = A * ((A + 1) + (A - 1) * cos_w0 - two_sqrt);
     a0 = (A + 1) - (A - 1) * cos_w0 + two_sqrt;
-    a1 = 2 * ((A - 1) + (A + 1) * cos_w0);
+    a1 = 2 * ((A - 1) - (A + 1) * cos_w0);   // RBJ highshelf (a motor biquad_analyzer.hpp-jával azonos)
     a2 = (A + 1) - (A - 1) * cos_w0 - two_sqrt;
   } else if (flt.type === "lowshelf") {
     const two_sqrt = 2 * Math.sqrt(A) * alpha;
@@ -2153,6 +2153,48 @@ function processAutoEqImport() {
         `• Crossfeed, Convolver, Bass Enhancer: KIKAPCSOLVA (Bármikor kézzel bekapcsolható)\n` +
         `• Szűrési mód: IIR (minimálfázisú, nincs előcsengés)`);
 }
+// Új sáv: a meglévő sávok közötti legnagyobb (logaritmikus) résbe, 0 dB-lel, hogy a hangzás ne változzon
+const EQ_MAX_BANDS = 32;   // a motor korlátja (param_block.hpp: kMaxEqBands)
+function addEqNode(freq, gain) {
+  if (nodes.length >= EQ_MAX_BANDS) { showToast(`Legfeljebb ${EQ_MAX_BANDS} EQ sáv lehet.`, 3000); return; }
+  if (!(freq > 0)) {
+    const fs = nodes.map(n => +n.freq).filter(f => f > 0).sort((a, b) => a - b);
+    const pts = [20, ...fs, 20000];
+    let best = 1000, gap = -1;
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const g = Math.log10(pts[i + 1]) - Math.log10(pts[i]);
+      if (g > gap) { gap = g; best = Math.sqrt(pts[i] * pts[i + 1]); }
+    }
+    freq = Math.round(best);
+  }
+  const colorPalette = ["#3584e4", "#e01b24", "#ff7800", "#33d17a", "#9141ac", "#f6d32d", "#2ec27e", "#e66100", "#1c71d8"];
+  const id = nodes.reduce((m, n) => Math.max(m, n.id), 0) + 1;
+  nodes.push({ id, freq: Math.max(20, Math.min(20000, freq)), gain: Math.max(-24, Math.min(24, +(gain || 0).toFixed(1))),
+               q: 1.0, type: "peaking", color: colorPalette[(nodes.length) % colorPalette.length] });
+  selectedNodeId = id;
+  if (!isEqEnabled) setModuleActive('eq', true);
+  updateEqUI();
+  drawEq();
+}
+document.getElementById("btnAddNode").onclick = () => addEqNode();
+// Dupla kattintás a görbén: új sáv a kattintás helyén
+eqCanvas.addEventListener("dblclick", (e) => {
+  const rect = eqCanvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (eqCanvas.width / rect.width);
+  const y = (e.clientY - rect.top) * (eqCanvas.height / rect.height);
+  const dpr = window.devicePixelRatio || 1;
+  const padLeft = 46 * dpr, padRight = 50 * dpr, padTop = 16 * dpr, padBottom = 22 * dpr;
+  const plotW = eqCanvas.width - padLeft - padRight;
+  const plotH = eqCanvas.height - padTop - padBottom;
+  const midY = padTop + plotH * 0.5;
+  if (x < padLeft || x > padLeft + plotW) return;
+  for (const n of nodes) {   // meglévő pötty fölött nem hozunk létre újat
+    const ny = midY - (n.gain / 24.0) * (plotH * 0.45);
+    if (Math.hypot(x - getX(n.freq, plotW, padLeft), y - ny) < 16 * dpr) return;
+  }
+  addEqNode(Math.round(getFreq(x, plotW, padLeft)), -((y - midY) / (plotH * 0.45)) * 24.0);
+});
+
 document.getElementById("btnDeleteNode").onclick = () => {
   if (nodes.length <= 1) return;
   nodes = nodes.filter(n => n.id !== selectedNodeId);
