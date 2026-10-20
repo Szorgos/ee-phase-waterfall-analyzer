@@ -67,8 +67,16 @@ int main() {
         w.set_title("AetherAudio");
         w.set_size(1480, 940, WEBVIEW_HINT_NONE);
         w.set_size(1000, 640, WEBVIEW_HINT_MIN);
-        if (auto win = w.window(); win.ok())
+        if (auto win = w.window(); win.ok()) {
             gtk_window_set_icon_name(GTK_WINDOW(win.value()), "aetheraudio");
+            std::string iconFile = folder + "/../../icons/hicolor/256x256/apps/aetheraudio.png";
+            if (fileExists(iconFile)) {
+                gtk_window_set_icon_from_file(GTK_WINDOW(win.value()), iconFile.c_str(), nullptr);
+            } else {
+                std::string iconLocal = folder + "/../linux/aetheraudio.png";
+                if (fileExists(iconLocal)) gtk_window_set_icon_from_file(GTK_WINDOW(win.value()), iconLocal.c_str(), nullptr);
+            }
+        }
         w.navigate(url);
         w.run();
         return 0;

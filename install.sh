@@ -89,12 +89,14 @@ fi
 say "\n[3/6] Fájlok másolása (${PREFIX})..."
 # Futó motor leállítása frissítéskor
 systemctl --user stop aetheraudio.service >/dev/null 2>&1 || true
-mkdir -p "$BIN_DIR" "$GUI_DIR" "$APP_DIR" "$ICON_DIR" "$UNIT_DIR"
+PIXMAP_DIR="${PREFIX}/share/pixmaps"
+mkdir -p "$BIN_DIR" "$GUI_DIR" "$APP_DIR" "$ICON_DIR" "$UNIT_DIR" "$PIXMAP_DIR"
 install -m 755 build/aetheraudio-engine "$BIN_DIR/aetheraudio-engine"
 install -m 644 gui_integrated_system.html autoeq_index.js "$GUI_DIR/"
 install -m 644 windows/third_party/three/three.min.js "$GUI_DIR/three.min.js"
 install -m 644 windows/third_party/three/LICENSE "$GUI_DIR/three.js-LICENSE.txt"
 install -m 644 linux/aetheraudio.png "$ICON_DIR/aetheraudio.png"
+install -m 644 linux/aetheraudio.png "$PIXMAP_DIR/aetheraudio.png"
 if [ "$HAVE_GUI" = 1 ]; then
     install -m 755 build/aetheraudio-gui "$BIN_DIR/aetheraudio-gui"
 else
@@ -138,16 +140,28 @@ Name=AetherAudio
 GenericName=Hangkorrekció és akusztikai vízesés
 Comment=Parametrikus EQ, konvolver, crossfeed és true peak limiter a PipeWire-hez, élő 3D vízesés-analizátorral
 Exec=${BIN_DIR}/aetheraudio-gui
-Icon=aetheraudio
+Icon=${ICON_DIR}/aetheraudio.png
 Terminal=false
 Categories=AudioVideo;Audio;
 StartupWMClass=AetherAudio
 EOF
+chmod +x "$APP_DIR/aetheraudio.desktop"
+
+# Asztali ikon létrehozása (ha létezik Asztal vagy Desktop mappa)
+for d in "$HOME/Asztal" "$HOME/Desktop"; do
+    if [ -d "$d" ]; then
+        cp "$APP_DIR/aetheraudio.desktop" "$d/aetheraudio.desktop"
+        chmod +x "$d/aetheraudio.desktop"
+        gio set "$d/aetheraudio.desktop" metadata::trusted true >/dev/null 2>&1 || true
+    fi
+done
+
 update-desktop-database "$APP_DIR" >/dev/null 2>&1 || true
 gtk-update-icon-cache -q "${PREFIX}/share/icons/hicolor" >/dev/null 2>&1 || true
+kbuildsycoca6 >/dev/null 2>&1 || kbuildsycoca5 >/dev/null 2>&1 || true
 # régi (0.x) telepítés maradványa
 rm -f "$PROJECT_DIR/run.sh" 2>/dev/null || true
-ok "A menüben: AetherAudio"
+ok "A menüben és az asztalon: AetherAudio"
 
 # ------------------------------------------------------------------ 6. alapértelmezett kimenet
 say "\n[6/6] Alapértelmezett hangkimenet"
