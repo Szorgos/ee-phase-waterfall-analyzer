@@ -2544,7 +2544,7 @@ function updateBassInfo() {
 }
 
 // =========================================================================
-// PIPEWIRE ÉLŐ WEBSOCKET HÍD (ws://127.0.0.1:8080)
+// ÉLŐ WEBSOCKET HÍD (ws://127.0.0.1:47810–47814, Linuxon 8080)
 // =========================================================================
 // =========================================================================
 // MODULOK BEKÖTÉSE A MOTORHOZ (Bass, Limiter, Crossfeed, Convolver)
@@ -2712,9 +2712,19 @@ function applyEngineState(st) {
   if (convIrLocal && (!st.ir || st.ir.name !== convIrLocal.name)) uploadIrToEngine();
 }
 
+// A motor az első szabad portot használja ebből a listából (Windows: aether_engine.cpp, Linux: 8080)
+const ENGINE_PORTS = [47810, 47811, 47812, 47813, 47814, 8080];
+let enginePortIdx = 0;
+let engineVerified = false;
+
 function initPipewireBridge() {
   try {
-    pipewireWs = new WebSocket("ws://127.0.0.1:8080");
+    const port = ENGINE_PORTS[enginePortIdx];
+    engineVerified = false;
+    pipewireWs = new WebSocket("ws://127.0.0.1:" + port);
+    const thisWs = pipewireWs;
+    // Ha 2,5 s alatt nem jön motor-üzenet (vagy a kézfogás beragad), ez nem az AetherAudio motor: továbblépünk
+    setTimeout(() => { if (thisWs === pipewireWs && !engineVerified && thisWs.readyState !== WebSocket.CLOSED) thisWs.close(); }, 2500);
 
     pipewireWs.onopen = () => {
       isPipewireConnected = true;
@@ -2726,6 +2736,7 @@ function initPipewireBridge() {
     pipewireWs.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data);
+        if (data && (data.type === "state" || data.type === "status" || data.type === "spectrum")) engineVerified = true;
         if (data.type === "spectrum" && data.levels) {
           liveSpectrumLevels = data.levels;
           liveSpectrumTime = performance.now();
@@ -2753,14 +2764,20 @@ function initPipewireBridge() {
       liveSpectrumLevels = null;
       engineStatus = null;
       updateEngineBadge();
-      setTimeout(initPipewireBridge, 3000);
+      if (engineVerified) {
+        setTimeout(initPipewireBridge, 3000);           // ugyanazon a porton újrakapcsolódás
+      } else {
+        enginePortIdx = (enginePortIdx + 1) % ENGINE_PORTS.length;
+        setTimeout(initPipewireBridge, enginePortIdx === 0 ? 3000 : 150);
+      }
     };
 
     pipewireWs.onerror = () => {
       pipewireWs.close();
     };
   } catch (e) {
-    setTimeout(initPipewireBridge, 3000);
+    enginePortIdx = (enginePortIdx + 1) % ENGINE_PORTS.length;
+    setTimeout(initPipewireBridge, enginePortIdx === 0 ? 3000 : 150);
   }
 }
 

@@ -7,7 +7,7 @@
  *      és a GUI-ról állított DSP (preamp, EQ, crossfeed, limiter) a plugin-ban, élőben hat a hangra.
  *   2. WASAPI loopback – az alapértelmezett lejátszóeszköz kimenete (csak analízis, plugin nélkül).
  *
- * A GUI (gui_integrated_system.html) a ws://127.0.0.1:8080 hídon csatlakozik, ugyanúgy, mint Linuxon.
+ * A GUI (gui_integrated_system.html) a ws://127.0.0.1:47810 (foglaltság esetén 47811-47814, végül 8080) hídon csatlakozik.
  *
  * Konzolablak nélküli háttéralkalmazás tálcaikonnal (dupla katt: felület, jobb klikk: menü).
  * Kapcsolók: --background (indításkor nem nyitja meg a felületet), --console (naplózás konzolba), --port N
@@ -21,6 +21,8 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <shellapi.h>
+#include <iphlpapi.h>
+#include <psapi.h>
 
 #include <atomic>
 #include <chrono>
@@ -29,6 +31,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 #include <algorithm>
 #include <cstring>
 
@@ -67,6 +70,38 @@ void openGui() {
         }
     }
     std::cout << "[GUI] A gui_integrated_system.html nem található az exe mellett (gui\\ mappa).\n";
+}
+
+
+// A GUI ugyanezt a listát próbálja végig (gui_integrated_system.html: ENGINE_PORTS).
+// A 8080 csak tartalék: gyakran foglalja más program (fejlesztői szerverek, proxyk).
+const int kEnginePorts[] = { 47810, 47811, 47812, 47813, 47814, 8080 };
+
+// Melyik folyamat figyel az adott 127.0.0.1 / 0.0.0.0 TCP porton? (üres, ha nem deríthető ki)
+std::wstring portOwner(int port) {
+    ULONG size = 0;
+    GetExtendedTcpTable(nullptr, &size, FALSE, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0);
+    std::vector<unsigned char> buf(size + 1024);
+    size = static_cast<ULONG>(buf.size());
+    if (GetExtendedTcpTable(buf.data(), &size, FALSE, AF_INET, TCP_TABLE_OWNER_PID_LISTENER, 0) != NO_ERROR) return {};
+    const auto* table = reinterpret_cast<const MIB_TCPTABLE_OWNER_PID*>(buf.data());
+    for (DWORD i = 0; i < table->dwNumEntries; ++i) {
+        const auto& row = table->table[i];
+        if (ntohs(static_cast<u_short>(row.dwLocalPort)) != port) continue;
+        std::wstring name = L"PID " + std::to_wstring(row.dwOwningPid);
+        if (HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, row.dwOwningPid)) {
+            wchar_t path[MAX_PATH];
+            DWORD n = MAX_PATH;
+            if (QueryFullProcessImageNameW(h, 0, path, &n)) {
+                std::wstring full(path, n);
+                const size_t sl = full.find_last_of(L"\\/");
+                name = (sl == std::wstring::npos ? full : full.substr(sl + 1)) + L" (" + name + L")";
+            }
+            CloseHandle(h);
+        }
+        return name;
+    }
+    return {};
 }
 
 bool hasArg(int argc, char** argv, const char* a) {
@@ -251,12 +286,12 @@ int main(int argc, char** argv) {
         std::cout << "Használat: AetherAudio.exe [--background] [--console] [--port N]\n"
                      "  --background  indításkor ne nyissa meg a felületet (automatikus indításhoz)\n"
                      "  --console     naplózás konzolablakba a napló fájl helyett\n"
-                     "  --port N      WebSocket port (alapértelmezés: 8080; a GUI a 8080-at használja)\n";
+                     "  --port N      csak ezt a WebSocket portot próbálja (alapból: 47810-47814, majd 8080)\n";
         return 0;
     }
-    int port = 8080;
+    std::vector<int> ports(std::begin(kEnginePorts), std::end(kEnginePorts));
     for (int i = 1; i + 1 < argc; ++i) {
-        if (std::strcmp(argv[i], "--port") == 0) port = std::atoi(argv[i + 1]);
+        if (std::strcmp(argv[i], "--port") == 0) ports = { std::atoi(argv[i + 1]) };
     }
     const bool background = hasArg(argc, argv, "--background") || hasArg(argc, argv, "--no-gui");
 
@@ -304,13 +339,21 @@ int main(int argc, char** argv) {
     cb.setIr = [&](IrData&& ir) { sources.setIr(std::move(ir)); };
     cb.getIr = [&]() { return sources.irCopy(); };
 
-    WebSocketBridge bridge(port);
-    if (!bridge.start(cb)) {
-        std::cout << "[Hiba] A WebSocket híd nem indult el (a " << port << " port foglalt).\n";
-        MessageBoxW(nullptr,
-                    L"Az AetherAudio nem tudott elindulni, mert a 8080-as helyi portot egy másik program használja.\n\n"
-                    L"Zárd be azt a programot, majd indítsd újra az AetherAudio-t.",
-                    L"AetherAudio", MB_ICONWARNING | MB_OK);
+    std::unique_ptr<WebSocketBridge> bridge;
+    for (int p : ports) {
+        auto b = std::make_unique<WebSocketBridge>(p);
+        if (b->start(cb)) { bridge = std::move(b); break; }
+        std::cout << "[Info] A " << p << " port foglalt, a következőt próbálom.\n";
+    }
+    if (!bridge) {
+        std::wstring msg = L"Az AetherAudio nem tudott elindulni, mert az összes kapcsolódási portját (";
+        for (size_t i = 0; i < ports.size(); ++i) msg += (i ? L", " : L"") + std::to_wstring(ports[i]);
+        msg += L") más program használja.";
+        const std::wstring owner = portOwner(ports.front());
+        if (!owner.empty()) msg += L"\n\nA " + std::to_wstring(ports.front()) + L"-es portot használja: " + owner;
+        msg += L"\n\nZárd be azt a programot, majd indítsd újra az AetherAudio-t.";
+        std::cout << "[Hiba] A WebSocket híd nem indult el (minden port foglalt).\n";
+        MessageBoxW(nullptr, msg.c_str(), L"AetherAudio", MB_ICONWARNING | MB_OK);
         loopback->stop();
         return 1;
     }
@@ -350,7 +393,7 @@ int main(int argc, char** argv) {
     tray.run();
 
     std::cout << "[Info] Leállítás...\n";
-    bridge.stop();
+    bridge->stop();
     loopback->stop();
     saveIfDue(true);
     if (single) { ReleaseMutex(single); CloseHandle(single); }
