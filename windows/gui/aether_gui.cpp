@@ -21,9 +21,27 @@
 #define WEBVIEW_MSWEBVIEW2_BUILTIN_IMPL 1
 #include "webview/webview.h"
 
+#include <shlobj.h>
+
+#include <cstdio>
 #include <string>
 
 namespace {
+
+/** Hibanapló a felülethez: %LOCALAPPDATA%\\AetherAudio\\gui.log (miért nem indult a saját ablak). */
+void guiLog(const std::string& msg) {
+    PWSTR p = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p)) || !p) return;
+    std::wstring dir = std::wstring(p) + L"\\AetherAudio";
+    CoTaskMemFree(p);
+    CreateDirectoryW(dir.c_str(), nullptr);
+    FILE* f = _wfopen((dir + L"\\gui.log").c_str(), L"a");
+    if (!f) return;
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    std::fprintf(f, "%04u-%02u-%02u %02u:%02u:%02u %s\n", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, msg.c_str());
+    std::fclose(f);
+}
 
 constexpr const wchar_t* kTitle = L"AetherAudio";
 constexpr const char* kTitleUtf8 = "AetherAudio";
@@ -183,8 +201,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             w.navigate(toUtf8(url));
         }
         w.run();
-    } catch (const std::exception&) {
-        // Nincs (vagy nem indítható) WebView2 futtatókörnyezet: böngészős tartalék
+    } catch (const std::exception& e) {
+        // Nincs (vagy nem indítható) WebView2 futtatókörnyezet: Edge alkalmazásablak / böngészős tartalék
+        guiLog(std::string("A WebView2 ablak nem indult: ") + e.what());
         rc = openInBrowser(guiFolder);
     }
 
