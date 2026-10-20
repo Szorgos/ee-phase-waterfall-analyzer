@@ -841,6 +841,9 @@ var isConvolverEnabled = false;
 var isLimiterEnabled = true;
 var isBassEnabled = false;
 var currentPreamp = 0.0;
+// Automatikus preamp: indulásnál 0 dB; ha az EQ-görbe klippelne, a preamp a görbe csúcsához igazodik.
+// A kézzel beírt, a profilból vagy az importált fájlból jött preamp addig marad, amíg az EQ nem klippel.
+var autoPreampMode = true;
 
 function setModuleActive(mod, active) {
   if (mod === 'eq') isEqEnabled = active;
@@ -1294,6 +1297,7 @@ function armLimiterForProfile(preamp, setDefaults) {
 function applyAutoPreamp() {
   const p = autoGuardPreamp();
   setPreamp(p);
+  autoPreampMode = true;
   const inp = document.getElementById("inputPreamp");
   if (inp) inp.value = p.toFixed(1);
   drawEq();
@@ -1329,8 +1333,29 @@ function drawEq() {
   scheduleEqSync();
   schedulePresetAutosave();
 
-  // Klippelés-figyelmeztetés és Auto Preamp gomb frissítése
+  // Automatikus preamp: klippelésnél bekapcsol, és a görbe csúcsát követi (fel és le is, legfeljebb 0 dB-ig)
   const curvePk = curvePeakDb();
+  if (!suppressEngineSync) {
+    if (!autoPreampMode && curvePk + currentPreamp > 0.1) autoPreampMode = true;
+    if (autoPreampMode) {
+      const p = autoGuardPreamp();
+      if (p !== currentPreamp) {
+        const wasNonNegative = currentPreamp >= 0;
+        currentPreamp = p;
+        const inp = document.getElementById("inputPreamp");
+        if (inp) inp.value = p.toFixed(1);
+        const badge = document.getElementById("badgePreampOrigin");
+        if (badge) {
+          badge.className = p < 0 ? "status-badge info" : "status-badge optimal";
+          badge.innerText = p < 0 ? `Auto (${p.toFixed(1)} dB)` : "0.0 dB (Tiszta)";
+        }
+        // Negatív preampnál a limiter is bekapcsol (mintaközi csúcsok ellen)
+        if (p < 0 && wasNonNegative && !isLimiterEnabled) setModuleActive('limiter', true);
+      }
+    }
+  }
+
+  // Klippelés-figyelmeztetés és Auto Preamp gomb frissítése
   const netPeak = curvePk + currentPreamp;
   const btnAuto = document.getElementById("btnAutoPreamp");
   if (btnAuto) {
@@ -1642,6 +1667,7 @@ function applyCrossfeedPreset(preset) {
 
 // 4 EQ Mód és Decramp kezelők
 function setPreamp(val) {
+  autoPreampMode = false;   // kézi érték: amíg az EQ nem klippel, ez marad
   currentPreamp = parseFloat(val) || 0.0;
   const badge = document.getElementById("badgePreampOrigin");
   if (badge) {
@@ -1946,6 +1972,7 @@ function applyParsedAutoEqProfile(text, modelName, sourceName) {
   }
 
   currentPreamp = finalPreamp;
+  autoPreampMode = explicitPreamp === null;   // a fájl preampja marad; preamp nélkül automatikus
   document.getElementById("inputPreamp").value = currentPreamp.toFixed(1);
 
   // Limiter: negatív preamp esetén automatikusan bekapcsol (-1,0 dBTP, 4x)
@@ -2089,6 +2116,7 @@ function processAutoEqImport() {
   }
 
   currentPreamp = finalPreamp;
+  autoPreampMode = explicitPreamp === null;   // a fájl preampja marad; preamp nélkül automatikus
   document.getElementById("inputPreamp").value = currentPreamp.toFixed(1);
 
   // Modulok intelligens bekapcsolása (csak ami indokolt!):
@@ -2824,6 +2852,7 @@ function applyEngineState(st) {
         if (m in mods) setModuleActive(m, !!mods[m]);
       });
       currentPreamp = typeof st.preamp === "number" ? st.preamp : 0.0;
+      autoPreampMode = false;
       if (st.eqMode) applyEqModeUi(st.eqMode);
       if (st.crossfeed) { setInput("cfFreq", st.crossfeed.freq); setInput("cfLevel", st.crossfeed.level); setInput("cfDelay", st.crossfeed.delay); }
       if (st.decramp) { currentDecramp = st.decramp; setInput("selectDecramp", st.decramp); }
@@ -2851,12 +2880,14 @@ function applyEngineState(st) {
       applyPresetData(presetsDoc.presets[activePresetName]);
       ['crossfeed', 'convolver', 'limiter', 'bass'].forEach(m => setModuleActive(m, false));
       setModuleActive('eq', true);
+      armLimiterForProfile(currentPreamp, false);
     } else {
       // A motor még sosem kapott beállítást: biztonságos, sík alapállapot (ami a képen, az szól)
       nodes.forEach(n => { n.gain = 0.0; });
       ['crossfeed', 'convolver', 'limiter', 'bass'].forEach(m => setModuleActive(m, false));
       setModuleActive('eq', true);
       currentPreamp = 0.0;
+      autoPreampMode = true;
     }
     const inp = document.getElementById("inputPreamp");
     if (inp) inp.value = currentPreamp.toFixed(1);
@@ -3181,6 +3212,7 @@ function applyPresetData(p) {
     selectedNodeId = nodes[0].id;
   }
   currentPreamp = typeof p.preamp === "number" ? p.preamp : 0.0;
+  autoPreampMode = false;   // a profil preampja marad, amíg az EQ nem klippel
   const inp = document.getElementById("inputPreamp");
   if (inp) inp.value = currentPreamp.toFixed(1);
   const badge = document.getElementById("badgePreampOrigin");
