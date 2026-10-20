@@ -161,6 +161,62 @@ std::string allowedExternalUrl(const std::string& req) {
 
 } // namespace
 
+/** A felület WebView2 ablakban; kivételt dob, ha a WebView2 nem indítható. */
+void runWindow(const std::wstring& guiFolder) {
+    webview::webview w(false, nullptr);
+    w.set_title(kTitleUtf8);
+    w.set_size(1480, 940, WEBVIEW_HINT_NONE);
+    w.set_size(1000, 640, WEBVIEW_HINT_MIN);
+
+    auto win = w.window();
+    if (win.ok()) styleWindow(static_cast<HWND>(win.value()));
+
+    w.bind("aetherOpenUrl", [](const std::string& req) -> std::string {
+        const std::string url = allowedExternalUrl(req);
+        if (!url.empty()) {
+            const int n = MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, nullptr, 0);
+            std::wstring wurl(static_cast<size_t>(n), L'\0');
+            MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, wurl.data(), n);
+            ShellExecuteW(nullptr, L"open", wurl.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        }
+        return "null";
+    });
+    if (mapVirtualHost(w, guiFolder)) {
+        w.navigate(kStartUrl);
+    } else {
+        // Régi WebView2 futtatókörnyezet: helyi fájlként töltjük be
+        std::wstring url = L"file:///" + guiFolder + L"/gui_integrated_system.html";
+        for (auto& c : url) if (c == L'\\') c = L'/';
+        w.navigate(toUtf8(url));
+    }
+    w.run();
+}
+
+/**
+ * A WebView2 adatmappája: %LOCALAPPDATA%\\AetherAudio\\<név>. A WEBVIEW2_USER_DATA_FOLDER felülírja a
+ * webview könyvtár alapértelmezését (%APPDATA%\\AetherAudioGui.exe), amely egy korábbi, rendszergazdaként
+ * futott példány után nem írható lehet, és ilyenkor a WebView2 nem indul.
+ */
+void useWebViewDataFolder(const wchar_t* name, bool reset) {
+    PWSTR p = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p)) || !p) return;
+    std::wstring dir = std::wstring(p) + L"\\AetherAudio";
+    CoTaskMemFree(p);
+    CreateDirectoryW(dir.c_str(), nullptr);
+    dir += L"\\";
+    dir += name;
+    if (reset) {
+        std::wstring from = dir;
+        from.push_back(L'\0'); // SHFileOperation: dupla nullával lezárt lista
+        SHFILEOPSTRUCTW op{};
+        op.wFunc = FO_DELETE;
+        op.pFrom = from.c_str();
+        op.fFlags = FOF_NO_UI;
+        SHFileOperationW(&op);
+    }
+    SetEnvironmentVariableW(L"WEBVIEW2_USER_DATA_FOLDER", dir.c_str());
+}
+
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     HANDLE single = CreateMutexW(nullptr, TRUE, L"Local\\AetherAudioGui");
     if (single && GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -173,39 +229,19 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     if (guiFolder.empty()) return openInBrowser(guiFolder);
 
     int rc = 0;
-    try {
-        webview::webview w(false, nullptr);
-        w.set_title(kTitleUtf8);
-        w.set_size(1480, 940, WEBVIEW_HINT_NONE);
-        w.set_size(1000, 640, WEBVIEW_HINT_MIN);
-
-        auto win = w.window();
-        if (win.ok()) styleWindow(static_cast<HWND>(win.value()));
-
-        w.bind("aetherOpenUrl", [](const std::string& req) -> std::string {
-            const std::string url = allowedExternalUrl(req);
-            if (!url.empty()) {
-                const int n = MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, nullptr, 0);
-                std::wstring wurl(static_cast<size_t>(n), L'\0');
-                MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, wurl.data(), n);
-                ShellExecuteW(nullptr, L"open", wurl.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-            }
-            return "null";
-        });
-        if (mapVirtualHost(w, guiFolder)) {
-            w.navigate(kStartUrl);
-        } else {
-            // Régi WebView2 futtatókörnyezet: helyi fájlként töltjük be
-            std::wstring url = L"file:///" + guiFolder + L"/gui_integrated_system.html";
-            for (auto& c : url) if (c == L'\\') c = L'/';
-            w.navigate(toUtf8(url));
+    bool shown = false;
+    for (int attempt = 0; attempt < 2 && !shown; ++attempt) {
+        // 2. kísérlet: friss, üres adatmappa (sérült vagy nem írható profil esetére)
+        useWebViewDataFolder(attempt == 0 ? L"WebView2" : L"WebView2-uj", attempt > 0);
+        try {
+            runWindow(guiFolder);
+            shown = true;
+        } catch (const std::exception& e) {
+            guiLog(std::string("A WebView2 ablak nem indult (") + std::to_string(attempt + 1) + ". kísérlet): " + e.what());
         }
-        w.run();
-    } catch (const std::exception& e) {
-        // Nincs (vagy nem indítható) WebView2 futtatókörnyezet: Edge alkalmazásablak / böngészős tartalék
-        guiLog(std::string("A WebView2 ablak nem indult: ") + e.what());
-        rc = openInBrowser(guiFolder);
     }
+    // Nincs (vagy nem indítható) WebView2 futtatókörnyezet: Edge alkalmazásablak / böngészős tartalék
+    if (!shown) rc = openInBrowser(guiFolder);
 
     if (single) { ReleaseMutex(single); CloseHandle(single); }
     return rc;
