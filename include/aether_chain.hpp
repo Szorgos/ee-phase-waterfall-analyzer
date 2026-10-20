@@ -253,7 +253,16 @@ private:
                      for (size_t i = 0; i < k; ++i) { l[i] *= g; r[i] *= g; }
                  });
 
-        limiter_.process(L, R, m);
+        if (limiter_.enabled) {
+            limiter_.process(L, R, m);
+        } else {
+            // Bit-pontosan érintetlen [-1.0, 1.0] között; csak a túlcsorduló csúcsokat vágjuk,
+            // megelőzve az ALSA integer túlcsordulást / négyszögesítést
+            for (size_t i = 0; i < m; ++i) {
+                if (L[i] > 1.0f) L[i] = 1.0f; else if (L[i] < -1.0f) L[i] = -1.0f;
+                if (R[i] > 1.0f) R[i] = 1.0f; else if (R[i] < -1.0f) R[i] = -1.0f;
+            }
+        }
     }
 
     // ------------------------------------------------------------ háttérszál

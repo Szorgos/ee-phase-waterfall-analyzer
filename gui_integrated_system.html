@@ -47,7 +47,7 @@
     flex-direction: column;
   }
 
-  header { background: var(--ee-card-bg); border-bottom: 1px solid var(--ee-border); padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; }
+  header { background: #181b22; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; }
   .title-group { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 0.95rem; }
   .badge-app { background: var(--ee-accent-blue); padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; }
 
@@ -253,7 +253,7 @@
       <button class="tab-btn active" id="tabBtn-eq" onclick="switchTab('eq')"><span class="module-dot active" id="dot-eq">●</span> Equalizer</button>
       <button class="tab-btn" id="tabBtn-crossfeed" onclick="switchTab('crossfeed')"><span class="module-dot" id="dot-crossfeed">○</span> Crossfeed</button>
       <button class="tab-btn" id="tabBtn-convolver" onclick="switchTab('convolver')"><span class="module-dot" id="dot-convolver">○</span> Convolver</button>
-      <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter')"><span class="module-dot" id="dot-limiter">○</span> Limiter</button>
+      <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter')"><span class="module-dot active" id="dot-limiter">●</span> Limiter</button>
       <button class="tab-btn" id="tabBtn-bass" onclick="switchTab('bass')"><span class="module-dot" id="dot-bass">○</span> Bass Enhancer</button>
     </div>
 
@@ -301,6 +301,7 @@
             <input type="number" id="inputPreamp" min="-30" max="12" step="0.1" value="0.0" class="ee-input" style="width:58px; color:var(--ee-orange);" oninput="setPreamp(this.value)">
             <small style="color:var(--ee-text-secondary);">dB</small>
             <span id="badgePreampOrigin" class="status-badge optimal" style="font-size:0.65rem; padding:1px 5px;" title="Preamp forrása és állapota">0.0 dB (Tiszta)</span>
+            <button id="btnAutoPreamp" class="adw-btn" style="display:none; padding:2px 8px; font-size:0.7rem; background:#ed333b; border-color:#c01c28; color:#fff;" onclick="applyAutoPreamp()" title="Klippelés elleni automatikus előerősítés">⚠️ Auto Preamp</button>
           </div>
 
           <button class="adw-btn danger" id="btnDeleteNode">✕ Törlés</button>
@@ -478,7 +479,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
         </div>
 
         <p class="module-desc">
-          Itt töltheted be a szobamérésből (pl. REW) exportált <strong>szobakorrekciós WAV / IRS fájlt</strong>. 
+          Itt töltheted be a szobamérésből (pl. REW vagy Cavern QuickEQ) exportált <strong>szobakorrekciós WAV / IRS fájlt</strong>. 
           A motor valós idejű partícionált FFT konvolúciót végez zéró késleltetéssel.
         </p>
 
@@ -554,13 +555,13 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div style="display:flex; align-items:center; gap:10px;">
             <h3 style="margin:0;">🛡️ Limiter & True Peak Védelem</h3>
-            <span class="status-badge" id="badgeStatus-limiter" style="background:rgba(255,255,255,0.06); color:var(--ee-text-secondary); border:1px solid #444;">Kikapcsolva</span>
+            <span class="status-badge optimal" id="badgeStatus-limiter">Bekapcsolva (Aktív)</span>
           </div>
           <div style="display:flex; align-items:center; gap:12px;">
             <span style="font-size:0.75rem; color:var(--ee-text-secondary);">
               Standard: <strong style="color:var(--ee-green);">ITU-R BS.1770-4</strong>
             </span>
-            <button class="adw-btn" id="btnToggle-limiter" onclick="toggleModule('limiter')">KI</button>
+            <button class="adw-btn primary active" id="btnToggle-limiter" onclick="toggleModule('limiter')">BE</button>
           </div>
         </div>
 
@@ -643,7 +644,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             </small>
           </div>
 
-          <!-- 5. Kivezérlés & Gain Reduction Kijelző szimuláció -->
+          <!-- 5. Kivezérlés & Gain Reduction Kijelző (Élő) -->
           <div class="param-box" style="grid-column: span 2;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
               <span class="title">Valós Idejű Dinamika & Csillapítás (Gain Reduction)</span>
@@ -653,18 +654,18 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
               <div style="display:flex; align-items:center; gap:8px;">
                 <span style="font-size:0.7rem; width:45px; color:#aaa;">In/Out:</span>
-                <div style="flex:1; height:12px; background:#181e26; border-radius:3px; overflow:hidden; position:relative;">
-                  <div id="meterLevelBar" style="width:68%; height:100%; background:linear-gradient(90deg, #33d17a 75%, #ff7800 90%, #ed333b 100%); transition:width 0.1s;"></div>
-                  <div style="position:absolute; top:0; bottom:0; left:83.3%; width:2px; background:#fff;" title="Plafon (-1.0 dBTP)"></div>
+                <div style="flex:1; height:14px; background:#181e26; border-radius:3px; overflow:hidden; position:relative; box-shadow:inset 0 1px 3px rgba(0,0,0,0.5);">
+                  <div id="meterLevelBar" style="width:0%; height:100%; background:linear-gradient(90deg, #33d17a 75%, #ff7800 90%, #ed333b 100%); transition:width 0.05s ease-out;"></div>
+                  <div style="position:absolute; top:0; bottom:0; left:83.3%; width:2px; background:#fff; opacity:0.85;" title="Plafon (-1.0 dBTP)"></div>
                 </div>
-                <span style="font-size:0.72rem; font-family:monospace; color:#aaa;">-2.4 dBFS</span>
+                <span id="lblLimiterLevel" style="font-size:0.72rem; font-family:monospace; color:#aaa; width:85px; text-align:right;">-inf dBFS</span>
               </div>
               <div style="display:flex; align-items:center; gap:8px;">
                 <span style="font-size:0.7rem; width:45px; color:#aaa;">GR:</span>
-                <div style="flex:1; height:8px; background:#181e26; border-radius:3px; overflow:hidden;">
-                  <div id="meterGrBar" style="width:0%; height:100%; background:#ed333b; transition:width 0.1s;"></div>
+                <div style="flex:1; height:10px; background:#181e26; border-radius:3px; overflow:hidden; box-shadow:inset 0 1px 3px rgba(0,0,0,0.5);">
+                  <div id="meterGrBar" style="width:0%; height:100%; background:linear-gradient(90deg, #ff7800, #ed333b); transition:width 0.05s ease-out;"></div>
                 </div>
-                <span style="font-size:0.72rem; font-family:monospace; color:#aaa;">0.0 dB</span>
+                <span id="lblLimiterGrVal" style="font-size:0.72rem; font-family:monospace; color:#aaa; width:85px; text-align:right;">0.0 dB</span>
               </div>
             </div>
           </div>
@@ -804,7 +805,7 @@ var isEqEnabled = true;
 var isFirMode = false;
 var isCrossfeedEnabled = false;
 var isConvolverEnabled = false;
-var isLimiterEnabled = false;
+var isLimiterEnabled = true;
 var isBassEnabled = false;
 var currentPreamp = 0.0;
 
@@ -1048,49 +1049,27 @@ function animate3D() {
   const mask = new Uint8Array(FREQ_BINS);
   simFrame++;
 
-  // Zenei jel: valódi FFT spektrum a motortól, régi nyers minták, vagy szimuláció
-  const hasLiveSpectrum = isPipewireConnected && liveSpectrumLevels && liveSpectrumLevels.length > 0;
-  if (hasLiveSpectrum) {
+  // Zenei jel: KIZÁRÓLAG valós zenei FFT spektrum a motortól (nincs kamu szimuláció)
+  const isLiveFresh = isPipewireConnected && liveSpectrumLevels && liveSpectrumLevels.length > 0 &&
+                      (performance.now() - liveSpectrumTime < 450);
+  if (isLiveFresh) {
     const n = liveSpectrumLevels.length;
     for (let f = 0; f < FREQ_BINS; f++) {
       const idx = Math.min(n - 1, Math.floor((f / FREQ_BINS) * n));
       slice[f] = Math.max(0, Math.min(1.0, liveSpectrumLevels[idx]));
     }
-  } else if (isPipewireConnected && livePipewireSamples && livePipewireSamples.length > 0) {
-    for (let f = 0; f < FREQ_BINS; f++) {
-      const sampleIdx = Math.floor((f / FREQ_BINS) * livePipewireSamples.length);
-      const amp = Math.abs(livePipewireSamples[sampleIdx]) * 1.6;
-      slice[f] = Math.min(1.0, amp);
-    }
   } else {
+    // Csend: ha nem szól valós zene, nincs mozgás, sík és csendes a vízesés
     for (let f = 0; f < FREQ_BINS; f++) {
-      const sub = Math.sin(simFrame * 0.08 + f * 0.08) * 0.45 + 0.45;
-      const mid = Math.sin(simFrame * 0.12 - f * 0.15) * 0.3;
-      const noise = (Math.random() - 0.5) * 0.04;
-      slice[f] = Math.max(0, (f < 45 ? sub : mid) + noise);
+      slice[f] = 0.0;
+    }
+    // Ha nincs zenei jel, a kivezérlésmérő is visszaáll nullára
+    if (typeof updateLimiterMeters === "function") {
+      updateLimiterMeters(-90.0, 0.0);
     }
   }
 
-  // FIR előcsengési folt (Pre-ringing): ragyogó fehér hullámok élő és szimulált jelnél is
-  // Élő spektrumnál a valódi jel már tartalmazza az EQ hatását: nem rajzolunk rá szimulált hatásokat
-  const hasPreRing = !hasLiveSpectrum && isEqEnabled && (isFirMode || currentEqMode === 'fir_lin' || currentEqMode === 'fir_int');
-  if (hasPreRing) {
-    const trPhase = simFrame % 35;
-    if (trPhase >= 28 && trPhase < 34) {
-      for (let f = 26; f <= 36; f++) {
-        slice[f] = Math.min(1.0, slice[f] + 0.5);
-        mask[f] = 1;
-      }
-    }
-  }
-
-  // EQ hatás (csak szimulációban)
-  if (isEqEnabled && !hasLiveSpectrum) {
-    for (let f = 0; f < FREQ_BINS; f++) {
-      if (f >= 20 && f <= 32) slice[f] = Math.min(1.0, slice[f] * 1.35);
-      if (f >= 45 && f <= 60) slice[f] = slice[f] * 0.5;
-    }
-  }
+  const hasPreRing = false;
 
   const decayFactor = 0.88;
   const prevSlice = waterfallData[0];
@@ -1257,6 +1236,14 @@ function autoGuardPreamp() {
   return -Math.ceil((pk + 0.3) * 2) / 2;
 }
 
+function applyAutoPreamp() {
+  const p = autoGuardPreamp();
+  setPreamp(p);
+  const inp = document.getElementById("inputPreamp");
+  if (inp) inp.value = p.toFixed(1);
+  drawEq();
+}
+
 const MIN_F = 20, MAX_F = 20000;
 const LOG_MIN = Math.log10(MIN_F), LOG_MAX = Math.log10(MAX_F);
 
@@ -1285,6 +1272,21 @@ function scheduleEqSync() {
 
 function drawEq() {
   scheduleEqSync();
+
+  // Klippelés-figyelmeztetés és Auto Preamp gomb frissítése
+  const curvePk = curvePeakDb();
+  const netPeak = curvePk + currentPreamp;
+  const btnAuto = document.getElementById("btnAutoPreamp");
+  if (btnAuto) {
+    if (netPeak > 0.1) {
+      const rec = autoGuardPreamp();
+      btnAuto.style.display = "inline-block";
+      btnAuto.innerText = `⚠️ Auto Preamp (${rec.toFixed(1)} dB)`;
+      btnAuto.title = `A teljes EQ görbe csúcsa +${netPeak.toFixed(1)} dB! Kattints a -${Math.abs(rec).toFixed(1)} dB előerősítéshez a túlvezérlés kizárására.`;
+    } else {
+      btnAuto.style.display = "none";
+    }
+  }
   const dpr = window.devicePixelRatio || 1;
   const w = eqCanvas.width;
   const h = eqCanvas.height;
@@ -2798,6 +2800,63 @@ const ENGINE_PORTS = [47810, 47811, 47812, 47813, 47814, 8080];
 let enginePortIdx = 0;
 let engineVerified = false;
 
+function updateLimiterMeters(peakDb, grDb) {
+  const levelBar = document.getElementById("meterLevelBar");
+  const levelLbl = document.getElementById("lblLimiterLevel");
+  const grBar = document.getElementById("meterGrBar");
+  const grValLbl = document.getElementById("lblLimiterGrVal");
+  const grLbl = document.getElementById("lblLimiterGr");
+
+  let peak = typeof peakDb === "number" ? peakDb : null;
+  if (peak === null && liveSpectrumLevels && liveSpectrumLevels.length > 0) {
+    let maxBin = 0;
+    for (let i = 0; i < liveSpectrumLevels.length; i++) {
+      if (liveSpectrumLevels[i] > maxBin) maxBin = liveSpectrumLevels[i];
+    }
+    peak = maxBin > 0.001 ? (maxBin * 90.0) - 90.0 : -90.0;
+  }
+
+  if (peak !== null && levelBar && levelLbl) {
+    if (peak <= -60) {
+      levelBar.style.width = "0%";
+      levelLbl.innerText = "-inf dBFS";
+      levelLbl.style.color = "#888";
+    } else {
+      let pct = 0;
+      if (peak <= 0) {
+        pct = Math.max(0, Math.min(95, ((peak + 60.0) / 60.0) * 95.0));
+      } else {
+        pct = Math.min(100, 95.0 + (peak / 3.0) * 5.0);
+      }
+      levelBar.style.width = pct.toFixed(1) + "%";
+      if (peak > 0.05) {
+        levelLbl.innerText = `+${peak.toFixed(1)} dB (CLIP!)`;
+        levelLbl.style.color = "#ed333b";
+        levelLbl.style.fontWeight = "bold";
+      } else {
+        levelLbl.innerText = `${peak.toFixed(1)} dBFS`;
+        levelLbl.style.color = peak > -1.0 ? "#ff7800" : "#33d17a";
+        levelLbl.style.fontWeight = "normal";
+      }
+    }
+  }
+
+  let gr = typeof grDb === "number" ? grDb : null;
+  if (gr !== null) {
+    if (grBar) {
+      const grPct = Math.min(100, Math.abs(gr) * 10);
+      grBar.style.width = grPct.toFixed(1) + "%";
+    }
+    if (grValLbl) {
+      grValLbl.innerText = gr < -0.05 ? `${gr.toFixed(1)} dB` : "0.0 dB";
+      grValLbl.style.color = gr < -0.05 ? "#ff7800" : "#aaa";
+    }
+    if (grLbl) {
+      grLbl.innerText = gr < -0.05 ? `GR: ${gr.toFixed(1)} dB (Aktív csillapítás)` : "GR: 0.0 dB (Tiszta áteresztés)";
+    }
+  }
+}
+
 function initPipewireBridge() {
   try {
     const port = ENGINE_PORTS[enginePortIdx];
@@ -2818,9 +2877,12 @@ function initPipewireBridge() {
       try {
         const data = JSON.parse(evt.data);
         if (data && (data.type === "state" || data.type === "status" || data.type === "spectrum")) engineVerified = true;
-        if (data.type === "spectrum" && data.levels) {
-          liveSpectrumLevels = data.levels;
-          liveSpectrumTime = performance.now();
+        if (data.type === "spectrum") {
+          if (data.levels) {
+            liveSpectrumLevels = data.levels;
+            liveSpectrumTime = performance.now();
+          }
+          updateLimiterMeters(data.peak, data.gr);
         } else if (data.type === "state") {
           // Teljes állapotot csak csatlakozáskor veszünk át; utána a GUI a forrás, a motor csak az IR-t jelzi vissza
           if (data.reason === "ir") applyEngineIr(data);
@@ -2828,12 +2890,7 @@ function initPipewireBridge() {
         } else if (data.type === "status") {
           engineStatus = data;
           updateEngineBadge();
-          const grLbl = document.getElementById("lblLimiterGr");
-          if (grLbl && typeof data.gr === "number") {
-            grLbl.innerText = data.gr < -0.05 ? `GR: ${data.gr.toFixed(1)} dB (élő)` : "GR: 0.0 dB (Tiszta áteresztés, élő)";
-            const bar = document.getElementById("meterGrBar");
-            if (bar) bar.style.width = Math.min(100, -data.gr * 8) + "%";
-          }
+          if (typeof data.gr === "number") updateLimiterMeters(null, data.gr);
         } else if (data.type === "audio_levels" && data.samples) {
           livePipewireSamples = data.samples; // régi motorverzió kompatibilitás
         }
@@ -2845,6 +2902,7 @@ function initPipewireBridge() {
       liveSpectrumLevels = null;
       engineStatus = null;
       updateEngineBadge();
+      updateLimiterMeters(-90, 0);
       if (engineVerified) {
         setTimeout(initPipewireBridge, 3000);           // ugyanazon a porton újrakapcsolódás
       } else {

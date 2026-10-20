@@ -108,6 +108,16 @@ public:
     /** Sávonkénti L-R fáziskülönbség fokban (-180..180). */
     const std::vector<float>& phaseDegrees() const { return phaseDeg_; }
 
+    /** Pillanatnyi csúcsszint dBFS-ben a csúszó pufferből (-90 .. +12 dBFS). */
+    float peakDb() const {
+        float mx = 0.0f;
+        for (size_t i = 0; i < n_ * 2; ++i) {
+            const float a = std::abs(history_[i]);
+            if (a > mx) mx = a;
+        }
+        return mx > 1e-5f ? static_cast<float>(20.0 * std::log10(mx)) : -90.0f;
+    }
+
 private:
     void buildTwiddles() {
         twiddle_.resize(n_ / 2);

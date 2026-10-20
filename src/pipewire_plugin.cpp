@@ -118,6 +118,7 @@ int main(int argc, char* argv[]) {
         }
         node.params.write(p);
     };
+    cb.gainReduction = [&]() { return node.chain.gainReductionDb(); };
     cb.statusFields = [&]() {
         char buf[200];
         std::snprintf(buf, sizeof(buf),

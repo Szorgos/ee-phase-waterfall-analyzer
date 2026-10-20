@@ -77,6 +77,8 @@ public:
         sampleIdx_ = 0;
         gain_ = 1.0f;
         minGain_ = 1.0f;
+        lastMinGain_ = 1.0f;
+        meterGr_ = 1.0f;
     }
 
     size_t latencySamples() const { return L_ + 3; }
@@ -172,7 +174,7 @@ private:
     std::vector<size_t> dqIdx_;
     size_t dqHead_ = 0, dqTail_ = 0, avgPos_ = 0, wpos_ = 0, sampleIdx_ = 0;
     double avgSum_ = 0.0;
-    float gain_ = 1.0f, minGain_ = 1.0f, lastMinGain_ = 1.0f;
+    float gain_ = 1.0f, minGain_ = 1.0f, lastMinGain_ = 1.0f, meterGr_ = 1.0f;
 };
 
 } // namespace ee_analyzer

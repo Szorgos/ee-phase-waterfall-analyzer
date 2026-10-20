@@ -39,6 +39,8 @@ struct BridgeCallbacks {
     std::function<void(const ParamData&)> setParams;
     /** Extra állapotmezők JSON-töredékként, pl. "\"source\":\"WASAPI\"" (opcionális). */
     std::function<std::string()> statusFields;
+    /** Aktuális limiter csillapítás dB-ben (opcionális, a spektrum üzenethez). */
+    std::function<double()> gainReduction;
     /** Új konvolver impulzusválasz a GUI-ból (üres IrData = törlés). */
     std::function<void(IrData&&)> setIr;
     /** A betöltött IR adatai (név, mintavétel, előnézet) az állapotüzenethez. */
@@ -517,7 +519,13 @@ private:
             if (i) s += ',';
             appendFloat(s, ph[i], 1);
         }
-        s += "]}";
+        s += "],\"peak\":";
+        appendFloat(s, a.peakDb(), 1);
+        if (cb_.gainReduction) {
+            s += ",\"gr\":";
+            appendFloat(s, cb_.gainReduction(), 2);
+        }
+        s += "}";
         return s;
     }
 
