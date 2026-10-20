@@ -45,6 +45,8 @@ struct BridgeCallbacks {
     std::function<void(IrData&&)> setIr;
     /** A betöltött IR adatai (név, mintavétel, előnézet) az állapotüzenethez. */
     std::function<IrData()> getIr;
+    /** Kimeneti hangeszköz váltása (pl. Speaker / USB Audio). */
+    std::function<void(const std::string&)> setOutputSink;
 };
 
 /** A GUI által küldött IR maximális hossza (frame). */
@@ -400,6 +402,11 @@ private:
             sendText(buildStateMessage());
             return;
         }
+        if (type == "set_output_sink") {
+            const std::string s = val ? val->stringOr("") : msg.get("sink") ? msg.get("sink")->stringOr("") : "";
+            if (!s.empty() && cb_.setOutputSink) cb_.setOutputSink(s);
+            return;
+        }
         if (!cb_.getParams || !cb_.setParams) return;
 
         ParamData p = cb_.getParams();
@@ -599,6 +606,15 @@ private:
             s += '}';
         }
         s += "]}";
+        if (cb_.statusFields) {
+            std::string extra = cb_.statusFields();
+            if (!extra.empty()) {
+                s.pop_back(); // remove '}'
+                s += ',';
+                s += extra;
+                s += '}';
+            }
+        }
         return s;
     }
 

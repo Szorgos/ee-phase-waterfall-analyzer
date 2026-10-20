@@ -111,4 +111,22 @@ inline bool loadIr(IrData& out) {
     return true;
 }
 
+inline bool saveOutputSink(const std::string& sinkName) {
+    const std::string path = configDir(true) + "/output_sink.txt";
+    std::ofstream f(path, std::ios::trunc);
+    if (!f) return false;
+    f << sinkName << "\n";
+    return true;
+}
+
+inline std::string loadOutputSink() {
+    const std::string path = configDir(false) + "/output_sink.txt";
+    std::ifstream f(path);
+    if (!f) return "";
+    std::string s;
+    std::getline(f, s);
+    while (!s.empty() && (s.back() == '\r' || s.back() == '\n' || s.back() == ' ')) s.pop_back();
+    return s;
+}
+
 } // namespace ee_analyzer::linux_store

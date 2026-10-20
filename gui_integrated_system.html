@@ -191,8 +191,13 @@
       <span id="pipewireLiveBadge" class="status-badge" style="background:rgba(255,255,255,0.06); color:var(--ee-text-secondary); border:1px solid #444;">
         ○ Motor Offline (Szimuláció)
       </span>
-      <div style="font-size:0.8rem; color:var(--ee-text-secondary);">
-        Kimenet: <strong>Speakers (DAC 768kHz)</strong>
+      <div style="font-size:0.8rem; color:var(--ee-text-secondary); display:flex; align-items:center; gap:6px;">
+        <label for="selectPhysicalSink" style="margin:0; font-size:0.8rem; color:var(--ee-text-secondary);">Kimenet:</label>
+        <select id="selectPhysicalSink" class="mini-select" onchange="onPhysicalSinkChanged(this.value)" style="background:#1e222b; color:#e0e0e0; border:1px solid #3c4456; border-radius:4px; padding:3px 8px; font-size:0.8rem; cursor:pointer; outline:none; max-width:230px;" title="Válassz kimeneti hangeszközt (Laptop Hangszóró, USB Audio vagy HDMI)">
+          <option value="speaker">🔊 Laptop Hangszóró</option>
+          <option value="usb">🎧 USB Audio / Dokkoló</option>
+          <option value="hdmi">🖥️ HDMI Kimenet</option>
+        </select>
       </div>
     </div>
   </header>
@@ -2857,6 +2862,32 @@ function updateLimiterMeters(peakDb, grDb) {
   }
 }
 
+function updatePhysicalSinkSelector(sinks, currentSink) {
+  const sel = document.getElementById("selectPhysicalSink");
+  if (!sel) return;
+  if (Array.isArray(sinks) && sinks.length > 0) {
+    const key = JSON.stringify(sinks) + (currentSink || "");
+    if (sel.getAttribute("data-cache") !== key) {
+      sel.setAttribute("data-cache", key);
+      sel.innerHTML = sinks.map(s => 
+        `<option value="${s.name}" ${s.active || s.name === currentSink ? "selected" : ""}>${s.label}</option>`
+      ).join("");
+      if (currentSink) sel.value = currentSink;
+    }
+  } else if (currentSink) {
+    sel.value = currentSink;
+  }
+}
+
+function onPhysicalSinkChanged(sinkName) {
+  if (!sinkName) return;
+  console.log("[Audio] Kimeneti eszköz váltás:", sinkName);
+  localStorage.setItem("aether_physical_sink", sinkName);
+  if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) {
+    pipewireWs.send(JSON.stringify({ type: "set_output_sink", sink: sinkName }));
+  }
+}
+
 function initPipewireBridge() {
   try {
     const port = ENGINE_PORTS[enginePortIdx];
@@ -2870,6 +2901,10 @@ function initPipewireBridge() {
       isPipewireConnected = true;
       updateEngineBadge();
       pipewireWs.send(JSON.stringify({ type: "hello", client: "gui_integrated_system" }));
+      const savedSink = localStorage.getItem("aether_physical_sink");
+      if (savedSink) {
+        pipewireWs.send(JSON.stringify({ type: "set_output_sink", sink: savedSink }));
+      }
       console.log("[Motor Bridge] Élő C++ hangmotorhoz csatlakozva!");
     };
 
@@ -2884,12 +2919,14 @@ function initPipewireBridge() {
           }
           updateLimiterMeters(data.peak, data.gr);
         } else if (data.type === "state") {
+          if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);
           // Teljes állapotot csak csatlakozáskor veszünk át; utána a GUI a forrás, a motor csak az IR-t jelzi vissza
           if (data.reason === "ir") applyEngineIr(data);
           else applyEngineState(data);
         } else if (data.type === "status") {
           engineStatus = data;
           updateEngineBadge();
+          if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);
           if (typeof data.gr === "number") updateLimiterMeters(null, data.gr);
         } else if (data.type === "audio_levels" && data.samples) {
           livePipewireSamples = data.samples; // régi motorverzió kompatibilitás
