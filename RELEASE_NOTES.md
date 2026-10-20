@@ -1,4 +1,8 @@
-### Újdonságok (1.5.1)
+### Újdonságok (1.5.2)
+- **Linux:** a felület indításkor elindítja a motort, ha az nem fut (a csomag telepítése után így nem marad „Motor Offline”).
+- **Linux:** sötét ablakcímsor a felület színeivel.
+
+### Az 1.5.1 újdonságai
 - **Fedora RPM csomag** minden kiadásnál (`aqulify-<verzió>.fc<NN>.x86_64.rpm`): `sudo dnf install ./aqulify-*.rpm`. Rendszerszintű telepítés menüvel, ikonnal, AppStream adatlappal (Discover / GNOME Szoftver) és automatikusan induló motorral.
 - Előkészítve a Fedora COPR-tároló (automatikus frissítés `dnf`-fel és a Discoverből).
 

@@ -67,5 +67,5 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.szor
 %{_userpresetdir}/80-aqulify.preset
 
 %changelog
-* Tue Oct 20 2026 Sass Gergő <gergoeagle@gmail.com> - 1.5.1-1
+* Tue Oct 20 2026 Szorgos - 1.5.2-1
 - Első Fedora/COPR csomag

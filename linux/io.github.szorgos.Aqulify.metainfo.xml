@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Copyright 2026 Sass Gergő (Szorgos) -->
+<!-- Copyright 2026 Szorgos -->
 <component type="desktop-application">
   <id>io.github.szorgos.Aqulify</id>
   <metadata_license>CC0-1.0</metadata_license>
@@ -8,7 +8,7 @@
   <summary>Headphone EQ, convolver and limiter with a live 3D waterfall</summary>
   <summary xml:lang="hu">Fejhallgató-EQ, konvolver és limiter élő 3D vízeséssel</summary>
   <developer id="io.github.szorgos">
-    <name>Sass Gergő (Szorgos)</name>
+    <name>Szorgos</name>
   </developer>
   <description>
     <p>

@@ -228,7 +228,7 @@ cmake --build build -j$(nproc)
 
 **Jelenleg a Windows kiadások aláírás nélkül jelennek meg** (lásd: [A telepítő nincs digitálisan aláírva](#️-a-telepítő-nincs-digitálisan-aláírva--így-indíthatod-el)). A kiadási folyamat fel van készítve az aláírásra (`Aqulify-Setup.exe`, valamint a benne lévő `Aqulify.exe`, `AqulifyGui.exe` és `Aqulify.dll`); amint lesz tanúsítvány, az alábbi szabályok szerint írjuk alá őket.
 
-- **Szerepek:** fejlesztő (committer), ellenőrző (reviewer) és jóváhagyó (approver): [Szorgos](https://github.com/Szorgos) (Sass Gergő).
+- **Szerepek:** fejlesztő (committer), ellenőrző (reviewer) és jóváhagyó (approver): [Szorgos](https://github.com/Szorgos).
 - **Mit írunk alá:** csak az ebben a tárolóban lévő forrásból, a GitHub Actions `Release` workflow-ján fordított fájlokat. Minden aláírási kérést a jóváhagyó egyenként hagy jóvá.
 - **Adatvédelem:** az Aqulify nem gyűjt és nem küld személyes adatot. Hálózatot csak ezekre használ: a felület a GitHubról tölti le az AutoEq fejhallgató-listát és a kiválasztott profilt, a „Támogatás” gomb pedig a Revolut oldalát nyitja meg a böngészőben.
 

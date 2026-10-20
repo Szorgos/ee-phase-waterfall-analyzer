@@ -8,11 +8,18 @@
  */
 #include "webview/webview.h"
 
+#include <arpa/inet.h>
+#include <chrono>
 #include <climits>
+#include <csignal>
 #include <cstdlib>
 #include <iostream>
+#include <netinet/in.h>
 #include <string>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <thread>
 #include <unistd.h>
 
 namespace {
@@ -88,6 +95,63 @@ std::string allowedExternalUrl(const std::string& req) {
     return {};
 }
 
+
+/** Fut-e már a motor (figyel-e valami a WebSocket-portok valamelyikén a 127.0.0.1-en)? */
+bool engineReachable() {
+    for (int port : { 47810, 47811, 47812, 47813, 47814, 8080 }) {
+        const int fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (fd < 0) continue;
+        sockaddr_in a{};
+        a.sin_family = AF_INET;
+        a.sin_port = htons(static_cast<uint16_t>(port));
+        a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        const bool ok = connect(fd, reinterpret_cast<sockaddr*>(&a), sizeof(a)) == 0;
+        close(fd);
+        if (ok) return true;
+    }
+    return false;
+}
+
+/**
+ * A felület indításakor a motort is elindítja, ha nem fut (pl. közvetlenül a csomag telepítése után,
+ * amikor a systemd felhasználói szolgáltatás csak a következő bejelentkezéskor indulna magától).
+ */
+void ensureEngineRunning() {
+    if (engineReachable()) return;
+    if (std::system("systemctl --user start aqulify.service >/dev/null 2>&1") != 0) {
+        // Nincs systemd felhasználói szolgáltatás: a motor közvetlen indítása a háttérben
+        std::string engine = exeDir() + "/aqulify-engine";
+        if (access(engine.c_str(), X_OK) != 0) engine = "aqulify-engine";
+        const pid_t pid = fork();
+        if (pid == 0) {
+            setsid();
+            if (fork() == 0) {
+                execlp(engine.c_str(), engine.c_str(), static_cast<char*>(nullptr));
+            }
+            _exit(0);
+        }
+        if (pid > 0) waitpid(pid, nullptr, 0);
+    }
+    for (int i = 0; i < 30 && !engineReachable(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+}
+
+/** A GTK címsor (kliensoldali dekoráció) a felület sötét színeit kapja, a rendszertémától függetlenül. */
+void applyDarkTitlebar() {
+    GtkCssProvider* css = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(css,
+        "headerbar, .titlebar, .titlebar:backdrop, headerbar:backdrop {"
+        "  background: #181b22; background-image: none; color: #e6e6e6;"
+        "  border-bottom: 1px solid rgba(255,255,255,0.08); box-shadow: none; }"
+        "headerbar .title, .titlebar .title { color: #e6e6e6; }"
+        "headerbar button, .titlebar button { color: #c8c8c8; background: transparent; border: none; box-shadow: none; }"
+        "headerbar button:hover, .titlebar button:hover { background: rgba(255,255,255,0.08); }"
+        "decoration { box-shadow: 0 3px 12px rgba(0,0,0,0.5); }",
+        -1, nullptr);
+    gtk_style_context_add_provider_for_screen(gdk_screen_get_default(), GTK_STYLE_PROVIDER(css),
+                                              GTK_STYLE_PROVIDER_PRIORITY_USER);
+    g_object_unref(css);
+}
+
 } // namespace
 
 int main() {
@@ -100,6 +164,8 @@ int main() {
     const std::string abs = realpath(folder.c_str(), real) ? std::string(real) : folder;
     const std::string url = "file://" + abs + "/gui_integrated_system.html";
 
+    ensureEngineRunning();
+
     try {
         webview::webview w(false, nullptr);
         w.set_title("Aqulify");
@@ -110,6 +176,7 @@ int main() {
             if (settings) {
                 g_object_set(settings, "gtk-application-prefer-dark-theme", TRUE, nullptr);
             }
+            applyDarkTitlebar();
             gtk_window_set_icon_name(GTK_WINDOW(win.value()), "aqulify");
             std::string iconFile = folder + "/../../icons/hicolor/256x256/apps/aqulify.png";
             if (fileExists(iconFile)) {

@@ -42,7 +42,7 @@ constexpr const wchar_t* kAppName = L"Aqulify";
 #define AQ_WIDEN2(x) L##x
 #define AQ_WIDEN(x) AQ_WIDEN2(x)
 constexpr const wchar_t* kVersion = AQ_WIDEN(AQULIFY_VERSION);
-constexpr const wchar_t* kPublisher = L"Aqulify (Sass Gergő)";
+constexpr const wchar_t* kPublisher = L"Szorgos";
 constexpr const wchar_t* kUninstallKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Aqulify";
 constexpr const wchar_t* kAppKey = L"Software\\Aqulify";
 constexpr const wchar_t* kRunKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";

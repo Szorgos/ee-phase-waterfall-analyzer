@@ -21,7 +21,7 @@ BEGIN
       VALUE "OriginalFilename", "@AA_FILE@\0"
       VALUE "ProductName",      "Aqulify\0"
       VALUE "ProductVersion",   "@PROJECT_VERSION@\0"
-      VALUE "LegalCopyright",   "Sass Gergő – nyílt forráskód\0"
+      VALUE "LegalCopyright",   "Szorgos – nyílt forráskód (GPL-3.0)\0"
     END
   END
   BLOCK "VarFileInfo"
