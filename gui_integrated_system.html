@@ -191,12 +191,9 @@
       <span id="pipewireLiveBadge" class="status-badge" style="background:rgba(255,255,255,0.06); color:var(--ee-text-secondary); border:1px solid #444;">
         ○ Motor Offline (Szimuláció)
       </span>
-      <div style="font-size:0.8rem; color:var(--ee-text-secondary); display:flex; align-items:center; gap:6px;">
+      <div id="physicalSinkWrap" style="font-size:0.8rem; color:var(--ee-text-secondary); display:none; align-items:center; gap:6px;">
         <label for="selectPhysicalSink" style="margin:0; font-size:0.8rem; color:var(--ee-text-secondary);">Kimenet:</label>
         <select id="selectPhysicalSink" class="mini-select" onchange="onPhysicalSinkChanged(this.value)" style="background:#1e222b; color:#e0e0e0; border:1px solid #3c4456; border-radius:4px; padding:3px 8px; font-size:0.8rem; cursor:pointer; outline:none; max-width:230px;" title="Válassz kimeneti hangeszközt (Laptop Hangszóró, USB Audio vagy HDMI)">
-          <option value="speaker">🔊 Laptop Hangszóró</option>
-          <option value="usb">🎧 USB Audio / Dokkoló</option>
-          <option value="hdmi">🖥️ HDMI Kimenet</option>
         </select>
       </div>
     </div>
@@ -848,10 +845,11 @@ function setModuleActive(mod, active) {
     }
   }
 
-  const topEqBtn = document.getElementById('btnEqToggle');
+  const topEqBtn = document.getElementById('btnEqBypass');
   if (mod === 'eq' && topEqBtn) {
     topEqBtn.className = active ? 'mini-btn active' : 'mini-btn';
-    topEqBtn.innerText = active ? 'EQ: BE' : 'EQ: KI';
+    topEqBtn.innerText = active ? 'EQ: BE' : 'EQ: KI (Bypass)';
+    topEqBtn.style.color = active ? '#00f0ff' : 'var(--ee-text-secondary)';
   }
 
   if (mod === 'eq' && typeof drawEq === 'function') drawEq();
@@ -1764,36 +1762,42 @@ async function loadRealAutoEqProfile(idx) {
     btn.disabled = true;
   }
 
-  try {
-    const folderName = hp.path.split('/').pop();
-    // A hivatalos GitHub raw ParametricEQ elérési út
-    const url = `https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/${hp.path}/${folderName}%20ParametricEQ.txt`;
-
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status} - Nem található a ParametricEQ.txt a tárolóban.`);
-    }
-
-    const text = await resp.text();
-    applyParsedAutoEqProfile(text, hp.name, hp.source);
-  } catch (err) {
-    console.warn("Hiba a profil letöltésekor:", err);
-    // Ha a ParametricEQ.txt nem elérhető, megpróbáljuk a README.md-ből kinyerni
-    try {
-      const folderName = hp.path.split('/').pop();
-      const readmeUrl = `https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/${hp.path}/README.md`;
-      const resp2 = await fetch(readmeUrl);
-      if (resp2.ok) {
-        const text2 = await resp2.text();
-        applyParsedAutoEqProfile(text2, hp.name, hp.source);
-        return;
-      }
-    } catch (e2) {}
-    alert(`Nem sikerült közvetlenül letölteni a(z) "${hp.name}" fájlt a GitHubról:\n${err.message}`);
+  const resetBtn = () => {
     if (btn) {
       btn.innerText = "⚡ Betöltés";
       btn.disabled = false;
     }
+  };
+  const base = `https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/${hp.path}`;
+  const folderName = hp.path.split('/').pop();
+
+  // 1. Letöltés (csak a hálózati hiba számít letöltési hibának)
+  let text = null;
+  let lastErr = "";
+  for (const url of [`${base}/${folderName}%20ParametricEQ.txt`, `${base}/README.md`]) {
+    try {
+      const resp = await fetch(url, { cache: "no-store" });
+      if (!resp.ok) { lastErr = `HTTP ${resp.status}`; continue; }
+      const t = await resp.text();
+      if (/Filter\s*\d+:/i.test(t)) { text = t; break; }
+      lastErr = "a fájlban nincs parametrikus EQ sáv";
+    } catch (e) {
+      lastErr = e && e.message ? e.message : String(e);
+    }
+  }
+  if (text === null) {
+    alert(`Nem sikerült letölteni a(z) "${hp.name}" profilt a GitHubról (${lastErr}).\nEllenőrizd az internetkapcsolatot, vagy töltsd le a ParametricEQ.txt-t, és importáld fájlból.`);
+    resetBtn();
+    return;
+  }
+
+  // 2. Alkalmazás (a felület hibája ne tűnjön letöltési hibának)
+  try {
+    applyParsedAutoEqProfile(text, hp.name, hp.source);
+  } catch (err) {
+    console.error("Hiba a profil alkalmazásakor:", err);
+    alert(`A(z) "${hp.name}" profil letöltődött, de az alkalmazása hibára futott:\n${err && err.message ? err.message : err}`);
+    resetBtn();
   }
 }
 
@@ -1896,10 +1900,17 @@ function applyParsedAutoEqProfile(text, modelName, sourceName) {
 
   currentEqMode = 'iir';
   document.getElementById("selectEqMode").value = "iir";
+  sendEngine({ type: "set_eq_mode", val: "iir" });
   isFirMode = false;
-  btnFirMode.innerText = "Mód: Minimálfázis (IIR)";
-  btnFirMode.classList.remove("active");
-  document.getElementById("hudPreRingBadge").style.display = "none";
+  if (btnFirMode) {
+    btnFirMode.innerText = "Mód: Minimálfázis (IIR)";
+    btnFirMode.classList.remove("active");
+  }
+  const prBadgeImp = document.getElementById("hudPreRingBadge");
+  if (prBadgeImp) prBadgeImp.style.display = "none";
+
+  // A betöltött profil csak bekapcsolt EQ-val szól (különben csak a preamp hatna)
+  setModuleActive('eq', true);
 
   closeImportModal();
   updateEqUI();
@@ -2038,10 +2049,16 @@ function processAutoEqImport() {
   updateLimiterOversampling();
   const limiterInfo = "opcionális (beállítva: -1,0 dBTP, 4x; állapota nem változott)";
 
+  currentEqMode = 'iir';
+  document.getElementById("selectEqMode").value = "iir";
+  sendEngine({ type: "set_eq_mode", val: "iir" });
   isFirMode = false;
-  btnFirMode.innerText = "Mód: Minimálfázis (IIR)";
-  btnFirMode.classList.remove("active");
-  document.getElementById("hudPreRingBadge").style.display = "none";
+  if (btnFirMode) {
+    btnFirMode.innerText = "Mód: Minimálfázis (IIR)";
+    btnFirMode.classList.remove("active");
+  }
+  const prBadgeImp = document.getElementById("hudPreRingBadge");
+  if (prBadgeImp) prBadgeImp.style.display = "none";
 
   closeImportModal();
   updateEqUI();
@@ -2864,14 +2881,22 @@ function updateLimiterMeters(peakDb, grDb) {
 
 function updatePhysicalSinkSelector(sinks, currentSink) {
   const sel = document.getElementById("selectPhysicalSink");
+  const wrap = document.getElementById("physicalSinkWrap");
   if (!sel) return;
+  // Csak a Linux motor küld eszközlistát; nélküle (pl. Windows) a választó rejtve marad
+  if (wrap) wrap.style.display = (Array.isArray(sinks) && sinks.length > 0) ? "flex" : "none";
   if (Array.isArray(sinks) && sinks.length > 0) {
     const key = JSON.stringify(sinks) + (currentSink || "");
     if (sel.getAttribute("data-cache") !== key) {
       sel.setAttribute("data-cache", key);
-      sel.innerHTML = sinks.map(s => 
-        `<option value="${s.name}" ${s.active || s.name === currentSink ? "selected" : ""}>${s.label}</option>`
-      ).join("");
+      sel.innerHTML = "";
+      sinks.forEach(s => {
+        const o = document.createElement("option");
+        o.value = s.name;
+        o.textContent = s.label || s.name;
+        if (s.active || s.name === currentSink) o.selected = true;
+        sel.appendChild(o);
+      });
       if (currentSink) sel.value = currentSink;
     }
   } else if (currentSink) {
@@ -2901,10 +2926,7 @@ function initPipewireBridge() {
       isPipewireConnected = true;
       updateEngineBadge();
       pipewireWs.send(JSON.stringify({ type: "hello", client: "gui_integrated_system" }));
-      const savedSink = localStorage.getItem("aether_physical_sink");
-      if (savedSink) {
-        pipewireWs.send(JSON.stringify({ type: "set_output_sink", sink: savedSink }));
-      }
+      // A választott kimenetet a motor maga jegyzi meg (~/.config/aetheraudio/output_sink.txt)
       console.log("[Motor Bridge] Élő C++ hangmotorhoz csatlakozva!");
     };
 

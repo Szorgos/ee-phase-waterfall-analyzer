@@ -216,6 +216,13 @@ private:
             return false;
         }
 
+        // Csak a saját felület csatlakozhat: egy tetszőleges weboldal a böngészőből ne vezérelhesse a motort
+        if (!originAllowed(headerValue(request, "origin"))) {
+            const char* resp = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            net::sendSome(sock, resp, std::char_traits<char>::length(resp));
+            return false;
+        }
+
         const std::string magicGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
         std::vector<uint8_t> digest = Sha1::hash(key + magicGuid);
         std::string acceptKey = Base64::encode(digest);
@@ -226,6 +233,19 @@ private:
             "Connection: Upgrade\r\n"
             "Sec-WebSocket-Accept: " + acceptKey + "\r\n\r\n";
         return sendAll(sock, response.data(), response.size());
+    }
+
+    /** Engedélyezett Origin: nincs (nem böngésző), helyi fájl, a Windows ablak virtuális gépneve, vagy localhost. */
+    static bool originAllowed(std::string o) {
+        for (auto& c : o) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (o.empty() || o == "null" || o.rfind("file://", 0) == 0) return true;
+        for (const char* ok : { "https://aether.local", "http://aether.local" })
+            if (o == ok) return true;
+        for (const char* host : { "http://127.0.0.1", "http://localhost", "http://[::1]" }) {
+            const std::string h = host;
+            if (o == h || (o.rfind(h + ":", 0) == 0)) return true;
+        }
+        return false;
     }
 
     static std::string headerValue(const std::string& req, const std::string& nameLower) {

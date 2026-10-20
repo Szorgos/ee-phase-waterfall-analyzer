@@ -7,6 +7,7 @@
  * A beállítások és a konvolver IR a ~/.config/aetheraudio mappába mentődnek.
  */
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <csignal>
 #include <cstdio>
@@ -53,153 +54,135 @@ std::string jsonEscape(const std::string& in) {
     return out;
 }
 
-std::string getOutputSinksJson(std::string* outCurrentSink = nullptr) {
-    std::string currentSinkId;
-    std::string sinkInputId;
-    {
-        FILE* fp = popen("pactl list sink-inputs 2>/dev/null | awk '/^([0-9]+\\. nyel|Sink Input #)/{id=$1; gsub(/[^0-9]/,\"\",id)} /node\\.name = \"aetheraudio_sink_output\"/{print id; exit}'", "r");
-        if (fp) {
-            char buf[64];
-            if (fgets(buf, sizeof(buf), fp)) {
-                char* p = buf;
-                while (*p && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) ++p;
-                char* end = p;
-                while (*end && *end >= '0' && *end <= '9') ++end;
-                sinkInputId = std::string(p, end - p);
-            }
-            pclose(fp);
-        }
-    }
-    if (!sinkInputId.empty()) {
-        FILE* fp = popen("pactl list short sink-inputs 2>/dev/null", "r");
-        if (fp) {
-            char line[256];
-            while (fgets(line, sizeof(line), fp)) {
-                char siId[32] = {0};
-                char sId[32] = {0};
-                if (sscanf(line, "%31s\t%31s", siId, sId) == 2) {
-                    if (siId == sinkInputId) {
-                        currentSinkId = sId;
-                        break;
-                    }
-                }
-            }
-            pclose(fp);
-        }
-    }
+// ---------------------------------------------------------------- fizikai kimenet (pactl)
+// A pactl kimenete nyelvfüggő ("Sink Input #12" / "12. nyelő-bemenet"), ezért mindig LC_ALL=C-vel hívjuk.
 
+std::string runCapture(const std::string& cmd) {
+    std::string out;
+    FILE* fp = popen(("LC_ALL=C " + cmd + " 2>/dev/null").c_str(), "r");
+    if (!fp) return out;
+    char buf[1024];
+    while (fgets(buf, sizeof(buf), fp)) out += buf;
+    pclose(fp);
+    return out;
+}
+
+/** Csak PipeWire/PulseAudio nyelőnevekben előforduló karakterek (shell-injekció ellen). */
+bool isSafeSinkName(const std::string& n) {
+    if (n.empty() || n.size() > 200) return false;
+    for (char c : n)
+        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '_' || c == '-' || c == ':' || c == '+' || c == '@'))
+            return false;
+    return true;
+}
+
+struct SinkInfo { std::string id, name; };
+
+std::vector<SinkInfo> listPhysicalSinks() {
+    std::vector<SinkInfo> v;
+    const std::string txt = runCapture("pactl list short sinks");
+    size_t pos = 0;
+    while (pos < txt.size()) {
+        size_t eol = txt.find('\n', pos);
+        if (eol == std::string::npos) eol = txt.size();
+        const std::string line = txt.substr(pos, eol - pos);
+        pos = eol + 1;
+        const size_t t1 = line.find('\t');
+        if (t1 == std::string::npos) continue;
+        size_t t2 = line.find('\t', t1 + 1);
+        if (t2 == std::string::npos) t2 = line.size();
+        SinkInfo s{ line.substr(0, t1), line.substr(t1 + 1, t2 - t1 - 1) };
+        if (s.name == "aetheraudio_sink" || !isSafeSinkName(s.name)) continue; // a saját virtuális nyelőnk nem cél
+        v.push_back(std::move(s));
+    }
+    return v;
+}
+
+/** A motor lejátszó streamjének (aetheraudio_sink_output) sink-input azonosítója és a nyelő, amelyre most szól. */
+bool findOwnSinkInput(std::string& sinkInputId, std::string& sinkId) {
+    sinkInputId.clear();
+    sinkId.clear();
+    const std::string txt = runCapture("pactl list sink-inputs");
+    std::string curId, curSink;
+    size_t pos = 0;
+    while (pos < txt.size()) {
+        size_t eol = txt.find('\n', pos);
+        if (eol == std::string::npos) eol = txt.size();
+        std::string line = txt.substr(pos, eol - pos);
+        pos = eol + 1;
+        const size_t f = line.find_first_not_of(" \t");
+        if (f == std::string::npos) continue;
+        line = line.substr(f);
+        if (line.rfind("Sink Input #", 0) == 0) { curId = line.substr(12); curSink.clear(); }
+        else if (line.rfind("Sink: ", 0) == 0) curSink = line.substr(6);
+        else if (line.find("node.name = \"aetheraudio_sink_output\"") != std::string::npos && !curId.empty()) {
+            sinkInputId = curId;
+            sinkId = curSink;
+            return std::all_of(sinkInputId.begin(), sinkInputId.end(), [](char c) { return c >= '0' && c <= '9'; });
+        }
+    }
+    return false;
+}
+
+std::string sinkLabel(const std::string& name) {
+    std::string lower = name;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (lower.find("speaker") != std::string::npos) return "🔊 Hangszóró (" + name + ")";
+    if (lower.find("usb") != std::string::npos) return "🎧 USB (" + name + ")";
+    if (lower.find("hdmi") != std::string::npos) return "🖥️ HDMI (" + name + ")";
+    if (lower.find("bluez") != std::string::npos) return "📶 Bluetooth (" + name + ")";
+    if (lower.find("analog") != std::string::npos) return "🔈 Analóg kimenet (" + name + ")";
+    return "🔈 " + name;
+}
+
+std::string getOutputSinksJson(std::string* outCurrentSink = nullptr) {
+    std::string siId, curSinkId;
+    findOwnSinkInput(siId, curSinkId);
     std::string currentSinkName;
     std::string json = "[";
-    {
-        FILE* fp = popen("pactl list short sinks 2>/dev/null", "r");
-        if (fp) {
-            char line[512];
-            bool first = true;
-            while (fgets(line, sizeof(line), fp)) {
-                char sId[32] = {0};
-                char sName[256] = {0};
-                if (sscanf(line, "%31s\t%255s", sId, sName) >= 2) {
-                    std::string name = sName;
-                    if (name == "aetheraudio_sink") continue; // virtuális nyelő, kihagyjuk
-
-                    bool active = (!currentSinkId.empty() && currentSinkId == sId);
-                    if (active) currentSinkName = name;
-
-                    std::string lower = name;
-                    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-                    std::string label;
-                    if (lower.find("speaker") != std::string::npos) {
-                        label = "🔊 Laptop Hangszóró";
-                    } else if (lower.find("usb") != std::string::npos || lower.find("dac") != std::string::npos) {
-                        label = "🎧 USB Audio (Dokkoló / DAC)";
-                    } else if (lower.find("hdmi3") != std::string::npos) {
-                        label = "🖥️ HDMI 3 Kimenet";
-                    } else if (lower.find("hdmi2") != std::string::npos) {
-                        label = "🖥️ HDMI 2 Kimenet";
-                    } else if (lower.find("hdmi") != std::string::npos) {
-                        label = "🖥️ HDMI Kimenet";
-                    } else {
-                        label = "🔈 " + name;
-                    }
-
-                    if (!first) json += ",";
-                    first = false;
-                    json += "{\"id\":" + std::string(sId) + ",\"name\":\"" + jsonEscape(name) + "\",\"label\":\"" + jsonEscape(label) + "\",\"active\":" + (active ? "true" : "false") + "}";
-                }
-            }
-            pclose(fp);
-        }
+    bool first = true;
+    for (const auto& s : listPhysicalSinks()) {
+        const bool active = !curSinkId.empty() && curSinkId == s.id;
+        if (active) currentSinkName = s.name;
+        if (!first) json += ",";
+        first = false;
+        json += "{\"id\":\"" + jsonEscape(s.id) + "\",\"name\":\"" + jsonEscape(s.name) + "\",\"label\":\"" +
+                jsonEscape(sinkLabel(s.name)) + "\",\"active\":" + (active ? "true" : "false") + "}";
     }
     json += "]";
     if (outCurrentSink) *outCurrentSink = currentSinkName;
     return json;
 }
 
-bool applyOutputSink(const std::string& targetSink) {
+/**
+ * A DSP kimenetét a megadott fizikai nyelőre irányítja. Csak létező nyelőnévre (vagy régi
+ * "speaker"/"usb"/"hdmi" kulcsszóra) visz át; ismeretlen szövegből soha nem lesz parancs.
+ */
+bool applyOutputSink(const std::string& targetSink, bool remember) {
     if (targetSink.empty()) return false;
-    
-    std::string sinkInputId;
-    {
-        FILE* fp = popen("pactl list sink-inputs 2>/dev/null | awk '/^([0-9]+\\. nyel|Sink Input #)/{id=$1; gsub(/[^0-9]/,\"\",id)} /node\\.name = \"aetheraudio_sink_output\"/{print id; exit}'", "r");
-        if (fp) {
-            char buf[64];
-            if (fgets(buf, sizeof(buf), fp)) {
-                char* p = buf;
-                while (*p && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) ++p;
-                char* end = p;
-                while (*end && *end >= '0' && *end <= '9') ++end;
-                sinkInputId = std::string(p, end - p);
-            }
-            pclose(fp);
-        }
-    }
-    if (sinkInputId.empty()) {
-        return false;
-    }
+    std::string sinkInputId, curSinkId;
+    if (!findOwnSinkInput(sinkInputId, curSinkId)) return false;
 
-    std::string resolvedSink = targetSink;
-    {
-        FILE* fp = popen("pactl list short sinks 2>/dev/null", "r");
-        if (fp) {
-            char line[512];
-            std::string lowerTarget = targetSink;
-            std::transform(lowerTarget.begin(), lowerTarget.end(), lowerTarget.begin(), ::tolower);
-            std::string bestMatch;
-            while (fgets(line, sizeof(line), fp)) {
-                char sId[32] = {0};
-                char sName[256] = {0};
-                if (sscanf(line, "%31s\t%255s", sId, sName) >= 2) {
-                    std::string name = sName;
-                    if (name == "aetheraudio_sink") continue;
-                    if (name == targetSink || sId == targetSink) {
-                        bestMatch = name;
-                        break;
-                    }
-                    std::string lowerName = name;
-                    std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
-                    if (lowerTarget.find("speaker") != std::string::npos && lowerName.find("speaker") != std::string::npos) {
-                        bestMatch = name;
-                    } else if ((lowerTarget.find("usb") != std::string::npos || lowerTarget.find("dac") != std::string::npos) &&
-                               lowerName.find("usb") != std::string::npos) {
-                        bestMatch = name;
-                    } else if (lowerTarget.find("hdmi") != std::string::npos && lowerName.find("hdmi") != std::string::npos) {
-                        if (bestMatch.empty()) bestMatch = name;
-                    }
-                }
-            }
-            pclose(fp);
-            if (!bestMatch.empty()) resolvedSink = bestMatch;
-        }
+    std::string lowerTarget = targetSink;
+    std::transform(lowerTarget.begin(), lowerTarget.end(), lowerTarget.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::string resolved, resolvedId;
+    for (const auto& s : listPhysicalSinks()) {
+        if (s.name == targetSink || s.id == targetSink) { resolved = s.name; resolvedId = s.id; break; }
+        std::string ln = s.name;
+        std::transform(ln.begin(), ln.end(), ln.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        const bool kw = (lowerTarget == "speaker" || lowerTarget == "usb" || lowerTarget == "hdmi") && ln.find(lowerTarget) != std::string::npos;
+        if (kw && resolved.empty()) { resolved = s.name; resolvedId = s.id; }
     }
-
-    std::string cmd = "pactl move-sink-input " + sinkInputId + " \"" + resolvedSink + "\" 2>/dev/null";
-    int ret = std::system(cmd.c_str());
-    if (ret == 0) {
-        std::cout << "[PipeWire] Kimeneti eszköz átirányítva: " << resolvedSink << " (sink-input #" << sinkInputId << ")\n";
-        linux_store::saveOutputSink(resolvedSink);
+    if (resolved.empty() || !isSafeSinkName(resolved)) return false;
+    if (resolvedId == curSinkId) {                    // már ott szól
+        if (remember) linux_store::saveOutputSink(resolved);
         return true;
     }
-    return false;
+    const std::string cmd = "LC_ALL=C pactl move-sink-input " + sinkInputId + " '" + resolved + "' >/dev/null 2>&1";
+    if (std::system(cmd.c_str()) != 0) return false;
+    std::cout << "[PipeWire] Kimeneti eszköz: " << resolved << " (sink-input #" << sinkInputId << ")\n";
+    if (remember) linux_store::saveOutputSink(resolved);
+    return true;
 }
 
 struct Saver {
@@ -267,19 +250,17 @@ int main(int argc, char* argv[]) {
     std::signal(SIGTERM, onSignal);
     std::cout << "[PipeWire] \"AetherAudio\" kimeneti eszköz létrehozva (aetheraudio_sink).\n";
 
-    // Kezdeti kimenet beállítása (mentett vagy alapértelmezett Speaker)
-    std::string initialSink = linux_store::loadOutputSink();
-    if (initialSink.empty()) {
-        initialSink = "speaker";
+    // Kezdeti kimenet: csak ha a felhasználó korábban választott. Különben a rendszer (WirePlumber)
+    // alapértelmezett eszközén marad – nem kényszerítjük pl. a laptop hangszóróra.
+    const std::string initialSink = linux_store::loadOutputSink();
+    if (!initialSink.empty()) {
+        std::thread([initialSink]() {
+            for (int i = 0; i < 25; ++i) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                if (applyOutputSink(initialSink, false)) break;
+            }
+        }).detach();
     }
-
-    // Háttérszál, amely a PipeWire playback stream regisztrációja után beállítja a kimenetet
-    std::thread([initialSink]() {
-        for (int i = 0; i < 25; ++i) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
-            if (applyOutputSink(initialSink)) break;
-        }
-    }).detach();
 
     uint64_t readPos = 0;
     BridgeCallbacks cb;
@@ -307,7 +288,8 @@ int main(int argc, char* argv[]) {
     };
 
     cb.setOutputSink = [&](const std::string& target) {
-        applyOutputSink(target);
+        if (!applyOutputSink(target, true))
+            std::cerr << "[PipeWire] A kért kimenet nem található vagy nem állítható be.\n";
         updateSinksCache();
     };
 
