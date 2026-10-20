@@ -1,4 +1,15 @@
 # AetherAudio • Valós Idejű Fázis, Spektrum & Akusztikai Vízesés DSP Csomag
+
+[![GitHub Release](https://img.shields.io/github/v/release/Szorgos/ee-phase-waterfall-analyzer?style=flat-square&color=blue)](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest)
+[![Windows Download](https://img.shields.io/badge/Windows%2011-Telep%C3%ADt%C5%91%20(.exe)-0078D6?style=flat-square&logo=windows)](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v1.0.1/AetherAudio-Setup-1.0.1.exe)
+[![Linux PipeWire](https://img.shields.io/badge/Linux-PipeWire%20SPA-FCC624?style=flat-square&logo=linux&logoColor=black)](https://github.com/Szorgos/ee-phase-waterfall-analyzer#telep%C3%ADt%C3%A9s-linuxon-egyetlen-parancsb%C3%B3l)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-green.svg?style=flat-square)](https://www.gnu.org/licenses/gpl-3.0)
+
+> ### 📦 **Gyors Letöltés Windows 11-re:**
+> 👉 **[AetherAudio-Setup-1.0.1.exe letöltése (Windows telepítő)](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v1.0.1/AetherAudio-Setup-1.0.1.exe)**  
+> *(Egykattintásos telepítő: tartalmazza az AetherAudio motort, a tálcaalkalmazást, a WebView2 felületet és az Equalizer APO automatikus bekötést!)*
+
+---
 **Projekt:** `AetherAudio`  
 **Cél:** Professzionális, zéró késleltetésű C++20 DSP motor és valós idejű 3D akusztikai vízesés / 2D fázis- és csoportkésleltetés-analizátor a Linux PipeWire és audiofil zenehallgató rendszerekhez.
 
