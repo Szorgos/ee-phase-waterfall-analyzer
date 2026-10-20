@@ -63,10 +63,15 @@ void openGui() {
     // Saját ablakos felület (WebView2); ha nincs meg, a böngészős megnyitás a tartalék
     const std::wstring app = dir + L"\\AetherAudioGui.exe";
     if (fileExists(app)) {
-        if (reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", app.c_str(), nullptr, dir.c_str(), SW_SHOWNORMAL)) > 32) {
+        const INT_PTR r = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", app.c_str(), nullptr, dir.c_str(), SW_SHOWNORMAL));
+        if (r > 32) {
             std::cout << "[GUI] Felület megnyitva saját ablakban.\n";
             return;
         }
+        std::cout << "[GUI] Az AetherAudioGui.exe nem indítható (ShellExecute: " << static_cast<long long>(r)
+                  << ", GetLastError: " << GetLastError() << ").\n";
+    } else {
+        std::cout << "[GUI] Az AetherAudioGui.exe hiányzik a motor mellől (telepítsd újra; a vírusirtó karanténba tehette).\n";
     }
     for (const std::wstring& candidate : { dir + L"\\gui\\gui_integrated_system.html",
                                            dir + L"\\gui_integrated_system.html",
