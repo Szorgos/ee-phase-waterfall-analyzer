@@ -427,7 +427,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
           <div style="color:var(--ee-green); font-weight:700;">✅ Intelligens előerősítés (Preamp):</div>
           <div>• <strong>Ha a fájlban van Preamp:</strong> Pontosan azt használja, nincs dupla levonás!</div>
           <div>• <strong>Ha a fájlban nincs Preamp:</strong> A <em>teljes eredő EQ-görbe</em> csúcsából számolja (az átfedő sávok összegét is figyelembe véve), kis tartalékkal.</div>
-          <div>• <strong>Limiter:</strong> opcionális biztonsági háló; az import nem kapcsolja be. Helyes előerősítés mellett nincs rá szükség.</div>
+          <div>• <strong>Limiter:</strong> negatív preamp esetén automatikusan bekapcsol (-1,0 dBTP, 4x túlmintavétel), és elkapja a mintaközi csúcsokat.</div>
         </div>
 
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:2px;">
@@ -600,7 +600,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
 
         <p class="module-desc">
           Megakadályozza, hogy az EQ-ban vagy a szobakorrekcióban végzett emelések miatt a DAC analóg rekonstrukciós szűrője digitális túlvezérlésbe fusson. 
-          A túlvezérlés ellen elsősorban a helyes (a teljes EQ-görbéhez igazított) előerősítés véd; a limiter <strong>opcionális biztonsági háló</strong>, és nem hallásvédelmi eszköz. A <strong>zöld színjelzés</strong> jó kiinduló beállítást jelöl, nem garantált határértéket.
+          A túlvezérlés ellen elsősorban a helyes (a teljes EQ-görbéhez igazított) előerősítés véd; a limiter <strong>biztonsági háló</strong> (negatív preampú profil betöltésekor automatikusan bekapcsol), és nem hallásvédelmi eszköz. A <strong>zöld színjelzés</strong> jó kiinduló beállítást jelöl, nem garantált határértéket.
         </p>
 
         <div class="param-grid" style="grid-template-columns: repeat(3, 1fr);">
@@ -1270,6 +1270,27 @@ function autoGuardPreamp() {
   return -Math.ceil((pk + 0.3) * 2) / 2;
 }
 
+/**
+ * Profil betöltésekor/importkor: negatív preamp esetén a limiter automatikusan bekapcsol
+ * (a preamp a görbe csúcsára van méretezve, a mintaközi csúcsokat a true peak limiter fogja meg).
+ * setDefaults: a plafont és a túlmintavételt is az ajánlott -1,0 dBTP / 4x értékre állítja (import).
+ * Visszaadja a toastba írható leírást.
+ */
+function armLimiterForProfile(preamp, setDefaults) {
+  if (setDefaults) {
+    updateLimiterCeiling(-1.0, false);
+    document.getElementById("limiterOversampling").value = "4x";
+    updateLimiterOversampling();
+  }
+  const ceil = numVal("limiterCeilingInput", -1.0).toFixed(1).replace(".", ",");
+  const os = (document.getElementById("limiterOversampling") || {}).value || "4x";
+  if (preamp < 0) {
+    setModuleActive('limiter', true);
+    return `BEKAPCSOLVA (negatív preamp: ${ceil} dBTP, ${os})`;
+  }
+  return `${isLimiterEnabled ? "bekapcsolva" : "kikapcsolva"} (${ceil} dBTP, ${os}; nincs negatív preamp, állapota nem változott)`;
+}
+
 function applyAutoPreamp() {
   const p = autoGuardPreamp();
   setPreamp(p);
@@ -1927,10 +1948,8 @@ function applyParsedAutoEqProfile(text, modelName, sourceName) {
   currentPreamp = finalPreamp;
   document.getElementById("inputPreamp").value = currentPreamp.toFixed(1);
 
-  // Limiter & Minimálfázis aktiválása
-  updateLimiterCeiling(-1.0, false);
-  document.getElementById("limiterOversampling").value = "4x";
-  updateLimiterOversampling();
+  // Limiter: negatív preamp esetén automatikusan bekapcsol (-1,0 dBTP, 4x)
+  const limiterInfo = armLimiterForProfile(finalPreamp, true);
 
   currentEqMode = 'iir';
   document.getElementById("selectEqMode").value = "iir";
@@ -1957,7 +1976,7 @@ function applyParsedAutoEqProfile(text, modelName, sourceName) {
         `• Preamp: ${finalPreamp.toFixed(1)} dB\n` +
         `  ↳ ${preampNote}\n` +
         `• Szűrősávok: ${nodes.length} db parametrikus pont\n` +
-        `• Limiter: opcionális (beállítva: -1,0 dBTP, 4x; állapota nem változott)\n` +
+        `• Limiter: ${limiterInfo}\n` +
         `• Szűrési mód: IIR (minimálfázisú, nincs előcsengés)`);
 }
 
@@ -2078,11 +2097,8 @@ function processAutoEqImport() {
   setModuleActive('convolver', false);
   setModuleActive('bass', false);
 
-  // A limiter opcionális biztonsági háló: az import csak beállítja, de nem kapcsolja be/ki.
-  updateLimiterCeiling(-1.0, false);
-  document.getElementById("limiterOversampling").value = "4x";
-  updateLimiterOversampling();
-  const limiterInfo = "opcionális (beállítva: -1,0 dBTP, 4x; állapota nem változott)";
+  // Limiter: negatív preamp esetén automatikusan bekapcsol (-1,0 dBTP, 4x)
+  const limiterInfo = armLimiterForProfile(finalPreamp, true);
 
   currentEqMode = 'iir';
   document.getElementById("selectEqMode").value = "iir";
@@ -3179,6 +3195,7 @@ function loadPreset(name) {
   applyPresetData(p);
   sendEngine({ type: "set_eq_mode", val: currentEqMode });
   setModuleActive('eq', true);
+  armLimiterForProfile(currentPreamp, false);
   lastSentPreamp = currentPreamp;
   sendParamToPipewire("set_preamp", currentPreamp);
   updateEqUI();

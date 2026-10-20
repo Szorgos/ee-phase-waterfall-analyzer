@@ -57,7 +57,7 @@ Az **AetherAudio** ezt a filozófiát egyesíti a modern digitális jelfeldolgoz
    * **Parametrikus EQ:** Szabadon állítható sávok minimálfázisú (IIR) és lineáris fázisú (FIR) móddal.
    * **Crossfeed Szimulátor:** Bauer bs2b, Jan Meier Corda és Studio Nearfield térhatás-profilok a fejhallgatós sztereó izoláció megszüntetésére.
    * **Convolver (Partícionált FIR):** IR (WAV/IRS) betöltés és előnézet; a feldolgozási késleltetés nem nő az IR hosszával (az IR saját késleltetése megmarad). Szobakorrekcióhoz mérésből tervezett korrekciós szűrőt tölts be (pl. REW), ne a szoba nyers impulzusválaszát.
-   * **True Peak Limiter & Soft-Clipper (opcionális):** BS.1770-szerű, túlmintavételezett (1x–8x) mintaközi csúcsbecslés, alapértelmezett -1,0 dBTP plafon. A túlvezérlés ellen elsősorban a teljes EQ-görbéhez igazított előerősítés véd; a limiter biztonsági háló, nem hallásvédelem.
+   * **True Peak Limiter & Soft-Clipper:** BS.1770-szerű, túlmintavételezett (1x–8x) mintaközi csúcsbecslés, alapértelmezett -1,0 dBTP plafon. A túlvezérlés ellen elsősorban a teljes EQ-görbéhez igazított előerősítés véd; a limiter biztonsági háló (negatív preampú profil importjakor vagy betöltésekor automatikusan bekapcsol), nem hallásvédelem.
    * **Bass Enhancer:** Pszichoakusztikai hiányzó alaphang szintézis membránkímélő 30 Hz-es szub-vágással.
 
 5. **Zármentes (Lock-free) C++20 Ringbuffer és PipeWire SPA Integráció:**
