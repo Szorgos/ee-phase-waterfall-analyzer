@@ -83,23 +83,20 @@ A Linuxos és a Windowsos ág ugyanazt a C++ DSP láncot futtatja (`include/aeth
 
 ---
 
-## 🎮 Indítás és Használat
+## 🎮 Indítás és Használat (Linux)
 
-A telepítés után kétféleképpen is elindíthatod a rendszert:
+Az `install.sh` mindent beállít:
 
-1. **A Terminálból:**
-   ```bash
-   ./run.sh
-   ```
-   Ez azonnal elindítja a PipeWire C++ szűrőcsomópontot, és megnyitja a grafikus kezelőfelületet az alapértelmezett böngésződben.
+* **Motor:** `aetheraudio-engine` systemd felhasználói szolgáltatásként fut, és bejelentkezéskor magától indul. Létrehoz egy **„AetherAudio”** nevű kimeneti hangeszközt; ami ide szól, az a DSP láncon át a valódi hangkártyára / DAC-ra megy (a WirePlumber köti be automatikusan).
+* **Használat:** a *Hangbeállításokban* válaszd kimenetnek az **AetherAudio**-t (vagy a telepítő végén kérd, hogy ez legyen az alapértelmezett).
+* **Felület:** menü → **AetherAudio**. Saját ablakban nyílik (WebKitGTK); ha a WebKitGTK fejlesztői csomag nem telepíthető, böngészőben.
+* **Beállítások:** a `~/.config/aetheraudio/` mappába mentődnek (EQ, modulok, betöltött impulzusválasz), újraindítás után is megmaradnak.
+* **Állapot / napló:** `systemctl --user status aetheraudio`, `journalctl --user -u aetheraudio -f`
+* **Eltávolítás:** `./uninstall.sh` (a `--purge` a beállításokat is törli)
 
-2. **A Linux Alkalmazásmenüből:**
-   Keresd meg a rendszer menüjében a **`EasyEffects Phase & Waterfall Analyzer`** ikont, és kattints rá!
+A fejléc jelvénye: **„● Élő – PipeWire – AetherAudio • 48.0 kHz”** = a motor fut és szűr; **„○ Motor Offline (Szimuláció)”** = a motor nem fut, a felület a beépített tesztjelet mutatja.
 
-3. **Csatlakozási állapot:**
-   A fejlécben lévő zöld jelvény jelzi az élő kapcsolatot:
-   * **`● PipeWire Live (Csatlakoztatva)`**: A valós rendszerhang szűrése és 3D megjelenítése aktív.
-   * **`○ PipeWire Offline (Szimuláció)`**: Ha a PipeWire démon nem elérhető, a felület automatikusan a beépített tesztgenerátorra vált.
+> EasyEffects mellett is használható: ilyenkor a kettő közül csak az egyiket válaszd kimenetnek, vagy láncold őket (pl. qpwgraph-fal), különben a hang kétszer menne át korrekción.
 
 ---
 
@@ -111,9 +108,10 @@ Ha kézzel szeretnéd lefordítani vagy módosítani a C++ motort:
 # Függőségek (Ubuntu/Debian példa):
 sudo apt install build-essential cmake libpipewire-0.3-dev pkg-config
 
-# Fordítás:
+# Fordítás (a saját ablakhoz: libgtk-3-dev libwebkit2gtk-4.1-dev):
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON
 cmake --build build -j$(nproc)
+./build/aetheraudio-engine        # motor kézi indítása (Ctrl+C: leállítás)
 
 # Tesztek futtatása:
 ./build/test_math         # Zárt képletű csoportkésleltetés teszt
@@ -130,7 +128,7 @@ cmake --build build -j$(nproc)
 ```
 ├── CMakeLists.txt              # C++20 szabványos építőrendszer (Linux & Windows)
 ├── install.sh                  # Univerzális Linux disztró-felismerő és telepítő szkript
-├── run.sh                      # Kényelmi futtató szkript (Web + PipeWire indítás)
+├── uninstall.sh                # Linux eltávolító
 ├── gui_integrated_system.html  # Teljes EasyEffects Adwaita grafikus felület és 3D WebGL
 ├── autoeq_index.js             # 8 850+ modellt tartalmazó AutoEq fülhallgató adatbázis
 ├── include/
@@ -144,7 +142,8 @@ cmake --build build -j$(nproc)
 │   ├── limiter.hpp             # True Peak limiter és analóg soft-clipper védelem
 │   ├── dsp_pipeline.hpp        # Integrált feldolgozási lánc (Preamp -> EQ -> CF -> Conv -> Limiter)
 │   ├── ringbuffer.hpp          # Zármentes SPSC körpuffer valós idejű hangátvitelhez
-│   ├── pipewire_filter_node.hpp# Natív Linux pw_filter audio csomópont
+│   ├── pipewire_sink_node.hpp  # Linux: „AetherAudio” virtuális kimenet (két pw_stream, filter-chain mintára)
+│   ├── linux_store.hpp         # Linux: beállítások és IR mentése (~/.config/aetheraudio)
 │   ├── ws_bridge.hpp           # RFC 6455 WebSocket híd (Linux + Windows), valódi FFT spektrummal
 │   ├── net_compat.hpp          # BSD socket / Winsock2 közös réteg
 │   ├── spectrum.hpp            # Hann-ablakos FFT, 160 logaritmikus sáv + L/R fázis
@@ -155,7 +154,8 @@ cmake --build build -j$(nproc)
 │   ├── mini_json.hpp           # Függőségmentes JSON olvasó a vezérlőüzenetekhez
 │   └── sha1_base64.hpp         # Független SHA-1 és Base64 modul a WS kézfogáshoz
 ├── src/
-│   ├── pipewire_plugin.cpp     # A PipeWire háttérszolgáltatás fő belépési pontja
+│   ├── pipewire_plugin.cpp     # Linux motor (aetheraudio-engine) belépési pontja
+│   ├── aether_gui_linux.cpp    # Linux felület saját ablakban (WebKitGTK)
 │   ├── test_core.cpp           # Közös mag teszt (FFT, seqlock, tap, JSON, átlátszóság)
 │   ├── test_dsp.cpp            # Konvolver, FIR EQ, Bass Enhancer, teljes lánc teszt
 │   ├── test_math.cpp           # Matematikai ellenőrző alkalmazás
