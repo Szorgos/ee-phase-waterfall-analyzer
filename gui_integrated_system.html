@@ -56,11 +56,9 @@
   /* ======================================================= */
   .top-spectrum-strip { position: relative; width: 100%; height: clamp(230px, 32vh, 420px); background: #0c0e12; border-bottom: 1px solid var(--ee-border); overflow: hidden; }
   canvas#waterfallCanvas { width: 100%; height: 100%; display: block; }
-  /* Linux saját ablak (WebKitGTK): a GTK-s léptetőgombok elvennék a helyet a számtól, ezért ott elrejtjük őket
-     (a léptetés görgővel és a fel/le nyilakkal megy) */
-  html.wkgtk input[type="number"] { -webkit-appearance: textfield; appearance: textfield; }
-  html.wkgtk input[type="number"]::-webkit-inner-spin-button,
-  html.wkgtk input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; display: none; }
+  /* Linux saját ablak (WebKitGTK): a GTK-s léptetőnyilak szélesebbek, mint Windowson, ezért ott a mezők
+     szélesebbek (JS), a szám jobbra igazodik, így a nyilak megmaradnak és az érték is teljesen látszik */
+  html.wkgtk input[type="number"] { text-align: right; padding-right: 2px; }
   .freq-scale { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 30px; pointer-events: none;
                 background: linear-gradient(to top, rgba(12,14,18,0.94) 0%, rgba(12,14,18,0.75) 55%, rgba(12,14,18,0) 100%); }
 
@@ -1099,7 +1097,14 @@ if (btnCameraAngle) {
   const isWebKitGtk = /AppleWebKit/.test(ua) && !/Chrome|Chromium|Edg\//.test(ua) && /Linux|X11/.test(ua);
   if (!isWebKitGtk) return;
   document.documentElement.classList.add("wkgtk");
-  // Görgővel léptetés a fókuszban lévő vagy egér alatti számmezőn (a rejtett léptetőgombok helyett)
+  // A számmezők kapnak annyi plusz szélességet, amennyit a GTK léptetőnyilak elvesznek
+  const widen = () => document.querySelectorAll('input[type="number"]').forEach(el => {
+    if (el.dataset.wkWidened) return;
+    const w = parseFloat(el.style.width) || el.getBoundingClientRect().width;
+    if (w > 0) { el.style.width = (w + 30) + "px"; el.dataset.wkWidened = "1"; }
+  });
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", widen); else widen();
+  // Görgővel is léptethető a számmező (mint Windowson)
   document.addEventListener("wheel", (e) => {
     const el = e.target;
     if (!(el instanceof HTMLInputElement) || el.type !== "number" || el.disabled) return;
