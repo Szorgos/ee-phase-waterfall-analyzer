@@ -27,7 +27,7 @@ Aqulify-Setup.exe /S [/D=C:\Mappa] [/NOAPO] [/DOWNLOADAPO]
 
 Az Aqulify a **tálcán** (értesítési területen) fut, konzolablak nélkül:
 
-- **kattintás / dupla kattintás** az ikonon: megnyílik a felület a böngészőben;
+- **kattintás / dupla kattintás** az ikonon: megnyílik a felület saját ablakban (WebView2 nélkül a böngészőben);
 - **jobb kattintás**: aktuális jelforrás, *Indítás a Windows-zal* ki/be, *Napló megnyitása*, *Kilépés*.
 
 A felület jelvénye mutatja, honnan jön a jel:

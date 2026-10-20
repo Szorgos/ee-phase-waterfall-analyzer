@@ -2,7 +2,7 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/Szorgos/ee-phase-waterfall-analyzer?style=flat-square&color=blue)](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest)
 [![Windows Download](https://img.shields.io/badge/Windows%2011-Telep%C3%ADt%C5%91%20(.exe)-0078D6?style=flat-square&logo=windows)](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe)
-[![Linux PipeWire](https://img.shields.io/badge/Linux-PipeWire%20SPA-FCC624?style=flat-square&logo=linux&logoColor=black)](https://github.com/Szorgos/ee-phase-waterfall-analyzer#telep%C3%ADt%C3%A9s-linuxon-egyetlen-parancsb%C3%B3l)
+[![Linux PipeWire](https://img.shields.io/badge/Linux-PipeWire-FCC624?style=flat-square&logo=linux&logoColor=black)](https://github.com/Szorgos/ee-phase-waterfall-analyzer#telep%C3%ADt%C3%A9s-linuxon-egyetlen-parancsb%C3%B3l)
 [![Támogatás](https://img.shields.io/badge/T%C3%A1mogat%C3%A1s-Revolut%20%40gergoqhg6-ff5c8a?style=flat-square&logo=revolut)](#-támogatás)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-green.svg?style=flat-square)](https://www.gnu.org/licenses/gpl-3.0)
 
@@ -12,7 +12,7 @@
 
 ---
 **Projekt:** `Aqulify`  
-**Cél:** Professzionális, zéró késleltetésű C++20 DSP motor és valós idejű 3D akusztikai vízesés / 2D fázis- és csoportkésleltetés-analizátor a Linux PipeWire és audiofil zenehallgató rendszerekhez.
+**Cél:** Valós idejű DSP lánc (EQ, crossfeed, konvolver, bass enhancer, limiter) az EasyEffects DSP könyvtáraival, élő 3D akusztikai vízeséssel és az EQ fázis- / csoportkésleltetés-görbéjével – Linuxon (PipeWire) és Windows 11-en (Equalizer APO).
 
 ---
 
@@ -23,44 +23,39 @@
 > ℹ️ **Névváltás:** a program 1.4.8-ig **AetherAudio** néven futott. Mivel ezt a nevet más hangszoftverek is használják, **Aqulify** lett az új neve. A korábbi telepítés frissítéskor automatikusan átáll: a beállítások, az EQ profilok és a konvolver IR megmaradnak.
 
 Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
-* **Analitikus transzparencia:** Az EasyEffects DSP könyvtárai (LSP, Calf, libbs2b, SpeexDSP, zita-convolver); IIR, FIR, FFT és SPM EQ mód.
-* **Akusztikai látásmód:** A rejtett rezonanciák és a lineáris fázisú szűrők előcsengésének (pre-ringing) megjelenítése a 3D vízesés-spektrogramon.
-* **Akusztikai tisztaság:** Teljes kontroll a fázis, a térhatás és a csúcsértékek felett, hogy a zene pontosan úgy szólaljon meg, ahogyan megszületett.
-
----
-
-> 💡 **Ennyit a bullshitről – most pedig lássuk a kőkemény technikai valóságot és a szoftver tudását!**
+* **DSP:** az EasyEffects DSP könyvtárai (LSP, Calf, libbs2b, SpeexDSP, zita-convolver); IIR, FIR, FFT és SPM EQ mód.
+* **Megjelenítés:** a 3D vízesés a lejátszott jel valódi spektrumát mutatja (a motor számolja); az EQ-görbe, a fázis és a csoportkésleltetés ugyanazokkal a szűrőkkel készül, amelyek a hangot feldolgozzák.
 
 ---
 
 ## 🎧 Főbb Képességek és Funkciók
 
 1. **Élő 3D Akusztikai Vízesés & Spektrogram (Top-Strip WebGL Engine):**
-   * Valós idejű, 60 FPS gördülés állítható időszeletekkel (60 – 240 lépcső).
+   * A motor FFT spektruma (160 logaritmikus sáv, 20 Hz – 20 kHz) ~60 képkocka/s-mal; ha nem szól semmi, a vízesés lecseng.
+   * Időlépcsők: 60 / 120 / 180; nézőpontok: 3D izometrikus, oldalsó profil, felülnézet.
+   * **Frekvenciaskála** a vízesés alatt, jelekkel a zene által éppen átfogott frekvenciatartomány alsó és felső határán.
    * **Előcsengés (pre-ringing) jelzése:** FIR / FFT / SPM (lineáris fázisú) módban egy diszkrét felirat jelzi, hogy előcsengés lehetséges. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik; a program nem nagyítja fel.
-   * Állítható hőtérkép és nézőpontok (3D Izometrikus, Felülnézeti 2D Hőtérkép, Szembőli Spektrum).
 
-2. **2D Analitikus Fázis- és Csoportkésleltetés ($-\frac{d\phi}{d\omega}$):**
-   * Zárt matematikai képletű Biquad IIR kalkuláció (0% CPU terhelés).
-   * Interaktív, Pro-Q stílusú közvetlen pont-húzás a görbén és egérgörgős Q-faktor állítás.
-   * Kétirányú numerikus beviteli mezők ezredpontos értékekkel.
+2. **EQ-görbe, fázis és csoportkésleltetés ($-\frac{d\phi}{d\omega}$):**
+   * A görbét a motor számolja az LSP szűrőkkel (sávtípus, szűrőmód, meredekség, decramp szerint). FIR / FFT / SPM módban a fázis lineáris, a késleltetés a feldolgozás késleltetése. Motor nélkül a felület közelítő görbét rajzol (RBJ biquad; harang-, polc-, alul- és felüláteresztő sávokra).
+   * Pontok húzása a görbén, egérgörgővel Q-állítás, dupla kattintással új sáv; a kijelölt sáv típusa, szűrőmódja, meredeksége, frekvenciája, gainje, Q-ja és (sáváteresztő / létra típusnál) sávszélessége állítható.
 
 3. **8 850+ Fejhallgató AutoEq Profil Kereső & Kézi Importálás:**
    * **Valós AutoEq Adatbázis Integráció:** A Jaakko Pasanen-féle hivatalos AutoEq tároló több mint 8 850 fül- és fejhallgatójának (oratory1990, Crinacle, Rtings stb.) élő keresése és profil-letöltése közvetlenül a GitHubról egyetlen kattintással.
-   * **Univerzális Kézi Importáló (Squiglink / REW / EqualizerAPO):** A Squiglinkről vagy más mérésekből exportált CSV és TXT görbék, illetve REW / APO szűrők közvetlen beillesztése és automatikus felismerése manuális módban.
+   * **Kézi import (fájl vagy beillesztett szöveg):** paraméteres szűrőlisták `Filter N: ON PK Fc … Hz Gain … dB Q …` formában (AutoEq ParametricEQ, Equalizer APO, REW), PK / LS(C) / HS(C) / LP / HP típusokkal és `Preamp:` sorral. Grafikus EQ-t (GraphicEQ) és CSV frekvenciamenetet nem alkalmaz.
    * **EQ profilok:** AutoEq importkor és kézi beállításkor automatikusan profil készül; az aktív profil neve a fejlécben látszik, és a korábbi profilok újraindítás után is választhatók (tárolás: Linuxon `~/.config/aqulify/presets.json`, Windowson `%APPDATA%\Aqulify\presets.json`). Az importált AutoEq profil érintetlen marad: kézi módosításkor „– módosított” nevű saját profil készül.
    * **Automatikus preamp (dupla levonás nélkül):** Induláskor 0 dB. Ha az EQ-görbe klippelne, a preamp magától a görbe csúcsához igazodik (és a limiter bekapcsol). Ha az importált profil tartalmaz preampot, pontosan azt használja; ha nem, az automatika állítja be.
 
 4. **Kézi Mesterkapcsolók Minden Modulhoz (Ki/Bekapcsolható lánc):**
    * **Parametrikus EQ (LSP Parametric Equalizer):** legfeljebb 32 sáv, 12 szűrőtípus, RLC / BWC / LRX / APO szűrőmód, x1–x4 meredekség; IIR, FIR, FFT és SPM mód, decramp.
-   * **Crossfeed Szimulátor (libbs2b):** Bauer bs2b (700 Hz / 4,5 dB), Jan Meier (650 Hz / 9,5 dB) és közeltéri stúdió (600 Hz / 3,5 dB) profil a fejhallgatós sztereó izoláció megszüntetésére.
-   * **Convolver (zita-convolver):** IR (WAV/IRS) betöltés és előnézet, IR szélesség, autogain, dry / wet; a feldolgozási késleltetés nem nő az IR hosszával (az IR saját késleltetése megmarad). Szobakorrekcióhoz mérésből tervezett korrekciós szűrőt tölts be (pl. REW), ne a szoba nyers impulzusválaszát.
-   * **Limiter (LSP Limiter):** 12 mód, túlmintavételezés (True Peak is), dither, lookahead / attack / release, ALR; alapértelmezés: -1,0 dB küszöb, True Peak / 24 bit. A túlvezérlés ellen elsősorban a teljes EQ-görbéhez igazított előerősítés véd; a limiter biztonsági háló (negatív preampú profil importjakor vagy betöltésekor automatikusan bekapcsol), nem hallásvédelem.
-   * **Bass Enhancer (Calf):** pszichoakusztikai hiányzó alaphang szintézis (amount, harmonics, scope, floor, blend).
+   * **Crossfeed Szimulátor (libbs2b):** Bauer bs2b (700 Hz / 4,5 dB), Jan Meier (650 Hz / 9,5 dB) és közeltéri stúdió (600 Hz / 3,5 dB) profil, vagy egyedi vágási frekvencia (300–2000 Hz) és szint (1–15 dB).
+   * **Convolver (zita-convolver):** IR (WAV/IRS) betöltés és előnézet, IR szélesség, autogain, dry / wet, bemeneti és kimeneti erősítés; az IR a lejátszás mintavételére konvertálódik (SpeexDSP). A feldolgozási késleltetés nem nő az IR hosszával; kettőhatvány blokkméretnél (pl. 256, 512, 1024) nincs többletkésleltetés, más blokkméretnél legfeljebb egy blokknyi (az IR saját késleltetése megmarad). Szobakorrekcióhoz mérésből tervezett korrekciós szűrőt tölts be (pl. REW), ne a szoba nyers impulzusválaszát.
+   * **Limiter (LSP Limiter):** 12 mód, túlmintavételezés (True Peak is), dither, lookahead / attack / release, stereo link, gain boost, ALR, bemeneti és kimeneti erősítés; alapértelmezés: -1,0 dB küszöb, True Peak / 24 bit. Kikapcsolt limiternél csak a 0 dBFS feletti minták vágódnak le. A túlvezérlés ellen elsősorban a teljes EQ-görbéhez igazított előerősítés véd; a limiter biztonsági háló (negatív preampú profil importjakor vagy betöltésekor automatikusan bekapcsol), nem hallásvédelem.
+   * **Bass Enhancer (Calf):** pszichoakusztikai hiányzó alaphang szintézis (amount, harmonics, scope, floor, blend, listen, bemeneti és kimeneti erősítés).
 
-5. **Zármentes (Lock-free) C++20 Ringbuffer és PipeWire SPA Integráció:**
-   * Zéró hangkimaradás (xrun-free): a grafikai terhelés soha nem akaszthatja meg a zenelejátszást.
-   * Kétirányú, valós idejű WebSocket híd (`ws://127.0.0.1:8080`) a hangmotor és a felület között: a motor valódi FFT spektrumot küld, a GUI pedig a preampot, a modulkapcsolókat és az EQ sávokat.
+5. **Motor és felület:**
+   * Linuxon PipeWire virtuális kimenet („Aqulify”), Windowson Equalizer APO plugin. A hangszál zárak nélkül veszi át a beállításokat; a felület és a grafika külön folyamatban fut, nem tartja fel a lejátszást.
+   * WebSocket híd a `127.0.0.1` címen (az első szabad port: 47810–47814, végső tartalékként 8080): a motor a spektrumot, az EQ-görbét, a limiter erősítéscsökkentését és a mentett állapotot küldi; a felület az összes modulbeállítást, az IR-t és az EQ profilokat.
 
 ---
 
@@ -128,7 +123,7 @@ Az Aqulify ingyenes, egyszemélyes nyílt forrású projekt, ezért a Windows-te
 
 Ha a Windows-figyelmeztetéseket nem szeretnéd megkerülni, a **Linux-verzió** forrásból fordul (`./install.sh`), ott ilyen korlát nincs.
 
-A Linuxos és a Windowsos ág ugyanazt a C++ DSP láncot futtatja (`include/aether_chain.hpp`): LSP equalizer (IIR / FIR / FFT / SPM), Calf Bass Enhancer, libbs2b crossfeed, zita-convolver és LSP limiter. A drága műveletek háttérszálon futnak, a csere kattanásmentes.
+A Linuxos és a Windowsos ág ugyanazt a C++ DSP láncot futtatja (`include/aether_chain.hpp`): LSP equalizer (IIR / FIR / FFT / SPM), Calf Bass Enhancer, libbs2b crossfeed, zita-convolver és LSP limiter. Az IR előkészítése és a konvolver indítása háttérszálon fut; az új konvolverre keresztúsztatással vált.
 
 ---
 
@@ -143,7 +138,7 @@ Az `install.sh` mindent beállít:
 * **Állapot / napló:** `systemctl --user status aqulify`, `journalctl --user -u aqulify -f`
 * **Eltávolítás:** `./uninstall.sh` (a `--purge` a beállításokat is törli)
 
-A fejléc jelvénye: **„● Élő – PipeWire – Aqulify • 48.0 kHz”** = a motor fut és szűr; **„○ Motor Offline (Szimuláció)”** = a motor nem fut, a felület a beépített tesztjelet mutatja.
+A fejléc jelvénye: **„● Élő – PipeWire – Aqulify • 48.0 kHz”** = a motor fut és szűr; **„○ Motor Offline (Szimuláció)”** = a motor nem fut; a vízesés áll, a beállítások a motor indulásakor jutnak el hozzá.
 
 > EasyEffects mellett is használható: ilyenkor a kettő közül csak az egyiket válaszd kimenetnek, vagy láncold őket (pl. qpwgraph-fal), különben a hang kétszer menne át korrekción.
 
@@ -176,7 +171,7 @@ cmake --build build -j$(nproc)
 ├── CMakeLists.txt              # C++20 szabványos építőrendszer (Linux & Windows)
 ├── install.sh                  # Univerzális Linux disztró-felismerő és telepítő szkript
 ├── uninstall.sh                # Linux eltávolító
-├── gui_integrated_system.html  # Teljes EasyEffects Adwaita grafikus felület és 3D WebGL
+├── gui_integrated_system.html  # Grafikus felület (Adwaita stílus) és 3D WebGL vízesés
 ├── autoeq_index.js             # 8 850+ modellt tartalmazó AutoEq fülhallgató adatbázis
 ├── include/
 │   ├── aether_chain.hpp        # Teljes DSP lánc háttérszállal (Linux + Windows közös mag)
@@ -232,6 +227,7 @@ Ez a projekt a **GNU General Public License v3.0 (GPL-3.0)** alatt érhető el.
 * Copyright (C) 2026 **Szorgos** (<https://github.com/Szorgos>)
 * A részletes licencfeltételeket a [LICENSE](LICENSE) fájl tartalmazza.
 * Beépített külső összetevők: [three.js](https://threejs.org/) (MIT), [webview/webview](https://github.com/webview/webview) (MIT), Microsoft WebView2 SDK fejlécek (BSD-3-Clause).
+* DSP könyvtárak ([third_party/README.md](third_party/README.md)): LSP (LGPL-3.0+), Calf (LGPL-2.1+), libbs2b (MIT), SpeexDSP (BSD-3-Clause), zita-convolver (GPL-3.0+); FFTW3 (GPL-2.0+) – Linuxon a rendszer csomagja, a Windows binárisokba beépítve.
 * Az AutoEq index és profilok forrása az [AutoEq GitHub projekt](https://github.com/jaakkopasanen/AutoEq) (MIT Licenc).
 
 ---
