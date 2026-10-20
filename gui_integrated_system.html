@@ -2612,7 +2612,7 @@ function updateEngineBadge() {
     badge.style.color = "var(--ee-text-secondary)";
     badge.style.border = "1px solid #444";
     badge.innerHTML = "○ Motor Offline (Szimuláció)";
-    badge.title = "Indítsd el a motort: Linuxon ./run.sh, Windowson AetherAudio.exe";
+    badge.title = "Indítsd el a motort: Linuxon systemctl --user start aetheraudio, Windowson AetherAudio.exe";
     return;
   }
   badge.style.background = "";
