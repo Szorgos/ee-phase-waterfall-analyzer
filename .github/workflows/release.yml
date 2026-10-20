@@ -44,7 +44,13 @@ jobs:
         run: |
           cmake -B build-test -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=OFF
           cmake --build build-test -j"$(nproc)"
-          for t in test_math test_pipeline test_ringbuffer test_core test_dsp; do ./build-test/$t; done
+          fail=0
+          for t in test_math test_pipeline test_ringbuffer test_core test_dsp; do
+            echo "::group::$t"
+            if ./build-test/$t; then echo "$t: OK"; else echo "::error::$t sikertelen"; fail=1; fi
+            echo "::endgroup::"
+          done
+          exit $fail
 
       - name: Telepítő elnevezése
         id: name
