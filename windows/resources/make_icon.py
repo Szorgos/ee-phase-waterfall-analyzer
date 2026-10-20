@@ -1,4 +1,4 @@
-"""AetherAudio ikon generálása (aether.ico, több méretben). Futtatás: python make_icon.py"""
+"""Aqulify ikon generálása (aether.ico, több méretben). Futtatás: python make_icon.py"""
 import math
 from PIL import Image, ImageDraw, ImageFilter
 

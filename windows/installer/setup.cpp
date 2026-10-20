@@ -1,9 +1,9 @@
 /**
  * @file setup.cpp
- * @brief AetherAudio-Setup.exe – egyfájlos Windows telepítő és eltávolító.
+ * @brief Aqulify-Setup.exe – egyfájlos Windows telepítő és eltávolító.
  *
- * Telepítés:   AetherAudio-Setup.exe            (varázsló)
- *              AetherAudio-Setup.exe /S [/D=mappa] [/NOAPO] [/DOWNLOADAPO]   (csendes telepítés)
+ * Telepítés:   Aqulify-Setup.exe            (varázsló)
+ *              Aqulify-Setup.exe /S [/D=mappa] [/NOAPO] [/DOWNLOADAPO]   (csendes telepítés)
  * Eltávolítás: Uninstall.exe /uninstall [/S]     (a "Programok és szolgáltatások" ezt hívja)
  */
 #ifndef UNICODE
@@ -48,7 +48,7 @@ int S(int v) { return MulDiv(v, g_dpi, 96); }
 std::wstring defaultInstallDir() {
     const std::wstring prev = regReadString(HKEY_LOCAL_MACHINE, kAppKey, L"InstallDir");
     if (!prev.empty()) return prev;
-    return joinPath(knownFolder(FOLDERID_ProgramFiles), L"AetherAudio");
+    return joinPath(knownFolder(FOLDERID_ProgramFiles), L"Aqulify");
 }
 
 // ------------------------------------------------------------------ telepítés (háttérszál)
@@ -68,10 +68,11 @@ public:
             CoUninitialize();
             return res;
         }
-        const std::wstring exe = joinPath(opt.installDir, L"AetherAudio.exe");
+        const std::wstring exe = joinPath(opt.installDir, L"Aqulify.exe");
 
-        phase(L"Futó AetherAudio bezárása...");
+        phase(L"Futó Aqulify bezárása...");
         closeRunningEngine(exe);
+        removeLegacyAetherAudio(log);   // régi név (AetherAudio) telepítésének átvétele
         progress(5);
 
         // 1. Fájlok
@@ -88,7 +89,7 @@ public:
             const void* data = nullptr;
             size_t size = 0;
             if (!payloadData(f.resName, data, size)) continue;
-            if (f.relPath == L"plugin\\AetherAudio.dll") { dllData = data; dllSize = size; }
+            if (f.relPath == L"plugin\\Aqulify.dll") { dllData = data; dllSize = size; }
             const std::wstring dst = joinPath(opt.installDir, f.relPath);
             createDirs(parentDir(dst));
             if (!replaceFile(dst, data, size, log)) {
@@ -116,7 +117,7 @@ public:
         EqApoInfo apo = detectEqApo();
         if (opt.integrateApo && !apo.installed && opt.downloadApo) {
             phase(L"Equalizer APO letöltése...");
-            const std::wstring tmp = joinPath(knownFolder(FOLDERID_ProgramData), L"AetherAudio\\EqualizerAPO-setup.exe");
+            const std::wstring tmp = joinPath(knownFolder(FOLDERID_ProgramData), L"Aqulify\\EqualizerAPO-setup.exe");
             bool got = false;
             for (const wchar_t* url : kEqApoDownloadUrls) {
                 log(std::wstring(L"Letöltés: ") + url);
@@ -146,29 +147,29 @@ public:
             if (dllData) res.apoIntegrated = integrateEqApo(apo, dllData, dllSize, log);
             regWriteDword(HKEY_LOCAL_MACHINE, kAppKey, L"EqApoIntegrated", res.apoIntegrated ? 1 : 0);
         } else if (opt.integrateApo) {
-            log(L"Equalizer APO nélkül az AetherAudio csak analizál (WASAPI loopback). Az EQ APO telepítése után futtasd újra a telepítőt.");
+            log(L"Equalizer APO nélkül az Aqulify csak analizál (WASAPI loopback). Az EQ APO telepítése után futtasd újra a telepítőt.");
         }
         progress(80);
 
         // 3. Parancsikonok, automatikus indítás
         phase(L"Parancsikonok és beállítások...");
-        const std::wstring menuDir = joinPath(knownFolder(FOLDERID_CommonPrograms), L"AetherAudio");
+        const std::wstring menuDir = joinPath(knownFolder(FOLDERID_CommonPrograms), L"Aqulify");
         createDirs(menuDir);
-        createShortcut(joinPath(menuDir, L"AetherAudio.lnk"), exe, L"", L"AetherAudio – fázis és vízesés analizátor, DSP", opt.installDir);
-        createShortcut(joinPath(menuDir, L"AetherAudio eltávolítása.lnk"), uninst, L"/uninstall", L"AetherAudio eltávolítása", opt.installDir);
-        const std::wstring desk = joinPath(knownFolder(FOLDERID_PublicDesktop), L"AetherAudio.lnk");
-        if (opt.desktopIcon) createShortcut(desk, exe, L"", L"AetherAudio", opt.installDir);
+        createShortcut(joinPath(menuDir, L"Aqulify.lnk"), exe, L"", L"Aqulify – fázis és vízesés analizátor, DSP", opt.installDir);
+        createShortcut(joinPath(menuDir, L"Aqulify eltávolítása.lnk"), uninst, L"/uninstall", L"Aqulify eltávolítása", opt.installDir);
+        const std::wstring desk = joinPath(knownFolder(FOLDERID_PublicDesktop), L"Aqulify.lnk");
+        if (opt.desktopIcon) createShortcut(desk, exe, L"", L"Aqulify", opt.installDir);
         else DeleteFileW(desk.c_str());
 
-        regDeleteValue(HKEY_LOCAL_MACHINE, kRunKey, L"AetherAudio");
-        if (opt.autostart) regWriteString(HKEY_CURRENT_USER, kRunKey, L"AetherAudio", L"\"" + exe + L"\" --background");
-        else regDeleteValue(HKEY_CURRENT_USER, kRunKey, L"AetherAudio");
+        regDeleteValue(HKEY_LOCAL_MACHINE, kRunKey, L"Aqulify");
+        if (opt.autostart) regWriteString(HKEY_CURRENT_USER, kRunKey, L"Aqulify", L"\"" + exe + L"\" --background");
+        else regDeleteValue(HKEY_CURRENT_USER, kRunKey, L"Aqulify");
         progress(90);
 
         // 4. Programok és szolgáltatások
         regWriteString(HKEY_LOCAL_MACHINE, kAppKey, L"InstallDir", opt.installDir);
         regWriteString(HKEY_LOCAL_MACHINE, kAppKey, L"Version", kVersion);
-        regWriteString(HKEY_LOCAL_MACHINE, kUninstallKey, L"DisplayName", L"AetherAudio");
+        regWriteString(HKEY_LOCAL_MACHINE, kUninstallKey, L"DisplayName", L"Aqulify");
         regWriteString(HKEY_LOCAL_MACHINE, kUninstallKey, L"DisplayVersion", kVersion);
         regWriteString(HKEY_LOCAL_MACHINE, kUninstallKey, L"Publisher", kPublisher);
         regWriteString(HKEY_LOCAL_MACHINE, kUninstallKey, L"DisplayIcon", exe + L",0");
@@ -198,7 +199,7 @@ int runUninstall(bool silent) {
     if (cmd.find(L"/fromtemp") == std::wstring::npos) {
         wchar_t tmpDir[MAX_PATH];
         GetTempPathW(MAX_PATH, tmpDir);
-        const std::wstring tmp = joinPath(tmpDir, L"AetherAudio-uninstall-" + std::to_wstring(GetCurrentProcessId()) + L".exe");
+        const std::wstring tmp = joinPath(tmpDir, L"Aqulify-uninstall-" + std::to_wstring(GetCurrentProcessId()) + L".exe");
         if (CopyFileW(self, tmp.c_str(), FALSE)) {
             MoveFileExW(tmp.c_str(), nullptr, MOVEFILE_DELAY_UNTIL_REBOOT);
             const std::wstring args = std::wstring(L"/uninstall /fromtemp") + (silent ? L" /S" : L"");
@@ -212,33 +213,33 @@ int runUninstall(bool silent) {
     }
 
     if (!silent &&
-        MessageBoxW(nullptr, L"Biztosan eltávolítod az AetherAudio-t?\n\nAz Equalizer APO megmarad, csak az AetherAudio "
+        MessageBoxW(nullptr, L"Biztosan eltávolítod az Aqulify-t?\n\nAz Equalizer APO megmarad, csak az Aqulify "
                              L"plugin kerül ki a láncából.",
-                    L"AetherAudio eltávolítása", MB_ICONQUESTION | MB_YESNO) != IDYES) {
+                    L"Aqulify eltávolítása", MB_ICONQUESTION | MB_YESNO) != IDYES) {
         return 1;
     }
     const bool removeData =
         !silent && MessageBoxW(nullptr, L"Törlődjenek a mentett beállítások is (EQ sávok, betöltött impulzusválasz)?",
-                               L"AetherAudio eltávolítása", MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2) == IDYES;
+                               L"Aqulify eltávolítása", MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2) == IDYES;
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     Logger log = [](const std::wstring&) {};
-    closeRunningEngine(joinPath(installDir, L"AetherAudio.exe"));
+    closeRunningEngine(joinPath(installDir, L"Aqulify.exe"));
     removeEqApoIntegration(log);
 
-    DeleteFileW(joinPath(knownFolder(FOLDERID_PublicDesktop), L"AetherAudio.lnk").c_str());
-    deleteTree(joinPath(knownFolder(FOLDERID_CommonPrograms), L"AetherAudio"));
-    regDeleteValue(HKEY_CURRENT_USER, kRunKey, L"AetherAudio");
-    regDeleteValue(HKEY_LOCAL_MACHINE, kRunKey, L"AetherAudio");
+    DeleteFileW(joinPath(knownFolder(FOLDERID_PublicDesktop), L"Aqulify.lnk").c_str());
+    deleteTree(joinPath(knownFolder(FOLDERID_CommonPrograms), L"Aqulify"));
+    regDeleteValue(HKEY_CURRENT_USER, kRunKey, L"Aqulify");
+    regDeleteValue(HKEY_LOCAL_MACHINE, kRunKey, L"Aqulify");
     regDeleteTree(HKEY_LOCAL_MACHINE, kUninstallKey);
     regDeleteTree(HKEY_LOCAL_MACHINE, kAppKey);
-    if (dirExists(installDir) && fileExists(joinPath(installDir, L"AetherAudio.exe"))) deleteTree(installDir);
+    if (dirExists(installDir) && fileExists(joinPath(installDir, L"Aqulify.exe"))) deleteTree(installDir);
     if (removeData) {
-        deleteTree(joinPath(knownFolder(FOLDERID_ProgramData), L"AetherAudio"));
-        deleteTree(joinPath(knownFolder(FOLDERID_LocalAppData), L"AetherAudio"));
+        deleteTree(joinPath(knownFolder(FOLDERID_ProgramData), L"Aqulify"));
+        deleteTree(joinPath(knownFolder(FOLDERID_LocalAppData), L"Aqulify"));
     }
     CoUninitialize();
-    if (!silent) MessageBoxW(nullptr, L"Az AetherAudio eltávolítása kész.", L"AetherAudio", MB_ICONINFORMATION | MB_OK);
+    if (!silent) MessageBoxW(nullptr, L"Az Aqulify eltávolítása kész.", L"Aqulify", MB_ICONINFORMATION | MB_OK);
     return 0;
 }
 
@@ -284,7 +285,7 @@ public:
         wc.hInstance = inst;
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         wc.hbrBackground = GetSysColorBrush(COLOR_WINDOW);
-        wc.lpszClassName = L"AetherAudioSetupWnd";
+        wc.lpszClassName = L"AqulifySetupWnd";
         wc.hIcon = icon_;
         wc.hIconSm = smallIcon;
         RegisterClassExW(&wc);
@@ -293,7 +294,7 @@ public:
         const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
         AdjustWindowRect(&r, style, FALSE);
         const int w = r.right - r.left, h = r.bottom - r.top;
-        hwnd_ = CreateWindowExW(0, wc.lpszClassName, L"AetherAudio telepítése", style,
+        hwnd_ = CreateWindowExW(0, wc.lpszClassName, L"Aqulify telepítése", style,
                                 (GetSystemMetrics(SM_CXSCREEN) - w) / 2, (GetSystemMetrics(SM_CYSCREEN) - h) / 2, w, h,
                                 nullptr, nullptr, inst, this);
         if (!hwnd_) return 1;
@@ -330,9 +331,9 @@ private:
         btnCancel_ = add(L"BUTTON", L"Mégse", WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 510, 404, 96, 30, IDC_CANCEL, nullptr);
 
         // 1. Üdvözlés
-        add(L"STATIC", L"Üdvözöl az AetherAudio telepítője", SS_LEFT, 28, 104, 560, 32, 0, &pWelcome_, fontBig_);
+        add(L"STATIC", L"Üdvözöl az Aqulify telepítője", SS_LEFT, 28, 104, 560, 32, 0, &pWelcome_, fontBig_);
         add(L"STATIC",
-            L"Az AetherAudio valós idejű 3D akusztikai vízesést, fázis- és csoportkésleltetés-analizátort, "
+            L"Az Aqulify valós idejű 3D akusztikai vízesést, fázis- és csoportkésleltetés-analizátort, "
             L"valamint audiofil DSP láncot ad a Windows hangrendszeréhez (paraméteres és FIR EQ, crossfeed, "
             L"partícionált konvolver, bass enhancer, limiter).\n\n"
             L"A telepítő mindent elvégez: bemásolja a programot, beilleszti a plugint az Equalizer APO láncába, "
@@ -368,7 +369,7 @@ private:
         // 4. Befejezés
         lblFinTitle_ = add(L"STATIC", L"", SS_LEFT, 28, 104, 560, 32, 0, &pFinish_, fontBig_);
         lblFinText_ = add(L"STATIC", L"", SS_LEFT, 28, 144, 560, 170, 0, &pFinish_);
-        chkLaunch_ = add(L"BUTTON", L"AetherAudio indítása most", WS_TABSTOP | BS_AUTOCHECKBOX, 28, 330, 560, 24, IDC_CHK_LAUNCH, &pFinish_);
+        chkLaunch_ = add(L"BUTTON", L"Aqulify indítása most", WS_TABSTOP | BS_AUTOCHECKBOX, 28, 330, 560, 24, IDC_CHK_LAUNCH, &pFinish_);
         chkReboot_ = add(L"BUTTON", L"A számítógép újraindítása most (az Equalizer APO aktiválásához szükséges)",
                          WS_TABSTOP | BS_AUTOCHECKBOX, 28, 358, 560, 24, IDC_CHK_REBOOT, &pFinish_);
         SendMessageW(chkLaunch_, BM_SETCHECK, BST_CHECKED, 0);
@@ -379,15 +380,15 @@ private:
         std::wstring st;
         if (apo_.installed) {
             st = L"✔ Equalizer APO telepítve: " + apo_.installPath +
-                 L"\nAz AetherAudio a lánc végére kerül, így pontosan azt méri, ami a DAC-ra megy.";
+                 L"\nAz Aqulify a lánc végére kerül, így pontosan azt méri, ami a DAC-ra megy.";
         } else {
             st = L"⚠ Az Equalizer APO nincs telepítve. A telepítő letöltheti és elindíthatja a telepítőjét; "
-                 L"nélküle az AetherAudio csak analizál (a DSP beállítások nem hatnak a hangra).";
+                 L"nélküle az Aqulify csak analizál (a DSP beállítások nem hatnak a hangra).";
         }
         SetWindowTextW(lblApoStatus_, st.c_str());
         ShowWindow(chkDlApo_, (!apo_.installed && page_ == kOptions) ? SW_SHOW : SW_HIDE);
         std::wstring note = apo_.installed
-            ? L"A beillesztés egyetlen sort ad az EQ APO config.txt-jéhez (Include: AetherAudio.txt), a saját "
+            ? L"A beillesztés egyetlen sort ad az EQ APO config.txt-jéhez (Include: Aqulify.txt), a saját "
               L"szűrőid érintetlenek maradnak. Az eltávolító ezt visszaveszi."
             : L"Az Equalizer APO telepítője külön ablakban indul: a végén jelöld be azt a hangeszközt, amin zenét "
               L"hallgatsz, majd indítsd újra a gépet, amikor kéri.";
@@ -429,7 +430,7 @@ private:
                 if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
                     std::wstring p = path;
                     CoTaskMemFree(path);
-                    if (p.find(L"AetherAudio") == std::wstring::npos) p = joinPath(p, L"AetherAudio");
+                    if (p.find(L"Aqulify") == std::wstring::npos) p = joinPath(p, L"Aqulify");
                     SetWindowTextW(edDir_, p.c_str());
                 }
                 item->Release();
@@ -444,7 +445,7 @@ private:
         opt_.installDir = buf;
         while (!opt_.installDir.empty() && (opt_.installDir.back() == L'\\' || opt_.installDir.back() == L' ')) opt_.installDir.pop_back();
         if (opt_.installDir.size() < 4) {
-            MessageBoxW(hwnd_, L"Adj meg egy érvényes telepítési mappát.", L"AetherAudio", MB_ICONWARNING);
+            MessageBoxW(hwnd_, L"Adj meg egy érvényes telepítési mappát.", L"Aqulify", MB_ICONWARNING);
             return;
         }
         opt_.integrateApo = SendMessageW(chkApo_, BM_GETCHECK, 0, 0) == BST_CHECKED;
@@ -480,7 +481,7 @@ private:
             return;
         }
         if (result_.ok && SendMessageW(chkLaunch_, BM_GETCHECK, 0, 0) == BST_CHECKED) {
-            launchUnelevated(joinPath(opt_.installDir, L"AetherAudio.exe"), L"");
+            launchUnelevated(joinPath(opt_.installDir, L"Aqulify.exe"), L"");
         }
         DestroyWindow(hwnd_);
     }
@@ -502,7 +503,7 @@ private:
         SetTextColor(dc, RGB(255, 255, 255));
         HGDIOBJ old = SelectObject(dc, fontTitle_);
         RECT tr{ S(84), S(14), rc.right - S(20), S(46) };
-        DrawTextW(dc, L"AetherAudio", -1, &tr, DT_LEFT | DT_SINGLELINE);
+        DrawTextW(dc, L"Aqulify", -1, &tr, DT_LEFT | DT_SINGLELINE);
         SelectObject(dc, font_);
         SetTextColor(dc, RGB(120, 220, 255));
         const wchar_t* sub = page_ == kWelcome ? L"Fázis, spektrum és akusztikai vízesés – Windows 11"
@@ -551,7 +552,7 @@ private:
                         return 0;
                     case IDC_CANCEL:
                         if (page_ != kProgress &&
-                            MessageBoxW(hwnd_, L"Megszakítod a telepítést?", L"AetherAudio", MB_ICONQUESTION | MB_YESNO) == IDYES)
+                            MessageBoxW(hwnd_, L"Megszakítod a telepítést?", L"Aqulify", MB_ICONQUESTION | MB_YESNO) == IDYES)
                             DestroyWindow(hwnd_);
                         return 0;
                     case IDC_BROWSE: browse(); return 0;
@@ -579,17 +580,17 @@ private:
                 result_ = *r;
                 if (worker_.joinable()) worker_.join();
                 if (result_.ok) {
-                    SetWindowTextW(lblFinTitle_, L"Az AetherAudio telepítése kész");
+                    SetWindowTextW(lblFinTitle_, L"Az Aqulify telepítése kész");
                     std::wstring t;
                     if (result_.apoIntegrated) {
                         t = L"A plugin a helyére került az Equalizer APO láncában, a vízesés és a DSP élőben működik.\n\n";
                     } else {
-                        t = L"Az AetherAudio analizátor módban fut (WASAPI loopback). Az élő DSP-hez telepítsd az "
+                        t = L"Az Aqulify analizátor módban fut (WASAPI loopback). Az élő DSP-hez telepítsd az "
                             L"Equalizer APO-t, majd futtasd újra ezt a telepítőt.\n\n";
                     }
                     if (result_.apoInstalledNow)
                         t += L"Az Equalizer APO most települt: a hangeszközön csak újraindítás után lép életbe.\n\n";
-                    t += L"Az AetherAudio a tálcán (értesítési területen) fut: dupla kattintás nyitja a felületet, "
+                    t += L"Az Aqulify a tálcán (értesítési területen) fut: dupla kattintás nyitja a felületet, "
                          L"jobb kattintás a menüt. A Start menüből is elérhető.";
                     SetWindowTextW(lblFinText_, t.c_str());
                     if (result_.apoInstalledNow) {
@@ -606,7 +607,7 @@ private:
             case WM_CLOSE:
                 if (page_ == kProgress) return 0;
                 if (page_ == kFinish ||
-                    MessageBoxW(hwnd_, L"Megszakítod a telepítést?", L"AetherAudio", MB_ICONQUESTION | MB_YESNO) == IDYES)
+                    MessageBoxW(hwnd_, L"Megszakítod a telepítést?", L"Aqulify", MB_ICONQUESTION | MB_YESNO) == IDYES)
                     DestroyWindow(hwnd_);
                 return 0;
             case WM_DESTROY:
@@ -680,9 +681,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         rc = ins.run(opt).ok ? 0 : 1;
     } else {
         // Egyszerre csak egy telepítő fusson
-        HANDLE m = CreateMutexW(nullptr, TRUE, L"Global\\AetherAudioSetup");
+        HANDLE m = CreateMutexW(nullptr, TRUE, L"Global\\AqulifySetup");
         if (m && GetLastError() == ERROR_ALREADY_EXISTS) {
-            MessageBoxW(nullptr, L"Az AetherAudio telepítője már fut.", L"AetherAudio", MB_ICONINFORMATION);
+            MessageBoxW(nullptr, L"Az Aqulify telepítője már fut.", L"Aqulify", MB_ICONINFORMATION);
             return 1;
         }
         Wizard w;

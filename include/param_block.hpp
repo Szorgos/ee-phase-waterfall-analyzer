@@ -4,7 +4,7 @@
  * @brief Zármentes paraméterblokk (seqlock) a GUI/híd szál és a valós idejű audio szál között.
  *
  * Kizárólag POD típusokat és címfüggetlen (lock-free) atomikat tartalmaz, ezért
- * folyamatok közötti közös memóriában (Windows: audiodg.exe <-> AetherAudio.exe)
+ * folyamatok közötti közös memóriában (Windows: audiodg.exe <-> Aqulify.exe)
  * is biztonságosan használható.
  */
 #include <atomic>

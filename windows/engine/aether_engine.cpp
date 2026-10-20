@@ -1,9 +1,9 @@
 /**
  * @file aether_engine.cpp
- * @brief AetherAudio.exe – Windows 11 motor a fázis- és vízesés-analizátorhoz.
+ * @brief Aqulify.exe – Windows 11 motor a fázis- és vízesés-analizátorhoz.
  *
  * Jelforrások (automatikus választás):
- *   1. AetherAudio EQ APO plugin (közös memória) – a feldolgozott jel pontosan a láncban lévő helyén,
+ *   1. Aqulify EQ APO plugin (közös memória) – a feldolgozott jel pontosan a láncban lévő helyén,
  *      és a GUI-ról állított DSP (preamp, EQ, crossfeed, limiter) a plugin-ban, élőben hat a hangra.
  *   2. WASAPI loopback – az alapértelmezett lejátszóeszköz kimenete (csak analízis, plugin nélkül).
  *
@@ -61,17 +61,17 @@ bool fileExists(const std::wstring& p) {
 void openGui() {
     const std::wstring dir = exeDirectory();
     // Saját ablakos felület (WebView2); ha nincs meg, a böngészős megnyitás a tartalék
-    const std::wstring app = dir + L"\\AetherAudioGui.exe";
+    const std::wstring app = dir + L"\\AqulifyGui.exe";
     if (fileExists(app)) {
         const INT_PTR r = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", app.c_str(), nullptr, dir.c_str(), SW_SHOWNORMAL));
         if (r > 32) {
             std::cout << "[GUI] Felület megnyitva saját ablakban.\n";
             return;
         }
-        std::cout << "[GUI] Az AetherAudioGui.exe nem indítható (ShellExecute: " << static_cast<long long>(r)
+        std::cout << "[GUI] Az AqulifyGui.exe nem indítható (ShellExecute: " << static_cast<long long>(r)
                   << ", GetLastError: " << GetLastError() << ").\n";
     } else {
-        std::cout << "[GUI] Az AetherAudioGui.exe hiányzik a motor mellől (telepítsd újra; a vírusirtó karanténba tehette).\n";
+        std::cout << "[GUI] Az AqulifyGui.exe hiányzik a motor mellől (telepítsd újra; a vírusirtó karanténba tehette).\n";
     }
     for (const std::wstring& candidate : { dir + L"\\gui\\gui_integrated_system.html",
                                            dir + L"\\gui_integrated_system.html",
@@ -126,17 +126,30 @@ std::wstring portOwner(int port) {
 }
 
 // ---------------------------------------------------------------- EQ profilok
-// A felület JSON dokumentuma: %APPDATA%\AetherAudio\presets.json (felhasználónként, újraindítás után is megmarad)
+// A felület JSON dokumentuma: %APPDATA%\Aqulify\presets.json (felhasználónként, újraindítás után is megmarad)
 std::wstring presetFilePath(bool createDir) {
     wchar_t buf[MAX_PATH];
     const DWORD n = GetEnvironmentVariableW(L"APPDATA", buf, MAX_PATH);
     std::wstring dir = (n > 0 && n < MAX_PATH) ? std::wstring(buf) : win::dataDirectory(createDir);
-    dir += L"\\AetherAudio";
+    dir += L"\\Aqulify";
     if (createDir) CreateDirectoryW(dir.c_str(), nullptr);
     return dir + L"\\presets.json";
 }
 
 std::string loadPresetFile() {
+    // Régi név (AetherAudio, 1.4.8-ig): a profilok egyszeri átvétele
+    {
+        const std::wstring now = presetFilePath(false);
+        std::wstring old = now;
+        const size_t k = old.rfind(L"\\Aqulify\\");
+        if (k != std::wstring::npos && GetFileAttributesW(now.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            old.replace(k, 9, std::wstring(L"\\Aether") + L"Audio\\");
+            if (GetFileAttributesW(old.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                presetFilePath(true);
+                CopyFileW(old.c_str(), now.c_str(), TRUE);
+            }
+        }
+    }
     HANDLE f = CreateFileW(presetFilePath(false).c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
                            FILE_ATTRIBUTE_NORMAL, nullptr);
     if (f == INVALID_HANDLE_VALUE) return {};
@@ -179,7 +192,7 @@ public:
         std::lock_guard<std::mutex> lk(mutex_);
         if (!mapping_.state()) {
             if (mapping_.open()) {
-                std::cout << "[Plugin] AetherAudio EQ APO plugin közös memória megtalálva ("
+                std::cout << "[Plugin] Aqulify EQ APO plugin közös memória megtalálva ("
                           << (mapping_.isGlobal() ? "Global" : "Local") << ").\n";
                 // A GUI-ban beállított, mentett lánc átadása a pluginnak
                 if (currentParams.has(kFlagInitialized)) mapping_.state()->params.write(currentParams);
@@ -339,11 +352,11 @@ int main(int argc, char** argv) {
     win::LogSink log(console);
 
     std::cout << "========================================================\n";
-    std::cout << " AetherAudio • Fázis & Akusztikai Vízesés – Windows motor\n";
+    std::cout << " Aqulify • Fázis & Akusztikai Vízesés – Windows motor\n";
     std::cout << "========================================================\n\n";
 
     if (hasArg(argc, argv, "--help") || hasArg(argc, argv, "-h")) {
-        std::cout << "Használat: AetherAudio.exe [--background] [--console] [--port N]\n"
+        std::cout << "Használat: Aqulify.exe [--background] [--console] [--port N]\n"
                      "  --background  indításkor ne nyissa meg a felületet (automatikus indításhoz)\n"
                      "  --console     naplózás konzolablakba a napló fájl helyett\n"
                      "  --port N      csak ezt a WebSocket portot próbálja (alapból: 47810-47814, majd 8080)\n";
@@ -356,7 +369,7 @@ int main(int argc, char** argv) {
     const bool background = hasArg(argc, argv, "--background") || hasArg(argc, argv, "--no-gui");
 
     // Egy példány felhasználónként: a második indítás csak a felületet nyitja meg
-    HANDLE single = CreateMutexW(nullptr, TRUE, L"Local\\AetherAudioEngine");
+    HANDLE single = CreateMutexW(nullptr, TRUE, L"Local\\AqulifyEngine");
     if (single && GetLastError() == ERROR_ALREADY_EXISTS) {
         std::cout << "[Info] Már fut egy példány; csak a felület nyílik meg.\n";
         if (!background) openGui();
@@ -414,14 +427,14 @@ int main(int argc, char** argv) {
         std::cout << "[Info] A " << p << " port foglalt, a következőt próbálom.\n";
     }
     if (!bridge) {
-        std::wstring msg = L"Az AetherAudio nem tudott elindulni, mert az összes kapcsolódási portját (";
+        std::wstring msg = L"Az Aqulify nem tudott elindulni, mert az összes kapcsolódási portját (";
         for (size_t i = 0; i < ports.size(); ++i) msg += (i ? L", " : L"") + std::to_wstring(ports[i]);
         msg += L") más program használja.";
         const std::wstring owner = portOwner(ports.front());
         if (!owner.empty()) msg += L"\n\nA " + std::to_wstring(ports.front()) + L"-es portot használja: " + owner;
-        msg += L"\n\nZárd be azt a programot, majd indítsd újra az AetherAudio-t.";
+        msg += L"\n\nZárd be azt a programot, majd indítsd újra az Aqulify-t.";
         std::cout << "[Hiba] A WebSocket híd nem indult el (minden port foglalt).\n";
-        MessageBoxW(nullptr, msg.c_str(), L"AetherAudio", MB_ICONWARNING | MB_OK);
+        MessageBoxW(nullptr, msg.c_str(), L"Aqulify", MB_ICONWARNING | MB_OK);
         loopback->stop();
         return 1;
     }
@@ -439,7 +452,7 @@ int main(int argc, char** argv) {
         }
         sources.poll(snapshot);
         if (save && !win::saveParamFile(snapshot)) {
-            std::cout << "[Beállítások] Figyelem: a ProgramData\\AetherAudio\\params.bin nem írható.\n";
+            std::cout << "[Beállítások] Figyelem: a ProgramData\\Aqulify\\params.bin nem írható.\n";
         }
     };
 

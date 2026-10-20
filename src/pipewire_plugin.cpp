@@ -1,10 +1,10 @@
 /**
  * @file pipewire_plugin.cpp
- * @brief AetherAudio motor Linuxra (PipeWire).
+ * @brief Aqulify motor Linuxra (PipeWire).
  *
- * Létrehoz egy "AetherAudio" virtuális kimeneti eszközt; ami ide szól, az a DSP láncon át a valódi
+ * Létrehoz egy "Aqulify" virtuális kimeneti eszközt; ami ide szól, az a DSP láncon át a valódi
  * hangkártyára megy. A felület a WebSocket hídon (127.0.0.1:47810–47814, végső tartalék: 8080) csatlakozik.
- * A beállítások és a konvolver IR a ~/.config/aetheraudio mappába mentődnek.
+ * A beállítások és a konvolver IR a ~/.config/aqulify mappába mentődnek.
  */
 #include <algorithm>
 #include <cctype>
@@ -92,13 +92,13 @@ std::vector<SinkInfo> listPhysicalSinks() {
         size_t t2 = line.find('\t', t1 + 1);
         if (t2 == std::string::npos) t2 = line.size();
         SinkInfo s{ line.substr(0, t1), line.substr(t1 + 1, t2 - t1 - 1) };
-        if (s.name == "aetheraudio_sink" || !isSafeSinkName(s.name)) continue; // a saját virtuális nyelőnk nem cél
+        if (s.name == "aqulify_sink" || !isSafeSinkName(s.name)) continue; // a saját virtuális nyelőnk nem cél
         v.push_back(std::move(s));
     }
     return v;
 }
 
-/** A motor lejátszó streamjének (aetheraudio_sink_output) sink-input azonosítója és a nyelő, amelyre most szól. */
+/** A motor lejátszó streamjének (aqulify_sink_output) sink-input azonosítója és a nyelő, amelyre most szól. */
 bool findOwnSinkInput(std::string& sinkInputId, std::string& sinkId) {
     sinkInputId.clear();
     sinkId.clear();
@@ -115,7 +115,7 @@ bool findOwnSinkInput(std::string& sinkInputId, std::string& sinkId) {
         line = line.substr(f);
         if (line.rfind("Sink Input #", 0) == 0) { curId = line.substr(12); curSink.clear(); }
         else if (line.rfind("Sink: ", 0) == 0) curSink = line.substr(6);
-        else if (line.find("node.name = \"aetheraudio_sink_output\"") != std::string::npos && !curId.empty()) {
+        else if (line.find("node.name = \"aqulify_sink_output\"") != std::string::npos && !curId.empty()) {
             sinkInputId = curId;
             sinkId = curSink;
             return std::all_of(sinkInputId.begin(), sinkInputId.end(), [](char c) { return c >= '0' && c <= '9'; });
@@ -209,14 +209,14 @@ void saveTick(void* data, uint64_t) {
 
 int main(int argc, char* argv[]) {
     std::cout << "========================================================\n";
-    std::cout << " AetherAudio • Fázis & Akusztikai Vízesés – Linux motor (PipeWire)\n";
+    std::cout << " Aqulify • Fázis & Akusztikai Vízesés – Linux motor (PipeWire)\n";
     std::cout << "========================================================\n";
 
     if (hasArg(argc, argv, "--help") || hasArg(argc, argv, "-h")) {
-        std::cout << "Használat: aetheraudio-engine [--port N]\n"
+        std::cout << "Használat: aqulify-engine [--port N]\n"
                      "  --port N   csak ezt a WebSocket portot próbálja (alapból: 47810-47814, majd 8080)\n"
-                     "A motor egy \"AetherAudio\" nevű kimeneti hangeszközt hoz létre. Válaszd ki a hangbeállításokban\n"
-                     "(vagy: pactl set-default-sink aetheraudio_sink), és minden hang a DSP láncon át szól.\n";
+                     "A motor egy \"Aqulify\" nevű kimeneti hangeszközt hoz létre. Válaszd ki a hangbeállításokban\n"
+                     "(vagy: pactl set-default-sink aqulify_sink), és minden hang a DSP láncon át szól.\n";
         return 0;
     }
     std::vector<int> ports(std::begin(kEnginePorts), std::end(kEnginePorts));
@@ -248,7 +248,7 @@ int main(int argc, char* argv[]) {
     }
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);
-    std::cout << "[PipeWire] \"AetherAudio\" kimeneti eszköz létrehozva (aetheraudio_sink).\n";
+    std::cout << "[PipeWire] \"Aqulify\" kimeneti eszköz létrehozva (aqulify_sink).\n";
 
     // Kezdeti kimenet: csak ha a felhasználó korábban választott. Különben a rendszer (WirePlumber)
     // alapértelmezett eszközén marad – nem kényszerítjük pl. a laptop hangszóróra.
@@ -300,7 +300,7 @@ int main(int argc, char* argv[]) {
         }
         char buf[256];
         std::snprintf(buf, sizeof(buf),
-                      "\"platform\":\"linux\",\"source\":\"PipeWire – AetherAudio\",\"dspActive\":%s,\"sr\":%u,\"gr\":%.2f",
+                      "\"platform\":\"linux\",\"source\":\"PipeWire – Aqulify\",\"dspActive\":%s,\"sr\":%u,\"gr\":%.2f",
                       node.playbackStreaming.load() ? "true" : "false", node.sampleRate.load(),
                       node.chain.gainReductionDb());
         std::string s = buf;
@@ -338,7 +338,7 @@ int main(int argc, char* argv[]) {
     Saver saver{ &paramMutex, &current, &dirty, &lastChange };
     node.addTimer(saveTick, &saver, 1000);
 
-    std::cout << "Fut. Leállítás: Ctrl+C (vagy systemctl --user stop aetheraudio).\n";
+    std::cout << "Fut. Leállítás: Ctrl+C (vagy systemctl --user stop aqulify).\n";
     node.run();
 
     std::cout << "[Info] Leállítás...\n";

@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file install_ops.hpp
- * @brief Az AetherAudio telepítő műveletei (felhasználói felülettől független rész).
+ * @brief Az Aqulify telepítő műveletei (felhasználói felülettől független rész).
  *
  *  - beágyazott fájlok kicsomagolása
  *  - Equalizer APO felismerése, letöltése, a plugin bemásolása és beillesztése a config.txt-be (Include:)
@@ -35,16 +35,21 @@
 
 namespace aether_setup {
 
-constexpr const wchar_t* kAppName = L"AetherAudio";
-constexpr const wchar_t* kVersion = L"1.3.0";
-constexpr const wchar_t* kPublisher = L"AetherAudio (Sass Gergő)";
-constexpr const wchar_t* kUninstallKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\AetherAudio";
-constexpr const wchar_t* kAppKey = L"Software\\AetherAudio";
+constexpr const wchar_t* kAppName = L"Aqulify";
+#ifndef AQULIFY_VERSION
+#define AQULIFY_VERSION "0.0.0"
+#endif
+#define AQ_WIDEN2(x) L##x
+#define AQ_WIDEN(x) AQ_WIDEN2(x)
+constexpr const wchar_t* kVersion = AQ_WIDEN(AQULIFY_VERSION);
+constexpr const wchar_t* kPublisher = L"Aqulify (Sass Gergő)";
+constexpr const wchar_t* kUninstallKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Aqulify";
+constexpr const wchar_t* kAppKey = L"Software\\Aqulify";
 constexpr const wchar_t* kRunKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-constexpr const wchar_t* kEngineWindowClass = L"AetherAudioEngineWnd";
+constexpr const wchar_t* kEngineWindowClass = L"AqulifyEngineWnd";
 constexpr const wchar_t* kEqApoKey = L"SOFTWARE\\EqualizerAPO";
-constexpr const wchar_t* kIncludeLine = L"Include: AetherAudio.txt";
-constexpr const wchar_t* kIncludeComment = L"# AetherAudio (a telepítő adta hozzá, eltávolításkor törlődik)";
+constexpr const wchar_t* kIncludeLine = L"Include: Aqulify.txt";
+constexpr const wchar_t* kIncludeComment = L"# Aqulify (a telepítő adta hozzá, eltávolításkor törlődik)";
 constexpr const wchar_t* kEqApoDownloadUrls[] = {
     L"https://sourceforge.net/projects/equalizerapo/files/latest/download",
     L"https://sourceforge.net/projects/equalizerapo/files/1.4.2/EqualizerAPO-x64-1.4.2.exe/download",
@@ -275,9 +280,9 @@ inline bool downloadFile(const std::wstring& url, const std::wstring& dest, std:
     uc.lpszUrlPath = path; uc.dwUrlPathLength = 2048;
     if (!WinHttpCrackUrl(url.c_str(), 0, 0, &uc)) return false;
 
-    HINTERNET ses = WinHttpOpen(L"Wget/1.21.4 (AetherAudio-Setup)", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+    HINTERNET ses = WinHttpOpen(L"Wget/1.21.4 (Aqulify-Setup)", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!ses) ses = WinHttpOpen(L"Wget/1.21.4 (AetherAudio-Setup)", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+    if (!ses) ses = WinHttpOpen(L"Wget/1.21.4 (Aqulify-Setup)", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!ses) return false;
     bool ok = false;
@@ -411,30 +416,30 @@ inline bool hasLine(const std::wstring& text, const std::wstring& wanted) {
     return false;
 }
 
-/** A plugin beillesztése: AetherAudio.txt + "Include:" sor a config.txt végére (idempotens). */
+/** A plugin beillesztése: Aqulify.txt + "Include:" sor a config.txt végére (idempotens). */
 inline bool integrateEqApo(const EqApoInfo& apo, const void* dll, size_t dllSize, Logger log) {
-    const std::wstring pluginDir = joinPath(apo.installPath, L"VSTPlugins\\AetherAudio");
+    const std::wstring pluginDir = joinPath(apo.installPath, L"VSTPlugins\\Aqulify");
     if (!createDirs(pluginDir)) { log(L"HIBA: nem hozható létre: " + pluginDir); return false; }
-    const std::wstring dllPath = joinPath(pluginDir, L"AetherAudio.dll");
+    const std::wstring dllPath = joinPath(pluginDir, L"Aqulify.dll");
     if (!replaceFile(dllPath, dll, dllSize, log)) { log(L"HIBA: a plugin nem másolható ide: " + dllPath); return false; }
     log(L"Plugin bemásolva: " + dllPath);
 
     if (!createDirs(apo.configPath)) { log(L"HIBA: az EQ APO config mappa nem érhető el: " + apo.configPath); return false; }
     const std::string inc =
-        "# AetherAudio DSP + analizátor csatlakozási pont\r\n"
-        "# Ezt a fájlt az AetherAudio telepítője kezeli; a beállításokat az AetherAudio felületén módosítsd.\r\n"
+        "# Aqulify DSP + analizátor csatlakozási pont\r\n"
+        "# Ezt a fájlt az Aqulify telepítője kezeli; a beállításokat az Aqulify felületén módosítsd.\r\n"
         "# Bypass 1 = a DSP lánc kikerülése (az analizátor továbbra is kap jelet); Remote 0 = a felület nem vezérli.\r\n"
-        "VSTPlugin: Library \"AetherAudio\\AetherAudio.dll\" Bypass 0 Remote 1\r\n";
-    const std::wstring incPath = joinPath(apo.configPath, L"AetherAudio.txt");
+        "VSTPlugin: Library \"Aqulify\\Aqulify.dll\" Bypass 0 Remote 1\r\n";
+    const std::wstring incPath = joinPath(apo.configPath, L"Aqulify.txt");
     if (!writeFileBytes(incPath, inc.data(), inc.size())) { log(L"HIBA: nem írható: " + incPath); return false; }
 
     const std::wstring cfgPath = joinPath(apo.configPath, L"config.txt");
     TextFile tf;
     if (!readTextFile(cfgPath, tf)) { tf.enc = TextFile::Enc::Utf8; tf.text.clear(); }
-    const std::wstring backup = cfgPath + L".aetheraudio-backup";
+    const std::wstring backup = cfgPath + L".aqulify-backup";
     if (fileExists(cfgPath) && !fileExists(backup)) CopyFileW(cfgPath.c_str(), backup.c_str(), TRUE);
 
-    // Korábban kézzel (Configuration Editorral) felvett AetherAudio plugin sorok kikapcsolása,
+    // Korábban kézzel (Configuration Editorral) felvett Aqulify plugin sorok kikapcsolása,
     // különben a lánc kétszer futna
     {
         std::wstring out;
@@ -448,8 +453,8 @@ inline bool integrateEqApo(const EqApoInfo& apo, const void* dll, size_t dllSize
             for (auto& c : low) c = static_cast<wchar_t>(towlower(c));
             const size_t first = low.find_first_not_of(L" \t");
             if (first != std::wstring::npos && low.compare(first, 10, L"vstplugin:") == 0 &&
-                low.find(L"aetheraudio.dll") != std::wstring::npos) {
-                line = L"# (AetherAudio telepítő: kikapcsolva, az AetherAudio.txt beillesztés helyettesíti) " + line;
+                low.find(L"aqulify.dll") != std::wstring::npos) {
+                line = L"# (Aqulify telepítő: kikapcsolva, az Aqulify.txt beillesztés helyettesíti) " + line;
                 ++disabled;
             }
             out += line;
@@ -457,22 +462,22 @@ inline bool integrateEqApo(const EqApoInfo& apo, const void* dll, size_t dllSize
         }
         if (disabled > 0) {
             tf.text = out;
-            log(L"Korábban kézzel felvett AetherAudio plugin sor kikapcsolva (" + std::to_wstring(disabled) + L" db).");
+            log(L"Korábban kézzel felvett Aqulify plugin sor kikapcsolva (" + std::to_wstring(disabled) + L" db).");
         }
     }
 
     if (hasLine(tf.text, kIncludeLine)) {
-        log(L"Az EQ APO config.txt már tartalmazza az AetherAudio sort.");
+        log(L"Az EQ APO config.txt már tartalmazza az Aqulify sort.");
         return writeTextFile(cfgPath, tf);
     }
     if (!tf.text.empty() && tf.text.back() != L'\n') tf.text += L"\r\n";
     tf.text += std::wstring(kIncludeComment) + L"\r\n" + kIncludeLine + L"\r\n";
     if (!writeTextFile(cfgPath, tf)) { log(L"HIBA: a config.txt nem írható: " + cfgPath); return false; }
-    log(L"Az AetherAudio a lánc végére került (config.txt → Include: AetherAudio.txt).");
+    log(L"Az Aqulify a lánc végére került (config.txt → Include: Aqulify.txt).");
     return true;
 }
 
-/** Visszavonás: Include sor + AetherAudio.txt + plugin DLL. */
+/** Visszavonás: Include sor + Aqulify.txt + plugin DLL. */
 inline void removeEqApoIntegration(Logger log) {
     const EqApoInfo apo = detectEqApo();
     if (!apo.installed) return;
@@ -500,24 +505,125 @@ inline void removeEqApoIntegration(Logger log) {
         }
         if (changed) {
             tf.text = out;
-            if (writeTextFile(cfgPath, tf)) log(L"Az AetherAudio sor törölve az EQ APO config.txt-ből.");
+            if (writeTextFile(cfgPath, tf)) log(L"Az Aqulify sor törölve az EQ APO config.txt-ből.");
         }
     }
-    deleteFileOrSchedule(joinPath(apo.configPath, L"AetherAudio.txt"));
+    deleteFileOrSchedule(joinPath(apo.configPath, L"Aqulify.txt"));
     // Az EQ APO a config változását figyeli és elengedi a plugint; adunk neki egy kis időt
-    const std::wstring dll = joinPath(apo.installPath, L"VSTPlugins\\AetherAudio\\AetherAudio.dll");
+    const std::wstring dll = joinPath(apo.installPath, L"VSTPlugins\\Aqulify\\Aqulify.dll");
     for (int i = 0; i < 20 && fileExists(dll); ++i) {
         if (DeleteFileW(dll.c_str())) break;
         Sleep(250);
     }
-    deleteTree(joinPath(apo.installPath, L"VSTPlugins\\AetherAudio"));
+    deleteTree(joinPath(apo.installPath, L"VSTPlugins\\Aqulify"));
+}
+
+
+// ------------------------------------------------------------------ régi név (AetherAudio, 1.4.8-ig)
+/**
+ * A korábbi "AetherAudio" telepítés eltávolítása frissítéskor: futó motor/felület, EQ APO plugin sora
+ * (különben két plugin dolgozna egymás után), parancsikonok, automatikus indítás, programmappa,
+ * eltávolító bejegyzés. A ProgramData beállításai (params.bin, ir.bin) átkerülnek az Aqulify mappájába.
+ */
+inline void removeLegacyAetherAudio(Logger log) {
+    const std::wstring oldName = std::wstring(L"Aether") + L"Audio";
+    const std::wstring oldUninstKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\" + oldName;
+    std::wstring oldDir = regReadString(HKEY_LOCAL_MACHINE, oldUninstKey.c_str(), L"InstallLocation");
+    if (oldDir.empty()) oldDir = joinPath(knownFolder(FOLDERID_ProgramFiles), oldName);
+    const std::wstring oldData = joinPath(knownFolder(FOLDERID_ProgramData), oldName);
+    const EqApoInfo apo = detectEqApo();
+    const bool present = fileExists(joinPath(oldDir, oldName + L".exe")) || dirExists(oldData) ||
+                         (apo.installed && fileExists(joinPath(apo.configPath, oldName + L".txt")));
+    if (!present) return;
+    log(L"Korábbi " + oldName + L" telepítés található: eltávolítás, a beállítások átvétele...");
+
+    // 1. Futó régi motor és felület
+    const std::wstring oldWndClass = oldName + L"EngineWnd";
+    for (int round = 0; round < 3; ++round) {
+        HWND w = nullptr;
+        while ((w = FindWindowExW(nullptr, w, oldWndClass.c_str(), nullptr)) != nullptr) PostMessageW(w, WM_CLOSE, 0, 0);
+        for (int i = 0; i < 20 && FindWindowW(oldWndClass.c_str(), nullptr); ++i) Sleep(100);
+    }
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe{};
+        pe.dwSize = sizeof(pe);
+        for (BOOL ok = Process32FirstW(snap, &pe); ok; ok = Process32NextW(snap, &pe)) {
+            if (_wcsicmp(pe.szExeFile, (oldName + L".exe").c_str()) != 0 && _wcsicmp(pe.szExeFile, (oldName + L"Gui.exe").c_str()) != 0) continue;
+            if (HANDLE pr = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pe.th32ProcessID)) {
+                TerminateProcess(pr, 0);
+                WaitForSingleObject(pr, 3000);
+                CloseHandle(pr);
+            }
+        }
+        CloseHandle(snap);
+    }
+
+    // 2. EQ APO: régi Include sor, include fájl és plugin DLL
+    if (apo.installed) {
+        const std::wstring cfgPath = joinPath(apo.configPath, L"config.txt");
+        const std::wstring oldInclude = L"Include: " + oldName + L".txt";
+        TextFile tf;
+        if (readTextFile(cfgPath, tf)) {
+            std::wstring out;
+            size_t pos = 0;
+            bool changed = false;
+            while (pos <= tf.text.size()) {
+                size_t eol = tf.text.find(L'\n', pos);
+                const bool last = eol == std::wstring::npos;
+                if (last) eol = tf.text.size();
+                std::wstring line = tf.text.substr(pos, eol - pos);
+                std::wstring trimmed = line;
+                while (!trimmed.empty() && (trimmed.back() == L'\r' || trimmed.back() == L' ')) trimmed.pop_back();
+                if (trimmed == oldInclude || (trimmed.rfind(L"# " + oldName + L" (a telepítő adta hozzá", 0) == 0)) {
+                    changed = true;
+                } else {
+                    out += line;
+                    if (!last) out += L'\n';
+                }
+                if (last) break;
+                pos = eol + 1;
+            }
+            if (changed) {
+                tf.text = out;
+                if (writeTextFile(cfgPath, tf)) log(L"A régi " + oldName + L" sor törölve az EQ APO config.txt-ből.");
+            }
+        }
+        deleteFileOrSchedule(joinPath(apo.configPath, oldName + L".txt"));
+        const std::wstring oldDll = joinPath(apo.installPath, L"VSTPlugins\\" + oldName + L"\\" + oldName + L".dll");
+        for (int i = 0; i < 20 && fileExists(oldDll); ++i) {
+            if (DeleteFileW(oldDll.c_str())) break;
+            Sleep(250);
+        }
+        deleteTree(joinPath(apo.installPath, L"VSTPlugins\\" + oldName));
+    }
+
+    // 3. Beállítások átvétele (ha az Aqulify-nak még nincs sajátja)
+    const std::wstring newData = joinPath(knownFolder(FOLDERID_ProgramData), L"Aqulify");
+    createDirs(newData);
+    for (const wchar_t* f : { L"params.bin", L"ir.bin" }) {
+        const std::wstring src = joinPath(oldData, f), dst = joinPath(newData, f);
+        if (fileExists(src) && !fileExists(dst) && CopyFileW(src.c_str(), dst.c_str(), TRUE))
+            log(std::wstring(L"Beállítás átvéve: ") + f);
+    }
+
+    // 4. Parancsikonok, automatikus indítás, programmappa, eltávolító bejegyzés
+    deleteTree(joinPath(knownFolder(FOLDERID_CommonPrograms), oldName));
+    DeleteFileW(joinPath(knownFolder(FOLDERID_PublicDesktop), oldName + L".lnk").c_str());
+    regDeleteValue(HKEY_CURRENT_USER, kRunKey, oldName.c_str());
+    regDeleteValue(HKEY_LOCAL_MACHINE, kRunKey, oldName.c_str());
+    if (dirExists(oldDir) && fileExists(joinPath(oldDir, oldName + L".exe"))) deleteTree(oldDir);
+    regDeleteTree(HKEY_LOCAL_MACHINE, oldUninstKey.c_str());
+    regDeleteTree(HKEY_LOCAL_MACHINE, (L"Software\\" + oldName).c_str());
+    deleteTree(oldData);
+    log(L"A korábbi " + oldName + L" eltávolítva; az Aqulify veszi át a helyét.");
 }
 
 // ------------------------------------------------------------------ rendszer integráció
 
-/** ProgramData\AetherAudio: a motor (felhasználó) írja, az audiodg (LOCAL SERVICE) olvassa/naplóz. */
+/** ProgramData\Aqulify: a motor (felhasználó) írja, az audiodg (LOCAL SERVICE) olvassa/naplóz. */
 inline void prepareDataDir() {
-    const std::wstring dir = joinPath(knownFolder(FOLDERID_ProgramData), L"AetherAudio");
+    const std::wstring dir = joinPath(knownFolder(FOLDERID_ProgramData), L"Aqulify");
     createDirs(dir);
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
@@ -561,18 +667,18 @@ inline void closeRunningEngine(const std::wstring& exePath) {
     PROCESSENTRY32W pe{};
     pe.dwSize = sizeof(pe);
     for (BOOL ok = Process32FirstW(snap, &pe); ok; ok = Process32NextW(snap, &pe)) {
-        const bool isEngine = _wcsicmp(pe.szExeFile, L"AetherAudio.exe") == 0;
-        const bool isGui = _wcsicmp(pe.szExeFile, L"AetherAudioGui.exe") == 0;
+        const bool isEngine = _wcsicmp(pe.szExeFile, L"Aqulify.exe") == 0;
+        const bool isGui = _wcsicmp(pe.szExeFile, L"AqulifyGui.exe") == 0;
         if (!isEngine && !isGui) continue;
         HANDLE p = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, pe.th32ProcessID);
         if (!p) continue;
         wchar_t img[MAX_PATH];
         DWORD n = MAX_PATH;
-        // A felület (AetherAudioGui.exe) ugyanabban a mappában van, mint a motor
+        // A felület (AqulifyGui.exe) ugyanabban a mappában van, mint a motor
         std::wstring want = exePath;
         if (isGui && !want.empty()) {
             const size_t sl = want.find_last_of(L"\\/");
-            want = (sl == std::wstring::npos ? std::wstring() : want.substr(0, sl + 1)) + L"AetherAudioGui.exe";
+            want = (sl == std::wstring::npos ? std::wstring() : want.substr(0, sl + 1)) + L"AqulifyGui.exe";
         }
         if (QueryFullProcessImageNameW(p, 0, img, &n) && (want.empty() || _wcsicmp(img, want.c_str()) == 0)) {
             TerminateProcess(p, 0);

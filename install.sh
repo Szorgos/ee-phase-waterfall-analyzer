@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# AetherAudio – telepítő Linuxra (PipeWire)
+# Aqulify – telepítő Linuxra (PipeWire)
 #
 # Mit csinál:
 #   1. telepíti a fordításhoz szükséges csomagokat (sudo jelszót kérhet),
 #   2. lefordítja a motort (és ha lehet, a saját ablakos felületet),
 #   3. felmásolja a felhasználó saját mappájába (~/.local), root jog nélkül,
 #   4. beállítja, hogy a motor bejelentkezéskor automatikusan induljon (systemd felhasználói szolgáltatás),
-#   5. menübejegyzést készít ("AetherAudio"),
-#   6. kérésre az "AetherAudio" eszközt teszi meg alapértelmezett hangkimenetnek.
+#   5. menübejegyzést készít ("Aqulify"),
+#   6. kérésre az "Aqulify" eszközt teszi meg alapértelmezett hangkimenetnek.
 #
 # Eltávolítás: ./uninstall.sh
 # Támogatott: Ubuntu / Debian / Mint / Pop!_OS, Fedora, Arch / Manjaro / EndeavourOS, openSUSE
@@ -26,17 +26,17 @@ cd "$PROJECT_DIR"
 
 PREFIX="${HOME}/.local"
 BIN_DIR="${PREFIX}/bin"
-SHARE_DIR="${PREFIX}/share/aetheraudio"
+SHARE_DIR="${PREFIX}/share/aqulify"
 GUI_DIR="${SHARE_DIR}/gui"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 APP_DIR="${PREFIX}/share/applications"
 ICON_DIR="${PREFIX}/share/icons/hicolor/256x256/apps"
 
 echo -e "${BLUE}====================================================================${NC}"
-echo -e "${GREEN}  AetherAudio – telepítés Linuxra${NC}"
+echo -e "${GREEN}  Aqulify – telepítés Linuxra${NC}"
 echo -e "${BLUE}====================================================================${NC}"
 
-[ "$(id -u)" -eq 0 ] && [ -z "${AETHER_ALLOW_ROOT:-}" ] && die "Ne rootként futtasd! A saját felhasználóddal indítsd (a csomagokhoz sudo jelszót fog kérni)."
+[ "$(id -u)" -eq 0 ] && [ -z "${AQULIFY_ALLOW_ROOT:-}" ] && die "Ne rootként futtasd! A saját felhasználóddal indítsd (a csomagokhoz sudo jelszót fog kérni)."
 
 # ------------------------------------------------------------------ 1. csomagok
 say "\n[1/6] Szükséges csomagok telepítése..."
@@ -74,13 +74,13 @@ command -v pw-cli >/dev/null 2>&1 || warn "A pw-cli nem található. Biztosan Pi
 # ------------------------------------------------------------------ 2. fordítás
 say "\n[2/6] Fordítás..."
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON
-cmake --build build -j"$(nproc)" --target aetheraudio-engine
-[ -x build/aetheraudio-engine ] || die "A motor fordítása sikertelen."
-ok "Motor: build/aetheraudio-engine"
+cmake --build build -j"$(nproc)" --target aqulify-engine
+[ -x build/aqulify-engine ] || die "A motor fordítása sikertelen."
+ok "Motor: build/aqulify-engine"
 HAVE_GUI=0
-if cmake --build build -j"$(nproc)" --target aetheraudio-gui > build/gui-build.log 2>&1 && [ -x build/aetheraudio-gui ]; then
+if cmake --build build -j"$(nproc)" --target aqulify-gui > build/gui-build.log 2>&1 && [ -x build/aqulify-gui ]; then
     HAVE_GUI=1
-    ok "Saját ablakos felület: build/aetheraudio-gui"
+    ok "Saját ablakos felület: build/aqulify-gui"
 else
     tail -n 15 build/gui-build.log 2>/dev/null || true
     warn "A saját ablakos (WebKitGTK) felület nem fordult le (részletek: build/gui-build.log)."
@@ -91,78 +91,92 @@ fi
 # ------------------------------------------------------------------ 3. fájlok
 say "\n[3/6] Fájlok másolása (${PREFIX})..."
 # Futó motor leállítása frissítéskor
-systemctl --user stop aetheraudio.service >/dev/null 2>&1 || true
+systemctl --user stop aqulify.service >/dev/null 2>&1 || true
+# Régi név (AetherAudio, 1.4.x-ig) eltávolítása: szolgáltatás, programfájlok, menü, ikon.
+# A beállítások és profilok a ~/.config/aetheraudio mappából az első indításkor átköltöznek.
+OLD="aether""audio"
+if [ -e "$UNIT_DIR/${OLD}.service" ] || [ -e "$BIN_DIR/${OLD}-engine" ]; then
+    say "Korábbi AetherAudio telepítés eltávolítása (a beállítások átkerülnek)..."
+    WAS_DEFAULT=0
+    pw-metadata 0 default.configured.audio.sink 2>/dev/null | grep -q "\"${OLD}_sink\"" && WAS_DEFAULT=1
+    systemctl --user disable --now "${OLD}.service" >/dev/null 2>&1 || true
+    rm -f "$UNIT_DIR/${OLD}.service" "$BIN_DIR/${OLD}-engine" "$BIN_DIR/${OLD}-gui"
+    rm -rf "${PREFIX}/share/${OLD}"
+    rm -f "$APP_DIR/${OLD}.desktop" "$ICON_DIR/${OLD}.png" "${PREFIX}/share/pixmaps/${OLD}.png"
+    for d in "$HOME/Asztal" "$HOME/Desktop"; do rm -f "$d/${OLD}.desktop"; done
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+fi
 PIXMAP_DIR="${PREFIX}/share/pixmaps"
 mkdir -p "$BIN_DIR" "$GUI_DIR" "$APP_DIR" "$ICON_DIR" "$UNIT_DIR" "$PIXMAP_DIR"
-install -m 755 build/aetheraudio-engine "$BIN_DIR/aetheraudio-engine"
+install -m 755 build/aqulify-engine "$BIN_DIR/aqulify-engine"
 install -m 644 gui_integrated_system.html autoeq_index.js "$GUI_DIR/"
 install -m 644 windows/third_party/three/three.min.js "$GUI_DIR/three.min.js"
 install -m 644 windows/third_party/three/LICENSE "$GUI_DIR/three.js-LICENSE.txt"
-install -m 644 linux/aetheraudio.png "$ICON_DIR/aetheraudio.png"
-install -m 644 linux/aetheraudio.png "$PIXMAP_DIR/aetheraudio.png"
+install -m 644 linux/aqulify.png "$ICON_DIR/aqulify.png"
+install -m 644 linux/aqulify.png "$PIXMAP_DIR/aqulify.png"
 if [ "$HAVE_GUI" = 1 ]; then
-    install -m 755 build/aetheraudio-gui "$BIN_DIR/aetheraudio-gui"
+    install -m 755 build/aqulify-gui "$BIN_DIR/aqulify-gui"
 else
-    cat > "$BIN_DIR/aetheraudio-gui" <<EOF
+    cat > "$BIN_DIR/aqulify-gui" <<EOF
 #!/usr/bin/env bash
-# AetherAudio felület WebKitGTK nélkül (a beépített saját ablakhoz telepítsd a webkit2gtk fejlesztői csomagot,
+# Aqulify felület WebKitGTK nélkül (a beépített saját ablakhoz telepítsd a webkit2gtk fejlesztői csomagot,
 # és futtasd újra az install.sh-t). Chromium alapú böngésző alkalmazásablaka (--app), végső esetben xdg-open.
 URL="file://${GUI_DIR}/gui_integrated_system.html"
 for b in chromium chromium-browser google-chrome google-chrome-stable brave-browser microsoft-edge vivaldi; do
     if command -v "\$b" >/dev/null 2>&1; then
-        exec "\$b" --app="\$URL" --class=AetherAudio --window-size=1480,940
+        exec "\$b" --app="\$URL" --class=Aqulify --window-size=1480,940
     fi
 done
 exec xdg-open "\$URL"
 EOF
-    chmod 755 "$BIN_DIR/aetheraudio-gui"
+    chmod 755 "$BIN_DIR/aqulify-gui"
 fi
 ok "Fájlok a helyükön."
 
 # ------------------------------------------------------------------ 4. automatikus indítás
 say "\n[4/6] Automatikus indítás beállítása (systemd felhasználói szolgáltatás)..."
-cat > "$UNIT_DIR/aetheraudio.service" <<EOF
+cat > "$UNIT_DIR/aqulify.service" <<EOF
 [Unit]
-Description=AetherAudio DSP motor (virtuális "AetherAudio" hangkimenet)
+Description=Aqulify DSP motor (virtuális "Aqulify" hangkimenet)
 After=pipewire.service wireplumber.service
 Wants=pipewire.service
 
 [Service]
-ExecStart=${BIN_DIR}/aetheraudio-engine
+ExecStart=${BIN_DIR}/aqulify-engine
 Restart=on-failure
 RestartSec=2
 
 [Install]
 WantedBy=default.target
 EOF
-if systemctl --user daemon-reload 2>/dev/null && systemctl --user enable --now aetheraudio.service; then
+if systemctl --user daemon-reload 2>/dev/null && systemctl --user enable --now aqulify.service; then
     ok "A motor fut, és bejelentkezéskor magától elindul."
 else
-    warn "A systemd felhasználói szolgáltatás nem érhető el. Indítsd kézzel: ${BIN_DIR}/aetheraudio-engine &"
+    warn "A systemd felhasználói szolgáltatás nem érhető el. Indítsd kézzel: ${BIN_DIR}/aqulify-engine &"
 fi
 
 # ------------------------------------------------------------------ 5. menübejegyzés
 say "\n[5/6] Menübejegyzés..."
-cat > "$APP_DIR/aetheraudio.desktop" <<EOF
+cat > "$APP_DIR/aqulify.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=AetherAudio
+Name=Aqulify
 GenericName=Hangkorrekció és akusztikai vízesés
 Comment=Parametrikus EQ, konvolver, crossfeed és true peak limiter a PipeWire-hez, élő 3D vízesés-analizátorral
-Exec=${BIN_DIR}/aetheraudio-gui
-Icon=${ICON_DIR}/aetheraudio.png
+Exec=${BIN_DIR}/aqulify-gui
+Icon=${ICON_DIR}/aqulify.png
 Terminal=false
 Categories=AudioVideo;Audio;
-StartupWMClass=AetherAudio
+StartupWMClass=Aqulify
 EOF
-chmod +x "$APP_DIR/aetheraudio.desktop"
+chmod +x "$APP_DIR/aqulify.desktop"
 
 # Asztali ikon létrehozása (ha létezik Asztal vagy Desktop mappa)
 for d in "$HOME/Asztal" "$HOME/Desktop"; do
     if [ -d "$d" ]; then
-        cp "$APP_DIR/aetheraudio.desktop" "$d/aetheraudio.desktop"
-        chmod +x "$d/aetheraudio.desktop"
-        gio set "$d/aetheraudio.desktop" metadata::trusted true >/dev/null 2>&1 || true
+        cp "$APP_DIR/aqulify.desktop" "$d/aqulify.desktop"
+        chmod +x "$d/aqulify.desktop"
+        gio set "$d/aqulify.desktop" metadata::trusted true >/dev/null 2>&1 || true
     fi
 done
 
@@ -171,27 +185,31 @@ gtk-update-icon-cache -q "${PREFIX}/share/icons/hicolor" >/dev/null 2>&1 || true
 kbuildsycoca6 >/dev/null 2>&1 || kbuildsycoca5 >/dev/null 2>&1 || true
 # régi (0.x) telepítés maradványa
 rm -f "$PROJECT_DIR/run.sh" 2>/dev/null || true
-ok "A menüben és az asztalon: AetherAudio"
+ok "A menüben és az asztalon: Aqulify"
 
 # ------------------------------------------------------------------ 6. alapértelmezett kimenet
 say "\n[6/6] Alapértelmezett hangkimenet"
-echo "Az alkalmazások hangja akkor megy át az AetherAudio-n, ha az \"AetherAudio\" a kimeneti eszköz."
-read -r -p "Beállítsam most alapértelmezettnek? [i/N] " ans || ans=""
+echo "Az alkalmazások hangja akkor megy át az Aqulify-n, ha az \"Aqulify\" a kimeneti eszköz."
+if [ "${WAS_DEFAULT:-0}" = 1 ]; then
+    ans="i"; echo "A korábbi AetherAudio volt az alapértelmezett kimenet: az Aqulify veszi át."
+else
+    read -r -p "Beállítsam most alapértelmezettnek? [i/N] " ans || ans=""
+fi
 if [[ "$ans" =~ ^[iIyY]$ ]]; then
     sleep 1
-    if pw-metadata 0 default.configured.audio.sink '{ "name": "aetheraudio_sink" }' Spa:String:JSON >/dev/null 2>&1; then
-        ok "Az \"AetherAudio\" lett az alapértelmezett kimenet."
+    if pw-metadata 0 default.configured.audio.sink '{ "name": "aqulify_sink" }' Spa:String:JSON >/dev/null 2>&1; then
+        ok "Az \"Aqulify\" lett az alapértelmezett kimenet."
     else
-        warn "Nem sikerült; állítsd be a Hangbeállításokban (Kimenet: AetherAudio)."
+        warn "Nem sikerült; állítsd be a Hangbeállításokban (Kimenet: Aqulify)."
     fi
 else
-    echo "Később a Hangbeállításokban választhatod ki (Kimenet: AetherAudio)."
+    echo "Később a Hangbeállításokban választhatod ki (Kimenet: Aqulify)."
 fi
 
 echo -e "\n${BLUE}====================================================================${NC}"
-echo -e "${GREEN}  Kész! Az AetherAudio telepítve.${NC}"
+echo -e "${GREEN}  Kész! Az Aqulify telepítve.${NC}"
 echo -e "${BLUE}====================================================================${NC}"
-echo "  Felület:        menü → AetherAudio  (vagy: aetheraudio-gui)"
-echo "  Motor állapota: systemctl --user status aetheraudio"
-echo "  Napló:          journalctl --user -u aetheraudio -f"
+echo "  Felület:        menü → Aqulify  (vagy: aqulify-gui)"
+echo "  Motor állapota: systemctl --user status aqulify"
+echo "  Napló:          journalctl --user -u aqulify -f"
 echo "  Eltávolítás:    ./uninstall.sh"

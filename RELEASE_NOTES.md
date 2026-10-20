@@ -1,4 +1,12 @@
-### Újdonságok (1.4.8)
+### Újdonságok (1.5.0) – az AetherAudio új neve: Aqulify
+- **Névváltás:** a program mostantól **Aqulify** (az „AetherAudio” nevet más hangszoftverek is használják). A GitHub-tároló címe nem változik.
+- **Automatikus átállás frissítéskor:**
+  - *Windows:* az `Aqulify-Setup.exe` eltávolítja a régi AetherAudio-t (futó program, Equalizer APO plugin sora – így nem fut két plugin egymás után –, parancsikonok, automatikus indítás), és átveszi a beállításokat, a konvolver IR-t és az EQ profilokat.
+  - *Linux:* az `install.sh` leállítja és törli a régi `aetheraudio` szolgáltatást és programfájlokat; a `~/.config/aetheraudio` mappa első indításkor `~/.config/aqulify` lesz. Ha az AetherAudio volt az alapértelmezett kimenet, az Aqulify veszi át.
+- A Windows „Programok és szolgáltatások” listájában most a valódi verziószám látszik (eddig tévesen 1.3.0).
+- **Linux saját ablak:** a számmezők léptetőnyilai visszakerültek; a mezők szélesebbek és jobbra igazítottak, így a teljes érték látszik.
+
+### Az 1.4.8 újdonságai
 - **Linux saját ablak:** a számmezők (Freq, Gain, Q, Preamp stb.) értéke nem csúszik ki jobbra – a GTK léptetőgombok helyett görgővel és a fel/le nyilakkal lehet léptetni.
 - **Nincs hatástalan gomb:** a profil átnevezése/törlése csak akkor látszik, ha van aktív profil; az utolsó EQ-sávnál a Törlés gomb láthatóan tiltott; a crossfeed profilgombok a késleltetést is átadják a motornak, és szólnak, ha a modul ki van kapcsolva.
 

@@ -7,7 +7,7 @@
  * - A motor hangjából valódi FFT-spektrumot számol és ~60 FPS-sel küldi ("spectrum" üzenet).
  * - A GUI vezérlőüzeneteit (preamp, modulkapcsolók, EQ sávok) ParamData-vá alakítja.
  *
- * Ugyanez a kód fut Linuxon (PipeWire csomópont) és Windowson (AetherAudio.exe).
+ * Ugyanez a kód fut Linuxon (PipeWire csomópont) és Windowson (Aqulify.exe).
  */
 #include <atomic>
 #include <chrono>
@@ -246,7 +246,7 @@ private:
     static bool originAllowed(std::string o) {
         for (auto& c : o) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         if (o.empty() || o == "null" || o.rfind("file://", 0) == 0) return true;
-        for (const char* ok : { "https://aether.local", "http://aether.local" })
+        for (const char* ok : { "https://aqulify.local", "http://aqulify.local" })
             if (o == ok) return true;
         for (const char* host : { "http://127.0.0.1", "http://localhost", "http://[::1]" }) {
             const std::string h = host;

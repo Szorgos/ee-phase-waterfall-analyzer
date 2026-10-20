@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file aether_chain.hpp
- * @brief A teljes AetherAudio DSP lánc (Linux PipeWire csomópont és Windows EQ APO plugin közös magja).
+ * @brief A teljes Aqulify DSP lánc (Linux PipeWire csomópont és Windows EQ APO plugin közös magja).
  *
  *   Preamp -> EQ (IIR vagy FIR: lineáris / köztes / minimálfázis) -> Bass Enhancer -> Crossfeed
  *          -> Convolver (partícionált FFT, IR) -> Limiter

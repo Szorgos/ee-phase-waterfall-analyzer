@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file tray.hpp
- * @brief Tálcaikon (értesítési terület) és naplózás az AetherAudio motorhoz: konzolablak nélküli háttérfutás.
+ * @brief Tálcaikon (értesítési terület) és naplózás az Aqulify motorhoz: konzolablak nélküli háttérfutás.
  */
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -23,9 +23,9 @@
 
 namespace ee_analyzer::win {
 
-constexpr const wchar_t* kEngineWindowClass = L"AetherAudioEngineWnd"; // a telepítő is ezt keresi
+constexpr const wchar_t* kEngineWindowClass = L"AqulifyEngineWnd"; // a telepítő is ezt keresi
 constexpr const wchar_t* kRunKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-constexpr const wchar_t* kRunValue = L"AetherAudio";
+constexpr const wchar_t* kRunValue = L"Aqulify";
 
 inline std::wstring utf8ToWide(const std::string& s) {
     if (s.empty()) return {};
@@ -41,15 +41,15 @@ inline std::wstring exePath() {
     return std::wstring(buf, n);
 }
 
-/** %LOCALAPPDATA%\AetherAudio */
+/** %LOCALAPPDATA%\Aqulify */
 inline std::filesystem::path localAppDir() {
     PWSTR p = nullptr;
     std::filesystem::path dir;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p)) && p) {
-        dir = std::filesystem::path(p) / L"AetherAudio";
+        dir = std::filesystem::path(p) / L"Aqulify";
         CoTaskMemFree(p);
     } else {
-        dir = std::filesystem::temp_directory_path() / L"AetherAudio";
+        dir = std::filesystem::temp_directory_path() / L"Aqulify";
     }
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
@@ -85,7 +85,7 @@ public:
             GetLocalTime(&t);
             char ts[64];
             std::snprintf(ts, sizeof(ts), "%04u-%02u-%02u %02u:%02u:%02u", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
-            std::cout << "\n===== AetherAudio motor indul: " << ts << " =====\n";
+            std::cout << "\n===== Aqulify motor indul: " << ts << " =====\n";
         }
     }
     ~LogSink() {
@@ -149,7 +149,7 @@ public:
         wc.hInstance = inst;
         wc.lpszClassName = kEngineWindowClass;
         RegisterClassExW(&wc);
-        hwnd_ = CreateWindowExW(0, kEngineWindowClass, L"AetherAudio", WS_OVERLAPPED, 0, 0, 0, 0, nullptr, nullptr, inst, this);
+        hwnd_ = CreateWindowExW(0, kEngineWindowClass, L"Aqulify", WS_OVERLAPPED, 0, 0, 0, 0, nullptr, nullptr, inst, this);
         if (!hwnd_) return false;
         taskbarCreated_ = RegisterWindowMessageW(L"TaskbarCreated");
         icon_ = static_cast<HICON>(LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
@@ -199,7 +199,7 @@ private:
         nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
         nid.uCallbackMessage = kTrayMsg;
         nid.hIcon = icon_;
-        wcsncpy_s(nid.szTip, L"AetherAudio", _TRUNCATE);
+        wcsncpy_s(nid.szTip, L"Aqulify", _TRUNCATE);
         Shell_NotifyIconW(NIM_ADD, &nid);
         nid.uVersion = NOTIFYICON_VERSION_4;
         Shell_NotifyIconW(NIM_SETVERSION, &nid);
@@ -217,7 +217,7 @@ private:
         lastTip_ = st;
         NOTIFYICONDATAW nid = baseData();
         nid.uFlags = NIF_TIP;
-        const std::wstring tip = L"AetherAudio – " + st;
+        const std::wstring tip = L"Aqulify – " + st;
         wcsncpy_s(nid.szTip, tip.c_str(), _TRUNCATE);
         Shell_NotifyIconW(NIM_MODIFY, &nid);
     }

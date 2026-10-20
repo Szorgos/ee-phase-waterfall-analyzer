@@ -10,7 +10,7 @@ API-token formájában kerül. Kiadóként a Windows a „SignPath Foundation”
    A feltételek: OSI-licenc, nincs zárt forrású komponens, aktívan karbantartott projekt, már van kiadása, és a
    honlapon (README) szerepel a kódaláírási szabályzat (megvan: README → „Kódaláírási szabályzat”).
 2. Elfogadás után a SignPath felületén:
-   - **Projekt** slug: `aetheraudio` (ha más, add meg a `SIGNPATH_PROJECT_SLUG` változóban).
+   - **Projekt** slug: `aqulify` (ha más, add meg a `SIGNPATH_PROJECT_SLUG` változóban).
    - **Trusted build system:** GitHub.com, a tárolóhoz rendelve.
    - **Aláírási szabály (signing policy):** `release-signing` (alapértelmezett név), kézi jóváhagyással.
    - **Két artifact configuration** (lent): `binaries` és `installer`.
@@ -24,7 +24,7 @@ Settings → Secrets and variables → Actions:
 |---|---|---|
 | Secret | `SIGNPATH_API_TOKEN` | a SignPath CI felhasználó API tokenje |
 | Variable | `SIGNPATH_ORGANIZATION_ID` | a SignPath szervezet azonosítója |
-| Variable (opcionális) | `SIGNPATH_PROJECT_SLUG` | ha nem `aetheraudio` |
+| Variable (opcionális) | `SIGNPATH_PROJECT_SLUG` | ha nem `aqulify` |
 | Variable (opcionális) | `SIGNPATH_SIGNING_POLICY_SLUG` | ha nem `release-signing` |
 
 Amíg a `SIGNPATH_API_TOKEN` nincs beállítva, a Release workflow aláíratlan telepítőt készít, mint eddig.
@@ -37,9 +37,9 @@ Amíg a `SIGNPATH_API_TOKEN` nincs beállítva, a Release workflow aláíratlan 
 <?xml version="1.0" encoding="utf-8"?>
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
   <zip-file>
-    <pe-file path="AetherAudio.exe"><authenticode-sign/></pe-file>
-    <pe-file path="AetherAudioGui.exe"><authenticode-sign/></pe-file>
-    <pe-file path="AetherAudio.dll"><authenticode-sign/></pe-file>
+    <pe-file path="Aqulify.exe"><authenticode-sign/></pe-file>
+    <pe-file path="AqulifyGui.exe"><authenticode-sign/></pe-file>
+    <pe-file path="Aqulify.dll"><authenticode-sign/></pe-file>
   </zip-file>
 </artifact-configuration>
 ```
@@ -50,7 +50,7 @@ Amíg a `SIGNPATH_API_TOKEN` nincs beállítva, a Release workflow aláíratlan 
 <?xml version="1.0" encoding="utf-8"?>
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
   <zip-file>
-    <pe-file path="AetherAudio-Setup.exe"><authenticode-sign/></pe-file>
+    <pe-file path="Aqulify-Setup.exe"><authenticode-sign/></pe-file>
   </zip-file>
 </artifact-configuration>
 ```

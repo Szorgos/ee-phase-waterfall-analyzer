@@ -36,8 +36,8 @@ jobs:
         run: |
           cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON
           cmake --build build -j"$(nproc)"
-          test -x build/aetheraudio-engine
-          test -x build/aetheraudio-gui
+          test -x build/aqulify-engine
+          test -x build/aqulify-gui
           for t in test_math test_pipeline test_ringbuffer test_core test_dsp; do ./build/$t; done
 
       - name: Linux telepítő csomag
@@ -46,14 +46,14 @@ jobs:
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then VER="${GITHUB_REF_NAME#v}"
           elif [ -n "${{ inputs.version }}" ]; then VER="${{ inputs.version }}"
           else VER="dev-${GITHUB_SHA::7}"; fi
-          NAME="AetherAudio-Linux-${VER}"
+          NAME="Aqulify-Linux-${VER}"
           git archive --format=tar.gz --prefix="${NAME}/" -o "${NAME}.tar.gz" HEAD
           sha256sum "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256"
           echo "file=${NAME}.tar.gz" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AetherAudio-Linux
+          name: Aqulify-Linux
           path: |
             ${{ steps.pkg.outputs.file }}
             ${{ steps.pkg.outputs.file }}.sha256
@@ -103,9 +103,9 @@ jobs:
         with:
           name: unsigned-binaries
           path: |
-            build-win/AetherAudio.exe
-            build-win/AetherAudioGui.exe
-            build-win/AetherAudio.dll
+            build-win/Aqulify.exe
+            build-win/AqulifyGui.exe
+            build-win/Aqulify.dll
 
       - name: Programfájlok aláírása (SignPath)
         if: env.SIGNPATH_ENABLED == 'true'
@@ -113,7 +113,7 @@ jobs:
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'aetheraudio' }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'aqulify' }}
           signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
           artifact-configuration-slug: binaries
           github-artifact-id: ${{ steps.upload-binaries.outputs.artifact-id }}
@@ -125,7 +125,7 @@ jobs:
         if: env.SIGNPATH_ENABLED == 'true'
         run: |
           cmake -B build-win -S . -DEE_SIGNED_BINARIES_DIR="$PWD/signed-binaries"
-          cmake --build build-win --target AetherAudioSetup
+          cmake --build build-win --target AqulifySetup
 
       - name: Aláíratlan telepítő feltöltése (aláíráshoz)
         if: env.SIGNPATH_ENABLED == 'true'
@@ -133,7 +133,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: unsigned-setup
-          path: build-win/AetherAudio-Setup.exe
+          path: build-win/Aqulify-Setup.exe
 
       - name: Telepítő aláírása (SignPath)
         if: env.SIGNPATH_ENABLED == 'true'
@@ -141,7 +141,7 @@ jobs:
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'aetheraudio' }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'aqulify' }}
           signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
           artifact-configuration-slug: installer
           github-artifact-id: ${{ steps.upload-setup.outputs.artifact-id }}
@@ -150,7 +150,7 @@ jobs:
 
       - name: Aláírt telepítő átvétele
         if: env.SIGNPATH_ENABLED == 'true'
-        run: cp signed-setup/AetherAudio-Setup.exe build-win/AetherAudio-Setup.exe
+        run: cp signed-setup/Aqulify-Setup.exe build-win/Aqulify-Setup.exe
 
       - name: Telepítő elnevezése
         id: name
@@ -159,16 +159,16 @@ jobs:
           elif [ -n "${{ inputs.version }}" ]; then VER="${{ inputs.version }}"
           else VER="dev-${GITHUB_SHA::7}"; fi
           echo "ver=${VER}" >> "$GITHUB_OUTPUT"
-          cp build-win/AetherAudio-Setup.exe "AetherAudio-Setup-${VER}.exe"
-          sha256sum "AetherAudio-Setup-${VER}.exe" > "AetherAudio-Setup-${VER}.exe.sha256"
+          cp build-win/Aqulify-Setup.exe "Aqulify-Setup-${VER}.exe"
+          sha256sum "Aqulify-Setup-${VER}.exe" > "Aqulify-Setup-${VER}.exe.sha256"
           # Állandó nevű példány: a README "legújabb kiadás" letöltési linkje erre mutat
-          cp build-win/AetherAudio-Setup.exe AetherAudio-Setup.exe
-          echo "file=AetherAudio-Setup-${VER}.exe" >> "$GITHUB_OUTPUT"
+          cp build-win/Aqulify-Setup.exe Aqulify-Setup.exe
+          echo "file=Aqulify-Setup-${VER}.exe" >> "$GITHUB_OUTPUT"
 
       - name: Feltöltés munkatermékként
         uses: actions/upload-artifact@v4
         with:
-          name: AetherAudio-Windows
+          name: Aqulify-Windows
           path: |
             ${{ steps.name.outputs.file }}
             ${{ steps.name.outputs.file }}.sha256
@@ -176,7 +176,7 @@ jobs:
       - name: Linux csomag átvétele a kiadáshoz
         uses: actions/download-artifact@v4
         with:
-          name: AetherAudio-Linux
+          name: Aqulify-Linux
 
       - name: "GitHub Release (kézi indításkor verziószámmal: új címke és kiadás)"
         if: github.event_name == 'workflow_dispatch' && inputs.version != ''
@@ -184,12 +184,12 @@ jobs:
         with:
           tag_name: v${{ inputs.version }}
           target_commitish: ${{ github.sha }}
-          name: AetherAudio ${{ inputs.version }}
+          name: Aqulify ${{ inputs.version }}
           body_path: RELEASE_NOTES.md
           files: |
             ${{ steps.name.outputs.file }}
             ${{ steps.name.outputs.file }}.sha256
-            AetherAudio-Setup.exe
+            Aqulify-Setup.exe
             ${{ needs.linux-package.outputs.file }}
             ${{ needs.linux-package.outputs.file }}.sha256
 
@@ -197,11 +197,11 @@ jobs:
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          name: AetherAudio ${{ github.ref_name }}
+          name: Aqulify ${{ github.ref_name }}
           body_path: ${{ github.event_name == 'push' && 'RELEASE_NOTES.md' || '' }}
           files: |
             ${{ steps.name.outputs.file }}
             ${{ steps.name.outputs.file }}.sha256
-            AetherAudio-Setup.exe
+            Aqulify-Setup.exe
             ${{ needs.linux-package.outputs.file }}
             ${{ needs.linux-package.outputs.file }}.sha256

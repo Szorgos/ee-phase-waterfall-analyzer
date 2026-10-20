@@ -1,10 +1,10 @@
 /**
  * @file eqapo_host_sim.cpp
- * @brief Teszt-hoszt: úgy tölti be az AetherAudio.dll-t, ahogy az Equalizer APO (VSTPluginInstance.cpp):
+ * @brief Teszt-hoszt: úgy tölti be az Aqulify.dll-t, ahogy az Equalizer APO (VSTPluginInstance.cpp):
  *        VSTPluginMain -> effOpen -> paraméterek név szerint -> effSetSampleRate/BlockSize -> effMainsChanged(1)
  *        -> effStartProcess -> processReplacing (valós időben ütemezve) -> effStopProcess -> effClose.
  *
- * Használat: eqapo_host_sim.exe <AetherAudio.dll> [másodperc=10] [mintavétel=48000]
+ * Használat: eqapo_host_sim.exe <Aqulify.dll> [másodperc=10] [mintavétel=48000]
  * Másodpercenként kiírja a kimenő jel szintjét 100 Hz / 1 kHz / 5 kHz-en (bemenet: három szinusz, -20 dBFS).
  */
 #define WIN32_LEAN_AND_MEAN
@@ -33,7 +33,7 @@ static double toneDb(const std::vector<float>& x, double f, double sr) {
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::printf("Használat: %s <AetherAudio.dll> [másodperc] [mintavétel]\n", argv[0]);
+        std::printf("Használat: %s <Aqulify.dll> [másodperc] [mintavétel]\n", argv[0]);
         return 2;
     }
     const int seconds = argc > 2 ? std::atoi(argv[2]) : 10;

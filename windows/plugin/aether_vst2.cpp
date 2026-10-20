@@ -1,13 +1,13 @@
 /**
  * @file aether_vst2.cpp
- * @brief AetherAudio DSP plugin Equalizer APO-hoz (VST 2.4 bináris interfész).
+ * @brief Aqulify DSP plugin Equalizer APO-hoz (VST 2.4 bináris interfész).
  *
  * Mit csinál:
  *   - lefuttatja a projekt DSP láncát (Preamp -> EQ (IIR/FIR) -> Bass Enhancer -> Crossfeed -> Convolver -> Limiter)
  *     az audiodg.exe-ben; a FIR tervezés és az IR előkészítés saját háttérszálon fut,
- *   - a feldolgozott sztereó jelet közös memórián át átadja az AetherAudio.exe motornak (3D vízesés, fázis),
+ *   - a feldolgozott sztereó jelet közös memórián át átadja az Aqulify.exe motornak (3D vízesés, fázis),
  *   - a GUI-ban állított beállításokat élőben átveszi a motortól (zármentes seqlock),
- *   - az utolsó beállítást a C:\ProgramData\AetherAudio\params.bin fájlból tölti be, így motor nélkül is
+ *   - az utolsó beállítást a C:\ProgramData\Aqulify\params.bin fájlból tölti be, így motor nélkül is
  *     a legutóbb beállított lánccal szól.
  *
  * Alapállapotban (nincs mentett beállítás) bit-pontosan átlátszó: csak "lehallgat".
@@ -43,7 +43,7 @@ constexpr int32_t kVersion = 1000; // 1.0.0
 
 enum ParamIndex : int32_t {
     kParamBypass = 0,  // 1 = a DSP lánc kikerülve (a jel továbbra is megy az analizátorba)
-    kParamRemote = 1,  // 1 = a GUI (AetherAudio.exe) vezérli a láncot
+    kParamRemote = 1,  // 1 = a GUI (Aqulify.exe) vezérli a láncot
     kNumParams
 };
 
@@ -53,9 +53,9 @@ void copyString(void* dst, const char* src, size_t maxLen) {
     static_cast<char*>(dst)[maxLen - 1] = '\0';
 }
 
-/** Egyszerű diagnosztikai napló: C:\ProgramData\AetherAudio\plugin_status.txt (nem valós idejű szálból!). */
+/** Egyszerű diagnosztikai napló: C:\ProgramData\Aqulify\plugin_status.txt (nem valós idejű szálból!). */
 void logStatus(const std::string& line) {
-    OutputDebugStringA(("[AetherAudio] " + line + "\n").c_str());
+    OutputDebugStringA(("[Aqulify] " + line + "\n").c_str());
     std::wstring path = win::paramFilePath(false);
     path = path.substr(0, path.find_last_of(L'\\')) + L"\\plugin_status.txt";
     HANDLE f = CreateFileW(path.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
@@ -273,13 +273,13 @@ private:
                 return opcode == vst2::effGetProgramNameIndexed ? 1 : 0;
             case vst2::effGetPlugCategory: return vst2::kPlugCategEffect;
             case vst2::effGetEffectName:
-                copyString(ptr, "AetherAudio", vst2::kVstMaxEffectNameLen);
+                copyString(ptr, "Aqulify", vst2::kVstMaxEffectNameLen);
                 return 1;
             case vst2::effGetVendorString:
-                copyString(ptr, "AetherAudio", vst2::kVstMaxVendorStrLen);
+                copyString(ptr, "Aqulify", vst2::kVstMaxVendorStrLen);
                 return 1;
             case vst2::effGetProductString:
-                copyString(ptr, "AetherAudio DSP + Analyzer Tap", vst2::kVstMaxProductStrLen);
+                copyString(ptr, "Aqulify DSP + Analyzer Tap", vst2::kVstMaxProductStrLen);
                 return 1;
             case vst2::effGetVendorVersion: return kVersion;
             case vst2::effGetVstVersion: return vst2::kVstVersion;

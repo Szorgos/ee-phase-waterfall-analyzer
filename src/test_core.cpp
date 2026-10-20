@@ -168,7 +168,7 @@ static void testJson() {
 
 int main() {
     std::printf("========================================================\n");
-    std::printf(" AetherAudio magteszt (Windows/Linux közös kód)\n");
+    std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
     std::printf("========================================================\n");
     testSpectrum();
     testTransparentAndEq();

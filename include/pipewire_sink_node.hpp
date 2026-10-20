@@ -1,10 +1,10 @@
 #pragma once
 /**
  * @file pipewire_sink_node.hpp
- * @brief AetherAudio virtuális hangeszköz PipeWire alatt.
+ * @brief Aqulify virtuális hangeszköz PipeWire alatt.
  *
  * Két pw_stream (ugyanaz a felépítés, mint a PipeWire saját module-filter-chain-jénél):
- *  - "AetherAudio" virtuális kimeneti eszköz (media.class = Audio/Sink): ide játszanak az alkalmazások,
+ *  - "Aqulify" virtuális kimeneti eszköz (media.class = Audio/Sink): ide játszanak az alkalmazások,
  *    ha a hangbeállításokban ezt választod (vagy ez az alapértelmezett kimenet);
  *  - lejátszó stream (Stream/Output/Audio), amelyet a munkamenet-kezelő (WirePlumber) automatikusan
  *    a valódi hangkártyára / DAC-ra köt.
@@ -60,8 +60,8 @@ public:
     AetherSinkNode& operator=(const AetherSinkNode&) = delete;
 
     /** Csatlakozás a PipeWire démonhoz és a két stream létrehozása. */
-    bool start(int argc, char* argv[], const std::string& sinkName = "aetheraudio_sink",
-               const std::string& description = "AetherAudio") {
+    bool start(int argc, char* argv[], const std::string& sinkName = "aqulify_sink",
+               const std::string& description = "Aqulify") {
         pw_init(&argc, &argv);
         loop = pw_main_loop_new(nullptr);
         if (!loop) return fail("a PipeWire eseményhurok nem hozható létre");
@@ -78,7 +78,7 @@ public:
         }();
         pw_core_add_listener(core, &coreListener, &coreEvents, this);
 
-        const std::string group = "aetheraudio-" + std::to_string(static_cast<long>(getpid()));
+        const std::string group = "aqulify-" + std::to_string(static_cast<long>(getpid()));
 
         // 1. Virtuális kimeneti eszköz (ide szólnak az alkalmazások)
         struct pw_properties* cprops = pw_properties_new(

@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file linux_store.hpp
- * @brief A DSP beállítások és a konvolver IR mentése Linuxon ($XDG_CONFIG_HOME/aetheraudio vagy ~/.config/aetheraudio).
+ * @brief A DSP beállítások és a konvolver IR mentése Linuxon ($XDG_CONFIG_HOME/aqulify vagy ~/.config/aqulify).
  *
  * Fájlformátum azonos a Windowsos változatéval (params.bin: 'AAEP' v3, ir.bin: 'AIRF' v1), így a beállítások
  * a két rendszer között átmásolhatók.
@@ -34,7 +34,16 @@ inline std::string configDir(bool create) {
     else if (const char* h = std::getenv("HOME"); h && *h) dir = std::string(h) + "/.config";
     else dir = ".";
     if (create) mkdir(dir.c_str(), 0755);
-    dir += "/aetheraudio";
+    // Régi név (AetherAudio, 1.4.x-ig): a beállítások, profilok és az IR egyszeri átköltöztetése
+    static bool migrated = false;
+    if (!migrated) {
+        migrated = true;
+        const std::string legacy = dir + "/" + "aether" "audio";
+        struct stat st{};
+        if (stat((dir + "/aqulify").c_str(), &st) != 0 && stat(legacy.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
+            std::rename(legacy.c_str(), (dir + "/aqulify").c_str());
+    }
+    dir += "/aqulify";
     if (create) mkdir(dir.c_str(), 0755);
     return dir;
 }
@@ -111,7 +120,7 @@ inline bool loadIr(IrData& out) {
     return true;
 }
 
-/** EQ profilok: a felület JSON dokumentuma (~/.config/aetheraudio/presets.json). */
+/** EQ profilok: a felület JSON dokumentuma (~/.config/aqulify/presets.json). */
 inline bool savePresets(const std::string& doc) {
     return writeAtomic(configDir(true) + "/presets.json", std::vector<char>(doc.begin(), doc.end()));
 }

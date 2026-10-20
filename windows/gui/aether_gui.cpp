@@ -1,10 +1,10 @@
 /**
  * @file aether_gui.cpp
- * @brief AetherAudio grafikus felület saját ablakban (WebView2).
+ * @brief Aqulify grafikus felület saját ablakban (WebView2).
  *
  * A gui_integrated_system.html-t egy beágyazott WebView2 (Chromium) vezérlőben jeleníti meg,
  * böngészőfülek és címsor nélkül. A felület ugyanúgy a motor WebSocket-hídján (127.0.0.1) kommunikál.
- * A fájlokat a "https://aether.local/" virtuális címről szolgálja ki (biztonságos eredet,
+ * A fájlokat a "https://aqulify.local/" virtuális címről szolgálja ki (biztonságos eredet,
  * a localStorage és a fájlválasztó rendesen működik).
  *
  * Ha a gépen nincs WebView2 futtatókörnyezet, a felület az alapértelmezett böngészőben nyílik meg.
@@ -28,11 +28,11 @@
 
 namespace {
 
-/** Hibanapló a felülethez: %LOCALAPPDATA%\AetherAudio\gui.log (miért nem indult a saját ablak). */
+/** Hibanapló a felülethez: %LOCALAPPDATA%\Aqulify\gui.log (miért nem indult a saját ablak). */
 void guiLog(const std::string& msg) {
     PWSTR p = nullptr;
     if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p)) || !p) return;
-    std::wstring dir = std::wstring(p) + L"\\AetherAudio";
+    std::wstring dir = std::wstring(p) + L"\\Aqulify";
     CoTaskMemFree(p);
     CreateDirectoryW(dir.c_str(), nullptr);
     FILE* f = _wfopen((dir + L"\\gui.log").c_str(), L"a");
@@ -43,10 +43,10 @@ void guiLog(const std::string& msg) {
     std::fclose(f);
 }
 
-constexpr const wchar_t* kTitle = L"AetherAudio";
-constexpr const char* kTitleUtf8 = "AetherAudio";
-constexpr const wchar_t* kVirtualHost = L"aether.local";
-constexpr const char* kStartUrl = "https://aether.local/gui_integrated_system.html";
+constexpr const wchar_t* kTitle = L"Aqulify";
+constexpr const char* kTitleUtf8 = "Aqulify";
+constexpr const wchar_t* kVirtualHost = L"aqulify.local";
+constexpr const char* kStartUrl = "https://aqulify.local/gui_integrated_system.html";
 
 std::wstring exeDirectory() {
     wchar_t buf[MAX_PATH];
@@ -85,7 +85,7 @@ std::string toUtf8(const std::wstring& w) {
 int openInBrowser(const std::wstring& guiFolder) {
     if (guiFolder.empty()) {
         MessageBoxW(nullptr, L"A felület fájljai (gui\\gui_integrated_system.html) nem találhatók.\n"
-                             L"Telepítsd újra az AetherAudio-t.", kTitle, MB_ICONERROR | MB_OK);
+                             L"Telepítsd újra az Aqulify-t.", kTitle, MB_ICONERROR | MB_OK);
         return 1;
     }
     const std::wstring html = guiFolder + L"\\gui_integrated_system.html";
@@ -127,7 +127,7 @@ void styleWindow(HWND hwnd) {
     DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof(dark));
 }
 
-/** A gui mappa kiszolgálása a https://aether.local/ virtuális címen. */
+/** A gui mappa kiszolgálása a https://aqulify.local/ virtuális címen. */
 bool mapVirtualHost(webview::webview& w, const std::wstring& folder) {
     auto res = w.browser_controller();
     if (!res.ok()) return false;
@@ -193,14 +193,14 @@ void runWindow(const std::wstring& guiFolder) {
 }
 
 /**
- * A WebView2 adatmappája: %LOCALAPPDATA%\AetherAudio\<név>. A WEBVIEW2_USER_DATA_FOLDER felülírja a
- * webview könyvtár alapértelmezését (%APPDATA%\AetherAudioGui.exe), amely egy korábbi, rendszergazdaként
+ * A WebView2 adatmappája: %LOCALAPPDATA%\Aqulify\<név>. A WEBVIEW2_USER_DATA_FOLDER felülírja a
+ * webview könyvtár alapértelmezését (%APPDATA%\AqulifyGui.exe), amely egy korábbi, rendszergazdaként
  * futott példány után nem írható lehet, és ilyenkor a WebView2 nem indul.
  */
 void useWebViewDataFolder(const wchar_t* name, bool reset) {
     PWSTR p = nullptr;
     if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p)) || !p) return;
-    std::wstring dir = std::wstring(p) + L"\\AetherAudio";
+    std::wstring dir = std::wstring(p) + L"\\Aqulify";
     CoTaskMemFree(p);
     CreateDirectoryW(dir.c_str(), nullptr);
     dir += L"\\";
@@ -218,7 +218,7 @@ void useWebViewDataFolder(const wchar_t* name, bool reset) {
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    HANDLE single = CreateMutexW(nullptr, TRUE, L"Local\\AetherAudioGui");
+    HANDLE single = CreateMutexW(nullptr, TRUE, L"Local\\AqulifyGui");
     if (single && GetLastError() == ERROR_ALREADY_EXISTS) {
         activateExistingWindow();
         CloseHandle(single);

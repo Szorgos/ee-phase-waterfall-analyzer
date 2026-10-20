@@ -24,7 +24,7 @@ namespace ee_analyzer::win {
 /**
  * Biztonsági leíró a közös memóriához:
  *  - mindenki (WD), a SYSTEM (SY) és a LOCAL SERVICE (LS) teljes hozzáférést kap,
- *  - alacsony integritási címke (LW, no-write-up): így a normál felhasználói jogú AetherAudio.exe
+ *  - alacsony integritási címke (LW, no-write-up): így a normál felhasználói jogú Aqulify.exe
  *    is írhatja az audiodg.exe (szolgáltatás) által létrehozott objektumot.
  */
 struct ScopedSecurity {
@@ -138,10 +138,10 @@ struct ParamFile {
     ParamData data;
 };
 
-/** C:\ProgramData\AetherAudio mappa (opcionálisan létrehozva a megfelelő jogosultságokkal). */
+/** C:\ProgramData\Aqulify mappa (opcionálisan létrehozva a megfelelő jogosultságokkal). */
 inline std::wstring dataDirectory(bool createDir);
 
-/** C:\ProgramData\AetherAudio\params.bin – a motor írja, a plugin (LOCAL SERVICE) is olvashatja. */
+/** C:\ProgramData\Aqulify\params.bin – a motor írja, a plugin (LOCAL SERVICE) is olvashatja. */
 inline std::wstring paramFilePath(bool createDir) {
     return dataDirectory(createDir) + L"\\params.bin";
 }
@@ -150,7 +150,7 @@ inline std::wstring dataDirectory(bool createDir) {
     wchar_t buf[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"ProgramData", buf, MAX_PATH);
     std::wstring dir = (n > 0 && n < MAX_PATH) ? std::wstring(buf) : std::wstring(L"C:\\ProgramData");
-    dir += L"\\AetherAudio";
+    dir += L"\\Aqulify";
     if (createDir) {
         // LS (LOCAL SERVICE = audiodg.exe) is írhat ide, hogy a plugin állapotnaplót hagyhasson.
         ScopedSecurity sec(L"D:(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;IU)(A;OICI;FA;;;LS)(A;OICI;FR;;;WD)");
@@ -243,7 +243,7 @@ inline bool readIrBlock(const IrBlock& blk, IrData& out, uint32_t& outSeq) {
 
 constexpr uint32_t kIrFileMagic = 0x46524941; // 'AIRF'
 
-/** C:\ProgramData\AetherAudio\ir.bin – a GUI-ból betöltött IR, hogy a plugin újraindítás után is megkapja. */
+/** C:\ProgramData\Aqulify\ir.bin – a GUI-ból betöltött IR, hogy a plugin újraindítás után is megkapja. */
 inline bool saveIrFile(const IrData& ir) {
     const std::wstring path = dataDirectory(true) + L"\\ir.bin";
     if (ir.empty()) { DeleteFileW(path.c_str()); return true; }

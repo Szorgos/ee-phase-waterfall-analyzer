@@ -1,12 +1,12 @@
-# AetherAudio • Windows 11 verzió
+# Aqulify • Windows 11 verzió
 
 ## Telepítés (egy fájl, minden automatikus)
 
-Futtasd az **`AetherAudio-Setup.exe`**-t. A varázsló:
+Futtasd az **`Aqulify-Setup.exe`**-t. A varázsló:
 
-1. bemásolja a programot (alapból `C:\Program Files\AetherAudio`);
+1. bemásolja a programot (alapból `C:\Program Files\Aqulify`);
 2. felismeri az **Equalizer APO**-t. Ha nincs telepítve, felajánlja a letöltését (sourceforge.net) és elindítja a telepítőjét. Ott jelöld be azt a hangeszközt, amin zenét hallgatsz, a végén pedig indítsd újra a gépet;
-3. bemásolja a plugint az EQ APO `VSTPlugins\AetherAudio` mappájába, és a `config.txt` **végére** egyetlen sort tesz: `Include: AetherAudio.txt`. A saját szűrőid érintetlenek maradnak, a régi `config.txt`-ről mentés készül (`config.txt.aetheraudio-backup`);
+3. bemásolja a plugint az EQ APO `VSTPlugins\Aqulify` mappájába, és a `config.txt` **végére** egyetlen sort tesz: `Include: Aqulify.txt`. A saját szűrőid érintetlenek maradnak, a régi `config.txt`-ről mentés készül (`config.txt.aqulify-backup`);
 4. Start menü és asztali parancsikont, opcionálisan automatikus indítást hoz létre;
 5. bejegyzi magát a *Gépház → Alkalmazások* (Programok és szolgáltatások) listába, rendes eltávolítóval.
 
@@ -17,15 +17,15 @@ Az **eltávolító** visszavesz mindent: az `Include` sort, a plugint, a parancs
 Csendes telepítés (rendszergazdáknak):
 
 ```
-AetherAudio-Setup.exe /S [/D=C:\Mappa] [/NOAPO] [/DOWNLOADAPO]
-"C:\Program Files\AetherAudio\Uninstall.exe" /uninstall /S
+Aqulify-Setup.exe /S [/D=C:\Mappa] [/NOAPO] [/DOWNLOADAPO]
+"C:\Program Files\Aqulify\Uninstall.exe" /uninstall /S
 ```
 
 > A telepítő jelenleg nincs digitálisan aláírva. A Windows SmartScreen figyelmeztethet (*További információ → Futtatás mindenképp*), a bekapcsolt Intelligens alkalmazásvezérlés (Smart App Control) pedig le is tiltja a programot. Lépésenkénti leírás, ellenőrzőösszeg és a Smart App Control kezelése: [README – A telepítő nincs digitálisan aláírva](../README.md#️-a-telepítő-nincs-digitálisan-aláírva--így-indíthatod-el).
 
 ## Használat
 
-Az AetherAudio a **tálcán** (értesítési területen) fut, konzolablak nélkül:
+Az Aqulify a **tálcán** (értesítési területen) fut, konzolablak nélkül:
 
 - **kattintás / dupla kattintás** az ikonon: megnyílik a felület a böngészőben;
 - **jobb kattintás**: aktuális jelforrás, *Indítás a Windows-zal* ki/be, *Napló megnyitása*, *Kilépés*.
@@ -36,13 +36,13 @@ A felület jelvénye mutatja, honnan jön a jel:
 |---|---|
 | **Élő – EQ APO plugin • 48.0 kHz** | Teljes működés: a vízesés a lánc végén mér, a felületen állított DSP élőben szól |
 | **Élő analízis – WASAPI loopback** | Nincs aktív plugin: csak analízis, a DSP beállítások nem hatnak a hangra |
-| **Motor Offline (Szimuláció)** | Nem fut az `AetherAudio.exe` |
+| **Motor Offline (Szimuláció)** | Nem fut az `Aqulify.exe` |
 
-A beállítások (EQ, modulok, betöltött impulzusválasz) a `C:\ProgramData\AetherAudio\` mappába mentődnek. A plugin onnan tölti be őket, így a lánc akkor is él, ha a motor nem fut.
+A beállítások (EQ, modulok, betöltött impulzusválasz) a `C:\ProgramData\Aqulify\` mappába mentődnek. A plugin onnan tölti be őket, így a lánc akkor is él, ha a motor nem fut.
 
 ## Felület
 
-A felület saját ablakban fut (`AetherAudioGui.exe`, Microsoft WebView2 – a Windows 11 része). A motor tálcaikonjáról vagy a Start menüből nyitható meg; egyszerre egy ablak lehet nyitva. Az ablak bezárása nem állítja le a hangfeldolgozást. Ha a gépen nincs WebView2 futtatókörnyezet, a felület az alapértelmezett böngészőben nyílik meg.
+A felület saját ablakban fut (`AqulifyGui.exe`, Microsoft WebView2 – a Windows 11 része). A motor tálcaikonjáról vagy a Start menüből nyitható meg; egyszerre egy ablak lehet nyitva. Az ablak bezárása nem állítja le a hangfeldolgozást. Ha a gépen nincs WebView2 futtatókörnyezet, a felület az alapértelmezett böngészőben nyílik meg.
 
 ## DSP modulok
 
@@ -62,7 +62,7 @@ A FIR tervezés és az impulzusválasz-előkészítés külön háttérszálon f
 
 ## Hibaelhárítás
 
-- **Napló:** tálcaikon → *Napló megnyitása* (`%LOCALAPPDATA%\AetherAudio\engine.log`). A plugin naplója: `C:\ProgramData\AetherAudio\plugin_status.txt`. Itt látszik, hogy az `audiodg.exe` betöltötte-e, és milyen beállítással.
+- **Napló:** tálcaikon → *Napló megnyitása* (`%LOCALAPPDATA%\Aqulify\engine.log`). A plugin naplója: `C:\ProgramData\Aqulify\plugin_status.txt`. Itt látszik, hogy az `audiodg.exe` betöltötte-e, és milyen beállítással.
 - **„Élő analízis – WASAPI loopback” a plugin telepítése után:** frissen telepített Equalizer APO után újraindítás kell. Az EQ APO *Device Selector*-ában ellenőrizd, hogy a használt eszköz be van-e jelölve.
 - **A felület böngészőben nyílik meg saját ablak helyett:** hiányzik a WebView2 futtatókörnyezet. Telepíthető a Microsoft oldaláról („Evergreen Bootstrapper”).
 - **Lejátszás szünetében** az EQ APO nem hívja a plugint; a vízesés ilyenkor lecseng, és ez nem hiba.
@@ -74,7 +74,7 @@ A FIR tervezés és az impulzusválasz-előkészítés külön háttérszálon f
 ```bash
 cmake -B build-win -S . -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_TOOLCHAIN_FILE=windows/toolchain-llvm-mingw.cmake -DLLVM_MINGW_ROOT=/opt/llvm-mingw
-cmake --build build-win      # -> AetherAudio-Setup.exe, AetherAudio.exe, AetherAudio.dll, tesztek
+cmake --build build-win      # -> Aqulify-Setup.exe, Aqulify.exe, Aqulify.dll, tesztek
 ```
 
 **Windowson** (Visual Studio 2022 + CMake):
@@ -83,7 +83,7 @@ cmake -B build -S . -A x64
 cmake --build build --config Release
 ```
 
-Kipróbálás EQ APO nélkül: az `eqapo_host_sim.exe <AetherAudio.dll>` úgy tölti be a plugint, ahogy az Equalizer APO. Három tesztszinuszt küld át rajta, és másodpercenként kiírja a kimenő szinteket. Közben a motor felülete élőben vezérelhető.
+Kipróbálás EQ APO nélkül: az `eqapo_host_sim.exe <Aqulify.dll>` úgy tölti be a plugint, ahogy az Equalizer APO. Három tesztszinuszt küld át rajta, és másodpercenként kiírja a kimenő szinteket. Közben a motor felülete élőben vezérelhető.
 
 ## Ismert korlátok
 

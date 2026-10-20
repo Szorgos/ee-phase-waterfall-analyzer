@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
-project(aetheraudio 
-    VERSION 1.4.8
-    DESCRIPTION "AetherAudio - Real-time Phase, Group Delay & Acoustic Waterfall DSP Suite"
+project(aqulify 
+    VERSION 1.5.0
+    DESCRIPTION "Aqulify - Real-time Phase, Group Delay & Acoustic Waterfall DSP Suite"
     LANGUAGES CXX
 )
 
@@ -52,10 +52,10 @@ target_link_libraries(test_dsp PRIVATE ee_dsp_core Threads::Threads)
 
 if(WIN32)
     # ------------------------------------------------------------------
-    # Windows: AetherAudio.exe motor + AetherAudio.dll (Equalizer APO plugin, VST 2.4 ABI)
+    # Windows: Aqulify.exe motor + Aqulify.dll (Equalizer APO plugin, VST 2.4 ABI)
     # ------------------------------------------------------------------
-    option(BUILD_WINDOWS_ENGINE "AetherAudio.exe Windows motor (WASAPI loopback + plugin híd)" ON)
-    option(BUILD_EQAPO_PLUGIN "AetherAudio.dll Equalizer APO plugin (VST 2.4 bináris interfész)" ON)
+    option(BUILD_WINDOWS_ENGINE "Aqulify.exe Windows motor (WASAPI loopback + plugin híd)" ON)
+    option(BUILD_EQAPO_PLUGIN "Aqulify.dll Equalizer APO plugin (VST 2.4 bináris interfész)" ON)
     set(BUILD_PIPEWIRE_PLUGIN OFF CACHE BOOL "" FORCE)
 
     enable_language(RC)
@@ -70,48 +70,48 @@ if(WIN32)
         set(AA_FILETYPE "${filetype}")
         configure_file(${EE_RES_DIR}/version.rc.in ${CMAKE_CURRENT_BINARY_DIR}/${out} @ONLY)
     endfunction()
-    ee_version_rc(engine_version.rc "AetherAudio" "AetherAudio.exe" "AetherAudio motor (tálcás háttéralkalmazás)" "VFT_APP")
-    ee_version_rc(plugin_version.rc "AetherAudio" "AetherAudio.dll" "AetherAudio Equalizer APO plugin (VST 2.4)" "VFT_DLL")
-    ee_version_rc(gui_version.rc "AetherAudio" "AetherAudioGui.exe" "AetherAudio felület (WebView2 ablak)" "VFT_APP")
-    ee_version_rc(setup_version.rc "AetherAudio-Setup" "AetherAudio-Setup.exe" "AetherAudio telepítő" "VFT_APP")
+    ee_version_rc(engine_version.rc "Aqulify" "Aqulify.exe" "Aqulify motor (tálcás háttéralkalmazás)" "VFT_APP")
+    ee_version_rc(plugin_version.rc "Aqulify" "Aqulify.dll" "Aqulify Equalizer APO plugin (VST 2.4)" "VFT_DLL")
+    ee_version_rc(gui_version.rc "Aqulify" "AqulifyGui.exe" "Aqulify felület (WebView2 ablak)" "VFT_APP")
+    ee_version_rc(setup_version.rc "Aqulify-Setup" "Aqulify-Setup.exe" "Aqulify telepítő" "VFT_APP")
 
     if(BUILD_WINDOWS_ENGINE)
-        add_executable(AetherAudio WIN32 windows/engine/aether_engine.cpp ${EE_RES_DIR}/engine.rc)
-        target_include_directories(AetherAudio PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR})
-        target_link_libraries(AetherAudio PRIVATE ee_dsp_core ws2_32 iphlpapi ole32 oleaut32 shell32 advapi32 user32 uuid)
-        target_compile_definitions(AetherAudio PRIVATE UNICODE _UNICODE)
+        add_executable(Aqulify WIN32 windows/engine/aether_engine.cpp ${EE_RES_DIR}/engine.rc)
+        target_include_directories(Aqulify PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+        target_link_libraries(Aqulify PRIVATE ee_dsp_core ws2_32 iphlpapi ole32 oleaut32 shell32 advapi32 user32 uuid)
+        target_compile_definitions(Aqulify PRIVATE UNICODE _UNICODE)
         if(MSVC)
-            target_link_options(AetherAudio PRIVATE /ENTRY:mainCRTStartup /MANIFEST:NO)
-            set_property(TARGET AetherAudio PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+            target_link_options(Aqulify PRIVATE /ENTRY:mainCRTStartup /MANIFEST:NO)
+            set_property(TARGET Aqulify PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
         endif()
     endif()
 
     # Grafikus felület saját ablakban (WebView2; a webview/webview 0.12.0 beépített betöltőjével, WebView2Loader.dll nélkül)
     if(BUILD_WINDOWS_ENGINE)
-        add_executable(AetherAudioGui WIN32 windows/gui/aether_gui.cpp ${EE_RES_DIR}/gui.rc)
-        target_include_directories(AetherAudioGui PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR}
+        add_executable(AqulifyGui WIN32 windows/gui/aether_gui.cpp ${EE_RES_DIR}/gui.rc)
+        target_include_directories(AqulifyGui PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR}
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/webview2)
-        target_compile_definitions(AetherAudioGui PRIVATE UNICODE _UNICODE)
-        target_link_libraries(AetherAudioGui PRIVATE advapi32 ole32 oleaut32 shell32 shlwapi user32 version dwmapi uuid)
+        target_compile_definitions(AqulifyGui PRIVATE UNICODE _UNICODE)
+        target_link_libraries(AqulifyGui PRIVATE advapi32 ole32 oleaut32 shell32 shlwapi user32 version dwmapi uuid)
         if(MINGW)
-            target_link_options(AetherAudioGui PRIVATE -municode -static)
+            target_link_options(AqulifyGui PRIVATE -municode -static)
         endif()
         if(MSVC)
-            target_link_options(AetherAudioGui PRIVATE /MANIFEST:NO)
-            set_property(TARGET AetherAudioGui PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+            target_link_options(AqulifyGui PRIVATE /MANIFEST:NO)
+            set_property(TARGET AqulifyGui PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
         endif()
     endif()
 
-    option(BUILD_WINDOWS_SETUP "AetherAudio-Setup.exe telepítő (a motort és a plugint is beágyazza)" ON)
+    option(BUILD_WINDOWS_SETUP "Aqulify-Setup.exe telepítő (a motort és a plugint is beágyazza)" ON)
 
     if(BUILD_EQAPO_PLUGIN)
-        add_library(AetherAudioPlugin SHARED windows/plugin/aether_vst2.cpp windows/plugin/aether_vst2.def ${EE_RES_DIR}/plugin.rc)
-        target_include_directories(AetherAudioPlugin PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR})
-        set_target_properties(AetherAudioPlugin PROPERTIES OUTPUT_NAME "AetherAudio" PREFIX "")
-        target_link_libraries(AetherAudioPlugin PRIVATE ee_dsp_core advapi32)
+        add_library(AqulifyPlugin SHARED windows/plugin/aether_vst2.cpp windows/plugin/aether_vst2.def ${EE_RES_DIR}/plugin.rc)
+        target_include_directories(AqulifyPlugin PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+        set_target_properties(AqulifyPlugin PROPERTIES OUTPUT_NAME "Aqulify" PREFIX "")
+        target_link_libraries(AqulifyPlugin PRIVATE ee_dsp_core advapi32)
         if(MSVC)
             # Statikus MSVC futtatókörnyezet (/MT): az audiodg.exe-be töltött DLL ne függjön a VC++ redisttől
-            set_property(TARGET AetherAudioPlugin PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+            set_property(TARGET AqulifyPlugin PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
         endif()
     endif()
 
@@ -122,15 +122,15 @@ if(WIN32)
         # A beágyazandó fájlok egy átmeneti mappába kerülnek; a .rc fix útvonalakkal hivatkozik rájuk
         set(EE_PAYLOAD_DIR ${CMAKE_CURRENT_BINARY_DIR}/payload)
         # Aláírt kiadáshoz: a motor, a felület és a plugin a SignPath által aláírt példányból kerül a telepítőbe
-        set(EE_SIGNED_BINARIES_DIR "" CACHE PATH "Aláírt AetherAudio.exe / AetherAudioGui.exe / AetherAudio.dll mappája (üres: a most fordított fájlok)")
+        set(EE_SIGNED_BINARIES_DIR "" CACHE PATH "Aláírt Aqulify.exe / AqulifyGui.exe / Aqulify.dll mappája (üres: a most fordított fájlok)")
         if(EE_SIGNED_BINARIES_DIR)
-            set(EE_SRC_ENGINE ${EE_SIGNED_BINARIES_DIR}/AetherAudio.exe)
-            set(EE_SRC_PLUGIN ${EE_SIGNED_BINARIES_DIR}/AetherAudio.dll)
-            set(EE_SRC_GUIAPP ${EE_SIGNED_BINARIES_DIR}/AetherAudioGui.exe)
+            set(EE_SRC_ENGINE ${EE_SIGNED_BINARIES_DIR}/Aqulify.exe)
+            set(EE_SRC_PLUGIN ${EE_SIGNED_BINARIES_DIR}/Aqulify.dll)
+            set(EE_SRC_GUIAPP ${EE_SIGNED_BINARIES_DIR}/AqulifyGui.exe)
         else()
-            set(EE_SRC_ENGINE $<TARGET_FILE:AetherAudio>)
-            set(EE_SRC_PLUGIN $<TARGET_FILE:AetherAudioPlugin>)
-            set(EE_SRC_GUIAPP $<TARGET_FILE:AetherAudioGui>)
+            set(EE_SRC_ENGINE $<TARGET_FILE:Aqulify>)
+            set(EE_SRC_PLUGIN $<TARGET_FILE:AqulifyPlugin>)
+            set(EE_SRC_GUIAPP $<TARGET_FILE:AqulifyGui>)
         endif()
         set(EE_PAYLOAD_SOURCES
             ${CMAKE_CURRENT_SOURCE_DIR}/gui_integrated_system.html
@@ -150,12 +150,12 @@ if(WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE ${EE_PAYLOAD_DIR}/threelic.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/README_WINDOWS.md ${EE_PAYLOAD_DIR}/readme.bin
             COMMAND ${CMAKE_COMMAND} -E touch ${EE_PAYLOAD_DIR}/payload.stamp
-            DEPENDS AetherAudio AetherAudioPlugin AetherAudioGui ${EE_PAYLOAD_SOURCES}
+            DEPENDS Aqulify AqulifyPlugin AqulifyGui ${EE_PAYLOAD_SOURCES}
             COMMENT "Telepítő csomag összeállítása")
         file(WRITE ${EE_PAYLOAD_DIR}/index.txt
-            "FILE_ENGINE|AetherAudio.exe\n"
-            "FILE_GUIAPP|AetherAudioGui.exe\n"
-            "FILE_PLUGIN|plugin\\AetherAudio.dll\n"
+            "FILE_ENGINE|Aqulify.exe\n"
+            "FILE_GUIAPP|AqulifyGui.exe\n"
+            "FILE_PLUGIN|plugin\\Aqulify.dll\n"
             "FILE_GUI|gui\\gui_integrated_system.html\n"
             "FILE_AUTOEQ|gui\\autoeq_index.js\n"
             "FILE_THREE|gui\\three.min.js\n"
@@ -172,35 +172,35 @@ if(WIN32)
             "FILE_THREELIC RCDATA \"${EE_PAYLOAD_DIR}/threelic.bin\"\n"
             "FILE_README RCDATA \"${EE_PAYLOAD_DIR}/readme.bin\"\n")
         set_source_files_properties(${EE_RES_DIR}/setup.rc PROPERTIES OBJECT_DEPENDS ${EE_PAYLOAD_DIR}/payload.stamp)
-        add_custom_target(AetherAudioPayload DEPENDS ${EE_PAYLOAD_DIR}/payload.stamp)
+        add_custom_target(AqulifyPayload DEPENDS ${EE_PAYLOAD_DIR}/payload.stamp)
 
-        add_executable(AetherAudioSetup WIN32 windows/installer/setup.cpp ${EE_RES_DIR}/setup.rc)
-        add_dependencies(AetherAudioSetup AetherAudioPayload)
-        set_target_properties(AetherAudioSetup PROPERTIES OUTPUT_NAME "AetherAudio-Setup")
-        target_include_directories(AetherAudioSetup PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR})
-        target_compile_definitions(AetherAudioSetup PRIVATE UNICODE _UNICODE)
-        target_link_libraries(AetherAudioSetup PRIVATE comctl32 ole32 oleaut32 shell32 shlwapi winhttp advapi32 user32 gdi32 uuid)
+        add_executable(AqulifySetup WIN32 windows/installer/setup.cpp ${EE_RES_DIR}/setup.rc)
+        add_dependencies(AqulifySetup AqulifyPayload)
+        set_target_properties(AqulifySetup PROPERTIES OUTPUT_NAME "Aqulify-Setup")
+        target_include_directories(AqulifySetup PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+        target_compile_definitions(AqulifySetup PRIVATE UNICODE _UNICODE AQULIFY_VERSION="${PROJECT_VERSION}")
+        target_link_libraries(AqulifySetup PRIVATE comctl32 ole32 oleaut32 shell32 shlwapi winhttp advapi32 user32 gdi32 uuid)
         if(MINGW)
-            target_link_options(AetherAudioSetup PRIVATE -municode)
+            target_link_options(AqulifySetup PRIVATE -municode)
         endif()
         if(MSVC)
-            target_link_options(AetherAudioSetup PRIVATE /MANIFEST:NO)
-            set_property(TARGET AetherAudioSetup PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+            target_link_options(AqulifySetup PRIVATE /MANIFEST:NO)
+            set_property(TARGET AqulifySetup PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
         endif()
     endif()
 endif()
 
-# Linux: PipeWire motor (virtuális "AetherAudio" kimeneti eszköz) és saját ablakos felület
-option(BUILD_PIPEWIRE_PLUGIN "AetherAudio PipeWire motor Linuxra" ON)
+# Linux: PipeWire motor (virtuális "Aqulify" kimeneti eszköz) és saját ablakos felület
+option(BUILD_PIPEWIRE_PLUGIN "Aqulify PipeWire motor Linuxra" ON)
 option(BUILD_LINUX_GUI "Saját ablakos felület (WebKitGTK), ha a fejlesztői csomag elérhető" ON)
 
 if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
-    add_executable(aetheraudio-engine src/pipewire_plugin.cpp)
-    target_include_directories(aetheraudio-engine PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
-    target_link_directories(aetheraudio-engine PRIVATE ${PIPEWIRE_LIBRARY_DIRS})
-    target_link_libraries(aetheraudio-engine PRIVATE ee_dsp_core ${PIPEWIRE_LIBRARIES} Threads::Threads)
+    add_executable(aqulify-engine src/pipewire_plugin.cpp)
+    target_include_directories(aqulify-engine PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
+    target_link_directories(aqulify-engine PRIVATE ${PIPEWIRE_LIBRARY_DIRS})
+    target_link_libraries(aqulify-engine PRIVATE ee_dsp_core ${PIPEWIRE_LIBRARIES} Threads::Threads)
 
     if(BUILD_LINUX_GUI)
         pkg_check_modules(WEBKITGTK IMPORTED_TARGET webkit2gtk-4.1)
@@ -209,14 +209,14 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32)
         endif()
         pkg_check_modules(GTK3 IMPORTED_TARGET gtk+-3.0)
         if(WEBKITGTK_FOUND AND GTK3_FOUND)
-            add_executable(aetheraudio-gui src/aether_gui_linux.cpp)
-            target_include_directories(aetheraudio-gui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party)
-            target_link_libraries(aetheraudio-gui PRIVATE PkgConfig::GTK3 PkgConfig::WEBKITGTK dl)
+            add_executable(aqulify-gui src/aether_gui_linux.cpp)
+            target_include_directories(aqulify-gui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party)
+            target_link_libraries(aqulify-gui PRIVATE PkgConfig::GTK3 PkgConfig::WEBKITGTK dl)
             message(STATUS "Saját ablakos felület (WebKitGTK) építése engedélyezve")
         else()
-            message(STATUS "WebKitGTK nem található: a felület böngészőben nyílik (aetheraudio-gui.sh)")
+            message(STATUS "WebKitGTK nem található: a felület böngészőben nyílik (aqulify-gui.sh)")
         endif()
     endif()
 endif()
 
-message(STATUS "AetherAudio C++ DSP Engine sikeresen konfigurálva.")
+message(STATUS "Aqulify C++ DSP Engine sikeresen konfigurálva.")

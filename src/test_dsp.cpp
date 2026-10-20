@@ -355,7 +355,7 @@ static void testTruePeakAndMore() {
 
 int main() {
     std::printf("========================================================\n");
-    std::printf(" AetherAudio DSP modulteszt\n");
+    std::printf(" Aqulify DSP modulteszt\n");
     std::printf("========================================================\n");
     testConvolver();
     testFirDesign();

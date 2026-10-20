@@ -1,9 +1,9 @@
 /**
  * @file aether_gui_linux.cpp
- * @brief AetherAudio felület saját ablakban Linuxon (WebKitGTK, a webview/webview 0.12.0 könyvtárral).
+ * @brief Aqulify felület saját ablakban Linuxon (WebKitGTK, a webview/webview 0.12.0 könyvtárral).
  *
- * A gui_integrated_system.html-t keresi (sorrendben): $AETHERAUDIO_GUI_DIR, <bináris>/../share/aetheraudio/gui,
- * ~/.local/share/aetheraudio/gui, <bináris> mappája. Ha a WebKitGTK ablak nem indul, Chromium alapú
+ * A gui_integrated_system.html-t keresi (sorrendben): $AQULIFY_GUI_DIR, <bináris>/../share/aqulify/gui,
+ * ~/.local/share/aqulify/gui, <bináris> mappája. Ha a WebKitGTK ablak nem indul, Chromium alapú
  * böngésző alkalmazásablakában (--app), végső esetben az alapértelmezett böngészőben nyitja meg (xdg-open).
  */
 #include "webview/webview.h"
@@ -34,10 +34,10 @@ std::string exeDir() {
 std::string findGuiFolder() {
     std::string candidates[5];
     int k = 0;
-    if (const char* env = std::getenv("AETHERAUDIO_GUI_DIR"); env && *env) candidates[k++] = env;
+    if (const char* env = std::getenv("AQULIFY_GUI_DIR"); env && *env) candidates[k++] = env;
     const std::string dir = exeDir();
-    candidates[k++] = dir + "/../share/aetheraudio/gui";
-    if (const char* home = std::getenv("HOME"); home && *home) candidates[k++] = std::string(home) + "/.local/share/aetheraudio/gui";
+    candidates[k++] = dir + "/../share/aqulify/gui";
+    if (const char* home = std::getenv("HOME"); home && *home) candidates[k++] = std::string(home) + "/.local/share/aqulify/gui";
     candidates[k++] = dir;
     candidates[k++] = dir + "/..";
     for (int i = 0; i < k; ++i)
@@ -68,7 +68,7 @@ int openInBrowser(const std::string& url) {
     for (const char* b : { "chromium", "chromium-browser", "google-chrome", "google-chrome-stable",
                            "brave-browser", "microsoft-edge", "vivaldi" }) {
         if (!inPath(b)) continue;
-        const std::string cmd = std::string(b) + " --app='" + url + "' --class=AetherAudio --window-size=1480,940 >/dev/null 2>&1 &";
+        const std::string cmd = std::string(b) + " --app='" + url + "' --class=Aqulify --window-size=1480,940 >/dev/null 2>&1 &";
         if (std::system(cmd.c_str()) == 0) return 0;
     }
     const std::string cmd = "xdg-open '" + url + "' >/dev/null 2>&1 &";
@@ -102,7 +102,7 @@ int main() {
 
     try {
         webview::webview w(false, nullptr);
-        w.set_title("AetherAudio");
+        w.set_title("Aqulify");
         w.set_size(1480, 940, WEBVIEW_HINT_NONE);
         w.set_size(1000, 640, WEBVIEW_HINT_MIN);
         if (auto win = w.window(); win.ok()) {
@@ -110,12 +110,12 @@ int main() {
             if (settings) {
                 g_object_set(settings, "gtk-application-prefer-dark-theme", TRUE, nullptr);
             }
-            gtk_window_set_icon_name(GTK_WINDOW(win.value()), "aetheraudio");
-            std::string iconFile = folder + "/../../icons/hicolor/256x256/apps/aetheraudio.png";
+            gtk_window_set_icon_name(GTK_WINDOW(win.value()), "aqulify");
+            std::string iconFile = folder + "/../../icons/hicolor/256x256/apps/aqulify.png";
             if (fileExists(iconFile)) {
                 gtk_window_set_icon_from_file(GTK_WINDOW(win.value()), iconFile.c_str(), nullptr);
             } else {
-                std::string iconLocal = folder + "/../linux/aetheraudio.png";
+                std::string iconLocal = folder + "/../linux/aqulify.png";
                 if (fileExists(iconLocal)) gtk_window_set_icon_from_file(GTK_WINDOW(win.value()), iconLocal.c_str(), nullptr);
             }
         }
