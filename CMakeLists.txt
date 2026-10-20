@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(aetheraudio 
-    VERSION 1.2.2
+    VERSION 1.3.0
     DESCRIPTION "AetherAudio - Real-time Phase, Group Delay & Acoustic Waterfall DSP Suite"
     LANGUAGES CXX
 )
@@ -72,6 +72,7 @@ if(WIN32)
     endfunction()
     ee_version_rc(engine_version.rc "AetherAudio" "AetherAudio.exe" "AetherAudio motor (tálcás háttéralkalmazás)" "VFT_APP")
     ee_version_rc(plugin_version.rc "AetherAudio" "AetherAudio.dll" "AetherAudio Equalizer APO plugin (VST 2.4)" "VFT_DLL")
+    ee_version_rc(gui_version.rc "AetherAudio" "AetherAudioGui.exe" "AetherAudio felület (WebView2 ablak)" "VFT_APP")
     ee_version_rc(setup_version.rc "AetherAudio-Setup" "AetherAudio-Setup.exe" "AetherAudio telepítő" "VFT_APP")
 
     if(BUILD_WINDOWS_ENGINE)
@@ -82,6 +83,22 @@ if(WIN32)
         if(MSVC)
             target_link_options(AetherAudio PRIVATE /ENTRY:mainCRTStartup /MANIFEST:NO)
             set_property(TARGET AetherAudio PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+        endif()
+    endif()
+
+    # Grafikus felület saját ablakban (WebView2; a webview/webview 0.12.0 beépített betöltőjével, WebView2Loader.dll nélkül)
+    if(BUILD_WINDOWS_ENGINE)
+        add_executable(AetherAudioGui WIN32 windows/gui/aether_gui.cpp ${EE_RES_DIR}/gui.rc)
+        target_include_directories(AetherAudioGui PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR}
+            ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/webview2)
+        target_compile_definitions(AetherAudioGui PRIVATE UNICODE _UNICODE)
+        target_link_libraries(AetherAudioGui PRIVATE advapi32 ole32 oleaut32 shell32 shlwapi user32 version dwmapi uuid)
+        if(MINGW)
+            target_link_options(AetherAudioGui PRIVATE -municode -static)
+        endif()
+        if(MSVC)
+            target_link_options(AetherAudioGui PRIVATE /MANIFEST:NO)
+            set_property(TARGET AetherAudioGui PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
         endif()
     endif()
 
@@ -115,16 +132,18 @@ if(WIN32)
             COMMAND ${CMAKE_COMMAND} -E make_directory ${EE_PAYLOAD_DIR}
             COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:AetherAudio> ${EE_PAYLOAD_DIR}/engine.bin
             COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:AetherAudioPlugin> ${EE_PAYLOAD_DIR}/plugin.bin
+            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:AetherAudioGui> ${EE_PAYLOAD_DIR}/guiapp.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/gui_integrated_system.html ${EE_PAYLOAD_DIR}/gui.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/autoeq_index.js ${EE_PAYLOAD_DIR}/autoeq.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js ${EE_PAYLOAD_DIR}/three.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE ${EE_PAYLOAD_DIR}/threelic.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/README_WINDOWS.md ${EE_PAYLOAD_DIR}/readme.bin
             COMMAND ${CMAKE_COMMAND} -E touch ${EE_PAYLOAD_DIR}/payload.stamp
-            DEPENDS AetherAudio AetherAudioPlugin ${EE_PAYLOAD_SOURCES}
+            DEPENDS AetherAudio AetherAudioPlugin AetherAudioGui ${EE_PAYLOAD_SOURCES}
             COMMENT "Telepítő csomag összeállítása")
         file(WRITE ${EE_PAYLOAD_DIR}/index.txt
             "FILE_ENGINE|AetherAudio.exe\n"
+            "FILE_GUIAPP|AetherAudioGui.exe\n"
             "FILE_PLUGIN|plugin\\AetherAudio.dll\n"
             "FILE_GUI|gui\\gui_integrated_system.html\n"
             "FILE_AUTOEQ|gui\\autoeq_index.js\n"
@@ -134,6 +153,7 @@ if(WIN32)
         file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/setup_payload.rc
             "PAYLOAD_INDEX RCDATA \"${EE_PAYLOAD_DIR}/index.txt\"\n"
             "FILE_ENGINE RCDATA \"${EE_PAYLOAD_DIR}/engine.bin\"\n"
+            "FILE_GUIAPP RCDATA \"${EE_PAYLOAD_DIR}/guiapp.bin\"\n"
             "FILE_PLUGIN RCDATA \"${EE_PAYLOAD_DIR}/plugin.bin\"\n"
             "FILE_GUI RCDATA \"${EE_PAYLOAD_DIR}/gui.bin\"\n"
             "FILE_AUTOEQ RCDATA \"${EE_PAYLOAD_DIR}/autoeq.bin\"\n"

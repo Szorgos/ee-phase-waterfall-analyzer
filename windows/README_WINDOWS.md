@@ -40,6 +40,10 @@ A felület jelvénye mutatja, honnan jön a jel:
 
 A beállítások (EQ, modulok, betöltött impulzusválasz) a `C:\ProgramData\AetherAudio\` mappába mentődnek. A plugin onnan tölti be őket, így a lánc akkor is él, ha a motor nem fut.
 
+## Felület
+
+A felület saját ablakban fut (`AetherAudioGui.exe`, Microsoft WebView2 – a Windows 11 része). A motor tálcaikonjáról vagy a Start menüből nyitható meg; egyszerre egy ablak lehet nyitva. Az ablak bezárása nem állítja le a hangfeldolgozást. Ha a gépen nincs WebView2 futtatókörnyezet, a felület az alapértelmezett böngészőben nyílik meg.
+
 ## DSP modulok
 
 | Modul | Megvalósítás |
@@ -60,6 +64,7 @@ A FIR tervezés és az impulzusválasz-előkészítés külön háttérszálon f
 
 - **Napló:** tálcaikon → *Napló megnyitása* (`%LOCALAPPDATA%\AetherAudio\engine.log`). A plugin naplója: `C:\ProgramData\AetherAudio\plugin_status.txt`. Itt látszik, hogy az `audiodg.exe` betöltötte-e, és milyen beállítással.
 - **„Élő analízis – WASAPI loopback” a plugin telepítése után:** frissen telepített Equalizer APO után újraindítás kell. Az EQ APO *Device Selector*-ában ellenőrizd, hogy a használt eszköz be van-e jelölve.
+- **A felület böngészőben nyílik meg saját ablak helyett:** hiányzik a WebView2 futtatókörnyezet. Telepíthető a Microsoft oldaláról („Evergreen Bootstrapper”).
 - **Lejátszás szünetében** az EQ APO nem hívja a plugint; a vízesés ilyenkor lecseng, és ez nem hiba.
 - A motor csak a `127.0.0.1` címen figyel (az első szabad port a 47810–47814 tartományból, végső tartalékként 8080), tűzfalszabály nem kell. A felület magától megtalálja. Ha mind foglalt, az indítási üzenet megnevezi a portot használó programot.
 
