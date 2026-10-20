@@ -1,4 +1,7 @@
-### Újdonságok (1.4.3)
+### Újdonságok (1.4.4)
+- **Automatikus preamp:** induláskor 0 dB. Ha az EQ-görbe klippelne, a preamp magától a görbe csúcsához igazodik (visszavett kiemelésnél vissza is megy, legfeljebb 0 dB-ig), és a limiter bekapcsol. Importnál a fájlban megadott preamp pontosan megmarad; ha a fájlban nincs preamp, az automatika állítja be. A kézzel beírt vagy profilban mentett preamp addig marad, amíg az EQ nem klippel.
+
+### Az 1.4.3 újdonságai
 - **Linux telepítő csomag a kiadások között:** `AetherAudio-Linux-<verzió>.tar.gz` (kicsomagolás után `./install.sh`). Minden kiadás előtt a GitHub lefordítja és teszteli a Linuxos motort és a saját ablakos felületet.
 - Előkészítve a Windows kódaláírás (SignPath Foundation); az aláírt kiadások a jóváhagyás után érkeznek.
 
