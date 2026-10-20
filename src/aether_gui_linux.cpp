@@ -50,6 +50,19 @@ int openInBrowser(const std::string& url) {
     return std::system(cmd.c_str()) == 0 ? 0 : 1;
 }
 
+
+/** JS-ből hívható külső link (pl. támogatás): csak engedélyezett https címeket nyit meg a rendszer böngészőjében. */
+std::string allowedExternalUrl(const std::string& req) {
+    // req: JSON tömb, pl. ["https://revolut.me/gergoqhg6"]
+    const size_t a = req.find('"');
+    const size_t b = a == std::string::npos ? std::string::npos : req.find('"', a + 1);
+    if (b == std::string::npos) return {};
+    const std::string url = req.substr(a + 1, b - a - 1);
+    for (const char* ok : { "https://revolut.me/", "https://github.com/Szorgos/" })
+        if (url.rfind(ok, 0) == 0 && url.find_first_of("'\\ \"<>`$;&|") == std::string::npos) return url;
+    return {};
+}
+
 } // namespace
 
 int main() {
@@ -81,6 +94,11 @@ int main() {
                 if (fileExists(iconLocal)) gtk_window_set_icon_from_file(GTK_WINDOW(win.value()), iconLocal.c_str(), nullptr);
             }
         }
+        w.bind("aetherOpenUrl", [](const std::string& req) -> std::string {
+            const std::string target = allowedExternalUrl(req);
+            if (!target.empty()) g_app_info_launch_default_for_uri(target.c_str(), nullptr, nullptr);
+            return "null";
+        });
         w.navigate(url);
         w.run();
         return 0;

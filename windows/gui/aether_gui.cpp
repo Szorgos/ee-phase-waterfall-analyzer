@@ -120,6 +120,19 @@ bool mapVirtualHost(webview::webview& w, const std::wstring& folder) {
     return ok;
 }
 
+
+/** JS-ből hívható külső link (pl. támogatás): csak engedélyezett https címeket nyit meg a rendszer böngészőjében. */
+std::string allowedExternalUrl(const std::string& req) {
+    // req: JSON tömb, pl. ["https://revolut.me/gergoqhg6"]
+    const size_t a = req.find('"');
+    const size_t b = a == std::string::npos ? std::string::npos : req.find('"', a + 1);
+    if (b == std::string::npos) return {};
+    const std::string url = req.substr(a + 1, b - a - 1);
+    for (const char* ok : { "https://revolut.me/", "https://github.com/Szorgos/" })
+        if (url.rfind(ok, 0) == 0 && url.find_first_of("'\\ \"<>`$;&|") == std::string::npos) return url;
+    return {};
+}
+
 } // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
@@ -143,6 +156,16 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         auto win = w.window();
         if (win.ok()) styleWindow(static_cast<HWND>(win.value()));
 
+        w.bind("aetherOpenUrl", [](const std::string& req) -> std::string {
+            const std::string url = allowedExternalUrl(req);
+            if (!url.empty()) {
+                const int n = MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, nullptr, 0);
+                std::wstring wurl(static_cast<size_t>(n), L'\0');
+                MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, wurl.data(), n);
+                ShellExecuteW(nullptr, L"open", wurl.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            }
+            return "null";
+        });
         if (mapVirtualHost(w, guiFolder)) {
             w.navigate(kStartUrl);
         } else {

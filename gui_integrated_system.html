@@ -57,9 +57,20 @@
   .top-spectrum-strip { position: relative; width: 100%; height: clamp(230px, 32vh, 420px); background: #0c0e12; border-bottom: 1px solid var(--ee-border); overflow: hidden; }
   canvas#waterfallCanvas { width: 100%; height: 100%; display: block; }
 
-  .strip-overlay { position: absolute; top: 10px; left: 14px; display: flex; gap: 8px; pointer-events: none; }
+  .strip-overlay { position: absolute; top: 10px; left: 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; pointer-events: none; }
   .strip-badge { background: rgba(30, 30, 30, 0.85); backdrop-filter: blur(4px); border: 1px solid var(--ee-border); border-radius: 6px; padding: 4px 10px; font-size: 0.72rem; color: var(--ee-text-secondary); }
   .strip-badge strong { color: #00f0ff; }
+  .support-link { background: transparent; border: 1px solid transparent; color: rgba(255,255,255,0.42); font-size: 0.74rem; padding: 2px 8px; border-radius: 12px; cursor: pointer; transition: color .15s, border-color .15s; }
+  .support-link:hover { color: #ff7b9c; border-color: rgba(255,123,156,0.45); }
+  .support-pop { position: fixed; top: 52px; right: 18px; z-index: 9998; width: 270px; background: #1c1f27; border: 1px solid #3c4456; border-radius: 10px; padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-size: 0.8rem; color: #d8d8d8; display: none; text-align: center; }
+  .support-pop img { width: 190px; border-radius: 8px; margin: 8px auto; display: block; }
+  .support-pop .tag { font-weight: 700; color: #fff; font-size: 0.95rem; }
+  .preset-bar { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; }
+  .preset-lbl { font-size: 0.8rem; color: var(--ee-text-secondary); }
+  .preset-select { min-width: 180px; max-width: 340px; font-weight: 600; color: #e0e0e0; background: #1e222b; border: 1px solid #3c4456; border-radius: 4px; padding: 3px 8px; }
+  .prering-note { font-size: 0.62rem; color: rgba(255,255,255,0.38); padding: 2px 4px; letter-spacing: 0.2px; }
+  .aether-toast { position: fixed; right: 18px; bottom: 18px; z-index: 9999; max-width: 420px; background: #1f2a1f; border: 1px solid #2ec27e; color: #e8ffe8; border-radius: 8px; padding: 10px 14px; font-size: 0.8rem; white-space: pre-line; box-shadow: 0 6px 24px rgba(0,0,0,0.45); opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; pointer-events: none; }
+  .aether-toast.show { opacity: 1; transform: translateY(0); }
 
   .strip-controls { position: absolute; top: 10px; right: 14px; display: flex; gap: 6px; align-items: center; z-index: 10; }
   .mini-btn { background: rgba(45, 45, 45, 0.85); backdrop-filter: blur(4px); border: 1px solid var(--ee-border); color: #fff; padding: 4px 9px; border-radius: 5px; font-size: 0.73rem; cursor: pointer; font-weight: 600; transition: all 0.15s; }
@@ -180,6 +191,18 @@
 </head>
 <body>
 
+
+<!-- TÁMOGATÁS (donateware) -->
+<div id="supportPop" class="support-pop" role="dialog" aria-label="Támogatás">
+  <div style="font-weight:700; color:#fff; margin-bottom:4px;">Tetszik az AetherAudio?</div>
+  <div>A program ingyenes és nyílt forrású. Ha hasznosnak találod, egy önkéntes támogatással segítheted a további fejlesztést. Köszönöm! ♥</div>
+  <img alt="Revolut QR-kód: @gergoqhg6" src="data:image/png;base64,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">
+  <div class="tag">Revolut: @gergoqhg6</div>
+  <div style="margin-top:10px; display:flex; gap:6px; justify-content:center;">
+    <button class="adw-btn primary" onclick="openExternal('https://revolut.me/gergoqhg6')">Megnyitás a Revoluton</button>
+    <button class="adw-btn" onclick="toggleSupport()">Bezárás</button>
+  </div>
+</div>
 <div class="ee-window">
   <!-- FEJLÉC -->
   <header>
@@ -187,7 +210,16 @@
       <div class="badge-app" style="background: linear-gradient(135deg, #3584e4, #9a59b5); font-weight: 800; letter-spacing: 0.5px;">AETHER</div>
       <span style="font-size: 1.02rem; font-weight: 700; background: linear-gradient(90deg, #ffffff, #78aeed); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">AetherAudio • Audiofil DSP Rendszer</span>
     </div>
+    <!-- EQ PROFILOK: aktív profil neve, választás, mentés, átnevezés, törlés -->
+    <div id="presetBar" class="preset-bar" title="EQ profilok: AutoEq importkor és kézi beállításkor automatikusan mentődnek, újraindítás után is választhatók">
+      <span class="preset-lbl">Profil:</span>
+      <select id="selectPreset" class="mini-select preset-select" onchange="onPresetSelected(this.value)"></select>
+      <button class="mini-btn" onclick="savePresetAs()" title="Mentés új profilként">＋</button>
+      <button class="mini-btn" onclick="renamePreset()" title="Aktív profil átnevezése">✎</button>
+      <button class="mini-btn" onclick="deletePreset()" title="Aktív profil törlése">🗑</button>
+    </div>
     <div style="display:flex; align-items:center; gap:12px;">
+      <button id="btnSupport" class="support-link" onclick="toggleSupport(event)" title="Az AetherAudio ingyenes (donateware). Ha hasznos, egy kis támogatással segítheted a fejlesztést.">♥ Támogatás</button>
       <span id="pipewireLiveBadge" class="status-badge" style="background:rgba(255,255,255,0.06); color:var(--ee-text-secondary); border:1px solid #444;">
         ○ Motor Offline (Szimuláció)
       </span>
@@ -209,9 +241,8 @@
       <div class="strip-badge">
         Top-Strip 3D: <strong id="lblResolution">160 sáv × 120 lépcső</strong>
       </div>
-      <div class="strip-badge" id="hudPreRingBadge" style="display:none; color:#fff;">
-        <span id="hudGlowDot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#fff; margin-right:4px;"></span>
-        <strong>FIR Pre-ringing észlelve</strong>
+      <div class="prering-note" id="hudPreRingBadge" style="display:none;" title="Lineáris / köztes fázisú FIR módban a meredek szűrők előtt kis előcsengés keletkezhet. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik – ez így rendben van.">
+        <span id="hudGlowDot" style="display:inline-block; width:5px; height:5px; border-radius:50%; background:rgba(255,255,255,0.4); margin-right:4px; vertical-align:middle;"></span>FIR: előcsengés lehetséges
       </div>
     </div>
 
@@ -1275,6 +1306,7 @@ function scheduleEqSync() {
 
 function drawEq() {
   scheduleEqSync();
+  schedulePresetAutosave();
 
   // Klippelés-figyelmeztetés és Auto Preamp gomb frissítése
   const curvePk = curvePeakDb();
@@ -1519,6 +1551,7 @@ function handleFileSelect(event) {
   const file = event.target.files[0];
   if (!file) return;
 
+  lastImportFileName = file.name.replace(/\.[^.]+$/, "").replace(/\s*ParametricEQ$/i, "");
   const reader = new FileReader();
   reader.onload = function(e) {
     const content = e.target.result;
@@ -1616,6 +1649,7 @@ function applyEqModeUi(mode) {
 document.getElementById("selectEqMode").onchange = (e) => {
   applyEqModeUi(e.target.value);
   sendEngine({ type: "set_eq_mode", val: e.target.value });
+  schedulePresetAutosave();
 };
 
 document.getElementById("selectDecramp").onchange = (e) => {
@@ -1916,7 +1950,8 @@ function applyParsedAutoEqProfile(text, modelName, sourceName) {
   updateEqUI();
   drawEq();
 
-  alert(`✅ Valódi AutoEq Profil Betöltve!\n\n` +
+  createPresetFromCurrent(sourceName ? `${modelName} (${sourceName})` : modelName, "autoeq");
+  showToast(`✅ AutoEq profil betöltve és elmentve: ${activePresetName}\n\n` +
         `• Modell: ${modelName}\n` +
         `• Mérési forrás: ${sourceName}\n` +
         `• Preamp: ${finalPreamp.toFixed(1)} dB\n` +
@@ -2064,7 +2099,9 @@ function processAutoEqImport() {
   updateEqUI();
   drawEq();
 
-  alert(`✅ Sikeres Profil Létrehozás!\n\n` +
+  createPresetFromCurrent(lastImportFileName || "Importált profil", "import");
+  lastImportFileName = "";
+  showToast(`✅ Profil létrehozva és elmentve: ${activePresetName}\n\n` +
         `• Equalizer: BEKAPCSOLVA (${nodes.length} sáv aktív)\n` +
         `• Beállított Preamp: ${finalPreamp.toFixed(1)} dB\n` +
         `  ↳ ${preampNote}\n` +
@@ -2793,6 +2830,11 @@ function applyEngineState(st) {
         if (typeof updateConvolverSettings === "function") updateConvolverSettings();
         if (typeof syncConvGain === "function") (setInput("convGainSlider", st.convolver.gain), syncConvGain(st.convolver.gain, true));
       }
+    } else if (activePresetName && presetsDoc.presets[activePresetName]) {
+      // A motor üres (pl. első indítás új gépen), de van mentett aktív profil: azt töltjük be
+      applyPresetData(presetsDoc.presets[activePresetName]);
+      ['crossfeed', 'convolver', 'limiter', 'bass'].forEach(m => setModuleActive(m, false));
+      setModuleActive('eq', true);
     } else {
       // A motor még sosem kapott beállítást: biztonságos, sík alapállapot (ami a képen, az szól)
       nodes.forEach(n => { n.gain = 0.0; });
@@ -2942,9 +2984,19 @@ function initPipewireBridge() {
           updateLimiterMeters(data.peak, data.gr);
         } else if (data.type === "state") {
           if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);
-          // Teljes állapotot csak csatlakozáskor veszünk át; utána a GUI a forrás, a motor csak az IR-t jelzi vissza
+          // Teljes állapotot csak a munkamenet első csatlakozásakor veszünk át. Újracsatlakozáskor
+          // (pl. a motor rövid ideig nem volt elérhető) a felület a forrás: a közben tett változtatások nem vesznek el.
           if (data.reason === "ir") applyEngineIr(data);
-          else applyEngineState(data);
+          else {
+            receivePresetsFromEngine(data.presets);
+            if (guiStateSynced && data.initialized) {
+              applyEngineIr(data);
+              pushAllToEngine();
+            } else {
+              applyEngineState(data);
+            }
+            guiStateSynced = true;
+          }
         } else if (data.type === "status") {
           engineStatus = data;
           updateEngineBadge();
@@ -2978,6 +3030,244 @@ function initPipewireBridge() {
     setTimeout(initPipewireBridge, enginePortIdx === 0 ? 3000 : 150);
   }
 }
+
+
+// =========================================================================
+// EQ PROFILOK (presetek)
+// A profil-dokumentumot a motor tárolja (Linux: ~/.config/aetheraudio/presets.json,
+// Windows: %APPDATA%\AetherAudio\presets.json), így újraindítás után is megmarad;
+// motor nélkül a böngésző tárolója a tartalék.
+// =========================================================================
+var guiStateSynced = false;        // kapott-e már a felület teljes állapotot ebben a munkamenetben
+var lastImportFileName = "";
+var presetsDoc = { version: 1, active: null, presets: {} };
+var activePresetName = null;
+var presetAutosaveTimer = null;
+var presetsDirtyForEngine = false;
+var userTouchedUi = false;         // csak valódi felhasználói beavatkozás hoz létre új profilt
+["pointerdown", "keydown", "wheel"].forEach(ev => document.addEventListener(ev, () => { userTouchedUi = true; }, true));
+
+function showToast(text, ms) {
+  let el = document.getElementById("aetherToast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "aetherToast";
+    el.className = "aether-toast";
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.classList.add("show");
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove("show"), ms || 6000);
+}
+
+function eqSnapshot() {
+  return {
+    bands: nodes.map(n => ({ type: n.type, freq: +(+n.freq).toFixed(2), gain: +(+n.gain).toFixed(2), q: +(+n.q).toFixed(3) })),
+    preamp: +(+currentPreamp).toFixed(2),
+    eqMode: currentEqMode
+  };
+}
+function snapshotSig(sn) { return JSON.stringify([sn.bands, sn.preamp, sn.eqMode]); }
+
+function sanitizePresetsDoc(doc) {
+  const out = { version: 1, active: null, presets: {} };
+  if (!doc || typeof doc !== "object" || !doc.presets || typeof doc.presets !== "object") return out;
+  for (const [name, p] of Object.entries(doc.presets)) {
+    if (!p || !Array.isArray(p.bands) || !name.trim()) continue;
+    out.presets[name.slice(0, 120)] = p;
+  }
+  if (doc.active && out.presets[doc.active]) out.active = doc.active;
+  return out;
+}
+
+function persistPresets() {
+  presetsDoc.active = activePresetName;
+  const text = JSON.stringify(presetsDoc);
+  try { localStorage.setItem("aether_presets", text); } catch (e) {}
+  if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) {
+    pipewireWs.send(JSON.stringify({ type: "save_presets", data: text }));
+    presetsDirtyForEngine = false;
+  } else {
+    presetsDirtyForEngine = true;
+  }
+}
+
+function loadLocalPresets() {
+  try {
+    const t = localStorage.getItem("aether_presets");
+    if (t) {
+      presetsDoc = sanitizePresetsDoc(JSON.parse(t));
+      activePresetName = presetsDoc.active;
+    }
+  } catch (e) {}
+  refreshPresetUi();
+}
+
+/** A motorban tárolt profilok átvétele (a motor a mérvadó); ha a motorban még nincs, a helyit töltjük fel. */
+function receivePresetsFromEngine(doc) {
+  if (presetsDirtyForEngine) {
+    persistPresets();                       // offline tett változtatások a motorba
+  } else if (doc && typeof doc === "object") {
+    presetsDoc = sanitizePresetsDoc(doc);
+    activePresetName = presetsDoc.active;
+    try { localStorage.setItem("aether_presets", JSON.stringify(presetsDoc)); } catch (e) {}
+  } else if (Object.keys(presetsDoc.presets).length > 0) {
+    persistPresets();
+  }
+  refreshPresetUi();
+}
+
+function refreshPresetUi() {
+  const sel = document.getElementById("selectPreset");
+  if (!sel) return;
+  sel.innerHTML = "";
+  const names = Object.keys(presetsDoc.presets).sort((a, b) => a.localeCompare(b, "hu"));
+  if (!activePresetName) {
+    const o = document.createElement("option");
+    o.value = "";
+    o.textContent = names.length ? "— nincs kiválasztva —" : "— még nincs profil —";
+    sel.appendChild(o);
+  }
+  names.forEach(n => {
+    const o = document.createElement("option");
+    o.value = n;
+    const p = presetsDoc.presets[n];
+    o.textContent = (p && p.kind === "autoeq" ? "🎧 " : "🎚 ") + n;
+    sel.appendChild(o);
+  });
+  sel.value = activePresetName || "";
+  sel.title = activePresetName ? `Aktív profil: ${activePresetName}` : "Nincs aktív profil";
+}
+
+function uniquePresetName(base) {
+  base = (base || "Profil").trim().slice(0, 100) || "Profil";
+  if (!presetsDoc.presets[base]) return base;
+  for (let i = 2; ; i++) { const n = `${base} (${i})`; if (!presetsDoc.presets[n]) return n; }
+}
+
+/** Új profil a jelenlegi EQ-ból (AutoEq import, kézi import, első kézi beállítás). */
+function createPresetFromCurrent(name, kind) {
+  const n = uniquePresetName(name);
+  const now = new Date().toISOString();
+  presetsDoc.presets[n] = Object.assign(eqSnapshot(), { kind: kind || "manual", created: now, updated: now });
+  activePresetName = n;
+  persistPresets();
+  refreshPresetUi();
+  return n;
+}
+
+function applyPresetData(p) {
+  const colorPalette = ["#3584e4", "#e01b24", "#ff7800", "#33d17a", "#9141ac", "#f6d32d", "#2ec27e", "#e66100", "#1c71d8"];
+  if (Array.isArray(p.bands) && p.bands.length) {
+    nodes = p.bands.map((b, i) => ({ id: i + 1, freq: +b.freq, gain: +b.gain, q: +b.q, type: b.type || "peaking",
+                                      color: colorPalette[i % colorPalette.length] }));
+    selectedNodeId = nodes[0].id;
+  }
+  currentPreamp = typeof p.preamp === "number" ? p.preamp : 0.0;
+  const inp = document.getElementById("inputPreamp");
+  if (inp) inp.value = currentPreamp.toFixed(1);
+  const badge = document.getElementById("badgePreampOrigin");
+  if (badge) { badge.className = "status-badge optimal"; badge.innerText = `Profil (${currentPreamp.toFixed(1)} dB)`; }
+  if (p.eqMode) applyEqModeUi(p.eqMode);
+}
+
+function loadPreset(name) {
+  const p = presetsDoc.presets[name];
+  if (!p) return;
+  activePresetName = name;
+  applyPresetData(p);
+  sendEngine({ type: "set_eq_mode", val: currentEqMode });
+  setModuleActive('eq', true);
+  lastSentPreamp = currentPreamp;
+  sendParamToPipewire("set_preamp", currentPreamp);
+  updateEqUI();
+  drawEq();
+  persistPresets();   // az aktív profil neve is megmarad
+  refreshPresetUi();
+}
+
+function onPresetSelected(name) {
+  if (!name) return;
+  loadPreset(name);
+  showToast(`Profil betöltve: ${name}`, 2500);
+}
+
+function savePresetAs() {
+  const n = prompt("Új profil neve:", activePresetName ? activePresetName + " – másolat" : "Saját profil");
+  if (n === null || !n.trim()) return;
+  const name = createPresetFromCurrent(n.trim(), "manual");
+  showToast(`Profil elmentve: ${name}`, 2500);
+}
+
+function renamePreset() {
+  if (!activePresetName) { savePresetAs(); return; }
+  const n = prompt("Profil új neve:", activePresetName);
+  if (n === null || !n.trim() || n.trim() === activePresetName) return;
+  const name = uniquePresetName(n.trim());
+  presetsDoc.presets[name] = presetsDoc.presets[activePresetName];
+  delete presetsDoc.presets[activePresetName];
+  activePresetName = name;
+  persistPresets();
+  refreshPresetUi();
+}
+
+function deletePreset() {
+  if (!activePresetName) return;
+  if (!confirm(`Törlöd a(z) "${activePresetName}" profilt? (A jelenlegi EQ-beállítás nem változik.)`)) return;
+  delete presetsDoc.presets[activePresetName];
+  activePresetName = null;
+  persistPresets();
+  refreshPresetUi();
+}
+
+/**
+ * Kézi beállítás automatikus mentése: saját profilnál az aktív profilba ír; importált (AutoEq)
+ * profil módosításakor, vagy ha nincs aktív profil, a felhasználó első valódi módosításakor újat hoz létre.
+ */
+function schedulePresetAutosave() {
+  if (suppressEngineSync || !userTouchedUi) return;
+  clearTimeout(presetAutosaveTimer);
+  presetAutosaveTimer = setTimeout(() => {
+    if (suppressEngineSync) return;
+    const sn = eqSnapshot();
+    const cur = activePresetName ? presetsDoc.presets[activePresetName] : null;
+    if (cur) {
+      if (snapshotSig(cur) === snapshotSig(sn)) return;
+      if (cur.kind === "autoeq" || cur.kind === "import") {
+        // Az importált (AutoEq) profil érintetlen marad: a kézi módosítás új, saját profilba kerül
+        createPresetFromCurrent(`${activePresetName} – módosított`, "manual");
+        showToast(`Kézi módosítás: új profil készült – ${activePresetName}`, 3500);
+        return;
+      }
+      Object.assign(cur, sn, { updated: new Date().toISOString() });
+      persistPresets();
+    } else {
+      createPresetFromCurrent("Saját profil", "manual");
+    }
+  }, 900);
+}
+
+loadLocalPresets();
+
+
+// ---------------------------------------------------------------- Támogatás (donateware)
+function openExternal(url) {
+  // Saját ablakban (WebView2 / WebKitGTK) a rendszer böngészője nyitja meg; böngészőben új lapon
+  try {
+    if (typeof window.aetherOpenUrl === "function") { window.aetherOpenUrl(url); return; }
+  } catch (e) {}
+  window.open(url, "_blank", "noopener");
+}
+function toggleSupport(ev) {
+  if (ev) ev.stopPropagation();
+  const pop = document.getElementById("supportPop");
+  if (pop) pop.style.display = pop.style.display === "block" ? "none" : "block";
+}
+document.addEventListener("click", (e) => {
+  const pop = document.getElementById("supportPop");
+  if (pop && pop.style.display === "block" && !pop.contains(e.target)) pop.style.display = "none";
+});
 
 // Induláskor háttérben előkészítjük a 8 850+ modellt tartalmazó teljes AutoEq indexet és csatlakozunk a hangmotorhoz (PipeWire / Windows)
 setTimeout(() => {

@@ -111,6 +111,17 @@ inline bool loadIr(IrData& out) {
     return true;
 }
 
+/** EQ profilok: a felület JSON dokumentuma (~/.config/aetheraudio/presets.json). */
+inline bool savePresets(const std::string& doc) {
+    return writeAtomic(configDir(true) + "/presets.json", std::vector<char>(doc.begin(), doc.end()));
+}
+
+inline std::string loadPresets() {
+    std::ifstream f(configDir(false) + "/presets.json", std::ios::binary);
+    if (!f) return "";
+    return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+}
+
 inline bool saveOutputSink(const std::string& sinkName) {
     const std::string path = configDir(true) + "/output_sink.txt";
     std::ofstream f(path, std::ios::trunc);

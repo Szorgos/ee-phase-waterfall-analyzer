@@ -61,6 +61,8 @@ jobs:
           echo "ver=${VER}" >> "$GITHUB_OUTPUT"
           cp build-win/AetherAudio-Setup.exe "AetherAudio-Setup-${VER}.exe"
           sha256sum "AetherAudio-Setup-${VER}.exe" > "AetherAudio-Setup-${VER}.exe.sha256"
+          # Állandó nevű példány: a README "legújabb kiadás" letöltési linkje erre mutat
+          cp build-win/AetherAudio-Setup.exe AetherAudio-Setup.exe
           echo "file=AetherAudio-Setup-${VER}.exe" >> "$GITHUB_OUTPUT"
 
       - name: Feltöltés munkatermékként
@@ -82,6 +84,7 @@ jobs:
           files: |
             ${{ steps.name.outputs.file }}
             ${{ steps.name.outputs.file }}.sha256
+            AetherAudio-Setup.exe
 
       - name: GitHub Release
         if: github.ref_type == 'tag'
@@ -92,3 +95,4 @@ jobs:
           files: |
             ${{ steps.name.outputs.file }}
             ${{ steps.name.outputs.file }}.sha256
+            AetherAudio-Setup.exe

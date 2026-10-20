@@ -112,6 +112,45 @@ std::wstring portOwner(int port) {
     return {};
 }
 
+// ---------------------------------------------------------------- EQ profilok
+// A felület JSON dokumentuma: %APPDATA%\AetherAudio\presets.json (felhasználónként, újraindítás után is megmarad)
+std::wstring presetFilePath(bool createDir) {
+    wchar_t buf[MAX_PATH];
+    const DWORD n = GetEnvironmentVariableW(L"APPDATA", buf, MAX_PATH);
+    std::wstring dir = (n > 0 && n < MAX_PATH) ? std::wstring(buf) : win::dataDirectory(createDir);
+    dir += L"\\AetherAudio";
+    if (createDir) CreateDirectoryW(dir.c_str(), nullptr);
+    return dir + L"\\presets.json";
+}
+
+std::string loadPresetFile() {
+    HANDLE f = CreateFileW(presetFilePath(false).c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return {};
+    std::string out;
+    LARGE_INTEGER size{};
+    if (GetFileSizeEx(f, &size) && size.QuadPart > 0 && size.QuadPart <= static_cast<LONGLONG>(kBridgeMaxPresetBytes)) {
+        out.resize(static_cast<size_t>(size.QuadPart));
+        DWORD read = 0;
+        if (!ReadFile(f, out.data(), static_cast<DWORD>(out.size()), &read, nullptr)) read = 0;
+        out.resize(read);
+    }
+    CloseHandle(f);
+    return out;
+}
+
+bool savePresetFile(const std::string& doc) {
+    const std::wstring path = presetFilePath(true);
+    const std::wstring tmp = path + L".tmp";
+    HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const BOOL ok = WriteFile(f, doc.data(), static_cast<DWORD>(doc.size()), &written, nullptr);
+    CloseHandle(f);
+    if (!ok || written != doc.size()) return false;
+    return MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+}
+
 bool hasArg(int argc, char** argv, const char* a) {
     for (int i = 1; i < argc; ++i) if (std::strcmp(argv[i], a) == 0) return true;
     return false;
@@ -346,6 +385,14 @@ int main(int argc, char** argv) {
     cb.statusFields = [&]() { return sources.statusFields(); };
     cb.setIr = [&](IrData&& ir) { sources.setIr(std::move(ir)); };
     cb.getIr = [&]() { return sources.irCopy(); };
+    std::mutex presetMutex;
+    std::string presetDoc = loadPresetFile();
+    cb.getPresets = [&]() { std::lock_guard<std::mutex> lk(presetMutex); return presetDoc; };
+    cb.setPresets = [&](const std::string& doc) {
+        std::lock_guard<std::mutex> lk(presetMutex);
+        presetDoc = doc;
+        if (!savePresetFile(doc)) std::cout << "[Profilok] Figyelem: a presets.json nem írható.\n";
+    };
 
     std::unique_ptr<WebSocketBridge> bridge;
     for (int p : ports) {

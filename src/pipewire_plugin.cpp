@@ -313,6 +313,14 @@ int main(int argc, char* argv[]) {
         node.chain.submitIr(std::move(ir));
     };
     cb.getIr = [&]() { return node.chain.irCopy(); };
+    std::mutex presetMutex;
+    std::string presetDoc = linux_store::loadPresets();
+    cb.getPresets = [&]() { std::lock_guard<std::mutex> lk(presetMutex); return presetDoc; };
+    cb.setPresets = [&](const std::string& doc) {
+        std::lock_guard<std::mutex> lk(presetMutex);
+        presetDoc = doc;
+        if (!linux_store::savePresets(doc)) std::cerr << "[Profilok] Figyelem: a presets.json nem írható.\n";
+    };
 
     std::unique_ptr<WebSocketBridge> bridge;
     for (int p : ports) {

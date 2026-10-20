@@ -22,6 +22,7 @@
   #include <netinet/tcp.h>
   #include <arpa/inet.h>
   #include <fcntl.h>
+  #include <poll.h>
   #include <cerrno>
 #endif
 
@@ -84,6 +85,20 @@ inline bool wouldBlock() {
     return e == WSAEWOULDBLOCK || e == WSAEINPROGRESS;
 #else
     return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR;
+#endif
+}
+
+/** Írható-e most a socket (azonnali, nem blokkoló ellenőrzés). */
+inline bool writableNow(socket_t s) {
+#ifdef _WIN32
+    fd_set w;
+    FD_ZERO(&w);
+    FD_SET(s, &w);
+    timeval tv{0, 0};
+    return ::select(0, nullptr, &w, nullptr, &tv) > 0;
+#else
+    pollfd p{ s, POLLOUT, 0 };
+    return ::poll(&p, 1, 0) > 0 && (p.revents & POLLOUT);
 #endif
 }
 

@@ -15,6 +15,7 @@
 #include <functional>
 #include <iostream>
 #include <mutex>
+#include <cstring>
 #include <string>
 #include <thread>
 #include <vector>
@@ -47,7 +48,13 @@ struct BridgeCallbacks {
     std::function<IrData()> getIr;
     /** Kimeneti hangeszköz váltása (pl. Speaker / USB Audio). */
     std::function<void(const std::string&)> setOutputSink;
+    /** EQ profilok (a felület által kezelt JSON dokumentum) olvasása / mentése (opcionális). */
+    std::function<std::string()> getPresets;
+    std::function<void(const std::string&)> setPresets;
 };
+
+/** Az EQ profil-dokumentum maximális mérete (bájt). */
+constexpr size_t kBridgeMaxPresetBytes = 2u << 20;
 
 /** A GUI által küldött IR maximális hossza (frame). */
 constexpr uint32_t kBridgeMaxIrFrames = 262144;
@@ -148,12 +155,12 @@ private:
                 if (freshAudio && now - lastSpectrum >= std::chrono::milliseconds(16)) {
                     const double sr = cb_.sampleRate ? cb_.sampleRate() : 48000.0;
                     analyzer.compute(sr > 0 ? sr : 48000.0);
-                    sendText(buildSpectrumMessage(analyzer, sr));
+                    sendText(buildSpectrumMessage(analyzer, sr), true);
                     lastSpectrum = now;
                     freshAudio = false;
                 }
                 if (now - lastStatus >= std::chrono::milliseconds(500)) {
-                    sendText(buildStatusMessage());
+                    sendText(buildStatusMessage(), true);
                     lastStatus = now;
                 }
                 pumpIncoming();
@@ -286,7 +293,7 @@ private:
         while (sent < len) {
             const long long n = net::sendSome(s, data + sent, len - sent);
             if (n > 0) { sent += static_cast<size_t>(n); spins = 0; continue; }
-            if (n < 0 && net::wouldBlock() && ++spins < 200) {
+            if (n < 0 && net::wouldBlock() && ++spins < 3000) { // max. ~3 s várakozás egy lassú kliensre
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 continue;
             }
@@ -295,8 +302,13 @@ private:
         return true;
     }
 
-    void sendFrame(uint8_t opcode, const std::string& payload) {
+    /**
+     * @param droppable true = eldobható (spektrum/státusz) keret: ha a felület épp nem olvas
+     *        (pl. nyitott párbeszédablak, háttérbe tett ablak), kihagyjuk, és NEM bontjuk a kapcsolatot.
+     */
+    void sendFrame(uint8_t opcode, const std::string& payload, bool droppable = false) {
         if (client_ == net::kInvalidSocket) return;
+        if (droppable && !net::writableNow(client_)) return;
         std::string frame;
         frame.reserve(payload.size() + 10);
         frame.push_back(static_cast<char>(0x80 | opcode));
@@ -315,7 +327,7 @@ private:
         if (!sendAll(client_, frame.data(), frame.size())) dropClient("küldési hiba");
     }
 
-    void sendText(const std::string& text) { sendFrame(0x1, text); }
+    void sendText(const std::string& text, bool droppable = false) { sendFrame(0x1, text, droppable); }
 
     /** Beérkező WebSocket keretek feldolgozása (töredezett TCP olvasással is). */
     void pumpIncoming() {
@@ -420,6 +432,17 @@ private:
 
         if (type == "hello" || type == "get_state") {
             sendText(buildStateMessage());
+            return;
+        }
+        if (type == "save_presets") {
+            // A felület a teljes profil-dokumentumot küldi JSON szövegként; csak érvényes JSON-t tárolunk
+            const json::Value* d = msg.get("data");
+            const std::string doc = d ? d->stringOr("") : "";
+            json::Value check;
+            if (!doc.empty() && doc.size() <= kBridgeMaxPresetBytes && json::parse(doc, check) &&
+                check.type == json::Value::Type::Object && cb_.setPresets) {
+                cb_.setPresets(doc);
+            }
             return;
         }
         if (type == "set_output_sink") {
@@ -632,6 +655,18 @@ private:
                 s.pop_back(); // remove '}'
                 s += ',';
                 s += extra;
+                s += '}';
+            }
+        }
+        if (std::strcmp(reason, "full") == 0 && cb_.getPresets) {
+            // Mentett EQ profilok (érvényes JSON objektum, változatlanul beágyazva)
+            const std::string doc = cb_.getPresets();
+            json::Value check;
+            if (!doc.empty() && doc.size() <= kBridgeMaxPresetBytes && json::parse(doc, check) &&
+                check.type == json::Value::Type::Object) {
+                s.pop_back();
+                s += ",\"presets\":";
+                s += doc;
                 s += '}';
             }
         }

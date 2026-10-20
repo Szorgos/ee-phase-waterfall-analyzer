@@ -1,13 +1,14 @@
 # AetherAudio • Valós Idejű Fázis, Spektrum & Akusztikai Vízesés DSP Csomag
 
 [![GitHub Release](https://img.shields.io/github/v/release/Szorgos/ee-phase-waterfall-analyzer?style=flat-square&color=blue)](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest)
-[![Windows Download](https://img.shields.io/badge/Windows%2011-Telep%C3%ADt%C5%91%20(.exe)-0078D6?style=flat-square&logo=windows)](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v1.0.1/AetherAudio-Setup-1.0.1.exe)
+[![Windows Download](https://img.shields.io/badge/Windows%2011-Telep%C3%ADt%C5%91%20(.exe)-0078D6?style=flat-square&logo=windows)](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/AetherAudio-Setup.exe)
 [![Linux PipeWire](https://img.shields.io/badge/Linux-PipeWire%20SPA-FCC624?style=flat-square&logo=linux&logoColor=black)](https://github.com/Szorgos/ee-phase-waterfall-analyzer#telep%C3%ADt%C3%A9s-linuxon-egyetlen-parancsb%C3%B3l)
+[![Támogatás](https://img.shields.io/badge/T%C3%A1mogat%C3%A1s-Revolut%20%40gergoqhg6-ff5c8a?style=flat-square&logo=revolut)](#-támogatás)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-green.svg?style=flat-square)](https://www.gnu.org/licenses/gpl-3.0)
 
 > ### 📦 **Gyors Letöltés Windows 11-re:**
-> 👉 **[AetherAudio-Setup-1.0.1.exe letöltése (Windows telepítő)](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v1.0.1/AetherAudio-Setup-1.0.1.exe)**  
-> *(Egykattintásos telepítő: tartalmazza az AetherAudio motort, a tálcaalkalmazást, a WebView2 felületet és az Equalizer APO automatikus bekötést!)*
+> 👉 **[AetherAudio-Setup.exe letöltése – mindig a legújabb kiadás](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/AetherAudio-Setup.exe)**  
+> *(Telepítő: AetherAudio motor tálcaikonnal, saját ablakos felület és az Equalizer APO plugin automatikus bekötése. Korábbi verziók és ellenőrzőösszegek: [Kiadások](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases).)*
 
 ---
 **Projekt:** `AetherAudio`  
@@ -38,7 +39,7 @@ Az **AetherAudio** ezt a filozófiát egyesíti a modern digitális jelfeldolgoz
 
 1. **Élő 3D Akusztikai Vízesés & Spektrogram (Top-Strip WebGL Engine):**
    * Valós idejű, 60 FPS gördülés állítható időszeletekkel (60 – 240 lépcső).
-   * **Előcsengés (pre-ringing) jelzése:** Ragyogó fehér lecsengési foltokkal és HUD jelvénnyel mutatja ki a lineáris fázisú szűrők által keltett előcsengést.
+   * **Előcsengés (pre-ringing) jelzése:** Lineáris / köztes fázisú FIR módban egy diszkrét felirat jelzi, hogy előcsengés lehetséges. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik; a program nem nagyítja fel.
    * Állítható hőtérkép és nézőpontok (3D Izometrikus, Felülnézeti 2D Hőtérkép, Szembőli Spektrum).
 
 2. **2D Analitikus Fázis- és Csoportkésleltetés ($-\frac{d\phi}{d\omega}$):**
@@ -49,6 +50,7 @@ Az **AetherAudio** ezt a filozófiát egyesíti a modern digitális jelfeldolgoz
 3. **8 850+ Fejhallgató AutoEq Profil Kereső & Kézi Importálás:**
    * **Valós AutoEq Adatbázis Integráció:** A Jaakko Pasanen-féle hivatalos AutoEq tároló több mint 8 850 fül- és fejhallgatójának (oratory1990, Crinacle, Rtings stb.) élő keresése és profil-letöltése közvetlenül a GitHubról egyetlen kattintással.
    * **Univerzális Kézi Importáló (Squiglink / REW / EqualizerAPO):** A Squiglinkről vagy más mérésekből exportált CSV és TXT görbék, illetve REW / APO szűrők közvetlen beillesztése és automatikus felismerése manuális módban.
+   * **EQ profilok:** AutoEq importkor és kézi beállításkor automatikusan profil készül; az aktív profil neve a fejlécben látszik, és a korábbi profilok újraindítás után is választhatók (tárolás: Linuxon `~/.config/aetheraudio/presets.json`, Windowson `%APPDATA%\AetherAudio\presets.json`). Az importált AutoEq profil érintetlen marad: kézi módosításkor „– módosított” nevű saját profil készül.
    * **Intelligens Dupla-Preamp Védelem:** Ha az importált profil már tartalmaz negatív preampot, azt használja; ha nem, az Auto-Guard állítja be a pozitív kiemelések kivédésére.
 
 4. **Kézi Mesterkapcsolók Minden Modulhoz (Ki/Bekapcsolható lánc):**
@@ -193,3 +195,16 @@ Ez a projekt a **GNU General Public License v3.0 (GPL-3.0)** alatt érhető el.
 * A részletes licencfeltételeket a [LICENSE](LICENSE) fájl tartalmazza.
 * Beépített külső összetevők: [three.js](https://threejs.org/) (MIT), [webview/webview](https://github.com/webview/webview) (MIT), Microsoft WebView2 SDK fejlécek (BSD-3-Clause).
 * Az AutoEq index és profilok forrása az [AutoEq GitHub projekt](https://github.com/jaakkopasanen/AutoEq) (MIT Licenc).
+
+---
+
+## ♥ Támogatás
+
+Az AetherAudio **ingyenes és nyílt forrású (donateware)**: minden funkció korlátozás nélkül használható. Ha hasznosnak találod, egy önkéntes támogatással segítheted a további fejlesztést. Köszönöm!
+
+<p align="center">
+  <a href="https://revolut.me/gergoqhg6"><img src="docs/revolut-qr.png" alt="Revolut QR-kód: @gergoqhg6" width="220"></a><br>
+  <b>Revolut: <a href="https://revolut.me/gergoqhg6">@gergoqhg6</a></b>
+</p>
+
+A programban a fejléc **♥ Támogatás** gombja ugyanezt mutatja.
