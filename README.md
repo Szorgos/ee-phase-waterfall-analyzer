@@ -143,5 +143,8 @@ cmake --build build -j$(nproc)
 ---
 
 ## 📄 Licenc
-* A projekt forráskódja nyílt forráskódú (GPLv3 / MIT kompatibilis).
+
+Ez a projekt a **GNU General Public License v3.0 (GPL-3.0)** alatt érhető el.
+* Copyright (C) 2026 **Szorgos** (<https://github.com/Szorgos>)
+* A részletes licencfeltételeket a [LICENSE](LICENSE) fájl tartalmazza.
 * Az AutoEq index és profilok forrása az [AutoEq GitHub projekt](https://github.com/jaakkopasanen/AutoEq) (MIT Licenc).
