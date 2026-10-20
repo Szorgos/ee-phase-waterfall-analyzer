@@ -30,7 +30,6 @@
     </p>
   </description>
   <launchable type="desktop-id">io.github.szorgos.Aqulify.desktop</launchable>
-  <icon type="stock">aqulify</icon>
   <screenshots>
     <screenshot type="default">
       <caption>Live 3D waterfall and parametric EQ with an AutoEq headphone profile</caption>
