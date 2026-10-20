@@ -36,7 +36,7 @@ A felület jelvénye mutatja, honnan jön a jel:
 |---|---|
 | **Élő – EQ APO plugin • 48.0 kHz** | Teljes működés: a vízesés a lánc végén mér, a felületen állított DSP élőben szól |
 | **Élő analízis – WASAPI loopback** | Nincs aktív plugin: csak analízis, a DSP beállítások nem hatnak a hangra |
-| **Motor Offline (Szimuláció)** | Nem fut az `Aqulify.exe` |
+| **Motor Offline** | Nem fut az `Aqulify.exe` |
 
 A beállítások (EQ, modulok, betöltött impulzusválasz) a `C:\ProgramData\Aqulify\` mappába mentődnek. A plugin onnan tölti be őket, így a lánc akkor is él, ha a motor nem fut.
 

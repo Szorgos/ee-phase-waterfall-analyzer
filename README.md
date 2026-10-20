@@ -138,7 +138,7 @@ Az `install.sh` mindent beállít:
 * **Állapot / napló:** `systemctl --user status aqulify`, `journalctl --user -u aqulify -f`
 * **Eltávolítás:** `./uninstall.sh` (a `--purge` a beállításokat is törli)
 
-A fejléc jelvénye: **„● Élő – PipeWire – Aqulify • 48.0 kHz”** = a motor fut és szűr; **„○ Motor Offline (Szimuláció)”** = a motor nem fut; a vízesés áll, a beállítások a motor indulásakor jutnak el hozzá.
+A fejléc jelvénye: **„● Élő – PipeWire – Aqulify • 48.0 kHz”** = a motor fut és szűr; **„○ Motor Offline”** = a motor nem fut; a vízesés áll, a beállítások a motor indulásakor jutnak el hozzá.
 
 > EasyEffects mellett is használható: ilyenkor a kettő közül csak az egyiket válaszd kimenetnek, vagy láncold őket (pl. qpwgraph-fal), különben a hang kétszer menne át korrekción.
 

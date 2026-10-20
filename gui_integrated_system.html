@@ -230,7 +230,7 @@
     <div style="display:flex; align-items:center; gap:12px;">
       <button id="btnSupport" class="support-link" onclick="toggleSupport(event)" title="Az Aqulify ingyenes (donateware). Ha hasznos, egy kis támogatással segítheted a fejlesztést.">♥ Támogatás</button>
       <span id="pipewireLiveBadge" class="status-badge" style="background:rgba(255,255,255,0.06); color:var(--ee-text-secondary); border:1px solid #444;">
-        ○ Motor Offline (Szimuláció)
+        ○ Motor Offline
       </span>
       <div id="physicalSinkWrap" style="font-size:0.8rem; color:var(--ee-text-secondary); display:none; align-items:center; gap:6px;">
         <label for="selectPhysicalSink" style="margin:0; font-size:0.8rem; color:var(--ee-text-secondary);">Kimenet:</label>
@@ -1683,17 +1683,15 @@ function detectEqFormat(text) {
     name.innerText = "AutoEq / oratory1990 / Crinacle Paraméteres TXT";
     name.style.color = "var(--ee-curve-cyan)";
   } else if (text.includes("GraphicEQ:")) {
-    name.innerText = "EqualizerAPO GraphicEQ Vektor";
-    name.style.color = "var(--ee-green)";
-  } else if (text.includes("REW") || text.includes("Room EQ Wizard")) {
-    name.innerText = "REW (Room EQ Wizard) Exportált Szűrőfájl";
-    name.style.color = "var(--ee-orange)";
+    // Csak a paraméteres "Filter N: ... Fc ... Gain ... Q ..." sorok alkalmazhatók
+    name.innerText = "EqualizerAPO GraphicEQ – nem importálható (csak paraméteres Filter sorok)";
+    name.style.color = "#ed333b";
   } else if (text.includes(",") && !text.includes(":")) {
-    name.innerText = "Squiglink CSV Frekvenciamenet";
-    name.style.color = "#ffd600";
+    name.innerText = "CSV frekvenciamenet – nem importálható (csak paraméteres Filter sorok)";
+    name.style.color = "#ed333b";
   } else {
-    name.innerText = "Általános Paraméteres EQ Lista";
-    name.style.color = "#fff";
+    name.innerText = "Nincs benne paraméteres Filter sor – nem importálható";
+    name.style.color = "#ed333b";
   }
 }
 
@@ -2710,7 +2708,7 @@ function updateEngineBadge() {
     badge.style.background = "rgba(255,255,255,0.06)";
     badge.style.color = "var(--ee-text-secondary)";
     badge.style.border = "1px solid #444";
-    badge.innerHTML = "○ Motor Offline (Szimuláció)";
+    badge.innerHTML = "○ Motor Offline";
     badge.title = "Indítsd el a motort: Linuxon systemctl --user start aqulify, Windowson Aqulify.exe";
     return;
   }
