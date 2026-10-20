@@ -72,9 +72,11 @@ jobs:
         id: rpm
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          make -f .copr/Makefile srpm outdir="$PWD/srpm"
-          dnf -y builddep srpm/*.src.rpm
-          rpmbuild --rebuild --define "_rpmdir $PWD/rpm" srpm/*.src.rpm
+          # Hiba esetén a napló vége hibajelzésként (annotáció) is megjelenik
+          fail() { tail -n 25 build.log | while IFS= read -r l; do echo "::error::$l"; done; exit 1; }
+          { make -f .copr/Makefile srpm outdir="$PWD/srpm" && dnf -y builddep srpm/*.src.rpm && \
+            rpmbuild --rebuild --define "_rpmdir $PWD/rpm" srpm/*.src.rpm; } > build.log 2>&1 || fail
+          tail -n 15 build.log
           f=$(ls rpm/x86_64/aqulify-[0-9]*.x86_64.rpm | head -1)
           cp "$f" . && sha256sum "$(basename "$f")" > "$(basename "$f").sha256"
           echo "file=$(basename "$f")" >> "$GITHUB_OUTPUT"
