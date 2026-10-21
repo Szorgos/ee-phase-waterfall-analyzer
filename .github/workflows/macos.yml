@@ -151,6 +151,11 @@ jobs:
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then VER="${GITHUB_REF_NAME#v}"
           elif [ -n "${{ inputs.version }}" ]; then VER="${{ inputs.version }}"
           else VER="dev-${GITHUB_SHA::7}"; fi
+          # A macOS változat az 1.7.0-val indult: régebbi verziószámmal nem készül csomag
+          case "$VER" in
+            [0-9]*) if [ "$(printf '%s\n' 1.7.0 "$VER" | sort -V | head -n1)" != 1.7.0 ]; then
+                      echo "::error title=Verzió::macOS csomag csak 1.7.0 vagy újabb verzióval készülhet ($VER)"; exit 1; fi ;;
+          esac
           file="Aqulify-${VER}-macOS.dmg"
           mkdir -p dmgroot
           cp -R dist/Aqulify.app dmgroot/
