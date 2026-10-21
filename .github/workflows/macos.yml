@@ -1,0 +1,148 @@
+# macOS: Aqulify.app fordítása (Apple Silicon és Intel külön, majd univerzális bináris), tesztek mindkét
+# architektúrán, indítási füstteszt, ad-hoc aláírás és DMG. A Release munkafolyamat is ezt hívja (workflow_call).
+name: macOS
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - "macos/**"
+      - "include/**"
+      - "src/**"
+      - "third_party/**"
+      - "CMakeLists.txt"
+      - "gui_integrated_system.html"
+      - "gui_i18n.js"
+      - "autoeq_index.js"
+      - ".github/workflows/macos.yml"
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        default: ""
+    outputs:
+      file:
+        description: "A DMG fájl neve"
+        value: ${{ jobs.macos-app.outputs.file }}
+
+permissions:
+  contents: read
+
+jobs:
+  macos-app:
+    runs-on: macos-14
+    outputs:
+      file: ${{ steps.dmg.outputs.file }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Eszközök
+        run: |
+          command -v ninja >/dev/null || brew install ninja
+          cmake --version | head -n1
+          xcrun --show-sdk-version
+
+      - name: Fordítások ellenőrzése (i18n/ és az előállított fájlok egyeznek)
+        run: python3 tools/i18n_build.py --check
+
+      - name: FFTW 3.3.10 forrás (statikusan épül be)
+        run: |
+          for i in 1 2 3; do curl -fsSL -o /tmp/fftw.tar.gz https://www.fftw.org/fftw-3.3.10.tar.gz && break; sleep 15; done
+          got=$(shasum -a 256 /tmp/fftw.tar.gz | cut -d' ' -f1)
+          want=56c932549852cddcfafdab3820b0200c7742675be92179e59e6215b340e26467
+          if [ "$got" != "$want" ]; then echo "::error title=FFTW::sha256 eltérés: $got"; exit 1; fi
+          tar -xzf /tmp/fftw.tar.gz -C "$RUNNER_TEMP"
+
+      - name: RNNoise modell (az Ubuntu forráscsomagjából, a tárolóban nincs)
+        run: |
+          for i in 1 2 3; do curl -fsSL -o /tmp/rnnoise.tar.xz http://archive.ubuntu.com/ubuntu/pool/universe/r/rnnoise/rnnoise_0.2+ds.orig.tar.xz && break; sleep 15; done
+          got=$(shasum -a 256 /tmp/rnnoise.tar.xz | cut -d' ' -f1)
+          want=db2718ee4a0b294bfbbe198fe94aabfdc8cd0d77cb9cd95d76c7a818ad805f0b
+          if [ "$got" != "$want" ]; then echo "::error title=RNNoise::sha256 eltérés: $got"; exit 1; fi
+          mkdir -p "$RUNNER_TEMP/rnnoise-model"
+          tar -xJf /tmp/rnnoise.tar.xz -C "$RUNNER_TEMP/rnnoise-model" --strip-components=2 rnnoise-0.2/src/rnnoise_data.c rnnoise-0.2/src/rnnoise_data.h
+
+      - name: Fordítás (arm64 és x86_64)
+        run: |
+          for arch in arm64 x86_64; do
+            cmake -B build-$arch -S . -G Ninja -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_OSX_ARCHITECTURES=$arch -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+              -DAQULIFY_FFTW_SOURCE_DIR="$RUNNER_TEMP/fftw-3.3.10" -DAQULIFY_RNNOISE_MODEL_DIR="$RUNNER_TEMP/rnnoise-model"
+            cmake --build build-$arch -j"$(sysctl -n hw.ncpu)" > build-$arch.log 2>&1 || {
+              grep -E "error|Error" build-$arch.log | tail -n 60
+              msg=$(grep -E "error|Error" build-$arch.log | tail -n 30 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+              echo "::error title=macOS build ($arch)::${msg}"; exit 1; }
+            grep -E "warning:" build-$arch.log | grep -E "macos/" | head -n 40 || true
+            test -x build-$arch/Aqulify.app/Contents/MacOS/Aqulify
+          done
+
+      - name: Tesztek (arm64 natívan, x86_64 Rosettán)
+        run: |
+          arch -x86_64 /usr/bin/true 2>/dev/null || sudo softwareupdate --install-rosetta --agree-to-license
+          fail=0
+          for t in test_ringbuffer test_core test_dsp; do
+            echo "::group::$t (arm64)"
+            if ./build-arm64/$t; then echo "$t arm64: OK"; else echo "::error::$t (arm64) sikertelen"; fail=1; fi
+            echo "::endgroup::"
+            echo "::group::$t (x86_64)"
+            if arch -x86_64 ./build-x86_64/$t; then echo "$t x86_64: OK"; else echo "::error::$t (x86_64) sikertelen"; fail=1; fi
+            echo "::endgroup::"
+          done
+          exit $fail
+
+      - name: Univerzális alkalmazás, ad-hoc aláírás
+        run: |
+          mkdir -p dist
+          cp -R build-arm64/Aqulify.app dist/
+          lipo -create build-arm64/Aqulify.app/Contents/MacOS/Aqulify build-x86_64/Aqulify.app/Contents/MacOS/Aqulify \
+            -output dist/Aqulify.app/Contents/MacOS/Aqulify
+          lipo -info dist/Aqulify.app/Contents/MacOS/Aqulify
+          codesign --force --deep --sign - --timestamp=none dist/Aqulify.app
+          codesign --verify --deep --strict --verbose=2 dist/Aqulify.app
+          plutil -lint dist/Aqulify.app/Contents/Info.plist
+          ls -R dist/Aqulify.app/Contents | head -n 40
+
+      - name: Indítási füstteszt (motor és híd)
+        run: |
+          log="$HOME/Library/Logs/Aqulify/aqulify.log"
+          rm -f "$log"
+          open dist/Aqulify.app
+          ok=0
+          for i in $(seq 1 30); do
+            if nc -z 127.0.0.1 47810 2>/dev/null; then ok=1; break; fi
+            sleep 1
+          done
+          if [ $ok = 1 ]; then python3 macos/ci/ws_status.py 47810 20 || ok=0; fi
+          echo "::group::aqulify.log"; cat "$log" 2>/dev/null || true; echo "::endgroup::"
+          pgrep -x Aqulify >/dev/null || { echo "::error title=Füstteszt::az alkalmazás nem fut (összeomlott?)"; ok=0; }
+          killall -TERM Aqulify 2>/dev/null || true
+          sleep 2
+          if pgrep -x Aqulify >/dev/null; then echo "::error title=Füstteszt::SIGTERM után sem állt le"; killall -KILL Aqulify; ok=0; fi
+          ls ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -i aqulify && ok=0 || true
+          [ $ok = 1 ]
+
+      - name: DMG
+        id: dmg
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then VER="${GITHUB_REF_NAME#v}"
+          elif [ -n "${{ inputs.version }}" ]; then VER="${{ inputs.version }}"
+          else VER="dev-${GITHUB_SHA::7}"; fi
+          file="Aqulify-${VER}-macOS.dmg"
+          mkdir -p dmgroot
+          cp -R dist/Aqulify.app dmgroot/
+          ln -s /Applications dmgroot/Applications
+          hdiutil create -volname "Aqulify" -srcfolder dmgroot -ov -format UDZO "$file"
+          shasum -a 256 "$file" > "$file.sha256"
+          # Állandó nevű példány: a README "legújabb kiadás" letöltési linkje erre mutat
+          cp "$file" Aqulify-macOS.dmg
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      - name: Feltöltés munkatermékként
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aqulify-macOS
+          path: |
+            ${{ steps.dmg.outputs.file }}
+            ${{ steps.dmg.outputs.file }}.sha256
+            Aqulify-macOS.dmg

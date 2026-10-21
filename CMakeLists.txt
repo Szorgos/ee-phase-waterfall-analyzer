@@ -207,11 +207,48 @@ if(WIN32)
     endif()
 endif()
 
+# macOS: Aqulify.app (menüsor-ikon, saját ablak és a Core Audio motor egy alkalmazásban)
+if(APPLE)
+    enable_language(OBJCXX)
+    set(CMAKE_OBJCXX_STANDARD 20)
+    set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
+    set(AQ_MACOS_MIN "${CMAKE_OSX_DEPLOYMENT_TARGET}")   # az Info.plist LSMinimumSystemVersion értéke
+    if(NOT AQ_MACOS_MIN)
+        set(AQ_MACOS_MIN 12.0)
+    endif()
+    set(AQ_MAC_RES ${CMAKE_CURRENT_SOURCE_DIR}/macos/resources)
+    set(AQ_MAC_GUI
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui_integrated_system.html
+        ${CMAKE_CURRENT_SOURCE_DIR}/autoeq_index.js
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui_i18n.js
+        ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js)
+    add_executable(Aqulify MACOSX_BUNDLE macos/app/main.mm macos/engine/mac_engine.mm ${AQ_MAC_GUI}
+        ${AQ_MAC_RES}/Aqulify.icns ${AQ_MAC_RES}/en.lproj/InfoPlist.strings ${AQ_MAC_RES}/hu.lproj/InfoPlist.strings)
+    set_source_files_properties(${AQ_MAC_GUI} PROPERTIES MACOSX_PACKAGE_LOCATION Resources/gui)
+    set_source_files_properties(${AQ_MAC_RES}/Aqulify.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    set_source_files_properties(${AQ_MAC_RES}/en.lproj/InfoPlist.strings PROPERTIES MACOSX_PACKAGE_LOCATION Resources/en.lproj)
+    set_source_files_properties(${AQ_MAC_RES}/hu.lproj/InfoPlist.strings PROPERTIES MACOSX_PACKAGE_LOCATION Resources/hu.lproj)
+    set_target_properties(Aqulify PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/macos/Info.plist.in
+        MACOSX_BUNDLE_GUI_IDENTIFIER io.github.szorgos.Aqulify
+        MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
+        MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION})
+    target_include_directories(Aqulify PRIVATE macos/engine)
+    target_compile_options(Aqulify PRIVATE -fobjc-arc)
+    target_compile_definitions(Aqulify PRIVATE AQULIFY_VERSION="${PROJECT_VERSION}")
+    target_link_libraries(Aqulify PRIVATE ee_dsp_core Threads::Threads
+        "-framework AppKit" "-framework AudioToolbox" "-framework CoreAudio" "-framework CoreFoundation"
+        "-framework Foundation" "-framework ServiceManagement" "-framework WebKit")
+    add_custom_command(TARGET Aqulify POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE
+                $<TARGET_BUNDLE_CONTENT_DIR:Aqulify>/Resources/gui/three.js-LICENSE.txt)
+endif()
+
 # Linux: PipeWire motor (virtuális "Aqulify" kimeneti eszköz) és saját ablakos felület
 option(BUILD_PIPEWIRE_PLUGIN "Aqulify PipeWire motor Linuxra" ON)
 option(BUILD_LINUX_GUI "Saját ablakos felület (WebKitGTK), ha a fejlesztői csomag elérhető" ON)
 
-if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32)
+if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
     add_executable(aqulify-engine src/pipewire_plugin.cpp)
@@ -238,7 +275,7 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32)
 endif()
 
 # ------------------------------------------------------------------ Linux rendszerszintű telepítés (RPM / cmake --install)
-if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32)
+if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
     include(GNUInstallDirs)
     string(TIMESTAMP AQ_RELEASE_DATE "%Y-%m-%d" UTC)
     set(BINDIR "${CMAKE_INSTALL_FULL_BINDIR}")

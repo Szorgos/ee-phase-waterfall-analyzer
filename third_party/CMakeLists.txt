@@ -33,6 +33,15 @@ set(CARCH ${LSP}/lsp-common-lib/src/arch)
 list(APPEND AQ_LSP_COMMON ${CARCH}/generic/generic.cpp)
 
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" AQ_CPU)
+if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+    # macOS-en a gépétől eltérő architektúrára is fordítható (pl. arm64 gépen x86_64); egyszerre egy szelet,
+    # az univerzális alkalmazást a két külön fordításból a lipo egyesíti
+    list(LENGTH CMAKE_OSX_ARCHITECTURES AQ_NARCH)
+    if(AQ_NARCH GREATER 1)
+        message(FATAL_ERROR "CMAKE_OSX_ARCHITECTURES: egyszerre egy architektúra (az univerzális bináris lipo-val készül)")
+    endif()
+    string(TOLOWER "${CMAKE_OSX_ARCHITECTURES}" AQ_CPU)
+endif()
 if(AQ_CPU MATCHES "x86_64|amd64|i.86|x86")
     list(APPEND AQ_LSP_COMMON ${CARCH}/x86/x86.cpp ${CARCH}/x86/sse.cpp ${CARCH}/x86/avx.cpp ${CARCH}/x86/avx512.cpp)
     if(NOT MSVC)

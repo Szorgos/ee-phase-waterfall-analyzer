@@ -24,6 +24,7 @@
   #include <fcntl.h>
   #include <poll.h>
   #include <cerrno>
+  #include <csignal>
 #endif
 
 namespace ee_analyzer::net {
@@ -42,6 +43,9 @@ inline bool startup() {
     WSADATA wsa;
     return WSAStartup(MAKEWORD(2, 2), &wsa) == 0;
 #else
+#ifdef __APPLE__
+    std::signal(SIGPIPE, SIG_IGN);   // macOS-en nincs MSG_NOSIGNAL: a bontott kapcsolatra írás ne állítsa le a folyamatot
+#endif
     return true;
 #endif
 }
@@ -110,6 +114,8 @@ inline long long recvSome(socket_t s, char* buf, size_t len) {
 inline long long sendSome(socket_t s, const char* buf, size_t len) {
 #ifdef _WIN32
     return static_cast<long long>(::send(s, buf, static_cast<int>(len), 0));
+#elif defined(__APPLE__)
+    return static_cast<long long>(::send(s, buf, len, 0));   // SIGPIPE: lásd startup()
 #else
     return static_cast<long long>(::send(s, buf, len, MSG_NOSIGNAL));
 #endif

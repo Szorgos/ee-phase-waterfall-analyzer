@@ -1,7 +1,8 @@
 #pragma once
 /**
  * @file linux_store.hpp
- * @brief A DSP beállítások és a konvolver IR mentése Linuxon ($XDG_CONFIG_HOME/aqulify vagy ~/.config/aqulify).
+ * @brief A DSP beállítások és a konvolver IR mentése Linuxon ($XDG_CONFIG_HOME/aqulify vagy ~/.config/aqulify)
+ *        és macOS-en (~/Library/Application Support/Aqulify).
  *
  * Fájlformátum azonos a Windowsos változatéval (params.bin: 'AAEP' v3, ir.bin: 'AIRF' v1), így a beállítások
  * a két rendszer között átmásolhatók.
@@ -29,6 +30,15 @@ constexpr uint32_t kParamVersion = kParamLayoutVersion;
 constexpr uint32_t kIrMagic = 0x46524941;    // 'AIRF'
 
 inline std::string configDir(bool create) {
+#ifdef __APPLE__
+    std::string mac;
+    if (const char* h = std::getenv("HOME"); h && *h) mac = std::string(h) + "/Library/Application Support";
+    else mac = ".";
+    if (create) mkdir(mac.c_str(), 0755);
+    mac += "/Aqulify";
+    if (create) mkdir(mac.c_str(), 0755);
+    return mac;
+#else
     std::string dir;
     if (const char* x = std::getenv("XDG_CONFIG_HOME"); x && *x) dir = x;
     else if (const char* h = std::getenv("HOME"); h && *h) dir = std::string(h) + "/.config";
@@ -46,6 +56,7 @@ inline std::string configDir(bool create) {
     dir += "/aqulify";
     if (create) mkdir(dir.c_str(), 0755);
     return dir;
+#endif
 }
 
 inline bool writeAtomic(const std::string& path, const std::vector<char>& bytes) {

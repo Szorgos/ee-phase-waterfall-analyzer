@@ -1,0 +1,3 @@
+/* Rendszerhang-rögzítés (Core Audio Tap) */
+"NSAudioCaptureUsageDescription" = "Aqulify processes the system audio (EQ, crossfeed, convolver, limiter) and shows it in the analyzer. The audio never leaves this Mac.";
+"NSMicrophoneUsageDescription" = "Aqulify only uses the output of your audio device. If the device also has inputs, macOS may ask for this permission; Aqulify does not record from the microphone.";

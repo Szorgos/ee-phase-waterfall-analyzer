@@ -3972,6 +3972,11 @@ function updateEngineBadge() {
     badge.className = "status-badge info";
     badge.textContent = t("engine.liveAnalysis", { src, sr });
     badge.title = (st.device ? t("engine.device", { device: st.device }) + "\n" : "") + t("engine.analysisOnly");
+  } else if (st.platform === "macos" && st.dspActive === false && st.problem) {
+    const key = st.problem === "permission" ? "engine.macPermission" : st.problem === "nosource" ? "engine.macNoSource" : "engine.macDevice";
+    badge.className = "status-badge warning";
+    badge.textContent = t(key);
+    badge.title = t(key + "Title");
   } else {
     badge.className = "status-badge optimal";
     badge.textContent = t("engine.live", { src, sr });

@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file aq_i18n.hpp
- * @brief Fordítások a natív részekhez (Windows tálcamenü, üzenetablakok, telepítő; Linux ablak).
+ * @brief Fordítások a natív részekhez (Windows tálcamenü, üzenetablakok, telepítő; Linux ablak; macOS alkalmazás).
  *
  * A szövegek az i18n/native/<nyelv>.json fájlokban vannak; a tools/i18n_build.py ezekből állítja elő
  * az aq_i18n_strings.hpp táblát. A nyelv: a felületen választott (language.txt), különben a rendszeré;
@@ -31,6 +31,9 @@
 #include <shlobj.h>
 #else
 #include <sys/stat.h>
+#endif
+#ifdef __APPLE__
+#include <CoreFoundation/CoreFoundation.h>
 #endif
 
 #include "aq_i18n_strings.hpp"
@@ -138,6 +141,34 @@ inline std::string narrow(const std::wstring& w) {
 }
 inline std::wstring trw(Msg m) { return widen(tr(m)); }
 inline std::wstring fmtw(Msg m, std::initializer_list<std::pair<const char*, std::string>> vars) { return widen(fmt(m, vars)); }
+#elif defined(__APPLE__)
+/** A macOS nyelvi beállítása (Rendszerbeállítások → Általános → Nyelv és régió: az első előnyben részesített nyelv). */
+inline std::string systemLanguage() {
+    std::string code = "en";
+    if (CFArrayRef langs = CFLocaleCopyPreferredLanguages()) {
+        if (CFArrayGetCount(langs) > 0) {
+            char buf[64] = {};
+            const auto first = static_cast<CFStringRef>(CFArrayGetValueAtIndex(langs, 0));
+            if (CFStringGetCString(first, buf, sizeof(buf), kCFStringEncodingUTF8)) {
+                const std::string n = normalize(buf);
+                if (!n.empty()) code = n;
+            }
+        }
+        CFRelease(langs);
+    }
+    return code;
+}
+
+/** ~/Library/Application Support/Aqulify/language.txt */
+inline std::string settingsFile(bool createDir = false) {
+    const char* h = std::getenv("HOME");
+    if (!h || !*h) return {};
+    std::string dir = std::string(h) + "/Library/Application Support";
+    if (createDir) mkdir(dir.c_str(), 0755);
+    dir += "/Aqulify";
+    if (createDir) mkdir(dir.c_str(), 0755);
+    return dir + "/language.txt";
+}
 #else
 /** A munkamenet nyelve (LANGUAGE, LC_ALL, LC_MESSAGES, LANG). */
 inline std::string systemLanguage() {

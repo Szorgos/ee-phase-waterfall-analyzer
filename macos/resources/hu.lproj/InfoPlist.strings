@@ -1,0 +1,3 @@
+/* Rendszerhang-rögzítés (Core Audio Tap) */
+"NSAudioCaptureUsageDescription" = "Az Aqulify a rendszerhangot dolgozza fel (EQ, crossfeed, konvolver, limiter), és megjeleníti az analizátorban. A hang nem hagyja el ezt a Macet.";
+"NSMicrophoneUsageDescription" = "Az Aqulify csak a hangeszköz kimenetét használja. Ha az eszköznek bemenete is van, a macOS ezt az engedélyt is kérheti; az Aqulify nem rögzít a mikrofonról.";
