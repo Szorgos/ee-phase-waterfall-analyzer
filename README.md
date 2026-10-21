@@ -1,4 +1,4 @@
-# Aqulify • Valós Idejű Fázis, Spektrum & Akusztikai Vízesés DSP Csomag
+# Aqulify • Audiofil DSP rendszer Linuxra és Windowsra
 
 [![GitHub Release](https://img.shields.io/github/v/release/Szorgos/ee-phase-waterfall-analyzer?style=flat-square&color=blue)](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest)
 [![Windows Download](https://img.shields.io/badge/Windows%2011-Telep%C3%ADt%C5%91%20(.exe)-0078D6?style=flat-square&logo=windows)](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe)
@@ -11,8 +11,10 @@
 > *(Telepítő: Aqulify motor tálcaikonnal, saját ablakos felület és az Equalizer APO plugin automatikus bekötése. Korábbi verziók és ellenőrzőösszegek: [Kiadások](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases).)*
 
 ---
-**Projekt:** `Aqulify`  
-**Cél:** Valós idejű DSP lánc (EQ, crossfeed, konvolver, bass enhancer, limiter) az EasyEffects DSP könyvtáraival, élő 3D akusztikai vízeséssel és az EQ fázis- / csoportkésleltetés-görbéjével – Linuxon (PipeWire) és Windows 11-en (Equalizer APO).
+
+Az **Aqulify** valós idejű hangfeldolgozó lánc zenehallgatáshoz: parametrikus EQ több mint 8 850 AutoEq fejhallgató-profillal, crossfeed, konvolver (szobakorrekció), bass enhancer és True Peak limiter az EasyEffects DSP könyvtáraival, valamint a **Magic Touch**, egy automatikus, visszafogott hangszépítő és helyreállító. A lejátszott jel valódi spektruma élő 3D vízesésen látszik, az EQ fázis- és csoportkésleltetés-görbéjével együtt. Linuxon PipeWire virtuális kimenetként, Windows 11-en Equalizer APO pluginként működik; a felület magyarul és angolul használható. Ingyenes és nyílt forrású (GPL-3.0).
+
+![Aqulify: élő 3D vízesés és parametrikus EQ egy AutoEq fejhallgató-profillal](docs/screenshots/aqulify-main.png)
 
 ---
 
@@ -34,7 +36,7 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
    * A motor valódi FFT spektruma (160 logaritmikus sáv, 10 Hz – 24 kHz) 60 FPS gördüléssel.
    * **GPU-gyorsítás a zene védelmében:** A 3D felületet a videokártya rajzolja (Linuxon OpenGL/Mesa, Windowson Direct3D backenddel a WebGL alatt); a rács pontjait és színeit a JavaScript számolja, így a grafika **csak kis mértékben terheli a processzort**, és még a legösszetettebb nézeteknél sem akasztja meg a valós idejű zenelejátszást (zéró hangkimaradás).
    * **Fakítás és testreszabás:** Állítható hőtérkép-fakítás csúszka (élénk színektől a lágy szürkeárnyalatig); időlépcsők: 60 / 120 / 180; nézőpontok: 3D izometrikus, oldalsó profil, felülnézet.
-   * **Frekvenciaskála (10 Hz – 24 kHz):** A vízesés alatt elhelyezett skála azonnal leolvashatóvá teszi a csúcsokat. A skála két szélén kis diszkrét felirat mutatja az elmúlt 10 másodpercben mért legmélyebb (Hz) és legmagasabb (kHz) frekvenciát, a gyors kék határolójelek pedig valós időben követik a hangsáv tartományát.
+   * **Frekvenciaskála (10 Hz – 24 kHz):** A vízesés alatt elhelyezett skála azonnal leolvashatóvá teszi a csúcsokat. A skála két szélén kis diszkrét felirat mutatja az elmúlt 10 másodpercben mért legmélyebb (Hz) és legmagasabb (kHz) frekvenciát, a gyors türkiz határolójelek pedig valós időben követik a hangsáv tartományát.
    * **Előcsengés (pre-ringing) jelzése:** FIR / FFT / SPM (lineáris fázisú) módban egy diszkrét felirat jelzi, hogy előcsengés lehetséges. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik; a program nem nagyítja fel.
 
 2. **EQ-görbe, fázis és csoportkésleltetés ($-\frac{d\phi}{d\omega}$):**
@@ -54,9 +56,16 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
    * **Limiter (LSP Limiter):** 12 mód, túlmintavételezés (True Peak is), dither, lookahead / attack / release, stereo link, gain boost, ALR, bemeneti és kimeneti erősítés; alapértelmezés: -1,0 dB küszöb, True Peak / 24 bit. Kikapcsolt limiternél csak a 0 dBFS feletti minták vágódnak le. A túlvezérlés ellen elsősorban a teljes EQ-görbéhez igazított előerősítés véd; a limiter biztonsági háló (negatív preampú profil importjakor vagy betöltésekor automatikusan bekapcsol), nem hallásvédelem.
    * **Bass Enhancer (Calf):** pszichoakusztikai hiányzó alaphang szintézis (amount, harmonics, scope, floor, blend, listen, bemeneti és kimeneti erősítés).
 
-5. **Motor és felület:**
+5. **Magic Touch – automatikus, visszafogott hangszépítő:**
+   * Elemzi a lejátszott felvételt (hangosság és dinamika BS.1770 / EBU 3342 szerint, hangszín, sziszegés, zajpadló, sztereókép), és csak azt igazítja, ami hiányzik vagy zavaró, kemény korlátokkal: mély-közép vágás, levegő, de-esser, mono basszus, tágítás, mikrodinamika, exciter. A kimenet hangossága megegyezik a bemenetével; rendben lévő felvételen a jel bitre érintetlen.
+   * **Karakter:** Természetes, Meleg, Fényes, Tágas. **Tartalom:** Automatikus (felismeréssel), Zene, Beszéd, Archív felvétel.
+   * **Helyreállítás:** 50/60 Hz-es zümmögés eltávolítása, kattanásjavítás, zajcsökkentés (beszédnél RNNoise). Késleltetés csak akkor lép fel, ha a kattanásjavítás (2,7 ms) vagy az RNNoise (32,7 ms) dolgozik.
+   * Intenzitás csúszka, hangerőre kiegyenlített A/B összehasonlítás, részletes diagnosztika ([terv és működés](docs/plans/magic-touch.md)).
+
+6. **Motor és felület:**
    * Linuxon PipeWire virtuális kimenet („Aqulify”), Windowson Equalizer APO plugin. A hangszál zárak nélkül veszi át a beállításokat; a modulok be- és kikapcsolása, valamint az EQ-mód és a decramp váltása rövid le- és felúsztatással, kattanás nélkül történik (lineáris fázisú módra váltáskor a kimenet a módhoz tartozó késleltetés kitöltéséig, kb. 0,1 s-ig néma). A felület és a grafika külön folyamatban fut, nem tartja fel a lejátszást.
-   * WebSocket híd a `127.0.0.1` címen (az első szabad port: 47810–47814, végső tartalékként 8080): a motor a spektrumot, az EQ-görbét, a limiter erősítéscsökkentését és a mentett állapotot küldi; a felület az összes modulbeállítást, az IR-t és az EQ profilokat.
+   * WebSocket híd a `127.0.0.1` címen (az első szabad port: 47810–47814, végső tartalékként 8080): a motor a spektrumot, az EQ-görbét, a limiter erősítéscsökkentését és a mentett állapotot küldi; a felület az összes modulbeállítást, az IR-t és az EQ profilokat (a protokoll leírása: [docs/remote-api.md](docs/remote-api.md)).
+   * **Felület:** magyarul és angolul (alapból a rendszer nyelvén, váltás a fejlécben); Linuxon saját ablakban (WebKitGTK, ennek hiányában böngészőben), Windowson saját ablakban (WebView2).
 
 ---
 
@@ -174,7 +183,7 @@ cmake --build build -j$(nproc)
 ├── CMakeLists.txt              # C++20 szabványos építőrendszer (Linux & Windows)
 ├── install.sh                  # Univerzális Linux disztró-felismerő és telepítő szkript
 ├── uninstall.sh                # Linux eltávolító
-├── gui_integrated_system.html  # Grafikus felület (Adwaita stílus) és 3D WebGL vízesés
+├── gui_integrated_system.html  # Grafikus felület és 3D WebGL vízesés (beágyazott Inter és IBM Plex Mono betűkkel)
 ├── autoeq_index.js             # 8 850+ modellt tartalmazó AutoEq fülhallgató adatbázis
 ├── gui_i18n.js                 # A felület szövegei magyarul és angolul (előállítva: tools/i18n_build.py)
 ├── i18n/                       # Fordítások forrásai: gui/ (felület), native/ (tálca, telepítő), scripts/ (install.sh)
@@ -208,7 +217,7 @@ cmake --build build -j$(nproc)
 │   ├── test_core.cpp           # Közös mag teszt (FFT, paraméterfájl, seqlock, tap, JSON)
 │   ├── test_dsp.cpp            # DSP modulok és teljes lánc teszt
 │   └── test_ringbuffer.cpp     # Többszálú valós idejű stabilitási tesztprogram
-├── third_party/                # LSP, Calf, libbs2b, SpeexDSP, zita-convolver, RNNoise (forrás, licencekkel)
+├── third_party/                # LSP, Calf, libbs2b, SpeexDSP, zita-convolver, RNNoise (forrás, licencekkel); fonts/: betűtípus-licencek
 └── windows/
     ├── README_WINDOWS.md       # Windows telepítés, használat, fordítás
     ├── engine/                 # Aqulify.exe (tálcás motor, WASAPI loopback, plugin híd)

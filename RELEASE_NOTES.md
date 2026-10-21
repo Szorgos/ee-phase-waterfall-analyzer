@@ -1,3 +1,22 @@
+### Újdonságok (következő kiadás)
+- **Magic Touch:** új, automatikus és visszafogott hangszépítő modul a lánc elején, Linuxon és Windowson ugyanazzal a kóddal. Elemzi a lejátszott felvételt, és csak azt igazítja, ami hiányzik vagy zavaró; a kimenet hangossága megegyezik a bemenetével, rendben lévő felvételen a jel bitre érintetlen, 0 %-on a modul kimarad a láncból.
+  - *Hangszín és tér:* mély-közép vágás (legfeljebb 3 dB), levegő (legfeljebb +2 dB), de-esser (legfeljebb 4 dB), fokozatos mono basszus, tágítás 150 Hz felett (Crossfeed mellett nincs).
+  - *Mikrodinamika és exciter:* tranziens-kiemelés és a halk részek finom emelése, csak lapos dinamikánál; páros felharmonikusok 6 kHz felett, ahol a magas hiányzik.
+  - *Karakter:* Természetes, Meleg, Fényes, Tágas. *Tartalom:* Automatikus (felismeréssel), Zene, Beszéd, Archív felvétel.
+  - *Helyreállítás:* az 50/60 Hz-es zümmögés eltávolítása, kattanásjavítás, zajcsökkentés (beszédnél RNNoise). Késleltetés csak akkor lép fel, ha a kattanásjavítás (2,7 ms) vagy az RNNoise (32,7 ms) dolgozik.
+  - Intenzitás csúszka, hangerőre kiegyenlített A/B összehasonlítás, részletes diagnosztika.
+- **Új megjelenés:** sötét, „víz és fény” arculat türkiz kiemelőszínnel; beágyazott Inter és IBM Plex Mono betűtípus (hálózat nélkül is); egységes vonalas ikonok az emojik helyett; új vízesés-színskála (mély kék → türkiz → borostyán csúcsok); kitöltött csúszkák, új állapotjelvények és modulpontok. Linuxon a címsor, Windows 11-en a címsor színe is a felülethez igazodik, és a felület háttere már betöltés előtt is sötét.
+- **Magyar és angol nyelv mindenhol:** a felület (nyelvválasztó a fejlécben, alapból a rendszer nyelve), Windowson a tálcamenü, az üzenetablakok, a telepítő és az eltávolító, Linuxon az `install.sh` / `uninstall.sh`, a menübejegyzés és a PipeWire kimenet neve.
+- **2D EQ grafikon:** függőleges nagyítás (±1 … ±48 dB, folyamatosan Ctrl+Shift+görgővel a kurzor magasságánál) és eltolás (húzás, Alt+görgő); az „Igazít” gomb egy kattintással mindent láthatóvá tesz, és jelzi, ha a görbe vagy egy sáv kilóg; a nézeten kívüli sáv a szélen nyílként látszik.
+
+### Javítások (következő kiadás)
+- **Linux felület:** bezáráskor nem omlik össze a WebKit tartalomfolyamata (nincs core dump), és nem akad meg; a vízesés követi az ablak átméretezését, rejtett ablakban nem rajzol.
+- **Windows:** a Feladatkezelőben helyes a felület neve (eddig „Aqulify felÃ¼let”).
+- **EQ grafikon:** nagyításkor a késleltetés-görbe a rajzterületen belül marad, a nézeten kívül futó EQ-görbe a szélen szaggatott vonallal látszik, a nagyítás-felirat a görbék fölött is olvasható.
+
+### Előkészítve
+- **Raspberry Pi (64 bites ARM):** a motor és a tesztek keresztfordítással lefordulnak (`linux/toolchain-aarch64-linux-gnu.cmake`), a tesztek QEMU alatt sikeresek; az így talált Convolver-hiba (100 %-os IR-szélességnél nem volt pontosan érintetlen) javítva. Valódi Pi-n még nem futott.
+
 ### Javítások (1.6.3)
 - **Felület ↔ motor:** megszűnt a felület és a motor közötti folyamatos üzenetváltás (tétlen felületnél is kb. 23 EQ-üzenet másodpercenként). Ennek következményei is megszűntek: a kézi módosítás ismét mentődik az aktív profilba, AutoEq-profil módosításakor létrejön a „– módosított” profil, a motor pedig nyitott felület mellett is elmenti a beállításokat (`params.bin`).
 - **Automatikus preamp:** az új sáverősítés és a hozzá tartozó preamp egyszerre lép életbe, profilváltáskor is (nincs rövid, előerősítés nélküli kiugrás).
