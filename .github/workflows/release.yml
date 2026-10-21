@@ -279,6 +279,32 @@ jobs:
             ${{ needs.fedora-rpm.outputs.file }}
             ${{ needs.fedora-rpm.outputs.file }}.sha256
 
+  # macOS: Aqulify.app univerzális DMG-ben (a macos.yml munkafolyamat)
+  macos-app:
+    uses: ./.github/workflows/macos.yml
+    with:
+      version: ${{ inputs.version }}
+
+  # A macOS DMG a kiadáshoz; külön feladat, így a macOS fordítás nem tartja vissza a Windows és Linux kiadást
+  macos-release:
+    needs: [macos-app, windows-installer]
+    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.version != '')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: macOS DMG átvétele
+        uses: actions/download-artifact@v4
+        with:
+          name: Aqulify-macOS
+
+      - name: Feltöltés a kiadáshoz
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', inputs.version) }}
+          files: |
+            ${{ needs.macos-app.outputs.file }}
+            ${{ needs.macos-app.outputs.file }}.sha256
+            Aqulify-macOS.dmg
+
   # Fedora COPR (nlali/aqulify): kiadáskor újraépíti a csomagot, így a dnf / Discover frissítést kap.
   # A COPR "custom webhook" címében lévő UUID titkos kulcs, ezért a teljes cím GitHub Secretben van:
   # Settings → Secrets and variables → Actions → COPR_WEBHOOK_URL

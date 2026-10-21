@@ -119,6 +119,15 @@ jobs:
             if nc -z 127.0.0.1 47810 2>/dev/null; then ok=1; break; fi
             sleep 1
           done
+          # az alkalmazás saját ablakában futó felület (WKWebView) is csatlakozik a hídhoz
+          gui=0
+          for i in $(seq 1 30); do
+            if grep -q "Grafikus felület csatlakozott" "$log" 2>/dev/null; then gui=1; break; fi
+            sleep 1
+          done
+          [ $gui = 1 ] || { echo "::error title=Füstteszt::az ablak felülete nem csatlakozott a motorhoz"; ok=0; }
+          sleep 3
+          screencapture -x macos-screenshot.png 2>/dev/null || true
           if [ $ok = 1 ]; then python3 macos/ci/ws_status.py 47810 20 || ok=0; fi
           echo "::group::aqulify.log"; cat "$log" 2>/dev/null || true; echo "::endgroup::"
           pgrep -x Aqulify >/dev/null || { echo "::error title=Füstteszt::az alkalmazás nem fut (összeomlott?)"; ok=0; }
@@ -127,6 +136,14 @@ jobs:
           if pgrep -x Aqulify >/dev/null; then echo "::error title=Füstteszt::SIGTERM után sem állt le"; killall -KILL Aqulify; ok=0; fi
           ls ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -i aqulify && ok=0 || true
           [ $ok = 1 ]
+
+      - name: Képernyőkép (füstteszt)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-screenshot
+          path: macos-screenshot.png
+          if-no-files-found: ignore
 
       - name: DMG
         id: dmg
