@@ -65,8 +65,22 @@
   .strip-overlay { position: absolute; top: 10px; left: 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; pointer-events: none; }
   .strip-badge { background: rgba(30, 30, 30, 0.85); backdrop-filter: blur(4px); border: 1px solid var(--ee-border); border-radius: 6px; padding: 4px 10px; font-size: 0.72rem; color: var(--ee-text-secondary); }
   .strip-badge strong { color: #00f0ff; }
-  .support-link { background: transparent; border: 1px solid transparent; color: rgba(255,255,255,0.42); font-size: 0.74rem; padding: 2px 8px; border-radius: 12px; cursor: pointer; transition: color .15s, border-color .15s; }
-  .support-link:hover { color: #ff7b9c; border-color: rgba(255,123,156,0.45); }
+  @keyframes donateSubtlePulse {
+    0%, 25%, 100% {
+      color: rgba(255, 255, 255, 0.42);
+      border-color: transparent;
+      box-shadow: none;
+      transform: scale(1);
+    }
+    12% {
+      color: #ff8da7;
+      border-color: rgba(255, 123, 156, 0.45);
+      box-shadow: 0 0 10px rgba(255, 123, 156, 0.28);
+      transform: scale(1.04);
+    }
+  }
+  .support-link { background: transparent; border: 1px solid transparent; color: rgba(255,255,255,0.42); font-size: 0.74rem; padding: 2px 8px; border-radius: 12px; cursor: pointer; transition: color .15s, border-color .15s, transform .2s, box-shadow .2s; animation: donateSubtlePulse 20s ease-in-out infinite; display: inline-block; }
+  .support-link:hover { animation: none; color: #ff7b9c; border-color: rgba(255,123,156,0.45); box-shadow: 0 0 8px rgba(255,123,156,0.3); transform: scale(1.05); }
   .support-pop { position: fixed; top: 52px; right: 18px; z-index: 9998; width: 270px; background: #1c1f27; border: 1px solid #3c4456; border-radius: 10px; padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-size: 0.8rem; color: #d8d8d8; display: none; text-align: center; }
   .support-pop img { width: 190px; border-radius: 8px; margin: 8px auto; display: block; }
   .support-pop .tag { font-weight: 700; color: #fff; font-size: 0.95rem; }
@@ -139,6 +153,30 @@
   /* 2D EQ GRAFIKON */
   .eq-canvas-wrapper { position: relative; background: var(--ee-view-bg); border: 1px solid var(--ee-border); border-radius: 8px; overflow: hidden; }
   canvas#eqCanvas { display: block; width: 100%; height: clamp(260px, 34vh, 440px); cursor: crosshair; }
+  .eq-zoom-overlay {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(18, 22, 28, 0.85);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid var(--ee-border);
+    border-radius: 6px;
+    padding: 3px 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    pointer-events: auto;
+  }
+  .eq-zoom-overlay .zoom-lbl { font-size: 0.72rem; color: var(--ee-text-secondary); font-weight: 600; }
+  .eq-zoom-overlay .zoom-val { font-size: 0.72rem; color: var(--ee-text-primary); font-family: monospace; min-width: 28px; text-align: center; }
+  .eq-zoom-overlay .zoom-divider { width: 1px; height: 14px; background: var(--ee-border); margin: 0 2px; }
+  .eq-zoom-overlay .zoom-btn { padding: 1px 6px; font-size: 0.72rem; height: 22px; line-height: 20px; border-radius: 4px; background: #252a34; border-color: #384252; color: #e0e6ed; cursor: pointer; }
+  .eq-zoom-overlay .zoom-btn:hover { background: #323946; color: #fff; }
+  .eq-zoom-overlay select.ee-select { padding: 1px 4px; font-size: 0.72rem; height: 22px; background: #252a34; border-color: #384252; color: #e0e6ed; }
+  .eq-zoom-overlay input.zoom-slider { width: 65px; height: 4px; accent-color: #78aeed; cursor: pointer; }
 
   .eq-bottom-bar { background: var(--ee-card-bg); border: 1px solid var(--ee-border); border-radius: 8px; padding: 7px 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
   .node-readout { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; flex-wrap: wrap; }
@@ -218,7 +256,7 @@
     <div class="title-group">
       <div class="badge-app" style="background: linear-gradient(135deg, #3584e4, #9a59b5); font-weight: 800; letter-spacing: 0.5px;">AQULIFY</div>
       <span style="font-size: 1.02rem; font-weight: 700; background: linear-gradient(90deg, #ffffff, #78aeed); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Aqulify • Audiofil DSP Rendszer</span>
-      <span style="font-size: 0.72rem; font-weight: 600; color: var(--ee-text-secondary); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--ee-border); border-radius: 4px; padding: 2px 6px; margin-left: 4px;" title="Verziószám">v1.6.1</span>
+      <span style="font-size: 0.72rem; font-weight: 600; color: var(--ee-text-secondary); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--ee-border); border-radius: 4px; padding: 2px 6px; margin-left: 4px;" title="Verziószám">v1.6.2</span>
     </div>
     <!-- EQ PROFILOK: aktív profil neve, választás, mentés, átnevezés, törlés -->
     <div id="presetBar" class="preset-bar" title="EQ profilok: AutoEq importkor és kézi beállításkor automatikusan mentődnek, újraindítás után is választhatók">
@@ -313,6 +351,24 @@
     <div class="tab-pane active" id="pane-eq">
       <div class="eq-canvas-wrapper">
         <canvas id="eqCanvas"></canvas>
+        <!-- 2D ZOOM & SKÁLA LEBEGŐ PANEL -->
+        <div class="eq-zoom-overlay">
+          <span class="zoom-lbl">dB skála:</span>
+          <select id="selectEqDbRange" class="ee-select" title="Függőleges dB és ms lépték zoom (±6, ±12, ±24, ±36 dB)">
+            <option value="6">±6 dB</option>
+            <option value="12">±12 dB</option>
+            <option value="24" selected>±24 dB</option>
+            <option value="36">±36 dB</option>
+          </select>
+          <span class="zoom-divider"></span>
+          <span class="zoom-lbl">Zoom:</span>
+          <button id="btnEqZoomOut" class="adw-btn zoom-btn" title="Kicsinyítés">🔍−</button>
+          <input type="range" id="sliderEqZoom" min="100" max="500" value="100" step="10" class="ee-slider zoom-slider" title="Frekvencia zoom (1.0x - 5.0x)">
+          <span id="lblEqZoom" class="zoom-val">1.0x</span>
+          <button id="btnEqZoomIn" class="adw-btn zoom-btn" title="Nagyítás">🔍+</button>
+          <button id="btnEqZoomReset" class="adw-btn zoom-btn" title="Nagyítás és skála alaphelyzetbe (1.0x, ±24 dB)">⟲ Reset</button>
+          <button id="btnEqExpandHeight" class="adw-btn zoom-btn" title="Grafikon megnövelése / normál méret">↕</button>
+        </div>
       </div>
 
       <div class="eq-bottom-bar">
@@ -401,8 +457,9 @@
 
       <!-- ÚJ PONT HOZZÁADÁSA GOMB -->
       <button class="adw-btn primary" id="btnAddNode" title="Új EQ sáv (0 dB) a legnagyobb üres frekvenciasávba. Dupla kattintás a görbén: új sáv a kattintás helyén.">+ Új Sáv</button>
-      <button class="adw-btn active-opt" id="btnToggleDelay">Késleltetés (ms)</button>
-      <button class="adw-btn active-opt" id="btnTogglePhase">Fázis (°)</button>
+      <button class="adw-btn active-opt" id="btnToggleEqCurve" style="border-left: 3px solid #78aeed;" title="Kék EQ átviteli görbe megjelenítése / elrejtése (hangra nincs hatással)">EQ Görbe (dB)</button>
+      <button class="adw-btn active-opt" id="btnToggleDelay" style="border-left: 3px solid #ff7800;" title="Narancs csoportkésleltetés görbe megjelenítése / elrejtése (hangra nincs hatással)">Késleltetés (ms)</button>
+      <button class="adw-btn active-opt" id="btnTogglePhase" style="border-left: 3px solid #33d17a;" title="Zöld szaggatott fázisgörbe megjelenítése / elrejtése (hangra nincs hatással)">Fázis (°)</button>
     </div>
   </div>
 </div>
@@ -1221,8 +1278,46 @@ let nodes = [];
 let selectedNodeId = 1;
 let draggedNode = null;
 
+let showEqCurve = true;
 let showDelay = true;
 let showPhase = true;
+
+// 2D EQ Zoom & Pan állapotok
+const BASE_MIN_F = 20, BASE_MAX_F = 20000;
+let eqMinFreq = 20, eqMaxFreq = 20000;
+let eqDbRange = 24.0; // választható: 6, 12, 24, 36
+let eqZoomX = 1.0;   // 1.0x - 5.0x
+let eqPanCenterLog = (Math.log10(BASE_MIN_F) + Math.log10(BASE_MAX_F)) / 2;
+let isCanvasPanning = false;
+let panStartX = 0;
+let panStartCenterLog = 0;
+let isEqExpanded = false;
+
+function updateEqBounds() {
+  const totalLogMin = Math.log10(BASE_MIN_F);
+  const totalLogMax = Math.log10(BASE_MAX_F);
+  const totalSpan = totalLogMax - totalLogMin;
+  const visibleSpan = totalSpan / Math.max(1.0, eqZoomX);
+  
+  if (eqZoomX <= 1.001) {
+    eqPanCenterLog = (totalLogMin + totalLogMax) / 2;
+    eqMinFreq = BASE_MIN_F;
+    eqMaxFreq = BASE_MAX_F;
+  } else {
+    const minCenter = totalLogMin + visibleSpan / 2;
+    const maxCenter = totalLogMax - visibleSpan / 2;
+    eqPanCenterLog = Math.max(minCenter, Math.min(maxCenter, eqPanCenterLog));
+    const curLogMin = eqPanCenterLog - visibleSpan / 2;
+    const curLogMax = eqPanCenterLog + visibleSpan / 2;
+    eqMinFreq = Math.pow(10, curLogMin);
+    eqMaxFreq = Math.pow(10, curLogMax);
+  }
+}
+
+try {
+  const savedDbRange = localStorage.getItem("aqulify_eq_dbrange");
+  if (savedDbRange) eqDbRange = parseFloat(savedDbRange);
+} catch (e) {}
 
 const eqCanvas = document.getElementById("eqCanvas");
 const eqCtx = eqCanvas.getContext("2d");
@@ -1430,15 +1525,16 @@ function applyAutoPreamp() {
   drawEq();
 }
 
-const MIN_F = 20, MAX_F = 20000;
-const LOG_MIN = Math.log10(MIN_F), LOG_MAX = Math.log10(MAX_F);
-
 function getX(f, plotW, padLeft) {
-  return padLeft + ((Math.log10(f) - LOG_MIN) / (LOG_MAX - LOG_MIN)) * plotW;
+  const logMin = Math.log10(eqMinFreq);
+  const logMax = Math.log10(eqMaxFreq);
+  return padLeft + ((Math.log10(f) - logMin) / (logMax - logMin)) * plotW;
 }
 function getFreq(x, plotW, padLeft) {
   const norm = Math.max(0, Math.min(plotW, x - padLeft));
-  return Math.pow(10, LOG_MIN + (norm / plotW) * (LOG_MAX - LOG_MIN));
+  const logMin = Math.log10(eqMinFreq);
+  const logMax = Math.log10(eqMaxFreq);
+  return Math.pow(10, logMin + (norm / plotW) * (logMax - logMin));
 }
 
 function scheduleEqSync() {
@@ -1512,24 +1608,38 @@ function drawEq() {
   // Rács
   eqCtx.strokeStyle = "#282828";
   eqCtx.lineWidth = 1 * dpr;
-  const gridFreqs = [30, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
+  const candidateFreqs = [20, 30, 40, 50, 70, 100, 150, 200, 300, 500, 700, 1000, 1500, 2000, 3000, 5000, 7000, 10000, 15000, 20000];
   eqCtx.fillStyle = "#77767b";
   eqCtx.font = (9.5 * dpr) + "px sans-serif";
   eqCtx.textAlign = "center";
 
-  for (let gf of gridFreqs) {
+  let lastLabelX = -999;
+  for (let gf of candidateFreqs) {
+    if (gf < eqMinFreq || gf > eqMaxFreq) continue;
     const x = getX(gf, plotW, padLeft);
+    if (x < padLeft || x > padLeft + plotW) continue;
+    const isMajor = [50, 100, 500, 1000, 5000, 10000].includes(gf);
+    eqCtx.strokeStyle = isMajor ? "#333333" : "#242424";
     eqCtx.beginPath();
     eqCtx.moveTo(x, padTop); eqCtx.lineTo(x, padTop + plotH);
     eqCtx.stroke();
-    eqCtx.fillText((gf >= 1000 ? (gf/1000) + "k" : gf), x, padTop + plotH + 14 * dpr);
+    if (x - lastLabelX >= 36 * dpr && x <= padLeft + plotW - 10 * dpr && x >= padLeft + 10 * dpr) {
+      eqCtx.fillText((gf >= 1000 ? (gf / 1000) + "k" : gf), x, padTop + plotH + 14 * dpr);
+      lastLabelX = x;
+    }
   }
 
   // Szintek
-  const levels = [{ db: 18, delay: 10 }, { db: 0, delay: 0 }, { db: -18, delay: -10 }];
+  const lvlDb = eqDbRange * 0.75;
+  const lvlDelay = (eqDbRange / 24.0) * 10.0;
+  const levels = [
+    { db: +lvlDb.toFixed(1), delay: +lvlDelay.toFixed(1) },
+    { db: 0, delay: 0 },
+    { db: -lvlDb.toFixed(1), delay: -lvlDelay.toFixed(1) }
+  ];
   eqCtx.textAlign = "right";
   for (let lvl of levels) {
-    const y = midY - (lvl.db / 24.0) * (plotH * 0.45);
+    const y = midY - (lvl.db / eqDbRange) * (plotH * 0.45);
     eqCtx.strokeStyle = (lvl.db === 0) ? "#454545" : "#282828";
     eqCtx.beginPath();
     eqCtx.moveTo(padLeft, y); eqCtx.lineTo(padLeft + plotW, y);
@@ -1552,6 +1662,12 @@ function drawEq() {
     points.push({ x: px, f, ...evalChain(f) });
   }
 
+  // Rajzterület vágása (hogy a görbék ne lógjanak ki a rácsból)
+  eqCtx.save();
+  eqCtx.beginPath();
+  eqCtx.rect(padLeft, padTop, plotW, plotH);
+  eqCtx.clip();
+
   // Fázis
   if (showPhase) {
     eqCtx.strokeStyle = "rgba(51, 209, 122, 0.75)";
@@ -1568,11 +1684,12 @@ function drawEq() {
 
   // Késleltetés
   if (showDelay) {
+    const delayScale = (eqDbRange / 24.0) * 10.0;
     eqCtx.strokeStyle = "#ff7800";
     eqCtx.lineWidth = 1.9 * dpr;
     eqCtx.beginPath();
     for (let i = 0; i < points.length; i++) {
-      const y = midY - (points[i].delay_ms / 10.0) * (plotH * 0.45);
+      const y = midY - (points[i].delay_ms / delayScale) * (plotH * 0.45);
       if (i === 0) eqCtx.moveTo(points[i].x, y); else eqCtx.lineTo(points[i].x, y);
     }
     eqCtx.stroke();
@@ -1580,7 +1697,7 @@ function drawEq() {
 
   // Preamp referenciaszint (ha nem 0 dB)
   if (currentPreamp !== 0) {
-    const py = midY - (currentPreamp / 24.0) * (plotH * 0.45);
+    const py = midY - (currentPreamp / eqDbRange) * (plotH * 0.45);
     eqCtx.strokeStyle = "rgba(255, 120, 0, 0.4)";
     eqCtx.lineWidth = 1 * dpr;
     eqCtx.setLineDash([4 * dpr, 4 * dpr]);
@@ -1596,21 +1713,37 @@ function drawEq() {
   }
 
   // EQ Görbe (Összegzett átvitel a Preamp hatásával együtt)
-  eqCtx.strokeStyle = "#78aeed";
-  eqCtx.lineWidth = 2.4 * dpr;
-  eqCtx.beginPath();
-  for (let i = 0; i < points.length; i++) {
-    const total_db = points[i].mag_db + currentPreamp;
-    const y = midY - (total_db / 24.0) * (plotH * 0.45);
-    if (i === 0) eqCtx.moveTo(points[i].x, y); else eqCtx.lineTo(points[i].x, y);
+  if (showEqCurve) {
+    eqCtx.strokeStyle = "#78aeed";
+    eqCtx.lineWidth = 2.4 * dpr;
+    eqCtx.beginPath();
+    for (let i = 0; i < points.length; i++) {
+      const total_db = points[i].mag_db + currentPreamp;
+      const y = midY - (total_db / eqDbRange) * (plotH * 0.45);
+      if (i === 0) eqCtx.moveTo(points[i].x, y); else eqCtx.lineTo(points[i].x, y);
+    }
+    eqCtx.stroke();
   }
-  eqCtx.stroke();
+
+  // Zoom állapot jelzése a bal alsó sarokban ha nagyítva van
+  if (eqZoomX > 1.01) {
+    eqCtx.fillStyle = "rgba(120, 174, 237, 0.85)";
+    eqCtx.font = (9 * dpr) + "px monospace";
+    eqCtx.textAlign = "left";
+    const minFStr = eqMinFreq >= 1000 ? (eqMinFreq / 1000).toFixed(1) + " kHz" : Math.round(eqMinFreq) + " Hz";
+    const maxFStr = eqMaxFreq >= 1000 ? (eqMaxFreq / 1000).toFixed(1) + " kHz" : Math.round(eqMaxFreq) + " Hz";
+    eqCtx.fillText(`🔍 ${minFStr} – ${maxFStr} (${eqZoomX.toFixed(1)}x) • Húzással pásztázható`, padLeft + 8 * dpr, padTop + plotH - 8 * dpr);
+  }
+
+  eqCtx.restore(); // Vágás vége
 
   // Fogantyúk
   nodes.forEach((node, index) => {
-    const nx = getX(Math.max(MIN_F, Math.min(MAX_F, node.freq)), plotW, padLeft);
-    const ny = midY - ((bandHasGain(node) ? node.gain : 0) / 24.0) * (plotH * 0.45);
+    const nx = getX(node.freq, plotW, padLeft);
+    const ny = midY - ((bandHasGain(node) ? node.gain : 0) / eqDbRange) * (plotH * 0.45);
     const isSelected = (node.id === selectedNodeId);
+
+    if (nx < padLeft - 10 * dpr || nx > padLeft + plotW + 10 * dpr) return;
 
     if (isSelected) {
       eqCtx.strokeStyle = "#ffffff";
@@ -1632,7 +1765,7 @@ function drawEq() {
   });
 }
 
-// Drag & Drop az EQ-n
+// Drag & Drop és Pásztázás az EQ-n
 eqCanvas.onmousedown = (e) => {
   const rect = eqCanvas.getBoundingClientRect();
   const x = (e.clientX - rect.left) * (eqCanvas.width / rect.width);
@@ -1647,8 +1780,8 @@ eqCanvas.onmousedown = (e) => {
   const midY = padTop + plotH * 0.5;
 
   for (let n of nodes) {
-    const nx = getX(Math.max(MIN_F, Math.min(MAX_F, n.freq)), plotW, padLeft);
-    const ny = midY - ((bandHasGain(n) ? n.gain : 0) / 24.0) * (plotH * 0.45);
+    const nx = getX(n.freq, plotW, padLeft);
+    const ny = midY - ((bandHasGain(n) ? n.gain : 0) / eqDbRange) * (plotH * 0.45);
     if (Math.hypot(x - nx, y - ny) < 16 * dpr) {
       draggedNode = n;
       selectedNodeId = n.id;
@@ -1656,6 +1789,14 @@ eqCanvas.onmousedown = (e) => {
       drawEq();
       return;
     }
+  }
+
+  // Ha nem csomópontra kattintott: pásztázás (Pan) bal egérgombbal zoomolva vagy jobb gombbal
+  if (eqZoomX > 1.01 || e.button === 2) {
+    isCanvasPanning = true;
+    panStartX = e.clientX;
+    panStartCenterLog = eqPanCenterLog;
+    eqCanvas.style.cursor = 'grabbing';
   }
 };
 
@@ -1674,17 +1815,52 @@ window.addEventListener("mousemove", (e) => {
     const midY = padTop + plotH * 0.5;
 
     const newFreq = getFreq(x, plotW, padLeft);
-    const newGain = -((y - midY) / (plotH * 0.45)) * 24.0;
-    draggedNode.freq = Math.max(20, Math.min(20000, newFreq));
-    if (bandHasGain(draggedNode)) draggedNode.gain = Math.max(-24, Math.min(24, Math.round(newGain * 10) / 10));
+    const newGain = -((y - midY) / (plotH * 0.45)) * eqDbRange;
+    draggedNode.freq = Math.max(10, Math.min(24000, newFreq));
+    if (bandHasGain(draggedNode)) draggedNode.gain = Math.max(-36, Math.min(36, Math.round(newGain * 10) / 10));
     updateEqUI();
+    drawEq();
+  } else if (isCanvasPanning) {
+    const rect = eqCanvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const padLeft = 46 * dpr;
+    const padRight = 50 * dpr;
+    const plotW = (rect.width * dpr - padLeft - padRight);
+    const totalSpan = Math.log10(BASE_MAX_F) - Math.log10(BASE_MIN_F);
+    const visibleSpan = totalSpan / eqZoomX;
+    const dx = (e.clientX - panStartX);
+    const dLog = -(dx * dpr / plotW) * visibleSpan;
+    eqPanCenterLog = panStartCenterLog + dLog;
+    updateEqBounds();
     drawEq();
   }
 });
-window.addEventListener("mouseup", () => { draggedNode = null; });
+window.addEventListener("mouseup", () => {
+  draggedNode = null;
+  if (isCanvasPanning) {
+    isCanvasPanning = false;
+    eqCanvas.style.cursor = eqZoomX > 1.01 ? 'grab' : 'crosshair';
+  }
+});
+eqCanvas.oncontextmenu = (e) => e.preventDefault();
 
 eqCanvas.onwheel = (e) => {
   e.preventDefault();
+  // Billentyűkombináció esetén kényelmi zoom/pan:
+  if (e.ctrlKey) {
+    const zoomDelta = (e.deltaY > 0) ? -0.2 : 0.2;
+    setEqZoom(eqZoomX + zoomDelta);
+    return;
+  }
+  if (e.shiftKey) {
+    const visibleSpan = (Math.log10(BASE_MAX_F) - Math.log10(BASE_MIN_F)) / eqZoomX;
+    const panDelta = (e.deltaY > 0) ? visibleSpan * 0.08 : -visibleSpan * 0.08;
+    eqPanCenterLog += panDelta;
+    updateEqBounds();
+    drawEq();
+    return;
+  }
+  // Alapértelmezett sima egérgörgő: kizárólag a kijelölt sáv Q értéke (a felhasználó kérésének megfelelően)!
   const selNode = nodes.find(n => n.id === selectedNodeId);
   if (selNode) {
     const delta = (e.deltaY > 0) ? -0.15 : 0.15;
@@ -2314,10 +2490,10 @@ eqCanvas.addEventListener("dblclick", (e) => {
   const midY = padTop + plotH * 0.5;
   if (x < padLeft || x > padLeft + plotW) return;
   for (const n of nodes) {   // meglévő pötty fölött nem hozunk létre újat
-    const ny = midY - ((bandHasGain(n) ? n.gain : 0) / 24.0) * (plotH * 0.45);
+    const ny = midY - ((bandHasGain(n) ? n.gain : 0) / eqDbRange) * (plotH * 0.45);
     if (Math.hypot(x - getX(n.freq, plotW, padLeft), y - ny) < 16 * dpr) return;
   }
-  addEqNode(Math.round(getFreq(x, plotW, padLeft)), -((y - midY) / (plotH * 0.45)) * 24.0);
+  addEqNode(Math.round(getFreq(x, plotW, padLeft)), -((y - midY) / (plotH * 0.45)) * eqDbRange);
 });
 
 function updateDeleteNodeButton() {
@@ -2337,6 +2513,15 @@ document.getElementById("btnDeleteNode").onclick = () => {
   drawEq();
 };
 
+// Görbék megjelenítésének ki/be kapcsolása (hangra nincs hatással!)
+const btnToggleEqCurve = document.getElementById("btnToggleEqCurve");
+if (btnToggleEqCurve) {
+  btnToggleEqCurve.onclick = (e) => {
+    showEqCurve = !showEqCurve;
+    e.target.classList.toggle("active-opt", showEqCurve);
+    drawEq();
+  };
+}
 document.getElementById("btnToggleDelay").onclick = (e) => {
   showDelay = !showDelay;
   e.target.classList.toggle("active-opt", showDelay);
@@ -2347,6 +2532,61 @@ document.getElementById("btnTogglePhase").onclick = (e) => {
   e.target.classList.toggle("active-opt", showPhase);
   drawEq();
 };
+
+// 2D Zoom & Pan vezérlők
+function setEqZoom(val) {
+  eqZoomX = Math.max(1.0, Math.min(5.0, Math.round(val * 10) / 10));
+  updateEqBounds();
+  const sl = document.getElementById("sliderEqZoom");
+  if (sl) sl.value = Math.round(eqZoomX * 100);
+  const lbl = document.getElementById("lblEqZoom");
+  if (lbl) lbl.innerText = eqZoomX.toFixed(1) + "x";
+  if (!isCanvasPanning) {
+    eqCanvas.style.cursor = eqZoomX > 1.01 ? 'grab' : 'crosshair';
+  }
+  drawEq();
+}
+
+const selectEqDbRange = document.getElementById("selectEqDbRange");
+if (selectEqDbRange) {
+  selectEqDbRange.value = String(Math.round(eqDbRange));
+  selectEqDbRange.onchange = (e) => {
+    eqDbRange = parseFloat(e.target.value);
+    try { localStorage.setItem("aqulify_eq_dbrange", eqDbRange); } catch (err) {}
+    drawEq();
+  };
+}
+
+const btnEqZoomIn = document.getElementById("btnEqZoomIn");
+if (btnEqZoomIn) btnEqZoomIn.onclick = () => setEqZoom(eqZoomX + 0.5);
+
+const btnEqZoomOut = document.getElementById("btnEqZoomOut");
+if (btnEqZoomOut) btnEqZoomOut.onclick = () => setEqZoom(eqZoomX - 0.5);
+
+const sliderEqZoom = document.getElementById("sliderEqZoom");
+if (sliderEqZoom) sliderEqZoom.oninput = (e) => setEqZoom(parseInt(e.target.value, 10) / 100);
+
+const btnEqZoomReset = document.getElementById("btnEqZoomReset");
+if (btnEqZoomReset) {
+  btnEqZoomReset.onclick = () => {
+    eqDbRange = 24.0;
+    if (selectEqDbRange) selectEqDbRange.value = "24";
+    try { localStorage.setItem("aqulify_eq_dbrange", "24"); } catch (err) {}
+    eqPanCenterLog = (Math.log10(BASE_MIN_F) + Math.log10(BASE_MAX_F)) / 2;
+    setEqZoom(1.0);
+  };
+}
+
+const btnEqExpandHeight = document.getElementById("btnEqExpandHeight");
+if (btnEqExpandHeight) {
+  btnEqExpandHeight.onclick = () => {
+    isEqExpanded = !isEqExpanded;
+    eqCanvas.style.height = isEqExpanded ? "520px" : "";
+    btnEqExpandHeight.innerText = isEqExpanded ? "🗗" : "↕";
+    btnEqExpandHeight.title = isEqExpanded ? "Grafikon visszaállítása normál méretre" : "Grafikon megnövelése (nagy nézet)";
+    resizeAllViews();
+  };
+}
 
 function updateEqUI() {
   if (typeof updateDeleteNodeButton === "function") updateDeleteNodeButton();

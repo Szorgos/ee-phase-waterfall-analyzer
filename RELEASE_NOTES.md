@@ -1,3 +1,13 @@
+### Újdonságok (1.6.2)
+- **2D Grafikon Zoom & Pásztázás:** A 2D frekvenciameneti rajzterület mostantól finomhangolható zoommal és pásztázással rendelkezik (a sima egérgörgő funkciója érintetlenül megmaradt a szűrősávok Q-faktorának állítására):
+  - **Függőleges dB skála:** Választható `±6 dB`, `±12 dB`, `±24 dB` és `±36 dB` nézet a tized-dB-es finomhangolásokhoz és mastering feladatokhoz.
+  - **Vízszintes frekvencia zoom:** `🔍−` és `🔍+` gombok, valamint finom Zoom csúszka (1.0x – 5.0x nagyítás).
+  - **Pásztázás (Pan):** Nagyított nézetben az egér bal gombjával üres területen húzva szabadon pásztázható a spektrum.
+  - **Alaphelyzet (Reset):** `⟲` gombbal egyetlen kattintással visszaáll a normál teljes nézet.
+  - **Ablakméret növelés:** `↕` gomb a grafikon rajzterületének megnövelésére (520 px magas nézet).
+- **Független görbe-kapcsolók:** A kék EQ átviteli görbe, a narancssárga csoportkésleltetés és a zöld szaggatott fázisgörbe mostantól egyenként, tetszés szerint ki-be kapcsolható a vezérlősáv gombjaival. A megjelenítés kikapcsolása tisztán grafikai jellegű, a háttérben futó DSP motorra és a hangzásra garantáltan nincs hatással.
+- **Finom Donate pulzálás:** A Támogatás (Donate) gomb diszkrét, percenként pontosan háromszor felvillanó halvány és lassú pulzáló animációt kapott.
+
 ### Újdonságok (1.6.1)
 - **Tiszta indulás:** Telepítés és első indítás után minden modul alapból kikapcsolt (Bypass) állapotban van, a sávlista üres, így a hangzás teljesen érintetlen, nulláról indul.
 - **Bővített frekvenciaskála:** A vízesés alatti skála mostantól 10 Hz – 24 kHz közötti tartományt fed le.
