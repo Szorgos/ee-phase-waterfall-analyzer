@@ -3,6 +3,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/Szorgos/ee-phase-waterfall-analyzer?style=flat-square&color=blue)](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest)
 [![Windows Download](https://img.shields.io/badge/Windows%2011-Telep%C3%ADt%C5%91%20(.exe)-0078D6?style=flat-square&logo=windows)](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe)
 [![Linux PipeWire](https://img.shields.io/badge/Linux-PipeWire-FCC624?style=flat-square&logo=linux&logoColor=black)](https://github.com/Szorgos/ee-phase-waterfall-analyzer#telep%C3%ADt%C3%A9s-linuxon-egyetlen-parancsb%C3%B3l)
+[![macOS](https://img.shields.io/badge/macOS-DMG-111111?style=flat-square&logo=apple)](https://github.com/Szorgos/ee-phase-waterfall-analyzer#-macos-verzi%C3%B3)
 [![Támogatás](https://img.shields.io/badge/T%C3%A1mogat%C3%A1s-Revolut%20%40gergoqhg6-ff5c8a?style=flat-square&logo=revolut)](#-támogatás)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-green.svg?style=flat-square)](https://www.gnu.org/licenses/gpl-3.0)
 
@@ -137,6 +138,27 @@ A Linuxos és a Windowsos ág ugyanazt a C++ DSP láncot futtatja (`include/aeth
 
 ---
 
+## 🍎 macOS verzió
+
+Letöltés (az 1.7.0 kiadástól): **[Aqulify-macOS.dmg – mindig a legújabb kiadás](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg)** (egy alkalmazás Apple Silicon és Intel Macre, macOS 12 vagy újabb). Nyisd meg, és húzd az **Aqulify**-t az *Alkalmazások* mappába.
+
+Az Aqulify itt egyetlen alkalmazás: a motor a menüsorban fut (hullámforma ikon), az ablakban a megszokott felület látszik. Az ablak bezárása után a hangfeldolgozás folytatódik; a felület a menüsor-ikonból nyitható újra, és ott kapcsolható be az *Indítás bejelentkezéskor* is (macOS 13-tól).
+
+* **macOS 14.2 vagy újabb:** a rendszerhangot a Core Audio adja át, illesztőprogram nélkül. Első indításkor a macOS engedélyt kér a rendszerhang rögzítésére: ezt engedélyezd. Amíg az Aqulify feldolgozza, az eredeti (feldolgozatlan) hang néma; kilépéskor visszaáll.
+* **Régebbi macOS (12 – 14.1), vagy ha nem adsz engedélyt:** telepítsd az ingyenes [BlackHole 2ch](https://existential.audio/blackhole/) virtuális hangeszközt. Az Aqulify magától felismeri, a rendszer kimenetét a BlackHole-ra állítja, a feldolgozott hangot pedig a valódi eszközre küldi; kilépéskor az eredeti kimenet visszaáll.
+* **Kimenet:** alapból a rendszer alapértelmezett kimenete (követi, ha a Hangbeállításokban másikat választasz); a felület fejlécében adott eszköz is választható.
+* Beállítások: `~/Library/Application Support/Aqulify`, napló: `~/Library/Logs/Aqulify/aqulify.log` (a menüsor-ikonból is megnyitható).
+
+### ⚠️ Az alkalmazás nincs az Apple-nél hitelesítve – így indíthatod el
+
+Az Apple-hitelesítéshez (notarizáció) fizetős fejlesztői tagság kell, ezért a DMG egyelőre csak saját (ad-hoc) aláírással jelenik meg. A DMG-t a GitHub Actions fordítja nyilvános naplóval, és minden kiadás mellett ott az ellenőrzőösszeg.
+
+1. **Ellenőrizd a fájlt (ajánlott):** Terminálban `shasum -a 256 Aqulify-<verzió>-macOS.dmg` – az eredménynek egyeznie kell a kiadás `.sha256` fájljában lévő értékkel.
+2. **Első indítás:** az *Alkalmazások* mappában Control-kattintás (jobb gomb) az Aqulify-ra → *Megnyitás* → *Megnyitás*. macOS 15-től: indítsd el egyszer, majd *Rendszerbeállítások → Adatvédelem és biztonság → Megnyitás mindenképp*.
+3. Új verzióra frissítés után a macOS újra kérheti a rendszerhang-engedélyt.
+
+---
+
 ## 🎮 Indítás és Használat (Linux)
 
 Az `install.sh` mindent beállít:
@@ -218,6 +240,11 @@ cmake --build build -j$(nproc)
 │   ├── test_dsp.cpp            # DSP modulok és teljes lánc teszt
 │   └── test_ringbuffer.cpp     # Többszálú valós idejű stabilitási tesztprogram
 ├── third_party/                # LSP, Calf, libbs2b, SpeexDSP, zita-convolver, RNNoise (forrás, licencekkel); fonts/: betűtípus-licencek
+├── macos/
+│   ├── engine/                 # Core Audio motor: rendszerhang (Tap vagy BlackHole) -> AetherChain -> kimenet
+│   ├── app/main.mm             # Aqulify.app: menüsor-ikon, saját ablak (WKWebView), beállítások
+│   ├── resources/              # Ikon, a rendszerhang-engedély szövegei (magyar, angol)
+│   └── lsp_x86_asm.sh          # Fordítóindító: az LSP x86 assembly igazítása az LLVM assemblerhez (Intel Mac)
 └── windows/
     ├── README_WINDOWS.md       # Windows telepítés, használat, fordítás
     ├── engine/                 # Aqulify.exe (tálcás motor, WASAPI loopback, plugin híd)
