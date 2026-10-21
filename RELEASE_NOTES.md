@@ -1,4 +1,4 @@
-### Újdonságok (következő kiadás)
+### Újdonságok (1.7.0)
 - **Magic Touch:** új, automatikus és visszafogott hangszépítő modul a lánc elején, Linuxon és Windowson ugyanazzal a kóddal. Elemzi a lejátszott felvételt, és csak azt igazítja, ami hiányzik vagy zavaró; a kimenet hangossága megegyezik a bemenetével, rendben lévő felvételen a jel bitre érintetlen, 0 %-on a modul kimarad a láncból.
   - *Hangszín és tér:* mély-közép vágás (legfeljebb 3 dB), levegő (legfeljebb +2 dB), de-esser (legfeljebb 4 dB), fokozatos mono basszus, tágítás 150 Hz felett (Crossfeed mellett nincs).
   - *Mikrodinamika és exciter:* tranziens-kiemelés és a halk részek finom emelése, csak lapos dinamikánál; páros felharmonikusok 6 kHz felett, ahol a magas hiányzik.
@@ -10,14 +10,14 @@
 - **3D vízesés:** a frekvenciaskála 0 Hz-től indul (eddig 10 Hz), a mély sávok saját, kb. 3 Hz felbontású elemzésből jönnek, így a „min” jel a zene valódi legmélyebb hangját mutatja, nem ragad a skála aljára; a háló első éle a skálán ül, és a skála a háló két széléig ér; az első sor alatt a sor színeit folytató függöny. Folyásirány: lefelé vagy felfelé, váltáskor a háló összeomlik és az új irányban újraépül. Trapézkorrekció gombokkal, mint a kivetítőnél. Felülnézetben a háló kitölti a sávot (spektrogram).
 - **2D EQ grafikon:** függőleges nagyítás (±1 … ±48 dB, folyamatosan Ctrl+Shift+görgővel a kurzor magasságánál) és eltolás (húzás, Alt+görgő); az „Igazít” gomb egy kattintással mindent láthatóvá tesz, és jelzi, ha a görbe vagy egy sáv kilóg; a nézeten kívüli sáv a szélen nyílként látszik.
 
-### Javítások (következő kiadás)
+### Javítások (1.7.0)
 - **Linux felület:** bezáráskor nem omlik össze a WebKit tartalomfolyamata (nincs core dump), és nem akad meg; a vízesés követi az ablak átméretezését, rejtett ablakban nem rajzol.
 - **Windows:** a Feladatkezelőben helyes a felület neve (eddig „Aqulify felÃ¼let”).
 - **EQ profilok:** az EQ mód váltása (IIR / FIR / FFT / SPM) nem hoz létre új profilt (eddig AutoEq profilnál „– módosított”, profil nélkül „Saját profil” készült); a választott módot az aktív profil megjegyzi.
 - **Crossfeed:** előbeállítás választásakor a modul be is kapcsol (eddig csak értesítés kérte); a kiválasztott előbeállítás jelölése nem hasonlít a bekapcsolt állapotra. Kikapcsolt modul beállításakor a modul BE/KI gombja röviden felvillan.
 - **EQ grafikon:** nagyításkor a késleltetés-görbe a rajzterületen belül marad, a nézeten kívül futó EQ-görbe a szélen szaggatott vonallal látszik, a nagyítás-felirat a görbék fölött is olvasható.
 
-### Előkészítve
+### Előkészítve (1.7.0)
 - **Raspberry Pi (64 bites ARM):** a motor és a tesztek keresztfordítással lefordulnak (`linux/toolchain-aarch64-linux-gnu.cmake`), a tesztek QEMU alatt sikeresek; az így talált Convolver-hiba (100 %-os IR-szélességnél nem volt pontosan érintetlen) javítva. Valódi Pi-n még nem futott.
 
 ### Javítások (1.6.3)
