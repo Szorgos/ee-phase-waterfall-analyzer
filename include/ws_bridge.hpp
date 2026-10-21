@@ -3,7 +3,8 @@
  * @file ws_bridge.hpp
  * @brief Könnyűsúlyú, platformfüggetlen C++ WebSocket híd (RFC 6455) a hangmotor és a webes GUI között.
  *
- * - Csak a 127.0.0.1 címen figyel (a helyi hálózat felől nem vezérelhető).
+ * - Csak a 127.0.0.1 címen figyel.
+ * - Egyszerre több kliens (pl. több felületablak); az egyik változtatását a többi is megkapja ("sync").
  * - A motor hangjából valódi FFT-spektrumot számol és ~60 FPS-sel küldi ("spectrum" üzenet).
  * - A GUI vezérlőüzeneteit (preamp, modulkapcsolók, EQ sávok) ParamData-vá alakítja.
  *
@@ -11,11 +12,13 @@
  */
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cmath>
 #include <chrono>
 #include <cstdio>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <cstring>
 #include <string>
@@ -67,6 +70,15 @@ constexpr size_t kBridgeMaxPresetBytes = 2u << 20;
 /** A GUI által küldött IR maximális hossza (frame). */
 constexpr uint32_t kBridgeMaxIrFrames = 262144;
 
+/** Egyszerre ennyi kliens (pl. több felületablak) csatlakozhat. */
+constexpr size_t kBridgeMaxClients = 8;
+
+/** A vezérlési protokoll verziója (a "state" üzenet "protocol" mezője). 2: több kliens, "sync". */
+constexpr int kBridgeProtocol = 2;
+
+/** Egy kliens küldési sora legfeljebb ekkora lehet; ha nem olvas, a kapcsolat bomlik (a többi kliens nem vár rá). */
+constexpr size_t kBridgeMaxQueuedBytes = 16u << 20;
+
 class WebSocketBridge {
 public:
     explicit WebSocketBridge(int port = 8080) : port_(port) {}
@@ -81,10 +93,13 @@ public:
             std::cerr << "[WS Bridge] Socket alrendszer indítása sikertelen!\n";
             return false;
         }
-        if (!openListener()) {
+        listener_ = openListener(INADDR_LOOPBACK, port_);
+        if (listener_ == net::kInvalidSocket) {
+            std::cerr << "[WS Bridge] A 127.0.0.1:" << port_ << " port foglalt (fut már egy példány?)\n";
             net::cleanup();
             return false;
         }
+        std::cout << "[WS Bridge] Élő WebSocket híd: ws://127.0.0.1:" << port_ << "\n";
         running_ = true;
         thread_ = std::thread(&WebSocketBridge::run, this);
         return true;
@@ -93,61 +108,73 @@ public:
     void stop() {
         if (!running_.exchange(false)) return;
         if (thread_.joinable()) thread_.join();
-        net::closeSocket(client_);
-        client_ = net::kInvalidSocket;
+        for (auto& c : clients_) net::closeSocket(c->sock);
+        clients_.clear();
+        for (auto& p : pending_) net::closeSocket(p.sock);
+        pending_.clear();
         net::closeSocket(listener_);
         listener_ = net::kInvalidSocket;
         net::cleanup();
     }
 
-    bool hasClient() const { return clientConnected_.load(); }
+    bool hasClient() const { return clientCount_.load() > 0; }
 
 private:
+    using clock = std::chrono::steady_clock;
+
+    struct Client {
+        net::socket_t sock = net::kInvalidSocket;
+        std::string rx, frag;           // beérkező bájtok, töredezett üzenet
+        uint8_t fragOpcode = 0;
+        std::string out;                // küldésre váró bájtok (nem blokkoló küldés)
+        size_t outPos = 0;
+        uint64_t spectrumSeq = 0;       // az utoljára kapott spektrum sorszáma
+        bool dead = false;
+        const char* why = "";
+    };
+
+    /** Kézfogásra váró kapcsolat (a fejléc nem blokkolva, legfeljebb néhány másodpercig érkezik). */
+    struct Pending {
+        net::socket_t sock = net::kInvalidSocket;
+        std::string buf;
+        clock::time_point deadline;
+    };
+
     // ------------------------------------------------------------------ hálózat
-    bool openListener() {
-        listener_ = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        if (listener_ == net::kInvalidSocket) {
-            std::cerr << "[WS Bridge] Hiba a socket létrehozásakor!\n";
-            return false;
-        }
+    static net::socket_t openListener(uint32_t hostAddr, int port) {
+        net::socket_t s = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (s == net::kInvalidSocket) return s;
 #ifndef _WIN32
         int opt = 1;
-        setsockopt(listener_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 #else
         BOOL excl = TRUE; // Windowson ne lehessen "ellopni" a portot
-        setsockopt(listener_, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&excl), sizeof(excl));
+        setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&excl), sizeof(excl));
 #endif
         sockaddr_in addr{};
         addr.sin_family = AF_INET;
-        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        addr.sin_port = htons(static_cast<uint16_t>(port_));
-        if (::bind(listener_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
-            std::cerr << "[WS Bridge] A 127.0.0.1:" << port_ << " port foglalt (fut már egy példány?)\n";
-            net::closeSocket(listener_);
-            listener_ = net::kInvalidSocket;
-            return false;
+        addr.sin_addr.s_addr = htonl(hostAddr);
+        addr.sin_port = htons(static_cast<uint16_t>(port));
+        if (::bind(s, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 || ::listen(s, 8) != 0) {
+            net::closeSocket(s);
+            return net::kInvalidSocket;
         }
-        if (::listen(listener_, 4) != 0) {
-            std::cerr << "[WS Bridge] Listen hiba!\n";
-            net::closeSocket(listener_);
-            listener_ = net::kInvalidSocket;
-            return false;
-        }
-        net::setNonBlocking(listener_, true);
-        std::cout << "[WS Bridge] Élő WebSocket híd: ws://127.0.0.1:" << port_ << "\n";
-        return true;
+        net::setNonBlocking(s, true);
+        return s;
     }
 
     void run() {
-        using clock = std::chrono::steady_clock;
         SpectrumAnalyzer analyzer(4096, 160);
         std::vector<float> chunk(8192 * 2);
         auto lastSpectrum = clock::now();
         auto lastStatus = clock::now();
         bool freshAudio = false;
+        std::string spectrumMsg;
+        uint64_t spectrumSeq = 0;
 
         while (running_) {
-            acceptPending();
+            acceptNew(listener_);
+            progressPending();
 
             // 1. Hang lehúzása a motorból (akkor is, ha nincs kliens, hogy ne torlódjon fel)
             if (cb_.pullAudio) {
@@ -160,96 +187,126 @@ private:
                 }
             }
 
-            if (client_ != net::kInvalidSocket) {
+            if (!clients_.empty()) {
                 const auto now = clock::now();
                 if (freshAudio && now - lastSpectrum >= std::chrono::milliseconds(16)) {
                     const double sr = cb_.sampleRate ? cb_.sampleRate() : 48000.0;
                     analyzer.compute(sr > 0 ? sr : 48000.0);
-                    sendText(buildSpectrumMessage(analyzer, sr), true);
+                    spectrumMsg = buildSpectrumMessage(analyzer, sr);
+                    ++spectrumSeq;
                     lastSpectrum = now;
                     freshAudio = false;
                 }
+                // Minden kliens egyszer kapja meg; ha még az előzőt sem olvasta, kimarad
+                for (auto& c : clients_) {
+                    if (c->spectrumSeq == spectrumSeq || spectrumMsg.empty()) continue;
+                    queueText(*c, spectrumMsg, true);
+                    c->spectrumSeq = spectrumSeq;
+                }
                 if (now - lastStatus >= std::chrono::milliseconds(500)) {
-                    sendText(buildStatusMessage(), true);
+                    const std::string status = buildStatusMessage();
+                    for (auto& c : clients_) queueText(*c, status, true);
                     lastStatus = now;
                 }
-                pumpIncoming();
+                for (auto& c : clients_) {
+                    if (c->dead) continue;
+                    pumpIncoming(*c);
+                    flush(*c);
+                }
+                flushSync();
+                removeDead();
             }
 
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
     }
 
-    void acceptPending() {
-        sockaddr_in ca{};
+    void acceptNew(net::socket_t listener) {
+        for (int k = 0; k < 4; ++k) {
+            sockaddr_in ca{};
 #ifdef _WIN32
-        int len = sizeof(ca);
+            int len = sizeof(ca);
 #else
-        socklen_t len = sizeof(ca);
+            socklen_t len = sizeof(ca);
 #endif
-        net::socket_t s = ::accept(listener_, reinterpret_cast<sockaddr*>(&ca), &len);
-        if (s == net::kInvalidSocket) return;
-
-        net::setNonBlocking(s, false);
-        if (!performHandshake(s)) {
-            net::closeSocket(s);
-            return;
+            net::socket_t s = ::accept(listener, reinterpret_cast<sockaddr*>(&ca), &len);
+            if (s == net::kInvalidSocket) return;
+            if (pending_.size() >= 8) { net::closeSocket(s); continue; }
+            net::setNonBlocking(s, true);
+            pending_.push_back({ s, {}, clock::now() + std::chrono::seconds(2) });
         }
-        net::setNonBlocking(s, true);
-        net::setNoDelay(s);
-
-        // Az új kliens váltja a régit (pl. GUI újratöltésekor)
-        if (client_ != net::kInvalidSocket) net::closeSocket(client_);
-        client_ = s;
-        rxBuf_.clear();
-        fragBuf_.clear();
-        fragOpcode_ = 0;
-        clientConnected_ = true;
-        std::cout << "[WS Bridge] Grafikus felület csatlakozott.\n";
-        sendText(buildStateMessage());
     }
 
-    bool performHandshake(net::socket_t sock) {
-        // Fejléc beolvasása (max 1 s, max 8 KB)
-#ifdef _WIN32
-        DWORD tv = 1000;
-        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
-#else
-        timeval tv{1, 0};
-        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-#endif
-        std::string request;
-        char buffer[2048];
-        while (request.find("\r\n\r\n") == std::string::npos && request.size() < 8192) {
-            const long long n = net::recvSome(sock, buffer, sizeof(buffer));
-            if (n <= 0) return false;
-            request.append(buffer, static_cast<size_t>(n));
+    void progressPending() {
+        const auto now = clock::now();
+        for (size_t i = 0; i < pending_.size();) {
+            Pending& p = pending_[i];
+            bool done = false, ok = false;
+            char buf[2048];
+            while (!done) {
+                const long long n = net::recvSome(p.sock, buf, sizeof(buf));
+                if (n > 0) {
+                    p.buf.append(buf, static_cast<size_t>(n));
+                    if (p.buf.size() > 8192) done = true;   // túl hosszú fejléc
+                    continue;
+                }
+                if (n == 0 || !net::wouldBlock()) done = true;
+                break;
+            }
+            if (!done && p.buf.find("\r\n\r\n") != std::string::npos) {
+                ok = finishHandshake(p);
+                done = true;
+            } else if (!done && now > p.deadline) {
+                done = true;
+            }
+            if (done) {
+                if (!ok) net::closeSocket(p.sock);
+                pending_.erase(pending_.begin() + static_cast<std::ptrdiff_t>(i));
+            } else {
+                ++i;
+            }
         }
+    }
 
-        std::string key = headerValue(request, "sec-websocket-key");
-        if (key.empty()) {
-            const char* resp = "HTTP/1.1 426 Upgrade Required\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-            net::sendSome(sock, resp, std::char_traits<char>::length(resp));
-            return false;
-        }
+    static void reply(net::socket_t s, const char* status) {
+        const std::string r = std::string("HTTP/1.1 ") + status + "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        net::sendSome(s, r.data(), r.size());
+    }
 
-        // Csak a saját felület csatlakozhat: egy tetszőleges weboldal a böngészőből ne vezérelhesse a motort
+    /** A kézfogás befejezése; true: a kapcsolat kliens lett (a socket hozzá került). */
+    bool finishHandshake(Pending& p) {
+        const std::string& request = p.buf;
+        const std::string key = headerValue(request, "sec-websocket-key");
+        if (key.empty()) { reply(p.sock, "426 Upgrade Required"); return false; }
+
         if (!originAllowed(headerValue(request, "origin"))) {
-            const char* resp = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-            net::sendSome(sock, resp, std::char_traits<char>::length(resp));
+            // Csak a saját felület csatlakozhat: egy tetszőleges weboldal a böngészőből ne vezérelhesse a motort
+            reply(p.sock, "403 Forbidden");
             return false;
+        }
+
+        if (clients_.size() >= kBridgeMaxClients) {
+            // Az új felületnek helyet csinálunk (a legrégebbi kapcsolat bomlik, pl. egy újratöltött ablaké)
+            kill(*clients_.front(), "új felület csatlakozott");
+            removeDead();
         }
 
         const std::string magicGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-        std::vector<uint8_t> digest = Sha1::hash(key + magicGuid);
-        std::string acceptKey = Base64::encode(digest);
+        const std::string acceptKey = Base64::encode(Sha1::hash(key + magicGuid));
+        auto c = std::make_unique<Client>();
+        c->sock = p.sock;
+        c->out = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                 "Sec-WebSocket-Accept: " + acceptKey + "\r\n\r\n";
+        net::setNoDelay(c->sock);
+        Client& cl = *c;
+        clients_.push_back(std::move(c));
+        clientCount_ = clients_.size();
+        std::cout << "[WS Bridge] Grafikus felület csatlakozott.\n";
 
-        std::string response =
-            "HTTP/1.1 101 Switching Protocols\r\n"
-            "Upgrade: websocket\r\n"
-            "Connection: Upgrade\r\n"
-            "Sec-WebSocket-Accept: " + acceptKey + "\r\n\r\n";
-        return sendAll(sock, response.data(), response.size());
+        cur_ = &cl;
+        sendText(buildStateMessage());
+        cur_ = nullptr;
+        return true;
     }
 
     /** Engedélyezett Origin: nincs (nem böngésző), helyi fájl, a Windows ablak virtuális gépneve, vagy localhost. */
@@ -287,119 +344,163 @@ private:
         return {};
     }
 
-    void dropClient(const char* why) {
-        if (client_ == net::kInvalidSocket) return;
-        net::closeSocket(client_);
-        client_ = net::kInvalidSocket;
-        clientConnected_ = false;
-        rxBuf_.clear();
-        std::cout << "[WS Bridge] Grafikus felület lecsatlakozott (" << why << ").\n";
+    /** A kapcsolat bontásra jelölése (a ciklus végén záródik; addig a kliens nem kap és nem küld semmit). */
+    void kill(Client& c, const char* why) {
+        if (c.dead) return;
+        c.dead = true;
+        c.why = why;
+        if (syncSource_ == &c) syncSource_ = nullptr;
     }
 
-    /** Teljes puffer elküldése nem blokkoló socketen is (rövid várakozással). */
-    bool sendAll(net::socket_t s, const char* data, size_t len) {
-        size_t sent = 0;
-        int spins = 0;
-        while (sent < len) {
-            const long long n = net::sendSome(s, data + sent, len - sent);
-            if (n > 0) { sent += static_cast<size_t>(n); spins = 0; continue; }
-            if (n < 0 && net::wouldBlock() && ++spins < 3000) { // max. ~3 s várakozás egy lassú kliensre
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                continue;
-            }
-            return false;
+    void removeDead() {
+        for (auto it = clients_.begin(); it != clients_.end();) {
+            Client& c = **it;
+            if (!c.dead) { ++it; continue; }
+            net::closeSocket(c.sock);
+            std::cout << "[WS Bridge] Grafikus felület lecsatlakozott (" << c.why << ").\n";
+            it = clients_.erase(it);
         }
-        return true;
+        clientCount_ = clients_.size();
+    }
+
+    /** Kiküldés a sorból, amennyi most blokkolás nélkül elfér (a többit a következő körben). */
+    void flush(Client& c) {
+        while (!c.dead && c.outPos < c.out.size()) {
+            const long long n = net::sendSome(c.sock, c.out.data() + c.outPos, c.out.size() - c.outPos);
+            if (n > 0) { c.outPos += static_cast<size_t>(n); continue; }
+            if (n < 0 && net::wouldBlock()) return;
+            kill(c, "küldési hiba");
+            return;
+        }
+        c.out.clear();
+        c.outPos = 0;
     }
 
     /**
-     * @param droppable true = eldobható (spektrum/státusz) keret: ha a felület épp nem olvas
-     *        (pl. nyitott párbeszédablak, háttérbe tett ablak), kihagyjuk, és NEM bontjuk a kapcsolatot.
+     * @param droppable true = eldobható (spektrum/státusz) keret: ha a kliens épp nem olvas (pl. nyitott
+     *        párbeszédablak, háttérbe tett ablak), kihagyjuk, és NEM bontjuk a kapcsolatot.
      */
-    void sendFrame(uint8_t opcode, const std::string& payload, bool droppable = false) {
-        if (client_ == net::kInvalidSocket) return;
-        if (droppable && !net::writableNow(client_)) return;
-        std::string frame;
-        frame.reserve(payload.size() + 10);
-        frame.push_back(static_cast<char>(0x80 | opcode));
+    void queueFrame(Client& c, uint8_t opcode, const std::string& payload, bool droppable = false) {
+        if (c.dead) return;
+        if (droppable && c.outPos < c.out.size()) return;
+        std::string& f = c.out;
+        f.push_back(static_cast<char>(0x80 | opcode));
         const uint64_t len = payload.size();
         if (len <= 125) {
-            frame.push_back(static_cast<char>(len));
+            f.push_back(static_cast<char>(len));
         } else if (len <= 0xFFFF) {
-            frame.push_back(126);
-            frame.push_back(static_cast<char>((len >> 8) & 0xFF));
-            frame.push_back(static_cast<char>(len & 0xFF));
+            f.push_back(126);
+            f.push_back(static_cast<char>((len >> 8) & 0xFF));
+            f.push_back(static_cast<char>(len & 0xFF));
         } else {
-            frame.push_back(127);
-            for (int i = 7; i >= 0; --i) frame.push_back(static_cast<char>((len >> (8 * i)) & 0xFF));
+            f.push_back(127);
+            for (int i = 7; i >= 0; --i) f.push_back(static_cast<char>((len >> (8 * i)) & 0xFF));
         }
-        frame += payload;
-        if (!sendAll(client_, frame.data(), frame.size())) dropClient("küldési hiba");
+        f += payload;
+        if (f.size() - c.outPos > kBridgeMaxQueuedBytes) { kill(c, "a kliens nem olvas"); return; }
+        flush(c);
     }
 
+    void queueText(Client& c, const std::string& text, bool droppable = false) { queueFrame(c, 0x1, text, droppable); }
+
+    /** Válasz annak a kliensnek, akinek az üzenetét éppen feldolgozzuk. */
+    void sendFrame(uint8_t opcode, const std::string& payload, bool droppable = false) {
+        if (cur_) queueFrame(*cur_, opcode, payload, droppable);
+    }
     void sendText(const std::string& text, bool droppable = false) { sendFrame(0x1, text, droppable); }
 
+    /** Mindenkinek (except: kivéve ezt a klienst). */
+    void broadcast(const std::string& text, const Client* except = nullptr) {
+        for (auto& c : clients_)
+            if (c.get() != except) queueText(*c, text);
+    }
+
+    /**
+     * Egy kliens módosította a beállításokat: a többiek rövid késleltetéssel (összevonva) megkapják az új
+     * állapotot ("sync"), így több felületablak egyszerre is használható.
+     */
+    void markSync(bool presets = false) {
+        if (clients_.size() < 2) return;
+        if (!syncPending_) {
+            syncPending_ = true;
+            syncSource_ = cur_;
+        } else if (syncSource_ != cur_) {
+            syncSource_ = nullptr;   // több kliens is módosított: mindenki megkapja
+        }
+        syncPresets_ = syncPresets_ || presets;
+        lastChange_ = clock::now();
+    }
+
+    void flushSync() {
+        if (!syncPending_ || clock::now() - lastChange_ < std::chrono::milliseconds(120)) return;
+        syncPending_ = false;
+        broadcast(buildStateMessage("sync", syncPresets_), syncSource_);
+        syncPresets_ = false;
+        syncSource_ = nullptr;
+    }
+
     /** Beérkező WebSocket keretek feldolgozása (töredezett TCP olvasással is). */
-    void pumpIncoming() {
+    void pumpIncoming(Client& c) {
         char buf[4096];
-        while (client_ != net::kInvalidSocket) {
-            const long long n = net::recvSome(client_, buf, sizeof(buf));
+        while (!c.dead) {
+            const long long n = net::recvSome(c.sock, buf, sizeof(buf));
             if (n > 0) {
-                rxBuf_.append(buf, static_cast<size_t>(n));
-                if (rxBuf_.size() > (24u << 20)) { dropClient("túl nagy üzenet"); return; }
+                c.rx.append(buf, static_cast<size_t>(n));
+                if (c.rx.size() > (24u << 20)) { kill(c, "túl nagy üzenet"); return; }
                 continue;
             }
-            if (n == 0) { dropClient("kapcsolat bontva"); return; }
+            if (n == 0) { kill(c, "kapcsolat bontva"); return; }
             if (net::wouldBlock()) break;
-            dropClient("olvasási hiba");
+            kill(c, "olvasási hiba");
             return;
         }
 
-        while (client_ != net::kInvalidSocket) {
-            if (rxBuf_.size() < 2) return;
-            const uint8_t b0 = static_cast<uint8_t>(rxBuf_[0]);
-            const uint8_t b1 = static_cast<uint8_t>(rxBuf_[1]);
+        cur_ = &c;
+        while (!c.dead) {
+            if (c.rx.size() < 2) break;
+            const uint8_t b0 = static_cast<uint8_t>(c.rx[0]);
+            const uint8_t b1 = static_cast<uint8_t>(c.rx[1]);
             const uint8_t opcode = b0 & 0x0F;
             const bool fin = (b0 & 0x80) != 0;
             const bool masked = (b1 & 0x80) != 0;
             uint64_t len = b1 & 0x7F;
             size_t hdr = 2;
             if (len == 126) {
-                if (rxBuf_.size() < 4) return;
-                len = (static_cast<uint8_t>(rxBuf_[2]) << 8) | static_cast<uint8_t>(rxBuf_[3]);
+                if (c.rx.size() < 4) break;
+                len = (static_cast<uint8_t>(c.rx[2]) << 8) | static_cast<uint8_t>(c.rx[3]);
                 hdr = 4;
             } else if (len == 127) {
-                if (rxBuf_.size() < 10) return;
+                if (c.rx.size() < 10) break;
                 len = 0;
-                for (int i = 0; i < 8; ++i) len = (len << 8) | static_cast<uint8_t>(rxBuf_[2 + i]);
+                for (int i = 0; i < 8; ++i) len = (len << 8) | static_cast<uint8_t>(c.rx[2 + i]);
                 hdr = 10;
             }
-            if (len > (20u << 20)) { dropClient("túl nagy keret"); return; }
+            if (len > (20u << 20)) { kill(c, "túl nagy keret"); break; }
             const size_t maskLen = masked ? 4 : 0;
-            if (rxBuf_.size() < hdr + maskLen + len) return;
+            if (c.rx.size() < hdr + maskLen + len) break;
 
-            std::string payload = rxBuf_.substr(hdr + maskLen, static_cast<size_t>(len));
+            std::string payload = c.rx.substr(hdr + maskLen, static_cast<size_t>(len));
             if (masked) {
-                const char* m = rxBuf_.data() + hdr;
+                const char* m = c.rx.data() + hdr;
                 for (size_t i = 0; i < payload.size(); ++i) payload[i] ^= m[i % 4];
             }
-            rxBuf_.erase(0, hdr + maskLen + static_cast<size_t>(len));
+            c.rx.erase(0, hdr + maskLen + static_cast<size_t>(len));
 
             // Töredezett üzenetek (a böngésző a nagy bináris üzeneteket több keretben küldheti)
             if ((opcode == 0x1 || opcode == 0x2) && !fin) {
-                fragOpcode_ = opcode;
-                fragBuf_ = std::move(payload);
+                c.fragOpcode = opcode;
+                c.frag = std::move(payload);
                 continue;
             }
             if (opcode == 0x0) {
-                if (fragOpcode_ == 0) continue; // váratlan folytatás: eldobjuk
-                fragBuf_ += payload;
-                if (fragBuf_.size() > (24u << 20)) { dropClient("túl nagy üzenet"); return; }
+                if (c.fragOpcode == 0) continue; // váratlan folytatás: eldobjuk
+                c.frag += payload;
+                if (c.frag.size() > (24u << 20)) { kill(c, "túl nagy üzenet"); break; }
                 if (!fin) continue;
-                const uint8_t op = fragOpcode_;
-                fragOpcode_ = 0;
-                std::string full = std::move(fragBuf_);
-                fragBuf_.clear();
+                const uint8_t op = c.fragOpcode;
+                c.fragOpcode = 0;
+                std::string full = std::move(c.frag);
+                c.frag.clear();
                 if (op == 0x1) handleMessage(full);
                 else handleBinary(full);
                 continue;
@@ -407,11 +508,12 @@ private:
             switch (opcode) {
                 case 0x1: handleMessage(payload); break;       // szöveg
                 case 0x2: handleBinary(payload); break;        // bináris (IR feltöltés)
-                case 0x8: sendFrame(0x8, ""); dropClient("close keret"); return;
+                case 0x8: sendFrame(0x8, ""); flush(c); kill(c, "close keret"); break;
                 case 0x9: sendFrame(0xA, payload); break;      // ping -> pong
                 default: break;                                 // bináris / folytatás: figyelmen kívül
             }
         }
+        cur_ = nullptr;
     }
 
     // ------------------------------------------------------------------ protokoll
@@ -424,7 +526,7 @@ private:
         std::cout << "[WS Bridge] Impulzusválasz érkezett: " << ir.name << " (" << ir.frames() << " minta, "
                   << ir.sampleRate << " Hz, " << ir.channels() << " csatorna)\n";
         if (cb_.setIr) cb_.setIr(std::move(ir));
-        sendText(buildStateMessage("ir"));
+        broadcast(buildStateMessage("ir"));   // mindenki (a küldő is) az új IR-t látja
     }
 
     static double num(const json::Value& msg, const char* key, double def) {
@@ -452,6 +554,7 @@ private:
             if (!doc.empty() && doc.size() <= kBridgeMaxPresetBytes && json::parse(doc, check) &&
                 check.type == json::Value::Type::Object && cb_.setPresets) {
                 cb_.setPresets(doc);
+                markSync(true);
             }
             return;
         }
@@ -544,7 +647,7 @@ private:
             p.convOutputGainDb = static_cast<float>(num(msg, "outputGain", p.convOutputGainDb));
         } else if (type == "clear_ir") {
             if (cb_.setIr) cb_.setIr(IrData{});
-            sendText(buildStateMessage("ir"));
+            broadcast(buildStateMessage("ir"));
             return;
         } else if (type == "get_eq_response") {
             sendText(buildEqResponseMessage(p, reqSeq));
@@ -576,7 +679,10 @@ private:
             p.set(kFlagInitialized, true);
             sanitizeParams(p);
             // Változatlan beállításnál nincs újraalkalmazás és nincs mentés (a mentés csak valódi változás után fut)
-            if (std::memcmp(&p, &before, sizeof(ParamData)) != 0) cb_.setParams(p);
+            if (std::memcmp(&p, &before, sizeof(ParamData)) != 0) {
+                cb_.setParams(p);
+                markSync();
+            }
             if (eqChanged) sendText(buildEqResponseMessage(p, reqSeq));
         }
     }
@@ -669,12 +775,17 @@ private:
         return s;
     }
 
-    /** @param reason "full" = teljes állapot (csatlakozáskor), "ir" = csak az IR változott */
-    std::string buildStateMessage(const char* reason = "full") const {
+    /**
+     * @param reason "full" = teljes állapot (csatlakozáskor), "ir" = csak az IR változott,
+     *               "sync" = egy másik kliens módosított (a felület átveszi, nem küldi vissza)
+     * @param presets a profil-dokumentum is (teljes állapotnál mindig)
+     */
+    std::string buildStateMessage(const char* reason = "full", bool presets = false) const {
         ParamData p = cb_.getParams ? cb_.getParams() : ParamData{};
         std::string s = "{\"type\":\"state\",\"reason\":\"";
         s += reason;
-        s += "\",\"initialized\":";
+        s += "\",\"protocol\":" + std::to_string(kBridgeProtocol);
+        s += ",\"initialized\":";
         s += p.has(kFlagInitialized) ? "true" : "false";
         s += ",\"preamp\":";
         appendFloat(s, p.preampDb, 2);
@@ -769,7 +880,7 @@ private:
                 s += ",\"language\":\"" + jsonEscape(lang) + "\"}";
             }
         }
-        if (std::strcmp(reason, "full") == 0 && cb_.getPresets) {
+        if ((presets || std::strcmp(reason, "full") == 0) && cb_.getPresets) {
             // Mentett EQ profilok (érvényes JSON objektum, változatlanul beágyazva)
             const std::string doc = cb_.getPresets();
             json::Value check;
@@ -787,13 +898,15 @@ private:
     int port_;
     BridgeCallbacks cb_;
     std::atomic<bool> running_{false};
-    std::atomic<bool> clientConnected_{false};
+    std::atomic<size_t> clientCount_{0};
     std::thread thread_;
     net::socket_t listener_ = net::kInvalidSocket;
-    net::socket_t client_ = net::kInvalidSocket;
-    std::string rxBuf_;
-    std::string fragBuf_;
-    uint8_t fragOpcode_ = 0;
+    std::vector<std::unique_ptr<Client>> clients_;
+    std::vector<Pending> pending_;
+    Client* cur_ = nullptr;             // akinek az üzenetét éppen feldolgozzuk
+    bool syncPending_ = false, syncPresets_ = false;
+    const Client* syncSource_ = nullptr;
+    clock::time_point lastChange_{};
 };
 
 } // namespace ee_analyzer

@@ -128,13 +128,41 @@ std::wstring portOwner(int port) {
 
 // ---------------------------------------------------------------- EQ profilok
 // A felület JSON dokumentuma: %APPDATA%\Aqulify\presets.json (felhasználónként, újraindítás után is megmarad)
-std::wstring presetFilePath(bool createDir) {
+std::wstring userFilePath(const wchar_t* name, bool createDir) {
     wchar_t buf[MAX_PATH];
     const DWORD n = GetEnvironmentVariableW(L"APPDATA", buf, MAX_PATH);
     std::wstring dir = (n > 0 && n < MAX_PATH) ? std::wstring(buf) : win::dataDirectory(createDir);
     dir += L"\\Aqulify";
     if (createDir) CreateDirectoryW(dir.c_str(), nullptr);
-    return dir + L"\\presets.json";
+    return dir + L"\\" + name;
+}
+
+std::wstring presetFilePath(bool createDir) { return userFilePath(L"presets.json", createDir); }
+
+std::string readSmallFile(const std::wstring& path, size_t maxBytes) {
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return {};
+    std::string out;
+    LARGE_INTEGER size{};
+    if (GetFileSizeEx(f, &size) && size.QuadPart > 0 && size.QuadPart <= static_cast<LONGLONG>(maxBytes)) {
+        out.resize(static_cast<size_t>(size.QuadPart));
+        DWORD read = 0;
+        if (!ReadFile(f, out.data(), static_cast<DWORD>(out.size()), &read, nullptr)) read = 0;
+        out.resize(read);
+    }
+    CloseHandle(f);
+    return out;
+}
+
+bool writeFileAtomic(const std::wstring& path, const std::string& doc) {
+    const std::wstring tmp = path + L".tmp";
+    HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const BOOL ok = WriteFile(f, doc.data(), static_cast<DWORD>(doc.size()), &written, nullptr);
+    CloseHandle(f);
+    if (!ok || written != doc.size()) return false;
+    return MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
 }
 
 std::string loadPresetFile() {
@@ -151,32 +179,10 @@ std::string loadPresetFile() {
             }
         }
     }
-    HANDLE f = CreateFileW(presetFilePath(false).c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-                           FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return {};
-    std::string out;
-    LARGE_INTEGER size{};
-    if (GetFileSizeEx(f, &size) && size.QuadPart > 0 && size.QuadPart <= static_cast<LONGLONG>(kBridgeMaxPresetBytes)) {
-        out.resize(static_cast<size_t>(size.QuadPart));
-        DWORD read = 0;
-        if (!ReadFile(f, out.data(), static_cast<DWORD>(out.size()), &read, nullptr)) read = 0;
-        out.resize(read);
-    }
-    CloseHandle(f);
-    return out;
+    return readSmallFile(presetFilePath(false), kBridgeMaxPresetBytes);
 }
 
-bool savePresetFile(const std::string& doc) {
-    const std::wstring path = presetFilePath(true);
-    const std::wstring tmp = path + L".tmp";
-    HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return false;
-    DWORD written = 0;
-    const BOOL ok = WriteFile(f, doc.data(), static_cast<DWORD>(doc.size()), &written, nullptr);
-    CloseHandle(f);
-    if (!ok || written != doc.size()) return false;
-    return MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
-}
+bool savePresetFile(const std::string& doc) { return writeFileAtomic(presetFilePath(true), doc); }
 
 bool hasArg(int argc, char** argv, const char* a) {
     for (int i = 1; i < argc; ++i) if (std::strcmp(argv[i], a) == 0) return true;

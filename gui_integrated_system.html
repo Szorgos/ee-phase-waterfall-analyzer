@@ -4000,14 +4000,18 @@ function applyEngineIr(st) {
 }
 
 // A motorban tárolt (mentett) DSP lánc betöltése a felületre
-function applyEngineState(st) {
+function applyEngineState(st, fromSync) {
   suppressEngineSync = true;
   try {
     const colorPalette = ["#6FB7FF", "#F07178", "#F2A65A", "#5ED6A0", "#A99CFF", "#E3B66B", "#4FD1C5", "#FF9E7A", "#8FB8FF"];
     if (st.initialized) {
       if (Array.isArray(st.bands) && st.bands.length > 0) {
+        const keep = fromSync && nodes.some(n => n.id === selectedNodeId) ? nodes.findIndex(n => n.id === selectedNodeId) : 0;
         nodes = st.bands.map((b, i) => normBand(b, i));
-        selectedNodeId = nodes[0].id;
+        selectedNodeId = nodes[Math.min(keep, nodes.length - 1)].id;
+      } else if (fromSync && Array.isArray(st.bands)) {
+        nodes = [];   // a másik kliens minden sávot törölt
+        selectedNodeId = null;
       }
       const mods = st.modules || {};
       if (st.magic) {
@@ -4072,6 +4076,7 @@ function applyEngineState(st) {
   } finally {
     suppressEngineSync = false;
   }
+  if (fromSync) return;
   if (!st.initialized) {
     // A motor még üres: a felület (biztonságos, sík) állapotát teljes egészében átadjuk
     pushAllToEngine();
@@ -4231,7 +4236,12 @@ function initPipewireBridge() {
           // Teljes állapotot csak a munkamenet első csatlakozásakor veszünk át. Újracsatlakozáskor
           // (pl. a motor rövid ideig nem volt elérhető) a felület a forrás: a közben tett változtatások nem vesznek el.
           if (data.reason === "ir") applyEngineIr(data);
-          else {
+          else if (data.reason === "sync") {
+            // Egy másik kliens (pl. egy másik felületablak) módosított: átvesszük, és nem küldjük vissza
+            if (data.presets) receivePresetsFromEngine(data.presets);
+            applyEngineState(data, true);
+            sendCurveMsg({ type: "get_eq_response" });
+          } else {
             receivePresetsFromEngine(data.presets);
             if (guiStateSynced && data.initialized) {
               applyEngineIr(data);
