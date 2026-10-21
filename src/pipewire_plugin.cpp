@@ -323,6 +323,14 @@ int main(int argc, char* argv[]) {
         presetDoc = doc;
         if (!linux_store::savePresets(doc)) std::cerr << "[Profilok] Figyelem: a presets.json nem írható.\n";
     };
+    cb.magicDiagJson = [&]() {
+        {
+            std::lock_guard<std::mutex> lk(paramMutex);
+            if (!(current.has(kFlagMagic) && current.magicAmount > 0.0f)) return std::string();
+        }
+        magic::MagicDiag d;
+        return node.chain.magicDiag(d) ? magic::diagToJson(d) : std::string();
+    };
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     cb.setLanguage = [](const std::string& l) {
         if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cerr << "[Nyelv] Figyelem: a language.txt nem írható.\n";

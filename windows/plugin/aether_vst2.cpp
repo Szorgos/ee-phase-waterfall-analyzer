@@ -149,6 +149,11 @@ private:
         chain_.startWorker([this]() {
             AetherSharedState* st = mapping_.state();
             if (!st) return;
+            // A Magic Touch mérései a motornak (a felület ezt mutatja); csak a lehallgatást író példány küldi
+            if (st->ownerToken.load(std::memory_order_relaxed) == token_) {
+                magic::MagicDiag d;
+                if (chain_.magicDiag(d)) st->magicDiag.write(d);
+            }
             const uint32_t seq = st->ir.seq.load(std::memory_order_acquire);
             if (seq == 0 || seq == lastIrSeq_ || (seq & 1u)) return;
             IrData ir;

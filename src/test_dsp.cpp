@@ -5,6 +5,7 @@
 #include <complex>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <random>
 #include <vector>
 
@@ -424,6 +425,218 @@ static void testDeclick(size_t kBlk) {
     CHECK(std::abs(g) < 0.01, "EQ kikapcsolva, preamp -6,5 dB: %.3f dB (érintetlen)", g);
 }
 
+// ------------------------------------------------------------------ Magic Touch
+
+/** Rózsaszín zaj (Paul Kellet szűrője), determinisztikus. */
+static std::vector<float> pinkNoise(size_t n, unsigned seed, double amp) {
+    std::mt19937 rng(seed);
+    std::normal_distribution<double> g(0.0, 1.0);
+    double b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    std::vector<float> o(n);
+    for (size_t i = 0; i < n; ++i) {
+        const double w = g(rng);
+        b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759; b2 = 0.96900 * b2 + w * 0.1538520;
+        b3 = 0.86650 * b3 + w * 0.3104856; b4 = 0.55000 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.0168980;
+        o[i] = static_cast<float>(amp * 0.11 * (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362));
+        b6 = w * 0.115926;
+    }
+    return o;
+}
+
+struct MagicRun {
+    magic::MagicDiag last;
+    float maxCut = 0, maxAir = 0, maxDeess = 0, maxWidth = 0, maxMakeup = 0, maxMono = 0;
+};
+
+/** Futtatás 480 mintás blokkokban; az elemzés kb. 30 ms-onként (mint a háttérszál). */
+static MagicRun runMagic(magic::MagicTouch& mt, std::vector<float>& L, std::vector<float>& R) {
+    MagicRun r;
+    size_t blk = 0;
+    runBlocks([&](float* a, float* b, size_t m) {
+        mt.process(a, b, m);
+        if (++blk % 3 == 0) {
+            mt.analyze();
+            magic::MagicDiag d;
+            if (mt.diag(d)) {
+                r.last = d;
+                r.maxCut = std::max(r.maxCut, -d.lowMidCutDb);
+                r.maxAir = std::max(r.maxAir, d.airGainDb);
+                r.maxDeess = std::max(r.maxDeess, d.deessNowDb);
+                r.maxWidth = std::max(r.maxWidth, d.widthGainDb);
+                r.maxMakeup = std::max(r.maxMakeup, std::fabs(d.makeupDb));
+                r.maxMono = std::max(r.maxMono, d.monoBass);
+            }
+        }
+    }, L, R, 480);
+    return r;
+}
+
+static double rmsDb(const std::vector<float>& x, size_t from) {
+    double e = 0;
+    for (size_t i = from; i < x.size(); ++i) e += static_cast<double>(x[i]) * x[i];
+    return 10.0 * std::log10(e / static_cast<double>(x.size() - from) + 1e-30);
+}
+
+static void checkLimits(const MagicRun& r, const char* what) {
+    CHECK(r.maxCut <= magic::kMaxLowMidCutDb + 1e-3f && r.maxAir <= magic::kMaxAirDb + 1e-3f &&
+          r.maxDeess <= magic::kMaxDeessDb + 1e-3f && r.maxWidth <= magic::kMaxWidthDb + 1e-3f &&
+          r.maxMakeup <= magic::kMaxMakeupDb + 1e-3f && r.maxMono <= 1.0f,
+          "Magic Touch korlátok (%s): vágás %.2f, levegő %.2f, de-esser %.2f, tágítás %.2f, kiegyenlítés %.2f dB",
+          what, r.maxCut, r.maxAir, r.maxDeess, r.maxWidth, r.maxMakeup);
+}
+
+static void testMagicTouch() {
+    std::printf("\n[Magic Touch]\n");
+    const double sr = 48000.0;
+    const size_t n = static_cast<size_t>(sr * 24);
+    const size_t tail = static_cast<size_t>(sr * 14);   // a beállás után vizsgált rész
+
+    // 1. Rendben lévő jel (mono rózsaszín zaj): nincs mit javítani, a kimenet érintetlen
+    {
+        auto mt = std::make_unique<magic::MagicTouch>();
+        mt->setControl(100.0f, false, false);
+        std::vector<float> L = pinkNoise(n, 1, 0.25), R = L, inL = L;
+        const MagicRun r = runMagic(*mt, L, R);
+        double maxDiff = 0;
+        for (size_t i = tail; i < n; ++i) maxDiff = std::max(maxDiff, static_cast<double>(std::fabs(L[i] - inL[i])));
+        CHECK(r.last.valid && maxDiff < 1e-5, "rendben lévő jel érintetlen (eltérés %.2e; vágás %.2f, levegő %.2f dB)",
+              maxDiff, r.last.lowMidCutDb, r.last.airGainDb);
+        checkLimits(r, "rendben lévő jel");
+    }
+    // 2. „Dobozhang”: +6 dB 200 Hz-en -> mély-közép vágás, hangerő-semlegesen
+    {
+        auto mt = std::make_unique<magic::MagicTouch>();
+        mt->setControl(100.0f, false, false);
+        std::vector<float> L = pinkNoise(n, 2, 0.2);
+        magic::Biquad bump;
+        magic::designPeaking(bump, sr, 200.0, 6.0, 1.0);
+        for (float& v : L) v = bump.process(v);
+        std::vector<float> R = L, inL = L;
+        const MagicRun r = runMagic(*mt, L, R);
+        magic::BiquadD bp1, bp2;
+        magic::designHighpass(bp1, sr, 150.0, 0.7071);
+        magic::designLowpass(bp2, sr, 280.0, 0.7071);
+        auto band = [&](const std::vector<float>& x) {
+            bp1.reset(); bp2.reset();
+            double e = 0;
+            for (size_t i = 0; i < x.size(); ++i) { const double y = bp2.process(bp1.process(x[i])); if (i >= tail) e += y * y; }
+            return 10.0 * std::log10(e);
+        };
+        const double dBand = band(L) - band(inL), dAll = rmsDb(L, tail) - rmsDb(inL, tail);
+        CHECK(r.last.lowMidCutDb < -1.0f && dBand - dAll < -0.5 && std::fabs(dAll) < 0.6,
+              "dobozhang: vágás %.2f dB @ %.0f Hz, a 150-280 Hz sáv %.2f dB, teljes szint %.2f dB",
+              r.last.lowMidCutDb, r.last.lowMidFreqHz, dBand, dAll);
+        checkLimits(r, "dobozhang");
+    }
+    // 3. Ellenfázisú mély: fokozatos mono basszus (50 Hz-en az oldaljel erősen csökken)
+    {
+        auto mt = std::make_unique<magic::MagicTouch>();
+        mt->setControl(100.0f, false, false);
+        std::vector<float> L = pinkNoise(n, 3, 0.1), R = L;
+        const std::vector<float> bass = sine(50.0, 0.25, n, sr), hi = sine(1000.0, 0.05, n, sr);
+        for (size_t i = 0; i < n; ++i) { L[i] += bass[i] + hi[i]; R[i] += -bass[i] - hi[i]; }
+        std::vector<float> inS(n), outS(n);
+        for (size_t i = 0; i < n; ++i) inS[i] = 0.5f * (L[i] - R[i]);
+        const MagicRun r = runMagic(*mt, L, R);
+        for (size_t i = 0; i < n; ++i) outS[i] = 0.5f * (L[i] - R[i]);
+        const double d50 = 20 * std::log10(toneAmp(outS, tail, 50.0, sr) / toneAmp(inS, tail, 50.0, sr));
+        const double d1k = 20 * std::log10(toneAmp(outS, tail, 1000.0, sr) / toneAmp(inS, tail, 1000.0, sr));
+        CHECK(r.last.lfCorr < 0.0f && r.last.monoBass > 0.9f && d50 < -12.0 && std::fabs(d1k) < 0.5,
+              "ellenfázisú mély: korreláció %.2f, mono %.2f, oldaljel 50 Hz %.1f dB, 1 kHz %.2f dB",
+              r.last.lfCorr, r.last.monoBass, d50, d1k);
+        checkLimits(r, "ellenfázisú mély");
+    }
+    // 4. Keskeny keverés: tágítás 150 Hz felett; bekapcsolt Crossfeed mellett nincs tágítás
+    for (int cf = 0; cf < 2; ++cf) {
+        auto mt = std::make_unique<magic::MagicTouch>();
+        mt->setControl(100.0f, false, cf != 0);
+        const std::vector<float> M = pinkNoise(n, 4, 0.2), S = pinkNoise(n, 5, 0.02);
+        std::vector<float> L(n), R(n), inS(n), outS(n);
+        for (size_t i = 0; i < n; ++i) { L[i] = M[i] + S[i]; R[i] = M[i] - S[i]; inS[i] = S[i]; }
+        const MagicRun r = runMagic(*mt, L, R);
+        for (size_t i = 0; i < n; ++i) outS[i] = 0.5f * (L[i] - R[i]);
+        magic::BiquadD hp;
+        magic::designHighpass(hp, sr, 1000.0, 0.7071);
+        auto hpDb = [&](const std::vector<float>& x) {
+            hp.reset();
+            double e = 0;
+            for (size_t i = 0; i < x.size(); ++i) { const double y = hp.process(x[i]); if (i >= tail) e += y * y; }
+            return 10.0 * std::log10(e);
+        };
+        const double dS = hpDb(outS) - hpDb(inS);
+        if (cf == 0)
+            CHECK(r.last.widthGainDb > 0.5f && std::fabs(dS - r.last.widthGainDb) < 0.4,
+                  "keskeny keverés (S/M %.1f dB): tágítás %.2f dB, oldaljel 1 kHz felett %.2f dB",
+                  r.last.sideMidDb, r.last.widthGainDb, dS);
+        else
+            CHECK(r.maxWidth < 1e-3f && std::fabs(dS) < 0.05, "keskeny keverés Crossfeeddel: nincs tágítás (%.3f dB)", dS);
+        checkLimits(r, "keskeny keverés");
+    }
+    // 5. Tompa, sziszegő felvétel: a levegő nem emel a zajra
+    {
+        auto mt = std::make_unique<magic::MagicTouch>();
+        mt->setControl(100.0f, false, false);
+        std::vector<float> L = pinkNoise(n, 6, 0.25);
+        magic::Biquad dull;
+        magic::designHighShelf(dull, sr, 5000.0, -12.0, 0.9);
+        std::mt19937 rng(7);
+        std::normal_distribution<double> g(0.0, 1.0);
+        // Szakaszos zene (2 s jel, 0,5 s halk) és állandó sziszegés a halk részekben is
+        for (size_t i = 0; i < n; ++i) {
+            const bool loud = (i / static_cast<size_t>(sr * 0.5)) % 5 != 4;
+            L[i] = dull.process(L[i]) * (loud ? 1.0f : 0.02f) + static_cast<float>(0.003 * g(rng));
+        }
+        std::vector<float> R = L;
+        const MagicRun r = runMagic(*mt, L, R);
+        CHECK(r.last.hiss > 0.5f && r.maxAir < 0.3f, "tompa + sziszegés: zaj %.2f, levegő legfeljebb %.2f dB", r.last.hiss, r.maxAir);
+        checkLimits(r, "tompa + sziszegés");
+    }
+    // 6. A/B összehasonlítás: az eredeti jel szól
+    {
+        auto mt = std::make_unique<magic::MagicTouch>();
+        mt->setControl(100.0f, false, false);
+        std::vector<float> L = pinkNoise(n / 2, 8, 0.2);
+        magic::Biquad bump;
+        magic::designPeaking(bump, sr, 200.0, 6.0, 1.0);
+        for (float& v : L) v = bump.process(v);
+        std::vector<float> R = L;
+        runMagic(*mt, L, R);
+        mt->setControl(100.0f, true, false);
+        std::vector<float> L2 = pinkNoise(static_cast<size_t>(sr), 9, 0.2), R2 = L2, in2 = L2;
+        runMagic(*mt, L2, R2);
+        double maxDiff = 0;
+        for (size_t i = static_cast<size_t>(sr * 0.1); i < L2.size(); ++i)
+            maxDiff = std::max(maxDiff, static_cast<double>(std::fabs(L2[i] - in2[i])));
+        CHECK(maxDiff < 1e-6, "A/B: az eredeti jel szól (eltérés %.2e)", maxDiff);
+    }
+    // 7. A láncban: 0 %-on ki van kerülve (bitre érintetlen), és a ki-be kapcsolás kattanásmentes
+    {
+        AetherChain chain;
+        chain.setSampleRate(sr);
+        ParamData d = transparentParams();
+        d.set(kFlagMagic, true);
+        d.magicAmount = 0.0f;
+        chain.applyParamsRT(d);
+        std::vector<float> L = pinkNoise(48000, 10, 0.2), R = L, in = L;
+        runBlocks([&](float* a, float* b, size_t m) { chain.process(a, b, m); }, L, R, 480);
+        bool same = true;
+        for (size_t i = 0; i < L.size(); ++i) same = same && L[i] == in[i];
+        CHECK(same, "láncban 0 %%-on: bitre érintetlen");
+        std::vector<float> s = sine(440.0, 0.3, 96000, sr), s2 = s;
+        size_t blk = 0;
+        runBlocks([&](float* a, float* b, size_t m) {
+            if (blk == 50) { d.magicAmount = 60.0f; chain.applyParamsRT(d); }
+            if (blk == 120) { d.set(kFlagMagic, false); chain.applyParamsRT(d); }
+            chain.process(a, b, m);
+            ++blk;
+        }, s, s2, 480);
+        float jump = 0;
+        for (size_t i = 1; i < s.size(); ++i) jump = std::max(jump, std::fabs(s[i] - s[i - 1]));
+        const float base = static_cast<float>(2.0 * kPi * 440.0 / sr * 0.3);
+        CHECK(jump < base * 1.6f, "Magic Touch be- és kikapcsolása kattanásmentes (legnagyobb lépés %.4f, szinusz %.4f)", jump, base);
+    }
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify DSP modulteszt (EasyEffects könyvtárak)\n");
@@ -437,6 +650,7 @@ int main() {
     testDeclick(480);
     testDeclick(1024);
     testDeclick(256);
+    testMagicTouch();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

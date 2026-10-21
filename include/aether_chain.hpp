@@ -3,8 +3,9 @@
  * @file aether_chain.hpp
  * @brief A teljes Aqulify DSP lánc (Linux PipeWire csomópont és Windows EQ APO plugin közös magja).
  *
- *   Preamp -> Equalizer (LSP) -> Bass Enhancer (Calf) -> Crossfeed (bs2b) -> Convolver (zita) -> Limiter (LSP)
+ *   Magic Touch -> Preamp -> Equalizer (LSP) -> Bass Enhancer (Calf) -> Crossfeed (bs2b) -> Convolver (zita) -> Limiter (LSP)
  *
+ * A Magic Touch (magic_touch.hpp) a felvételt javítja, ezért a lánc elején van; az elemzése a háttérszálon fut.
  * A modulok az EasyEffects-szel azonos könyvtárakat és beállítás-leképezést használnak (ee_dsp.hpp).
  * A konvolver kernelét (újramintavételezés, szélesség, autogain) és a zita példányt (FFTW tervek, szálak)
  * egy háttérszál készíti. Az elkészült példányt a valós idejű szál zármentesen veszi át, egy blokknyi
@@ -24,6 +25,7 @@
 #include "param_block.hpp"
 #include "ir_data.hpp"
 #include "ee_dsp.hpp"
+#include "magic_touch.hpp"
 
 namespace ee_analyzer {
 
@@ -141,7 +143,14 @@ public:
     size_t eqLatencySamples() const { return current_.has(kFlagEq) ? eq_.latency() : 0; }
     bool convolverActive() const { return irStage_.active != nullptr; }
 
+    /** A Magic Touch mérései és beavatkozásai (bármely szálról). false, ha még nincs adat. */
+    bool magicDiag(magic::MagicDiag& out) const { return magic_.diag(out); }
+
+    /** A Magic Touch fut-e (bekapcsolva, nem 0 % intenzitással). */
+    static bool magicActive(const ParamData& d) { return d.has(kFlagMagic) && d.magicAmount > 0.0f; }
+
     void reset() {
+        magic_.reset();
         eq_.reset();
         bass_.reset();
         crossfeed_.reset();
@@ -161,6 +170,7 @@ private:
     };
 
     void setSampleRateInternal(uint32_t sr) {
+        magic_.setSampleRate(sr);
         eq_.setSampleRate(sr);
         limiter_.setSampleRate(sr);
         bass_.setSampleRate(sr);
@@ -183,6 +193,7 @@ private:
     static bool needsDeclick(const ParamData& a, const ParamData& b) {
         const uint32_t mods = kFlagEq | kFlagBass | kFlagCrossfeed | kFlagLimiter;
         if ((a.flags & mods) != (b.flags & mods)) return true;
+        if (magicActive(a) != magicActive(b)) return true;
         if (b.has(kFlagEq) && (a.eqMode != b.eqMode || a.eqDecramp != b.eqDecramp)) return true;
         if (b.has(kFlagLimiter) && (a.limOversampling != b.limOversampling || a.limLookaheadMs != b.limLookaheadMs))
             return true;
@@ -202,6 +213,7 @@ private:
         if (current_.has(kFlagLimiter)) limiter_.reset();
         if (current_.has(kFlagBass) && !old.has(kFlagBass)) bass_.reset();
         if (current_.has(kFlagCrossfeed) && !old.has(kFlagCrossfeed)) crossfeed_.reset();
+        if (magicActive(current_) && !magicActive(old)) magic_.reset();
     }
 
     /**
@@ -255,6 +267,7 @@ private:
         // Az előerősítés az EQ része (EasyEffects: Equalizer "inputGain"): kikapcsolt EQ-nál nem hat
         preampTarget_ = d.has(kFlagEq) ? ee::dbToGain(d.preampDb) : 1.0f;
         preampStep_ = (preampTarget_ - preampCur_) / fadeSamples_;
+        magic_.setControl(d.magicAmount, d.magicCompare != 0, d.has(kFlagCrossfeed));
         eq_.update(d);
         bass_.update(d);
         crossfeed_.update(d);
@@ -317,6 +330,8 @@ private:
     void processChunk(float* L, float* R, size_t m) {
         quantum_.store(static_cast<uint32_t>(m), std::memory_order_relaxed);
         const ParamData& d = current_;
+
+        if (magicActive(d)) magic_.process(L, R, m);
 
         if (preampCur_ != preampTarget_) {
             // Előerősítés-változás 5 ms alatt (nincs lépcső / kattanás)
@@ -389,6 +404,7 @@ private:
             workerIdle_ = false;
             if (tick_) tick_();
             freeRetired();
+            magic_.analyze();   // csak az új mintákat dolgozza fel (kikapcsolva nincs új minta)
 
             ParamData d;
             uint32_t seq = 0;
@@ -459,6 +475,7 @@ private:
     }
 
     // valós idejű állapot
+    magic::MagicTouch magic_;
     ee::Equalizer eq_;
     ee::BassEnhancer bass_;
     ee::Crossfeed crossfeed_;

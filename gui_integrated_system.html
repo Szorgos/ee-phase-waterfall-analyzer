@@ -226,6 +226,14 @@
   .module-card { background: var(--ee-card-bg); border: 1px solid var(--ee-border); border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
   .module-card h3 { font-size: 1rem; color: #fff; display: flex; align-items: center; gap: 8px; }
   .module-desc { font-size: 0.82rem; color: var(--ee-text-secondary); line-height: 1.4; }
+  /* Magic Touch: diagnosztika */
+  .magic-diag { margin-top: 12px; border: 1px solid var(--ee-border); border-radius: 6px; background: #16191f; padding: 8px 12px; }
+  .magic-diag summary { cursor: pointer; font-size: 0.8rem; font-weight: 600; color: var(--ee-text-secondary); }
+  .magic-diag-state { font-size: 0.78rem; color: var(--ee-curve-cyan); margin: 8px 0 4px; }
+  .magic-diag table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .magic-diag td { padding: 3px 6px 3px 0; vertical-align: top; }
+  .magic-diag td:first-child { color: var(--ee-text-secondary); white-space: nowrap; width: 1%; padding-right: 14px; }
+  .magic-diag td:last-child { font-family: monospace; color: #e0e0e0; }
   .param-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 8px; }
   .param-box { background: #262626; border: 1px solid var(--ee-border); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
   .param-box .title { font-size: 0.75rem; color: var(--ee-text-secondary); text-transform: uppercase; }
@@ -362,6 +370,7 @@
       <button class="tab-btn" id="tabBtn-convolver" onclick="switchTab('convolver')"><span class="module-dot" id="dot-convolver">○</span> Convolver</button>
       <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter')"><span class="module-dot" id="dot-limiter">○</span> Limiter</button>
       <button class="tab-btn" id="tabBtn-bass" onclick="switchTab('bass')"><span class="module-dot" id="dot-bass">○</span> Bass Enhancer</button>
+      <button class="tab-btn" id="tabBtn-magic" onclick="switchTab('magic')"><span class="module-dot" id="dot-magic">○</span> Magic Touch</button>
     </div>
 
     <!-- 1. TAB: EQUALIZER (A MÁR KÉSZ 2D FÁZIS- ÉS GÖRBERAJZOLÓVAL) -->
@@ -702,6 +711,31 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
       </div>
     </div>
 
+    <div class="tab-pane" id="pane-magic">
+      <div class="module-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <h3 style="margin:0;">✨ Magic Touch</h3>
+            <span class="status-badge" id="badgeStatus-magic" style="background:rgba(255,255,255,0.06); color:var(--ee-text-secondary); border:1px solid #444;" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button class="adw-btn" id="btnMagicCompare" onclick="toggleMagicCompare()" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
+            <button class="adw-btn" id="btnToggle-magic" onclick="toggleModule('magic')" data-i18n="mod.btnOff">KI</button>
+          </div>
+        </div>
+
+        <p class="module-desc" data-i18n="mt.desc">Automatikus, visszafogott hangszépítő: elemzi a lejátszott felvételt, és csak azt igazítja, ami hiányzik vagy zavaró (dobozhang, tompa magasak, ellenfázisú mély, keskeny keverés). Nem hangosít és nem tömörít: a kimenet hangossága megegyezik a bemenetével.</p>
+
+        <div class="param-grid" id="magicControls"></div>
+
+        <details class="magic-diag" id="magicDiag">
+          <summary data-i18n="mt.diagTitle">Részletek / diagnosztika</summary>
+          <div class="magic-diag-state" id="magicDiagState"></div>
+          <table id="magicDiagTable"></table>
+        </details>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -797,6 +831,8 @@ var isCrossfeedEnabled = false;
 var isConvolverEnabled = false;
 var isLimiterEnabled = false;
 var isBassEnabled = false;
+var isMagicEnabled = false;
+var magicCompare = false;     // A/B: true = az eredeti jel szól
 var currentPreamp = 0.0;
 // Automatikus preamp: indulásnál 0 dB; ha az EQ-görbe klippelne, a preamp a görbe csúcsához igazodik.
 // A kézzel beírt, a profilból vagy az importált fájlból jött preamp addig marad, amíg az EQ nem klippel.
@@ -808,6 +844,7 @@ function setModuleActive(mod, active) {
   else if (mod === 'convolver') isConvolverEnabled = active;
   else if (mod === 'limiter') isLimiterEnabled = active;
   else if (mod === 'bass') isBassEnabled = active;
+  else if (mod === 'magic') isMagicEnabled = active;
 
   const dot = document.getElementById('dot-' + mod);
   if (dot) {
@@ -843,12 +880,18 @@ function setModuleActive(mod, active) {
   if (mod === 'eq' && prBadge) prBadge.style.display = (isFirMode && active) ? "block" : "none";
 
   if (mod === 'eq' && typeof drawEq === 'function') drawEq();
+  if (mod === 'magic') {
+    // Kikapcsoláskor az A/B is az alapállapotba (feldolgozott) áll; a gomb csak bekapcsolva látszik
+    if (!active && magicCompare) { magicCompare = false; sendMagic(); }
+    renderMagicCompare();
+    if (!active) updateMagicDiag(null);
+  }
   sendParamToPipewire('set_module_' + mod, active ? 1 : 0);
 }
 
 function moduleIsActive(mod) {
   return mod === 'eq' ? isEqEnabled : mod === 'crossfeed' ? isCrossfeedEnabled : mod === 'convolver' ? isConvolverEnabled
-       : mod === 'limiter' ? isLimiterEnabled : mod === 'bass' ? isBassEnabled : false;
+       : mod === 'limiter' ? isLimiterEnabled : mod === 'bass' ? isBassEnabled : mod === 'magic' ? isMagicEnabled : false;
 }
 /** A modul BE/KI gombjának, állapotjelvényének (és az EQ felső gombjának) felirata a választott nyelven. */
 function renderModuleTexts(mod) {
@@ -868,6 +911,7 @@ function toggleModule(mod) {
   else if (mod === 'convolver') curr = isConvolverEnabled;
   else if (mod === 'limiter') curr = isLimiterEnabled;
   else if (mod === 'bass') curr = isBassEnabled;
+  else if (mod === 'magic') curr = isMagicEnabled;
   setModuleActive(mod, !curr);
 }
 
@@ -3259,6 +3303,64 @@ buildControls("bassControls", [
 // A vezérlők létrehozása után (az „Alsó határ frekvencia” doboza csak most létezik): kikapcsolt alsó határnál rejtve
 setCtl("bassFloorActive", false);
 
+// --- Magic Touch (automatikus hangszépítő; docs/plans/magic-touch.md)
+buildControls("magicControls", [
+  { id: "magicAmount", kind: "num", label: "ctl.magicAmount", min: 0, max: 100, step: 1, unit: "%", def: 50, hint: "ctl.magicAmountHint" },
+], () => sendMagic());
+
+function sendMagic() {
+  sendEngine({ type: "set_magic", amount: getCtl("magicAmount"), compare: magicCompare ? 1 : 0 });
+}
+function toggleMagicCompare() {
+  magicCompare = !magicCompare;
+  renderMagicCompare();
+  sendMagic();
+}
+function renderMagicCompare() {
+  const b = document.getElementById("btnMagicCompare");
+  if (!b) return;
+  b.style.display = isMagicEnabled ? "" : "none";
+  b.className = magicCompare ? "adw-btn" : "adw-btn primary active";
+  b.innerText = magicCompare ? t("mt.abOriginal") : t("mt.abProcessed");
+}
+
+/** A motor által küldött Magic Touch mérések (állapotüzenet, 0,5 s-onként); null: nincs adat. */
+var magicDiagLast = null;
+function updateMagicDiag(m) {
+  magicDiagLast = m || null;
+  const state = document.getElementById("magicDiagState"), table = document.getElementById("magicDiagTable");
+  if (!state || !table) return;
+  if (!m || !isMagicEnabled) {
+    state.textContent = t("mt.noData");
+    table.innerHTML = "";
+    return;
+  }
+  state.textContent = !m.valid ? t("mt.collecting") : m.silent ? t("mt.silent") : t("mt.running");
+  const sg = (v, d) => (v > 0 ? "+" : "") + fmtNum(v, d);
+  const pc = v => fmtNum(Math.round(v * 100), 0);
+  const rows = [
+    ["mt.rowLoud", t("mt.valLoud", { lufs: fmtNum(m.lufs, 1), lra: fmtNum(m.lra, 1), crest: fmtNum(m.crest, 1) })],
+    ["mt.rowLowMid", t("mt.valLowMid", { ex: sg(m.lowMid, 1), cut: sg(m.cut, 1), hz: fmtNum(m.lowMidHz, 0) })],
+    ["mt.rowAir", t("mt.valAir", { ratio: sg(m.air, 1), gain: sg(m.airGain, 1) })],
+    ["mt.rowDeess", t("mt.valDeess", { harsh: pc(m.harsh), sib: pc(m.sib), depth: fmtNum(m.deess, 1), now: fmtNum(m.deessNow, 1) })],
+    ["mt.rowHiss", pc(m.hiss) + " %"],
+    ["mt.rowBass", t("mt.valBass", { corr: fmtNum(m.lfCorr, 2), mono: pc(m.mono) })],
+    ["mt.rowWidth", t("mt.valWidth", { sm: m.sideMid <= -99 ? "–" : sg(m.sideMid, 1), w: sg(m.width, 1) })],
+    ["mt.rowMakeup", sg(m.makeup, 1) + " dB"],
+  ];
+  table.innerHTML = "";
+  rows.forEach(([k, v]) => {
+    const tr = document.createElement("tr");
+    const a = document.createElement("td"), b = document.createElement("td");
+    a.textContent = t(k);
+    b.textContent = v;
+    tr.appendChild(a); tr.appendChild(b);
+    table.appendChild(tr);
+  });
+}
+renderMagicCompare();
+updateMagicDiag(null);
+
 // =========================================================================
 // MODULOK BEKÖTÉSE A MOTORHOZ (Bass, Limiter, Crossfeed, Convolver)
 // =========================================================================
@@ -3287,14 +3389,12 @@ markCrossfeedPreset();
 
 /** A teljes felületi állapot elküldése a motornak. */
 function pushAllToEngine() {
-  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass'].forEach(m => {
-    const on = m === 'eq' ? isEqEnabled : m === 'crossfeed' ? isCrossfeedEnabled : m === 'convolver' ? isConvolverEnabled
-             : m === 'limiter' ? isLimiterEnabled : isBassEnabled;
-    sendParamToPipewire('set_module_' + m, on ? 1 : 0);
+  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'magic'].forEach(m => {
+    sendParamToPipewire('set_module_' + m, moduleIsActive(m) ? 1 : 0);
   });
   sendCurveMsg({ type: "set_eq_mode", val: currentEqMode });
   sendCurveMsg({ type: "set_decramp", val: currentDecramp });
-  sendBass(); sendLimiter(); sendCrossfeed(); sendConvolver();
+  sendBass(); sendLimiter(); sendCrossfeed(); sendConvolver(); sendMagic();
   lastSentPreamp = currentPreamp;
   sendParamToPipewire("set_preamp", currentPreamp);
   lastSentEqSig = null;   // a sávokat mindenképp átadjuk
@@ -3376,9 +3476,14 @@ function applyEngineState(st) {
         selectedNodeId = nodes[0].id;
       }
       const mods = st.modules || {};
-      ['eq', 'crossfeed', 'convolver', 'limiter', 'bass'].forEach(m => {
+      if (st.magic) {
+        setCtl("magicAmount", st.magic.amount);
+        magicCompare = !!st.magic.compare;
+      }
+      ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'magic'].forEach(m => {
         if (m in mods) setModuleActive(m, !!mods[m]);
       });
+      renderMagicCompare();
       currentPreamp = typeof st.preamp === "number" ? st.preamp : 0.0;
       autoPreampMode = false;
       setPreampBadge(currentPreamp === 0 ? "preamp.clean" : "preamp.saved", currentPreamp, currentPreamp === 0 ? "optimal" : "info");
@@ -3408,13 +3513,13 @@ function applyEngineState(st) {
     } else if (activePresetName && presetsDoc.presets[activePresetName]) {
       // A motor üres (pl. első indítás új gépen), de van mentett aktív profil: azt töltjük be
       applyPresetData(presetsDoc.presets[activePresetName]);
-      ['crossfeed', 'convolver', 'limiter', 'bass'].forEach(m => setModuleActive(m, false));
+      ['crossfeed', 'convolver', 'limiter', 'bass', 'magic'].forEach(m => setModuleActive(m, false));
       setModuleActive('eq', nodes.length > 0);
       armLimiterForProfile(currentPreamp, false);
     } else {
       // A motor még sosem kapott beállítást: teljesen tiszta, kikapcsolt (bypass) alapállapot
       nodes.forEach(n => { n.gain = 0.0; });
-      ['crossfeed', 'convolver', 'limiter', 'bass', 'eq'].forEach(m => setModuleActive(m, false));
+      ['crossfeed', 'convolver', 'limiter', 'bass', 'eq', 'magic'].forEach(m => setModuleActive(m, false));
       currentPreamp = 0.0;
       autoPreampMode = false;
       setPreampBadge("preamp.clean", 0, "optimal");
@@ -3616,6 +3721,7 @@ function initPipewireBridge() {
           updateEngineBadge();
           if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);
           if (typeof data.gr === "number") updateLimiterMeters(null, data.gr);
+          updateMagicDiag(data.magic || null);
         } else if (data.type === "audio_levels" && data.samples) {
           livePipewireSamples = data.samples; // régi motorverzió kompatibilitás
         }
@@ -3628,6 +3734,7 @@ function initPipewireBridge() {
       engineStatus = null;
       updateEngineBadge();
       updateLimiterMeters(-90, 0);
+      updateMagicDiag(null);
       if (engineVerified) {
         setTimeout(initPipewireBridge, 3000);           // ugyanazon a porton újrakapcsolódás
       } else {
@@ -3889,7 +3996,9 @@ document.addEventListener("click", (e) => {
 
 /** Nyelvváltáskor minden futás közben előállított felirat újra (a statikusakat az applyI18nDom intézi). */
 function refreshDynamicTexts() {
-  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass'].forEach(renderModuleTexts);
+  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'magic'].forEach(renderModuleTexts);
+  renderMagicCompare();
+  updateMagicDiag(magicDiagLast);
   updateCameraLabel();
   const res = document.getElementById("lblResolution");
   if (res) res.innerText = t("strip.resolution", { bins: FREQ_BINS, steps: TIME_SLICES });

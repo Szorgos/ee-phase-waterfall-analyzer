@@ -79,7 +79,7 @@ static void testSpectrum() {
 }
 
 static void testParamFile() {
-    std::printf("[2] Paraméterfájl (v4 és régi v3 átvétele)\n");
+    std::printf("[2] Paraméterfájl (v5, valamint a v4 és a régi v3 átvétele)\n");
     // v4: változatlan visszaolvasás
     ParamData d = transparentParams();
     d.set(kFlagEq, true);
@@ -94,7 +94,21 @@ static void testParamFile() {
     d.crossfeedFeedDb = 9.5f;
     ParamData r{};
     CHECK(loadParamBytes(reinterpret_cast<const char*>(&d), sizeof(d), kParamLayoutVersion, sizeof(d), r) &&
-              std::memcmp(&r, &d, sizeof(d)) == 0, "v4 paraméterblokk bájtra azonosan visszaolvasva");
+              std::memcmp(&r, &d, sizeof(d)) == 0, "v5 paraméterblokk bájtra azonosan visszaolvasva");
+
+    // v4 (Magic Touch előtti) fájl: a meglévő beállítások megmaradnak, a Magic Touch alapértéket kap
+    ParamData r4{};
+    CHECK(loadParamBytes(reinterpret_cast<const char*>(&d), kParamSizeV4, 4, static_cast<uint32_t>(kParamSizeV4), r4) &&
+              std::memcmp(&r4, &d, kParamSizeV4) == 0 && r4.magicAmount == 50.0f && r4.magicCompare == 0 &&
+              !r4.has(kFlagMagic),
+          "v4 paraméterfájl átvétele (Magic Touch: kikapcsolva, 50 %%)");
+    // Az A/B összehasonlítás újraindítás után nem marad bekapcsolva
+    ParamData dm = d;
+    dm.set(kFlagMagic, true); dm.magicAmount = 70.0f; dm.magicCompare = 1;
+    ParamData rm{};
+    CHECK(loadParamBytes(reinterpret_cast<const char*>(&dm), sizeof(dm), kParamLayoutVersion, sizeof(dm), rm) &&
+              rm.has(kFlagMagic) && rm.magicAmount == 70.0f && rm.magicCompare == 0,
+          "Magic Touch beállítás mentve (70 %%), az A/B nem marad bekapcsolva");
 
     // v3: a régi RBJ sávok "APO (DR)" módú EasyEffects sávokká válnak
     legacy::ParamDataV3 o{};

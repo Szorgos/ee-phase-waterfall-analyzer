@@ -191,6 +191,7 @@ cmake --build build -j$(nproc)
 │   ├── shared_state.hpp        # Plugin <-> motor közös memória elrendezés (Windows)
 │   ├── mini_json.hpp           # Függőségmentes JSON olvasó a vezérlőüzenetekhez
 │   ├── aq_i18n.hpp             # Nyelvválasztás és szövegek a natív részekhez (aq_i18n_strings.hpp: előállítva)
+│   ├── magic_touch.hpp         # Magic Touch: automatikus, visszafogott hangszépítő (docs/plans/magic-touch.md)
 │   └── sha1_base64.hpp         # Független SHA-1 és Base64 modul a WS kézfogáshoz
 ├── src/
 │   ├── pipewire_plugin.cpp     # Linux motor (aqulify-engine) belépési pontja

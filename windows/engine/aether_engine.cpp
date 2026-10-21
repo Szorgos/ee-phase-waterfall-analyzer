@@ -313,6 +313,15 @@ public:
         return s;
     }
 
+    /** A Magic Touch mérései (csak a pluginból: WASAPI loopbacknél nincs DSP). Üres, ha nincs adat. */
+    std::string magicDiagJson() {
+        std::lock_guard<std::mutex> lk(mutex_);
+        if (!pluginActive_ || !mapping_.state()) return {};
+        magic::MagicDiag d;
+        if (!mapping_.state()->magicDiag.read(d)) return {};
+        return magic::diagToJson(d);
+    }
+
 private:
     bool pluginAliveLocked() const {
         const AetherSharedState* st = mapping_.state();
@@ -421,6 +430,13 @@ int main(int argc, char** argv) {
         std::lock_guard<std::mutex> lk(presetMutex);
         presetDoc = doc;
         if (!savePresetFile(doc)) std::cout << "[Profilok] Figyelem: a presets.json nem írható.\n";
+    };
+    cb.magicDiagJson = [&]() {
+        {
+            std::lock_guard<std::mutex> lk(paramMutex);
+            if (!(current.has(kFlagMagic) && current.magicAmount > 0.0f)) return std::string();
+        }
+        return sources.magicDiagJson();
     };
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     cb.setLanguage = [](const std::string& l) {

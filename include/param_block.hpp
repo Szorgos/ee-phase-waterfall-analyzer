@@ -11,6 +11,7 @@
  * tartomány és alapérték), mert ugyanazokat a DSP könyvtárakat hajtják meg:
  *   EQ: LSP Parametric Equalizer x32, Limiter: LSP Limiter Stereo, Bass Enhancer: Calf,
  *   Crossfeed: libbs2b, Convolver: zita-convolver.
+ * A Magic Touch (automatikus hangszépítő, magic_touch.hpp) az Aqulify saját modulja.
  */
 #include <algorithm>
 #include <atomic>
@@ -23,7 +24,7 @@ namespace ee_analyzer {
 constexpr uint32_t kMaxEqBands = 32;
 
 /** A params.bin fájl és a közös memória paraméter-formátumának verziója. */
-constexpr uint32_t kParamLayoutVersion = 4;
+constexpr uint32_t kParamLayoutVersion = 5;
 
 enum ParamFlags : uint32_t {
     kFlagEq        = 1u << 0,
@@ -31,6 +32,7 @@ enum ParamFlags : uint32_t {
     kFlagConvolver = 1u << 2,
     kFlagLimiter   = 1u << 3,
     kFlagBass      = 1u << 4,
+    kFlagMagic     = 1u << 5,   // Magic Touch
     kFlagInitialized = 1u << 31, // a GUI legalább egyszer beállította
 };
 
@@ -113,6 +115,10 @@ struct ParamData {
     float convWetDb = 0.0f;        // -100 (= ki) .. 20
     float convInputGainDb = 0.0f;
     float convOutputGainDb = 0.0f;
+
+    // --- Magic Touch (az Aqulify saját modulja, docs/plans/magic-touch.md) ---
+    float magicAmount = 50.0f;     // % (0 .. 100): az intenzitás
+    int32_t magicCompare = 0;      // A/B: 1 = az eredeti (feldolgozatlan) jel szól, hangerőre kiegyenlítve
 
     bool has(uint32_t f) const { return (flags & f) != 0; }
     void set(uint32_t f, bool on) { flags = on ? (flags | f) : (flags & ~f); }
@@ -208,7 +214,12 @@ inline void sanitizeParams(ParamData& d) {
     cl(d.convWetDb, -100.0f, 20.0f, 0.0f);
     cl(d.convInputGainDb, -36.0f, 36.0f, 0.0f);
     cl(d.convOutputGainDb, -36.0f, 36.0f, 0.0f);
+    cl(d.magicAmount, 0.0f, 100.0f, 50.0f);
+    ci(d.magicCompare, 0, 1);
 }
+
+/** A params.bin v4 mérete: a Magic Touch mezői előtti rész (v5-ben ezek a végére kerültek). */
+constexpr size_t kParamSizeV4 = offsetof(ParamData, magicAmount);
 
 // ------------------------------------------------------------------ régi (v2/v3) params.bin átvétele
 
@@ -225,15 +236,17 @@ struct ParamDataV3 {
 
 /**
  * Paraméterfájl tartalmának betöltése (a 12 bájtos fejléc után).
- * v4: közvetlen másolat. v2/v3: a régi saját DSP beállításai a megfelelő EasyEffects paraméterekre:
+ * v5: közvetlen másolat. v4: ugyanaz a Magic Touch mezői nélkül (azok alapértéket kapnak). v2/v3: a régi saját DSP beállításai a megfelelő EasyEffects paraméterekre:
  * a régi RBJ biquad sávok "APO (DR)" szűrőmódot kapnak (ugyanaz a hangolás), a többi az alapértéket.
  */
 inline bool loadParamBytes(const char* bytes, size_t len, uint32_t version, uint32_t size, ParamData& out) {
     if (size > len) return false;
-    if (version == kParamLayoutVersion) {
-        if (size != sizeof(ParamData)) return false;
+    if (version == kParamLayoutVersion || version == 4) {
+        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : kParamSizeV4;
+        if (size != want) return false;
         ParamData d{};
-        std::memcpy(static_cast<void*>(&d), bytes, sizeof(ParamData));
+        std::memcpy(static_cast<void*>(&d), bytes, want);
+        d.magicCompare = 0;   // az A/B összehasonlítás nem marad bekapcsolva újraindítás után
         sanitizeParams(d);
         out = d;
         return true;

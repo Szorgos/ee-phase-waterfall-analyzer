@@ -57,6 +57,8 @@ struct BridgeCallbacks {
     /** A felületen választott nyelv (pl. "de"; üres: még nem választott) – a tálcamenü és a rendszerüzenetek is ezt használják. */
     std::function<std::string()> getLanguage;
     std::function<void(const std::string&)> setLanguage;
+    /** A Magic Touch mérései JSON objektumként (magic::diagToJson); üres, ha nincs adat (opcionális). */
+    std::function<std::string()> magicDiagJson;
 };
 
 /** Az EQ profil-dokumentum maximális mérete (bájt). */
@@ -484,6 +486,7 @@ private:
             else if (mod == "convolver") p.set(kFlagConvolver, on);
             else if (mod == "limiter") p.set(kFlagLimiter, on);
             else if (mod == "bass") p.set(kFlagBass, on);
+            else if (mod == "magic") p.set(kFlagMagic, on);
             else changed = false;
         } else if (type == "set_crossfeed") {
             p.crossfeedFcut = static_cast<float>(num(msg, "fcut", p.crossfeedFcut));
@@ -525,6 +528,9 @@ private:
             p.bassListen = num(msg, "listen", p.bassListen) != 0.0 ? 1 : 0;
             p.bassInputGainDb = static_cast<float>(num(msg, "inputGain", p.bassInputGainDb));
             p.bassOutputGainDb = static_cast<float>(num(msg, "outputGain", p.bassOutputGainDb));
+        } else if (type == "set_magic") {
+            p.magicAmount = static_cast<float>(num(msg, "amount", p.magicAmount));
+            p.magicCompare = num(msg, "compare", p.magicCompare) != 0.0 ? 1 : 0;
         } else if (type == "set_convolver") {
             p.convIrWidth = static_cast<int32_t>(num(msg, "irWidth", p.convIrWidth));
             p.convAutogain = num(msg, "autogain", p.convAutogain) != 0.0 ? 1 : 0;
@@ -648,6 +654,10 @@ private:
             std::string extra = cb_.statusFields();
             if (!extra.empty()) { s += ','; s += extra; }
         }
+        if (cb_.magicDiagJson) {
+            const std::string m = cb_.magicDiagJson();
+            if (!m.empty()) { s += ",\"magic\":"; s += m; }
+        }
         s += '}';
         return s;
     }
@@ -667,6 +677,7 @@ private:
         s += ",\"convolver\":"; s += p.has(kFlagConvolver) ? "1" : "0";
         s += ",\"limiter\":"; s += p.has(kFlagLimiter) ? "1" : "0";
         s += ",\"bass\":"; s += p.has(kFlagBass) ? "1" : "0";
+        s += ",\"magic\":"; s += p.has(kFlagMagic) ? "1" : "0";
         s += "},\"crossfeedPreset\":" + std::to_string(p.crossfeedPreset);
         s += ",\"eqMode\":" + std::to_string(p.eqMode);
         s += ",\"decramp\":" + std::to_string(p.eqDecramp);
@@ -703,6 +714,8 @@ private:
         s += ",\"wet\":"; appendFloat(s, p.convWetDb, 2);
         s += ",\"inputGain\":"; appendFloat(s, p.convInputGainDb, 2);
         s += ",\"outputGain\":"; appendFloat(s, p.convOutputGainDb, 2); s += '}';
+        s += ",\"magic\":{\"amount\":"; appendFloat(s, p.magicAmount, 1);
+        s += ",\"compare\":" + std::to_string(p.magicCompare) + '}';
         if (cb_.getIr) {
             IrData ir = cb_.getIr();
             s += ",\"ir\":";

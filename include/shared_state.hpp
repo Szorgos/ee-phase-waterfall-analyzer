@@ -6,18 +6,19 @@
  */
 #include <atomic>
 #include <cstdint>
+#include "magic_touch.hpp"
 #include "param_block.hpp"
 #include "tap_ring.hpp"
 
 namespace ee_analyzer {
 
 constexpr uint32_t kSharedMagic = 0x41455448;   // 'AETH'
-constexpr uint32_t kSharedVersion = 4;
+constexpr uint32_t kSharedVersion = 5;
 
 // A plugin (szolgáltatásként futó audiodg) a Global\ névtérben hozza létre;
 // ha erre nincs joga (pl. DAW-ban vagy az EQ APO szerkesztőben), a Local\ névtérbe esik vissza.
-constexpr const wchar_t* kSharedNameGlobal = L"Global\\AqulifyShared_v4";
-constexpr const wchar_t* kSharedNameLocal = L"Local\\AqulifyShared_v4";
+constexpr const wchar_t* kSharedNameGlobal = L"Global\\AqulifyShared_v5";
+constexpr const wchar_t* kSharedNameLocal = L"Local\\AqulifyShared_v5";
 
 using SharedTapRing = StereoTapRing<65536>; // ~1,4 s 48 kHz-en
 
@@ -44,6 +45,7 @@ struct AetherSharedState {
     std::atomic<uint64_t> ownerTickMs;    // GetTickCount64 az utolsó íráskor
     std::atomic<uint32_t> activeInstances;
     std::atomic<float> gainReductionDb;
+    magic::DiagBlock magicDiag;           // a Magic Touch mérései (a lehallgatást író példányé)
     SharedTapRing tap;
 
     // --- motor -> plugin ---

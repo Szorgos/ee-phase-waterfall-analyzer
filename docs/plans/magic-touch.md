@@ -1,6 +1,6 @@
 # Terv: Magic Touch – automatikus, visszafogott hangszépítő
 
-**Állapot:** terv, a megvalósítás ez után következik.
+**Állapot:** az 1–2. ütem elkészült (2026-10-21), a 3–6. ütem terv.
 **Felvéve:** 2026-10-21
 
 ## Cél
@@ -196,11 +196,42 @@ Az [EasyEffects plugin-paritás](easyeffects-plugins.md) több plugint is tartal
 belül használ (Autogain, Deesser, Exciter, Stereo Tools, Compressor, Crystalizer, Noise Reduction).
 A DSP kód közös, így ezek később önálló modulként is megjelenhetnek.
 
-## Nyitott kérdések
+## Döntések (2026-10-21)
 
-- Az első verzió terjedelme (1. ütem önmagában, vagy rögtön az 1–2. ütem).
-- RNNoise és a zajszűrés: mikor, és milyen csomagolással Windowsra.
-- A macOS változat ütemezése.
+- Az első verzió az 1–2. ütem: mérés és diagnosztika, Tone & Air, fokozatos mono basszus és tér,
+  hangerőre kiegyenlített A/B, intenzitás.
+- A zajszűrés (Restoration, RNNoise) később, külön lépésben jön.
+- A macOS változat külön terv lesz, később.
+
+## Megvalósítás (1–2. ütem)
+
+Kód: `include/magic_touch.hpp` (a lánc: `aether_chain.hpp`), tesztek: `src/test_dsp.cpp` („Magic Touch”).
+
+- **Felület:** „Magic Touch” fül: be/ki, intenzitás (0–100 %, alapból 50 %), A/B gomb (csak bekapcsolva
+  látszik), „Részletek / diagnosztika” a motor méréseivel. A Karakter és a Tartalom választó a 3–4. ütemmel
+  jön, addig nem jelenik meg (nincs hatástalan vezérlő).
+- **Hangút sorrendje:** mély-közép vágás → levegő → de-esser → hangerő-kiegyenlítés → oldaljel (mono basszus,
+  tágítás) → A/B. A hangerő-kiegyenlítés csak a hangszínváltozást egyenlíti ki: az ellenfázisú mély
+  eltávolítása után nem emeli vissza a szintet.
+- **Érintetlenség:** a fokozatok csak akkor futnak, ha van mit tenniük; rendben lévő felvételen a kimenet bitre
+  egyezik a bemenettel (a csúcsok sem nőnek). 0 %-on a lánc teljesen kikerüli.
+- **Fokozatos mono basszus:** két mély polcszűrő az oldaljelen (75 Hz, teljes erővel 2 × −12 dB): 50 Hz alatt
+  kb. −20 dB, 80 Hz −11 dB, 120 Hz −4 dB, 150 Hz −2 dB, 200 Hz felett 1 dB alatt. A középjel nem változik.
+  Csak 0,4 alatti mély sávi korrelációnál lép be (természetes, szétszórt mikrofonos felvételeknél 0,5–0,6 a
+  szokásos érték), teljes erővel −0,2-nél.
+- **Tágítás:** magas polc az oldaljelen (200 Hz), legfeljebb +1,5 dB, csak −14 dB alatti (de nem mono)
+  S/M aránynál, és bekapcsolt Crossfeed mellett soha.
+- **Levegő:** legfeljebb +2 dB (10,5 kHz-es magas polc); sziszegésnél, élességnél és sávkorlátos
+  (pl. 8 kHz-ig terjedő) felvételnél nem, illetve kevésbé emel.
+- **De-esser:** legfeljebb 4 dB, csak a felvételre jellemzőnél jóval erősebb 4,5 kHz feletti kitörésekre
+  (a medián fölött 12 dB-lel és a 95. percentilis fölött), hogy a cintányérokat ne tompítsa.
+- **Lassúság:** a hangszín-mérés 20 s-os átlag (a refrén és a vers között ne ingadozzon), a beavatkozások
+  legfeljebb 0,5 dB/s sebességgel változnak; új számnál (1,5 s csend után) a mérés újraindul.
+- **Mérések a valóságban:** a hangútban 48 kHz-en egy mag 0,1–0,2 %-a, az elemzés kb. 0,7 % (Xeon, 2,1 GHz),
+  plusz késleltetés nincs. A hangosság a bemenetéhez képest ±0,1 LU-n belül marad.
+- **Hangolás:** szabad licencű zenei mintákon (klasszikus, elektronikus, drum and bass, pop, ragtime, beszéd)
+  és ezek mesterségesen rontott változatain (dobozhang, tompa magasak, sziszegés, ellenfázisú mély, keskeny
+  keverés). A hallgatói A/B teszt valódi lejátszási listán még hátravan.
 
 ## Források
 
