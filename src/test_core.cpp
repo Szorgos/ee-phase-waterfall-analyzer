@@ -19,8 +19,18 @@ static constexpr double kPi = 3.14159265358979323846;
 static int g_fail = 0;
 #define CHECK(cond, ...) do { if (!(cond)) { ++g_fail; std::printf("  [HIBA] " __VA_ARGS__); std::printf("\n"); } else { std::printf("  [OK]   " __VA_ARGS__); std::printf("\n"); } } while (0)
 
-static size_t bandOf(double hz, size_t bands = 160) {
-    return static_cast<size_t>((std::log10(hz) - std::log10(10.0)) / (std::log10(24000.0) - std::log10(10.0)) * bands);
+static size_t bandOf(double hz) { return SpectrumAnalyzer(4096, 160).bandOf(hz); }
+
+/** frames sztereó minta (L = R) a gen(i) értékeivel, darabokban betolva (mint a motor hídja). */
+template <typename Gen>
+static void pushMono(SpectrumAnalyzer& an, size_t frames, Gen gen) {
+    std::vector<float> lr(1024 * 2);
+    for (size_t done = 0; done < frames;) {
+        const size_t n = std::min<size_t>(1024, frames - done);
+        for (size_t i = 0; i < n; ++i) lr[2 * i] = lr[2 * i + 1] = static_cast<float>(gen(done + i));
+        an.push(lr.data(), n);
+        done += n;
+    }
 }
 
 static void testSpectrum() {
@@ -53,13 +63,48 @@ static void testSpectrum() {
     an.compute(sr);
     CHECK(std::abs(std::abs(an.phaseDegrees()[peak]) - 180.0) < 1.0, "ellenfázis -> %.1f°", an.phaseDegrees()[peak]);
 
-    // Csend
-    std::fill(lr.begin(), lr.end(), 0.0f);
-    an.push(lr.data(), 4096);
+    // Csend (a mély elemzés hosszabb ablaka is kiürül)
+    pushMono(an, 48000, [](size_t) { return 0.0; });
     an.compute(sr);
     float mx = 0;
     for (float v : an.levels()) mx = std::max(mx, v);
     CHECK(mx == 0.0f, "csendnél minden sáv 0");
+
+    // Tengely: 0 Hz-től, a 10 Hz fölött közel logaritmikus
+    CHECK(an.bandEdgeHz(0) == 0.0 && std::abs(an.bandEdgeHz(160) - 24000.0) < 0.5 && bandOf(0.0) == 0 &&
+          bandOf(10.0) > 10 && bandOf(10.0) < 20, "sávok 0 Hz – 24 kHz, a 10 Hz a %zu. sáv", bandOf(10.0));
+
+    // Mély sávok: 50 Hz-es hang a helyén, a szivárgás nem ér le a legalsó sávokig
+    pushMono(an, 48000, [&](size_t i) { return amp * std::sin(2.0 * kPi * 50.0 * i / sr); });
+    an.compute(sr);
+    {
+        const auto& v = an.levels();
+        size_t pk = 0;
+        for (size_t i = 1; i < v.size(); ++i) if (v[i] > v[pk]) pk = i;
+        const double pkDb = v[pk] * 90.0 - 90.0, at20 = v[bandOf(20.0)] * 90.0 - 90.0, at0 = v[0] * 90.0 - 90.0;
+        CHECK(pk + 1 >= bandOf(50.0) && pk <= bandOf(50.0) + 1 && std::abs(pkDb + 6.02) < 1.5,
+              "50 Hz: csúcs a %zu. sávban (várt: %zu), %.2f dBFS", pk, bandOf(50.0), pkDb);
+        CHECK(at20 < -60.0 && at0 < -70.0, "50 Hz: 20 Hz-en %.1f dBFS, 0 Hz-en %.1f dBFS", at20, at0);
+    }
+    // 5 Hz-es hang: a 10 Hz alatti tartomány is látszik
+    pushMono(an, 48000, [&](size_t i) { return amp * std::sin(2.0 * kPi * 5.0 * i / sr); });
+    an.compute(sr);
+    {
+        const auto& v = an.levels();
+        size_t pk = 0;
+        for (size_t i = 1; i < v.size(); ++i) if (v[i] > v[pk]) pk = i;
+        const double pkDb = v[pk] * 90.0 - 90.0, at40 = v[bandOf(40.0)] * 90.0 - 90.0;
+        CHECK(pk + 2 >= bandOf(5.0) && pk <= bandOf(5.0) + 2 && pkDb > -9.0 && at40 < -60.0,
+              "5 Hz: csúcs a %zu. sávban (várt: %zu), %.2f dBFS; 40 Hz-en %.1f dBFS", pk, bandOf(5.0), pkDb, at40);
+    }
+    // Egyenáram (DC eltolás): nem jelenik meg
+    pushMono(an, 48000, [](size_t) { return 0.25; });
+    an.compute(sr);
+    {
+        float low = 0.0f;
+        for (size_t i = 0; i < bandOf(100.0); ++i) low = std::max(low, an.levels()[i]);
+        CHECK(low == 0.0f, "egyenáramú eltolás: 100 Hz alatt nincs jel (%.3f)", low);
+    }
 
     // 44,1 kHz: ugyanazok a sávhatárok (a skála nem csúszik el), a Nyquist fölötti sávok üresek
     const double sr2 = 44100.0;

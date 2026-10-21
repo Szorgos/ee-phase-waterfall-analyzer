@@ -151,6 +151,8 @@ private:
 
             // 1. Hang lehúzása a motorból (akkor is, ha nincs kliens, hogy ne torlódjon fel)
             if (cb_.pullAudio) {
+                const double inSr = cb_.sampleRate ? cb_.sampleRate() : 48000.0;
+                analyzer.setSampleRate(inSr > 0 ? inSr : 48000.0);   // a mély sávok decimálásához
                 size_t got;
                 while ((got = cb_.pullAudio(chunk.data(), chunk.size() / 2)) > 0) {
                     analyzer.push(chunk.data(), got);
@@ -600,6 +602,9 @@ private:
         s.reserve(a.numBands() * 14 + 64);
         s += "{\"type\":\"spectrum\",\"sr\":";
         appendFloat(s, sr, 0);
+        // a sávok tengelye: ln(1 + f / f0) szerint egyenközű, 0 Hz – 24 kHz (régi motor: f0 nélkül, log 10 Hz – 24 kHz)
+        s += ",\"f0\":";
+        appendFloat(s, SpectrumAnalyzer::kWarpHz, 0);
         s += ",\"levels\":[";
         const auto& lv = a.levels();
         for (size_t i = 0; i < lv.size(); ++i) {
