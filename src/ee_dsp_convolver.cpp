@@ -119,7 +119,8 @@ ConvKernel prepareConvKernel(const std::vector<float>& left, const std::vector<f
 
     // set_kernel_stereo_width (Mid-Side; https://github.com/tomszilagyi/ir.lv2)
     {
-        const float w = static_cast<float>(irWidth) * 0.01F;
+        // osztás (és nem · 0,01F): 100 %-nál pontosan 1, így FMA-s gépen (pl. aarch64) is pontosan érintetlen
+        const float w = static_cast<float>(irWidth) / 100.0F;
         const float x = (1.0F - w) / (1.0F + w);
         for (size_t i = 0; i < k.left.size(); i++) {
             const float LL = k.left[i];
