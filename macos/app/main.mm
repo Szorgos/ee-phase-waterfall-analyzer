@@ -243,7 +243,7 @@ struct Core {
     NSImage* img = nil;
     if (@available(macOS 11.0, *)) img = [NSImage imageWithSystemSymbolName:@"waveform" accessibilityDescription:@"Aqulify"];
     if (img) {
-        img.template = YES;
+        [img setTemplate:YES];   // (a "template" C++ kulcsszó: pont-szintaxissal nem írható)
         statusItem_.button.image = img;
     } else {
         statusItem_.button.title = @"Aqulify";
@@ -322,13 +322,7 @@ struct Core {
     __weak AppDelegate* weakSelf = self;
     cb.setLanguage = [weakSelf](const std::string& l) {
         if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cerr << "[Nyelv] Figyelem: a language.txt nem írható.\n";
-        dispatch_async(dispatch_get_main_queue(), ^{
-            AppDelegate* strong = weakSelf;
-            if (!strong || !strong->core_) return;
-            [strong buildMainMenu];
-            std::lock_guard<std::mutex> lk(strong->core_->outputMutex);
-            strong->core_->lastSinkQuery = {};   // az alapértelmezett kimenet felirata az új nyelven
-        });
+        dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf languageChanged]; });
     };
 
     for (int p : kEnginePorts) {
@@ -341,6 +335,14 @@ struct Core {
     }
     std::cerr << "[Hiba] Minden kapcsolódási port foglalt; a felület nem tud csatlakozni.\n";
     return NO;
+}
+
+/** A felületen választott nyelv: a menüsor menüi és az alapértelmezett kimenet felirata is ezen a nyelven. */
+- (void)languageChanged {
+    [self buildMainMenu];
+    if (!core_) return;
+    std::lock_guard<std::mutex> lk(core_->outputMutex);
+    core_->lastSinkQuery = {};
 }
 
 - (void)applicationWillTerminate:(NSNotification*)note {
@@ -368,7 +370,7 @@ struct Core {
 // ------------------------------------------------------------------ menük
 
 - (void)buildMainMenu {
-    NSMenu* main = [NSMenu new];
+    NSMenu* bar = [NSMenu new];
 
     NSMenu* app = [NSMenu new];
     [app addItemWithTitle:T(Msg::mac_about) action:@selector(orderFrontStandardAboutPanel:) keyEquivalent:@""];
@@ -376,7 +378,7 @@ struct Core {
     [app addItemWithTitle:T(Msg::mac_hide) action:@selector(hide:) keyEquivalent:@"h"];
     [app addItem:NSMenuItem.separatorItem];
     [app addItemWithTitle:T(Msg::mac_quit) action:@selector(terminate:) keyEquivalent:@"q"];
-    [main addItemWithTitle:@"Aqulify" action:nil keyEquivalent:@""].submenu = app;
+    [bar addItemWithTitle:@"Aqulify" action:nil keyEquivalent:@""].submenu = app;
 
     NSMenu* edit = [[NSMenu alloc] initWithTitle:T(Msg::mac_edit)];
     [edit addItemWithTitle:T(Msg::mac_undo) action:@selector(undo:) keyEquivalent:@"z"];
@@ -386,15 +388,15 @@ struct Core {
     [edit addItemWithTitle:T(Msg::mac_copy) action:@selector(copy:) keyEquivalent:@"c"];
     [edit addItemWithTitle:T(Msg::mac_paste) action:@selector(paste:) keyEquivalent:@"v"];
     [edit addItemWithTitle:T(Msg::mac_selectAll) action:@selector(selectAll:) keyEquivalent:@"a"];
-    [main addItemWithTitle:T(Msg::mac_edit) action:nil keyEquivalent:@""].submenu = edit;
+    [bar addItemWithTitle:T(Msg::mac_edit) action:nil keyEquivalent:@""].submenu = edit;
 
     NSMenu* win = [[NSMenu alloc] initWithTitle:T(Msg::mac_window)];
     [win addItemWithTitle:T(Msg::mac_minimize) action:@selector(performMiniaturize:) keyEquivalent:@"m"];
     [win addItemWithTitle:T(Msg::mac_closeWindow) action:@selector(performClose:) keyEquivalent:@"w"];
-    [main addItemWithTitle:T(Msg::mac_window) action:nil keyEquivalent:@""].submenu = win;
+    [bar addItemWithTitle:T(Msg::mac_window) action:nil keyEquivalent:@""].submenu = win;
     NSApp.windowsMenu = win;
 
-    NSApp.mainMenu = main;
+    NSApp.mainMenu = bar;
 }
 
 - (NSMenuItem*)addItem:(NSMenu*)menu title:(NSString*)title action:(SEL)action {
@@ -550,7 +552,7 @@ struct Core {
 // ------------------------------------------------------------------ WKWebView
 
 - (void)userContentController:(WKUserContentController*)ucc didReceiveScriptMessage:(WKScriptMessage*)message {
-    if (![message.name isEqualToString:@"aetherOpenUrl"] || ![message.body isKindOfClass:NSString.class]) return;
+    if (![message.name isEqualToString:@"aetherOpenUrl"] || ![message.body isKindOfClass:[NSString class]]) return;
     NSString* url = message.body;
     if (allowedExternalUrl(url)) [NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:url]];
 }
