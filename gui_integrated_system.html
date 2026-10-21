@@ -364,19 +364,24 @@
         <!-- 2D ZOOM & SKÁLA LEBEGŐ PANEL -->
         <div class="eq-zoom-overlay">
           <span class="zoom-lbl">dB skála:</span>
-          <select id="selectEqDbRange" class="ee-select" title="Függőleges dB és ms lépték zoom (±6, ±12, ±24, ±36 dB)">
+          <select id="selectEqDbRange" class="ee-select" title="Függőleges (dB) nagyítás. Folyamatosan: Ctrl+Shift+görgő a kurzor magasságánál; fel-le eltolás: húzás (jobb gombbal mindig) vagy Alt+görgő">
+            <option value="1">±1 dB</option>
+            <option value="3">±3 dB</option>
             <option value="6">±6 dB</option>
             <option value="12">±12 dB</option>
             <option value="24" selected>±24 dB</option>
             <option value="36">±36 dB</option>
+            <option value="48">±48 dB</option>
+            <option value="custom" id="optEqDbCustom" hidden>±24 dB</option>
           </select>
+          <button id="btnEqFitY" class="adw-btn zoom-btn" title="Görbére igazítás: a dB skála és a függőleges eltolás úgy áll be, hogy a teljes görbe és minden sáv látsszon">⤢ Igazít</button>
           <span class="zoom-divider"></span>
           <span class="zoom-lbl">Zoom:</span>
           <button id="btnEqZoomOut" class="adw-btn zoom-btn" title="Kicsinyítés">🔍−</button>
           <input type="range" id="sliderEqZoom" min="100" max="500" value="100" step="10" class="ee-slider zoom-slider" title="Frekvencia zoom (1.0x - 5.0x)">
           <span id="lblEqZoom" class="zoom-val">1.0x</span>
           <button id="btnEqZoomIn" class="adw-btn zoom-btn" title="Nagyítás">🔍+</button>
-          <button id="btnEqZoomReset" class="adw-btn zoom-btn" title="Nagyítás és skála alaphelyzetbe (1.0x, ±24 dB)">⟲ Reset</button>
+          <button id="btnEqZoomReset" class="adw-btn zoom-btn" title="Nagyítás, eltolás és skála alaphelyzetbe (1.0x, ±24 dB, 0 dB középen)">⟲ Reset</button>
           <button id="btnEqExpandHeight" class="adw-btn zoom-btn" title="Grafikon megnövelése / normál méret">↕</button>
         </div>
       </div>
@@ -1310,12 +1315,16 @@ let showPhase = true;
 // 2D EQ Zoom & Pan állapotok
 const BASE_MIN_F = 20, BASE_MAX_F = 20000;
 let eqMinFreq = 20, eqMaxFreq = 20000;
-let eqDbRange = 24.0; // választható: 6, 12, 24, 36
+let eqDbRange = 24.0;   // függőleges nagyítás: ±eqDbRange dB a rajzterület 90%-án (1 – 48 dB)
+let eqDbCenter = 0.0;  // függőleges eltolás: a rajzterület közepének dB-értéke
+const EQ_DB_RANGE_MIN = 1.0, EQ_DB_RANGE_MAX = 48.0, EQ_DB_CENTER_LIMIT = 48.0;
 let eqZoomX = 1.0;   // 1.0x - 5.0x
 let eqPanCenterLog = (Math.log10(BASE_MIN_F) + Math.log10(BASE_MAX_F)) / 2;
 let isCanvasPanning = false;
 let panStartX = 0;
 let panStartCenterLog = 0;
+let panStartY = 0;
+let panStartDbCenter = 0;
 let isEqExpanded = false;
 
 function updateEqBounds() {
@@ -1339,9 +1348,56 @@ function updateEqBounds() {
   }
 }
 
+// --- A 2D EQ grafikon geometriája (a rajzolás és az egérkezelés ugyanezt használja)
+function eqGeom() {
+  const dpr = window.devicePixelRatio || 1;
+  const padLeft = 46 * dpr, padRight = 50 * dpr, padTop = 16 * dpr, padBottom = 22 * dpr;
+  const plotW = eqCanvas.width - padLeft - padRight, plotH = eqCanvas.height - padTop - padBottom;
+  return { dpr, padLeft, padRight, padTop, padBottom, plotW, plotH, midY: padTop + plotH * 0.5 };
+}
+/** dB -> függőleges képpont (függőleges nagyítással és eltolással). */
+function dbToY(db, g) { return g.midY - ((db - eqDbCenter) / eqDbRange) * (g.plotH * 0.45); }
+/** Függőleges képpont -> dB. */
+function yToDb(y, g) { return eqDbCenter - ((y - g.midY) / (g.plotH * 0.45)) * eqDbRange; }
+/** A lebegő zoom panel helye a vászon képpontjaiban (ami alatta van, az nem látszik és nem kattintható). */
+function eqOverlayBox() {
+  const ov = document.querySelector(".eq-zoom-overlay");
+  if (!ov) return null;
+  const cr = eqCanvas.getBoundingClientRect(), o = ov.getBoundingClientRect();
+  if (!cr.width || !o.width) return null;
+  const k = eqCanvas.width / cr.width;
+  return { left: (o.left - cr.left) * k, right: (o.right - cr.left) * k, bottom: (o.bottom - cr.top) * k };
+}
+/**
+ * Egy sáv pöttyének helye. A nézeten kívüli (vagy a zoom panel alá eső) sáv a szélen nyílként jelenik meg:
+ * off = -1 fölötte, +1 alatta, 0 látható.
+ */
+function nodeView(n, G, box) {
+  const x = getX(n.freq, G.plotW, G.padLeft);
+  const yRaw = dbToY(bandHasGain(n) ? n.gain : 0, G);
+  const underPanel = box && x >= box.left - 8 * G.dpr && x <= box.right + 8 * G.dpr;
+  const top = (underPanel ? Math.max(G.padTop, box.bottom) : G.padTop) + 7 * G.dpr;
+  const bottom = G.padTop + G.plotH - 7 * G.dpr;
+  if (yRaw < top) return { x, y: top, off: -1 };
+  if (yRaw > bottom) return { x, y: bottom, off: 1 };
+  return { x, y: yRaw, off: 0 };
+}
+/** Nagyítva vagy eltolva van-e a nézet (ilyenkor bal gombos húzással is pásztázható). */
+function eqViewZoomed() { return eqZoomX > 1.01 || Math.abs(eqDbRange - 24) > 0.01 || Math.abs(eqDbCenter) > 0.01; }
+/**
+ * Egérgörgő iránya. Shift mellett a böngésző (Chromium / WebView2, WebKitGTK) a függőleges görgetést
+ * vízszintesre fordítja (deltaX), ezért módosítóbillentyűvel a deltaX is számít; sima görgőnél csak a deltaY
+ * (az érintőpad oldalirányú húzása ne állítsa a Q-t).
+ */
+function wheelDir(e) {
+  const useX = e.shiftKey || e.altKey;
+  const d = useX && Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+  return d > 0 ? 1 : d < 0 ? -1 : 0;
+}
+
 try {
-  const savedDbRange = localStorage.getItem("aqulify_eq_dbrange");
-  if (savedDbRange) eqDbRange = parseFloat(savedDbRange);
+  const savedDbRange = parseFloat(localStorage.getItem("aqulify_eq_dbrange"));
+  if (savedDbRange > 0) eqDbRange = Math.max(EQ_DB_RANGE_MIN, Math.min(EQ_DB_RANGE_MAX, savedDbRange));
 } catch (e) {}
 
 const eqCanvas = document.getElementById("eqCanvas");
@@ -1657,13 +1713,8 @@ function drawEq() {
 
   eqCtx.clearRect(0, 0, w, h);
 
-  const padLeft = 46 * dpr;
-  const padRight = 50 * dpr;
-  const padTop = 16 * dpr;
-  const padBottom = 22 * dpr;
-  const plotW = w - padLeft - padRight;
-  const plotH = h - padTop - padBottom;
-  const midY = padTop + plotH * 0.5;
+  const G = eqGeom();
+  const { padLeft, padTop, plotW, plotH, midY } = G;
 
   // Rács
   eqCtx.strokeStyle = "#282828";
@@ -1689,30 +1740,42 @@ function drawEq() {
     }
   }
 
-  // Szintek
-  const lvlDb = eqDbRange * 0.75;
-  const lvlDelay = (eqDbRange / 24.0) * 10.0;   // a ms-feliratok a dB-feliratok magasságában (0,75-ös szint)
-  const levels = [
-    { db: +lvlDb.toFixed(1), delay: +lvlDelay.toFixed(1) },
-    { db: 0, delay: 0 },
-    { db: -lvlDb.toFixed(1), delay: -lvlDelay.toFixed(1) }
-  ];
+  // dB rács és feliratok: „kerek” lépésköz a látható tartományhoz (0,25 … 24 dB)
+  const dbTop = yToDb(padTop, G), dbBottom = yToDb(padTop + plotH, G);
+  const dbSpan = dbTop - dbBottom;
+  const dbStep = [0.25, 0.5, 1, 2, 3, 6, 12, 24].find(st => dbSpan / st <= 7) || 24;
+  const dbDec = dbStep < 0.5 ? 2 : dbStep < 1 ? 1 : 0;
   eqCtx.textAlign = "right";
-  for (let lvl of levels) {
-    const y = midY - (lvl.db / eqDbRange) * (plotH * 0.45);
-    eqCtx.strokeStyle = (lvl.db === 0) ? "#454545" : "#282828";
+  for (let k = Math.ceil(dbBottom / dbStep); k * dbStep <= dbTop; k++) {
+    const db = k * dbStep;
+    const y = dbToY(db, G);
+    if (y < padTop + 4 * dpr || y > padTop + plotH - 4 * dpr) continue;
+    const isZero = Math.abs(db) < 1e-9;
+    eqCtx.strokeStyle = isZero ? "#454545" : "#282828";
     eqCtx.beginPath();
     eqCtx.moveTo(padLeft, y); eqCtx.lineTo(padLeft + plotW, y);
     eqCtx.stroke();
+    eqCtx.fillStyle = isZero ? "#ffffff" : "#77767b";
+    eqCtx.fillText((db > 0 ? "+" : "") + (isZero ? "0" : db.toFixed(dbDec)) + " dB", padLeft - 6 * dpr, y + 3 * dpr);
+  }
 
-    eqCtx.fillStyle = (lvl.db === 0) ? "#ffffff" : "#77767b";
-    eqCtx.fillText((lvl.db > 0 ? "+" : "") + lvl.db + " dB", padLeft - 6 * dpr, y + 3 * dpr);
-
-    if (showDelay) {
-      eqCtx.textAlign = "left";
-      eqCtx.fillStyle = "#ff7800";
-      eqCtx.fillText((lvl.delay > 0 ? "+" : "") + lvl.delay + " ms", padLeft + plotW + 6 * dpr, y + 3 * dpr);
-      eqCtx.textAlign = "right";
+  // Késleltetés tengely (jobb oldal): a rajzterület közepén 0 ms, a skála a dB nagyítással együtt változik
+  // (±24 dB-nél a dB-feliratok 0,75-ös szintjén ±10 ms); a feliratok mindig a görbéhez igazodnak
+  // ±6 dB alatt a késleltetés skálája már nem nagyít tovább (különben a görbe kitöltené a rajzterületet)
+  const delayScale = (Math.max(eqDbRange, 6) / 24.0) * 10.0 / 0.75;   // ms a 0,45 × magasságnál
+  const ovBox = eqOverlayBox();
+  if (showDelay) {
+    const msHalf = delayScale / 0.9;
+    const msStep = [0.05, 0.1, 0.2, 0.5, 1, 2, 2.5, 5, 10, 20, 25, 50, 100].find(st => msHalf / st <= 3) || 100;
+    const msDec = msStep < 0.1 ? 2 : msStep < 1 ? 1 : (msStep % 1 ? 1 : 0);
+    eqCtx.textAlign = "left";
+    eqCtx.fillStyle = "#ff7800";
+    for (let k = -Math.floor(msHalf / msStep); k * msStep <= msHalf; k++) {
+      const ms = k * msStep;
+      const y = midY - (ms / delayScale) * (plotH * 0.45);
+      if (y < padTop + 4 * dpr || y > padTop + plotH - 4 * dpr) continue;
+      if (ovBox && y - 8 * dpr < ovBox.bottom) continue;   // a zoom panel alatt nem látszana
+      eqCtx.fillText((ms > 0 ? "+" : "") + (k === 0 ? "0" : ms.toFixed(msDec)) + " ms", padLeft + plotW + 6 * dpr, y + 3 * dpr);
     }
   }
 
@@ -1744,8 +1807,6 @@ function drawEq() {
 
   // Késleltetés
   if (showDelay) {
-    // A görbe skálája a feliratokhoz igazodik: a ±lvlDelay ms felirat magasságában a görbe is ±lvlDelay ms
-    const delayScale = lvlDelay / 0.75;
     eqCtx.strokeStyle = "#ff7800";
     eqCtx.lineWidth = 1.9 * dpr;
     eqCtx.beginPath();
@@ -1758,7 +1819,7 @@ function drawEq() {
 
   // Preamp referenciaszint (ha nem 0 dB)
   if (currentPreamp !== 0) {
-    const py = midY - (currentPreamp / eqDbRange) * (plotH * 0.45);
+    const py = dbToY(currentPreamp, G);
     eqCtx.strokeStyle = "rgba(255, 120, 0, 0.4)";
     eqCtx.lineWidth = 1 * dpr;
     eqCtx.setLineDash([4 * dpr, 4 * dpr]);
@@ -1779,32 +1840,51 @@ function drawEq() {
     eqCtx.lineWidth = 2.4 * dpr;
     eqCtx.beginPath();
     for (let i = 0; i < points.length; i++) {
-      const total_db = points[i].mag_db + currentPreamp;
-      const y = midY - (total_db / eqDbRange) * (plotH * 0.45);
+      const y = dbToY(points[i].mag_db + currentPreamp, G);
       if (i === 0) eqCtx.moveTo(points[i].x, y); else eqCtx.lineTo(points[i].x, y);
     }
     eqCtx.stroke();
   }
 
-  // Zoom állapot jelzése a bal alsó sarokban ha nagyítva van
-  if (eqZoomX > 1.01) {
+  // Zoom állapot jelzése a bal alsó sarokban ha nagyítva / eltolva van
+  if (eqViewZoomed()) {
     eqCtx.fillStyle = "rgba(120, 174, 237, 0.85)";
     eqCtx.font = (9 * dpr) + "px monospace";
     eqCtx.textAlign = "left";
-    const minFStr = eqMinFreq >= 1000 ? (eqMinFreq / 1000).toFixed(1) + " kHz" : Math.round(eqMinFreq) + " Hz";
-    const maxFStr = eqMaxFreq >= 1000 ? (eqMaxFreq / 1000).toFixed(1) + " kHz" : Math.round(eqMaxFreq) + " Hz";
-    eqCtx.fillText(`🔍 ${minFStr} – ${maxFStr} (${eqZoomX.toFixed(1)}x) • Húzással pásztázható`, padLeft + 8 * dpr, padTop + plotH - 8 * dpr);
+    const parts = [];
+    if (eqZoomX > 1.01) {
+      const minFStr = eqMinFreq >= 1000 ? (eqMinFreq / 1000).toFixed(1) + " kHz" : Math.round(eqMinFreq) + " Hz";
+      const maxFStr = eqMaxFreq >= 1000 ? (eqMaxFreq / 1000).toFixed(1) + " kHz" : Math.round(eqMaxFreq) + " Hz";
+      parts.push(`${minFStr} – ${maxFStr} (${eqZoomX.toFixed(1)}x)`);
+    }
+    if (Math.abs(eqDbRange - 24) > 0.01 || Math.abs(eqDbCenter) > 0.01) {
+      const f = v => (v > 0 ? "+" : "") + v.toFixed(Math.abs(dbSpan) < 10 ? 1 : 0);
+      parts.push(`${f(dbBottom)} … ${f(dbTop)} dB`);
+    }
+    eqCtx.fillText(`🔍 ${parts.join(" • ")} • Húzással pásztázható`, padLeft + 8 * dpr, padTop + plotH - 8 * dpr);
   }
 
   eqCtx.restore(); // Vágás vége
 
   // Fogantyúk
   nodes.forEach((node, index) => {
-    const nx = getX(node.freq, plotW, padLeft);
-    const ny = midY - ((bandHasGain(node) ? node.gain : 0) / eqDbRange) * (plotH * 0.45);
+    const nv = nodeView(node, G, ovBox);
+    const nx = nv.x;
     const isSelected = (node.id === selectedNodeId);
 
     if (nx < padLeft - 10 * dpr || nx > padLeft + plotW + 10 * dpr) return;
+    // A nézeten kívüli (fölötte / alatta lévő, vagy a zoom panel alá eső) sáv a szélen nyílként látszik
+    if (nv.off) {
+      const up = nv.off < 0;
+      const ey = nv.y, d = (up ? -1 : 1) * 6 * dpr;
+      eqCtx.fillStyle = node.color;
+      eqCtx.beginPath();
+      eqCtx.moveTo(nx, ey + d); eqCtx.lineTo(nx - 6 * dpr, ey - d * 0.4); eqCtx.lineTo(nx + 6 * dpr, ey - d * 0.4);
+      eqCtx.closePath(); eqCtx.fill();
+      if (isSelected) { eqCtx.strokeStyle = "#ffffff"; eqCtx.lineWidth = 1.5 * dpr; eqCtx.stroke(); }
+      return;
+    }
+    const ny = nv.y;
 
     if (isSelected) {
       eqCtx.strokeStyle = "#ffffff";
@@ -1831,21 +1911,16 @@ eqCanvas.onmousedown = (e) => {
   const rect = eqCanvas.getBoundingClientRect();
   const x = (e.clientX - rect.left) * (eqCanvas.width / rect.width);
   const y = (e.clientY - rect.top) * (eqCanvas.height / rect.height);
-  const dpr = window.devicePixelRatio || 1;
-  const padLeft = 46 * dpr;
-  const padRight = 50 * dpr;
-  const padTop = 16 * dpr;
-  const padBottom = 22 * dpr;
-  const plotW = eqCanvas.width - padLeft - padRight;
-  const plotH = eqCanvas.height - padTop - padBottom;
-  const midY = padTop + plotH * 0.5;
+  const G = eqGeom();
+  const { dpr, padLeft, plotW } = G;
+  const box = eqOverlayBox();
 
   for (let n of nodes) {
-    const nx = getX(n.freq, plotW, padLeft);
-    if (nx < padLeft - 10 * dpr || nx > padLeft + plotW + 10 * dpr) continue;   // nem látható (kizoomolt) pötty
-    const ny = midY - ((bandHasGain(n) ? n.gain : 0) / eqDbRange) * (plotH * 0.45);
-    if (Math.hypot(x - nx, y - ny) < 16 * dpr) {
-      draggedNode = n;
+    const nv = nodeView(n, G, box);
+    if (nv.x < padLeft - 10 * dpr || nv.x > padLeft + plotW + 10 * dpr) continue;   // nem látható (kizoomolt) pötty
+    if (Math.hypot(x - nv.x, y - nv.y) < 16 * dpr) {
+      // A nézeten kívüli sáv (nyíl) csak kijelölhető; húzni a látható tartományba eltolva lehet
+      if (!nv.off) draggedNode = n;
       selectedNodeId = n.id;
       updateEqUI();
       drawEq();
@@ -1853,11 +1928,14 @@ eqCanvas.onmousedown = (e) => {
     }
   }
 
-  // Ha nem csomópontra kattintott: pásztázás (Pan) bal egérgombbal zoomolva vagy jobb gombbal
-  if (eqZoomX > 1.01 || e.button === 2) {
+  // Ha nem csomópontra kattintott: pásztázás (vízszintesen és függőlegesen) bal egérgombbal nagyított /
+  // eltolt nézetben, jobb egérgombbal mindig
+  if (eqViewZoomed() || e.button === 2) {
     isCanvasPanning = true;
     panStartX = e.clientX;
+    panStartY = e.clientY;
     panStartCenterLog = eqPanCenterLog;
+    panStartDbCenter = eqDbCenter;
     eqCanvas.style.cursor = 'grabbing';
   }
 };
@@ -1867,33 +1945,25 @@ window.addEventListener("mousemove", (e) => {
     const rect = eqCanvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (eqCanvas.width / rect.width);
     const y = (e.clientY - rect.top) * (eqCanvas.height / rect.height);
-    const dpr = window.devicePixelRatio || 1;
-    const padLeft = 46 * dpr;
-    const padRight = 50 * dpr;
-    const padTop = 16 * dpr;
-    const padBottom = 22 * dpr;
-    const plotW = eqCanvas.width - padLeft - padRight;
-    const plotH = eqCanvas.height - padTop - padBottom;
-    const midY = padTop + plotH * 0.5;
+    const G = eqGeom();
 
-    const newFreq = getFreq(x, plotW, padLeft);
-    const newGain = -((y - midY) / (plotH * 0.45)) * eqDbRange;
+    const newFreq = getFreq(x, G.plotW, G.padLeft);
+    const newGain = yToDb(y, G);
     draggedNode.freq = Math.max(10, Math.min(24000, newFreq));
     if (bandHasGain(draggedNode)) draggedNode.gain = Math.max(-36, Math.min(36, Math.round(newGain * 10) / 10));
     updateEqUI();
     drawEq();
   } else if (isCanvasPanning) {
     const rect = eqCanvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    const padLeft = 46 * dpr;
-    const padRight = 50 * dpr;
-    const plotW = (rect.width * dpr - padLeft - padRight);
+    const G = eqGeom();
+    const sx = eqCanvas.width / rect.width, sy = eqCanvas.height / rect.height;
+    // Vízszintes: csak nagyított frekvenciatartománynál van hova pásztázni
     const totalSpan = Math.log10(BASE_MAX_F) - Math.log10(BASE_MIN_F);
     const visibleSpan = totalSpan / eqZoomX;
-    const dx = (e.clientX - panStartX);
-    const dLog = -(dx * dpr / plotW) * visibleSpan;
-    eqPanCenterLog = panStartCenterLog + dLog;
+    eqPanCenterLog = panStartCenterLog - ((e.clientX - panStartX) * sx / G.plotW) * visibleSpan;
     updateEqBounds();
+    // Függőleges: a tartalom az egérrel együtt mozog
+    setEqDbView(eqDbRange, panStartDbCenter + ((e.clientY - panStartY) * sy / (G.plotH * 0.45)) * eqDbRange, true);
     drawEq();
   }
 });
@@ -1901,23 +1971,39 @@ window.addEventListener("mouseup", () => {
   draggedNode = null;
   if (isCanvasPanning) {
     isCanvasPanning = false;
-    eqCanvas.style.cursor = eqZoomX > 1.01 ? 'grab' : 'crosshair';
+    eqCanvas.style.cursor = eqViewZoomed() ? 'grab' : 'crosshair';
   }
 });
 eqCanvas.oncontextmenu = (e) => e.preventDefault();
 
 eqCanvas.onwheel = (e) => {
   e.preventDefault();
+  const dir = wheelDir(e);
+  if (!dir) return;
   // Billentyűkombináció esetén kényelmi zoom/pan:
+  if (e.ctrlKey && e.shiftKey) {
+    // Függőleges nagyítás a kurzor magasságánál (a kurzor alatti dB-érték helyben marad)
+    const rect = eqCanvas.getBoundingClientRect();
+    const G = eqGeom();
+    const y = (e.clientY - rect.top) * (eqCanvas.height / rect.height);
+    const d0 = yToDb(y, G);
+    const newRange = Math.max(EQ_DB_RANGE_MIN, Math.min(EQ_DB_RANGE_MAX, eqDbRange * (dir > 0 ? 1.25 : 0.8)));
+    setEqDbView(newRange, d0 + (eqDbCenter - d0) * newRange / eqDbRange);
+    return;
+  }
   if (e.ctrlKey) {
-    const zoomDelta = (e.deltaY > 0) ? -0.2 : 0.2;
+    const zoomDelta = (dir > 0) ? -0.2 : 0.2;
     setEqZoom(eqZoomX + zoomDelta);
+    return;
+  }
+  if (e.altKey) {
+    // Függőleges eltolás: lefelé görgetve lejjebb (kisebb dB-értékek felé) látunk
+    setEqDbView(eqDbRange, eqDbCenter - dir * (2 * eqDbRange / 0.9) * 0.08);
     return;
   }
   if (e.shiftKey) {
     const visibleSpan = (Math.log10(BASE_MAX_F) - Math.log10(BASE_MIN_F)) / eqZoomX;
-    const panDelta = (e.deltaY > 0) ? visibleSpan * 0.08 : -visibleSpan * 0.08;
-    eqPanCenterLog += panDelta;
+    eqPanCenterLog += dir * visibleSpan * 0.08;
     updateEqBounds();
     drawEq();
     return;
@@ -1925,7 +2011,7 @@ eqCanvas.onwheel = (e) => {
   // Alapértelmezett sima egérgörgő: kizárólag a kijelölt sáv Q értéke (a felhasználó kérésének megfelelően)!
   const selNode = nodes.find(n => n.id === selectedNodeId);
   if (selNode) {
-    const delta = (e.deltaY > 0) ? -0.15 : 0.15;
+    const delta = (dir > 0) ? -0.15 : 0.15;
     selNode.q = Math.max(0.1, Math.min(100.0, Math.round((selNode.q + delta) * 100) / 100));
     updateEqUI();
     drawEq();
@@ -2535,17 +2621,15 @@ eqCanvas.addEventListener("dblclick", (e) => {
   const rect = eqCanvas.getBoundingClientRect();
   const x = (e.clientX - rect.left) * (eqCanvas.width / rect.width);
   const y = (e.clientY - rect.top) * (eqCanvas.height / rect.height);
-  const dpr = window.devicePixelRatio || 1;
-  const padLeft = 46 * dpr, padRight = 50 * dpr, padTop = 16 * dpr, padBottom = 22 * dpr;
-  const plotW = eqCanvas.width - padLeft - padRight;
-  const plotH = eqCanvas.height - padTop - padBottom;
-  const midY = padTop + plotH * 0.5;
-  if (x < padLeft || x > padLeft + plotW) return;
-  for (const n of nodes) {   // meglévő pötty fölött nem hozunk létre újat
-    const ny = midY - ((bandHasGain(n) ? n.gain : 0) / eqDbRange) * (plotH * 0.45);
-    if (Math.hypot(x - getX(n.freq, plotW, padLeft), y - ny) < 16 * dpr) return;
+  const G = eqGeom();
+  const { dpr, padLeft, padTop, plotW, plotH } = G;
+  if (x < padLeft || x > padLeft + plotW || y < padTop || y > padTop + plotH) return;
+  const box = eqOverlayBox();
+  for (const n of nodes) {   // meglévő pötty (vagy nyíl) fölött nem hozunk létre újat
+    const nv = nodeView(n, G, box);
+    if (Math.hypot(x - nv.x, y - nv.y) < 16 * dpr) return;
   }
-  addEqNode(Math.round(getFreq(x, plotW, padLeft)), -((y - midY) / (plotH * 0.45)) * eqDbRange);
+  addEqNode(Math.round(getFreq(x, plotW, padLeft)), yToDb(y, G));
 });
 
 function updateDeleteNodeButton() {
@@ -2595,20 +2679,69 @@ function setEqZoom(val) {
   const lbl = document.getElementById("lblEqZoom");
   if (lbl) lbl.innerText = eqZoomX.toFixed(1) + "x";
   if (!isCanvasPanning) {
-    eqCanvas.style.cursor = eqZoomX > 1.01 ? 'grab' : 'crosshair';
+    eqCanvas.style.cursor = eqViewZoomed() ? 'grab' : 'crosshair';
   }
   drawEq();
 }
 
+/** Függőleges nézet: dB nagyítás (±range) és eltolás (a közép dB-értéke). */
+function setEqDbView(range, center, noDraw) {
+  eqDbRange = Math.max(EQ_DB_RANGE_MIN, Math.min(EQ_DB_RANGE_MAX, Math.round(range * 100) / 100));
+  eqDbCenter = Math.max(-EQ_DB_CENTER_LIMIT, Math.min(EQ_DB_CENTER_LIMIT, Math.round(center * 100) / 100));
+  if (Math.abs(eqDbCenter) < 0.005) eqDbCenter = 0;
+  try { localStorage.setItem("aqulify_eq_dbrange", eqDbRange); } catch (err) {}
+  updateDbRangeSelect();
+  if (!isCanvasPanning) eqCanvas.style.cursor = eqViewZoomed() ? 'grab' : 'crosshair';
+  if (!noDraw) drawEq();
+}
+/** A dB skála választó a gyorsgombok egyikét, vagy a folyamatos (egyedi) értéket mutatja. */
+function updateDbRangeSelect() {
+  const sel = document.getElementById("selectEqDbRange"), custom = document.getElementById("optEqDbCustom");
+  if (!sel || !custom) return;
+  const preset = [...sel.options].find(o => o !== custom && Math.abs(parseFloat(o.value) - eqDbRange) < 0.01);
+  if (preset) { custom.hidden = true; sel.value = preset.value; }
+  else {
+    custom.hidden = false;
+    custom.text = `±${eqDbRange < 10 ? eqDbRange.toFixed(1) : Math.round(eqDbRange)} dB`;
+    sel.value = "custom";
+  }
+}
+/** Görbére igazítás: a teljes (preamppal együtt rajzolt) görbe és minden látható sáv férjen el. */
+function fitEqDbView() {
+  let lo = Infinity, hi = -Infinity;
+  if (showEqCurve) {
+    const N = 300, a = Math.log10(eqMinFreq), b = Math.log10(eqMaxFreq);
+    for (let i = 0; i <= N; i++) {
+      const v = evalChain(Math.pow(10, a + (b - a) * i / N)).mag_db + currentPreamp;
+      lo = Math.min(lo, v); hi = Math.max(hi, v);
+    }
+  }
+  nodes.forEach(n => {
+    if (n.freq < eqMinFreq || n.freq > eqMaxFreq) return;
+    const v = bandHasGain(n) ? n.gain : 0;
+    lo = Math.min(lo, v); hi = Math.max(hi, v);
+  });
+  if (!isFinite(lo)) { lo = 0; hi = 0; }
+  if (hi - lo < 2) { const m = (hi + lo) / 2; lo = m - 1; hi = m + 1; }   // legalább 2 dB magas tartomány
+  // A görbe a zoom panel alatti és a rajzterület alja fölötti sávba kerüljön (10 px ráhagyással)
+  const G = eqGeom(), box = eqOverlayBox();
+  const topY = Math.max(G.padTop, box ? box.bottom : 0) + 10 * G.dpr, botY = G.padTop + G.plotH - 10 * G.dpr;
+  let k = (botY - topY) / (hi - lo);                        // képpont / dB
+  const range = Math.max(EQ_DB_RANGE_MIN, Math.min(EQ_DB_RANGE_MAX, Math.ceil(G.plotH * 0.45 / k * 10) / 10));
+  k = G.plotH * 0.45 / range;
+  setEqDbView(range, (hi + lo) / 2 + ((topY + botY) / 2 - G.midY) / k);
+}
+
 const selectEqDbRange = document.getElementById("selectEqDbRange");
 if (selectEqDbRange) {
-  selectEqDbRange.value = String(Math.round(eqDbRange));
+  updateDbRangeSelect();
   selectEqDbRange.onchange = (e) => {
-    eqDbRange = parseFloat(e.target.value);
-    try { localStorage.setItem("aqulify_eq_dbrange", eqDbRange); } catch (err) {}
-    drawEq();
+    const v = parseFloat(e.target.value);
+    if (v > 0) setEqDbView(v, eqDbCenter);   // a gyorsgomb a nagyítást állítja, az eltolás marad
   };
 }
+const btnEqFitY = document.getElementById("btnEqFitY");
+if (btnEqFitY) btnEqFitY.onclick = () => fitEqDbView();
 
 const btnEqZoomIn = document.getElementById("btnEqZoomIn");
 if (btnEqZoomIn) btnEqZoomIn.onclick = () => setEqZoom(eqZoomX + 0.5);
@@ -2622,9 +2755,7 @@ if (sliderEqZoom) sliderEqZoom.oninput = (e) => setEqZoom(parseInt(e.target.valu
 const btnEqZoomReset = document.getElementById("btnEqZoomReset");
 if (btnEqZoomReset) {
   btnEqZoomReset.onclick = () => {
-    eqDbRange = 24.0;
-    if (selectEqDbRange) selectEqDbRange.value = "24";
-    try { localStorage.setItem("aqulify_eq_dbrange", "24"); } catch (err) {}
+    setEqDbView(24.0, 0.0, true);
     eqPanCenterLog = (Math.log10(BASE_MIN_F) + Math.log10(BASE_MAX_F)) / 2;
     setEqZoom(1.0);
   };
