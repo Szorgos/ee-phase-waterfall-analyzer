@@ -60,6 +60,22 @@ static void testSpectrum() {
     float mx = 0;
     for (float v : an.levels()) mx = std::max(mx, v);
     CHECK(mx == 0.0f, "csendnél minden sáv 0");
+
+    // 44,1 kHz: ugyanazok a sávhatárok (a skála nem csúszik el), a Nyquist fölötti sávok üresek
+    const double sr2 = 44100.0;
+    for (size_t i = 0; i < 4096; ++i) {
+        const float v = static_cast<float>(amp * std::sin(2.0 * kPi * 1000.0 * i / sr2));
+        lr[2 * i] = v;
+        lr[2 * i + 1] = v;
+    }
+    an.push(lr.data(), 4096);
+    an.compute(sr2);
+    size_t peak2 = 0;
+    for (size_t i = 1; i < an.levels().size(); ++i) if (an.levels()[i] > an.levels()[peak2]) peak2 = i;
+    float above = 0.0f;
+    for (size_t i = bandOf(22100.0) + 1; i < an.levels().size(); ++i) above = std::max(above, an.levels()[i]);
+    CHECK(peak2 + 1 >= expected && peak2 <= expected + 1 && above == 0.0f,
+          "44,1 kHz: 1 kHz a %zu. sávban (várt: %zu), a 22,05 kHz feletti sávok üresek", peak2, expected);
 }
 
 static void testParamFile() {

@@ -363,7 +363,12 @@ struct Equalizer::Impl {
         size_t lat = 0;
         for (Channel& c : ch) {
             const size_t ovs_lat = c.sOversampler.latency();
+            // Módváltáskor az új FIR/FFT kernel közvetlenül lép életbe (get_latency() itt építi fel).
+            // Simítással az LSP az első blokkban még a régi kernellel számolna és abból úsztatna át, de SPM után
+            // ott nem FIR kernel van (hanem SPM magnitúdó) -> kattanás. A váltást a lánc úgyis le-fel úsztatja.
+            if (mode_changed) c.sEqualizer.set_smooth(false);
             const size_t eq_lat = c.sEqualizer.get_latency();
+            if (mode_changed) c.sEqualizer.set_smooth(true);
             lat = std::max(lat, ovs_lat + eq_lat);
         }
         latency = lat;

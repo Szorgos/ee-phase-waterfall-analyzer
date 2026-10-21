@@ -30,9 +30,9 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
 
 ## 🎧 Főbb Képességek és Funkciók
 
-1. **Élő 3D Akusztikai Vízesés & Spektrogram (Hardveres GPU gyorsítás / Vulkan / Direct3D):**
+1. **Élő 3D Akusztikai Vízesés & Spektrogram (Hardveres GPU gyorsítás / OpenGL / Direct3D):**
    * A motor valódi FFT spektruma (160 logaritmikus sáv, 10 Hz – 24 kHz) 60 FPS gördüléssel.
-   * **GPU-gyorsítás a zene védelmében:** A 3D felületet teljes egészében a videokártya rajzolja (Linuxon Vulkan/Mesa, Windowson Direct3D backenddel a WebGL alatt). A grafika így **nem terheli a processzort**, és még a legösszetettebb nézeteknél sem akasztja meg a valós idejű zenelejátszást (zéró hangkimaradás).
+   * **GPU-gyorsítás a zene védelmében:** A 3D felületet a videokártya rajzolja (Linuxon OpenGL/Mesa, Windowson Direct3D backenddel a WebGL alatt); a rács pontjait és színeit a JavaScript számolja, így a grafika **csak kis mértékben terheli a processzort**, és még a legösszetettebb nézeteknél sem akasztja meg a valós idejű zenelejátszást (zéró hangkimaradás).
    * **Fakítás és testreszabás:** Állítható hőtérkép-fakítás csúszka (élénk színektől a lágy szürkeárnyalatig); időlépcsők: 60 / 120 / 180; nézőpontok: 3D izometrikus, oldalsó profil, felülnézet.
    * **Frekvenciaskála (10 Hz – 24 kHz):** A vízesés alatt elhelyezett skála azonnal leolvashatóvá teszi a csúcsokat. A skála két szélén kis diszkrét felirat mutatja az elmúlt 10 másodpercben mért legmélyebb (Hz) és legmagasabb (kHz) frekvenciát, a gyors kék határolójelek pedig valós időben követik a hangsáv tartományát.
    * **Előcsengés (pre-ringing) jelzése:** FIR / FFT / SPM (lineáris fázisú) módban egy diszkrét felirat jelzi, hogy előcsengés lehetséges. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik; a program nem nagyítja fel.
@@ -43,9 +43,9 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
 
 3. **8 850+ Fejhallgató AutoEq Profil Kereső & Kézi Importálás:**
    * **Valós AutoEq Adatbázis Integráció:** A Jaakko Pasanen-féle hivatalos AutoEq tároló több mint 8 850 fül- és fejhallgatójának (oratory1990, Crinacle, Rtings stb.) élő keresése és profil-letöltése közvetlenül a GitHubról egyetlen kattintással.
-   * **Kézi import (fájl vagy beillesztett szöveg):** paraméteres szűrőlisták `Filter N: ON PK Fc … Hz Gain … dB Q …` formában (AutoEq ParametricEQ, Equalizer APO, REW), PK / LS(C) / HS(C) / LP / HP típusokkal és `Preamp:` sorral. Grafikus EQ-t (GraphicEQ) és CSV frekvenciamenetet nem alkalmaz.
+   * **Kézi import (fájl vagy beillesztett szöveg):** paraméteres szűrőlisták `Filter N: ON PK Fc … Hz Gain … dB Q …` formában (AutoEq ParametricEQ, Equalizer APO, REW), PK / LS(C) / HS(C) / LP / HP / NO / AP / BP típusokkal (Q vagy BW Oct megadással) és `Preamp:` sorral. A kikapcsolt (OFF) és a nem támogatott sorokat kihagyja, és kiírja, hány sort és miért. Grafikus EQ-t (GraphicEQ) és CSV frekvenciamenetet nem alkalmaz.
    * **EQ profilok:** AutoEq importkor és kézi beállításkor automatikusan profil készül; az aktív profil neve a fejlécben látszik, és a korábbi profilok újraindítás után is választhatók (tárolás: Linuxon `~/.config/aqulify/presets.json`, Windowson `%APPDATA%\Aqulify\presets.json`). Az importált AutoEq profil érintetlen marad: kézi módosításkor „– módosított” nevű saját profil készül.
-   * **Automatikus preamp (dupla levonás nélkül):** Induláskor 0 dB. Ha az EQ-görbe klippelne, a preamp magától a görbe csúcsához igazodik (és a limiter bekapcsol). Ha az importált profil tartalmaz preampot, pontosan azt használja; ha nem, az automatika állítja be.
+   * **Automatikus preamp (dupla levonás nélkül):** Induláskor 0 dB. Ha az EQ-görbe klippelne, a preamp magától a görbe csúcsához igazodik (és a limiter bekapcsol). Ha az importált profil tartalmaz preampot, pontosan azt használja; ha nem, az automatika állítja be. A preamp az EQ része: kikapcsolt EQ-nál (Bypass) nem hat, így a Bypass az eredeti, érintetlen jelet adja.
 
 4. **Kézi Mesterkapcsolók Minden Modulhoz (Ki/Bekapcsolható lánc):**
    * **Parametrikus EQ (LSP Parametric Equalizer):** legfeljebb 32 sáv, 12 szűrőtípus, RLC / BWC / LRX / APO szűrőmód, x1–x4 meredekség; IIR, FIR, FFT és SPM mód, decramp.
@@ -55,7 +55,7 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
    * **Bass Enhancer (Calf):** pszichoakusztikai hiányzó alaphang szintézis (amount, harmonics, scope, floor, blend, listen, bemeneti és kimeneti erősítés).
 
 5. **Motor és felület:**
-   * Linuxon PipeWire virtuális kimenet („Aqulify”), Windowson Equalizer APO plugin. A hangszál zárak nélkül veszi át a beállításokat; a felület és a grafika külön folyamatban fut, nem tartja fel a lejátszást.
+   * Linuxon PipeWire virtuális kimenet („Aqulify”), Windowson Equalizer APO plugin. A hangszál zárak nélkül veszi át a beállításokat; a modulok be- és kikapcsolása, valamint az EQ-mód és a decramp váltása rövid le- és felúsztatással, kattanás nélkül történik (lineáris fázisú módra váltáskor a kimenet a módhoz tartozó késleltetés kitöltéséig, kb. 0,1 s-ig néma). A felület és a grafika külön folyamatban fut, nem tartja fel a lejátszást.
    * WebSocket híd a `127.0.0.1` címen (az első szabad port: 47810–47814, végső tartalékként 8080): a motor a spektrumot, az EQ-görbét, a limiter erősítéscsökkentését és a mentett állapotot küldi; a felület az összes modulbeállítást, az IR-t és az EQ profilokat.
 
 ---

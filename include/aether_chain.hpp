@@ -99,15 +99,27 @@ public:
 
     // ------------------------------------------------------------ valós idejű szál
 
-    /** Új paraméterek alkalmazása (valós idejű szálból, foglalás nélkül). */
+    /**
+     * Új paraméterek alkalmazása (valós idejű szálból, foglalás nélkül).
+     *
+     * Modul be/ki kapcsolásakor és késleltetést változtató beállításnál (EQ mód, decramp, limiter
+     * túlmintavételezés / előretekintés) a váltás kattanásmentes: rövid leúsztatás, váltás, majd a
+     * kimenet az új késleltetés kitelte után úsztatva tér vissza. Egyéb változás azonnal hat.
+     */
     void applyParamsRT(const ParamData& in) {
         ParamData d = in;
         sanitizeParams(d);
-        const bool limWasOn = current_.has(kFlagLimiter);
+        workerParams_.write(d);
+        if (fade_ == Fade::Out) { pending_ = d; return; }   // a leúsztatás végén ez lép életbe
+        if (needsDeclick(current_, d)) {
+            pending_ = d;
+            // Felúsztatás közben a pillanatnyi szintről indul a leúsztatás (néma várakozásnál azonnal vált)
+            if (fade_ == Fade::None) fadePos_ = fadeLen_;
+            fade_ = Fade::Out;
+            return;
+        }
         current_ = d;
         applyParamsInternal(d);
-        if (d.has(kFlagLimiter) && !limWasOn) limiter_.reset();
-        workerParams_.write(d);
     }
 
     const ParamData& params() const { return current_; }
@@ -154,14 +166,95 @@ private:
         bass_.setSampleRate(sr);
         crossfeed_.setSampleRate(sr);
         sampleRate_.store(sr);
+        // Mintavétel-váltáskor a lánc úgyis újraindul: a függő váltás azonnal érvényes
+        if (fade_ == Fade::Out) current_ = pending_;
+        fade_ = Fade::None;
+        fadeSamples_ = std::max(1.0f, 0.005f * static_cast<float>(sr));   // 5 ms
+        fadeLen_ = static_cast<size_t>(fadeSamples_ + 0.5f);
+        fadePos_ = fadeLen_;
         applyParamsInternal(current_);
+        preampCur_ = preampTarget_;
         eq_.reset();
         limiter_.reset();
         crossfeed_.reset();
     }
 
+    /** Kell-e kattanásmentes (le-fel úsztatott) váltás a két beállítás között. */
+    static bool needsDeclick(const ParamData& a, const ParamData& b) {
+        const uint32_t mods = kFlagEq | kFlagBass | kFlagCrossfeed | kFlagLimiter;
+        if ((a.flags & mods) != (b.flags & mods)) return true;
+        if (b.has(kFlagEq) && (a.eqMode != b.eqMode || a.eqDecramp != b.eqDecramp)) return true;
+        if (b.has(kFlagLimiter) && (a.limOversampling != b.limOversampling || a.limLookaheadMs != b.limLookaheadMs))
+            return true;
+        return false;
+    }
+
+    /** Váltás a függő beállításra (néma pillanatban, a leúsztatás végén). */
+    void switchToPending() {
+        const ParamData old = current_;
+        current_ = pending_;
+        applyParamsInternal(current_);
+        preampCur_ = preampTarget_;
+        // A most bekapcsolt modul ne a régi (elavult) belső állapotából induljon
+        eqWasReset_ = current_.has(kFlagEq) &&
+                      (!old.has(kFlagEq) || old.eqMode != current_.eqMode || old.eqDecramp != current_.eqDecramp);
+        if (eqWasReset_) eq_.reset();
+        if (current_.has(kFlagLimiter)) limiter_.reset();
+        if (current_.has(kFlagBass) && !old.has(kFlagBass)) bass_.reset();
+        if (current_.has(kFlagCrossfeed) && !old.has(kFlagCrossfeed)) crossfeed_.reset();
+    }
+
+    /**
+     * Váltás után ennyi mintáig néma a kimenet: csak az újraindított (üres késleltető vonalú) modulok
+     * késleltetése számít. A változatlanul futó EQ (pl. FIR módban, más modul kapcsolásakor) folytatja
+     * a jelet, ott nem kell kivárni a késleltetését. Az EQ a pontos értéket a feldolgozás után adja meg.
+     */
+    size_t chainLatency() const {
+        return (eqWasReset_ && current_.has(kFlagEq) ? eq_.latency() : 0) +
+               (current_.has(kFlagLimiter) ? limiter_.latency() : 0);
+    }
+
+    /**
+     * Le-, illetve felúsztatás a kimeneten (a feldolgozott blokk után). Az erősítés fadePos_ / fadeLen_.
+     * A leúsztatás a blokk végére igazodik (előtte a szint változatlan), így a váltás pontosan a blokkhatáron
+     * történik, és nem marad néma blokkmaradék; csak az újraindított modulok késleltetéséig néma a kimenet.
+     */
+    void applyFade(float* L, float* R, size_t m) {
+        const float inv = 1.0f / static_cast<float>(fadeLen_);
+        if (fade_ == Fade::Out) {
+            const size_t hold = fadePos_ < m ? m - fadePos_ : 0;   // a hátralévő leúsztatás a blokk végére esik
+            const float g0 = static_cast<float>(fadePos_) * inv;
+            size_t i = 0;
+            for (; i < hold; ++i) { L[i] *= g0; R[i] *= g0; }
+            for (; i < m && fadePos_ > 0; ++i) {
+                --fadePos_;
+                const float g = static_cast<float>(fadePos_) * inv;
+                L[i] *= g;
+                R[i] *= g;
+            }
+            if (fadePos_ == 0) {
+                for (; i < m; ++i) { L[i] = 0.0f; R[i] = 0.0f; }
+                switchToPending();
+                fade_ = Fade::In;
+                sinceSwitch_ = 0;
+            }
+            return;
+        }
+        // Fade::In: az újraindított modulok késleltetésének kiteltéig csend (üres késleltető vonal), utána felúsztatás
+        const size_t lat = chainLatency();
+        for (size_t i = 0; i < m; ++i, ++sinceSwitch_) {
+            if (sinceSwitch_ < lat) { L[i] = 0.0f; R[i] = 0.0f; continue; }
+            if (++fadePos_ >= fadeLen_) { fadePos_ = fadeLen_; fade_ = Fade::None; break; }
+            const float g = static_cast<float>(fadePos_) * inv;
+            L[i] *= g;
+            R[i] *= g;
+        }
+    }
+
     void applyParamsInternal(const ParamData& d) {
-        preampGain_ = ee::dbToGain(d.preampDb);
+        // Az előerősítés az EQ része (EasyEffects: Equalizer "inputGain"): kikapcsolt EQ-nál nem hat
+        preampTarget_ = d.has(kFlagEq) ? ee::dbToGain(d.preampDb) : 1.0f;
+        preampStep_ = (preampTarget_ - preampCur_) / fadeSamples_;
         eq_.update(d);
         bass_.update(d);
         crossfeed_.update(d);
@@ -225,8 +318,20 @@ private:
         quantum_.store(static_cast<uint32_t>(m), std::memory_order_relaxed);
         const ParamData& d = current_;
 
-        if (preampGain_ != 1.0f)
-            for (size_t i = 0; i < m; ++i) { L[i] *= preampGain_; R[i] *= preampGain_; }
+        if (preampCur_ != preampTarget_) {
+            // Előerősítés-változás 5 ms alatt (nincs lépcső / kattanás)
+            for (size_t i = 0; i < m; ++i) {
+                if (preampCur_ != preampTarget_) {
+                    preampCur_ += preampStep_;
+                    if ((preampStep_ > 0.0f && preampCur_ >= preampTarget_) || (preampStep_ <= 0.0f && preampCur_ <= preampTarget_))
+                        preampCur_ = preampTarget_;
+                }
+                L[i] *= preampCur_;
+                R[i] *= preampCur_;
+            }
+        } else if (preampCur_ != 1.0f) {
+            for (size_t i = 0; i < m; ++i) { L[i] *= preampCur_; R[i] *= preampCur_; }
+        }
 
         if (d.has(kFlagEq)) eq_.process(L, R, m);
         if (d.has(kFlagBass)) bass_.process(L, R, m);
@@ -243,6 +348,8 @@ private:
                 if (R[i] > 1.0f) R[i] = 1.0f; else if (R[i] < -1.0f) R[i] = -1.0f;
             }
         }
+
+        if (fade_ != Fade::None) applyFade(L, R, m);
     }
 
     // ------------------------------------------------------------ háttérszál
@@ -357,7 +464,14 @@ private:
     ee::Crossfeed crossfeed_;
     ee::Limiter limiter_;
     ParamData current_;
-    float preampGain_ = 1.0f;
+    ParamData pending_;                 // le-fel úsztatott váltásnál a leúsztatás végén lép életbe
+    enum class Fade { None, Out, In };
+    Fade fade_ = Fade::None;
+    float fadeSamples_ = 240.0f;        // 5 ms (a mintavételi frekvenciából számolva)
+    size_t fadeLen_ = 240, fadePos_ = 240;   // úsztatás hossza mintában; pillanatnyi erősítés = fadePos_ / fadeLen_
+    size_t sinceSwitch_ = 0;
+    bool eqWasReset_ = false;           // a legutóbbi váltásnál újraindult-e az EQ (üres késleltető vonal)
+    float preampCur_ = 1.0f, preampTarget_ = 1.0f, preampStep_ = 0.0f;
     float convIn_ = 1.0f, convOut_ = 1.0f, convDry_ = 0.0f, convWet_ = 1.0f;
     std::vector<float> aL_, aR_, bL_, bR_, dryL_, dryR_;
     Stage irStage_;

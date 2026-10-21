@@ -1,3 +1,15 @@
+### Javítások (1.6.3)
+- **Felület ↔ motor:** megszűnt a felület és a motor közötti folyamatos üzenetváltás (tétlen felületnél is kb. 23 EQ-üzenet másodpercenként). Ennek következményei is megszűntek: a kézi módosítás ismét mentődik az aktív profilba, AutoEq-profil módosításakor létrejön a „– módosított” profil, a motor pedig nyitott felület mellett is elmenti a beállításokat (`params.bin`).
+- **Automatikus preamp:** az új sáverősítés és a hozzá tartozó preamp egyszerre lép életbe, profilváltáskor is (nincs rövid, előerősítés nélküli kiugrás).
+- **EQ Bypass:** a preamp az EQ része, kikapcsolt EQ-nál nem hat – a Bypass az eredeti, érintetlen jelet adja.
+- **Kattanásmentes váltás:** modul be/ki kapcsolásakor, EQ-mód, decramp, limiter túlmintavételezés és előretekintés váltásakor rövid le- és felúsztatás; a preamp változása 5 ms alatt történik. Egy másik modul kapcsolásakor a változatlanul futó (pl. FIR módú) EQ nem némul el.
+- **Sávok:** sáv nélkül nincs hatástalan szerkesztőmező, csak útmutatás; az utolsó sáv is törölhető (ekkor az EQ kikapcsol); üres profil betöltése a sávlistát is üríti; a tartományon kívül beírt érték a mező tartományára áll be.
+- **Import:** a formátumfelismerés és az importálás ugyanazt a feldolgozót használja; új típusok: NO, AP, BP és BW Oct megadás; a kikapcsolt (OFF) sorokat kihagyja, és kiírja, hány sort és miért hagyott ki.
+- **Kijelzés:** motor nélkül a Limiter valós (kikapcsolt) állapotát mutatja; a Convolver nem ír ki nem létező IR-t; a Bass Enhancer „Alsó határ frekvencia” csúszkája csak bekapcsolt alsó határnál látszik; a preamp jelvény a mentett értéket mutatja; a késleltetés-tengely feliratai a görbéhez igazodnak; az előcsengés-jelzés minden EQ-bekapcsolásnál frissül; a limiter szintmérő csak 0 dBFS közelében piros; a Limiter fülön a választott túlmintavételezés látszik.
+- **Vízesés és skála:** a vízesés másodpercenként 60 sort lép a monitor frissítésétől függetlenül; 44,1 kHz-en sem csúszik el a frekvenciaskála; a skála szélein a 10 másodperces szélsőértékek „min” / „max” jelölést kaptak.
+- **Verzió:** a motor elküldi a verziószámát; ha eltér a felületétől (pl. félbemaradt frissítés), a fejléc mindkettőt mutatja.
+- **Elrendezés:** szélesebb számmezők (Q, Gain, Preamp); 1000–1200 px széles ablakban a fejléc nem csúszik össze; alacsony ablakban (pl. 1000×640) a sávszerkesztő görgetés nélkül látszik.
+
 ### Újdonságok (1.6.2)
 - **2D Grafikon Zoom & Pásztázás:** A 2D frekvenciameneti rajzterület mostantól finomhangolható zoommal és pásztázással rendelkezik (a sima egérgörgő funkciója érintetlenül megmaradt a szűrősávok Q-faktorának állítására):
   - **Függőleges dB skála:** Választható `±6 dB`, `±12 dB`, `±24 dB` és `±36 dB` nézet a tized-dB-es finomhangolásokhoz és mastering feladatokhoz.

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(aqulify 
-    VERSION 1.6.2
+    VERSION 1.6.3
     DESCRIPTION "Aqulify - Real-time Phase, Group Delay & Acoustic Waterfall DSP Suite"
     LANGUAGES C CXX
 )
@@ -85,7 +85,7 @@ if(WIN32)
         add_executable(Aqulify WIN32 windows/engine/aether_engine.cpp ${EE_RES_DIR}/engine.rc)
         target_include_directories(Aqulify PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR})
         target_link_libraries(Aqulify PRIVATE ee_dsp_core ws2_32 iphlpapi ole32 oleaut32 shell32 advapi32 user32 uuid)
-        target_compile_definitions(Aqulify PRIVATE UNICODE _UNICODE)
+        target_compile_definitions(Aqulify PRIVATE UNICODE _UNICODE AQULIFY_VERSION="${PROJECT_VERSION}")
         if(MSVC)
             target_link_options(Aqulify PRIVATE /ENTRY:mainCRTStartup /MANIFEST:NO)
             set_property(TARGET Aqulify PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
@@ -207,6 +207,7 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32)
     target_include_directories(aqulify-engine PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
     target_link_directories(aqulify-engine PRIVATE ${PIPEWIRE_LIBRARY_DIRS})
     target_link_libraries(aqulify-engine PRIVATE ee_dsp_core ${PIPEWIRE_LIBRARIES} Threads::Threads)
+    target_compile_definitions(aqulify-engine PRIVATE AQULIFY_VERSION="${PROJECT_VERSION}")
 
     if(BUILD_LINUX_GUI)
         pkg_check_modules(WEBKITGTK IMPORTED_TARGET webkit2gtk-4.1)

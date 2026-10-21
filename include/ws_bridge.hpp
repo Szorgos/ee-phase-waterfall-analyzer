@@ -455,7 +455,11 @@ private:
         if (!cb_.getParams || !cb_.setParams) return;
 
         ParamData p = cb_.getParams();
+        const ParamData before = p;
         bool changed = true;
+        // A felület a set_eq / get_eq_response üzenethez sorszámot ad; a válasz visszaküldi,
+        // így a felület tudja, melyik sávállapothoz tartozik a görbe.
+        const double reqSeq = num(msg, "seq", -1.0);
 
         bool eqChanged = false;
         if (type == "set_preamp" && val) {
@@ -521,11 +525,13 @@ private:
             sendText(buildStateMessage("ir"));
             return;
         } else if (type == "get_eq_response") {
-            sendText(buildEqResponseMessage(p));
+            sendText(buildEqResponseMessage(p, reqSeq));
             return;
         } else if (type == "set_eq") {
             const json::Value* bands = msg.get("bands");
             if (!bands || bands->type != json::Value::Type::Array) return;
+            // A sávokhoz tartozó előerősítés ugyanabban az üzenetben: a kettő egyszerre lép életbe
+            if (const json::Value* pre = msg.get("preamp")) p.preampDb = static_cast<float>(pre->numberOr(p.preampDb));
             p.numBands = 0;
             for (const auto& b : bands->arr) {
                 if (p.numBands >= kMaxEqBands) break;
@@ -547,8 +553,9 @@ private:
         if (changed) {
             p.set(kFlagInitialized, true);
             sanitizeParams(p);
-            cb_.setParams(p);
-            if (eqChanged) sendText(buildEqResponseMessage(p));
+            // Változatlan beállításnál nincs újraalkalmazás és nincs mentés (a mentés csak valódi változás után fut)
+            if (std::memcmp(&p, &before, sizeof(ParamData)) != 0) cb_.setParams(p);
+            if (eqChanged) sendText(buildEqResponseMessage(p, reqSeq));
         }
     }
 
@@ -596,7 +603,7 @@ private:
     }
 
     /** Az EQ eredő frekvenciamenete az LSP szűrőkkel (a felület görbéje ebből rajzol). */
-    std::string buildEqResponseMessage(const ParamData& p) const {
+    std::string buildEqResponseMessage(const ParamData& p, double seq = -1.0) const {
         constexpr size_t kPoints = 256;
         double sr = cb_.sampleRate ? cb_.sampleRate() : 48000.0;
         if (!(sr >= 8000.0)) sr = 48000.0;
@@ -609,6 +616,7 @@ private:
         appendFloat(s, sr, 0);
         s += ",\"mode\":" + std::to_string(p.eqMode);
         s += ",\"latency\":" + std::to_string(latency);
+        if (seq >= 0.0) { s += ",\"seq\":"; appendFloat(s, seq, 0); }
         s += ",\"freq\":[";
         for (size_t i = 0; i < kPoints; ++i) { if (i) s += ','; appendFloat(s, f[i], 2); }
         s += "],\"mag\":[";
@@ -621,6 +629,9 @@ private:
 
     std::string buildStatusMessage() const {
         std::string s = "{\"type\":\"status\"";
+#ifdef AQULIFY_VERSION
+        s += ",\"version\":\"" AQULIFY_VERSION "\"";   // a felület ebből látja, ha a motor más verziójú
+#endif
         if (cb_.statusFields) {
             std::string extra = cb_.statusFields();
             if (!extra.empty()) { s += ','; s += extra; }

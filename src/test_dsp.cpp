@@ -347,6 +347,83 @@ static void testChain() {
     chain.stopWorker();
 }
 
+/** Legnagyobb második differencia (ugrás / kattanás mértéke) a jelben. */
+static double maxJump(const std::vector<float>& x, size_t from, size_t to) {
+    double mx = 0;
+    for (size_t i = std::max<size_t>(from, 2); i < to; ++i) mx = std::max(mx, std::abs(double(x[i]) - 2.0 * x[i - 1] + x[i - 2]));
+    return mx;
+}
+
+static void testDeclick(size_t kBlk) {
+    std::printf("[7] Kattanásmentes váltások (%zu mintás blokkok), preamp csak bekapcsolt EQ-val\n", kBlk);
+    const double sr = 48000.0;
+    AetherChain chain;
+    chain.setSampleRate(sr);
+    // 1 kHz, 0,5 amplitúdó: a szinusz második differenciája ~0,0086; egy ugrás ennél nagyságrenddel nagyobb
+    const size_t seg = 12000;
+    std::vector<float> L = sine(1000.0, 0.5, seg * 23, sr), R = L;
+    ParamData d = transparentParams();
+    size_t pos = 0;
+    double worst = 0;
+    const char* worstAt = "";
+    auto run = [&](const char* what) {
+        std::vector<float> l(L.begin() + pos, L.begin() + pos + seg), r(R.begin() + pos, R.begin() + pos + seg);
+        chain.applyParamsRT(d);
+        runBlocks([&](float* a, float* b, size_t m) { chain.process(a, b, m); }, l, r, kBlk);
+        const double j = maxJump(l, 0, seg);
+        if (j > worst) { worst = j; worstAt = what; }
+        std::copy(l.begin(), l.end(), L.begin() + pos);
+        pos += seg;
+    };
+    run("alap");
+    d = bellParams(0, 0, 3); d.preampDb = -6.0f; run("EQ be (IIR, decramp x4)");
+    d.eqMode = 1; run("FIR mód");
+    d.eqMode = 2; run("FFT mód");
+    d.eqMode = 3; run("SPM mód");
+    d.eqMode = 2; run("SPM -> FFT");
+    d.eqMode = 1; run("FFT -> FIR");
+    d.eqMode = 3; run("FIR -> SPM");
+    d.eqMode = 0; run("IIR mód");
+    for (int dc : {0, 1, 2, 4, 5, 3}) { d.eqDecramp = dc; run("decramp váltás"); }
+    d.eqMode = 1; d.eqDecramp = 0; run("FIR, decramp ki");
+    d.eqDecramp = 5; run("FIR, decramp x8");
+    d.eqMode = 0; d.eqDecramp = 3; run("IIR, decramp x4");
+    d.set(kFlagLimiter, true); run("limiter be");
+    d.limOversampling = 0; run("limiter túlmintavételezés ki");
+    d.set(kFlagLimiter, false); d.set(kFlagBass, true); run("limiter ki, bass be");
+    d.set(kFlagBass, false); d.set(kFlagEq, false); run("EQ ki");
+    CHECK(worst < 0.03, "modul- és módváltások ugrás nélkül (legnagyobb második differencia %.4f, %s)", worst, worstAt);
+
+    // FIR módú, változatlanul futó EQ mellett egy másik modul kapcsolása: nem kell kivárni az EQ
+    // ~128 ms-os késleltetését, csak a le-fel úsztatás (és a blokk maradéka) néma
+    {
+        AetherChain c2;
+        c2.setSampleRate(sr);
+        ParamData f = bellParams(0, 1, 3);
+        f.preampDb = -6.0f;   // +6 dB harang: ne érje el a ±1,0 vágást
+        std::vector<float> a = sine(1000.0, 0.5, 48000, sr), b = a;
+        c2.applyParamsRT(f);
+        runBlocks([&](float* x, float* y, size_t m) { c2.process(x, y, m); }, a, b, kBlk);
+        f.set(kFlagBass, true);
+        std::vector<float> a2 = sine(1000.0, 0.5, 24000, sr), b2 = a2;
+        c2.applyParamsRT(f);
+        runBlocks([&](float* x, float* y, size_t m) { c2.process(x, y, m); }, a2, b2, kBlk);
+        size_t run = 0, longest = 0;
+        for (float v : a2) { run = (v == 0.0f) ? run + 1 : 0; longest = std::max(longest, run); }
+        CHECK(longest < kBlk + 64 && maxJump(a2, 0, a2.size()) < 0.03,
+              "FIR EQ mellett bass be: néma szakasz %zu minta (blokk %zu), ugrás nélkül", longest, kBlk);
+    }
+
+    // Kikapcsolt EQ: a preamp sem hat (bypass = érintetlen jel)
+    d = transparentParams();
+    d.preampDb = -6.5f;
+    std::vector<float> s = sine(1000.0, 0.1, 24000, sr), s2 = s;
+    chain.applyParamsRT(d);
+    runBlocks([&](float* a, float* b, size_t m) { chain.process(a, b, m); }, s, s2, 480);
+    const double g = 20 * std::log10(toneAmp(s, 12000, 1000.0, sr) / 0.1);
+    CHECK(std::abs(g) < 0.01, "EQ kikapcsolva, preamp -6,5 dB: %.3f dB (érintetlen)", g);
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify DSP modulteszt (EasyEffects könyvtárak)\n");
@@ -357,6 +434,9 @@ int main() {
     testBass();
     testConvolver();
     testChain();
+    testDeclick(480);
+    testDeclick(1024);
+    testDeclick(256);
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

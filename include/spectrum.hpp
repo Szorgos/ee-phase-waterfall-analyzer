@@ -3,7 +3,7 @@
  * @file spectrum.hpp
  * @brief Valódi FFT-alapú spektrumanalizátor a 3D vízeséshez.
  *
- * Hann-ablakos, radix-2 FFT; a lineáris FFT-binekből logaritmikus (20 Hz - 20 kHz)
+ * Hann-ablakos, radix-2 FFT; a lineáris FFT-binekből logaritmikus (10 Hz - 24 kHz)
  * frekvenciasávokat képez, és 0..1 közé normált dB-értékeket ad vissza.
  * Kimenet: L+R közép (M) spektrum, valamint sávonkénti L/R fáziskülönbség és koherencia-jellegű korreláció.
  */
@@ -71,12 +71,20 @@ public:
         const double norm = 4.0 / static_cast<double>(n_);
         const double binHz = sampleRate / static_cast<double>(n_);
         const double maxBin = static_cast<double>(n_ / 2 - 1);
-        const double logMin = std::log10(minHz_), logMax = std::log10(std::min(maxHz_, sampleRate * 0.5));
+        // A sávhatárok minden mintavételi frekvencián azonosak (a felület skálája fix 10 Hz – 24 kHz);
+        // a Nyquist-frekvencia fölötti sávok (pl. 44,1 kHz-nél 22,05 kHz felett) üresek maradnak.
+        const double logMin = std::log10(minHz_), logMax = std::log10(maxHz_);
+        const double nyquist = sampleRate * 0.5;
         const double pi = 3.14159265358979323846;
 
         for (size_t b = 0; b < bands_; ++b) {
             const double f0 = std::pow(10.0, logMin + (logMax - logMin) * b / bands_);
             const double f1 = std::pow(10.0, logMin + (logMax - logMin) * (b + 1) / bands_);
+            if (f0 >= nyquist) {
+                levels_[b] = 0.0f;
+                phaseDeg_[b] = 0.0f;
+                continue;
+            }
             double k0 = f0 / binHz, k1 = f1 / binHz;
 
             double peak = 0.0;
