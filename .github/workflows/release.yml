@@ -257,16 +257,24 @@ jobs:
             ${{ needs.fedora-rpm.outputs.file }}.sha256
 
   # Fedora COPR (nlali/aqulify): kiadáskor újraépíti a csomagot, így a dnf / Discover frissítést kap.
-  # A COPR "custom webhook" egy kiadás-indító cím; legfeljebb egy fölösleges újraépítést lehet vele kérni.
+  # A COPR "custom webhook" címében lévő UUID titkos kulcs, ezért a teljes cím GitHub Secretben van:
+  # Settings → Secrets and variables → Actions → COPR_WEBHOOK_URL
+  # (COPR: Settings → Integrations → Custom webhook, a végére a csomag neve: .../aqulify/).
   copr-rebuild:
     needs: windows-installer
     if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.version != '')
     runs-on: ubuntu-24.04
     steps:
       - name: COPR újraépítés indítása
+        env:
+          COPR_WEBHOOK_URL: ${{ secrets.COPR_WEBHOOK_URL }}
         run: |
+          if [ -z "$COPR_WEBHOOK_URL" ]; then
+            echo "::warning::Nincs beállítva a COPR_WEBHOOK_URL titok, a COPR újraépítés kimarad; kézzel: copr.fedorainfracloud.org/coprs/nlali/aqulify → Packages → Rebuild"
+            exit 0
+          fi
           for i in 1 2 3; do
-            curl -fsS -X POST "https://copr.fedorainfracloud.org/webhooks/custom/265836/33fa0eaf-a16e-4b01-bd67-99b64f0db79d/aqulify/" && exit 0
+            curl -fsS -o /dev/null -X POST "$COPR_WEBHOOK_URL" && exit 0
             sleep 30
           done
           echo "::warning::A COPR újraépítést nem sikerült elindítani; kézzel: copr.fedorainfracloud.org/coprs/nlali/aqulify → Packages → Rebuild"
