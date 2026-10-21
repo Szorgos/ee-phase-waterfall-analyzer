@@ -1,5 +1,6 @@
 #pragma code_page(65001)
-// Közös verzióinformáció (a CMake tölti ki)
+// Közös verzióinformáció (a CMake tölti ki). Két nyelv: angol (alapértelmezett) és magyar;
+// a Windows a felhasználói felület nyelvéhez illőt mutatja, egyébként az angolt.
 #include <winver.h>
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION     @AA_VER_COMMA@
@@ -12,10 +13,21 @@ VS_VERSION_INFO VERSIONINFO
 BEGIN
   BLOCK "StringFileInfo"
   BEGIN
-    BLOCK "040E04B0"
+    BLOCK "040904B0"
     BEGIN
       VALUE "CompanyName",      "Aqulify\0"
       VALUE "FileDescription",  "@AA_DESC@\0"
+      VALUE "FileVersion",      "@PROJECT_VERSION@\0"
+      VALUE "InternalName",     "@AA_NAME@\0"
+      VALUE "OriginalFilename", "@AA_FILE@\0"
+      VALUE "ProductName",      "Aqulify\0"
+      VALUE "ProductVersion",   "@PROJECT_VERSION@\0"
+      VALUE "LegalCopyright",   "Szorgos – open source (GPL-3.0)\0"
+    END
+    BLOCK "040E04B0"
+    BEGIN
+      VALUE "CompanyName",      "Aqulify\0"
+      VALUE "FileDescription",  "@AA_DESC_HU@\0"
       VALUE "FileVersion",      "@PROJECT_VERSION@\0"
       VALUE "InternalName",     "@AA_NAME@\0"
       VALUE "OriginalFilename", "@AA_FILE@\0"
@@ -26,6 +38,6 @@ BEGIN
   END
   BLOCK "VarFileInfo"
   BEGIN
-    VALUE "Translation", 0x040E, 1200
+    VALUE "Translation", 0x0409, 1200, 0x040E, 1200
   END
 END

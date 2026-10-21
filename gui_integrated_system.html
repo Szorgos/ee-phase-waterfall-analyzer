@@ -1759,10 +1759,18 @@ function drawEq() {
     eqCtx.fillText((db > 0 ? "+" : "") + (isZero ? "0" : db.toFixed(dbDec)) + " dB", padLeft - 6 * dpr, y + 3 * dpr);
   }
 
-  // Késleltetés tengely (jobb oldal): a rajzterület közepén 0 ms, a skála a dB nagyítással együtt változik
-  // (±24 dB-nél a dB-feliratok 0,75-ös szintjén ±10 ms); a feliratok mindig a görbéhez igazodnak
-  // ±6 dB alatt a késleltetés skálája már nem nagyít tovább (különben a görbe kitöltené a rajzterületet)
-  const delayScale = (Math.max(eqDbRange, 6) / 24.0) * 10.0 / 0.75;   // ms a 0,45 × magasságnál
+  const points = [];
+  for (let px = padLeft; px <= padLeft + plotW; px += 2 * dpr) {
+    const f = getFreq(px, plotW, padLeft);
+    points.push({ x: px, f, ...evalChain(f) });
+  }
+
+  // Késleltetés tengely (jobb oldal): a rajzterület közepén 0 ms. A skála a késleltetés görbéjéhez igazodik
+  // (kerek végértékkel), így a narancs görbe a dB nagyítástól függetlenül mindig a rajzterületen belül marad;
+  // a skálát a 98. percentilis dönti el, hogy egy szűk notch körüli tüske ne nyomja össze a görbét.
+  const delayAbs = points.map(pt => Math.abs(pt.delay_ms)).filter(Number.isFinite).sort((a, b) => a - b);
+  const delayRef = delayAbs.length ? delayAbs[Math.min(delayAbs.length - 1, Math.floor(delayAbs.length * 0.98))] : 0;
+  const delayScale = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000].find(v => v >= delayRef * 0.98) || 1000;   // ms a 0,45 × magasságnál
   const ovBox = eqOverlayBox();
   if (showDelay) {
     const msHalf = delayScale / 0.9;
@@ -1777,12 +1785,6 @@ function drawEq() {
       if (ovBox && y - 8 * dpr < ovBox.bottom) continue;   // a zoom panel alatt nem látszana
       eqCtx.fillText((ms > 0 ? "+" : "") + (k === 0 ? "0" : ms.toFixed(msDec)) + " ms", padLeft + plotW + 6 * dpr, y + 3 * dpr);
     }
-  }
-
-  const points = [];
-  for (let px = padLeft; px <= padLeft + plotW; px += 2 * dpr) {
-    const f = getFreq(px, plotW, padLeft);
-    points.push({ x: px, f, ...evalChain(f) });
   }
 
   // Rajzterület vágása (hogy a görbék ne lógjanak ki a rácsból)
@@ -1845,6 +1847,24 @@ function drawEq() {
     }
     eqCtx.stroke();
   }
+  // A nézeten kívül futó görberész a szélen halvány szaggatott vonallal jelzi, hogy a görbe ott folytatódik
+  if (showEqCurve) {
+    const yTop = padTop + 1.5 * dpr, yBot = padTop + plotH - 1.5 * dpr;
+    eqCtx.strokeStyle = "rgba(120, 174, 237, 0.55)";
+    eqCtx.lineWidth = 1.6 * dpr;
+    eqCtx.setLineDash([3 * dpr, 3 * dpr]);
+    eqCtx.beginPath();
+    let lastEdge = null;
+    for (let i = 0; i < points.length; i++) {
+      const y = dbToY(points[i].mag_db + currentPreamp, G);
+      const edge = y < yTop ? yTop : y > yBot ? yBot : null;
+      if (edge === null) { lastEdge = null; continue; }
+      if (edge !== lastEdge) eqCtx.moveTo(points[i].x, edge); else eqCtx.lineTo(points[i].x, edge);
+      lastEdge = edge;
+    }
+    eqCtx.stroke();
+    eqCtx.setLineDash([]);
+  }
 
   // Zoom állapot jelzése a bal alsó sarokban ha nagyítva / eltolva van
   if (eqViewZoomed()) {
@@ -1861,7 +1881,11 @@ function drawEq() {
       const f = v => (v > 0 ? "+" : "") + v.toFixed(Math.abs(dbSpan) < 10 ? 1 : 0);
       parts.push(`${f(dbBottom)} … ${f(dbTop)} dB`);
     }
-    eqCtx.fillText(`🔍 ${parts.join(" • ")} • Húzással pásztázható`, padLeft + 8 * dpr, padTop + plotH - 8 * dpr);
+    const zt = `🔍 ${parts.join(" • ")} • Húzással pásztázható`;
+    eqCtx.fillStyle = "rgba(18, 22, 28, 0.78)";   // olvasható maradjon a görbék fölött is
+    eqCtx.fillRect(padLeft + 4 * dpr, padTop + plotH - 20 * dpr, eqCtx.measureText(zt).width + 8 * dpr, 16 * dpr);
+    eqCtx.fillStyle = "rgba(120, 174, 237, 0.95)";
+    eqCtx.fillText(zt, padLeft + 8 * dpr, padTop + plotH - 8 * dpr);
   }
 
   eqCtx.restore(); // Vágás vége

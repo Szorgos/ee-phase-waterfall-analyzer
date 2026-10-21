@@ -1,3 +1,4 @@
+#pragma code_page(65001)
 #include <windows.h>
 1 ICON "aether.ico"
 1 RT_MANIFEST "setup.manifest"

@@ -65,21 +65,27 @@ if(WIN32)
     set(BUILD_PIPEWIRE_PLUGIN OFF CACHE BOOL "" FORCE)
 
     enable_language(RC)
+    # Az .rc fájlok UTF-8 kódolásúak (ékezetes szövegek): az llvm-windres alapból ANSI kódlapot feltételez,
+    # és a beemelt (#include) fájlokban a "#pragma code_page" nem hat
+    if(MINGW)
+        string(APPEND CMAKE_RC_FLAGS " -c 65001")
+    endif()
     set(EE_RES_DIR ${CMAKE_CURRENT_SOURCE_DIR}/windows/resources)
     string(REPLACE "." "," AA_VER_COMMA "${PROJECT_VERSION},0")
 
     # Verzióinformáció fájlonként
-    function(ee_version_rc out name file desc filetype)
+    function(ee_version_rc out name file desc desc_hu filetype)
         set(AA_NAME "${name}")
         set(AA_FILE "${file}")
         set(AA_DESC "${desc}")
+        set(AA_DESC_HU "${desc_hu}")
         set(AA_FILETYPE "${filetype}")
         configure_file(${EE_RES_DIR}/version.rc.in ${CMAKE_CURRENT_BINARY_DIR}/${out} @ONLY)
     endfunction()
-    ee_version_rc(engine_version.rc "Aqulify" "Aqulify.exe" "Aqulify motor (tálcás háttéralkalmazás)" "VFT_APP")
-    ee_version_rc(plugin_version.rc "Aqulify" "Aqulify.dll" "Aqulify Equalizer APO plugin (VST 2.4)" "VFT_DLL")
-    ee_version_rc(gui_version.rc "Aqulify" "AqulifyGui.exe" "Aqulify felület (WebView2 ablak)" "VFT_APP")
-    ee_version_rc(setup_version.rc "Aqulify-Setup" "Aqulify-Setup.exe" "Aqulify telepítő" "VFT_APP")
+    ee_version_rc(engine_version.rc "Aqulify" "Aqulify.exe" "Aqulify engine (tray app)" "Aqulify motor (tálcás háttéralkalmazás)" "VFT_APP")
+    ee_version_rc(plugin_version.rc "Aqulify" "Aqulify.dll" "Aqulify Equalizer APO plugin (VST 2.4)" "Aqulify Equalizer APO plugin (VST 2.4)" "VFT_DLL")
+    ee_version_rc(gui_version.rc "Aqulify" "AqulifyGui.exe" "Aqulify window (WebView2)" "Aqulify felület (WebView2 ablak)" "VFT_APP")
+    ee_version_rc(setup_version.rc "Aqulify-Setup" "Aqulify-Setup.exe" "Aqulify Setup" "Aqulify telepítő" "VFT_APP")
 
     if(BUILD_WINDOWS_ENGINE)
         add_executable(Aqulify WIN32 windows/engine/aether_engine.cpp ${EE_RES_DIR}/engine.rc)
