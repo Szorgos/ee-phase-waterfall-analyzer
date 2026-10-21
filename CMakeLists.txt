@@ -101,7 +101,7 @@ if(WIN32)
     # Grafikus felület saját ablakban (WebView2; a webview/webview 0.12.0 beépített betöltőjével, WebView2Loader.dll nélkül)
     if(BUILD_WINDOWS_ENGINE)
         add_executable(AqulifyGui WIN32 windows/gui/aether_gui.cpp ${EE_RES_DIR}/gui.rc)
-        target_include_directories(AqulifyGui PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR}
+        target_include_directories(AqulifyGui PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR} ${EE_INCLUDE_DIR}
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/webview2)
         target_compile_definitions(AqulifyGui PRIVATE UNICODE _UNICODE)
         target_link_libraries(AqulifyGui PRIVATE advapi32 ole32 oleaut32 shell32 shlwapi user32 version dwmapi uuid)
@@ -147,6 +147,7 @@ if(WIN32)
         set(EE_PAYLOAD_SOURCES
             ${CMAKE_CURRENT_SOURCE_DIR}/gui_integrated_system.html
             ${CMAKE_CURRENT_SOURCE_DIR}/autoeq_index.js
+            ${CMAKE_CURRENT_SOURCE_DIR}/gui_i18n.js
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/README_WINDOWS.md)
@@ -158,6 +159,7 @@ if(WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy ${EE_SRC_GUIAPP} ${EE_PAYLOAD_DIR}/guiapp.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/gui_integrated_system.html ${EE_PAYLOAD_DIR}/gui.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/autoeq_index.js ${EE_PAYLOAD_DIR}/autoeq.bin
+            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/gui_i18n.js ${EE_PAYLOAD_DIR}/i18n.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js ${EE_PAYLOAD_DIR}/three.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE ${EE_PAYLOAD_DIR}/threelic.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/README_WINDOWS.md ${EE_PAYLOAD_DIR}/readme.bin
@@ -170,6 +172,7 @@ if(WIN32)
             "FILE_PLUGIN|plugin\\Aqulify.dll\n"
             "FILE_GUI|gui\\gui_integrated_system.html\n"
             "FILE_AUTOEQ|gui\\autoeq_index.js\n"
+            "FILE_I18N|gui\\gui_i18n.js\n"
             "FILE_THREE|gui\\three.min.js\n"
             "FILE_THREELIC|gui\\three.js-LICENSE.txt\n"
             "FILE_README|OLVASS_EL.md\n")
@@ -180,6 +183,7 @@ if(WIN32)
             "FILE_PLUGIN RCDATA \"${EE_PAYLOAD_DIR}/plugin.bin\"\n"
             "FILE_GUI RCDATA \"${EE_PAYLOAD_DIR}/gui.bin\"\n"
             "FILE_AUTOEQ RCDATA \"${EE_PAYLOAD_DIR}/autoeq.bin\"\n"
+            "FILE_I18N RCDATA \"${EE_PAYLOAD_DIR}/i18n.bin\"\n"
             "FILE_THREE RCDATA \"${EE_PAYLOAD_DIR}/three.bin\"\n"
             "FILE_THREELIC RCDATA \"${EE_PAYLOAD_DIR}/threelic.bin\"\n"
             "FILE_README RCDATA \"${EE_PAYLOAD_DIR}/readme.bin\"\n")
@@ -189,7 +193,7 @@ if(WIN32)
         add_executable(AqulifySetup WIN32 windows/installer/setup.cpp ${EE_RES_DIR}/setup.rc)
         add_dependencies(AqulifySetup AqulifyPayload)
         set_target_properties(AqulifySetup PROPERTIES OUTPUT_NAME "Aqulify-Setup")
-        target_include_directories(AqulifySetup PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+        target_include_directories(AqulifySetup PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR} ${EE_INCLUDE_DIR})
         target_compile_definitions(AqulifySetup PRIVATE UNICODE _UNICODE AQULIFY_VERSION="${PROJECT_VERSION}")
         target_link_libraries(AqulifySetup PRIVATE comctl32 ole32 oleaut32 shell32 shlwapi winhttp advapi32 user32 gdi32 uuid)
         if(MINGW)
@@ -223,7 +227,7 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32)
         pkg_check_modules(GTK3 IMPORTED_TARGET gtk+-3.0)
         if(WEBKITGTK_FOUND AND GTK3_FOUND)
             add_executable(aqulify-gui src/aether_gui_linux.cpp)
-            target_include_directories(aqulify-gui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party)
+            target_include_directories(aqulify-gui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party ${EE_INCLUDE_DIR})
             target_link_libraries(aqulify-gui PRIVATE PkgConfig::GTK3 PkgConfig::WEBKITGTK dl)
             message(STATUS "Saját ablakos felület (WebKitGTK) építése engedélyezve")
         else()
@@ -246,7 +250,7 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32)
     if(TARGET aqulify-gui)
         install(TARGETS aqulify-gui RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     endif()
-    install(FILES gui_integrated_system.html autoeq_index.js windows/third_party/three/three.min.js
+    install(FILES gui_integrated_system.html autoeq_index.js gui_i18n.js windows/third_party/three/three.min.js
             DESTINATION ${CMAKE_INSTALL_DATADIR}/aqulify/gui)
     install(FILES windows/third_party/three/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/aqulify/gui RENAME three.js-LICENSE.txt)
     install(FILES linux/io.github.szorgos.Aqulify.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)

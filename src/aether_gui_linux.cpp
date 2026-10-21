@@ -22,6 +22,8 @@
 #include <thread>
 #include <unistd.h>
 
+#include "aq_i18n.hpp"
+
 namespace {
 
 bool fileExists(const std::string& p) {
@@ -157,7 +159,8 @@ void applyDarkTitlebar() {
 int main() {
     const std::string folder = findGuiFolder();
     if (folder.empty()) {
-        std::cerr << "[Hiba] A gui_integrated_system.html nem található (telepítsd újra: ./install.sh).\n";
+        aq_i18n::init();
+        std::cerr << aq_i18n::tr(aq_i18n::Msg::linux_guiMissing) << "\n";
         return 1;
     }
     char real[PATH_MAX];
@@ -195,7 +198,8 @@ int main() {
         w.run();
         return 0;
     } catch (const std::exception& e) {
-        std::cerr << "[Info] A saját ablak nem indult (" << e.what() << "), megnyitás böngészőben.\n";
+        aq_i18n::init();
+        std::cerr << aq_i18n::fmt(aq_i18n::Msg::linux_browserFallback, { { "err", e.what() } }) << "\n";
         return openInBrowser(url);
     }
 }

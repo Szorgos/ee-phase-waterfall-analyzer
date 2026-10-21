@@ -26,6 +26,8 @@
 #include <cstdio>
 #include <string>
 
+#include "aq_i18n.hpp"
+
 namespace {
 
 /** Hibanapló a felülethez: %LOCALAPPDATA%\Aqulify\gui.log (miért nem indult a saját ablak). */
@@ -84,8 +86,8 @@ std::string toUtf8(const std::wstring& w) {
  */
 int openInBrowser(const std::wstring& guiFolder) {
     if (guiFolder.empty()) {
-        MessageBoxW(nullptr, L"A felület fájljai (gui\\gui_integrated_system.html) nem találhatók.\n"
-                             L"Telepítsd újra az Aqulify-t.", kTitle, MB_ICONERROR | MB_OK);
+        aq_i18n::init();
+        MessageBoxW(nullptr, aq_i18n::trw(aq_i18n::Msg::gui_filesMissing).c_str(), kTitle, MB_ICONERROR | MB_OK);
         return 1;
     }
     const std::wstring html = guiFolder + L"\\gui_integrated_system.html";

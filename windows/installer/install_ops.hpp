@@ -26,6 +26,8 @@
 #include <tlhelp32.h>
 #include <cwctype>
 
+#include "aq_i18n.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -172,7 +174,7 @@ inline bool replaceFile(const std::wstring& dst, const void* data, size_t len, L
     const std::wstring aside = dst + L".old-" + std::to_wstring(GetTickCount64());
     if (!MoveFileExW(dst.c_str(), aside.c_str(), MOVEFILE_REPLACE_EXISTING)) return false;
     MoveFileExW(aside.c_str(), nullptr, MOVEFILE_DELAY_UNTIL_REBOOT);
-    if (log) log(L"A régi fájl használatban volt, félretéve (újraindításkor törlődik): " + aside);
+    if (log) log(aq_i18n::fmtw(aq_i18n::Msg::ops_fileAside, { { "path", aq_i18n::narrow(aside) } }));
     return writeFileBytes(dst, data, len);
 }
 
@@ -419,19 +421,19 @@ inline bool hasLine(const std::wstring& text, const std::wstring& wanted) {
 /** A plugin beillesztése: Aqulify.txt + "Include:" sor a config.txt végére (idempotens). */
 inline bool integrateEqApo(const EqApoInfo& apo, const void* dll, size_t dllSize, Logger log) {
     const std::wstring pluginDir = joinPath(apo.installPath, L"VSTPlugins\\Aqulify");
-    if (!createDirs(pluginDir)) { log(L"HIBA: nem hozható létre: " + pluginDir); return false; }
+    if (!createDirs(pluginDir)) { log(aq_i18n::fmtw(aq_i18n::Msg::ops_errMkdir, { { "path", aq_i18n::narrow(pluginDir) } })); return false; }
     const std::wstring dllPath = joinPath(pluginDir, L"Aqulify.dll");
-    if (!replaceFile(dllPath, dll, dllSize, log)) { log(L"HIBA: a plugin nem másolható ide: " + dllPath); return false; }
-    log(L"Plugin bemásolva: " + dllPath);
+    if (!replaceFile(dllPath, dll, dllSize, log)) { log(aq_i18n::fmtw(aq_i18n::Msg::ops_errCopyPlugin, { { "path", aq_i18n::narrow(dllPath) } })); return false; }
+    log(aq_i18n::fmtw(aq_i18n::Msg::ops_pluginCopied, { { "path", aq_i18n::narrow(dllPath) } }));
 
-    if (!createDirs(apo.configPath)) { log(L"HIBA: az EQ APO config mappa nem érhető el: " + apo.configPath); return false; }
+    if (!createDirs(apo.configPath)) { log(aq_i18n::fmtw(aq_i18n::Msg::ops_errConfigDir, { { "path", aq_i18n::narrow(apo.configPath) } })); return false; }
     const std::string inc =
         "# Aqulify DSP + analizátor csatlakozási pont\r\n"
         "# Ezt a fájlt az Aqulify telepítője kezeli; a beállításokat az Aqulify felületén módosítsd.\r\n"
         "# Bypass 1 = a DSP lánc kikerülése (az analizátor továbbra is kap jelet); Remote 0 = a felület nem vezérli.\r\n"
         "VSTPlugin: Library \"Aqulify\\Aqulify.dll\" Bypass 0 Remote 1\r\n";
     const std::wstring incPath = joinPath(apo.configPath, L"Aqulify.txt");
-    if (!writeFileBytes(incPath, inc.data(), inc.size())) { log(L"HIBA: nem írható: " + incPath); return false; }
+    if (!writeFileBytes(incPath, inc.data(), inc.size())) { log(aq_i18n::fmtw(aq_i18n::Msg::ops_errWrite, { { "path", aq_i18n::narrow(incPath) } })); return false; }
 
     const std::wstring cfgPath = joinPath(apo.configPath, L"config.txt");
     TextFile tf;
@@ -462,18 +464,18 @@ inline bool integrateEqApo(const EqApoInfo& apo, const void* dll, size_t dllSize
         }
         if (disabled > 0) {
             tf.text = out;
-            log(L"Korábban kézzel felvett Aqulify plugin sor kikapcsolva (" + std::to_wstring(disabled) + L" db).");
+            log(aq_i18n::fmtw(aq_i18n::Msg::ops_manualDisabled, { { "n", std::to_string(disabled) } }));
         }
     }
 
     if (hasLine(tf.text, kIncludeLine)) {
-        log(L"Az EQ APO config.txt már tartalmazza az Aqulify sort.");
+        log(aq_i18n::trw(aq_i18n::Msg::ops_alreadyIncluded));
         return writeTextFile(cfgPath, tf);
     }
     if (!tf.text.empty() && tf.text.back() != L'\n') tf.text += L"\r\n";
     tf.text += std::wstring(kIncludeComment) + L"\r\n" + kIncludeLine + L"\r\n";
-    if (!writeTextFile(cfgPath, tf)) { log(L"HIBA: a config.txt nem írható: " + cfgPath); return false; }
-    log(L"Az Aqulify a lánc végére került (config.txt → Include: Aqulify.txt).");
+    if (!writeTextFile(cfgPath, tf)) { log(aq_i18n::fmtw(aq_i18n::Msg::ops_errConfigWrite, { { "path", aq_i18n::narrow(cfgPath) } })); return false; }
+    log(aq_i18n::trw(aq_i18n::Msg::ops_chained));
     return true;
 }
 
@@ -505,7 +507,7 @@ inline void removeEqApoIntegration(Logger log) {
         }
         if (changed) {
             tf.text = out;
-            if (writeTextFile(cfgPath, tf)) log(L"Az Aqulify sor törölve az EQ APO config.txt-ből.");
+            if (writeTextFile(cfgPath, tf)) log(aq_i18n::trw(aq_i18n::Msg::ops_lineRemoved));
         }
     }
     deleteFileOrSchedule(joinPath(apo.configPath, L"Aqulify.txt"));
@@ -535,7 +537,7 @@ inline void removeLegacyAetherAudio(Logger log) {
     const bool present = fileExists(joinPath(oldDir, oldName + L".exe")) || dirExists(oldData) ||
                          (apo.installed && fileExists(joinPath(apo.configPath, oldName + L".txt")));
     if (!present) return;
-    log(L"Korábbi " + oldName + L" telepítés található: eltávolítás, a beállítások átvétele...");
+    log(aq_i18n::fmtw(aq_i18n::Msg::ops_legacyFound, { { "name", aq_i18n::narrow(oldName) } }));
 
     // 1. Futó régi motor és felület
     const std::wstring oldWndClass = oldName + L"EngineWnd";
@@ -586,7 +588,7 @@ inline void removeLegacyAetherAudio(Logger log) {
             }
             if (changed) {
                 tf.text = out;
-                if (writeTextFile(cfgPath, tf)) log(L"A régi " + oldName + L" sor törölve az EQ APO config.txt-ből.");
+                if (writeTextFile(cfgPath, tf)) log(aq_i18n::fmtw(aq_i18n::Msg::ops_legacyLineRemoved, { { "name", aq_i18n::narrow(oldName) } }));
             }
         }
         deleteFileOrSchedule(joinPath(apo.configPath, oldName + L".txt"));
@@ -604,7 +606,7 @@ inline void removeLegacyAetherAudio(Logger log) {
     for (const wchar_t* f : { L"params.bin", L"ir.bin" }) {
         const std::wstring src = joinPath(oldData, f), dst = joinPath(newData, f);
         if (fileExists(src) && !fileExists(dst) && CopyFileW(src.c_str(), dst.c_str(), TRUE))
-            log(std::wstring(L"Beállítás átvéve: ") + f);
+            log(aq_i18n::fmtw(aq_i18n::Msg::ops_settingTaken, { { "file", aq_i18n::narrow(std::wstring(f)) } }));
     }
 
     // 4. Parancsikonok, automatikus indítás, programmappa, eltávolító bejegyzés
@@ -616,7 +618,7 @@ inline void removeLegacyAetherAudio(Logger log) {
     regDeleteTree(HKEY_LOCAL_MACHINE, oldUninstKey.c_str());
     regDeleteTree(HKEY_LOCAL_MACHINE, (L"Software\\" + oldName).c_str());
     deleteTree(oldData);
-    log(L"A korábbi " + oldName + L" eltávolítva; az Aqulify veszi át a helyét.");
+    log(aq_i18n::fmtw(aq_i18n::Msg::ops_legacyRemoved, { { "name", aq_i18n::narrow(oldName) } }));
 }
 
 // ------------------------------------------------------------------ rendszer integráció

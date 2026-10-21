@@ -13,6 +13,7 @@
 #define _UNICODE
 #endif
 #include "install_ops.hpp"
+#include "aq_i18n.hpp"
 
 #include <commctrl.h>
 #include <shellapi.h>
@@ -22,8 +23,15 @@
 #include <thread>
 
 using namespace aether_setup;
+using aq_i18n::Msg;
 
 namespace {
+
+// Szöveg a választott nyelven (a felületen választott, különben a Windows nyelve)
+std::wstring T(Msg m) { return aq_i18n::trw(m); }
+std::wstring T(Msg m, const char* name, const std::wstring& value) {
+    return aq_i18n::fmtw(m, { { name, aq_i18n::narrow(value) } });
+}
 
 // ------------------------------------------------------------------ beállítások
 struct Options {
@@ -64,21 +72,21 @@ public:
         CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         const std::vector<PayloadFile> files = payloadIndex();
         if (files.empty()) {
-            res.message = L"A telepítő sérült: nem találhatók a beágyazott fájlok.";
+            res.message = T(Msg::setup_corrupt);
             CoUninitialize();
             return res;
         }
         const std::wstring exe = joinPath(opt.installDir, L"Aqulify.exe");
 
-        phase(L"Futó Aqulify bezárása...");
+        phase(T(Msg::setup_phaseClosing));
         closeRunningEngine(exe);
         removeLegacyAetherAudio(log);   // régi név (AetherAudio) telepítésének átvétele
         progress(5);
 
         // 1. Fájlok
-        phase(L"Fájlok másolása...");
+        phase(T(Msg::setup_phaseCopying));
         if (!createDirs(opt.installDir)) {
-            res.message = L"A telepítési mappa nem hozható létre:\n" + opt.installDir;
+            res.message = T(Msg::setup_mkdirFail, "path", opt.installDir);
             CoUninitialize();
             return res;
         }
@@ -93,7 +101,7 @@ public:
             const std::wstring dst = joinPath(opt.installDir, f.relPath);
             createDirs(parentDir(dst));
             if (!replaceFile(dst, data, size, log)) {
-                res.message = L"Nem sikerült írni:\n" + dst;
+                res.message = T(Msg::setup_writeFail, "path", dst);
                 CoUninitialize();
                 return res;
             }
@@ -116,47 +124,49 @@ public:
         // 2. Equalizer APO
         EqApoInfo apo = detectEqApo();
         if (opt.integrateApo && !apo.installed && opt.downloadApo) {
-            phase(L"Equalizer APO letöltése...");
+            phase(T(Msg::setup_phaseDlApo));
             const std::wstring tmp = joinPath(knownFolder(FOLDERID_ProgramData), L"Aqulify\\EqualizerAPO-setup.exe");
             bool got = false;
             for (const wchar_t* url : kEqApoDownloadUrls) {
-                log(std::wstring(L"Letöltés: ") + url);
+                log(T(Msg::setup_logDownload, "url", url));
                 if (downloadFile(url, tmp, [&](uint64_t a, uint64_t t) { if (t) progress(45 + static_cast<int>(20 * a / t)); }, &cancel) &&
                     looksLikeExe(tmp)) {
                     got = true;
                     break;
                 }
-                log(L"  sikertelen, következő forrás...");
+                log(T(Msg::setup_logDlFailed));
             }
             if (got) {
-                phase(L"Equalizer APO telepítése (külön ablakban)...");
-                log(L"Az Equalizer APO telepítője elindult. A végén jelöld be azt a hangeszközt, amin zenét hallgatsz!");
+                phase(T(Msg::setup_phaseApoInstall));
+                log(T(Msg::setup_logApoStarted));
                 runAndWait(tmp, L"");
                 DeleteFileW(tmp.c_str());
                 apo = detectEqApo();
                 res.apoInstalledNow = apo.installed;
-                log(apo.installed ? L"Equalizer APO telepítve." : L"Az Equalizer APO telepítése megszakadt vagy sikertelen.");
+                log(apo.installed ? T(Msg::setup_logApoInstalled) : T(Msg::setup_logApoFailed));
             } else {
-                log(L"Az Equalizer APO automatikus letöltése nem sikerült. Később kézzel telepítheted: " + std::wstring(kEqApoPage));
+                log(T(Msg::setup_logApoDlFailed, "url", kEqApoPage));
             }
         }
         progress(70);
 
         if (opt.integrateApo && apo.installed) {
-            phase(L"Beillesztés az Equalizer APO láncba...");
+            phase(T(Msg::setup_phaseIntegrate));
             if (dllData) res.apoIntegrated = integrateEqApo(apo, dllData, dllSize, log);
             regWriteDword(HKEY_LOCAL_MACHINE, kAppKey, L"EqApoIntegrated", res.apoIntegrated ? 1 : 0);
         } else if (opt.integrateApo) {
-            log(L"Equalizer APO nélkül az Aqulify csak analizál (WASAPI loopback). Az EQ APO telepítése után futtasd újra a telepítőt.");
+            log(T(Msg::setup_logAnalyzerOnly));
         }
         progress(80);
 
         // 3. Parancsikonok, automatikus indítás
-        phase(L"Parancsikonok és beállítások...");
+        phase(T(Msg::setup_phaseShortcuts));
         const std::wstring menuDir = joinPath(knownFolder(FOLDERID_CommonPrograms), L"Aqulify");
         createDirs(menuDir);
-        createShortcut(joinPath(menuDir, L"Aqulify.lnk"), exe, L"", L"Aqulify – fázis és vízesés analizátor, DSP", opt.installDir);
-        createShortcut(joinPath(menuDir, L"Aqulify eltávolítása.lnk"), uninst, L"/uninstall", L"Aqulify eltávolítása", opt.installDir);
+        createShortcut(joinPath(menuDir, L"Aqulify.lnk"), exe, L"", T(Msg::setup_shortcutDesc), opt.installDir);
+        // A Start menü mappáját az eltávolító egészében törli, így a lefordított parancsikonnév nem marad ott
+        createShortcut(joinPath(menuDir, T(Msg::setup_uninstallName) + L".lnk"), uninst, L"/uninstall", T(Msg::setup_uninstallName),
+                       opt.installDir);
         const std::wstring desk = joinPath(knownFolder(FOLDERID_PublicDesktop), L"Aqulify.lnk");
         if (opt.desktopIcon) createShortcut(desk, exe, L"", L"Aqulify", opt.installDir);
         else DeleteFileW(desk.c_str());
@@ -180,7 +190,7 @@ public:
         regWriteDword(HKEY_LOCAL_MACHINE, kUninstallKey, L"NoRepair", 1);
         regWriteDword(HKEY_LOCAL_MACHINE, kUninstallKey, L"EstimatedSize", 12 * 1024);
         progress(100);
-        phase(L"Kész.");
+        phase(T(Msg::setup_phaseDone));
         res.ok = true;
         CoUninitialize();
         return res;
@@ -213,14 +223,12 @@ int runUninstall(bool silent) {
     }
 
     if (!silent &&
-        MessageBoxW(nullptr, L"Biztosan eltávolítod az Aqulify-t?\n\nAz Equalizer APO megmarad, csak az Aqulify "
-                             L"plugin kerül ki a láncából.",
-                    L"Aqulify eltávolítása", MB_ICONQUESTION | MB_YESNO) != IDYES) {
+        MessageBoxW(nullptr, T(Msg::uninst_confirm).c_str(), T(Msg::setup_uninstallName).c_str(), MB_ICONQUESTION | MB_YESNO) != IDYES) {
         return 1;
     }
     const bool removeData =
-        !silent && MessageBoxW(nullptr, L"Törlődjenek a mentett beállítások is (EQ sávok, betöltött impulzusválasz)?",
-                               L"Aqulify eltávolítása", MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2) == IDYES;
+        !silent && MessageBoxW(nullptr, T(Msg::uninst_removeData).c_str(), T(Msg::setup_uninstallName).c_str(),
+                               MB_ICONQUESTION | MB_YESNO | MB_DEFBUTTON2) == IDYES;
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     Logger log = [](const std::wstring&) {};
@@ -239,7 +247,7 @@ int runUninstall(bool silent) {
         deleteTree(joinPath(knownFolder(FOLDERID_LocalAppData), L"Aqulify"));
     }
     CoUninitialize();
-    if (!silent) MessageBoxW(nullptr, L"Az Aqulify eltávolítása kész.", L"Aqulify", MB_ICONINFORMATION | MB_OK);
+    if (!silent) MessageBoxW(nullptr, T(Msg::uninst_done).c_str(), L"Aqulify", MB_ICONINFORMATION | MB_OK);
     return 0;
 }
 
@@ -294,7 +302,7 @@ public:
         const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
         AdjustWindowRect(&r, style, FALSE);
         const int w = r.right - r.left, h = r.bottom - r.top;
-        hwnd_ = CreateWindowExW(0, wc.lpszClassName, L"Aqulify telepítése", style,
+        hwnd_ = CreateWindowExW(0, wc.lpszClassName, T(Msg::setup_windowTitle).c_str(), style,
                                 (GetSystemMetrics(SM_CXSCREEN) - w) / 2, (GetSystemMetrics(SM_CYSCREEN) - h) / 2, w, h,
                                 nullptr, nullptr, inst, this);
         if (!hwnd_) return 1;
@@ -326,40 +334,35 @@ private:
 
     void createControls() {
         // Közös gombok
-        btnBack_ = add(L"BUTTON", L"< Vissza", WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 300, 404, 96, 30, IDC_BACK, nullptr);
-        btnNext_ = add(L"BUTTON", L"Tovább >", WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, 402, 404, 96, 30, IDC_NEXT, nullptr);
-        btnCancel_ = add(L"BUTTON", L"Mégse", WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 510, 404, 96, 30, IDC_CANCEL, nullptr);
+        btnBack_ = add(L"BUTTON", T(Msg::btn_back).c_str(), WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 300, 404, 96, 30, IDC_BACK, nullptr);
+        btnNext_ = add(L"BUTTON", T(Msg::btn_next).c_str(), WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, 402, 404, 96, 30, IDC_NEXT, nullptr);
+        btnCancel_ = add(L"BUTTON", T(Msg::btn_cancel).c_str(), WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 510, 404, 96, 30, IDC_CANCEL, nullptr);
 
         // 1. Üdvözlés
-        add(L"STATIC", L"Üdvözöl az Aqulify telepítője", SS_LEFT, 28, 104, 560, 32, 0, &pWelcome_, fontBig_);
-        add(L"STATIC",
-            L"Az Aqulify valós idejű 3D akusztikai vízesést, fázis- és csoportkésleltetés-analizátort, "
-            L"valamint audiofil DSP láncot ad a Windows hangrendszeréhez (paraméteres és FIR EQ, crossfeed, "
-            L"partícionált konvolver, bass enhancer, limiter).\n\n"
-            L"A telepítő mindent elvégez: bemásolja a programot, beilleszti a plugint az Equalizer APO láncába, "
-            L"létrehozza a parancsikonokat, és rendes eltávolítót ad a Programok és szolgáltatások listájához.",
-            SS_LEFT, 28, 144, 560, 130, 0, &pWelcome_);
-        lblApoStatus_ = add(L"STATIC", L"", SS_LEFT, 28, 290, 560, 60, 0, &pWelcome_);
+        add(L"STATIC", T(Msg::setup_welcomeTitle).c_str(), SS_LEFT, 28, 104, 560, 32, 0, &pWelcome_, fontBig_);
+        // A fordítások hossza eltér: a szövegek és a jelölőnégyzetek több sorba is törhetnek
+        add(L"STATIC", T(Msg::setup_welcomeText).c_str(), SS_LEFT, 28, 144, 560, 150, 0, &pWelcome_);
+        lblApoStatus_ = add(L"STATIC", L"", SS_LEFT, 28, 300, 560, 80, 0, &pWelcome_);
 
         // 2. Beállítások
-        add(L"STATIC", L"Telepítési mappa:", SS_LEFT, 28, 104, 300, 20, 0, &pOptions_);
+        add(L"STATIC", T(Msg::setup_dirLabel).c_str(), SS_LEFT, 28, 104, 300, 20, 0, &pOptions_);
         edDir_ = add(L"EDIT", opt_.installDir.c_str(), WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL, 28, 126, 460, 26, IDC_DIR, &pOptions_);
-        add(L"BUTTON", L"Tallózás...", WS_TABSTOP | BS_PUSHBUTTON, 496, 125, 96, 28, IDC_BROWSE, &pOptions_);
-        chkApo_ = add(L"BUTTON", L"Beillesztés az Equalizer APO láncba (élő DSP + pontos mérés a lánc végén)",
-                      WS_TABSTOP | BS_AUTOCHECKBOX, 28, 170, 570, 24, IDC_CHK_APO, &pOptions_);
-        chkDlApo_ = add(L"BUTTON", L"Az Equalizer APO letöltése és telepítése (sourceforge.net, ~12 MB, ingyenes)",
-                        WS_TABSTOP | BS_AUTOCHECKBOX, 48, 196, 550, 24, IDC_CHK_DLAPO, &pOptions_);
-        chkAuto_ = add(L"BUTTON", L"Indítás a Windows-zal (háttérben, tálcaikonnal)", WS_TABSTOP | BS_AUTOCHECKBOX, 28, 230,
-                       570, 24, IDC_CHK_AUTO, &pOptions_);
-        chkDesk_ = add(L"BUTTON", L"Parancsikon az Asztalon", WS_TABSTOP | BS_AUTOCHECKBOX, 28, 258, 570, 24, IDC_CHK_DESK, &pOptions_);
-        lblOptNote_ = add(L"STATIC", L"", SS_LEFT, 28, 296, 570, 90, 0, &pOptions_);
+        add(L"BUTTON", T(Msg::setup_browse).c_str(), WS_TABSTOP | BS_PUSHBUTTON, 496, 125, 96, 28, IDC_BROWSE, &pOptions_);
+        chkApo_ = add(L"BUTTON", T(Msg::setup_chkApo).c_str(),
+                      WS_TABSTOP | BS_AUTOCHECKBOX | BS_MULTILINE, 28, 164, 570, 34, IDC_CHK_APO, &pOptions_);
+        chkDlApo_ = add(L"BUTTON", T(Msg::setup_chkDlApo).c_str(),
+                        WS_TABSTOP | BS_AUTOCHECKBOX | BS_MULTILINE, 48, 200, 550, 34, IDC_CHK_DLAPO, &pOptions_);
+        chkAuto_ = add(L"BUTTON", T(Msg::setup_chkAuto).c_str(), WS_TABSTOP | BS_AUTOCHECKBOX | BS_MULTILINE, 28, 238,
+                       570, 34, IDC_CHK_AUTO, &pOptions_);
+        chkDesk_ = add(L"BUTTON", T(Msg::setup_chkDesk).c_str(), WS_TABSTOP | BS_AUTOCHECKBOX, 28, 274, 570, 24, IDC_CHK_DESK, &pOptions_);
+        lblOptNote_ = add(L"STATIC", L"", SS_LEFT, 28, 306, 570, 80, 0, &pOptions_);
         SendMessageW(chkApo_, BM_SETCHECK, BST_CHECKED, 0);
         SendMessageW(chkDlApo_, BM_SETCHECK, BST_CHECKED, 0);
         SendMessageW(chkAuto_, BM_SETCHECK, BST_CHECKED, 0);
         SendMessageW(chkDesk_, BM_SETCHECK, BST_CHECKED, 0);
 
         // 3. Folyamat
-        lblPhase_ = add(L"STATIC", L"Előkészítés...", SS_LEFT, 28, 104, 570, 22, IDC_PHASE, &pProgress_);
+        lblPhase_ = add(L"STATIC", T(Msg::setup_preparing).c_str(), SS_LEFT, 28, 104, 570, 22, IDC_PHASE, &pProgress_);
         prog_ = add(PROGRESS_CLASSW, L"", 0, 28, 132, 564, 20, IDC_PROGRESS, &pProgress_);
         SendMessageW(prog_, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
         lstLog_ = add(L"LISTBOX", L"", WS_BORDER | WS_VSCROLL | WS_HSCROLL | LBS_NOINTEGRALHEIGHT | LBS_NOSEL, 28, 164, 564, 222,
@@ -369,9 +372,9 @@ private:
         // 4. Befejezés
         lblFinTitle_ = add(L"STATIC", L"", SS_LEFT, 28, 104, 560, 32, 0, &pFinish_, fontBig_);
         lblFinText_ = add(L"STATIC", L"", SS_LEFT, 28, 144, 560, 170, 0, &pFinish_);
-        chkLaunch_ = add(L"BUTTON", L"Aqulify indítása most", WS_TABSTOP | BS_AUTOCHECKBOX, 28, 330, 560, 24, IDC_CHK_LAUNCH, &pFinish_);
-        chkReboot_ = add(L"BUTTON", L"A számítógép újraindítása most (az Equalizer APO aktiválásához szükséges)",
-                         WS_TABSTOP | BS_AUTOCHECKBOX, 28, 358, 560, 24, IDC_CHK_REBOOT, &pFinish_);
+        chkLaunch_ = add(L"BUTTON", T(Msg::setup_chkLaunch).c_str(), WS_TABSTOP | BS_AUTOCHECKBOX, 28, 324, 560, 24, IDC_CHK_LAUNCH, &pFinish_);
+        chkReboot_ = add(L"BUTTON", T(Msg::setup_chkReboot).c_str(),
+                         WS_TABSTOP | BS_AUTOCHECKBOX | BS_MULTILINE, 28, 350, 560, 34, IDC_CHK_REBOOT, &pFinish_);
         SendMessageW(chkLaunch_, BM_SETCHECK, BST_CHECKED, 0);
         updateApoTexts();
     }
@@ -379,19 +382,13 @@ private:
     void updateApoTexts() {
         std::wstring st;
         if (apo_.installed) {
-            st = L"✔ Equalizer APO telepítve: " + apo_.installPath +
-                 L"\nAz Aqulify a lánc végére kerül, így pontosan azt méri, ami a DAC-ra megy.";
+            st = T(Msg::setup_apoInstalled, "path", apo_.installPath);
         } else {
-            st = L"⚠ Az Equalizer APO nincs telepítve. A telepítő letöltheti és elindíthatja a telepítőjét; "
-                 L"nélküle az Aqulify csak analizál (a DSP beállítások nem hatnak a hangra).";
+            st = T(Msg::setup_apoMissing);
         }
         SetWindowTextW(lblApoStatus_, st.c_str());
         ShowWindow(chkDlApo_, (!apo_.installed && page_ == kOptions) ? SW_SHOW : SW_HIDE);
-        std::wstring note = apo_.installed
-            ? L"A beillesztés egyetlen sort ad az EQ APO config.txt-jéhez (Include: Aqulify.txt), a saját "
-              L"szűrőid érintetlenek maradnak. Az eltávolító ezt visszaveszi."
-            : L"Az Equalizer APO telepítője külön ablakban indul: a végén jelöld be azt a hangeszközt, amin zenét "
-              L"hallgatsz, majd indítsd újra a gépet, amikor kéri.";
+        std::wstring note = apo_.installed ? T(Msg::setup_noteInstalled) : T(Msg::setup_noteMissing);
         SetWindowTextW(lblOptNote_, note.c_str());
     }
 
@@ -407,7 +404,7 @@ private:
 
         EnableWindow(btnBack_, p == kOptions);
         ShowWindow(btnBack_, p == kFinish || p == kProgress ? SW_HIDE : SW_SHOW);
-        SetWindowTextW(btnNext_, p == kOptions ? L"Telepítés" : p == kFinish ? L"Befejezés" : L"Tovább >");
+        SetWindowTextW(btnNext_, (p == kOptions ? T(Msg::btn_install) : p == kFinish ? T(Msg::btn_finish) : T(Msg::btn_next)).c_str());
         SetWindowPos(btnNext_, nullptr, S(p == kFinish ? 510 : 402), S(404), 0, 0, SWP_NOSIZE | SWP_NOZORDER);
         EnableWindow(btnNext_, p != kProgress);
         ShowWindow(btnCancel_, p == kFinish ? SW_HIDE : SW_SHOW);
@@ -422,7 +419,7 @@ private:
         DWORD fl = 0;
         dlg->GetOptions(&fl);
         dlg->SetOptions(fl | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
-        dlg->SetTitle(L"Telepítési mappa kiválasztása");
+        dlg->SetTitle(T(Msg::setup_browseTitle).c_str());
         if (SUCCEEDED(dlg->Show(hwnd_))) {
             IShellItem* item = nullptr;
             if (SUCCEEDED(dlg->GetResult(&item))) {
@@ -445,7 +442,7 @@ private:
         opt_.installDir = buf;
         while (!opt_.installDir.empty() && (opt_.installDir.back() == L'\\' || opt_.installDir.back() == L' ')) opt_.installDir.pop_back();
         if (opt_.installDir.size() < 4) {
-            MessageBoxW(hwnd_, L"Adj meg egy érvényes telepítési mappát.", L"Aqulify", MB_ICONWARNING);
+            MessageBoxW(hwnd_, T(Msg::setup_invalidDir).c_str(), L"Aqulify", MB_ICONWARNING);
             return;
         }
         opt_.integrateApo = SendMessageW(chkApo_, BM_GETCHECK, 0, 0) == BST_CHECKED;
@@ -506,12 +503,12 @@ private:
         DrawTextW(dc, L"Aqulify", -1, &tr, DT_LEFT | DT_SINGLELINE);
         SelectObject(dc, font_);
         SetTextColor(dc, RGB(120, 220, 255));
-        const wchar_t* sub = page_ == kWelcome ? L"Fázis, spektrum és akusztikai vízesés – Windows 11"
-                           : page_ == kOptions ? L"Beállítások"
-                           : page_ == kProgress ? L"Telepítés folyamatban..."
-                           : L"Befejezés";
+        const std::wstring sub = T(page_ == kWelcome ? Msg::setup_subWelcome
+                                   : page_ == kOptions ? Msg::setup_subOptions
+                                   : page_ == kProgress ? Msg::setup_subProgress
+                                   : Msg::setup_subFinish);
         RECT sr{ S(86), S(48), rc.right - S(20), S(72) };
-        DrawTextW(dc, sub, -1, &sr, DT_LEFT | DT_SINGLELINE);
+        DrawTextW(dc, sub.c_str(), -1, &sr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
         SetTextColor(dc, RGB(150, 150, 160));
         RECT vr{ rc.right - S(200), S(56), rc.right - S(16), S(78) };
         std::wstring v = std::wstring(L"v") + kVersion;
@@ -552,7 +549,7 @@ private:
                         return 0;
                     case IDC_CANCEL:
                         if (page_ != kProgress &&
-                            MessageBoxW(hwnd_, L"Megszakítod a telepítést?", L"Aqulify", MB_ICONQUESTION | MB_YESNO) == IDYES)
+                            MessageBoxW(hwnd_, T(Msg::setup_cancelConfirm).c_str(), L"Aqulify", MB_ICONQUESTION | MB_YESNO) == IDYES)
                             DestroyWindow(hwnd_);
                         return 0;
                     case IDC_BROWSE: browse(); return 0;
@@ -580,26 +577,18 @@ private:
                 result_ = *r;
                 if (worker_.joinable()) worker_.join();
                 if (result_.ok) {
-                    SetWindowTextW(lblFinTitle_, L"Az Aqulify telepítése kész");
-                    std::wstring t;
-                    if (result_.apoIntegrated) {
-                        t = L"A plugin a helyére került az Equalizer APO láncában, a vízesés és a DSP élőben működik.\n\n";
-                    } else {
-                        t = L"Az Aqulify analizátor módban fut (WASAPI loopback). Az élő DSP-hez telepítsd az "
-                            L"Equalizer APO-t, majd futtasd újra ezt a telepítőt.\n\n";
-                    }
-                    if (result_.apoInstalledNow)
-                        t += L"Az Equalizer APO most települt: a hangeszközön csak újraindítás után lép életbe.\n\n";
-                    t += L"Az Aqulify a tálcán (értesítési területen) fut: dupla kattintás nyitja a felületet, "
-                         L"jobb kattintás a menüt. A Start menüből is elérhető.";
+                    SetWindowTextW(lblFinTitle_, T(Msg::setup_doneTitle).c_str());
+                    std::wstring t = T(result_.apoIntegrated ? Msg::setup_doneIntegrated : Msg::setup_doneAnalyzer) + L"\n\n";
+                    if (result_.apoInstalledNow) t += T(Msg::setup_doneReboot) + L"\n\n";
+                    t += T(Msg::setup_doneTray);
                     SetWindowTextW(lblFinText_, t.c_str());
                     if (result_.apoInstalledNow) {
                         SendMessageW(chkReboot_, BM_SETCHECK, BST_CHECKED, 0);
                         SendMessageW(chkLaunch_, BM_SETCHECK, BST_UNCHECKED, 0);
                     }
                 } else {
-                    SetWindowTextW(lblFinTitle_, L"A telepítés nem sikerült");
-                    SetWindowTextW(lblFinText_, (result_.message + L"\n\nA részletek a telepítési naplóban láthatók.").c_str());
+                    SetWindowTextW(lblFinTitle_, T(Msg::setup_failTitle).c_str());
+                    SetWindowTextW(lblFinText_, (result_.message + L"\n\n" + T(Msg::setup_failDetails)).c_str());
                 }
                 showPage(kFinish);
                 return 0;
@@ -607,7 +596,7 @@ private:
             case WM_CLOSE:
                 if (page_ == kProgress) return 0;
                 if (page_ == kFinish ||
-                    MessageBoxW(hwnd_, L"Megszakítod a telepítést?", L"Aqulify", MB_ICONQUESTION | MB_YESNO) == IDYES)
+                    MessageBoxW(hwnd_, T(Msg::setup_cancelConfirm).c_str(), L"Aqulify", MB_ICONQUESTION | MB_YESNO) == IDYES)
                     DestroyWindow(hwnd_);
                 return 0;
             case WM_DESTROY:
@@ -659,6 +648,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     INITCOMMONCONTROLSEX icc{ sizeof(icc), ICC_PROGRESS_CLASS | ICC_STANDARD_CLASSES };
     InitCommonControlsEx(&icc);
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    // Nyelv: a felületen korábban választott (frissítéskor), különben a Windows megjelenítési nyelve
+    aq_i18n::init();
 
     const std::wstring cmd = GetCommandLineW();
     const bool silent = hasSwitch(cmd, L" /s");
@@ -683,7 +674,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         // Egyszerre csak egy telepítő fusson
         HANDLE m = CreateMutexW(nullptr, TRUE, L"Global\\AqulifySetup");
         if (m && GetLastError() == ERROR_ALREADY_EXISTS) {
-            MessageBoxW(nullptr, L"Az Aqulify telepítője már fut.", L"Aqulify", MB_ICONINFORMATION);
+            MessageBoxW(nullptr, T(Msg::setup_alreadyRunning).c_str(), L"Aqulify", MB_ICONINFORMATION);
             return 1;
         }
         Wizard w;

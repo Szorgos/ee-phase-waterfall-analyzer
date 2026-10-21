@@ -15,11 +15,131 @@
 # ==============================================================================
 set -euo pipefail
 
+# >>> i18n (előállítva: tools/i18n_build.py – ne szerkeszd kézzel; források: i18n/scripts/<nyelv>.json)
+# Nyelv: AQULIFY_LANG, a felületen választott nyelv (~/.config/aqulify/language.txt), majd a rendszeré
+aq_detect_lang() {
+    local l="${AQULIFY_LANG:-}" f="${XDG_CONFIG_HOME:-$HOME/.config}/aqulify/language.txt"
+    [ -z "$l" ] && [ -r "$f" ] && l="$(head -n 1 "$f" 2>/dev/null || true)"
+    [ -z "$l" ] && l="${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}"
+    l="${l%%[_.@-]*}"
+    case "$l" in
+        hu|en) printf "%s" "$l" ;;
+        *) printf "en" ;;
+    esac
+}
+AQ_LANG="$(aq_detect_lang)"
+# msg_text NYELV KULCS – a szöveg (printf formátum) az adott nyelven; ha nincs, angolul
+msg_text() {
+    local f=""
+    case "$1" in
+    hu) case "$2" in
+        common.errorPrefix) f='[Hiba]' ;;
+        inst.title) f='Aqulify – telepítés Linuxra' ;;
+        inst.noRoot) f='Ne rootként futtasd! A saját felhasználóddal indítsd (a csomagokhoz sudo jelszót fog kérni).' ;;
+        inst.step1) f='[1/6] Szükséges csomagok telepítése...' ;;
+        inst.noOsRelease) f='Nem állapítható meg a disztribúció (/etc/os-release).' ;;
+        inst.unknownDistro1) f='Ismeretlen disztribúció (%s). Kell: C/C++20 fordító, cmake, pkg-config, libpipewire-0.3 és fftw3 (float) fejlesztői csomag;' ;;
+        inst.unknownDistro2) f='a saját ablakhoz: gtk3 és webkit2gtk-4.1 (vagy 4.0) fejlesztői csomag.' ;;
+        inst.noWebkit) f='A WebKitGTK csomag nem települt: a felület böngészőben fog megnyílni.' ;;
+        inst.noPwCli) f='A pw-cli nem található. Biztosan PipeWire a hangrendszered?' ;;
+        inst.step2) f='[2/6] Fordítás...' ;;
+        inst.engineFail) f='A motor fordítása sikertelen.' ;;
+        inst.engineOk) f='Motor: build/aqulify-engine' ;;
+        inst.guiOk) f='Saját ablakos felület: build/aqulify-gui' ;;
+        inst.guiFail1) f='A saját ablakos (WebKitGTK) felület nem fordult le (részletek: build/gui-build.log).' ;;
+        inst.guiFail2) f='Tartalék: Chromium alapú böngésző alkalmazásablaka, ha nincs ilyen, az alapértelmezett böngésző.' ;;
+        inst.guiFail3) f='Javítás: telepítsd a gtk3 és webkit2gtk-4.1 fejlesztői csomagot, majd futtasd újra az ./install.sh-t.' ;;
+        inst.step3) f='[3/6] Fájlok másolása (%s)...' ;;
+        inst.legacy) f='Korábbi AetherAudio telepítés eltávolítása (a beállítások átkerülnek)...' ;;
+        inst.filesOk) f='Fájlok a helyükön.' ;;
+        inst.step4) f='[4/6] Automatikus indítás beállítása (systemd felhasználói szolgáltatás)...' ;;
+        inst.unitDesc) f='Aqulify DSP motor (virtuális "Aqulify" hangkimenet)' ;;
+        inst.serviceOk) f='A motor fut, és bejelentkezéskor magától elindul.' ;;
+        inst.serviceFail) f='A systemd felhasználói szolgáltatás nem érhető el. Indítsd kézzel: %s &' ;;
+        inst.step5) f='[5/6] Menübejegyzés...' ;;
+        inst.desktopGeneric) f='Hangkorrekció és akusztikai vízesés' ;;
+        inst.desktopComment) f='Parametrikus EQ, konvolver, crossfeed és true peak limiter a PipeWire-hez, élő 3D vízesés-analizátorral' ;;
+        inst.menuOk) f='A menüben és az asztalon: Aqulify' ;;
+        inst.step6) f='[6/6] Alapértelmezett hangkimenet' ;;
+        inst.defaultExplain) f='Az alkalmazások hangja akkor megy át az Aqulify-n, ha az "Aqulify" a kimeneti eszköz.' ;;
+        inst.legacyDefault) f='A korábbi AetherAudio volt az alapértelmezett kimenet: az Aqulify veszi át.' ;;
+        inst.askDefault) f='Beállítsam most alapértelmezettnek? [i/N] ' ;;
+        inst.defaultOk) f='Az "Aqulify" lett az alapértelmezett kimenet.' ;;
+        inst.defaultFail) f='Nem sikerült; állítsd be a Hangbeállításokban (Kimenet: Aqulify).' ;;
+        inst.defaultLater) f='Később a Hangbeállításokban választhatod ki (Kimenet: Aqulify).' ;;
+        inst.done) f='Kész! Az Aqulify telepítve.' ;;
+        inst.sumGui) f='Felület:        menü → Aqulify  (vagy: aqulify-gui)' ;;
+        inst.sumState) f='Motor állapota: systemctl --user status aqulify' ;;
+        inst.sumLog) f='Napló:          journalctl --user -u aqulify -f' ;;
+        inst.sumUninstall) f='Eltávolítás:    ./uninstall.sh' ;;
+        esac ;;
+    esac
+    if [ -z "$f" ]; then
+        case "$2" in
+        common.errorPrefix) f='[Error]' ;;
+        inst.title) f='Aqulify – installation on Linux' ;;
+        inst.noRoot) f='Do not run it as root! Start it as your own user (it will ask for the sudo password for the packages).' ;;
+        inst.step1) f='[1/6] Installing required packages...' ;;
+        inst.noOsRelease) f='Cannot determine the distribution (/etc/os-release).' ;;
+        inst.unknownDistro1) f='Unknown distribution (%s). Required: C/C++20 compiler, cmake, pkg-config, libpipewire-0.3 and fftw3 (float) development packages;' ;;
+        inst.unknownDistro2) f='for the app window: gtk3 and webkit2gtk-4.1 (or 4.0) development packages.' ;;
+        inst.noWebkit) f='The WebKitGTK package was not installed: the interface will open in a browser.' ;;
+        inst.noPwCli) f='pw-cli was not found. Is your sound system really PipeWire?' ;;
+        inst.step2) f='[2/6] Building...' ;;
+        inst.engineFail) f='Building the engine failed.' ;;
+        inst.engineOk) f='Engine: build/aqulify-engine' ;;
+        inst.guiOk) f='App window interface: build/aqulify-gui' ;;
+        inst.guiFail1) f='The app window (WebKitGTK) interface did not build (details: build/gui-build.log).' ;;
+        inst.guiFail2) f='Fallback: the app window of a Chromium-based browser, or if there is none, the default browser.' ;;
+        inst.guiFail3) f='Fix: install the gtk3 and webkit2gtk-4.1 development packages, then run ./install.sh again.' ;;
+        inst.step3) f='[3/6] Copying files (%s)...' ;;
+        inst.legacy) f='Removing the previous AetherAudio installation (the settings are carried over)...' ;;
+        inst.filesOk) f='Files in place.' ;;
+        inst.step4) f='[4/6] Setting up automatic start (systemd user service)...' ;;
+        inst.unitDesc) f='Aqulify DSP engine (virtual "Aqulify" audio output)' ;;
+        inst.serviceOk) f='The engine is running and starts automatically at login.' ;;
+        inst.serviceFail) f='The systemd user service is not available. Start it manually: %s &' ;;
+        inst.step5) f='[5/6] Menu entry...' ;;
+        inst.desktopGeneric) f='Equalizer and acoustic waterfall analyzer' ;;
+        inst.desktopComment) f='Parametric EQ, convolver, crossfeed and true peak limiter for PipeWire with a live 3D waterfall analyzer' ;;
+        inst.menuOk) f='In the menu and on the desktop: Aqulify' ;;
+        inst.step6) f='[6/6] Default audio output' ;;
+        inst.defaultExplain) f='Application audio goes through Aqulify when "Aqulify" is the output device.' ;;
+        inst.legacyDefault) f='The previous AetherAudio was the default output: Aqulify takes over.' ;;
+        inst.askDefault) f='Set it as the default now? [y/N] ' ;;
+        inst.defaultOk) f='"Aqulify" is now the default output.' ;;
+        inst.defaultFail) f='That did not work; set it in the Sound settings (Output: Aqulify).' ;;
+        inst.defaultLater) f='You can select it later in the Sound settings (Output: Aqulify).' ;;
+        inst.done) f='Done! Aqulify is installed.' ;;
+        inst.sumGui) f='Interface:      menu → Aqulify  (or: aqulify-gui)' ;;
+        inst.sumState) f='Engine status:  systemctl --user status aqulify' ;;
+        inst.sumLog) f='Log:            journalctl --user -u aqulify -f' ;;
+        inst.sumUninstall) f='Uninstall:      ./uninstall.sh' ;;
+        esac
+    fi
+    printf "%s" "$f"
+}
+# msg KULCS [argumentumok...] – a választott nyelven (%s helyére az argumentumok)
+msg() {
+    local f
+    f="$(msg_text "$AQ_LANG" "$1")"; shift
+    # shellcheck disable=SC2059
+    printf "$f" "$@"
+}
+# desktop_l10n MEZŐ KULCS – a .desktop fájl fordított sorai (MEZŐ[nyelv]=...)
+desktop_l10n() {
+    local l
+    for l in hu; do
+        printf "%s[%s]=%s\n" "$1" "$l" "$(msg_text "$l" "$2")"
+    done
+}
+# <<< i18n
+
 RED='\033[0;31m'; GREEN='\033[0;32m'; BLUE='\033[0;34m'; YELLOW='\033[1;33m'; NC='\033[0m'
 say()  { echo -e "${YELLOW}$*${NC}"; }
 ok()   { echo -e "${GREEN}✓ $*${NC}"; }
 warn() { echo -e "${YELLOW}! $*${NC}"; }
-die()  { echo -e "${RED}[Hiba] $*${NC}"; exit 1; }
+die()  { echo -e "${RED}$(msg common.errorPrefix) $*${NC}"; exit 1; }
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_DIR"
@@ -33,14 +153,14 @@ APP_DIR="${PREFIX}/share/applications"
 ICON_DIR="${PREFIX}/share/icons/hicolor/256x256/apps"
 
 echo -e "${BLUE}====================================================================${NC}"
-echo -e "${GREEN}  Aqulify – telepítés Linuxra${NC}"
+echo -e "${GREEN}  $(msg inst.title)${NC}"
 echo -e "${BLUE}====================================================================${NC}"
 
-[ "$(id -u)" -eq 0 ] && [ -z "${AQULIFY_ALLOW_ROOT:-}" ] && die "Ne rootként futtasd! A saját felhasználóddal indítsd (a csomagokhoz sudo jelszót fog kérni)."
+[ "$(id -u)" -eq 0 ] && [ -z "${AQULIFY_ALLOW_ROOT:-}" ] && die "$(msg inst.noRoot)"
 
 # ------------------------------------------------------------------ 1. csomagok
-say "\n[1/6] Szükséges csomagok telepítése..."
-. /etc/os-release 2>/dev/null || die "Nem állapítható meg a disztribúció (/etc/os-release)."
+say "\n$(msg inst.step1)"
+. /etc/os-release 2>/dev/null || die "$(msg inst.noOsRelease)"
 ID_ALL="${ID:-} ${ID_LIKE:-}"
 GUI_PKGS_OK=1
 case "$ID_ALL" in
@@ -63,40 +183,40 @@ case "$ID_ALL" in
         sudo zypper install -y gtk3-devel webkit2gtk3-devel || GUI_PKGS_OK=0
         ;;
     *)
-        warn "Ismeretlen disztribúció ($ID). Kell: C/C++20 fordító, cmake, pkg-config, libpipewire-0.3 és fftw3 (float) fejlesztői csomag;"
-        warn "a saját ablakhoz: gtk3 és webkit2gtk-4.1 (vagy 4.0) fejlesztői csomag."
+        warn "$(msg inst.unknownDistro1 "${ID:-?}")"
+        warn "$(msg inst.unknownDistro2)"
         ;;
 esac
-[ "$GUI_PKGS_OK" = 1 ] || warn "A WebKitGTK csomag nem települt: a felület böngészőben fog megnyílni."
+[ "$GUI_PKGS_OK" = 1 ] || warn "$(msg inst.noWebkit)"
 
-command -v pw-cli >/dev/null 2>&1 || warn "A pw-cli nem található. Biztosan PipeWire a hangrendszered?"
+command -v pw-cli >/dev/null 2>&1 || warn "$(msg inst.noPwCli)"
 
 # ------------------------------------------------------------------ 2. fordítás
-say "\n[2/6] Fordítás..."
+say "\n$(msg inst.step2)"
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON
 cmake --build build -j"$(nproc)" --target aqulify-engine
-[ -x build/aqulify-engine ] || die "A motor fordítása sikertelen."
-ok "Motor: build/aqulify-engine"
+[ -x build/aqulify-engine ] || die "$(msg inst.engineFail)"
+ok "$(msg inst.engineOk)"
 HAVE_GUI=0
 if cmake --build build -j"$(nproc)" --target aqulify-gui > build/gui-build.log 2>&1 && [ -x build/aqulify-gui ]; then
     HAVE_GUI=1
-    ok "Saját ablakos felület: build/aqulify-gui"
+    ok "$(msg inst.guiOk)"
 else
     tail -n 15 build/gui-build.log 2>/dev/null || true
-    warn "A saját ablakos (WebKitGTK) felület nem fordult le (részletek: build/gui-build.log)."
-    warn "Tartalék: Chromium alapú böngésző alkalmazásablaka, ha nincs ilyen, az alapértelmezett böngésző."
-    warn "Javítás: telepítsd a gtk3 és webkit2gtk-4.1 fejlesztői csomagot, majd futtasd újra az ./install.sh-t."
+    warn "$(msg inst.guiFail1)"
+    warn "$(msg inst.guiFail2)"
+    warn "$(msg inst.guiFail3)"
 fi
 
 # ------------------------------------------------------------------ 3. fájlok
-say "\n[3/6] Fájlok másolása (${PREFIX})..."
+say "\n$(msg inst.step3 "${PREFIX}")"
 # Futó motor leállítása frissítéskor
 systemctl --user stop aqulify.service >/dev/null 2>&1 || true
 # Régi név (AetherAudio, 1.4.x-ig) eltávolítása: szolgáltatás, programfájlok, menü, ikon.
 # A beállítások és profilok a ~/.config/aetheraudio mappából az első indításkor átköltöznek.
 OLD="aether""audio"
 if [ -e "$UNIT_DIR/${OLD}.service" ] || [ -e "$BIN_DIR/${OLD}-engine" ]; then
-    say "Korábbi AetherAudio telepítés eltávolítása (a beállítások átkerülnek)..."
+    say "$(msg inst.legacy)"
     WAS_DEFAULT=0
     pw-metadata 0 default.configured.audio.sink 2>/dev/null | grep -q "\"${OLD}_sink\"" && WAS_DEFAULT=1
     systemctl --user disable --now "${OLD}.service" >/dev/null 2>&1 || true
@@ -109,7 +229,7 @@ fi
 PIXMAP_DIR="${PREFIX}/share/pixmaps"
 mkdir -p "$BIN_DIR" "$GUI_DIR" "$APP_DIR" "$ICON_DIR" "$UNIT_DIR" "$PIXMAP_DIR"
 install -m 755 build/aqulify-engine "$BIN_DIR/aqulify-engine"
-install -m 644 gui_integrated_system.html autoeq_index.js "$GUI_DIR/"
+install -m 644 gui_integrated_system.html autoeq_index.js gui_i18n.js "$GUI_DIR/"
 install -m 644 windows/third_party/three/three.min.js "$GUI_DIR/three.min.js"
 install -m 644 windows/third_party/three/LICENSE "$GUI_DIR/three.js-LICENSE.txt"
 install -m 644 linux/aqulify.png "$ICON_DIR/aqulify.png"
@@ -131,13 +251,13 @@ exec xdg-open "\$URL"
 EOF
     chmod 755 "$BIN_DIR/aqulify-gui"
 fi
-ok "Fájlok a helyükön."
+ok "$(msg inst.filesOk)"
 
 # ------------------------------------------------------------------ 4. automatikus indítás
-say "\n[4/6] Automatikus indítás beállítása (systemd felhasználói szolgáltatás)..."
+say "\n$(msg inst.step4)"
 cat > "$UNIT_DIR/aqulify.service" <<EOF
 [Unit]
-Description=Aqulify DSP motor (virtuális "Aqulify" hangkimenet)
+Description=$(msg inst.unitDesc)
 After=pipewire.service wireplumber.service
 Wants=pipewire.service
 
@@ -150,19 +270,21 @@ RestartSec=2
 WantedBy=default.target
 EOF
 if systemctl --user daemon-reload 2>/dev/null && systemctl --user enable --now aqulify.service; then
-    ok "A motor fut, és bejelentkezéskor magától elindul."
+    ok "$(msg inst.serviceOk)"
 else
-    warn "A systemd felhasználói szolgáltatás nem érhető el. Indítsd kézzel: ${BIN_DIR}/aqulify-engine &"
+    warn "$(msg inst.serviceFail "${BIN_DIR}/aqulify-engine")"
 fi
 
 # ------------------------------------------------------------------ 5. menübejegyzés
-say "\n[5/6] Menübejegyzés..."
+say "\n$(msg inst.step5)"
 cat > "$APP_DIR/aqulify.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Aqulify
-GenericName=Hangkorrekció és akusztikai vízesés
-Comment=Parametrikus EQ, konvolver, crossfeed és true peak limiter a PipeWire-hez, élő 3D vízesés-analizátorral
+GenericName=$(msg_text en inst.desktopGeneric)
+$(desktop_l10n GenericName inst.desktopGeneric)
+Comment=$(msg_text en inst.desktopComment)
+$(desktop_l10n Comment inst.desktopComment)
 Exec=${BIN_DIR}/aqulify-gui
 Icon=${ICON_DIR}/aqulify.png
 Terminal=false
@@ -185,31 +307,33 @@ gtk-update-icon-cache -q "${PREFIX}/share/icons/hicolor" >/dev/null 2>&1 || true
 kbuildsycoca6 >/dev/null 2>&1 || kbuildsycoca5 >/dev/null 2>&1 || true
 # régi (0.x) telepítés maradványa
 rm -f "$PROJECT_DIR/run.sh" 2>/dev/null || true
-ok "A menüben és az asztalon: Aqulify"
+ok "$(msg inst.menuOk)"
 
 # ------------------------------------------------------------------ 6. alapértelmezett kimenet
-say "\n[6/6] Alapértelmezett hangkimenet"
-echo "Az alkalmazások hangja akkor megy át az Aqulify-n, ha az \"Aqulify\" a kimeneti eszköz."
+say "\n$(msg inst.step6)"
+msg inst.defaultExplain; echo
 if [ "${WAS_DEFAULT:-0}" = 1 ]; then
-    ans="i"; echo "A korábbi AetherAudio volt az alapértelmezett kimenet: az Aqulify veszi át."
+    ans="y"; msg inst.legacyDefault; echo
 else
-    read -r -p "Beállítsam most alapértelmezettnek? [i/N] " ans || ans=""
+    read -r -p "$(msg inst.askDefault)" ans || ans=""
 fi
-if [[ "$ans" =~ ^[iIyY]$ ]]; then
+# Igen: i (igen) vagy y (yes)
+case "$ans" in
+    [iIyY]*) ans="y" ;;
+    *) ans="" ;;
+esac
+if [ "$ans" = "y" ]; then
     sleep 1
     if pw-metadata 0 default.configured.audio.sink '{ "name": "aqulify_sink" }' Spa:String:JSON >/dev/null 2>&1; then
-        ok "Az \"Aqulify\" lett az alapértelmezett kimenet."
+        ok "$(msg inst.defaultOk)"
     else
-        warn "Nem sikerült; állítsd be a Hangbeállításokban (Kimenet: Aqulify)."
+        warn "$(msg inst.defaultFail)"
     fi
 else
-    echo "Később a Hangbeállításokban választhatod ki (Kimenet: Aqulify)."
+    msg inst.defaultLater; echo
 fi
 
 echo -e "\n${BLUE}====================================================================${NC}"
-echo -e "${GREEN}  Kész! Az Aqulify telepítve.${NC}"
+echo -e "${GREEN}  $(msg inst.done)${NC}"
 echo -e "${BLUE}====================================================================${NC}"
-echo "  Felület:        menü → Aqulify  (vagy: aqulify-gui)"
-echo "  Motor állapota: systemctl --user status aqulify"
-echo "  Napló:          journalctl --user -u aqulify -f"
-echo "  Eltávolítás:    ./uninstall.sh"
+for k in inst.sumGui inst.sumState inst.sumLog inst.sumUninstall; do echo "  $(msg "$k")"; done

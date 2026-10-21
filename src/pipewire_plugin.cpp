@@ -219,6 +219,8 @@ int main(int argc, char* argv[]) {
                      "(vagy: pactl set-default-sink aqulify_sink), és minden hang a DSP láncon át szól.\n";
         return 0;
     }
+    // Nyelv (a hangbeállításokban látszó kimenet neve): a felületen választott, különben a munkameneté
+    aq_i18n::init();
     std::vector<int> ports(std::begin(kEnginePorts), std::end(kEnginePorts));
     for (int i = 1; i + 1 < argc; ++i)
         if (std::strcmp(argv[i], "--port") == 0) ports = { std::atoi(argv[i + 1]) };
@@ -320,6 +322,10 @@ int main(int argc, char* argv[]) {
         std::lock_guard<std::mutex> lk(presetMutex);
         presetDoc = doc;
         if (!linux_store::savePresets(doc)) std::cerr << "[Profilok] Figyelem: a presets.json nem írható.\n";
+    };
+    cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
+    cb.setLanguage = [](const std::string& l) {
+        if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cerr << "[Nyelv] Figyelem: a language.txt nem írható.\n";
     };
 
     std::unique_ptr<WebSocketBridge> bridge;

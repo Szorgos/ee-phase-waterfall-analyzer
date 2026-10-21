@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include "aether_chain.hpp"
+#include "aq_i18n.hpp"
 #include "param_block.hpp"
 #include "tap_ring.hpp"
 
@@ -98,7 +99,7 @@ public:
         struct pw_properties* pprops = pw_properties_new(
             PW_KEY_MEDIA_CLASS, "Stream/Output/Audio",
             PW_KEY_NODE_NAME, (sinkName + "_output").c_str(),
-            PW_KEY_NODE_DESCRIPTION, (description + " kimenet").c_str(),
+            PW_KEY_NODE_DESCRIPTION, aq_i18n::fmt(aq_i18n::Msg::pw_outputNode, { { "name", description } }).c_str(),
             PW_KEY_NODE_GROUP, group.c_str(),
             PW_KEY_NODE_LINK_GROUP, group.c_str(),
             PW_KEY_NODE_PASSIVE, "true",

@@ -37,6 +37,7 @@
 
 #include "ws_bridge.hpp"
 #include "param_block.hpp"
+#include "aq_i18n.hpp"
 #include "../common/win_shared.hpp"
 #include "wasapi_loopback.hpp"
 #include "tray.hpp"
@@ -378,6 +379,8 @@ int main(int argc, char** argv) {
     }
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    // Nyelv (tálcamenü, üzenetek): a felületen választott, különben a Windows nyelve
+    aq_i18n::init();
 
     // Mentett beállítások (a GUI utolsó állapota)
     std::mutex paramMutex;
@@ -419,6 +422,10 @@ int main(int argc, char** argv) {
         presetDoc = doc;
         if (!savePresetFile(doc)) std::cout << "[Profilok] Figyelem: a presets.json nem írható.\n";
     };
+    cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
+    cb.setLanguage = [](const std::string& l) {
+        if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cout << "[Nyelv] Figyelem: a language.txt nem írható.\n";
+    };
 
     std::unique_ptr<WebSocketBridge> bridge;
     for (int p : ports) {
@@ -427,12 +434,15 @@ int main(int argc, char** argv) {
         std::cout << "[Info] A " << p << " port foglalt, a következőt próbálom.\n";
     }
     if (!bridge) {
-        std::wstring msg = L"Az Aqulify nem tudott elindulni, mert az összes kapcsolódási portját (";
-        for (size_t i = 0; i < ports.size(); ++i) msg += (i ? L", " : L"") + std::to_wstring(ports[i]);
-        msg += L") más program használja.";
+        std::string list;
+        for (size_t i = 0; i < ports.size(); ++i) list += (i ? ", " : "") + std::to_string(ports[i]);
+        std::wstring msg = aq_i18n::fmtw(aq_i18n::Msg::engine_portsBusy, { { "ports", list } });
         const std::wstring owner = portOwner(ports.front());
-        if (!owner.empty()) msg += L"\n\nA " + std::to_wstring(ports.front()) + L"-es portot használja: " + owner;
-        msg += L"\n\nZárd be azt a programot, majd indítsd újra az Aqulify-t.";
+        if (!owner.empty()) {
+            msg += L"\n\n" + aq_i18n::fmtw(aq_i18n::Msg::engine_portOwner, { { "port", std::to_string(ports.front()) },
+                                                                               { "owner", aq_i18n::narrow(owner) } });
+        }
+        msg += L"\n\n" + aq_i18n::trw(aq_i18n::Msg::engine_portsHint);
         std::cout << "[Hiba] A WebSocket híd nem indult el (minden port foglalt).\n";
         MessageBoxW(nullptr, msg.c_str(), L"Aqulify", MB_ICONWARNING | MB_OK);
         loopback->stop();

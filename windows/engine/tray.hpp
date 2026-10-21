@@ -21,6 +21,8 @@
 #include <memory>
 #include <string>
 
+#include "aq_i18n.hpp"
+
 namespace ee_analyzer::win {
 
 constexpr const wchar_t* kEngineWindowClass = L"AqulifyEngineWnd"; // a telepítő is ezt keresi
@@ -225,13 +227,15 @@ private:
     void showMenu() {
         HMENU m = CreatePopupMenu();
         const std::wstring st = cb_.statusText ? cb_.statusText() : L"";
-        AppendMenuW(m, MF_STRING | MF_GRAYED, 0, (L"Forrás: " + st).c_str());
+        // A menü minden megnyitáskor a pillanatnyi nyelven készül (a felületen váltott nyelv azonnal látszik)
+        using aq_i18n::Msg;
+        AppendMenuW(m, MF_STRING | MF_GRAYED, 0, aq_i18n::fmtw(Msg::tray_source, { { "src", aq_i18n::narrow(st) } }).c_str());
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(m, MF_STRING, kCmdOpen, L"Felület megnyitása");
-        AppendMenuW(m, MF_STRING | (autostartEnabled() ? MF_CHECKED : MF_UNCHECKED), kCmdAutostart, L"Indítás a Windows-zal");
-        AppendMenuW(m, MF_STRING, kCmdLog, L"Napló megnyitása");
+        AppendMenuW(m, MF_STRING, kCmdOpen, aq_i18n::trw(Msg::tray_open).c_str());
+        AppendMenuW(m, MF_STRING | (autostartEnabled() ? MF_CHECKED : MF_UNCHECKED), kCmdAutostart, aq_i18n::trw(Msg::tray_autostart).c_str());
+        AppendMenuW(m, MF_STRING, kCmdLog, aq_i18n::trw(Msg::tray_log).c_str());
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(m, MF_STRING, kCmdExit, L"Kilépés");
+        AppendMenuW(m, MF_STRING, kCmdExit, aq_i18n::trw(Msg::tray_exit).c_str());
         SetMenuDefaultItem(m, kCmdOpen, FALSE);
         POINT pt;
         GetCursorPos(&pt);

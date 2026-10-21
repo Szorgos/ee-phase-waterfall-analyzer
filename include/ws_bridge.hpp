@@ -9,6 +9,7 @@
  *
  * Ugyanez a kód fut Linuxon (PipeWire csomópont) és Windowson (Aqulify.exe).
  */
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <chrono>
@@ -53,6 +54,9 @@ struct BridgeCallbacks {
     /** EQ profilok (a felület által kezelt JSON dokumentum) olvasása / mentése (opcionális). */
     std::function<std::string()> getPresets;
     std::function<void(const std::string&)> setPresets;
+    /** A felületen választott nyelv (pl. "de"; üres: még nem választott) – a tálcamenü és a rendszerüzenetek is ezt használják. */
+    std::function<std::string()> getLanguage;
+    std::function<void(const std::string&)> setLanguage;
 };
 
 /** Az EQ profil-dokumentum maximális mérete (bájt). */
@@ -447,6 +451,14 @@ private:
             }
             return;
         }
+        if (type == "set_language") {
+            // Csak rövid nyelvkód (a–z): a motor fájlba írja, és a tálcamenü is erre vált
+            const std::string l = val ? val->stringOr("") : "";
+            const bool valid = l.size() >= 2 && l.size() <= 8 &&
+                               std::all_of(l.begin(), l.end(), [](char c) { return c >= 'a' && c <= 'z'; });
+            if (valid && cb_.setLanguage) cb_.setLanguage(l);
+            return;
+        }
         if (type == "set_output_sink") {
             const std::string s = val ? val->stringOr("") : msg.get("sink") ? msg.get("sink")->stringOr("") : "";
             if (!s.empty() && cb_.setOutputSink) cb_.setOutputSink(s);
@@ -726,6 +738,13 @@ private:
                 s += ',';
                 s += extra;
                 s += '}';
+            }
+        }
+        if (cb_.getLanguage) {
+            const std::string lang = cb_.getLanguage();
+            if (!lang.empty()) {
+                s.pop_back();
+                s += ",\"language\":\"" + jsonEscape(lang) + "\"}";
             }
         }
         if (std::strcmp(reason, "full") == 0 && cb_.getPresets) {

@@ -174,6 +174,9 @@ cmake --build build -j$(nproc)
 ├── uninstall.sh                # Linux eltávolító
 ├── gui_integrated_system.html  # Grafikus felület (Adwaita stílus) és 3D WebGL vízesés
 ├── autoeq_index.js             # 8 850+ modellt tartalmazó AutoEq fülhallgató adatbázis
+├── gui_i18n.js                 # A felület szövegei magyarul és angolul (előállítva: tools/i18n_build.py)
+├── i18n/                       # Fordítások forrásai: gui/ (felület), native/ (tálca, telepítő), scripts/ (install.sh)
+├── tools/i18n_build.py         # A fordítások összeállítása és ellenőrzése
 ├── include/
 │   ├── aether_chain.hpp        # Teljes DSP lánc háttérszállal (Linux + Windows közös mag)
 │   ├── ee_dsp.hpp              # EQ, limiter, bass enhancer, crossfeed, konvolver (src/ee_dsp_*.cpp)
@@ -187,6 +190,7 @@ cmake --build build -j$(nproc)
 │   ├── tap_ring.hpp            # Felülíró sztereó tap körpuffer (közös memóriában is)
 │   ├── shared_state.hpp        # Plugin <-> motor közös memória elrendezés (Windows)
 │   ├── mini_json.hpp           # Függőségmentes JSON olvasó a vezérlőüzenetekhez
+│   ├── aq_i18n.hpp             # Nyelvválasztás és szövegek a natív részekhez (aq_i18n_strings.hpp: előállítva)
 │   └── sha1_base64.hpp         # Független SHA-1 és Base64 modul a WS kézfogáshoz
 ├── src/
 │   ├── pipewire_plugin.cpp     # Linux motor (aqulify-engine) belépési pontja
