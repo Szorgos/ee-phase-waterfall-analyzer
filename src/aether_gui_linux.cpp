@@ -8,6 +8,8 @@
  */
 #include "webview/webview.h"
 
+#include <glib-unix.h>
+
 #include <arpa/inet.h>
 #include <chrono>
 #include <climits>
@@ -154,6 +156,26 @@ void applyDarkTitlebar() {
     g_object_unref(css);
 }
 
+/**
+ * Bezáráskor a WebKit tartalomfolyamatát (WebKitWebProcess) is leállítjuk. Ha a felület kilépésekor éppen
+ * egy hosszabb rajzolást végez, a WebKit 10 másodperc múlva szándékosan összeomlasztaná (g_error, core dump,
+ * hibajelentés); így ehelyett azonnal és csendben leáll.
+ */
+gboolean onWindowDelete(GtkWidget*, GdkEvent*, gpointer view) {
+#if WEBKIT_CHECK_VERSION(2, 34, 0)
+    if (view) webkit_web_view_terminate_web_process(WEBKIT_WEB_VIEW(view));
+#else
+    (void)view;
+#endif
+    return FALSE;   // a bezárás folytatódik (az ablak megszűnik, a program kilép)
+}
+
+/** SIGTERM / SIGINT: ugyanaz, mint az ablak bezárása. */
+gboolean onQuitSignal(gpointer window) {
+    gtk_window_close(GTK_WINDOW(window));
+    return G_SOURCE_REMOVE;
+}
+
 } // namespace
 
 int main() {
@@ -188,6 +210,11 @@ int main() {
                 std::string iconLocal = folder + "/../linux/aqulify.png";
                 if (fileExists(iconLocal)) gtk_window_set_icon_from_file(GTK_WINDOW(win.value()), iconLocal.c_str(), nullptr);
             }
+            auto view = w.browser_controller();
+            g_signal_connect(G_OBJECT(win.value()), "delete-event", G_CALLBACK(onWindowDelete),
+                             view.ok() ? view.value() : nullptr);
+            g_unix_signal_add(SIGTERM, onQuitSignal, win.value());
+            g_unix_signal_add(SIGINT, onQuitSignal, win.value());
         }
         w.bind("aetherOpenUrl", [](const std::string& req) -> std::string {
             const std::string target = allowedExternalUrl(req);

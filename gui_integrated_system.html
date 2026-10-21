@@ -66,6 +66,15 @@
   html.wkgtk input[type="number"] { text-align: right; padding-right: 2px; }
   .freq-scale { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 30px; pointer-events: none;
                 background: linear-gradient(to top, rgba(12,14,18,0.94) 0%, rgba(12,14,18,0.75) 55%, rgba(12,14,18,0) 100%); }
+  /* A skála élő jelei (tartománysáv, ottragadó jelek, min/max) DOM-elemek: képkockánként nem kerül művelet a vászonra */
+  .freq-scale-live { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; pointer-events: none; display: none; }
+  .freq-scale-live > * { position: absolute; left: 0; top: 0; display: none; }
+  .freq-scale-live .fs-band { top: 7px; width: 1px; height: 5px; transform-origin: 0 0; background: rgba(0, 240, 255, 0.10); will-change: transform; }
+  .freq-scale-live .fs-mark { top: 3.5px; left: -0.25px; width: 1.5px; height: 12px; background: rgba(0, 240, 255, 0.95); will-change: transform; }
+  .freq-scale-live .fs-stat { top: 1.5px; font: 600 9px monospace, sans-serif; line-height: 9px; color: #00f0ff; white-space: nowrap; }
+  .freq-scale-live.stale .fs-band { background: rgba(0, 240, 255, 0.05); }
+  .freq-scale-live.stale .fs-mark { background: rgba(0, 240, 255, 0.45); }
+  .freq-scale-live.stale .fs-stat { color: rgba(0, 240, 255, 0.45); }
 
   .strip-overlay { position: absolute; top: 10px; left: 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; pointer-events: none; }
   .strip-badge { background: rgba(30, 30, 30, 0.85); backdrop-filter: blur(4px); border: 1px solid var(--ee-border); border-radius: 6px; padding: 4px 10px; font-size: 0.72rem; color: var(--ee-text-secondary); }
@@ -311,6 +320,9 @@
     <canvas id="waterfallCanvas"></canvas>
     <!-- Frekvenciaskála a vízesés első (alsó) éléhez igazítva -->
     <canvas id="freqScaleCanvas" class="freq-scale" aria-hidden="true"></canvas>
+    <div id="freqScaleLive" class="freq-scale-live" aria-hidden="true">
+      <div class="fs-band"></div><div class="fs-mark"></div><div class="fs-mark"></div><span class="fs-stat"></span><span class="fs-stat"></span>
+    </div>
 
     <div class="strip-overlay">
       <div class="strip-badge">
@@ -972,7 +984,7 @@ function setCamera(v) {
 }
 
 const renderer = new THREE.WebGLRenderer({ canvas: wfCanvas, antialias: true });
-renderer.setSize(wfCanvas.clientWidth, wfCanvas.clientHeight);
+renderer.setSize(wfCanvas.clientWidth, wfCanvas.clientHeight, false);   // a CSS-méret marad 100 %: az ablakkal együtt méreteződik
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 const FREQ_BINS = 160;
@@ -1161,24 +1173,26 @@ function freqScreenX(freq, w, h, edgeY) {
   return p.x;
 }
 
+/**
+ * A skála álló része (alapvonal, osztások, feliratok): csak méret- vagy nézetváltáskor rajzolódik újra.
+ * A mozgó jelek külön DOM-elemek (drawFreqScaleFrame), így képkockánként nem kerül művelet a vászonra.
+ */
 function drawFreqScale(force) {
   if (!freqScaleCtx) return;
   const w = wfCanvas.clientWidth, h = wfCanvas.clientHeight;
   const sh = 30;                                // .freq-scale magassága (rejtve a clientHeight 0 lenne)
-  const key = `${w}x${h}|${currentViewIdx}`;
+  const dpr = window.devicePixelRatio || 1;
+  const key = `${w}x${h}|${currentViewIdx}|${dpr}`;
   if (!force && key === freqScaleKey) return;
   freqScaleKey = key;
   camera.updateMatrixWorld();
-  const dpr = window.devicePixelRatio || 1;
-  freqScaleCanvas.width = Math.round(w * dpr);
+  freqScaleCanvas.width = Math.round(w * dpr);  // a méret beállítása a vászon korábbi tartalmát is eldobja
   freqScaleCanvas.height = Math.round(sh * dpr);
-  fsStatic.width = freqScaleCanvas.width;
-  fsStatic.height = freqScaleCanvas.height;
-  const c = fsStatic.getContext("2d");
+  const c = freqScaleCtx;
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   c.clearRect(0, 0, w, sh);
   // Oldalnézetben a frekvenciatengely a mélységbe mutat: ott nincs értelme a skálának
-  if (w <= 0 || h <= 0 || cameraViews[currentViewIdx].id === "side") { freqScaleCanvas.style.display = "none"; return; }
+  if (w <= 0 || h <= 0 || cameraViews[currentViewIdx].id === "side") { freqScaleCanvas.style.display = "none"; fsGeom = null; return; }
   freqScaleCanvas.style.display = "block";
   const edgeY = h - sh;                         // a skála felső széle a vízesés-vásznon
   const x0 = freqScreenX(10, w, h, edgeY), x1 = freqScreenX(24000, w, h, edgeY);
@@ -1231,7 +1245,6 @@ function drawFreqScale(force) {
 // ---------------------------------------------------------------- a zenei jel frekvenciatartománya (ottragadó jelek)
 // A spektrum legalsó és legfelső, a zenében ténylegesen jelen lévő sávját mutatja a skálán. A jelek a
 // szélső értéken „ottragadnak”, és csak néhány másodperc után, lassan húzódnak vissza.
-const fsStatic = document.createElement("canvas");
 let fsGeom = null;
 const FS_RANGE = { lo: null, hi: null, loHoldUntil: 0, hiHoldUntil: 0, last: 0 };
 const FS_HOLD_MS = 600;           // gyorsabb reakció: csak 600 ms-ig tartja a szélső értéket (korábban 4000 ms volt)
@@ -1289,54 +1302,67 @@ function updateFreqRange(levels, now) {
     FS_RANGE.hi = Math.max(hi, FS_RANGE.hi - FS_RETURN_BANDS_PER_S * dt);
 }
 
+// A mozgó jelek DOM-elemei. Csak a ténylegesen megváltozott tulajdonság íródik ki (a változatlan érték nem
+// okoz újrarajzolást), és ezek az elemek nem vásznon rajzolódnak: WebKitGTK a vászonműveleteket rögzíti és
+// megjelenítéskor játssza vissza, a képkockánkénti vászonrajzolás így nem halmozódhat fel.
+const fsLive = (() => {
+  const root = document.getElementById("freqScaleLive");
+  if (!root) return null;
+  const [band, markLo, markHi, statMin, statMax] = root.children;
+  return { root, band, markLo, markHi, statMin, statMax, stale: null, posKey: "" };
+})();
+function fsStyle(el, prop, val) {
+  const cache = el._fs || (el._fs = {});
+  if (cache[prop] !== val) { cache[prop] = val; el.style[prop] = val; }
+}
+function fsShow(el, on) { fsStyle(el, "display", on ? "block" : "none"); }
+function fsPx(v) { return (Math.round(v * 4) / 4) + "px"; }   // negyed képpontra kerekítve: apró mozgás nem ír ki újat
+
 function drawFreqScaleFrame(levels) {
-  if (!freqScaleCtx || !fsGeom || freqScaleCanvas.style.display === "none") return;
+  const L = fsLive;
+  if (!L) return;
+  const visible = !!fsGeom && freqScaleCanvas.style.display !== "none";
+  fsShow(L.root, visible);
+  if (!visible) return;
   const now = performance.now();
   updateFreqRange(levels, now);
-  const g = fsGeom, c = freqScaleCtx;
-  c.setTransform(1, 0, 0, 1, 0, 0);
-  c.clearRect(0, 0, freqScaleCanvas.width, freqScaleCanvas.height);
-  c.drawImage(fsStatic, 0, 0);
-  if (FS_RANGE.lo === null) return;
-  c.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
+  const g = fsGeom;
+  const has = FS_RANGE.lo !== null;
+  [L.band, L.markLo, L.markHi].forEach(el => fsShow(el, has));
+  if (!has) { fsShow(L.statMin, false); fsShow(L.statMax, false); return; }
+  const live = !!levels;
+  if (L.stale !== !live) { L.stale = !live; L.root.classList.toggle("stale", !live); }
   const xl = freqScreenX(bandFreq(FS_RANGE.lo), g.w, g.h, g.edgeY);
   const xh = freqScreenX(bandFreq(FS_RANGE.hi), g.w, g.h, g.edgeY);
-  const live = !!levels;
-  // a lefedett tartomány halvány sávja az alapvonalon
-  c.fillStyle = live ? "rgba(0, 240, 255, 0.10)" : "rgba(0, 240, 255, 0.05)";
-  c.fillRect(xl, g.baseY - 2.5, Math.max(1, xh - xl), 5);
+  // a lefedett tartomány halvány sávja az alapvonalon (1 px széles elem, vízszintesen nyújtva)
+  fsStyle(L.band, "transform", `translateX(${fsPx(xl)}) scaleX(${Math.max(1, Math.round((xh - xl) * 4) / 4)})`);
   // ottragadó jelek: picike függőleges vonal mindkét irányba az alapvonaltól
-  c.strokeStyle = live ? "rgba(0, 240, 255, 0.95)" : "rgba(0, 240, 255, 0.45)";
-  c.lineWidth = 1.5;
-  for (const x of [xl, xh]) {
-    const xx = Math.round(x) + 0.5;
-    c.beginPath(); c.moveTo(xx, g.baseY - 6); c.lineTo(xx, g.baseY + 6); c.stroke();
-  }
+  fsStyle(L.markLo, "transform", `translateX(${Math.round(xl)}px)`);   // 1,5 px széles, a vászon x + 0,5 közepével
+  fsStyle(L.markHi, "transform", `translateX(${Math.round(xh)}px)`);
 
   // Az elmúlt 10 másodperc legmélyebb és legmagasabb frekvenciájának szöveges kijelzése a két szélen
-  if (FS_HISTORY_10S.length > 0) {
-    let min10s = Infinity, max10s = -Infinity;
-    for (let i = 0; i < FS_HISTORY_10S.length; i++) {
-      if (FS_HISTORY_10S[i].loFreq < min10s) min10s = FS_HISTORY_10S[i].loFreq;
-      if (FS_HISTORY_10S[i].hiFreq > max10s) max10s = FS_HISTORY_10S[i].hiFreq;
-    }
-    if (min10s < Infinity && max10s > -Infinity) {
-      c.font = "600 9px monospace, sans-serif";
-      c.fillStyle = live ? "#00f0ff" : "rgba(0, 240, 255, 0.45)";
-
-      // „min” / „max” jelöléssel, a skála végein kívül: ne tűnjön a skála határának
-      c.textAlign = "left";
-      c.textBaseline = "top";
-      // Bal szél: legmélyebb frekvencia (a skála kezdete előtt)
-      const strMin = t("scale.min") + " " + formatFreqStat(min10s, false);
-      const twMin = c.measureText(strMin).width;
-      c.fillText(strMin, Math.max(4, g.x0 - 6 - twMin), g.baseY - 8);
-
-      // Jobb szél: legmagasabb frekvencia (a skála vége után)
-      const strMax = t("scale.max") + " " + formatFreqStat(max10s, true);
-      const twMax = c.measureText(strMax).width;
-      c.fillText(strMax, Math.min(g.w - 4 - twMax, g.x1 + 6), g.baseY - 8);
-    }
+  let min10s = Infinity, max10s = -Infinity;
+  for (let i = 0; i < FS_HISTORY_10S.length; i++) {
+    if (FS_HISTORY_10S[i].loFreq < min10s) min10s = FS_HISTORY_10S[i].loFreq;
+    if (FS_HISTORY_10S[i].hiFreq > max10s) max10s = FS_HISTORY_10S[i].hiFreq;
+  }
+  const hasStat = min10s < Infinity && max10s > -Infinity;
+  fsShow(L.statMin, hasStat);
+  fsShow(L.statMax, hasStat);
+  if (!hasStat) return;
+  // „min” / „max” jelöléssel, a skála végein kívül: ne tűnjön a skála határának
+  const strMin = t("scale.min") + " " + formatFreqStat(min10s, false);
+  const strMax = t("scale.max") + " " + formatFreqStat(max10s, true);
+  let changed = false;
+  if (L.statMin.textContent !== strMin) { L.statMin.textContent = strMin; changed = true; }
+  if (L.statMax.textContent !== strMax) { L.statMax.textContent = strMax; changed = true; }
+  const posKey = `${g.w}|${g.x0}|${g.x1}`;
+  if (changed || posKey !== L.posKey) {         // a felirat szélességét csak szövegváltozáskor mérjük
+    L.posKey = posKey;
+    const twMin = L.statMin.getBoundingClientRect().width, twMax = L.statMax.getBoundingClientRect().width;
+    // Bal szél: legmélyebb frekvencia (a skála kezdete előtt); jobb szél: legmagasabb (a skála vége után)
+    fsStyle(L.statMin, "transform", `translateX(${fsPx(Math.max(4, g.x0 - 6 - twMin))})`);
+    fsStyle(L.statMax, "transform", `translateX(${fsPx(Math.min(g.w - 4 - twMax, g.x1 + 6))})`);
   }
 }
 
@@ -1347,6 +1373,7 @@ const WF_STEP_MS = 1000 / 60;
 let wfLastStep = 0;
 function animate3D() {
   requestAnimationFrame(animate3D);
+  if (document.hidden) return;                // rejtett (pl. kis méretre tett) ablakban nincs mit rajzolni
   drawFreqScale(false);
   const nowMs = performance.now();
   {
@@ -1830,6 +1857,27 @@ function drawEq() {
       btnAuto.style.display = "none";
     }
   }
+  requestEqPaint();
+}
+
+/**
+ * A 2D EQ grafikon újrarajzolása legfeljebb képkockánként egyszer, és csak ha a vászon látszik (rejtett fülnél a
+ * fülváltás rajzol). WebKitGTK a vászonműveleteket rögzíti és csak megjelenítéskor játssza vissza: a megjelenítés
+ * nélküli (pl. háttérben, üzenetekre történő) rajzolások különben felhalmozódnának, és a visszajátszásuk
+ * hosszú másodpercekre megakaszthatná a felületet.
+ */
+let eqPaintQueued = false;
+function requestEqPaint() {
+  if (eqPaintQueued) return;
+  eqPaintQueued = true;
+  requestAnimationFrame(() => {
+    eqPaintQueued = false;
+    if (!eqCanvas.width || !eqCanvas.height || eqCanvas.offsetParent === null) return;
+    paintEq();
+  });
+}
+
+function paintEq() {
   const dpr = window.devicePixelRatio || 1;
   const w = eqCanvas.width;
   const h = eqCanvas.height;
@@ -1910,6 +1958,10 @@ function drawEq() {
     }
   }
 
+  // A görbék pontjai legfeljebb egy rajzterületnyire lóghatnak ki (a vágás miatt ez nem látszik), így egy szűk
+  // notch vagy meredek szűrő sem ad óriási, lassan rajzolódó útvonalat
+  const clampY = y => Math.max(padTop - plotH, Math.min(padTop + 2 * plotH, y));
+
   // Rajzterület vágása (hogy a görbék ne lógjanak ki a rácsból)
   eqCtx.save();
   eqCtx.beginPath();
@@ -1936,7 +1988,7 @@ function drawEq() {
     eqCtx.lineWidth = 1.9 * dpr;
     eqCtx.beginPath();
     for (let i = 0; i < points.length; i++) {
-      const y = midY - (points[i].delay_ms / delayScale) * (plotH * 0.45);
+      const y = clampY(midY - (points[i].delay_ms / delayScale) * (plotH * 0.45));
       if (i === 0) eqCtx.moveTo(points[i].x, y); else eqCtx.lineTo(points[i].x, y);
     }
     eqCtx.stroke();
@@ -1965,7 +2017,7 @@ function drawEq() {
     eqCtx.lineWidth = 2.4 * dpr;
     eqCtx.beginPath();
     for (let i = 0; i < points.length; i++) {
-      const y = dbToY(points[i].mag_db + currentPreamp, G);
+      const y = clampY(dbToY(points[i].mag_db + currentPreamp, G));
       if (i === 0) eqCtx.moveTo(points[i].x, y); else eqCtx.lineTo(points[i].x, y);
     }
     eqCtx.stroke();
