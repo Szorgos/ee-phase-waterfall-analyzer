@@ -144,10 +144,13 @@ if(AQULIFY_FFTW_SOURCE_DIR)
     set(ENABLE_THREADS OFF CACHE BOOL "" FORCE)
     set(ENABLE_OPENMP OFF CACHE BOOL "" FORCE)
     if(AQ_CPU MATCHES "x86_64|amd64")
+        # Csak SSE/SSE2 (minden 64 bites x86 processzoron van). Az FFTW CMake-je az AVX / AVX2 kapcsolót a teljes
+        # könyvtárra teszi, nem csak a SIMD-részekre: azzal AVX2 nélküli processzoron (sok Pentium / Celeron, régebbi
+        # Intel és AMD, Mac Pro 2013, Rosetta macOS 15 előtt) az FFTW első használatakor leállna a program.
         set(ENABLE_SSE ON CACHE BOOL "" FORCE)
         set(ENABLE_SSE2 ON CACHE BOOL "" FORCE)
-        set(ENABLE_AVX ON CACHE BOOL "" FORCE)
-        set(ENABLE_AVX2 ON CACHE BOOL "" FORCE)
+        set(ENABLE_AVX OFF CACHE BOOL "" FORCE)
+        set(ENABLE_AVX2 OFF CACHE BOOL "" FORCE)
     endif()
     set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
     add_subdirectory(${AQULIFY_FFTW_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/fftw EXCLUDE_FROM_ALL)
