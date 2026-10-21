@@ -13,6 +13,8 @@
 ### Javítások (következő kiadás)
 - **Linux felület:** bezáráskor nem omlik össze a WebKit tartalomfolyamata (nincs core dump), és nem akad meg; a vízesés követi az ablak átméretezését, rejtett ablakban nem rajzol.
 - **Windows:** a Feladatkezelőben helyes a felület neve (eddig „Aqulify felÃ¼let”).
+- **EQ profilok:** az EQ mód váltása (IIR / FIR / FFT / SPM) nem hoz létre új profilt (eddig AutoEq profilnál „– módosított”, profil nélkül „Saját profil” készült); a választott módot az aktív profil megjegyzi.
+- **Crossfeed:** előbeállítás választásakor a modul be is kapcsol (eddig csak értesítés kérte); a kiválasztott előbeállítás jelölése nem hasonlít a bekapcsolt állapotra. Kikapcsolt modul beállításakor a modul BE/KI gombja röviden felvillan.
 - **EQ grafikon:** nagyításkor a késleltetés-görbe a rajzterületen belül marad, a nézeten kívül futó EQ-görbe a szélen szaggatott vonallal látszik, a nagyítás-felirat a görbék fölött is olvasható.
 
 ### Előkészítve

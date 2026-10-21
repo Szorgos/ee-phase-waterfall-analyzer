@@ -145,7 +145,6 @@
   "fmt.graphic": "EqualizerAPO GraphicEQ – cannot be imported (parametric Filter lines only)",
   "fmt.csv": "CSV frequency response – cannot be imported (parametric Filter lines only)",
   "fmt.noFilter": "No parametric Filter line – cannot be imported",
-  "cf.toast": "Crossfeed preset set. Turn on the Crossfeed module (OFF → ON) to hear it.",
   "imp.loading": "Loading 8,850+ models from GitHub...",
   "imp.dbCount": "Real database: {n} devices available",
   "imp.resultCount": "Results: {n} (of {total} models)",

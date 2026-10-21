@@ -317,6 +317,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   select.lang-select { width: 104px; text-overflow: ellipsis; }
   /* Nagyon keskeny ablakban (böngészőben, 900 px alatt) a Támogatás gomb csak a szívet mutatja (a felirat a tooltipben) */
   @media (max-width: 900px) { #btnSupport span { display: none; } }
+  /* Kiválasztott előbeállítás (nem a modul be/ki állapota), és a kikapcsolt modul be/ki gombjának felvillanása */
+  .adw-btn.selected { background: var(--aq-accent-soft); border-color: rgba(79, 209, 197, 0.55); color: var(--aq-accent-2); }
+  @keyframes aqNudge { 0%, 100% { box-shadow: 0 0 0 0 rgba(79, 209, 197, 0); border-color: var(--aq-line-2); } 50% { box-shadow: 0 0 0 4px rgba(79, 209, 197, 0.35); border-color: var(--aq-accent); } }
+  .adw-btn.nudge { animation: aqNudge 0.6s ease-in-out 3; }
   /* A görbe vagy egy sáv kilóg a látható dB tartományból: az Igazít gomb kiemelve */
   .eq-zoom-overlay .zoom-btn.attn { border-color: var(--aq-amber); color: var(--aq-amber); box-shadow: 0 0 0 1px rgba(227, 182, 107, 0.35); }
   select.mini-select option, select.ee-select option {
@@ -845,7 +849,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
 
         <div style="display:flex; gap:10px; align-items:center; margin-top:4px;">
           <span style="font-size:0.8rem; color:var(--ee-text-secondary); font-weight:600;" data-i18n="cf.presets">Iparági Mester-Beállítások:</span>
-          <button class="adw-btn primary" id="cfPreset-bauer" onclick="applyCrossfeedPreset('bauer')" style="font-size:0.75rem;" data-i18n="cf.bauer">Bauer bs2b (700 Hz / 4,5 dB)</button>
+          <button class="adw-btn selected" id="cfPreset-bauer" onclick="applyCrossfeedPreset('bauer')" style="font-size:0.75rem;" data-i18n="cf.bauer">Bauer bs2b (700 Hz / 4,5 dB)</button>
           <button class="adw-btn" id="cfPreset-meier" onclick="applyCrossfeedPreset('meier')" style="font-size:0.75rem;" data-i18n="cf.meier">Jan Meier (650 Hz / 9,5 dB)</button>
           <button class="adw-btn" id="cfPreset-studio" onclick="applyCrossfeedPreset('studio')" style="font-size:0.75rem;" data-i18n="cf.studio">Közeltéri stúdió (600 Hz / 3,5 dB)</button>
         </div>
@@ -1147,6 +1151,18 @@ function renderModuleTexts(mod) {
   if (badge) { badge.innerText = active ? t('mod.on') : t('mod.off'); badge.removeAttribute('data-i18n'); }
   const topEqBtn = document.getElementById('btnEqBypass');
   if (mod === 'eq' && topEqBtn) topEqBtn.innerText = active ? t('eq.bypassOn') : t('eq.bypassOff');
+}
+
+/** Kikapcsolt modul beállításakor a be/ki gomb röviden felvillan: a változás csak bekapcsolva hallható. */
+function nudgeIfOff(mod) {
+  if (moduleIsActive(mod)) return;
+  const btn = document.getElementById('btnToggle-' + mod);
+  if (!btn) return;
+  btn.classList.remove('nudge');
+  void btn.offsetWidth;   // az animáció újraindul
+  btn.classList.add('nudge');
+  clearTimeout(btn._nudge);
+  btn._nudge = setTimeout(() => btn.classList.remove('nudge'), 1900);
 }
 
 function toggleModule(mod) {
@@ -2774,7 +2790,7 @@ function markCrossfeedPreset() {
   const idx = crossfeedPresetIndex();
   ["bauer", "meier", "studio"].forEach(k => {
     const b = document.getElementById("cfPreset-" + k);
-    if (b) b.className = CF_PRESETS[k][2] === idx ? "adw-btn primary" : "adw-btn";
+    if (b) b.className = CF_PRESETS[k][2] === idx ? "adw-btn selected" : "adw-btn";   // kiválasztva (nem a be/ki állapot)
   });
 }
 function applyCrossfeedPreset(preset) {
@@ -2782,7 +2798,7 @@ function applyCrossfeedPreset(preset) {
   setCtl("cfFcut", p[0]);
   setCtl("cfFeed", p[1]);
   sendCrossfeed();
-  if (!isCrossfeedEnabled) showToast(t("cf.toast"), 3500);
+  if (!isCrossfeedEnabled) setModuleActive('crossfeed', true);   // a választott előbeállítás azonnal szól
 }
 
 // 4 EQ Mód és Decramp kezelők
@@ -2826,7 +2842,7 @@ function applyDecrampUi(v) {
 document.getElementById("selectEqMode").onchange = (e) => {
   applyEqModeUi(parseInt(e.target.value, 10));
   sendCurveMsg({ type: "set_eq_mode", val: currentEqMode });
-  schedulePresetAutosave();
+  rememberEqModeInPreset();
   drawEq();
 };
 
@@ -3748,7 +3764,7 @@ buildControls("cfControls", [
     hint: "ctl.cfFcutHint" },
   { id: "cfFeed", kind: "num", label: "ctl.cfFeed", min: 1, max: 15, step: 0.1, unit: "dB", def: 4.5,
     hint: "ctl.cfFeedHint" },
-], () => sendCrossfeed());
+], () => { sendCrossfeed(); nudgeIfOff('crossfeed'); });
 
 // --- Convolver (zita-convolver)
 buildControls("convControls", [
@@ -3758,7 +3774,7 @@ buildControls("convControls", [
   { id: "convWet", kind: "num", label: "Wet", min: -100, max: 20, step: 0.1, unit: "dB", def: 0, off: -100, sign: true },
   { id: "convInGain", kind: "num", label: "ctl.inGain", min: -36, max: 36, step: 0.1, unit: "dB", def: 0, sign: true },
   { id: "convOutGain", kind: "num", label: "ctl.outGain", min: -36, max: 36, step: 0.1, unit: "dB", def: 0, sign: true },
-], () => sendConvolver());
+], () => { sendConvolver(); nudgeIfOff('convolver'); });
 
 // --- Limiter (LSP Limiter Stereo)
 buildControls("limControls", [
@@ -3781,7 +3797,7 @@ buildControls("limControls", [
   { id: "limAlrRelease", kind: "num", label: "ctl.limAlrRelease", min: 10, max: 1000, step: 1, unit: "ms", def: 50 },
   { id: "limAlrKnee", kind: "num", label: "ALR knee", min: -12, max: 12, step: 0.1, unit: "dB", def: 0, sign: true },
   { id: "limAlrKneeSmooth", kind: "num", label: "ctl.limAlrKneeSmooth", min: -48, max: 0, step: 0.1, unit: "dB", def: -5 },
-], () => sendLimiter());
+], () => { sendLimiter(); nudgeIfOff('limiter'); });
 setCtl("limAlr", false);
 
 // --- Bass Enhancer (Calf)
@@ -3795,7 +3811,7 @@ buildControls("bassControls", [
   { id: "bassListen", kind: "toggle", label: "ctl.bassListen", def: false },
   { id: "bassInGain", kind: "num", label: "ctl.inGain", min: -36, max: 36, step: 0.1, unit: "dB", def: 0, sign: true },
   { id: "bassOutGain", kind: "num", label: "ctl.outGain", min: -36, max: 36, step: 0.1, unit: "dB", def: 0, sign: true },
-], () => sendBass());
+], () => { sendBass(); nudgeIfOff('bass'); });
 // A vezérlők létrehozása után (az „Alsó határ frekvencia” doboza csak most létezik): kikapcsolt alsó határnál rejtve
 setCtl("bassFloorActive", false);
 
@@ -3806,7 +3822,7 @@ buildControls("magicControls", [
     options: ["mt.charNatural", "mt.charWarm", "mt.charBright", "mt.charSpacious"] },
   { id: "magicContent", kind: "select", label: "ctl.magicContent", optKeys: true, def: 0,
     options: ["mt.contentAuto", "mt.contentMusic", "mt.contentSpeech", "mt.contentArchive"] },
-], () => sendMagic());
+], () => { sendMagic(); nudgeIfOff('magic'); });
 
 function sendMagic() {
   sendEngine({ type: "set_magic", amount: getCtl("magicAmount"), compare: magicCompare ? 1 : 0,
@@ -4047,6 +4063,7 @@ function applyEngineState(st) {
     if (st.initialized && Array.isArray(st.bands) && st.bands.length === nodes.length) lastSentEqSig = JSON.stringify(eqBandsPayload());
     updateEqUI();
     drawEq();
+    presetBaseSig = snapshotSig(eqSnapshot());   // a motor mentett sávjai nem „új” beállítás
   } finally {
     suppressEngineSync = false;
   }
@@ -4281,6 +4298,7 @@ var activePresetName = null;
 var presetAutosaveTimer = null;
 var presetsDirtyForEngine = false;
 var userTouchedUi = false;         // csak valódi felhasználói beavatkozás hoz létre új profilt
+var presetBaseSig = null;          // aktív profil nélkül: a sávok és a preamp a legutóbbi betöltéskor (ehhez képest új profil)
 ["pointerdown", "keydown", "wheel"].forEach(ev => document.addEventListener(ev, () => { userTouchedUi = true; }, true));
 
 function showToast(text, ms) {
@@ -4305,7 +4323,16 @@ function eqSnapshot() {
     eqMode: currentEqMode
   };
 }
-function snapshotSig(sn) { return JSON.stringify([sn.bands, sn.preamp, sn.eqMode]); }
+// Az EQ mód (IIR / FIR / FFT / SPM) nem a profil hangolása: a váltása nem számít módosításnak
+function snapshotSig(sn) { return JSON.stringify([sn.bands, sn.preamp]); }
+/** Az EQ mód az aktív profilban helyben megmarad: új profil nem készül, az importált profil sávjai érintetlenek. */
+function rememberEqModeInPreset() {
+  const cur = activePresetName ? presetsDoc.presets[activePresetName] : null;
+  if (!cur || cur.eqMode === currentEqMode) return;
+  cur.eqMode = currentEqMode;
+  cur.updated = new Date().toISOString();
+  persistPresets();
+}
 
 function sanitizePresetsDoc(doc) {
   const out = { version: 1, active: null, presets: {} };
@@ -4457,6 +4484,7 @@ function deletePreset() {
   if (!confirm(t("preset.confirmDelete", { name: activePresetName }))) return;
   delete presetsDoc.presets[activePresetName];
   activePresetName = null;
+  presetBaseSig = snapshotSig(eqSnapshot());
   persistPresets();
   refreshPresetUi();
 }
@@ -4482,7 +4510,7 @@ function schedulePresetAutosave() {
       }
       Object.assign(cur, sn, { updated: new Date().toISOString() });
       persistPresets();
-    } else if (nodes.length > 0) {      // üres (sáv nélküli) EQ-ból nem készül profil
+    } else if (nodes.length > 0 && snapshotSig(sn) !== presetBaseSig) {   // üres EQ-ból és változatlan sávokból nem készül profil
       createPresetFromCurrent(t("preset.mine"), "manual");
     }
   }, 900);

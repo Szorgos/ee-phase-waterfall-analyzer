@@ -145,7 +145,6 @@
   "fmt.graphic": "EqualizerAPO GraphicEQ – nem importálható (csak paraméteres Filter sorok)",
   "fmt.csv": "CSV frekvenciamenet – nem importálható (csak paraméteres Filter sorok)",
   "fmt.noFilter": "Nincs benne paraméteres Filter sor – nem importálható",
-  "cf.toast": "Crossfeed profil beállítva. A hatáshoz kapcsold be a Crossfeed modult (KI → BE).",
   "imp.loading": "8 850+ modell betöltése a GitHubról...",
   "imp.dbCount": "Valódi adatbázis: {n} eszköz elérhető",
   "imp.resultCount": "{n} találat (összesen {total} modell)",
