@@ -30,10 +30,11 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
 
 ## 🎧 Főbb Képességek és Funkciók
 
-1. **Élő 3D Akusztikai Vízesés & Spektrogram (Top-Strip WebGL Engine):**
-   * A motor FFT spektruma (160 logaritmikus sáv, 20 Hz – 20 kHz) ~60 képkocka/s-mal; ha nem szól semmi, a vízesés lecseng.
-   * Időlépcsők: 60 / 120 / 180; nézőpontok: 3D izometrikus, oldalsó profil, felülnézet.
-   * **Frekvenciaskála** a vízesés alatt, jelekkel a zene által éppen átfogott frekvenciatartomány alsó és felső határán.
+1. **Élő 3D Akusztikai Vízesés & Spektrogram (Hardveres GPU gyorsítás / Vulkan / Direct3D):**
+   * A motor valódi FFT spektruma (160 logaritmikus sáv, 10 Hz – 24 kHz) 60 FPS gördüléssel.
+   * **GPU-gyorsítás a zene védelmében:** A 3D felületet teljes egészében a videokártya rajzolja (Linuxon Vulkan/Mesa, Windowson Direct3D backenddel a WebGL alatt). A grafika így **nem terheli a processzort**, és még a legösszetettebb nézeteknél sem akasztja meg a valós idejű zenelejátszást (zéró hangkimaradás).
+   * **Fakítás és testreszabás:** Állítható hőtérkép-fakítás csúszka (élénk színektől a lágy szürkeárnyalatig); időlépcsők: 60 / 120 / 180; nézőpontok: 3D izometrikus, oldalsó profil, felülnézet.
+   * **Frekvenciaskála (10 Hz – 24 kHz):** A vízesés alatt elhelyezett skála azonnal leolvashatóvá teszi a csúcsokat. A skála két szélén kis diszkrét felirat mutatja az elmúlt 10 másodpercben mért legmélyebb (Hz) és legmagasabb (kHz) frekvenciát, a gyors kék határolójelek pedig valós időben követik a hangsáv tartományát.
    * **Előcsengés (pre-ringing) jelzése:** FIR / FFT / SPM (lineáris fázisú) módban egy diszkrét felirat jelzi, hogy előcsengés lehetséges. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik; a program nem nagyítja fel.
 
 2. **EQ-görbe, fázis és csoportkésleltetés ($-\frac{d\phi}{d\omega}$):**

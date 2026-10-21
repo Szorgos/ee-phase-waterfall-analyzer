@@ -18,7 +18,7 @@ namespace ee_analyzer {
 class SpectrumAnalyzer {
 public:
     explicit SpectrumAnalyzer(size_t fftSize = 4096, size_t numBands = 160,
-                              double minHz = 20.0, double maxHz = 20000.0,
+                              double minHz = 10.0, double maxHz = 24000.0,
                               double floorDb = -90.0, double ceilDb = 0.0)
         : n_(fftSize), bands_(numBands), minHz_(minHz), maxHz_(maxHz),
           floorDb_(floorDb), ceilDb_(ceilDb) {

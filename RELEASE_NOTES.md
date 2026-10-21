@@ -1,3 +1,11 @@
+### Újdonságok (1.6.1)
+- **Tiszta indulás:** Telepítés és első indítás után minden modul alapból kikapcsolt (Bypass) állapotban van, a sávlista üres, így a hangzás teljesen érintetlen, nulláról indul.
+- **Bővített frekvenciaskála:** A vízesés alatti skála mostantól 10 Hz – 24 kHz közötti tartományt fed le.
+- **Gyorsabb frekvenciajelzők:** A zene sávszélességét mutató kék jelzések reakcióideje jelentősen gyorsult, azonnal és dinamikusan követik a lejátszott zenét.
+- **Frekvencia-szélsőértékek kijelzése:** A skála két szélén kis diszkrét felirat mutatja az elmúlt 10 másodperc legmélyebb (Hz) és legmagasabb (kHz) mért frekvenciáját.
+- **Fakítás csúszka:** A 3D vízesés telítettsége a jobb felső „Fakítás” csúszkával tetszés szerint lágyítható vagy teljesen fekete-fehérré tehető.
+- **Fejléc finomhangolás:** A felső sáv háttere egységesen alkalmazkodik az ablak sötét tónusához, és megjeleníti a verziószámot (`v1.6.1`).
+
 ### Újdonságok (1.6.0) – az EasyEffects DSP könyvtárai
 - **Equalizer:** LSP Parametric Equalizer (mint az EasyEffects-ben): IIR, FIR, FFT és SPM mód; sávonként 12 típus, RLC / BWC / LRX / APO szűrőmód és x1–x4 meredekség; decramp Off, x2, x3, x4, x6, x8 (44,1 kHz-hez viszonyítva). A görbét a motor számolja ugyanazokkal a szűrőkkel. Az AutoEq / APO import APO (DR) sávokat hoz létre; a korábbi profilok sávjai is APO (DR) módban töltődnek be, így a hangolásuk megmarad.
 - **Limiter:** LSP Limiter: 12 mód, túlmintavételezés (True Peak is), dither, lookahead, attack, release, stereo link, gain boost, ALR, bemeneti és kimeneti erősítés.

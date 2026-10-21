@@ -20,7 +20,7 @@ static int g_fail = 0;
 #define CHECK(cond, ...) do { if (!(cond)) { ++g_fail; std::printf("  [HIBA] " __VA_ARGS__); std::printf("\n"); } else { std::printf("  [OK]   " __VA_ARGS__); std::printf("\n"); } } while (0)
 
 static size_t bandOf(double hz, size_t bands = 160) {
-    return static_cast<size_t>((std::log10(hz) - std::log10(20.0)) / (std::log10(20000.0) - std::log10(20.0)) * bands);
+    return static_cast<size_t>((std::log10(hz) - std::log10(10.0)) / (std::log10(24000.0) - std::log10(10.0)) * bands);
 }
 
 static void testSpectrum() {

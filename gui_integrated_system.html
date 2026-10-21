@@ -47,7 +47,7 @@
     flex-direction: column;
   }
 
-  header { background: #181b22; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; }
+  header { background: var(--ee-window-bg); border-bottom: 1px solid var(--ee-border); padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; }
   .title-group { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 0.95rem; }
   .badge-app { background: var(--ee-accent-blue); padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; }
 
@@ -218,6 +218,7 @@
     <div class="title-group">
       <div class="badge-app" style="background: linear-gradient(135deg, #3584e4, #9a59b5); font-weight: 800; letter-spacing: 0.5px;">AQULIFY</div>
       <span style="font-size: 1.02rem; font-weight: 700; background: linear-gradient(90deg, #ffffff, #78aeed); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Aqulify • Audiofil DSP Rendszer</span>
+      <span style="font-size: 0.72rem; font-weight: 600; color: var(--ee-text-secondary); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--ee-border); border-radius: 4px; padding: 2px 6px; margin-left: 4px;" title="Verziószám">v1.6.1</span>
     </div>
     <!-- EQ PROFILOK: aktív profil neve, választás, mentés, átnevezés, törlés -->
     <div id="presetBar" class="preset-bar" title="EQ profilok: AutoEq importkor és kézi beállításkor automatikusan mentődnek, újraindítás után is választhatók">
@@ -286,7 +287,12 @@
         <option value="5">x8</option>
       </select></span>
 
-      <span class="ctrl-group"><button class="mini-btn active" id="btnEqBypass">EQ: BE</button>
+      <!-- FAKÍTÁS / TELÍTETTSÉG CSÚSZKA -->
+      <span class="ctrl-group" title="Vízesés telítettsége / fakítása"><span class="ctrl-label">Fakítás:</span>
+      <input type="range" id="sliderWfFade" min="0" max="100" value="100" class="ee-slider" style="width:75px; vertical-align:middle; cursor:pointer;" oninput="updateWfFade(this.value)">
+      </span>
+
+      <span class="ctrl-group"><button class="mini-btn" id="btnEqBypass">EQ: KI (Bypass)</button>
       <button class="mini-btn" id="btnCameraAngle">Nézőpont: 3D</button></span>
     </div>
   </div>
@@ -296,10 +302,10 @@
   <!-- ======================================================= -->
   <div class="main-content">
     <div class="plugin-tabs">
-      <button class="tab-btn active" id="tabBtn-eq" onclick="switchTab('eq')"><span class="module-dot active" id="dot-eq">●</span> Equalizer</button>
+      <button class="tab-btn active" id="tabBtn-eq" onclick="switchTab('eq')"><span class="module-dot" id="dot-eq">○</span> Equalizer</button>
       <button class="tab-btn" id="tabBtn-crossfeed" onclick="switchTab('crossfeed')"><span class="module-dot" id="dot-crossfeed">○</span> Crossfeed</button>
       <button class="tab-btn" id="tabBtn-convolver" onclick="switchTab('convolver')"><span class="module-dot" id="dot-convolver">○</span> Convolver</button>
-      <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter')"><span class="module-dot active" id="dot-limiter">●</span> Limiter</button>
+      <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter')"><span class="module-dot" id="dot-limiter">○</span> Limiter</button>
       <button class="tab-btn" id="tabBtn-bass" onclick="switchTab('bass')"><span class="module-dot" id="dot-bass">○</span> Bass Enhancer</button>
     </div>
 
@@ -646,11 +652,11 @@ var eqSyncTimer = null;
 var currentEqMode = 0;      // 0 = IIR, 1 = FIR, 2 = FFT, 3 = SPM (EasyEffects / LSP)
 var currentDecramp = 3;     // 0 = Off, 1 = x2, 2 = x3, 3 = x4, 4 = x6, 5 = x8
 var engineEqResponse = null; // a motor által számolt (LSP) EQ frekvenciamenet
-var isEqEnabled = true;
+var isEqEnabled = false;
 var isFirMode = false;
 var isCrossfeedEnabled = false;
 var isConvolverEnabled = false;
-var isLimiterEnabled = true;
+var isLimiterEnabled = false;
 var isBassEnabled = false;
 var currentPreamp = 0.0;
 // Automatikus preamp: indulásnál 0 dB; ha az EQ-görbe klippelne, a preamp a görbe csúcsához igazodik.
@@ -828,11 +834,32 @@ function getGlowRgb() {
   }
 }
 
+var wfFadeFactor = 1.0; // 1.0 = normál élénk, 0.0 = teljesen fakó / szürkeárnyalatos
+function updateWfFade(val) {
+  wfFadeFactor = Math.max(0.0, Math.min(1.0, parseInt(val, 10) / 100.0));
+  try { localStorage.setItem("aqulify_wf_fade", val); } catch (e) {}
+}
+try {
+  const savedFade = localStorage.getItem("aqulify_wf_fade");
+  if (savedFade !== null) {
+    wfFadeFactor = Math.max(0.0, Math.min(1.0, parseInt(savedFade, 10) / 100.0));
+    const sl = document.getElementById("sliderWfFade");
+    if (sl) sl.value = savedFade;
+  }
+} catch (e) {}
+
 function getHeatmapColor(val, isPreRing = false) {
   if (isPreRing) return getGlowRgb();
-  const r = Math.max(0, Math.min(1, Math.sin(val * Math.PI - Math.PI / 2) * 0.5 + 0.5 + (val > 0.7 ? (val - 0.7) * 2.5 : 0)));
-  const g = Math.max(0, Math.min(1, Math.sin(val * Math.PI) * 1.1 - (val > 0.8 ? (val - 0.8) * 4 : 0)));
-  const b = Math.max(0, Math.min(1, (1.0 - val * 1.4)));
+  let r = Math.max(0, Math.min(1, Math.sin(val * Math.PI - Math.PI / 2) * 0.5 + 0.5 + (val > 0.7 ? (val - 0.7) * 2.5 : 0)));
+  let g = Math.max(0, Math.min(1, Math.sin(val * Math.PI) * 1.1 - (val > 0.8 ? (val - 0.8) * 4 : 0)));
+  let b = Math.max(0, Math.min(1, (1.0 - val * 1.4)));
+  if (wfFadeFactor < 0.999) {
+    // Standard relatív luminancia (szürkeárnyalat) a fakításhoz
+    const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+    r = gray + (r - gray) * wfFadeFactor;
+    g = gray + (g - gray) * wfFadeFactor;
+    b = gray + (b - gray) * wfFadeFactor;
+  }
   return [r, g, b];
 }
 
@@ -906,19 +933,23 @@ if (btnCameraAngle) {
 })();
 
 // ---------------------------------------------------------------- frekvenciaskála a vízesés alatt
-// A spektrum 160 logaritmikus sávja 20 Hz – 20 kHz (spectrum.hpp); a mesh x-oszlopai ezek a sávok.
+// A spektrum 160 logaritmikus sávja 10 Hz – 24 kHz (spectrum.hpp); a mesh x-oszlopai ezek a sávok.
 const freqScaleCanvas = document.getElementById("freqScaleCanvas");
 const freqScaleCtx = freqScaleCanvas ? freqScaleCanvas.getContext("2d") : null;
 let freqScaleKey = "";
-const FS_MAJOR = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+const FS_MAJOR = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 24000];
 const FS_MID = [30, 300, 3000, 15000];   // köztes feliratok (halványabbak; ütközéskor elmaradnak)
-const FS_MINOR = [30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000, 7000, 8000, 9000,
-                  12000, 14000, 15000, 16000, 18000];
+const FS_MINOR = [15, 30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000, 7000, 8000, 9000,
+                  12000, 14000, 15000, 16000, 18000, 22000];
 const _fsVec = new THREE.Vector3();
+
+const FS_MIN_HZ = 10.0, FS_MAX_HZ = 24000.0;
+const FS_LOG_MIN = Math.log10(FS_MIN_HZ), FS_LOG_MAX = Math.log10(FS_MAX_HZ);
+const FS_LOG_SPAN = FS_LOG_MAX - FS_LOG_MIN;
 
 /** Egy frekvencia képernyő-x koordinátája ott, ahol a vízesés alja a skála felső szélénél van. */
 function freqScreenX(freq, w, h, edgeY) {
-  const frac = Math.max(0, Math.min(1, ((Math.log10(freq) - Math.log10(20)) / 3 * FREQ_BINS - 0.5) / (FREQ_BINS - 1)));
+  const frac = Math.max(0, Math.min(1, ((Math.log10(freq) - FS_LOG_MIN) / FS_LOG_SPAN * FREQ_BINS - 0.5) / (FREQ_BINS - 1)));
   const x3 = -planeWidth / 2 + planeWidth * frac;
   const proj = (z) => { _fsVec.set(x3, 0, z).project(camera); return { x: (_fsVec.x + 1) / 2 * w, y: (1 - _fsVec.y) / 2 * h }; };
   let p = proj(planeDepth / 2);                 // a mesh első éle
@@ -953,7 +984,7 @@ function drawFreqScale(force) {
   if (w <= 0 || h <= 0 || cameraViews[currentViewIdx].name === "Oldalsó Profil") { freqScaleCanvas.style.display = "none"; return; }
   freqScaleCanvas.style.display = "block";
   const edgeY = h - sh;                         // a skála felső széle a vízesés-vásznon
-  const x0 = freqScreenX(20, w, h, edgeY), x1 = freqScreenX(20000, w, h, edgeY);
+  const x0 = freqScreenX(10, w, h, edgeY), x1 = freqScreenX(24000, w, h, edgeY);
   const baseY = 9.5;
   fsGeom = { w, h, edgeY, baseY, dpr, x0, x1 };
 
@@ -1006,10 +1037,26 @@ function drawFreqScale(force) {
 const fsStatic = document.createElement("canvas");
 let fsGeom = null;
 const FS_RANGE = { lo: null, hi: null, loHoldUntil: 0, hiHoldUntil: 0, last: 0 };
-const FS_HOLD_MS = 4000;          // ennyi ideig marad a szélső érték
-const FS_RETURN_BANDS_PER_S = 6;  // utána ilyen lassan húzódik vissza (160 sáv = 3 dekád)
+const FS_HOLD_MS = 600;           // gyorsabb reakció: csak 600 ms-ig tartja a szélső értéket (korábban 4000 ms volt)
+const FS_RETURN_BANDS_PER_S = 35; // gyors visszahúzódás az aktuális frekvenciák felé (korábban 6 sáv/mp volt)
 
-function bandFreq(b) { return 20 * Math.pow(1000, (b + 0.5) / FREQ_BINS); }
+// Az elmúlt 10 másodperc legmélyebb és legmagasabb mért frekvenciájának csúcsérték-tárolója
+const FS_HISTORY_10S = []; // { t, loFreq, hiFreq }
+
+function formatFreqStat(f, isHigh) {
+  if (!(f > 0)) return "";
+  if (f >= 17000) {
+    // 17 kHz felett 100 Hz-re kerekítve, pl. 18.7k
+    return (Math.round(f / 100) / 10).toFixed(1) + "k";
+  } else if (f >= 1000) {
+    return (Math.round(f / 100) / 10).toFixed(1) + "k";
+  } else {
+    // Egész Hz-re kerekítve, pl. 13Hz
+    return Math.round(f) + "Hz";
+  }
+}
+
+function bandFreq(b) { return FS_MIN_HZ * Math.pow(FS_MAX_HZ / FS_MIN_HZ, (b + 0.5) / FREQ_BINS); }
 
 function updateFreqRange(levels, now) {
   const dt = FS_RANGE.last ? Math.min(0.2, (now - FS_RANGE.last) / 1000) : 0;
@@ -1029,7 +1076,15 @@ function updateFreqRange(levels, now) {
   if (lo >= 0) {
     if (FS_RANGE.lo === null || lo <= FS_RANGE.lo) { FS_RANGE.lo = lo; FS_RANGE.loHoldUntil = now + FS_HOLD_MS; }
     if (FS_RANGE.hi === null || hi >= FS_RANGE.hi) { FS_RANGE.hi = hi; FS_RANGE.hiHoldUntil = now + FS_HOLD_MS; }
+    // 10 másodperces gördülő statisztika mentése
+    FS_HISTORY_10S.push({ t: now, loFreq: bandFreq(lo), hiFreq: bandFreq(hi) });
   }
+
+  // 10 másodpercnél régebbi minták törlése
+  while (FS_HISTORY_10S.length > 0 && now - FS_HISTORY_10S[0].t > 10000) {
+    FS_HISTORY_10S.shift();
+  }
+
   // Tartás után lassú visszahúzódás a jelenlegi tartomány felé (csend esetén is ott maradnak, csak halványulnak)
   if (FS_RANGE.lo !== null && now > FS_RANGE.loHoldUntil && lo >= 0 && FS_RANGE.lo < lo)
     FS_RANGE.lo = Math.min(lo, FS_RANGE.lo + FS_RETURN_BANDS_PER_S * dt);
@@ -1059,6 +1114,31 @@ function drawFreqScaleFrame(levels) {
   for (const x of [xl, xh]) {
     const xx = Math.round(x) + 0.5;
     c.beginPath(); c.moveTo(xx, g.baseY - 6); c.lineTo(xx, g.baseY + 6); c.stroke();
+  }
+
+  // Az elmúlt 10 másodperc legmélyebb és legmagasabb frekvenciájának szöveges kijelzése a két szélen
+  if (FS_HISTORY_10S.length > 0) {
+    let min10s = Infinity, max10s = -Infinity;
+    for (let i = 0; i < FS_HISTORY_10S.length; i++) {
+      if (FS_HISTORY_10S[i].loFreq < min10s) min10s = FS_HISTORY_10S[i].loFreq;
+      if (FS_HISTORY_10S[i].hiFreq > max10s) max10s = FS_HISTORY_10S[i].hiFreq;
+    }
+    if (min10s < Infinity && max10s > -Infinity) {
+      c.font = "600 9px monospace, sans-serif";
+      c.fillStyle = live ? "#00f0ff" : "rgba(0, 240, 255, 0.45)";
+
+      // Bal szél: legmélyebb frekvencia
+      c.textAlign = "left";
+      c.textBaseline = "top";
+      const strMin = formatFreqStat(min10s, false);
+      c.fillText(strMin, Math.max(4, g.x0 - 32), g.baseY - 8);
+
+      // Jobb szél: legmagasabb frekvencia
+      c.textAlign = "right";
+      c.textBaseline = "top";
+      const strMax = formatFreqStat(max10s, true);
+      c.fillText(strMax, Math.min(g.w - 4, g.x1 + 32), g.baseY - 8);
+    }
   }
 }
 
@@ -1137,12 +1217,7 @@ animate3D();
 // =========================================================================
 // 2. 2D EQUALIZER MOTOR (AZ ALSÓ PANELEN)
 // =========================================================================
-let nodes = [
-  { id: 1, freq: 60, gain: 6.0, q: 1.41, type: 1, mode: 0, slope: 0, width: 4.0, color: "#3584e4" },
-  { id: 2, freq: 120, gain: -8.0, q: 4.5, type: 1, mode: 0, slope: 0, width: 4.0, color: "#e01b24" },
-  { id: 3, freq: 2400, gain: -2.0, q: 2.0, type: 1, mode: 0, slope: 0, width: 4.0, color: "#ff7800" },
-  { id: 4, freq: 9000, gain: 3.5, q: 0.71, type: 3, mode: 0, slope: 0, width: 4.0, color: "#33d17a" }
-];
+let nodes = [];
 let selectedNodeId = 1;
 let draggedNode = null;
 
@@ -2791,12 +2866,11 @@ function applyEngineState(st) {
       setModuleActive('eq', true);
       armLimiterForProfile(currentPreamp, false);
     } else {
-      // A motor még sosem kapott beállítást: biztonságos, sík alapállapot (ami a képen, az szól)
+      // A motor még sosem kapott beállítást: teljesen tiszta, kikapcsolt (bypass) alapállapot
       nodes.forEach(n => { n.gain = 0.0; });
-      ['crossfeed', 'convolver', 'limiter', 'bass'].forEach(m => setModuleActive(m, false));
-      setModuleActive('eq', true);
+      ['crossfeed', 'convolver', 'limiter', 'bass', 'eq'].forEach(m => setModuleActive(m, false));
       currentPreamp = 0.0;
-      autoPreampMode = true;
+      autoPreampMode = false;
     }
     const inp = document.getElementById("inputPreamp");
     if (inp) inp.value = currentPreamp.toFixed(1);
