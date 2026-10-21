@@ -43,6 +43,10 @@ msg_text() {
         inst.noWebkit) f='A WebKitGTK csomag nem települt: a felület böngészőben fog megnyílni.' ;;
         inst.noPwCli) f='A pw-cli nem található. Biztosan PipeWire a hangrendszered?' ;;
         inst.step2) f='[2/6] Fordítás...' ;;
+        inst.rnnSystem) f='RNNoise (beszéd zajcsökkentés): a rendszer csomagja.' ;;
+        inst.rnnDownload) f='RNNoise modell letöltése (Ubuntu archívum, kb. 19 MB)...' ;;
+        inst.rnnOk) f='RNNoise (beszéd zajcsökkentés): beépítve.' ;;
+        inst.rnnFail) f='Az RNNoise modell nem tölthető le: a beszéd zajcsökkentése a saját, sávonkénti módszerrel működik.' ;;
         inst.engineFail) f='A motor fordítása sikertelen.' ;;
         inst.engineOk) f='Motor: build/aqulify-engine' ;;
         inst.guiOk) f='Saját ablakos felület: build/aqulify-gui' ;;
@@ -86,6 +90,10 @@ msg_text() {
         inst.noWebkit) f='The WebKitGTK package was not installed: the interface will open in a browser.' ;;
         inst.noPwCli) f='pw-cli was not found. Is your sound system really PipeWire?' ;;
         inst.step2) f='[2/6] Building...' ;;
+        inst.rnnSystem) f='RNNoise (speech noise reduction): system package.' ;;
+        inst.rnnDownload) f='Downloading the RNNoise model (Ubuntu archive, about 19 MB)...' ;;
+        inst.rnnOk) f='RNNoise (speech noise reduction): built in.' ;;
+        inst.rnnFail) f='The RNNoise model could not be downloaded: speech noise reduction uses the built-in band-wise method.' ;;
         inst.engineFail) f='Building the engine failed.' ;;
         inst.engineOk) f='Engine: build/aqulify-engine' ;;
         inst.guiOk) f='App window interface: build/aqulify-gui' ;;
@@ -167,6 +175,8 @@ case "$ID_ALL" in
     *ubuntu*|*debian*)
         sudo apt-get update
         sudo apt-get install -y build-essential cmake pkg-config libpipewire-0.3-dev libfftw3-dev pipewire
+        # RNNoise (a Magic Touch beszéd zajcsökkentése): újabb kiadásokban csomagként is van
+        sudo apt-get install -y librnnoise-dev 2>/dev/null || true
         sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev \
             || sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev || GUI_PKGS_OK=0
         ;;
@@ -193,7 +203,31 @@ command -v pw-cli >/dev/null 2>&1 || warn "$(msg inst.noPwCli)"
 
 # ------------------------------------------------------------------ 2. fordítás
 say "\n$(msg inst.step2)"
-cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON
+# RNNoise: a rendszer csomagja, ha van; különben a betanított modell az Ubuntu forráscsomagjából (ellenőrzött sha256)
+RNN_OPT=""
+if pkg-config --exists rnnoise 2>/dev/null; then
+    ok "$(msg inst.rnnSystem)"
+else
+    RNN_URL="http://archive.ubuntu.com/ubuntu/pool/universe/r/rnnoise/rnnoise_0.2+ds.orig.tar.xz"
+    RNN_SHA="db2718ee4a0b294bfbbe198fe94aabfdc8cd0d77cb9cd95d76c7a818ad805f0b"
+    RNN_DIR="$PROJECT_DIR/build/rnnoise-model"
+    if [ ! -f "$RNN_DIR/rnnoise_data.c" ]; then
+        say "$(msg inst.rnnDownload)"
+        mkdir -p "$RNN_DIR"
+        RNN_TAR="$RNN_DIR/rnnoise.orig.tar.xz"
+        { curl -fsSL -o "$RNN_TAR" "$RNN_URL" 2>/dev/null || wget -q -O "$RNN_TAR" "$RNN_URL" 2>/dev/null; } &&
+            echo "$RNN_SHA  $RNN_TAR" | sha256sum -c --status &&
+            tar -xJf "$RNN_TAR" -C "$RNN_DIR" --strip-components=2 rnnoise-0.2/src/rnnoise_data.c rnnoise-0.2/src/rnnoise_data.h 2>/dev/null
+        rm -f "$RNN_TAR"
+    fi
+    if [ -f "$RNN_DIR/rnnoise_data.c" ] && [ -f "$RNN_DIR/rnnoise_data.h" ]; then
+        RNN_OPT="-DAQULIFY_RNNOISE_MODEL_DIR=$RNN_DIR"
+        ok "$(msg inst.rnnOk)"
+    else
+        warn "$(msg inst.rnnFail)"
+    fi
+fi
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON $RNN_OPT
 cmake --build build -j"$(nproc)" --target aqulify-engine
 [ -x build/aqulify-engine ] || die "$(msg inst.engineFail)"
 ok "$(msg inst.engineOk)"

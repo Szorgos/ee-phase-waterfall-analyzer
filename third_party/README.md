@@ -14,6 +14,15 @@ kivéve ahol jelölve van; mindegyik a saját licencével.
 | `libbs2b` | https://github.com/alexmarsev/libbs2b | 3.1.0 | MIT |
 | `speexdsp` | https://github.com/xiph/speexdsp (7a15878): resampler; `speexdsp_config_types.h` a configure kimenete helyett | | BSD-3-Clause |
 | `zita-convolver` | Fons Adriaensen zita-convolvere az Ardour hordozható változatában (https://github.com/Ardour/ardour, libs/zita-convolver, 1e41d33) | 4.0.0 | GPL-3.0-or-later |
+| `rnnoise` | https://gitlab.xiph.org/xiph/rnnoise (a 0.2-es kiadás kódja a 372f7b4 javítással: „Fix compilation errors.”, a Debian `fix-compilation-errors.patch` foltja); a fordításhoz szükséges fájlok, a betanított modell nélkül | 0.2 | BSD-3-Clause |
+
+Az RNNoise betanított modellje (`src/rnnoise_data.c`, 29 MB, a `model_version` szerinti 0b50c45) sincs a tárolóban.
+Forrása az Ubuntu `rnnoise_0.2+ds.orig.tar.xz` csomagja
+(http://archive.ubuntu.com/ubuntu/pool/universe/r/rnnoise/, sha256
+`db2718ee4a0b294bfbbe198fe94aabfdc8cd0d77cb9cd95d76c7a818ad805f0b`): a CI, a COPR és az `install.sh` innen veszi,
+és a `-DAQULIFY_RNNOISE_MODEL_DIR=<mappa>` kapcsolóval kerül a fordításba. Ennek hiányában Linuxon a rendszer
+`librnnoise` csomagja épül be, ha van; ha egyik sincs, a Magic Touch a beszédnél is a saját, sávonkénti
+zajcsökkentést használja.
 
 Az FFTW3 (GPL-2.0-or-later) nincs a tárolóban: Linuxon a rendszer `fftw3f` csomagja, Windowson a
 https://www.fftw.org/fftw-3.3.10.tar.gz forrás épül be (`-DAQULIFY_FFTW_SOURCE_DIR=...`).

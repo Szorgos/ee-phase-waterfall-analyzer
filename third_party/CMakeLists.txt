@@ -164,3 +164,46 @@ else()
     find_package(Threads REQUIRED)
     target_link_libraries(aq_zita PUBLIC Threads::Threads)
 endif()
+
+# ---------------------------------------------------------------- RNNoise (Magic Touch: beszéd zajcsökkentés)
+# A kód a tárolóban van (third_party/rnnoise), a betanított modell (src/rnnoise_data.c, 29 MB) nincs:
+#   -DAQULIFY_RNNOISE_MODEL_DIR=<mappa>  a rnnoise_data.c és rnnoise_data.h mappája (pl. az Ubuntu
+#                                        rnnoise_0.2+ds.orig.tar.xz csomag rnnoise-0.2/src mappája);
+#   ennek hiányában Linuxon a rendszer librnnoise csomagja (pkg-config: rnnoise), ha van.
+# Egyik sem: az aq_rnnoise üres, és a Magic Touch a beszédnél is a saját, sávonkénti zajcsökkentést használja.
+set(AQULIFY_RNNOISE_MODEL_DIR "" CACHE PATH "Az RNNoise modell (rnnoise_data.c / .h) mappája")
+add_library(aq_rnnoise INTERFACE)
+if(AQULIFY_RNNOISE_MODEL_DIR)
+    if(NOT EXISTS ${AQULIFY_RNNOISE_MODEL_DIR}/rnnoise_data.c OR NOT EXISTS ${AQULIFY_RNNOISE_MODEL_DIR}/rnnoise_data.h)
+        message(FATAL_ERROR "AQULIFY_RNNOISE_MODEL_DIR: nincs benne rnnoise_data.c és rnnoise_data.h")
+    endif()
+    set(RNN ${TP}/rnnoise/src)
+    add_library(aq_rnnoise_impl STATIC
+        ${RNN}/denoise.c ${RNN}/rnn.c ${RNN}/pitch.c ${RNN}/kiss_fft.c ${RNN}/celt_lpc.c ${RNN}/nnet.c
+        ${RNN}/nnet_default.c ${RNN}/parse_lpcnet_weights.c ${RNN}/rnnoise_tables.c
+        ${AQULIFY_RNNOISE_MODEL_DIR}/rnnoise_data.c)
+    target_include_directories(aq_rnnoise_impl SYSTEM PUBLIC ${TP}/rnnoise/include)
+    target_include_directories(aq_rnnoise_impl PRIVATE ${RNN} ${AQULIFY_RNNOISE_MODEL_DIR})
+    target_compile_options(aq_rnnoise_impl PRIVATE ${AQ_TP_NOWARN})
+    set_target_properties(aq_rnnoise_impl PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    if(NOT MSVC)
+        target_link_libraries(aq_rnnoise_impl PRIVATE m)
+    endif()
+    target_link_libraries(aq_rnnoise INTERFACE aq_rnnoise_impl)
+    target_compile_definitions(aq_rnnoise INTERFACE AQ_HAVE_RNNOISE=1)
+    message(STATUS "RNNoise: beépítve (modell: ${AQULIFY_RNNOISE_MODEL_DIR})")
+elseif(NOT WIN32)
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(RNNOISE QUIET IMPORTED_TARGET rnnoise)
+    endif()
+    if(RNNOISE_FOUND)
+        target_link_libraries(aq_rnnoise INTERFACE PkgConfig::RNNOISE)
+        target_compile_definitions(aq_rnnoise INTERFACE AQ_HAVE_RNNOISE=1)
+        message(STATUS "RNNoise: a rendszer csomagja (${RNNOISE_VERSION})")
+    else()
+        message(STATUS "RNNoise: nincs (a beszéd zajcsökkentése a saját, sávonkénti módszerrel)")
+    endif()
+else()
+    message(STATUS "RNNoise: nincs (a beszéd zajcsökkentése a saját, sávonkénti módszerrel)")
+endif()

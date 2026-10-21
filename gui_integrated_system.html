@@ -3417,6 +3417,14 @@ function updateMagicDiag(m) {
       ["mt.rowExciter", t("mt.valExciter", { ex: fmtNum(m.exciter * 100, 1), wm: fmtNum(m.warmth * 100, 1), body: sg(m.body, 1) })],
       ["mt.rowSpeech", t("mt.valSpeech", { lc: pc(m.lowCut), pr: sg(m.presence, 1), lvl: sg(m.level, 1) })]);
   }
+  // 5. ütem: helyreállítás
+  if (typeof m.nrMode === "number") {
+    const hum = m.humHz > 0 ? t("mt.humVal", { hz: fmtNum(m.humHz, 2), n: m.humCount, cut: fmtNum(m.humCut, 1) }) : t("mt.humNone");
+    const nr = m.nrMode === 2 ? t("mt.nrRnn", { db: fmtNum(m.nr, 1) })
+             : m.nrMode === 1 ? t("mt.nrBand", { db: fmtNum(m.nr, 1), now: fmtNum(m.nrNow, 1) }) : t("mt.nrNone");
+    rows.splice(typeof m.content === "number" ? 2 : 1, 0, ["mt.rowRestore", t("mt.valRestore", {
+      hum, nr, rate: fmtNum(m.clickRate, 1), fixed: fmtNum(m.clicks, 0), lat: fmtNum(m.latency, 1) })]);
+  }
   table.innerHTML = "";
   rows.forEach(([k, v]) => {
     const tr = document.createElement("tr");

@@ -30,9 +30,10 @@ endif()
 set(EE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # 1. DSP Mag Könyvtár (Platformfüggetlen Interface könyvtár)
-add_library(aqulify_ee STATIC src/ee_dsp_lsp.cpp src/ee_dsp_misc.cpp src/ee_dsp_convolver.cpp)
+add_library(aqulify_ee STATIC src/ee_dsp_lsp.cpp src/ee_dsp_misc.cpp src/ee_dsp_convolver.cpp src/rnn_denoise.cpp)
 target_include_directories(aqulify_ee PUBLIC ${EE_INCLUDE_DIR})
 target_link_libraries(aqulify_ee PUBLIC aq_lsp aq_calf aq_bs2b aq_speex aq_zita)
+target_link_libraries(aqulify_ee PRIVATE aq_rnnoise)
 set_target_properties(aqulify_ee PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(NOT MSVC)
     # A könyvtárakból átvett jelfeldolgozó kód az eredetivel azonos lebegőpontos szabályokkal fusson

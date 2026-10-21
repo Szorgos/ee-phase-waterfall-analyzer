@@ -1,6 +1,6 @@
 # Terv: Magic Touch – automatikus, visszafogott hangszépítő
 
-**Állapot:** az 1–4. ütem elkészült (2026-10-21), az 5–6. ütem terv.
+**Állapot:** az 1–5. ütem elkészült (2026-10-21), a 6. ütem terv.
 **Felvéve:** 2026-10-21
 
 ## Cél
@@ -288,6 +288,57 @@ Kód: `include/magic_touch.hpp`, tesztek: `src/test_dsp.cpp` („Magic Touch” 
 - **Archív jel:** csak a 14,5 kHz alatti letörés számít archívnak. A 16 kHz-en levágott MP3 (128 kbit/s) gyakori
   modern anyagnál is, ezért az nem kapcsolja be az archív profilt.
 - **Az archív profil helyreállító része** (de-click, sziszegés-kapuzás) az 5. ütemmel (Restoration) jön.
+
+## Megvalósítás (5. ütem: Restoration)
+
+Kód: `include/magic_restore.hpp` (a közös szűrők: `include/magic_dsp.hpp`, az RNNoise burkoló:
+`include/rnn_denoise.hpp`, `src/rnn_denoise.cpp`), tesztek: `src/test_dsp.cpp` („Magic Touch” 13–16.).
+
+- **Hangút:** de-hum → kattanásjavítás / RNNoise (késleltetett blokk) → sávonkénti zajcsökkentés → a 2–4. ütem
+  fokozatai. A helyreállítás is csak akkor fut, ha van mit tennie; a rendben lévő felvétel bitre érintetlen marad.
+- **De-hum:** a felismerés a halk keretek nagy felbontású (≈ 1,5 Hz) átlagspektrumából dolgozik (a kb. 100 s-os
+  előzmény alsó negyede). Zümmögés, ha az 50 vagy 60 Hz-es sor legalább három tagja (vagy kettő 20 dB felett)
+  ±0,35 Hz-en belül az alap többszörösén kiemelkedik, és ez hat egymást követő halk kereten át megmarad. A vágás
+  felharmonikusonként keskeny (2,5–4,5 Hz), a kiemelkedésnél 3 dB-lel mélyebb, legfeljebb 24 dB. Valódi
+  felvételen (zenekari zene + 50/100/150 Hz-es zümmögés) a zümmögés kb. 23 dB-lel halkult; a zenét egyik tiszta
+  felvételen sem nézte zümmögésnek (a G1 = 49,0 Hz-es hang a ±0,35 Hz-es tűrés miatt nem fér bele).
+- **Zajcsökkentés, sávonként (zenéhez, és beszédhez, ha nincs RNNoise):** öt sáv (250 Hz–1 kHz csak beszédnél,
+  1–3, 3–6, 6–10, 10–20 kHz), sávonkénti lefelé tágítás lépcsős magas polcokkal, késleltetés nélkül. A zajpadló
+  a 20 ms-os keretek 10. percentilise; zaj, ha a halk keretek szintje állandó (a 2. és a 10. percentilis közel),
+  a zajpadló 8 s alatt sem vándorol, és a jel jóval fölötte jár (zenénél 12 dB, beszédnél 6 dB). Zenénél
+  ezen felül csak hallható, állandó sziszegésnél (a halk zenei rész és a lecsengés ne tompuljon). Legfeljebb
+  6 dB, a zajpadló + 6 dB alatt teljes mélységgel, + 18 dB felett érintetlen. Sziszegő próbajelen a halk
+  részekben −5,2 dB, a hangosakban 0 dB.
+- **Zajcsökkentés beszédhez: RNNoise** (Xiph, BSD-3, ugyanaz, mint az EasyEffectsben), 48 kHz-en, ha a fordításba
+  bekerült. A kimenete a nyers jellel keveredik, így a zaj legfeljebb 6 dB-lel halkul (a terv szerint). Zajos
+  beszéden: a szünetekben −6,0 dB, a beszédben −0,5 dB.
+- **Kattanásjavítás:** 16. rendű lineáris predikció maradékában elszigetelt, legfeljebb 1 ms-os kitörés; a
+  sérült mintákat az előre és a hátra irányú maradék metszete adja, a kitöltés LSAR interpolációval (Vaseghi,
+  Godsill). A szabályos ismétlődés (zöngés beszéd impulzusai) nem kattanás. Bekapcsol, ha a kattanások
+  gyakorisága (10 s átlag) archív anyagnál legalább 1/s, beszédnél 1,5/s, zenénél 2/s. Próbajelen a kattanások
+  energiája 38,8 dB-lel csökkent.
+- **Késleltetés:** a kattanásjavítás 2,7 ms, az RNNoise (0.2) 32,7 ms; csak amíg dolgoznak. Módváltáskor 5 ms-os
+  le- és felúsztatás. Az A/B eredeti jele is ugyanennyit késik (nincs időbeli ugrás).
+- **Hangerő-kiegyenlítés:** a helyreállítás utáni jelhez igazít, így a zaj, a zümmögés és a kattanás eltávolítását
+  nem pótolja vissza.
+- **Javítás a beszéd szintkiegyenlítésében (4. ütem):** a 3 s-os mérés is ugyanazzal a kapuval dolgozik, mint a
+  viszonyítás (korábban a szünetek miatt tévesen hangosított), és a viszonyítás az első 50 s-ban futó átlag.
+- **Diagnosztika:** új „Helyreállítás” sor: zümmögés, zajcsökkentés módja és mélysége, kattanások / s (felismert
+  és javított), késleltetés.
+- **Mérések:** a hangútban 48 kHz-en RNNoise nélkül egy mag 0,3 %-a, RNNoise-zal (két csatorna) kb. 5,7 %; az
+  elemzés kb. 1 % (Xeon, 2,8 GHz). A modell 5,5 MB-tal növeli a binárisokat.
+
+### Döntések (5. ütem)
+
+- **Az RNNoise modellje nincs a tárolóban** (29 MB C forrás): a CI, a COPR és az `install.sh` az Ubuntu
+  forráscsomagjából veszi, ellenőrzött sha256-tal (`third_party/README.md`). Ha nem érhető el, a beszéd
+  zajcsökkentése a saját, sávonkénti módszerrel működik.
+- **Késleltetés:** a terv 10 ms alatti célt ír. Az RNNoise saját késleltetése 20 ms, a keretezéssel 32,7 ms; ez
+  csak zajos beszédnél lép fel (videónál az ajak-szinkron tűréshatárán belül van). Zenénél a zajcsökkentés
+  késleltetés nélküli.
+- **Az RNNoise csak 48 kHz-en** fut (a modell erre készült); más mintavételnél a sávonkénti módszer dolgozik.
+- **A zümmögés vágása** keskeny (néhány Hz), ezért a ±3 dB-es hangszín-korlát rá nem vonatkozik; a saját
+  korlátja 24 dB.
 
 ## Források
 

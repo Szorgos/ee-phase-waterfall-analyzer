@@ -284,5 +284,12 @@
   "mt.rowExciter": "Exciter / melegség",
   "mt.valExciter": "exciter {ex} % · meleg felharmonikusok {wm} % · mély polc {body} dB",
   "mt.rowSpeech": "Beszéd",
-  "mt.valSpeech": "mélyvágás (80 Hz) {lc} % · jelenlét {pr} dB · szintkiegyenlítés {lvl} dB"
+  "mt.valSpeech": "mélyvágás (80 Hz) {lc} % · jelenlét {pr} dB · szintkiegyenlítés {lvl} dB",
+  "mt.rowRestore": "Helyreállítás",
+  "mt.valRestore": "zümmögés: {hum} · zajcsökkentés: {nr} · kattanás {rate}/s, javítva {fixed}/s · késleltetés {lat} ms",
+  "mt.humNone": "nincs",
+  "mt.humVal": "{hz} Hz, {n} tag, legfeljebb −{cut} dB",
+  "mt.nrNone": "nincs",
+  "mt.nrBand": "sávonkénti, legfeljebb {db} dB (most {now} dB)",
+  "mt.nrRnn": "RNNoise, legfeljebb {db} dB"
 }

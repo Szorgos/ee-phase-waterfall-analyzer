@@ -449,6 +449,7 @@ struct MagicRun {
     float maxTrans = 0, maxTransNow = 0, maxUp = 0, maxExc = 0, maxWarm = 0, maxBody = 0, maxPres = 0, maxLevel = 0;
     float minAir = 0;
     double firstSpeechS = -1;   // mikor lett először beszéd a profil (s)
+    float maxHum = 0, maxNr = 0;
 };
 
 /** Futtatás 480 mintás blokkokban; az elemzés kb. 30 ms-onként (mint a háttérszál). */
@@ -477,6 +478,8 @@ static MagicRun runMagic(magic::MagicTouch& mt, std::vector<float>& L, std::vect
                 r.maxPres = std::max(r.maxPres, d.presenceDb);
                 r.maxLevel = std::max(r.maxLevel, std::fabs(d.levelDb));
                 r.minAir = std::min(r.minAir, d.airGainDb);
+                r.maxHum = std::max(r.maxHum, d.humCutDb);
+                r.maxNr = std::max(r.maxNr, std::max(d.nrDb, d.nrNowDb));
                 if (d.content == magic::kProfSpeech && r.firstSpeechS < 0) r.firstSpeechS = blk * 480.0 / 48000.0;
             }
         }
@@ -497,7 +500,8 @@ static void checkLimits(const MagicRun& r, const char* what) {
           r.maxTrans <= magic::kMaxTransientDb + 1e-3f && r.maxTransNow <= magic::kMaxTransientDb + 1e-3f &&
           r.maxUp <= magic::kMaxUpwardDb + 1e-3f && r.maxExc <= magic::kMaxExciterMix + 1e-4f &&
           r.maxWarm <= magic::kMaxWarmthMix + 1e-4f && r.maxBody <= magic::kMaxBodyDb + 1e-3f &&
-          r.maxPres <= magic::kMaxPresenceDb + 1e-3f && r.maxLevel <= magic::kMaxLevelDb + 1e-3f && r.minAir >= -3.0f,
+          r.maxPres <= magic::kMaxPresenceDb + 1e-3f && r.maxLevel <= magic::kMaxLevelDb + 1e-3f && r.minAir >= -3.0f &&
+          r.maxHum <= magic::kMaxHumCutDb + 1e-3f && r.maxNr <= magic::kMaxNrDb + 1e-3f,
           "Magic Touch korlátok (%s): vágás %.2f, levegő %.2f, de-esser %.2f, tágítás %.2f, kiegyenlítés %.2f dB, "
           "tranziens %.2f dB, emelés %.2f dB, exciter %.0f %%, meleg %.0f %%, szintkiegyenlítés %.2f dB",
           what, r.maxCut, r.maxAir, r.maxDeess, r.maxWidth, r.maxMakeup, r.maxTransNow, r.maxUp, r.maxExc * 100.0f,
@@ -828,6 +832,134 @@ static void testMagicTouch() {
             width[k] = runChar(k == 0 ? magic::kCharNatural : magic::kCharSpacious, L, R).last.widthGainDb;
         }
         CHECK(width[0] < 0.01f && width[1] > 0.5f, "Tágas: S/M −11 dB-nél tágítás %.2f dB (Természetes: %.2f dB)", width[1], width[0]);
+    }
+    // 13. De-hum: 50 Hz-es zümmögés és felharmonikusai szakaszos zenében (a halk részekben is szól)
+    for (double base : { 50.0, 60.0 }) {
+        auto mt = std::make_unique<magic::MagicTouch>();
+        mt->setControl(100.0f, false, false);
+        // a zümmögés a halk részekben (1,5 s, 4,5 s-onként) jól hallható, a hangosakban a zene alatt van;
+        // a felismeréshez a halk részek átlagspektruma kell (kb. 15 s), ezért hosszabb a jel
+        const size_t nh = static_cast<size_t>(sr * 40), tailH = static_cast<size_t>(sr * 30);
+        std::vector<float> L = pinkNoise(nh, 20, 0.2);
+        for (size_t i = 0; i < nh; ++i) if ((i / static_cast<size_t>(sr * 1.5)) % 3 == 2) L[i] *= 0.05f;
+        std::vector<float> clean = L;
+        const double amps[4] = { 0.006, 0.004, 0.003, 0.002 };
+        for (int h = 0; h < 4; ++h) {
+            const std::vector<float> s = sine(base * (h + 1), amps[h], nh, sr);
+            for (size_t i = 0; i < nh; ++i) L[i] += s[i];
+        }
+        std::vector<float> R = L, inL = L;
+        const MagicRun r = runMagic(*mt, L, R);
+        double worst = -1e9;
+        for (int h = 0; h < 3; ++h) {
+            const double f = base * (h + 1);
+            const double hin = toneAmp(inL, tailH, f, sr), hcl = toneAmp(clean, tailH, f, sr), hout = toneAmp(L, tailH, f, sr);
+            worst = std::max(worst, 20 * std::log10((hout + 1e-9) / (hin - hcl + 1e-9)));
+        }
+        const double d1k = bandDb(L, tailH, sr, 800.0, 1250.0) - bandDb(inL, tailH, sr, 800.0, 1250.0);
+        CHECK(std::fabs(r.last.humHz - base) < 0.3f && r.last.humCount >= 3 && worst < -10.0 && std::fabs(d1k) < 0.2,
+              "de-hum %.0f Hz: felismerve %.2f Hz, %u felharmonikus, legfeljebb %.1f dB vágás; a zümmögés legalább %.1f dB-lel halkabb, 1 kHz %+.2f dB",
+              base, r.last.humHz, r.last.humCount, r.last.humCutDb, -worst, d1k);
+        checkLimits(r, "de-hum");
+    }
+    // 14. Sziszegés (állandó magas zajpadló) szakaszos zenében: sávonkénti zajcsökkentés a halk részekben, a hangosakban nem
+    {
+        auto mt = std::make_unique<magic::MagicTouch>();
+        mt->setControl(100.0f, false, false);
+        std::vector<float> L = pinkNoise(n, 21, 0.25), hissOnly(n);
+        std::mt19937 rng(22);
+        std::normal_distribution<double> g(0.0, 1.0);
+        magic::BiquadD hhp;
+        magic::designHighpass(hhp, sr, 2000.0, 0.7071);
+        std::vector<bool> quiet(n);
+        for (size_t i = 0; i < n; ++i) {
+            quiet[i] = (i / static_cast<size_t>(sr * 0.5)) % 5 == 4;
+            hissOnly[i] = static_cast<float>(0.002 * hhp.process(g(rng)));
+            L[i] = L[i] * (quiet[i] ? 0.0f : 1.0f) + hissOnly[i];
+        }
+        std::vector<float> R = L, inL = L;
+        const MagicRun r = runMagic(*mt, L, R);
+        double eqIn = 0, eqOut = 0, elIn = 0, elOut = 0;
+        for (size_t i = n - static_cast<size_t>(sr * 6); i < n; ++i) {   // a beállás után (a zajpadlóhoz 5 s előzmény kell)
+            const size_t ph = i % static_cast<size_t>(sr * 2.5);
+            if (quiet[i] && ph > sr * 2.1 && ph < sr * 2.45) { eqIn += inL[i] * inL[i]; eqOut += L[i] * L[i]; }
+            if (!quiet[i] && ph > sr * 0.2 && ph < sr * 1.8) { elIn += inL[i] * inL[i]; elOut += L[i] * L[i]; }
+        }
+        const double dq = 10 * std::log10(eqOut / eqIn), dl = 10 * std::log10(elOut / elIn);
+        CHECK(r.last.nrMode == 1 && dq < -2.0 && dq > -magic::kMaxNrDb - 0.5 && std::fabs(dl) < 0.5,
+              "sziszegés: sávonkénti zajcsökkentés legfeljebb %.1f dB; a halk részekben %+.1f dB, a hangosakban %+.2f dB",
+              r.last.nrDb, dq, dl);
+        checkLimits(r, "sziszegés");
+    }
+    // 15. Kattanások archív felvételen: javítás 2,7 ms késleltetéssel; az A/B eredeti jele is késleltetett
+    {
+        auto mt = std::make_unique<magic::MagicTouch>();
+        mt->setControl(100.0f, false, false);
+        std::vector<float> clean = pinkNoise(n, 23, 0.25);
+        magic::Biquad lp[6];
+        for (auto& f : lp) magic::designLowpass(f, sr, 10000.0, 0.7071);
+        for (float& v : clean) for (auto& f : lp) v = f.process(v);
+        std::vector<float> L = clean;
+        std::mt19937 rng(24);
+        std::uniform_real_distribution<double> u(0.0, 1.0);
+        std::vector<size_t> pos;
+        for (size_t t = static_cast<size_t>(sr); t + 10 < n; t += static_cast<size_t>(sr * (0.2 + 0.2 * u(rng)))) {
+            const float A = static_cast<float>((u(rng) < 0.5 ? -1 : 1) * (0.1 + 0.3 * u(rng)));
+            L[t] += A; L[t + 1] += 0.5f * A;
+            pos.push_back(t);
+        }
+        std::vector<float> R = L, inL = L;
+        const MagicRun r = runMagic(*mt, L, R);
+        const size_t D = static_cast<size_t>(std::lround(r.last.latencyMs * sr / 1000.0));
+        double eIn = 0, eOut = 0;
+        for (size_t t : pos) {
+            if (t < tail) continue;
+            for (size_t k = t - 4; k < t + 6; ++k) {
+                eIn += std::pow(inL[k] - clean[k], 2);
+                if (k + D < n) eOut += std::pow(L[k + D] - clean[k], 2);
+            }
+        }
+        const double dClick = 10 * std::log10(eOut / eIn);
+        CHECK(r.last.latencyMs > 2.0f && r.last.latencyMs < 3.0f && r.last.clickRate > 1.0f && dClick < -10.0,
+              "kattanások: %.1f/s felismerve, késleltetés %.1f ms, a kattanások energiája %.1f dB",
+              r.last.clickRate, r.last.latencyMs, dClick);
+        checkLimits(r, "kattanások");
+        // A/B: az eredeti jel szól, a késleltetéssel együtt (nincs időbeli ugrás)
+        mt->setControl(100.0f, true, false);
+        std::vector<float> L2 = pinkNoise(static_cast<size_t>(sr), 25, 0.2), R2 = L2, in2 = L2;
+        runMagic(*mt, L2, R2);
+        double maxDiff = 0;
+        for (size_t i = static_cast<size_t>(sr * 0.1); i < L2.size(); ++i)
+            maxDiff = std::max(maxDiff, static_cast<double>(std::fabs(L2[i] - in2[i - D])));
+        CHECK(maxDiff < 1e-6, "A/B késleltetett helyreállítás mellett: az eredeti jel, %zu mintával késleltetve (eltérés %.2e)", D, maxDiff);
+    }
+    // 16. Zajos beszéd: RNNoise (ha beépült, 48 kHz), különben sávonkénti zajcsökkentés; a beszéd szintje marad
+    {
+        auto mt = std::make_unique<magic::MagicTouch>();
+        mt->setControl(100.0f, false, false, magic::kCharNatural, magic::kContentSpeech);
+        const size_t ns = static_cast<size_t>(sr * 40);
+        const std::vector<float> sp = synthSpeech(ns, 26, sr, 0.3), noise = pinkNoise(ns, 27, 0.03);
+        std::vector<float> L(ns);
+        for (size_t i = 0; i < ns; ++i) L[i] = sp[i] + noise[i];
+        std::vector<float> R = L, inL = L;
+        const MagicRun r = runMagic(*mt, L, R);
+        const size_t D = static_cast<size_t>(std::lround(r.last.latencyMs * sr / 1000.0));
+        const size_t F = 960;
+        double ep = 0, ip = 0, es = 0, is = 0;
+        for (size_t k = static_cast<size_t>(sr * 20) / F; (k + 2) * F + D < ns; ++k) {
+            double c = 0, x = 0, y = 0;
+            for (size_t j = 0; j < F; ++j) {
+                const size_t t = k * F + j;
+                c += sp[t] * sp[t]; x += inL[t] * inL[t]; y += L[t + D] * L[t + D];
+            }
+            if (c < 1e-10) { ip += x; ep += y; } else if (c > 1e-3 * F) { is += x; es += y; }
+        }
+        const double dp = 10 * std::log10(ep / ip), ds = 10 * std::log10(es / is);
+        const bool rnn = magic::RnnDenoiser::available();
+        CHECK(r.last.nrMode == (rnn ? 2u : 1u) && dp < -2.0 && ds - dp > 1.5,
+              "zajos beszéd (%s): késleltetés %.1f ms, a szünetekben %+.1f dB, a beszédben %+.1f dB",
+              rnn ? "RNNoise" : "sávonkénti", r.last.latencyMs, dp, ds);
+        checkLimits(r, "zajos beszéd");
     }
     // 7. A láncban: 0 %-on ki van kerülve (bitre érintetlen), és a ki-be kapcsolás kattanásmentes
     {

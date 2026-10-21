@@ -1,11 +1,13 @@
 #pragma once
 /**
  * @file magic_touch.hpp
- * @brief Magic Touch: automatikus, visszafogott hangszépítő (docs/plans/magic-touch.md, 1–4. ütem).
+ * @brief Magic Touch: automatikus, visszafogott hangszépítő (docs/plans/magic-touch.md, 1–5. ütem).
  *
- * Hangút (valós idejű szál, késleltetés nélkül, csak IIR szűrők és burkolók):
+ * Hangút (valós idejű szál; IIR szűrők és burkolók, késleltetés csak a kattanásjavításnál és az RNNoise-nál):
  *
- *   bemenet -> beszéd: mélyvágás 80 Hz alatt -> mély-közép vágás (150–300 Hz, csúcsszűrő)
+ *   bemenet -> Restoration (magic_restore.hpp): de-hum -> kattanásjavítás / RNNoise (beszéd; ha dolgoznak,
+ *              2,7 ms, illetve az RNNoise 0.2-vel 32,7 ms késleltetéssel) -> sávonkénti zajcsökkentés
+ *           -> beszéd: mélyvágás 80 Hz alatt -> mély-közép vágás (150–300 Hz, csúcsszűrő)
  *           -> Meleg karakter: mély polc (150 Hz) -> beszéd: jelenlét (2,2 kHz) -> levegő (high shelf, 10,5 kHz)
  *           -> de-esser (dinamikus csillapítás 5 kHz felett)
  *           -> exciter (páros felharmonikusok: 3–9 kHz -> 6 kHz felett; Meleg: 120–600 Hz -> 200 Hz felett)
@@ -15,7 +17,7 @@
  *              a középjel (M) érintetlen, 0 dB-es polcoknál az oldaljel is -> kimenet
  *
  * A hangerő-kiegyenlítés csak a hangszínváltozást egyenlíti ki; a térbeli javítás (pl. az ellenfázisú
- * mély eltávolítása) után nem emeli vissza a szintet.
+ * mély eltávolítása) és a helyreállítás (zaj, zümmögés, kattanás eltávolítása) után nem emeli vissza a szintet.
  *
  * Elemzés (a lánc háttérszálán): rövid idejű hangosság és LRA (ITU-R BS.1770, EBU Tech 3342),
  * csúcstényező, 1/3 oktávos átlagspektrum (mély-közép többlet, élesség, levegő arány, sávszélesség),
@@ -40,6 +42,8 @@
 #include <string>
 #include <vector>
 
+#include "magic_dsp.hpp"
+#include "magic_restore.hpp"
 #include "tap_ring.hpp"
 
 namespace ee_analyzer::magic {
@@ -73,15 +77,15 @@ enum ContentSel : int32_t { kContentAuto = 0, kContentMusic = 1, kContentSpeech 
 enum Profile : uint32_t { kProfMusic = 0, kProfMusicDense = 1, kProfMusicDynamic = 2, kProfSpeech = 3, kProfArchive = 4 };
 
 /** A szabályok súlyai tartalmi profilonként (docs/plans/magic-touch.md, „Tartalmi profilok”). */
-struct ProfileWeights { float lowMid, air, exciter, transient, upward, width, warmth; bool speech; };
+struct ProfileWeights { float lowMid, air, exciter, transient, upward, width, warmth, nr; bool speech; };
 inline const ProfileWeights& profileWeights(uint32_t p) {
     static const ProfileWeights w[5] = {
-        //  mély-k. levegő exciter tranz. emelés tágítás meleg  beszéd
-        { 1.0f, 1.0f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, false },   // zene
-        { 1.0f, 1.0f, 0.3f, 0.6f, 1.0f, 1.0f, 0.5f, false },   // túltömörített zene: nincs erős exciter, visszafogott tranziens
-        { 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.5f, false },   // akusztikus / élő: minimális beavatkozás
-        { 1.0f, 0.3f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, true  },   // beszéd: érthetőség, stabil szint
-        { 1.0f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, false },   // archív: sávszélesség és élet, zajkiemelés nélkül
+        //  mély-k. levegő exciter tranz. emelés tágítás meleg  zajcs. beszéd
+        { 1.0f, 1.0f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 0.7f, false },   // zene
+        { 1.0f, 1.0f, 0.3f, 0.6f, 1.0f, 1.0f, 0.5f, 0.5f, false },   // túltömörített zene: nincs erős exciter, visszafogott tranziens
+        { 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.5f, 0.7f, false },   // akusztikus / élő: minimális beavatkozás
+        { 1.0f, 0.3f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, true  },   // beszéd: érthetőség, zajmentesség, stabil szint
+        { 1.0f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, false },   // archív: sávszélesség és élet, zajkiemelés nélkül
     };
     return w[std::min<uint32_t>(p, 4)];
 }
@@ -97,80 +101,6 @@ inline const CharacterWeights& characterWeights(int32_t c) {
         { 2.0f,  -8.0f,  0.0f, 0.0f, 0.0f, 0.0f,       1.0f,  -8.0f, 0.25f },   // Tágas
     };
     return w[std::clamp(c, 0, 3)];
-}
-
-// ------------------------------------------------------------------ szűrők
-struct Biquad {
-    float b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0;
-    float z1 = 0, z2 = 0;
-    inline float process(float x) {
-        const float y = b0 * x + z1;
-        z1 = b1 * x - a1 * y + z2;
-        z2 = b2 * x - a2 * y;
-        return y;
-    }
-    void reset() { z1 = z2 = 0; }
-    void set(double nb0, double nb1, double nb2, double na0, double na1, double na2) {
-        b0 = static_cast<float>(nb0 / na0); b1 = static_cast<float>(nb1 / na0); b2 = static_cast<float>(nb2 / na0);
-        a1 = static_cast<float>(na1 / na0); a2 = static_cast<float>(na2 / na0);
-    }
-};
-
-/** Duplapontos változat az elemzéshez (hosszú összegzéseknél pontosabb). */
-struct BiquadD {
-    double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
-    inline double process(double x) {
-        const double y = b0 * x + z1;
-        z1 = b1 * x - a1 * y + z2;
-        z2 = b2 * x - a2 * y;
-        return y;
-    }
-    void reset() { z1 = z2 = 0; }
-    template <class B> void from(const B& f) { b0 = f.b0; b1 = f.b1; b2 = f.b2; a1 = f.a1; a2 = f.a2; }
-    void set(double nb0, double nb1, double nb2, double na0, double na1, double na2) {
-        b0 = nb0 / na0; b1 = nb1 / na0; b2 = nb2 / na0; a1 = na1 / na0; a2 = na2 / na0;
-    }
-};
-
-constexpr double kPi = 3.14159265358979323846;
-
-/** RBJ Audio EQ Cookbook tervezők (B: Biquad vagy BiquadD). */
-template <class B> void designLowpass(B& f, double fs, double fc, double q) {
-    const double w = 2 * kPi * fc / fs, c = std::cos(w), al = std::sin(w) / (2 * q);
-    f.set((1 - c) / 2, 1 - c, (1 - c) / 2, 1 + al, -2 * c, 1 - al);
-}
-template <class B> void designHighpass(B& f, double fs, double fc, double q) {
-    const double w = 2 * kPi * fc / fs, c = std::cos(w), al = std::sin(w) / (2 * q);
-    f.set((1 + c) / 2, -(1 + c), (1 + c) / 2, 1 + al, -2 * c, 1 - al);
-}
-template <class B> void designPeaking(B& f, double fs, double fc, double gainDb, double q) {
-    const double A = std::pow(10.0, gainDb / 40.0), w = 2 * kPi * fc / fs, c = std::cos(w), al = std::sin(w) / (2 * q);
-    f.set(1 + al * A, -2 * c, 1 - al * A, 1 + al / A, -2 * c, 1 - al / A);
-}
-template <class B> void designLowShelf(B& f, double fs, double fc, double gainDb, double slope) {
-    const double A = std::pow(10.0, gainDb / 40.0), w = 2 * kPi * fc / fs, c = std::cos(w);
-    const double al = std::sin(w) / 2 * std::sqrt((A + 1 / A) * (1 / slope - 1) + 2), sa = 2 * std::sqrt(A) * al;
-    f.set(A * ((A + 1) - (A - 1) * c + sa), 2 * A * ((A - 1) - (A + 1) * c), A * ((A + 1) - (A - 1) * c - sa),
-          (A + 1) + (A - 1) * c + sa, -2 * ((A - 1) + (A + 1) * c), (A + 1) + (A - 1) * c - sa);
-}
-template <class B> void designHighShelf(B& f, double fs, double fc, double gainDb, double slope) {
-    const double A = std::pow(10.0, gainDb / 40.0), w = 2 * kPi * fc / fs, c = std::cos(w);
-    const double al = std::sin(w) / 2 * std::sqrt((A + 1 / A) * (1 / slope - 1) + 2), sa = 2 * std::sqrt(A) * al;
-    f.set(A * ((A + 1) + (A - 1) * c + sa), -2 * A * ((A - 1) + (A + 1) * c), A * ((A + 1) + (A - 1) * c - sa),
-          (A + 1) - (A - 1) * c + sa, 2 * ((A - 1) - (A + 1) * c), (A + 1) - (A - 1) * c - sa);
-}
-
-/** ITU-R BS.1770 K-súlyozás: 1. fokozat (magas polc, fejhatás), tetszőleges mintavételen. */
-inline void designKShelf(BiquadD& f, double fs) {
-    const double f0 = 1681.974450955533, G = 3.999843853973347, Q = 0.7071752369554196;
-    const double K = std::tan(kPi * f0 / fs), Vh = std::pow(10.0, G / 20.0), Vb = std::pow(Vh, 0.4996667741545416);
-    const double a0 = 1.0 + K / Q + K * K;
-    f.set(Vh + Vb * K / Q + K * K, 2.0 * (K * K - Vh), Vh - Vb * K / Q + K * K, a0, 2.0 * (K * K - 1.0), 1.0 - K / Q + K * K);
-}
-/** ITU-R BS.1770 K-súlyozás: 2. fokozat (RLB felüláteresztő). */
-inline void designKHighpass(BiquadD& f, double fs) {
-    const double f0 = 38.13547087602444, Q = 0.5003270373238773, K = std::tan(kPi * f0 / fs);
-    f.set(1.0, -2.0, 1.0, 1.0 + K / Q + K * K, 2.0 * (K * K - 1.0), 1.0 - K / Q + K * K);
 }
 
 // ------------------------------------------------------------------ diagnosztika (felületnek)
@@ -212,6 +142,16 @@ struct MagicDiag {
     float presenceDb = 0;          // beszéd: jelenlét
     float lowCut = 0;              // beszéd: mélyvágás (0..1)
     float levelDb = 0;             // beszéd szintkiegyenlítés
+    // 5. ütem (Restoration)
+    float humHz = 0;               // a felismert hálózati alapfrekvencia (0: nincs zümmögés)
+    uint32_t humCount = 0;         // hány felharmonikusát vágja
+    float humCutDb = 0;            // a legmélyebb vágás
+    uint32_t nrMode = 0;           // zajcsökkentés: 0 nincs, 1 sávonkénti, 2 RNNoise
+    float nrDb = 0;                // a zajcsökkentés legnagyobb megengedett mélysége
+    float nrNowDb = 0;             // pillanatnyi (sávonkénti módnál)
+    float clickRate = 0;           // felismert kattanások / s (a bemeneten)
+    float clicksFixed = 0;         // javított kattanások / s (csatornánként összesen)
+    float latencyMs = 0;           // a helyreállítás késleltetése (0, ha nem dolgozik)
 };
 
 /** Seqlock a diagnosztikához (POD; folyamatok közötti közös memóriában is használható). */
@@ -240,81 +180,23 @@ struct DiagBlock {
 
 /** A diagnosztika JSON töredékként (a motor állapotüzenetébe: "magic":{...}). */
 inline std::string diagToJson(const MagicDiag& d) {
-    char b[1024];
+    char b[1400];
     std::snprintf(b, sizeof(b),
                   "{\"valid\":%u,\"silent\":%u,\"lufs\":%.1f,\"lra\":%.1f,\"crest\":%.1f,\"lowMid\":%.2f,\"lowMidHz\":%.0f,"
                   "\"harsh\":%.2f,\"sib\":%.2f,\"air\":%.1f,\"hiss\":%.2f,\"lfCorr\":%.2f,\"sideMid\":%.1f,"
                   "\"cut\":%.2f,\"airGain\":%.2f,\"deess\":%.2f,\"deessNow\":%.2f,\"mono\":%.2f,\"width\":%.2f,\"makeup\":%.2f,"
                   "\"content\":%u,\"contentAuto\":%u,\"speech\":%.2f,\"bw\":%.0f,\"trans\":%.2f,\"transNow\":%.2f,"
                   "\"up\":%.2f,\"upNow\":%.2f,\"exciter\":%.3f,\"warmth\":%.3f,\"body\":%.2f,\"presence\":%.2f,"
-                  "\"lowCut\":%.2f,\"level\":%.2f}",
+                  "\"lowCut\":%.2f,\"level\":%.2f,\"humHz\":%.2f,\"humCount\":%u,\"humCut\":%.1f,\"nrMode\":%u,"
+                  "\"nr\":%.2f,\"nrNow\":%.2f,\"clickRate\":%.2f,\"clicks\":%.1f,\"latency\":%.1f}",
                   d.valid, d.silent, d.lufsShort, d.lra, d.crestDb, d.lowMidExcessDb, d.lowMidFreqHz, d.harshness, d.sibilance,
                   d.airRatioDb, d.hiss, d.lfCorr, d.sideMidDb, d.lowMidCutDb, d.airGainDb, d.deessDepthDb, d.deessNowDb,
                   d.monoBass, d.widthGainDb, d.makeupDb, d.content, d.contentAuto, d.speechScore, d.bandwidthHz,
                   d.transientDb, d.transientNowDb, d.upwardDb, d.upwardNowDb, d.exciterMix, d.warmthMix, d.bodyDb,
-                  d.presenceDb, d.lowCut, d.levelDb);
+                  d.presenceDb, d.lowCut, d.levelDb, d.humHz, d.humCount, d.humCutDb, d.nrMode, d.nrDb, d.nrNowDb,
+                  d.clickRate, d.clicksFixed, d.latencyMs);
     return b;
 }
-
-// ------------------------------------------------------------------ segédek az elemzéshez
-/** Egyszerű radix-2 FFT (az elemzés másodpercenként kb. 25-ször fut, nem kritikus). */
-class Fft {
-public:
-    void init(size_t n) {
-        n_ = n;
-        tw_.resize(n / 2);
-        for (size_t k = 0; k < n / 2; ++k) tw_[k] = std::polar(1.0, -2.0 * kPi * static_cast<double>(k) / static_cast<double>(n));
-        rev_.resize(n);
-        size_t bits = 0;
-        while ((size_t{1} << bits) < n) ++bits;
-        for (size_t i = 0; i < n; ++i) {
-            size_t r = 0;
-            for (size_t b = 0; b < bits; ++b) if (i & (size_t{1} << b)) r |= size_t{1} << (bits - 1 - b);
-            rev_[i] = r;
-        }
-    }
-    void forward(std::vector<std::complex<double>>& a) const {
-        for (size_t i = 0; i < n_; ++i) if (i < rev_[i]) std::swap(a[i], a[rev_[i]]);
-        for (size_t len = 2; len <= n_; len <<= 1) {
-            const size_t step = n_ / len;
-            for (size_t i = 0; i < n_; i += len)
-                for (size_t j = 0; j < len / 2; ++j) {
-                    const std::complex<double> u = a[i + j], v = a[i + j + len / 2] * tw_[j * step];
-                    a[i + j] = u + v;
-                    a[i + j + len / 2] = u - v;
-                }
-        }
-    }
-    size_t size() const { return n_; }
-private:
-    size_t n_ = 0;
-    std::vector<std::complex<double>> tw_;
-    std::vector<size_t> rev_;
-};
-
-/** Rögzített méretű előzmény-gyűrű percentilisekhez. */
-class History {
-public:
-    explicit History(size_t cap = 1) { resize(cap); }
-    void resize(size_t cap) { v_.assign(cap, 0.0); n_ = 0; pos_ = 0; }
-    void clear() { n_ = 0; pos_ = 0; }
-    void push(double x) { v_[pos_] = x; pos_ = (pos_ + 1) % v_.size(); n_ = std::min(n_ + 1, v_.size()); }
-    size_t size() const { return n_; }
-    /** p: 0..1; a tmp a hívó munkapuffere (nincs foglalás a gyakori hívásban). */
-    double percentile(double p, std::vector<double>& tmp) const {
-        if (n_ == 0) return 0.0;
-        tmp.assign(v_.begin(), v_.begin() + static_cast<long>(n_));
-        const size_t k = std::min(n_ - 1, static_cast<size_t>(p * static_cast<double>(n_ - 1) + 0.5));
-        std::nth_element(tmp.begin(), tmp.begin() + static_cast<long>(k), tmp.end());
-        return tmp[k];
-    }
-    template <class F> void forEach(F f) const { for (size_t i = 0; i < n_; ++i) f(v_[i]); }
-private:
-    std::vector<double> v_;
-    size_t n_ = 0, pos_ = 0;
-};
-
-inline double toDb(double p) { return 10.0 * std::log10(std::max(p, 1e-30)); }
 
 // ------------------------------------------------------------------ Magic Touch
 class MagicTouch {
@@ -362,6 +244,10 @@ public:
         grAtt_ = static_cast<float>(1.0 - std::exp(-static_cast<double>(kSub) / (0.002 * fs)));      // 2 ms
         grRel_ = static_cast<float>(1.0 - std::exp(-static_cast<double>(kSub) / (0.080 * fs)));      // 80 ms
         cmpStep_ = 1.0f / std::max(1.0f, 0.03f * static_cast<float>(fs));                            // 30 ms áttűnés
+        dehum_.setSampleRate(fs);
+        bandNr_.setSampleRate(fs);
+        rdelay_.setSampleRate(sr);
+        rnnUsable_.store(rdelay_.rnnUsable(), std::memory_order_relaxed);
         cur_ = Smoothed{};
         coefDirty_ = true;
         updateCoefs();
@@ -392,6 +278,9 @@ public:
         gr_ = 0.0f;
         tFast_ = tSlow_ = upEnv_ = 0.0f;
         microG_ = 1.0f;
+        dehum_.reset();
+        bandNr_.reset();
+        rdelay_.reset();
         cmpMix_ = compare_ ? 1.0f : 0.0f;
     }
 
@@ -401,6 +290,38 @@ public:
         pre_.write(L, R, static_cast<uint32_t>(n));
         std::memcpy(dryL_.data(), L, n * sizeof(float));
         std::memcpy(dryR_.data(), R, n * sizeof(float));
+
+        // 0. Restoration: de-hum (alblokkonként simítva), kattanásjavítás és RNNoise (ha dolgoznak: késleltetéssel;
+        //    ilyenkor az A/B eredeti jele is késleltetett), sávonkénti zajcsökkentés (lent, az alblokkokban)
+        {
+            float hd[kHumHarmonics];
+            for (int h = 0; h < kHumHarmonics; ++h) hd[h] = tgt_.humDb[h].load(std::memory_order_relaxed);
+            const float f0 = tgt_.humF0.load(std::memory_order_relaxed);
+            for (size_t off = 0; off < n; off += kSub) {
+                const size_t m = std::min(kSub, n - off);
+                dehum_.step(f0, hd, subCoef_);
+                dehum_.process(L + off, R + off, m);
+            }
+            uint32_t fixed = 0;
+            const bool declick = tgt_.declick.load(std::memory_order_relaxed);
+            const float rnnW = tgt_.rnnW.load(std::memory_order_relaxed);
+            rdelay_.process(L, R, dryL_.data(), dryR_.data(), n, rnnW > 0.0f ? 2 : declick ? 1 : 0, declick,
+                            tgt_.clickK.load(std::memory_order_relaxed), rnnW, tgt_.rnnAtt.load(std::memory_order_relaxed), fixed);
+            if (fixed) clicksFixed_.fetch_add(fixed, std::memory_order_relaxed);
+            latSamples_.store(static_cast<uint32_t>(rdelay_.latency(rdelay_.mode())), std::memory_order_relaxed);
+        }
+        float nrMax = 0.0f;
+        {
+            float nrDepth[kNrBands], nrFloor[kNrBands];
+            for (int b = 0; b < kNrBands; ++b) {
+                nrDepth[b] = tgt_.nrDb[b].load(std::memory_order_relaxed);
+                nrFloor[b] = tgt_.nrFloor[b].load(std::memory_order_relaxed);
+            }
+            for (size_t off = 0; off < n; off += kSub)
+                bandNr_.process(L + off, R + off, std::min(kSub, n - off), nrDepth, nrFloor, nrMax);
+        }
+        // a helyreállított jel: a hangerő-kiegyenlítés ehhez igazít (a zaj, a zümmögés, a kattanás eltávolítását nem pótolja)
+        mid_.write(L, R, static_cast<uint32_t>(n));
 
         float grMax = 0.0f, tMax = 0.0f, uMax = 0.0f;
         for (size_t off = 0; off < n; off += kSub) {
@@ -474,6 +395,7 @@ public:
         storeMax(deessNow_, grMax);
         storeMax(transNow_, tMax);
         storeMax(upNow_, uMax);
+        storeMax(nrNow_, nrMax);
 
         // 6. hangerő-kiegyenlítés (beszédnél a szintkiegyenlítéssel együtt)
         const float mkTarget = std::pow(10.0f, (tgt_.makeupDb.load(std::memory_order_relaxed) +
@@ -522,8 +444,10 @@ public:
             const size_t got = readTapRing(pre_, preRead_, aPre_.data(), want);
             if (got == 0) break;
             uint64_t pr = preRead_ - got;   // a bemenettel azonos pozíció
+            uint64_t pm = pr;
             const size_t gotPost = readTapRing(post_, pr, aPost_.data(), got);
-            consume(aPre_.data(), gotPost == got ? aPost_.data() : nullptr, got);
+            const size_t gotMid = readTapRing(mid_, pm, aMid_.data(), got);
+            consume(aPre_.data(), gotPost == got && gotMid == got ? aPost_.data() : nullptr, aMid_.data(), got);
             if (got < cap) break;
         }
     }
@@ -540,6 +464,13 @@ private:
         std::atomic<float> mono{0}, widthDb{0}, lowMidDb{0}, lowMidHz{200}, airDb{0}, deessDepth{0}, deessThresh{-6},
                            makeupDb{0};
         std::atomic<float> lowCut{0}, bodyDb{0}, presDb{0}, exMix{0}, warmMix{0}, transDb{0}, upDb{0}, refDb{-20}, levelDb{0};
+        std::atomic<float> humF0{0}, humDb[kHumHarmonics], nrDb[kNrBands], nrFloor[kNrBands], rnnW{0}, rnnAtt{1}, clickK{10};
+        std::atomic<bool> declick{false};
+        Targets() {
+            for (auto& v : humDb) v.store(0.0f);
+            for (auto& v : nrDb) v.store(0.0f);
+            for (auto& v : nrFloor) v.store(-120.0f);
+        }
     };
 
     static void storeMax(std::atomic<float>& a, float v) {
@@ -678,6 +609,8 @@ private:
         designKShelf(kPreA_[0], fs); designKHighpass(kPreB_[0], fs);
         kPreA_[1] = kPreA_[0]; kPreB_[1] = kPreB_[0];
         kPostA_[0] = kPreA_[0]; kPostA_[1] = kPreA_[0]; kPostB_[0] = kPreB_[0]; kPostB_[1] = kPreB_[0];
+        kMidA_[0] = kPreA_[0]; kMidA_[1] = kPreA_[0]; kMidB_[0] = kPreB_[0]; kMidB_[1] = kPreB_[0];
+        for (auto* f : { &kMidA_[0], &kMidA_[1], &kMidB_[0], &kMidB_[1] }) f->reset();
         for (int c = 0; c < 2; ++c) for (int k = 0; k < 2; ++k) designLowpass(lfLp_[c][k], fs, kCrossoverHz, std::sqrt(0.5));
         designHighpass(whHp_[0], fs, 150.0, std::sqrt(0.5));
         whHp_[1] = whHp_[0];
@@ -725,15 +658,20 @@ private:
         activeBlocks_ = 0; blockCount_ = 0; silentBlocks_ = 0;
         dg_ = MagicDiag{};
         st_ = Decision{};
+        hum_.configure(fs);
+        nrm_.configure(fs);
+        clkA_.configure(fs);
+        clkT_ = 0; clickCount_ = 0; clickHist_.resize(10); clickRate_ = 0; declickOn_ = false; declickOffSecs_ = 0;
+        fixedLast_ = clicksFixed_.load(std::memory_order_relaxed);
         preRead_ = post_.writePos.load();
     }
 
     struct Block {
-        double kPre = 0, kPost = 0, raw = 0, peak = 0, lfL = 0, lfR = 0, lfLR = 0, mHi = 0, sHi = 0;
+        double kPre = 0, kPost = 0, kMid = 0, raw = 0, peak = 0, lfL = 0, lfR = 0, lfLR = 0, mHi = 0, sHi = 0;
         size_t n = 0;
     };
 
-    void consume(const float* pre, const float* post, size_t n) {
+    void consume(const float* pre, const float* post, const float* mid, size_t n) {
         for (size_t i = 0; i < n; ++i) {
             const double l = pre[2 * i], r = pre[2 * i + 1];
             // hangosság (K-súlyozás) a bemeneten és a feldolgozott jelen
@@ -743,6 +681,8 @@ private:
                 const double pl = post[2 * i], pr = post[2 * i + 1];
                 const double ql = kPostB_[0].process(kPostA_[0].process(pl)), qr = kPostB_[1].process(kPostA_[1].process(pr));
                 blk_.kPost += ql * ql + qr * qr;
+                const double ml = kMidB_[0].process(kMidA_[0].process(mid[2 * i])), mr = kMidB_[1].process(kMidA_[1].process(mid[2 * i + 1]));
+                blk_.kMid += ml * ml + mr * mr;
             }
             blk_.raw += 0.5 * (l * l + r * r);
             blk_.peak = std::max(blk_.peak, std::max(std::fabs(l), std::fabs(r)));
@@ -753,6 +693,13 @@ private:
             const double mh = whHp_[0].process(0.5 * (l + r)), sh = whHp_[1].process(0.5 * (l - r));
             blk_.mHi += mh * mh; blk_.sHi += sh * sh;
             const double mono = 0.5 * (l + r);
+            // Restoration: zümmögés, sávonkénti zajpadló, kattanások gyakorisága (a bemeneten)
+            hum_.push(mono);
+            nrm_.push(mono);
+            {
+                int64_t a = 0, b = 0;
+                if (clkA_.step(mono, clkT_++, kClickK, a, b)) ++clickCount_;
+            }
             // zajpadló: 8–16 kHz és teljes sáv, 20 ms-os keretek
             const double hf = hfLp_[1].process(hfLp_[0].process(hfHp_[1].process(hfHp_[0].process(mono))));
             hfAcc_ += hf * hf; bbAcc_ += mono * mono;
@@ -810,6 +757,8 @@ private:
     struct Decision {
         float lowMid = 0, lowMidHz = 200, air = 0, deess = 0, deessThr = -6, mono = 0, width = 0, makeup = 0;
         float lowCut = 0, body = 0, presence = 0, exciter = 0, warmth = 0, transient = 0, upward = 0, level = 0, refDb = -20;
+        float humF0 = 0, hum[kHumHarmonics] = {}, nr[kNrBands] = {}, nrFloor[kNrBands] = { -120, -120, -120, -120, -120 };
+        float rnnW = 0, rnnAtt = 1;
     };
     enum Group : uint32_t { kGroupMusic = 0, kGroupSpeech = 1, kGroupArchive = 2 };
 
@@ -819,9 +768,11 @@ private:
         blocks_.push_back(blk_);
         if (blocks_.size() > 30) blocks_.erase(blocks_.begin());   // 3 s
         // rövid idejű hangosság (3 s) a bemeneten és a feldolgozott jelen
-        double kPre = 0, kPost = 0, raw = 0, peak = 0, cnt = 0;
-        for (const Block& b : blocks_) { kPre += b.kPre; kPost += b.kPost; raw += b.raw; peak = std::max(peak, b.peak); cnt += static_cast<double>(b.n); }
-        const double lPre = -0.691 + toDb(kPre / cnt), lPost = -0.691 + toDb(kPost / cnt);
+        double kPre = 0, kPost = 0, kMid = 0, raw = 0, peak = 0, cnt = 0;
+        for (const Block& b : blocks_) {
+            kPre += b.kPre; kPost += b.kPost; kMid += b.kMid; raw += b.raw; peak = std::max(peak, b.peak); cnt += static_cast<double>(b.n);
+        }
+        const double lPre = -0.691 + toDb(kPre / cnt), lPost = -0.691 + toDb(kPost / cnt), lMid = -0.691 + toDb(kMid / cnt);
         stHist_.push(lPre);
         dg_.lufsShort = static_cast<float>(lPre);
         st_.refDb = static_cast<float>(toDb(raw / cnt));   // a mikrodinamika viszonyítási szintje (3 s, súlyozatlan)
@@ -855,7 +806,7 @@ private:
         if (ready && !silent) decide(I);
         // hangerő-kiegyenlítés: a feldolgozott jel (kiegyenlítés előtt) hangossága a bemenetéhez
         if (havePost && !silent && lPost > -70.0) {
-            const float want = std::clamp(static_cast<float>(lPre - lPost), -kMaxMakeupDb, kMaxMakeupDb);
+            const float want = std::clamp(static_cast<float>(lMid - lPost), -kMaxMakeupDb, kMaxMakeupDb);
             st_.makeup = slew(st_.makeup, want, 0.05f);   // 0,5 dB/s
         }
         level(I, n, silent);
@@ -874,20 +825,31 @@ private:
             const double refDb = lvlRefValid_ ? toDb(lvlRefP_) : lBlk;
             if (lBlk > refDb - 20.0) {   // relatív kapu: a halk részek nem húzzák le az átlagot
                 const double p = std::pow(10.0, lBlk / 10.0);
-                if (!lvlRefValid_) { lvlRefP_ = p; lvlRefValid_ = true; }
-                lvlRefP_ += 0.002 * (p - lvlRefP_);
+                if (!lvlRefValid_) { lvlRefP_ = p; lvlRefValid_ = true; lvlRefN_ = 0; }
+                // az első 50 s-ban futó átlag (ne az első blokk határozza meg), utána lassú (τ ≈ 50 s) átlag
+                lvlRefP_ += std::max(0.002, 1.0 / static_cast<double>(++lvlRefN_ + 1)) * (p - lvlRefP_);
             }
         }
         float want = 0.0f;
         if (speech && lvlRefValid_) {
-            const double lShort = blocks_.empty() ? -70.0 : static_cast<double>(dg_.lufsShort);
-            if (silent || lShort < -50.0) want = st_.level;   // szünet: áll
-            else want = std::clamp(static_cast<float>(toDb(lvlRefP_) - lShort), -kMaxLevelDb, kMaxLevelDb) * I;
+            // a 3 s-os hangosság ugyanazzal a kapuval, mint a viszonyítás (a szünetek egyikbe sem számítanak bele)
+            const double refDb = toDb(lvlRefP_);
+            double ps = 0;
+            int cnt = 0;
+            for (const Block& b : blocks_) {
+                const double l = -0.691 + toDb(b.kPre / static_cast<double>(std::max<size_t>(1, b.n)));
+                if (l > -50.0 && l > refDb - 20.0) { ps += std::pow(10.0, l / 10.0); ++cnt; }
+            }
+            if (silent || cnt < 3) want = st_.level;   // szünet: áll
+            else want = std::clamp(static_cast<float>(refDb - toDb(ps / cnt)), -kMaxLevelDb, kMaxLevelDb) * I;
         }
         st_.level = slew(st_.level, want, 0.1f);   // 1 dB/s
     }
 
     void restartMeasurements() {
+        hum_.restart();
+        nrm_.restart();
+        clickHist_.clear();
         specAvg_.fill(0.0);
         specFast_.fill(0.0);
         envN_ = envPos_ = 0;
@@ -937,6 +899,22 @@ private:
             ++crestN_;
         }
         classifyContent();
+        // Restoration: zajpadló, kattanások / s (10 s átlag), a kattanásjavítás be- és kikapcsolása (hiszterézissel)
+        nrm_.update();
+        clickHist_.push(static_cast<double>(clickCount_));
+        clickCount_ = 0;
+        double cs = 0;
+        clickHist_.forEach([&](double v) { cs += v; });
+        clickRate_ = clickHist_.size() ? static_cast<float>(cs / static_cast<double>(clickHist_.size())) : 0.0f;
+        const uint32_t fixedNow = clicksFixed_.load(std::memory_order_relaxed);
+        dg_.clicksFixed = static_cast<float>(fixedNow - fixedLast_);
+        fixedLast_ = fixedNow;
+        // archív felvételnél már ritkább kattogás is számít; beszédnél és zenénél csak a sűrűbb
+        // (a beszéd zöngés impulzusai, a zene éles tranziensei ritkán téves jelzést adnak)
+        const float need = profile_ == kProfArchive ? 1.0f : profile_ == kProfSpeech ? 1.5f : 2.0f;
+        if (clickRate_ >= need && clickHist_.size() >= 5) { declickOn_ = true; declickOffSecs_ = 0; }
+        else if (declickOn_ && clickRate_ < 0.2f && ++declickOffSecs_ >= 20) declickOn_ = false;
+        dg_.clickRate = clickRate_;
     }
 
     /**
@@ -1126,6 +1104,7 @@ private:
                                            std::clamp(1.0f - dg_.sibilance / 0.3f, 0.0f, 1.0f) * (1.0f - 0.5f * dg_.hiss) * I
                                      : 0.0f;
         st_.presence = slew(st_.presence, pres, 0.05f);
+        decideRestore(I, pw);
         // de-esser: csak a felvételre jellemzőnél jóval erősebb kitöréseket fogja vissza (a medián fölött
         // legalább 12 dB-lel és a 95. percentilis fölött), hogy a cintányérokat és a lábcint ne tompítsa
         const float deess = std::clamp(1.5f + 2.5f * dg_.sibilance + 0.5f * st_.air, 0.0f, kMaxDeessDb) * I;
@@ -1141,6 +1120,43 @@ private:
         const float width = (cf || dg_.sideMidDb < -40.0f || dg_.sideMidDb > cw.widthThr)
                                 ? 0.0f : std::clamp((cw.widthThr - dg_.sideMidDb) * cw.widthSlope, 0.0f, kMaxWidthDb) * pw.width * I;
         st_.width = slew(st_.width, width, 0.05f);
+    }
+
+    /**
+     * Restoration: de-hum (a felismert sor tagjai a kiemelkedésüknél 3 dB-lel mélyebb vágással), zajcsökkentés
+     * (beszédnél RNNoise, ha van, különben és zenénél sávonkénti), legfeljebb 6 dB.
+     */
+    void decideRestore(float I, const ProfileWeights& pw) {
+        const float I2 = std::min(1.0f, 2.0f * I);   // a javítások 50 %-on már teljes erővel dolgoznak
+        const HumDetector::Result& hr = hum_.result();
+        // más alapfrekvencia (pl. 50 -> 60 Hz): előbb a régi vágások állnak le, utána vált
+        const bool newBase = hr.f0 > 0 && st_.humF0 > 0 && std::fabs(hr.f0 - st_.humF0) > 1.0f;
+        float maxHum = 0;
+        for (int h = 0; h < kHumHarmonics; ++h) maxHum = std::max(maxHum, st_.hum[h]);
+        if (hr.f0 > 0 && (!newBase || maxHum < 0.1f)) st_.humF0 = hr.f0;
+        for (int h = 0; h < kHumHarmonics; ++h) {
+            float want = 0.0f;
+            // a zümmögés a környezete alá (3 dB-lel) kerül
+            if (hr.f0 > 0 && !newBase && hr.promDb[h] >= 6.0f) want = std::clamp(hr.promDb[h] + 3.0f, 0.0f, kMaxHumCutDb) * I2;
+            st_.hum[h] = slew(st_.hum[h], want, 0.3f);   // 3 dB/s
+        }
+        // zajcsökkentés
+        const bool rnn = pw.speech && rnnUsable_.load(std::memory_order_relaxed);
+        float speechConf = 0;
+        const float minRange = pw.speech ? 6.0f : 12.0f;
+        for (int b = 0; b <= 2; ++b) speechConf = std::max(speechConf, nrm_.conf(b, minRange));
+        // zenénél csak hallható, állandó sziszegésnél (a halk zenei rész, a lecsengés ne tompuljon); archív anyagnál
+        // és beszédnél a sávonkénti mérés is elég
+        const float musicGate = (pw.speech || profile_ == kProfArchive) ? 1.0f : std::clamp((dg_.hiss - 0.2f) / 0.4f, 0.0f, 1.0f);
+        for (int b = 0; b < kNrBands; ++b) {
+            float want = 0.0f;
+            if (!rnn && (b > 0 || pw.speech)) want = kMaxNrDb * nrm_.conf(b, minRange) * musicGate * pw.nr * I;
+            st_.nr[b] = slew(st_.nr[b], want, 0.1f);   // 1 dB/s
+            st_.nrFloor[b] = nrm_.floorDb(b);
+        }
+        const float rnnDb = rnn ? kMaxNrDb * speechConf * pw.nr * I : 0.0f;
+        st_.rnnW = rnnDb > 0.3f ? 1.0f : (rnnDb < 0.1f ? 0.0f : st_.rnnW);   // hiszterézis
+        st_.rnnAtt = std::pow(10.0f, -std::max(rnnDb, 0.3f) / 20.0f);
     }
 
     void publish() {
@@ -1161,6 +1177,17 @@ private:
         tgt_.upDb.store(st_.upward, std::memory_order_relaxed);
         tgt_.refDb.store(st_.refDb, std::memory_order_relaxed);
         tgt_.levelDb.store(st_.level, std::memory_order_relaxed);
+        tgt_.humF0.store(st_.humF0, std::memory_order_relaxed);
+        for (int h = 0; h < kHumHarmonics; ++h) tgt_.humDb[h].store(st_.hum[h], std::memory_order_relaxed);
+        for (int b = 0; b < kNrBands; ++b) {
+            tgt_.nrDb[b].store(st_.nr[b], std::memory_order_relaxed);
+            tgt_.nrFloor[b].store(st_.nrFloor[b], std::memory_order_relaxed);
+        }
+        tgt_.rnnW.store(st_.rnnW, std::memory_order_relaxed);
+        tgt_.rnnAtt.store(st_.rnnAtt, std::memory_order_relaxed);
+        const float Ic = amount_.load(std::memory_order_relaxed);
+        tgt_.declick.store(declickOn_ && Ic > 0.0f, std::memory_order_relaxed);
+        tgt_.clickK.store(static_cast<float>(kClickK) + 6.0f - 6.0f * Ic, std::memory_order_relaxed);   // 100 %-on a felismeréssel azonos
         dg_.lowCut = st_.lowCut;
         dg_.bodyDb = st_.body;
         dg_.presenceDb = st_.presence;
@@ -1171,6 +1198,21 @@ private:
         dg_.upwardDb = st_.upward;
         dg_.upwardNowDb = upNow_.exchange(0.0f, std::memory_order_relaxed);
         dg_.levelDb = st_.level;
+        {
+            uint32_t hc = 0;
+            float hm = 0;
+            for (int h = 0; h < kHumHarmonics; ++h) if (st_.hum[h] > 0.05f) { ++hc; hm = std::max(hm, st_.hum[h]); }
+            dg_.humHz = hc ? st_.humF0 : 0.0f;
+            dg_.humCount = hc;
+            dg_.humCutDb = hm;
+            float nrMax = 0;
+            for (int b = 0; b < kNrBands; ++b) nrMax = std::max(nrMax, st_.nr[b]);
+            const bool rnnOn = st_.rnnW > 0.0f;
+            dg_.nrMode = rnnOn ? 2u : nrMax > 0.05f ? 1u : 0u;
+            dg_.nrDb = rnnOn ? -20.0f * std::log10(st_.rnnAtt) : nrMax;
+            dg_.nrNowDb = nrNow_.exchange(0.0f, std::memory_order_relaxed);
+            dg_.latencyMs = 1000.0f * static_cast<float>(latSamples_.load(std::memory_order_relaxed)) / static_cast<float>(std::max<uint32_t>(1, aFs_));
+        }
         dg_.lowMidCutDb = st_.lowMid;
         dg_.airGainDb = st_.air;
         dg_.deessDepthDb = st_.deess;
@@ -1202,20 +1244,27 @@ private:
     std::atomic<float> amount_{0.5f};
     std::atomic<bool> crossfeed_{false};
     std::atomic<int32_t> character_{kCharNatural}, content_{kContentAuto};
-    std::atomic<float> deessNow_{0.0f}, transNow_{0.0f}, upNow_{0.0f};
+    std::atomic<float> deessNow_{0.0f}, transNow_{0.0f}, upNow_{0.0f}, nrNow_{0.0f};
+    std::atomic<uint32_t> clicksFixed_{0}, latSamples_{0};
+    std::atomic<bool> rnnUsable_{false};
+    // Restoration (valós idejű)
+    Dehum dehum_;
+    BandNr bandNr_;
+    RestoreDelay rdelay_;
     Targets tgt_;
     // A gyűrűk a kupacon (egyenként 512 KB): a lánc vermen is létrehozható marad (pl. tesztekben, Windowson 1 MB verem)
     using Ring = StereoTapRing<65536>;
-    std::unique_ptr<Ring> preRing_ = std::make_unique<Ring>(), postRing_ = std::make_unique<Ring>();
+    std::unique_ptr<Ring> preRing_ = std::make_unique<Ring>(), postRing_ = std::make_unique<Ring>(), midRing_ = std::make_unique<Ring>();
     Ring& pre_ = *preRing_;
     Ring& post_ = *postRing_;
+    Ring& mid_ = *midRing_;   // a helyreállítás utáni jel
     DiagBlock diag_;
 
     // elemzés (csak a háttérszál)
     uint32_t aFs_ = 0;
     uint64_t preRead_ = 0;
-    std::vector<float> aPre_ = std::vector<float>(2 * 8192), aPost_ = std::vector<float>(2 * 8192);
-    BiquadD kPreA_[2], kPreB_[2], kPostA_[2], kPostB_[2], lfLp_[2][2], whHp_[2], hfHp_[2], hfLp_[2], sibHp_;
+    std::vector<float> aPre_ = std::vector<float>(2 * 8192), aPost_ = std::vector<float>(2 * 8192), aMid_ = std::vector<float>(2 * 8192);
+    BiquadD kPreA_[2], kPreB_[2], kPostA_[2], kPostB_[2], kMidA_[2], kMidB_[2], lfLp_[2][2], whHp_[2], hfHp_[2], hfLp_[2], sibHp_;
     size_t blockLen_ = 4800, hfFrameLen_ = 960, sibFrameLen_ = 480, hfPos_ = 0, sibPos_ = 0, blkPos_ = 0;
     double hfAcc_ = 0, bbAcc_ = 0, sibAcc_ = 0, sibBb_ = 0, sibMedian_ = -20.0, sibP95_ = -10.0;
     Fft fft_;
@@ -1232,8 +1281,18 @@ private:
     float crestAvg_ = 0, speechAvg_ = 0, lowFrac_ = 0, mod4_ = 0, lfRel_ = 0;
     size_t crestN_ = 0;
     double lvlRefP_ = 0;
+    size_t lvlRefN_ = 0;
     bool lvlRefValid_ = false;
     uint32_t group_ = kGroupMusic, pendingGroup_ = kGroupMusic, pendingSecs_ = 0, profile_ = kProfMusic;
+    // Restoration (elemzés)
+    HumDetector hum_;
+    NrMeter nrm_;
+    ClickDetector clkA_;
+    int64_t clkT_ = 0;
+    uint32_t clickCount_ = 0, fixedLast_ = 0, declickOffSecs_ = 0;
+    History clickHist_{10};
+    float clickRate_ = 0;
+    bool declickOn_ = false;
     Block blk_;
     std::vector<Block> blocks_;
     History stHist_{600}, hfHist_{400}, bbHist_{400}, sibHist_{800};

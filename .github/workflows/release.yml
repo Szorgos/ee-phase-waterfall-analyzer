@@ -35,9 +35,19 @@ jobs:
       - name: Fordítások ellenőrzése (i18n/ és az előállított fájlok egyeznek)
         run: python3 tools/i18n_build.py --check
 
+      - name: RNNoise modell (az Ubuntu forráscsomagjából, a tárolóban nincs)
+        run: |
+          for i in 1 2 3; do curl -fsSL -o /tmp/rnnoise.tar.xz http://archive.ubuntu.com/ubuntu/pool/universe/r/rnnoise/rnnoise_0.2+ds.orig.tar.xz && break; sleep 15; done
+          got=$(sha256sum /tmp/rnnoise.tar.xz | cut -d' ' -f1)
+          want=db2718ee4a0b294bfbbe198fe94aabfdc8cd0d77cb9cd95d76c7a818ad805f0b
+          if [ "$got" != "$want" ]; then echo "::error title=RNNoise::sha256 eltérés: $got"; exit 1; fi
+          mkdir -p "$RUNNER_TEMP/rnnoise-model"
+          tar -xJf /tmp/rnnoise.tar.xz -C "$RUNNER_TEMP/rnnoise-model" --strip-components=2 rnnoise-0.2/src/rnnoise_data.c rnnoise-0.2/src/rnnoise_data.h
+
       - name: Fordítás (motor, felület, tesztek)
         run: |
-          cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON
+          cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON \
+            -DAQULIFY_RNNOISE_MODEL_DIR="$RUNNER_TEMP/rnnoise-model"
           cmake --build build -j"$(nproc)"
           test -x build/aqulify-engine
           test -x build/aqulify-gui
@@ -117,18 +127,28 @@ jobs:
           if [ "$got" != "$want" ]; then echo "::error title=FFTW::sha256 eltérés: $got"; exit 1; fi
           tar -xzf /tmp/fftw.tar.gz -C "$RUNNER_TEMP"
 
+      - name: RNNoise modell (az Ubuntu forráscsomagjából, a tárolóban nincs)
+        run: |
+          for i in 1 2 3; do curl -fsSL -o /tmp/rnnoise.tar.xz http://archive.ubuntu.com/ubuntu/pool/universe/r/rnnoise/rnnoise_0.2+ds.orig.tar.xz && break; sleep 15; done
+          got=$(sha256sum /tmp/rnnoise.tar.xz | cut -d' ' -f1)
+          want=db2718ee4a0b294bfbbe198fe94aabfdc8cd0d77cb9cd95d76c7a818ad805f0b
+          if [ "$got" != "$want" ]; then echo "::error title=RNNoise::sha256 eltérés: $got"; exit 1; fi
+          mkdir -p "$RUNNER_TEMP/rnnoise-model"
+          tar -xJf /tmp/rnnoise.tar.xz -C "$RUNNER_TEMP/rnnoise-model" --strip-components=2 rnnoise-0.2/src/rnnoise_data.c rnnoise-0.2/src/rnnoise_data.h
+
       - name: Fordítás
         run: |
           cmake -B build-win -S . -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE=windows/toolchain-llvm-mingw.cmake -DLLVM_MINGW_ROOT=/opt/llvm-mingw \
-            -DAQULIFY_FFTW_SOURCE_DIR="$RUNNER_TEMP/fftw-3.3.10"
+            -DAQULIFY_FFTW_SOURCE_DIR="$RUNNER_TEMP/fftw-3.3.10" -DAQULIFY_RNNOISE_MODEL_DIR="$RUNNER_TEMP/rnnoise-model"
           cmake --build build-win -j"$(nproc)" > build-win.log 2>&1 || {
             msg=$(grep -E "error|Error" build-win.log | tail -n 30 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             echo "::error title=Windows build::${msg}"; exit 1; }
 
       - name: Közös DSP tesztek (Linux)
         run: |
-          cmake -B build-test -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=OFF
+          cmake -B build-test -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=OFF \
+            -DAQULIFY_RNNOISE_MODEL_DIR="$RUNNER_TEMP/rnnoise-model"
           cmake --build build-test -j"$(nproc)"
           fail=0
           for t in test_ringbuffer test_core test_dsp; do

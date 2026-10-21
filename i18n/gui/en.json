@@ -284,5 +284,12 @@
   "mt.rowExciter": "Exciter / warmth",
   "mt.valExciter": "exciter {ex} % · warm harmonics {wm} % · low shelf {body} dB",
   "mt.rowSpeech": "Speech",
-  "mt.valSpeech": "low cut (80 Hz) {lc} % · presence {pr} dB · levelling {lvl} dB"
+  "mt.valSpeech": "low cut (80 Hz) {lc} % · presence {pr} dB · levelling {lvl} dB",
+  "mt.rowRestore": "Restoration",
+  "mt.valRestore": "hum: {hum} · noise reduction: {nr} · clicks {rate}/s, repaired {fixed}/s · latency {lat} ms",
+  "mt.humNone": "none",
+  "mt.humVal": "{hz} Hz, {n} harmonics, up to −{cut} dB",
+  "mt.nrNone": "none",
+  "mt.nrBand": "band-wise, up to {db} dB (now {now} dB)",
+  "mt.nrRnn": "RNNoise, up to {db} dB"
 }

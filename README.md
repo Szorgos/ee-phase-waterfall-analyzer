@@ -154,6 +154,8 @@ Ha kézzel szeretnéd lefordítani vagy módosítani a C++ motort:
 sudo apt install build-essential cmake libpipewire-0.3-dev libfftw3-dev pkg-config
 
 # Fordítás (a saját ablakhoz: libgtk-3-dev libwebkit2gtk-4.1-dev):
+# A Magic Touch beszéd-zajcsökkentéséhez (RNNoise) a rendszer librnnoise-dev csomagja, vagy a modell mappája:
+#   -DAQULIFY_RNNOISE_MODEL_DIR=<mappa a rnnoise_data.c / .h fájllal> (lásd third_party/README.md)
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON
 cmake --build build -j$(nproc)
 ./build/aqulify-engine        # motor kézi indítása (Ctrl+C: leállítás)
@@ -192,6 +194,9 @@ cmake --build build -j$(nproc)
 │   ├── mini_json.hpp           # Függőségmentes JSON olvasó a vezérlőüzenetekhez
 │   ├── aq_i18n.hpp             # Nyelvválasztás és szövegek a natív részekhez (aq_i18n_strings.hpp: előállítva)
 │   ├── magic_touch.hpp         # Magic Touch: automatikus, visszafogott hangszépítő (docs/plans/magic-touch.md)
+│   ├── magic_restore.hpp       # Magic Touch helyreállítás: de-hum, kattanásjavítás, zajcsökkentés
+│   ├── magic_dsp.hpp           # Magic Touch közös szűrői és elemző segédei
+│   ├── rnn_denoise.hpp         # RNNoise burkoló (src/rnn_denoise.cpp)
 │   └── sha1_base64.hpp         # Független SHA-1 és Base64 modul a WS kézfogáshoz
 ├── src/
 │   ├── pipewire_plugin.cpp     # Linux motor (aqulify-engine) belépési pontja
@@ -199,10 +204,11 @@ cmake --build build -j$(nproc)
 │   ├── ee_dsp_lsp.cpp          # Equalizer és Limiter (LSP)
 │   ├── ee_dsp_misc.cpp         # Bass Enhancer (Calf) és Crossfeed (libbs2b)
 │   ├── ee_dsp_convolver.cpp    # Convolver (zita-convolver, SpeexDSP)
+│   ├── rnn_denoise.cpp         # RNNoise (beszéd zajcsökkentés) burkoló
 │   ├── test_core.cpp           # Közös mag teszt (FFT, paraméterfájl, seqlock, tap, JSON)
 │   ├── test_dsp.cpp            # DSP modulok és teljes lánc teszt
 │   └── test_ringbuffer.cpp     # Többszálú valós idejű stabilitási tesztprogram
-├── third_party/                # LSP, Calf, libbs2b, SpeexDSP, zita-convolver (forrás, licencekkel)
+├── third_party/                # LSP, Calf, libbs2b, SpeexDSP, zita-convolver, RNNoise (forrás, licencekkel)
 └── windows/
     ├── README_WINDOWS.md       # Windows telepítés, használat, fordítás
     ├── engine/                 # Aqulify.exe (tálcás motor, WASAPI loopback, plugin híd)
@@ -233,7 +239,7 @@ Ez a projekt a **GNU General Public License v3.0 (GPL-3.0)** alatt érhető el.
 * Copyright (C) 2026 **Szorgos** (<https://github.com/Szorgos>)
 * A részletes licencfeltételeket a [LICENSE](LICENSE) fájl tartalmazza.
 * Beépített külső összetevők: [three.js](https://threejs.org/) (MIT), [webview/webview](https://github.com/webview/webview) (MIT), Microsoft WebView2 SDK fejlécek (BSD-3-Clause).
-* DSP könyvtárak ([third_party/README.md](third_party/README.md)): LSP (LGPL-3.0+), Calf (LGPL-2.1+), libbs2b (MIT), SpeexDSP (BSD-3-Clause), zita-convolver (GPL-3.0+); FFTW3 (GPL-2.0+) – Linuxon a rendszer csomagja, a Windows binárisokba beépítve.
+* DSP könyvtárak ([third_party/README.md](third_party/README.md)): LSP (LGPL-3.0+), Calf (LGPL-2.1+), libbs2b (MIT), SpeexDSP (BSD-3-Clause), zita-convolver (GPL-3.0+), RNNoise (BSD-3-Clause); FFTW3 (GPL-2.0+) – Linuxon a rendszer csomagja, a Windows binárisokba beépítve.
 * Az AutoEq index és profilok forrása az [AutoEq GitHub projekt](https://github.com/jaakkopasanen/AutoEq) (MIT Licenc).
 
 ---

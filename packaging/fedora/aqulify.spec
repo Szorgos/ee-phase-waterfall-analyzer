@@ -7,6 +7,8 @@ Summary:        Headphone EQ, convolver and limiter for PipeWire with a live 3D 
 License:        GPL-3.0-or-later AND MIT AND LGPL-3.0-or-later AND LGPL-2.1-or-later AND BSD-3-Clause
 URL:            https://github.com/Szorgos/ee-phase-waterfall-analyzer
 Source0:        %{name}-%{version}.tar.gz
+# Az RNNoise betanított modellje (a kód a third_party/rnnoise mappában van)
+Source1:        rnnoise_0.2+ds.orig.tar.xz
 
 BuildRequires:  gcc
 BuildRequires:  gcc-c++
@@ -34,6 +36,7 @@ Provides:       bundled(calf)
 Provides:       bundled(libbs2b) = 3.1.0
 Provides:       bundled(speexdsp)
 Provides:       bundled(zita-convolver) = 4.0.0
+Provides:       bundled(rnnoise) = 0.2
 
 %description
 Aqulify creates a virtual "Aqulify" audio output on PipeWire. Everything played
@@ -43,9 +46,12 @@ waterfall, phase and group delay view shows what the processing does.
 
 %prep
 %autosetup -n %{name}-%{version}
+mkdir -p rnnoise-model
+tar -xJf %{SOURCE1} -C rnnoise-model --strip-components=2 rnnoise-0.2/src/rnnoise_data.c rnnoise-0.2/src/rnnoise_data.h
 
 %build
-%cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON
+%cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON \
+       -DAQULIFY_RNNOISE_MODEL_DIR=$PWD/rnnoise-model
 %cmake_build
 
 %install
