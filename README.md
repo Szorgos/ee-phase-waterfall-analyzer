@@ -33,10 +33,10 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
 ## 🎧 Főbb Képességek és Funkciók
 
 1. **Élő 3D Akusztikai Vízesés & Spektrogram (Hardveres GPU gyorsítás / OpenGL / Direct3D):**
-   * A motor valódi FFT spektruma (160 logaritmikus sáv, 10 Hz – 24 kHz) 60 FPS gördüléssel.
+   * A motor valódi FFT spektruma (160 sáv, 0 Hz – 24 kHz: 10 Hz fölött közel logaritmikus, alatta lineáris tengelyen) 60 FPS gördüléssel. A mély sávok (75 Hz alatt) külön, kb. 3 Hz felbontású elemzésből jönnek, így a basszus nem kenődik szét a legalsó sávokig.
    * **GPU-gyorsítás a zene védelmében:** A 3D felületet a videokártya rajzolja (Linuxon OpenGL/Mesa, Windowson Direct3D backenddel a WebGL alatt); a rács pontjait és színeit a JavaScript számolja, így a grafika **csak kis mértékben terheli a processzort**, és még a legösszetettebb nézeteknél sem akasztja meg a valós idejű zenelejátszást (zéró hangkimaradás).
-   * **Fakítás és testreszabás:** Állítható hőtérkép-fakítás csúszka (élénk színektől a lágy szürkeárnyalatig); időlépcsők: 60 / 120 / 180; nézőpontok: 3D izometrikus, oldalsó profil, felülnézet.
-   * **Frekvenciaskála (10 Hz – 24 kHz):** A vízesés alatt elhelyezett skála azonnal leolvashatóvá teszi a csúcsokat. A skála két szélén kis diszkrét felirat mutatja az elmúlt 10 másodpercben mért legmélyebb (Hz) és legmagasabb (kHz) frekvenciát, a gyors türkiz határolójelek pedig valós időben követik a hangsáv tartományát.
+   * **Fakítás és testreszabás:** Állítható hőtérkép-fakítás csúszka (élénk színektől a lágy szürkeárnyalatig); időlépcsők: 60 / 120 / 180; nézőpontok: 3D izometrikus, oldalsó profil, felülnézet (a sávot kitöltő spektrogram); folyásirány: lefelé (az új sorok hátul indulnak) vagy felfelé (elöl, a skálánál), váltáskor összeomló és újraépülő animációval; trapézkorrekció gombokkal (a hátsó él keskenyebb vagy szélesebb, mint a kivetítőnél).
+   * **Frekvenciaskála (0 Hz – 24 kHz):** A vízesés első éle a skálán ül, a skála a háló két széléig ér, így a csúcsok azonnal leolvashatók. A skála két szélén kis diszkrét felirat mutatja az elmúlt 10 másodperc legmélyebb (legalább fél másodpercig jelen lévő) és legmagasabb frekvenciáját, a gyors türkiz határolójelek pedig valós időben követik a hangsáv tartományát.
    * **Előcsengés (pre-ringing) jelzése:** FIR / FFT / SPM (lineáris fázisú) módban egy diszkrét felirat jelzi, hogy előcsengés lehetséges. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik; a program nem nagyítja fel.
 
 2. **EQ-görbe, fázis és csoportkésleltetés ($-\frac{d\phi}{d\omega}$):**
@@ -196,7 +196,7 @@ cmake --build build -j$(nproc)
 │   ├── linux_store.hpp         # Linux: beállítások és IR mentése (~/.config/aqulify)
 │   ├── ws_bridge.hpp           # RFC 6455 WebSocket híd (Linux + Windows), valódi FFT spektrummal
 │   ├── net_compat.hpp          # BSD socket / Winsock2 közös réteg
-│   ├── spectrum.hpp            # Hann-ablakos FFT, 160 logaritmikus sáv + L/R fázis
+│   ├── spectrum.hpp            # Hann-ablakos FFT, 160 sáv 0 Hz – 24 kHz (mély sávok decimált FFT-ből) + L/R fázis
 │   ├── param_block.hpp         # Zármentes (seqlock) paraméterblokk GUI -> audio szál
 │   ├── tap_ring.hpp            # Felülíró sztereó tap körpuffer (közös memóriában is)
 │   ├── shared_state.hpp        # Plugin <-> motor közös memória elrendezés (Windows)

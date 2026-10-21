@@ -189,7 +189,6 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .icon-btn:hover { background: var(--aq-surface-2); color: var(--aq-text); }
   .icon-btn .aq-icon { width: 18px; height: 18px; }
   .search-input { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237F92A6' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M20 20l-4.3-4.3'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 11px center; background-size: 16px 16px; }
-  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 
   .ee-window {
     width: 100%;
@@ -274,6 +273,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .mini-btn:hover { background: var(--aq-surface-2); border-color: var(--aq-line-2); }
   .mini-btn.active { background: var(--aq-accent-soft); border-color: rgba(79, 209, 197, 0.55); color: var(--aq-accent-2); }
   .strip-controls .ctrl-group .mini-btn { border-color: transparent; background: transparent; }
+  .strip-controls .mini-btn.icon-only { padding: 4px 6px; }
+  .strip-controls .mini-btn[hidden] { display: none; }
+  .strip-controls .mini-btn:disabled { opacity: 0.35; cursor: default; }
+  .strip-controls .ctrl-value { font: 500 0.74rem var(--aq-mono); color: var(--aq-text); min-width: 20px; text-align: center; }
   .strip-controls .ctrl-group .mini-btn:hover { background: var(--aq-surface-2); }
   .strip-controls .ctrl-group .mini-btn.active { background: var(--aq-accent-soft); }
 
@@ -493,6 +496,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M11 4l1.7 4.8L17.5 10.5l-4.8 1.7L11 17l-1.7-4.8-4.8-1.7 4.8-1.7z"/><path d="M18 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
   <symbol id="i-warning" viewBox="0 0 24 24"><path d="M12 4.5l8.5 15h-17z"/><path d="M12 10.5v4M12 17.2v.1"/></symbol>
+  <symbol id="i-trap-narrow" viewBox="0 0 24 24"><path d="M8.5 6h7L20 18H4z"/></symbol>
+  <symbol id="i-trap-wide" viewBox="0 0 24 24"><path d="M4 6h16l-4.5 12h-7z"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
 </svg>
 
@@ -591,7 +596,15 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       </span>
 
       <span class="ctrl-group"><button class="mini-btn" id="btnEqBypass">EQ: KI (Bypass)</button>
-      <button class="mini-btn" id="btnCameraAngle">Nézőpont: 3D</button></span>
+      <button class="mini-btn" id="btnCameraAngle">Nézőpont: 3D</button>
+      <button class="mini-btn" id="btnFlowDir" title="Vízesés iránya: lefelé (az új sorok hátul indulnak) vagy felfelé (az új sorok elöl, a skálánál indulnak)" data-i18n-title="strip.flowTitle">Folyás: lefelé</button></span>
+
+      <!-- TRAPÉZKORREKCIÓ (mint a kivetítőnél): a hátsó él szélessége -->
+      <span class="ctrl-group"><span class="ctrl-label" data-i18n="strip.keystone">Trapéz:</span>
+      <button class="mini-btn icon-only" id="btnKeystoneLess" title="Trapézkorrekció: keskenyebb hátsó él" data-i18n-title="strip.keystoneLess" data-i18n-aria-label="strip.keystoneLess"><svg class="aq-icon" aria-hidden="true"><use href="#i-trap-narrow"/></svg></button>
+      <span class="ctrl-value" id="lblKeystone">0</span>
+      <button class="mini-btn icon-only" id="btnKeystoneMore" title="Trapézkorrekció: szélesebb hátsó él" data-i18n-title="strip.keystoneMore" data-i18n-aria-label="strip.keystoneMore"><svg class="aq-icon" aria-hidden="true"><use href="#i-trap-wide"/></svg></button>
+      <button class="mini-btn icon-only" id="btnKeystoneReset" hidden title="Trapézkorrekció alaphelyzetbe" data-i18n-title="strip.keystoneReset" data-i18n-aria-label="strip.keystoneReset"><svg class="aq-icon" aria-hidden="true"><use href="#i-reset"/></svg></button></span>
     </div>
   </div>
 
@@ -1190,9 +1203,9 @@ scene.background = new THREE.Color(0x0a0f15);
 
 const camera = new THREE.PerspectiveCamera(38, wfCanvas.clientWidth / wfCanvas.clientHeight, 0.1, 1000);
 const cameraViews = [
-  { id: "iso", nameKey: "cam.iso", pos: [0, 26, 42], look: [0, 0, -8] },
+  { id: "iso", nameKey: "cam.iso", pos: [0, 22.6, 58], look: [0, 0, -4] },   // 20°-os rálátás; a képet a fitCamera illeszti
   { id: "side", nameKey: "cam.side", pos: [-38, 18, 10], look: [0, 0, -8] },
-  { id: "top", nameKey: "cam.top", pos: [0, 48, -4], look: [0, 0, -5] }
+  { id: "top", nameKey: "cam.top", pos: [0, 48, -4], look: [0, 0, -5], stretch: true }   // felülnézet: kitölti a sávot (spektrogram)
 ];
 var cameraLabelInitial = true;   // indulásnál „Nézőpont: 3D”, váltás után a nézet neve
 let currentViewIdx = 0;
@@ -1213,6 +1226,144 @@ let TIME_SLICES = 120; // Alapértelmezett, de állítható!
 let geometry, mesh, wireMesh;
 const planeWidth = 76;
 const planeDepth = 60;
+const WF_MAX_H = 8.5;       // a legmagasabb csúcs (1,0-s szint) magassága
+const WF_SCALE_H = 30;      // a frekvenciaskála (.freq-scale) magassága a vászon alján
+
+// ---------------------------------------------------------------- trapézkorrekció (mint a kivetítőnél)
+// A hátsó él szélessége az elsőhöz képest 2^(lépés / 6). A sorok szélessége a mélységgel lineárisan változik,
+// így az oldalak egyenesek maradnak, az első él (a skála) pedig változatlan.
+const WF_KEYSTONE_MIN = -6, WF_KEYSTONE_MAX = 12;
+var wfKeystone = 0;
+try { wfKeystone = Math.max(WF_KEYSTONE_MIN, Math.min(WF_KEYSTONE_MAX, parseInt(localStorage.getItem("aqulify_wf_keystone"), 10) || 0)); } catch (e) {}
+function keystoneBack() { return Math.pow(2, wfKeystone / 6); }
+/** A z mélységű sor szélességének szorzója (elöl, z = +planeDepth / 2: 1; hátul: keystoneBack()). */
+function keystoneAt(z) { return 1 + (keystoneBack() - 1) * Math.max(0, Math.min(1, (planeDepth / 2 - z) / planeDepth)); }
+function keystoneMesh() {
+  if (!geometry) return;
+  const pos = geometry.attributes.position.array;
+  for (let r = 0; r < TIME_SLICES; r++) {
+    const k = keystoneAt(-planeDepth / 2 + planeDepth * r / (TIME_SLICES - 1));   // 0. sor: hátul
+    for (let c = 0; c < FREQ_BINS; c++) pos[(r * FREQ_BINS + c) * 3] = (-planeWidth / 2 + planeWidth * c / (FREQ_BINS - 1)) * k;
+  }
+  geometry.attributes.position.needsUpdate = true;
+}
+
+// A rács a háló alatt, ugyanazzal a trapézkorrekcióval
+let grid = null;
+function buildGrid() {
+  if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
+  const pts = [], cols = [];
+  const cMain = new THREE.Color(0x2b3d50), cSub = new THREE.Color(0x16212d);
+  const add = (x1, z1, x2, z2, c) => {
+    pts.push(x1 * keystoneAt(z1), -0.05, z1, x2 * keystoneAt(z2), -0.05, z2);
+    cols.push(c.r, c.g, c.b, c.r, c.g, c.b);
+  };
+  for (let i = 0; i <= 12; i++) { const x = -planeWidth / 2 + planeWidth * i / 12; add(x, planeDepth / 2, x, -planeDepth / 2, i === 6 ? cMain : cSub); }
+  for (let j = 0; j <= 10; j++) { const z = planeDepth / 2 - planeDepth * j / 10; add(-planeWidth / 2, z, planeWidth / 2, z, j === 5 ? cMain : cSub); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(cols, 3));
+  grid = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true }));
+  grid.frustumCulled = false;
+  scene.add(grid);
+}
+
+/**
+ * A nézet illesztése: a háló első éle a skála vonalán ül, az egész háló (a legmagasabb csúcsokkal együtt) a
+ * vásznon belül marad, így a skála a háló két széléig ér. A kamera képe képernyősíkban nagyítódik és tolódik
+ * (a vetítési mátrix elé szorozva). Felülnézetben a szélesség és a mélység külön méreteződik (a háló kitölti a
+ * sávot, mint egy spektrogram). Oldalnézetben nincs skála: ott a kép változatlan.
+ */
+const WF_FIT_MARGIN_X = 72, WF_FIT_MARGIN_TOP = 6;   // oldalt a min / max felirat a skála végein kívül fér el
+function fitCamera() {
+  const w = wfCanvas.clientWidth, h = wfCanvas.clientHeight;
+  if (!(w > 0 && h > 0)) return;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+  if (cameraViews[currentViewIdx].id === "side") return;
+  const v = new THREE.Vector3(), kb = keystoneBack(), hw = planeWidth / 2, hd = planeDepth / 2;
+  let maxX = 0, maxY = -Infinity;
+  for (const [x, y, z] of [[hw, 0, hd], [hw, WF_MAX_H, hd], [hw * kb, 0, -hd], [hw * kb, WF_MAX_H, -hd]]) {
+    v.set(x, y, z).project(camera);
+    maxX = Math.max(maxX, Math.abs(v.x));
+    maxY = Math.max(maxY, v.y);
+  }
+  const frontY = v.set(0, 0, hd).project(camera).y;
+  const targetY = 1 - 2 * (h - WF_SCALE_H) / h;
+  const sx = (1 - 2 * WF_FIT_MARGIN_X / w) / maxX;
+  const sy = (1 - 2 * WF_FIT_MARGIN_TOP / h - targetY) / Math.max(1e-6, maxY - frontY);
+  const stretch = !!cameraViews[currentViewIdx].stretch;
+  const scX = Math.max(0.05, stretch ? sx : Math.min(sx, sy)), scY = Math.max(0.05, stretch ? sy : scX);
+  camera.projectionMatrix.premultiply(new THREE.Matrix4().set(scX, 0, 0, 0, 0, scY, 0, targetY - scY * frontY, 0, 0, 1, 0, 0, 0, 0, 1));
+  camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+}
+function applyKeystone() {
+  keystoneMesh();
+  buildGrid();
+  fitCamera();
+}
+
+// Függöny az első sor alatt: a háló felület, elölről nézve a megemelt első sor alatt különben a háttér
+// látszana. A függöny az első sor színeit viszi le a padlóig, sötétedve.
+const skirtGeo = new THREE.BufferGeometry();
+{
+  const idx = [];
+  for (let c = 0; c < FREQ_BINS - 1; c++) idx.push(2 * c, 2 * c + 1, 2 * c + 2, 2 * c + 2, 2 * c + 1, 2 * c + 3);
+  skirtGeo.setIndex(idx);
+  skirtGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(FREQ_BINS * 6), 3));
+  skirtGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(FREQ_BINS * 6), 3));
+}
+const skirt = new THREE.Mesh(skirtGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+skirt.frustumCulled = false;
+scene.add(skirt);
+/** A függöny követi az első sort (a háló utolsó sorát). */
+function updateSkirt() {
+  const mp = geometry.attributes.position.array, mc = geometry.attributes.color.array;
+  const sp = skirtGeo.attributes.position.array, sc = skirtGeo.attributes.color.array;
+  const base = (TIME_SLICES - 1) * FREQ_BINS * 3;
+  for (let c = 0; c < FREQ_BINS; c++) {
+    const m = base + c * 3, t = c * 6;
+    sp[t] = sp[t + 3] = mp[m];
+    sp[t + 1] = mp[m + 1];
+    sp[t + 4] = -0.05;
+    sp[t + 2] = sp[t + 5] = mp[m + 2];
+    for (let k = 0; k < 3; k++) { sc[t + k] = mc[m + k] * 0.8; sc[t + 3 + k] = mc[m + k] * 0.18; }
+  }
+  skirtGeo.attributes.position.needsUpdate = true;
+  skirtGeo.attributes.color.needsUpdate = true;
+}
+
+// ---------------------------------------------------------------- folyásirány
+// Lefelé: az új sorok hátul jelennek meg, és a néző felé folynak; felfelé: elöl, a skálánál jelennek meg, és
+// hátrafelé haladnak. Váltáskor a háló összezuhan (a legrégebbi sorok kezdik, gyorsulva), majd az új irányban,
+// a legújabb sortól kezdve, kis túllendüléssel újraépül.
+const WF_COLLAPSE_MS = 420, WF_REBUILD_MS = 760, WF_STAGGER = 0.5;
+const wfFlow = { up: false, target: false, anim: null };
+try { wfFlow.up = wfFlow.target = localStorage.getItem("aqulify_wf_flow") === "up"; } catch (e) {}
+function wfFlowTick(now) {
+  const a = wfFlow.anim;
+  if (!a) return;
+  const t = now - a.start;
+  if (!a.swapped && t >= WF_COLLAPSE_MS) { a.swapped = true; wfFlow.up = wfFlow.target; }
+  if (t >= WF_COLLAPSE_MS + WF_REBUILD_MS) {
+    wfFlow.anim = (wfFlow.up !== wfFlow.target) ? { start: now, swapped: false } : null;   // közben újra váltott
+  }
+}
+/** A megjelenített r. sor (0 = hátul) magasságának szorzója az animáció alatt. */
+function wfRowFactor(r, now) {
+  const a = wfFlow.anim;
+  if (!a) return 1;
+  const age = (wfFlow.up ? TIME_SLICES - 1 - r : r) / (TIME_SLICES - 1);   // 0: legújabb, 1: legrégebbi
+  const t = now - a.start;
+  if (t < WF_COLLAPSE_MS) {
+    const tau = Math.max(0, Math.min(1, (t / WF_COLLAPSE_MS - (1 - age) * WF_STAGGER) / (1 - WF_STAGGER)));
+    return 1 - tau * tau;
+  }
+  const tau = Math.max(0, Math.min(1, ((t - WF_COLLAPSE_MS) / WF_REBUILD_MS - age * WF_STAGGER) / (1 - WF_STAGGER)));
+  const c1 = 1.70158, c3 = c1 + 1;   // „ease out back”
+  return tau <= 0 ? 0 : 1 + c3 * Math.pow(tau - 1, 3) + c1 * Math.pow(tau - 1, 2);
+}
 
 function rebuildMesh() {
   if (mesh) scene.remove(mesh);
@@ -1230,8 +1381,10 @@ function rebuildMesh() {
 
   mesh = new THREE.Mesh(geometry, material);
   wireMesh = new THREE.Mesh(geometry, wireMaterial);
+  mesh.frustumCulled = wireMesh.frustumCulled = false;   // a trapézkorrekció és a csúcsok kilóghatnak a befoglaló gömbből
   scene.add(mesh);
   scene.add(wireMesh);
+  keystoneMesh();
 
   // Mátrixok újraméretezése
   waterfallData.length = 0;
@@ -1243,14 +1396,11 @@ function rebuildMesh() {
   document.getElementById("lblResolution").innerText = t("strip.resolution", { bins: FREQ_BINS, steps: TIME_SLICES });
 }
 
-const grid = new THREE.GridHelper(planeWidth, 12, 0x2b3d50, 0x16212d);
-grid.position.y = -0.05;
-grid.position.z = -5;
-scene.add(grid);
-
 const waterfallData = [];
 const preRingMask = [];
 rebuildMesh();
+buildGrid();
+fitCamera();
 
 // Állítható Glow Színek a Pre-ringinghez
 let glowColorType = 'white';
@@ -1278,13 +1428,16 @@ try {
   }
 } catch (e) {}
 
-const HEAT_STOPS = [   // #0D1721, #11304A, #1C5A8A, #2A9A9E, #4FD1C5, #BFEFE8, #E3B66B, #F2A65A
-  [0.00, 0.051, 0.090, 0.129], [0.20, 0.067, 0.188, 0.290], [0.40, 0.110, 0.353, 0.541], [0.58, 0.165, 0.604, 0.620],
-  [0.72, 0.310, 0.820, 0.773], [0.86, 0.749, 0.937, 0.910], [0.95, 0.890, 0.714, 0.420], [1.00, 0.949, 0.651, 0.353]
+// A színfokok a valódi zene sávszintjeihez igazítva (medián kb. 0,40, 90. percentilis kb. 0,61, 0..1 = -90..0 dBFS):
+// egy átlagos felvétel a kéktől a sárgáig bejárja a skálát, a narancs és a korall a csúcsoké.
+const HEAT_STOPS = [   // #0B1426, #1B1F5E, #3B2F9E, #2563EB, #12A4D9, #2CCFB8, #8EE27A, #F4D35E, #F59A4A, #F0656F, #FFC9D0
+  [0.00, 0.043, 0.078, 0.149], [0.18, 0.106, 0.122, 0.369], [0.28, 0.231, 0.184, 0.620], [0.36, 0.145, 0.388, 0.922],
+  [0.44, 0.071, 0.643, 0.851], [0.52, 0.173, 0.812, 0.722], [0.60, 0.557, 0.886, 0.478], [0.68, 0.957, 0.827, 0.369],
+  [0.76, 0.961, 0.604, 0.290], [0.86, 0.941, 0.396, 0.435], [1.00, 1.000, 0.788, 0.816]
 ];
 function getHeatmapColor(val, isPreRing = false) {
   if (isPreRing) return getGlowRgb();
-  // „víz és fény”: mély kék → kék → türkiz → világos türkiz → borostyán a csúcsokon
+  // mélykék → ibolya → kék → cián → türkiz → zöld → sárga → narancs → korall a csúcsokon
   const v = Math.max(0, Math.min(1, val));
   let i = 1;
   while (i < HEAT_STOPS.length - 1 && v > HEAT_STOPS[i][0]) i++;
@@ -1338,8 +1491,40 @@ if (btnCameraAngle) {
     updateCameraLabel();
     mesh.rotation.y = 0; wireMesh.rotation.y = 0; grid.rotation.y = 0;
     setCamera(v);
+    fitCamera();
   };
 }
+const btnFlowDir = document.getElementById("btnFlowDir");
+if (btnFlowDir) btnFlowDir.onclick = () => setFlowUp(!wfFlow.target);
+function setFlowUp(up) {
+  wfFlow.target = up;
+  try { localStorage.setItem("aqulify_wf_flow", up ? "up" : "down"); } catch (e) {}
+  updateFlowLabel();
+  if (!wfFlow.anim) wfFlow.anim = { start: performance.now(), swapped: false };
+}
+function updateFlowLabel() {
+  if (btnFlowDir) btnFlowDir.innerText = t(wfFlow.target ? "strip.flowUp" : "strip.flowDown");
+}
+function setKeystone(k) {
+  wfKeystone = Math.max(WF_KEYSTONE_MIN, Math.min(WF_KEYSTONE_MAX, k));
+  try { localStorage.setItem("aqulify_wf_keystone", String(wfKeystone)); } catch (e) {}
+  applyKeystone();
+  updateKeystoneUi();
+}
+function updateKeystoneUi() {
+  const lbl = document.getElementById("lblKeystone");
+  if (lbl) lbl.textContent = wfKeystone > 0 ? "+" + wfKeystone : wfKeystone < 0 ? "−" + (-wfKeystone) : "0";
+  const less = document.getElementById("btnKeystoneLess"), more = document.getElementById("btnKeystoneMore");
+  const rst = document.getElementById("btnKeystoneReset");
+  if (less) less.disabled = wfKeystone <= WF_KEYSTONE_MIN;
+  if (more) more.disabled = wfKeystone >= WF_KEYSTONE_MAX;
+  if (rst) rst.hidden = wfKeystone === 0;
+}
+[["btnKeystoneLess", -1], ["btnKeystoneMore", 1], ["btnKeystoneReset", 0]].forEach(([id, d]) => {
+  const b = document.getElementById(id);
+  if (b) b.onclick = () => setKeystone(d === 0 ? 0 : wfKeystone + d);
+});
+updateKeystoneUi();
 function updateCameraLabel() {
   if (!btnCameraAngle) return;
   btnCameraAngle.innerText = cameraLabelInitial ? t("cam.initial") : t("cam.label", { name: t(cameraViews[currentViewIdx].nameKey) });
@@ -1376,21 +1561,23 @@ function updateCameraLabel() {
 const freqScaleCanvas = document.getElementById("freqScaleCanvas");
 const freqScaleCtx = freqScaleCanvas ? freqScaleCanvas.getContext("2d") : null;
 let freqScaleKey = "";
-const FS_MAJOR = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 24000];
-const FS_MID = [30, 300, 3000, 15000];   // köztes feliratok (halványabbak; ütközéskor elmaradnak)
-const FS_MINOR = [15, 30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000, 7000, 8000, 9000,
-                  12000, 14000, 15000, 16000, 18000, 22000];
+const FS_MAJOR = [0, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 24000];
+const FS_MID = [5, 30, 300, 3000, 15000];   // köztes feliratok (halványabbak; ütközéskor elmaradnak)
+const FS_MINOR = [1, 2, 3, 4, 6, 7, 8, 9, 15, 30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000,
+                  7000, 8000, 9000, 12000, 14000, 15000, 16000, 18000, 22000];
 const _fsVec = new THREE.Vector3();
 
-const FS_MIN_HZ = 10.0, FS_MAX_HZ = 24000.0;
-const FS_LOG_MIN = Math.log10(FS_MIN_HZ), FS_LOG_MAX = Math.log10(FS_MAX_HZ);
-const FS_LOG_SPAN = FS_LOG_MAX - FS_LOG_MIN;
+// A spektrum sávjai a motorral egyezően ln(1 + f / FS_WARP_HZ) szerint egyenközűek, 0 Hz – 24 kHz
+// (10 Hz fölött közel logaritmikus, alatta lineáris, így a 0 Hz is a skálán van)
+const FS_WARP_HZ = 10.0, FS_MAX_HZ = 24000.0;
+const FS_WARP_SPAN = Math.log1p(FS_MAX_HZ / FS_WARP_HZ);
+function freqToAxis(f) { return Math.log1p(Math.max(0, f) / FS_WARP_HZ) / FS_WARP_SPAN; }
 
 /** Egy frekvencia képernyő-x koordinátája ott, ahol a vízesés alja a skála felső szélénél van. */
 function freqScreenX(freq, w, h, edgeY) {
-  const frac = Math.max(0, Math.min(1, ((Math.log10(freq) - FS_LOG_MIN) / FS_LOG_SPAN * FREQ_BINS - 0.5) / (FREQ_BINS - 1)));
+  const frac = Math.max(0, Math.min(1, (freqToAxis(freq) * FREQ_BINS - 0.5) / (FREQ_BINS - 1)));
   const x3 = -planeWidth / 2 + planeWidth * frac;
-  const proj = (z) => { _fsVec.set(x3, 0, z).project(camera); return { x: (_fsVec.x + 1) / 2 * w, y: (1 - _fsVec.y) / 2 * h }; };
+  const proj = (z) => { _fsVec.set(x3 * keystoneAt(z), 0, z).project(camera); return { x: (_fsVec.x + 1) / 2 * w, y: (1 - _fsVec.y) / 2 * h }; };
   let p = proj(planeDepth / 2);                 // a mesh első éle
   if (p.y > edgeY) {                            // ha a képen kívül esik: a látható alsó szélhez keresünk z-t
     let lo = -planeDepth / 2, hi = planeDepth / 2;
@@ -1410,9 +1597,9 @@ function freqScreenX(freq, w, h, edgeY) {
 function drawFreqScale(force) {
   if (!freqScaleCtx) return;
   const w = wfCanvas.clientWidth, h = wfCanvas.clientHeight;
-  const sh = 30;                                // .freq-scale magassága (rejtve a clientHeight 0 lenne)
+  const sh = WF_SCALE_H;                        // .freq-scale magassága (rejtve a clientHeight 0 lenne)
   const dpr = window.devicePixelRatio || 1;
-  const key = `${w}x${h}|${currentViewIdx}|${dpr}`;
+  const key = `${w}x${h}|${currentViewIdx}|${dpr}|${wfKeystone}`;
   if (!force && key === freqScaleKey) return;
   freqScaleKey = key;
   camera.updateMatrixWorld();
@@ -1425,7 +1612,7 @@ function drawFreqScale(force) {
   if (w <= 0 || h <= 0 || cameraViews[currentViewIdx].id === "side") { freqScaleCanvas.style.display = "none"; fsGeom = null; return; }
   freqScaleCanvas.style.display = "block";
   const edgeY = h - sh;                         // a skála felső széle a vízesés-vásznon
-  const x0 = freqScreenX(10, w, h, edgeY), x1 = freqScreenX(24000, w, h, edgeY);
+  const x0 = freqScreenX(0, w, h, edgeY), x1 = freqScreenX(FS_MAX_HZ, w, h, edgeY);
   const baseY = 9.5;
   fsGeom = { w, h, edgeY, baseY, dpr, x0, x1 };
 
@@ -1490,13 +1677,29 @@ function formatFreqStat(f, isHigh) {
     return (Math.round(f / 100) / 10).toFixed(1) + "k";
   } else if (f >= 1000) {
     return (Math.round(f / 100) / 10).toFixed(1) + "k";
+  } else if (f < 10) {
+    return f.toFixed(1) + "Hz";            // 10 Hz alatt tizedre, pl. 2.4Hz
   } else {
     // Egész Hz-re kerekítve, pl. 13Hz
     return Math.round(f) + "Hz";
   }
 }
 
-function bandFreq(b) { return FS_MIN_HZ * Math.pow(FS_MAX_HZ / FS_MIN_HZ, (b + 0.5) / FREQ_BINS); }
+function bandFreq(b) { return FS_WARP_HZ * Math.expm1((b + 0.5) / FREQ_BINS * FS_WARP_SPAN); }
+
+/** Régi motor (a spektrumüzenetben nincs f0): 10 Hz – 24 kHz logaritmikus sávok átszámítása a mostani tengelyre. */
+function spectrumFromLogAxis(levels) {
+  const n = levels.length, out = new Array(FREQ_BINS);
+  const lmin = Math.log10(10), lspan = Math.log10(FS_MAX_HZ) - lmin;
+  for (let b = 0; b < FREQ_BINS; b++) {
+    const f = bandFreq(b);
+    if (f < 10) { out[b] = 0; continue; }
+    const p = Math.max(0, (Math.log10(f) - lmin) / lspan * n - 0.5);
+    const i = Math.min(n - 1, Math.floor(p)), j = Math.min(n - 1, i + 1), tt = Math.min(1, p - i);
+    out[b] = levels[i] + (levels[j] - levels[i]) * tt;
+  }
+  return out;
+}
 
 function updateFreqRange(levels, now) {
   const dt = FS_RANGE.last ? Math.min(0.2, (now - FS_RANGE.last) / 1000) : 0;
@@ -1505,10 +1708,12 @@ function updateFreqRange(levels, now) {
   if (levels && levels.length) {
     let mx = 0;
     for (let i = 0; i < levels.length; i++) mx = Math.max(mx, levels[i]);
-    // jelen lévőnek számít: -66 dBFS fölött és a pillanatnyi csúcstól legfeljebb 48 dB-re (0..1 = -90..0 dBFS)
-    const thr = Math.max(24 / 90, mx - 48 / 90);
+    // jelen lévőnek számít: -66 dBFS fölött, a felső határnál a pillanatnyi csúcstól legfeljebb 48 dB-re, az
+    // alsónál legfeljebb 30 dB-re (0..1 = -90..0 dBFS). Lent szigorúbb a küszöb: a hangos basszus hangindításai
+    // a csúcs alatt 25–40 dB-lel egészen 0 Hz-ig szétterülnek, ez nem a zene legmélyebb hangja.
+    const thrHi = Math.max(24 / 90, mx - 48 / 90), thrLo = Math.max(24 / 90, mx - 30 / 90);
     if (mx > 24 / 90) {
-      for (let i = 0; i < levels.length; i++) if (levels[i] >= thr) { if (lo < 0) lo = i; hi = i; }
+      for (let i = 0; i < levels.length; i++) { if (levels[i] >= thrLo && lo < 0) lo = i; if (levels[i] >= thrHi) hi = i; }
       const scale = FREQ_BINS / levels.length;
       lo *= scale; hi *= scale;
     }
@@ -1570,12 +1775,16 @@ function drawFreqScaleFrame(levels) {
   fsStyle(L.markLo, "transform", `translateX(${Math.round(xl)}px)`);   // 1,5 px széles, a vászon x + 0,5 közepével
   fsStyle(L.markHi, "transform", `translateX(${Math.round(xh)}px)`);
 
-  // Az elmúlt 10 másodperc legmélyebb és legmagasabb frekvenciájának szöveges kijelzése a két szélen
+  // Az elmúlt 10 másodperc legmélyebb és legmagasabb frekvenciájának szöveges kijelzése a két szélen. A legmélyebb
+  // az, amely összesen legalább fél másodpercig jelen volt (a mért alsó határok 5. percentilise): egy-egy
+  // pillanatnyi mély rezdülés nem rögzíti 10 másodpercre a skála aljára.
   let min10s = Infinity, max10s = -Infinity;
+  const los = [];
   for (let i = 0; i < FS_HISTORY_10S.length; i++) {
-    if (FS_HISTORY_10S[i].loFreq < min10s) min10s = FS_HISTORY_10S[i].loFreq;
+    los.push(FS_HISTORY_10S[i].loFreq);
     if (FS_HISTORY_10S[i].hiFreq > max10s) max10s = FS_HISTORY_10S[i].hiFreq;
   }
+  if (los.length) { los.sort((a, b) => a - b); min10s = los[Math.floor(los.length * 0.05)]; }
   const hasStat = min10s < Infinity && max10s > -Infinity;
   fsShow(L.statMin, hasStat);
   fsShow(L.statMax, hasStat);
@@ -1663,16 +1872,19 @@ function animate3D() {
   const pos = geometry.attributes.position.array;
   const col = geometry.attributes.color.array;
 
+  wfFlowTick(nowMs);
   for (let z = 0; z < TIME_SLICES; z++) {
-    const sData = waterfallData[z];
-    const sMask = preRingMask[z];
+    const src = wfFlow.up ? TIME_SLICES - 1 - z : z;   // felfelé folyásnál a legújabb sor (0.) elöl
+    const sData = waterfallData[src];
+    const sMask = preRingMask[src];
+    const fz = wfRowFactor(z, nowMs);
     for (let x = 0; x < FREQ_BINS; x++) {
       const idx = z * FREQ_BINS + x;
-      const y = sData[x];
+      const y = sData[x] * fz;
       const isPre = (sMask[x] === 1);
 
-      pos[idx * 3 + 1] = y * 8.5;
-      const rgb = getHeatmapColor(y, isPre);
+      pos[idx * 3 + 1] = y * WF_MAX_H;
+      const rgb = getHeatmapColor(Math.min(1, y), isPre);
       col[idx * 3] = rgb[0];
       col[idx * 3 + 1] = rgb[1];
       col[idx * 3 + 2] = rgb[2];
@@ -1681,6 +1893,7 @@ function animate3D() {
 
   geometry.attributes.position.needsUpdate = true;
   geometry.attributes.color.needsUpdate = true;
+  updateSkirt();
   renderer.render(scene, camera);
 }
 animate3D();
@@ -1792,8 +2005,7 @@ function resizeAllViews() {
     const w = wfCanvas.clientWidth;
     const h = wfCanvas.clientHeight;
     if (w > 0 && h > 0) {
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
+      fitCamera();
       renderer.setSize(w, h, false);
     }
   }
@@ -3987,7 +4199,7 @@ function initPipewireBridge() {
         if (data && (data.type === "state" || data.type === "status" || data.type === "spectrum")) engineVerified = true;
         if (data.type === "spectrum") {
           if (data.levels) {
-            liveSpectrumLevels = data.levels;
+            liveSpectrumLevels = data.f0 === undefined ? spectrumFromLogAxis(data.levels) : data.levels;
             liveSpectrumTime = performance.now();
           }
           updateLimiterMeters(data.peak, data.gr);
@@ -4303,6 +4515,8 @@ function refreshDynamicTexts() {
   renderMagicCompare();
   updateMagicDiag(magicDiagLast);
   updateCameraLabel();
+  updateFlowLabel();
+  updateKeystoneUi();
   const res = document.getElementById("lblResolution");
   if (res) res.innerText = t("strip.resolution", { bins: FREQ_BINS, steps: TIME_SLICES });
   if (btnEqExpandHeight) btnEqExpandHeight.title = isEqExpanded ? t("zoom.expandNormal") : t("zoom.expandBig");
