@@ -127,6 +127,23 @@ void styleWindow(HWND hwnd) {
     // Sötét címsor (a felület sötét témájú); régebbi Windowson egyszerűen hatástalan
     const BOOL dark = TRUE;
     DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof(dark));
+    // Windows 11: a címsor a felület háttérszínét kapja; korábbi Windowson hatástalan
+    const COLORREF caption = RGB(10, 15, 21), text = RGB(232, 238, 244);
+    DwmSetWindowAttribute(hwnd, 35 /* DWMWA_CAPTION_COLOR */, &caption, sizeof(caption));
+    DwmSetWindowAttribute(hwnd, 36 /* DWMWA_TEXT_COLOR */, &text, sizeof(text));
+}
+
+/** A WebView2 háttere betöltés előtt is a felület háttérszíne (nincs fehér villanás). */
+void setWebViewBackground(webview::webview& w) {
+    auto res = w.browser_controller();
+    if (!res.ok()) return;
+    auto* controller = static_cast<ICoreWebView2Controller*>(res.value());
+    ICoreWebView2Controller2* controller2 = nullptr;
+    if (SUCCEEDED(controller->QueryInterface(IID_ICoreWebView2Controller2, reinterpret_cast<void**>(&controller2)))
+        && controller2) {
+        controller2->put_DefaultBackgroundColor(COREWEBVIEW2_COLOR{ 255, 10, 15, 21 });
+        controller2->Release();
+    }
 }
 
 /** A gui mappa kiszolgálása a https://aqulify.local/ virtuális címen. */
@@ -172,6 +189,7 @@ void runWindow(const std::wstring& guiFolder) {
 
     auto win = w.window();
     if (win.ok()) styleWindow(static_cast<HWND>(win.value()));
+    setWebViewBackground(w);
 
     w.bind("aetherOpenUrl", [](const std::string& req) -> std::string {
         const std::string url = allowedExternalUrl(req);

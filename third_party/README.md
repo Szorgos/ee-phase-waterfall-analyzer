@@ -24,6 +24,14 @@ Forrása az Ubuntu `rnnoise_0.2+ds.orig.tar.xz` csomagja
 `librnnoise` csomagja épül be, ha van; ha egyik sincs, a Magic Touch a beszédnél is a saját, sávonkénti
 zajcsökkentést használja.
 
+A felület betűtípusai (`fonts`: csak a licencek; a betűkészletek a felület karakterkészletére szűkítve, WOFF2
+formában a `gui_integrated_system.html`-be ágyazva, mert a felület hálózat nélkül is fut):
+
+| Betűtípus | Forrás | Verzió | Licenc |
+|---|---|---|---|
+| Inter (változó súly) | https://github.com/rsms/inter, a `@fontsource-variable/inter` 5.1.0 csomagból | 4.001 | OFL-1.1 (`fonts/Inter-OFL.txt`) |
+| IBM Plex Mono (400, 500) | https://github.com/IBM/plex, a `@fontsource/ibm-plex-mono` 5.1.0 csomagból | 2.3 | OFL-1.1 (`fonts/IBMPlexMono-OFL.txt`) |
+
 Az FFTW3 (GPL-2.0-or-later) nincs a tárolóban: Linuxon a rendszer `fftw3f` csomagja, Windowson a
 https://www.fftw.org/fftw-3.3.10.tar.gz forrás épül be (`-DAQULIFY_FFTW_SOURCE_DIR=...`).
 

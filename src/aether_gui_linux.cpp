@@ -144,11 +144,11 @@ void applyDarkTitlebar() {
     GtkCssProvider* css = gtk_css_provider_new();
     gtk_css_provider_load_from_data(css,
         "headerbar, .titlebar, .titlebar:backdrop, headerbar:backdrop {"
-        "  background: #181b22; background-image: none; color: #e6e6e6;"
-        "  border-bottom: 1px solid rgba(255,255,255,0.08); box-shadow: none; }"
-        "headerbar .title, .titlebar .title { color: #e6e6e6; }"
-        "headerbar button, .titlebar button { color: #c8c8c8; background: transparent; border: none; box-shadow: none; }"
-        "headerbar button:hover, .titlebar button:hover { background: rgba(255,255,255,0.08); }"
+        "  background: #0A0F15; background-image: none; color: #E8EEF4;"
+        "  border-bottom: 1px solid #1F2C3A; box-shadow: none; }"
+        "headerbar .title, .titlebar .title { color: #E8EEF4; }"
+        "headerbar button, .titlebar button { color: #A3B3C2; background: transparent; border: none; box-shadow: none; }"
+        "headerbar button:hover, .titlebar button:hover { background: rgba(255,255,255,0.06); color: #E8EEF4; }"
         "decoration { box-shadow: 0 3px 12px rgba(0,0,0,0.5); }",
         -1, nullptr);
     gtk_style_context_add_provider_for_screen(gdk_screen_get_default(), GTK_STYLE_PROVIDER(css),
@@ -211,6 +211,11 @@ int main() {
                 if (fileExists(iconLocal)) gtk_window_set_icon_from_file(GTK_WINDOW(win.value()), iconLocal.c_str(), nullptr);
             }
             auto view = w.browser_controller();
+            if (view.ok()) {
+                // betöltés előtt is a felület háttérszíne (nincs fehér villanás)
+                const GdkRGBA bg{ 10 / 255.0, 15 / 255.0, 21 / 255.0, 1.0 };
+                webkit_web_view_set_background_color(WEBKIT_WEB_VIEW(view.value()), &bg);
+            }
             g_signal_connect(G_OBJECT(win.value()), "delete-event", G_CALLBACK(onWindowDelete),
                              view.ok() ? view.value() : nullptr);
             g_unix_signal_add(SIGTERM, onQuitSignal, win.value());
