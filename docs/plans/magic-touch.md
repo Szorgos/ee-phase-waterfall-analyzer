@@ -1,6 +1,6 @@
 # Terv: Magic Touch – automatikus, visszafogott hangszépítő
 
-**Állapot:** az 1–2. ütem elkészült (2026-10-21), a 3–6. ütem terv.
+**Állapot:** az 1–4. ütem elkészült (2026-10-21), az 5–6. ütem terv.
 **Felvéve:** 2026-10-21
 
 ## Cél
@@ -232,6 +232,62 @@ Kód: `include/magic_touch.hpp` (a lánc: `aether_chain.hpp`), tesztek: `src/tes
 - **Hangolás:** szabad licencű zenei mintákon (klasszikus, elektronikus, drum and bass, pop, ragtime, beszéd)
   és ezek mesterségesen rontott változatain (dobozhang, tompa magasak, sziszegés, ellenfázisú mély, keskeny
   keverés). A hallgatói A/B teszt valódi lejátszási listán még hátravan.
+
+## Megvalósítás (3–4. ütem)
+
+Kód: `include/magic_touch.hpp`, tesztek: `src/test_dsp.cpp` („Magic Touch” 8–12.), `src/test_core.cpp` (paraméterfájl).
+
+- **Felület:** a Magic Touch fülön megjelent a Karakter (Természetes / Meleg / Fényes / Tágas) és a Tartalom
+  (Automatikus / Zene / Beszéd / Archív felvétel) választó. A „Részletek / diagnosztika” új sorai: a használt
+  tartalom (felismert vagy kézi, beszéd-jelleg, sávszélesség), mikrodinamika, exciter / melegség, beszéd.
+  Paraméterfájl v6 (a v5 és a v4 átvehető), közös memória v6.
+- **Hangút sorrendje:** beszéd: mélyvágás → mély-közép vágás → Meleg: mély polc → beszéd: jelenlét → levegő →
+  de-esser → exciter → mikrodinamika → hangerő-kiegyenlítés (beszédnél a szintkiegyenlítéssel) → oldaljel → A/B.
+  Ezek a fokozatok is csak akkor futnak, ha van mit tenniük; a rendben lévő felvétel továbbra is bitre érintetlen.
+- **Mikrodinamika:** tranziens-kiemelés legfeljebb +1,2 dB (+15 %) a gyors (2 ms) és a lassú (40 ms)
+  teljesítmény-burkoló arányából, csak lapos dinamikánál (a csúcstényező 12 dB, az LRA 6 LU alatt). A halk részek
+  emelése legfeljebb +2 dB, csak a 3 s-os szintnél 18 dB-lel halkabb részeken, a csendet és a zajpadlót nem emeli.
+  A csúcs a mikrodinamika miatt nem kerül −1 dBFS fölé. További kompresszió és limitálás nincs.
+- **Exciter:** a 3–9 kHz sáv páros felharmonikusai 6 kHz felett (a 3–5 kHz-et nem emeli), legfeljebb 12 % keverés.
+  Ott dolgozik, ahol a magas hiányzik (tompa vagy sávkorlátos felvétel); zajnál, élességnél és sziszegésnél vissza.
+- **Karakter** (a szabályok súlyai, a kemény korlátokon belül):
+  - Természetes: az 1–2. ütem szabályai.
+  - Meleg: mély polc 150 Hz alatt legfeljebb +2 dB, a 120–600 Hz sáv páros felharmonikusai (legfeljebb 8 %),
+    a levegő-polc legfeljebb −1 dB, kisebb mély-közép vágás. A már dobozos felvételre nem tesz melegséget.
+  - Fényes: a levegő hamarabb és legfeljebb +2,5 dB-lel emel, enyhe exciter. Élességnél, sziszegésnél, zajnál
+    ugyanúgy visszafogja magát.
+  - Tágas: a tágítás már −8 dB-es S/M aránynál is belép (a Természetesnél −14 dB), bekapcsolt Crossfeed mellett
+    továbbra sincs tágítás.
+- **Tartalomfelismerés (Automatikus):** beszéd-jelleg a 10 ms-os burkolóból (az 1 s-os átlag felénél halkabb
+  keretek aránya, a 2,5–6,5 Hz-es moduláció) és a kevés mélyből (40–80 Hz a 200 Hz – 2 kHz sávhoz képest).
+  Archív: 14,5 kHz alatt meredeken letört spektrum, vagy közel mono, zajos felvétel. A profil csak akkor vált, ha
+  az új tartalom 8 másodpercig egyértelmű (a beszédet kb. 12–15 s után ismeri fel). A zenei alprofil a
+  csúcstényezőből és az LRA-ból jön: túltömörített (csúcstényező 10 dB, LRA 5 LU alatt) vagy akusztikus / élő
+  (csúcstényező 15 dB és LRA 6 LU felett, vagy LRA 12 LU felett).
+- **Profilok:** beszéd: mélyvágás 80 Hz alatt, jelenlét 2,2 kHz-en legfeljebb +1,5 dB (élességnél és
+  sziszegésnél nincs), kevés levegő, nincs exciter, tranziens-kiemelés és tágítás. Archív: exciter teljes
+  súllyal, tranziens-helyreállítás, fél levegő. Túltömörített zene: gyenge exciter, visszafogott tranziens.
+  Akusztikus / élő: fél mély-közép vágás, nincs exciter, mikrodinamika és tágítás.
+- **Beszéd szintkiegyenlítés:** a 3 s-os hangosság (BS.1770) a felvétel saját, hosszú távú (τ ≈ 50 s, kapuzott)
+  átlagához igazodik, legfeljebb ±6 dB-lel és 1 dB/s sebességgel; szünetben áll. Egy 8–10 dB-es szintugrásból
+  kb. 4 dB marad.
+- **Javítás az élességmérésben:** sávkorlátos felvételnél a letörés előtti lejtő nem számít élességnek (korábban az
+  archív anyagot „élesnek” mérte, és emiatt a levegőt is visszafogta).
+- **Mérések a valóságban:** a hangútban 48 kHz-en egy mag 0,2–0,35 %-a, az elemzés kb. 0,4 % (Xeon, 2,8 GHz),
+  plusz késleltetés nincs. A hangosság 100 %-on, bármely Karakterrel ±0,3 LU-n belül marad (a terv határa ±0,5 LU).
+- **Hangolás:** szabad licencű zenekari felvételeken (Battle for Wesnoth zenék), ezek mesterségesen rontott
+  változatain (erősen tömörített master, 10 kHz-en letört mono felvétel), espeak-ng beszéden (magyar és angol)
+  és szintetikus jeleken. A zenét egyik felvételen sem nézte beszédnek (beszéd-jelleg legfeljebb 0,41).
+  A hallgatói A/B teszt valódi lejátszási listán még hátravan.
+
+### Döntések (3–4. ütem)
+
+- **Beszéd szintje:** a terv „−16 LUFS körül” értéket ír. A szintkiegyenlítés ehelyett a felvétel saját hosszú
+  távú hangosságát tartja, mert egy rögzített célszint a halk podcastot akár 8 dB-lel is hangosítaná, ami ellentmond
+  a „nem hangosít” elvnek, és a Preamp / Limiter működését is megváltoztatná.
+- **Archív jel:** csak a 14,5 kHz alatti letörés számít archívnak. A 16 kHz-en levágott MP3 (128 kbit/s) gyakori
+  modern anyagnál is, ezért az nem kapcsolja be az archív profilt.
+- **Az archív profil helyreállító része** (de-click, sziszegés-kapuzás) az 5. ütemmel (Restoration) jön.
 
 ## Források
 

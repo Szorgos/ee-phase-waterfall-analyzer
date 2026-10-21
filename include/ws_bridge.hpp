@@ -531,6 +531,8 @@ private:
         } else if (type == "set_magic") {
             p.magicAmount = static_cast<float>(num(msg, "amount", p.magicAmount));
             p.magicCompare = num(msg, "compare", p.magicCompare) != 0.0 ? 1 : 0;
+            p.magicCharacter = static_cast<int32_t>(num(msg, "character", p.magicCharacter));
+            p.magicContent = static_cast<int32_t>(num(msg, "content", p.magicContent));
         } else if (type == "set_convolver") {
             p.convIrWidth = static_cast<int32_t>(num(msg, "irWidth", p.convIrWidth));
             p.convAutogain = num(msg, "autogain", p.convAutogain) != 0.0 ? 1 : 0;
@@ -715,7 +717,9 @@ private:
         s += ",\"inputGain\":"; appendFloat(s, p.convInputGainDb, 2);
         s += ",\"outputGain\":"; appendFloat(s, p.convOutputGainDb, 2); s += '}';
         s += ",\"magic\":{\"amount\":"; appendFloat(s, p.magicAmount, 1);
-        s += ",\"compare\":" + std::to_string(p.magicCompare) + '}';
+        s += ",\"compare\":" + std::to_string(p.magicCompare);
+        s += ",\"character\":" + std::to_string(p.magicCharacter);
+        s += ",\"content\":" + std::to_string(p.magicContent) + '}';
         if (cb_.getIr) {
             IrData ir = cb_.getIr();
             s += ",\"ir\":";

@@ -267,7 +267,7 @@ private:
         // Az előerősítés az EQ része (EasyEffects: Equalizer "inputGain"): kikapcsolt EQ-nál nem hat
         preampTarget_ = d.has(kFlagEq) ? ee::dbToGain(d.preampDb) : 1.0f;
         preampStep_ = (preampTarget_ - preampCur_) / fadeSamples_;
-        magic_.setControl(d.magicAmount, d.magicCompare != 0, d.has(kFlagCrossfeed));
+        magic_.setControl(d.magicAmount, d.magicCompare != 0, d.has(kFlagCrossfeed), d.magicCharacter, d.magicContent);
         eq_.update(d);
         bass_.update(d);
         crossfeed_.update(d);

@@ -24,7 +24,7 @@ namespace ee_analyzer {
 constexpr uint32_t kMaxEqBands = 32;
 
 /** A params.bin fájl és a közös memória paraméter-formátumának verziója. */
-constexpr uint32_t kParamLayoutVersion = 5;
+constexpr uint32_t kParamLayoutVersion = 6;
 
 enum ParamFlags : uint32_t {
     kFlagEq        = 1u << 0,
@@ -119,6 +119,8 @@ struct ParamData {
     // --- Magic Touch (az Aqulify saját modulja, docs/plans/magic-touch.md) ---
     float magicAmount = 50.0f;     // % (0 .. 100): az intenzitás
     int32_t magicCompare = 0;      // A/B: 1 = az eredeti (feldolgozatlan) jel szól, hangerőre kiegyenlítve
+    int32_t magicCharacter = 0;    // Karakter: 0 Természetes, 1 Meleg, 2 Fényes, 3 Tágas
+    int32_t magicContent = 0;      // Tartalom: 0 Automatikus, 1 Zene, 2 Beszéd, 3 Archív felvétel
 
     bool has(uint32_t f) const { return (flags & f) != 0; }
     void set(uint32_t f, bool on) { flags = on ? (flags | f) : (flags & ~f); }
@@ -216,10 +218,14 @@ inline void sanitizeParams(ParamData& d) {
     cl(d.convOutputGainDb, -36.0f, 36.0f, 0.0f);
     cl(d.magicAmount, 0.0f, 100.0f, 50.0f);
     ci(d.magicCompare, 0, 1);
+    ci(d.magicCharacter, 0, 3);
+    ci(d.magicContent, 0, 3);
 }
 
 /** A params.bin v4 mérete: a Magic Touch mezői előtti rész (v5-ben ezek a végére kerültek). */
 constexpr size_t kParamSizeV4 = offsetof(ParamData, magicAmount);
+/** A params.bin v5 mérete: a Karakter és a Tartalom választó előtti rész (v6-ban ezek a végére kerültek). */
+constexpr size_t kParamSizeV5 = offsetof(ParamData, magicCharacter);
 
 // ------------------------------------------------------------------ régi (v2/v3) params.bin átvétele
 
@@ -236,13 +242,14 @@ struct ParamDataV3 {
 
 /**
  * Paraméterfájl tartalmának betöltése (a 12 bájtos fejléc után).
- * v5: közvetlen másolat. v4: ugyanaz a Magic Touch mezői nélkül (azok alapértéket kapnak). v2/v3: a régi saját DSP beállításai a megfelelő EasyEffects paraméterekre:
+ * v6: közvetlen másolat. v5: ugyanaz a Karakter és a Tartalom nélkül, v4: a Magic Touch mezői nélkül (ezek alapértéket
+ * kapnak). v2/v3: a régi saját DSP beállításai a megfelelő EasyEffects paraméterekre:
  * a régi RBJ biquad sávok "APO (DR)" szűrőmódot kapnak (ugyanaz a hangolás), a többi az alapértéket.
  */
 inline bool loadParamBytes(const char* bytes, size_t len, uint32_t version, uint32_t size, ParamData& out) {
     if (size > len) return false;
-    if (version == kParamLayoutVersion || version == 4) {
-        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : kParamSizeV4;
+    if (version == kParamLayoutVersion || version == 5 || version == 4) {
+        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : version == 5 ? kParamSizeV5 : kParamSizeV4;
         if (size != want) return false;
         ParamData d{};
         std::memcpy(static_cast<void*>(&d), bytes, want);

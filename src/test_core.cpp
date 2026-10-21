@@ -79,7 +79,7 @@ static void testSpectrum() {
 }
 
 static void testParamFile() {
-    std::printf("[2] Paraméterfájl (v5, valamint a v4 és a régi v3 átvétele)\n");
+    std::printf("[2] Paraméterfájl (v6, valamint a v5, a v4 és a régi v3 átvétele)\n");
     // v4: változatlan visszaolvasás
     ParamData d = transparentParams();
     d.set(kFlagEq, true);
@@ -94,7 +94,7 @@ static void testParamFile() {
     d.crossfeedFeedDb = 9.5f;
     ParamData r{};
     CHECK(loadParamBytes(reinterpret_cast<const char*>(&d), sizeof(d), kParamLayoutVersion, sizeof(d), r) &&
-              std::memcmp(&r, &d, sizeof(d)) == 0, "v5 paraméterblokk bájtra azonosan visszaolvasva");
+              std::memcmp(&r, &d, sizeof(d)) == 0, "v6 paraméterblokk bájtra azonosan visszaolvasva");
 
     // v4 (Magic Touch előtti) fájl: a meglévő beállítások megmaradnak, a Magic Touch alapértéket kap
     ParamData r4{};
@@ -102,13 +102,26 @@ static void testParamFile() {
               std::memcmp(&r4, &d, kParamSizeV4) == 0 && r4.magicAmount == 50.0f && r4.magicCompare == 0 &&
               !r4.has(kFlagMagic),
           "v4 paraméterfájl átvétele (Magic Touch: kikapcsolva, 50 %%)");
-    // Az A/B összehasonlítás újraindítás után nem marad bekapcsolva
+    // Az A/B összehasonlítás újraindítás után nem marad bekapcsolva; a Karakter és a Tartalom megmarad
     ParamData dm = d;
-    dm.set(kFlagMagic, true); dm.magicAmount = 70.0f; dm.magicCompare = 1;
+    dm.set(kFlagMagic, true); dm.magicAmount = 70.0f; dm.magicCompare = 1; dm.magicCharacter = 2; dm.magicContent = 3;
     ParamData rm{};
     CHECK(loadParamBytes(reinterpret_cast<const char*>(&dm), sizeof(dm), kParamLayoutVersion, sizeof(dm), rm) &&
-              rm.has(kFlagMagic) && rm.magicAmount == 70.0f && rm.magicCompare == 0,
-          "Magic Touch beállítás mentve (70 %%), az A/B nem marad bekapcsolva");
+              rm.has(kFlagMagic) && rm.magicAmount == 70.0f && rm.magicCompare == 0 && rm.magicCharacter == 2 &&
+              rm.magicContent == 3,
+          "Magic Touch beállítás mentve (70 %%, Fényes, Archív), az A/B nem marad bekapcsolva");
+    // v5 (Karakter és Tartalom előtti) fájl: a Magic Touch beállítása megmarad, a két választó alapértéket kap
+    ParamData r5{};
+    CHECK(loadParamBytes(reinterpret_cast<const char*>(&dm), kParamSizeV5, 5, static_cast<uint32_t>(kParamSizeV5), r5) &&
+              r5.has(kFlagMagic) && r5.magicAmount == 70.0f && r5.magicCharacter == 0 && r5.magicContent == 0,
+          "v5 paraméterfájl átvétele (Karakter: Természetes, Tartalom: Automatikus)");
+    // Tartományon kívüli választó: a megengedett tartományba kerül
+    ParamData dx = d;
+    dx.magicCharacter = 9; dx.magicContent = -4;
+    ParamData rx{};
+    CHECK(loadParamBytes(reinterpret_cast<const char*>(&dx), sizeof(dx), kParamLayoutVersion, sizeof(dx), rx) &&
+              rx.magicCharacter == 3 && rx.magicContent == 0,
+          "hibás Karakter / Tartalom érték a tartományba vágva");
 
     // v3: a régi RBJ sávok "APO (DR)" módú EasyEffects sávokká válnak
     legacy::ParamDataV3 o{};

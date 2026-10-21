@@ -3242,8 +3242,9 @@ function buildControls(containerId, specs, onChange) {
               `<input type="range" id="sl-${sp.id}" class="param-slider" min="${smin}" max="${smax}" step="${sp.step}">` +
               `<input type="number" id="in-${sp.id}" class="ee-input" style="width:82px;" min="${sp.min}" max="${sp.max}" step="${sp.step}"></div>`;
     } else if (sp.kind === "select") {
+      // optKeys: az opciók fordítási kulcsok (nyelvváltáskor a setCtl frissíti a feliratukat)
       html += `<select id="in-${sp.id}" class="ee-select" style="margin-top:4px;">` +
-              sp.options.map((o, i) => `<option value="${i}">${o}</option>`).join("") + `</select>`;
+              sp.options.map((o, i) => `<option value="${i}">${sp.optKeys ? t(o) : o}</option>`).join("") + `</select>`;
     } else {
       html += `<button class="adw-btn" id="in-${sp.id}" style="margin-top:4px; width:fit-content;">${t("mod.btnOff")}</button>`;
     }
@@ -3287,6 +3288,7 @@ function setCtl(id, v, fromInput) {
     if (sl) sl.value = v;
     if (inp && !fromInput) inp.value = (+v).toFixed(sp.dec !== undefined ? sp.dec : (sp.step >= 1 ? 0 : sp.step >= 0.1 ? 1 : 2));
   } else if (sp.kind === "select") {
+    if (inp && sp.optKeys) [...inp.options].forEach((o, i) => { o.textContent = t(sp.options[i]); });
     if (inp) inp.value = String(v);
   } else if (inp) {
     inp.className = v ? "adw-btn primary active" : "adw-btn";
@@ -3358,10 +3360,15 @@ setCtl("bassFloorActive", false);
 // --- Magic Touch (automatikus hangszépítő; docs/plans/magic-touch.md)
 buildControls("magicControls", [
   { id: "magicAmount", kind: "num", label: "ctl.magicAmount", min: 0, max: 100, step: 1, unit: "%", def: 50, hint: "ctl.magicAmountHint" },
+  { id: "magicCharacter", kind: "select", label: "ctl.magicCharacter", optKeys: true, def: 0,
+    options: ["mt.charNatural", "mt.charWarm", "mt.charBright", "mt.charSpacious"] },
+  { id: "magicContent", kind: "select", label: "ctl.magicContent", optKeys: true, def: 0,
+    options: ["mt.contentAuto", "mt.contentMusic", "mt.contentSpeech", "mt.contentArchive"] },
 ], () => sendMagic());
 
 function sendMagic() {
-  sendEngine({ type: "set_magic", amount: getCtl("magicAmount"), compare: magicCompare ? 1 : 0 });
+  sendEngine({ type: "set_magic", amount: getCtl("magicAmount"), compare: magicCompare ? 1 : 0,
+               character: getCtl("magicCharacter"), content: getCtl("magicContent") });
 }
 function toggleMagicCompare() {
   magicCompare = !magicCompare;
@@ -3400,6 +3407,16 @@ function updateMagicDiag(m) {
     ["mt.rowWidth", t("mt.valWidth", { sm: m.sideMid <= -99 ? "–" : sg(m.sideMid, 1), w: sg(m.width, 1) })],
     ["mt.rowMakeup", sg(m.makeup, 1) + " dB"],
   ];
+  // 3–4. ütem (régebbi motornál ezek a mezők hiányoznak)
+  if (typeof m.content === "number") {
+    const prof = ["mt.profMusic", "mt.profDense", "mt.profDynamic", "mt.profSpeech", "mt.profArchive"][m.content] || "mt.profMusic";
+    rows.splice(1, 0, ["mt.rowContent", t("mt.valContent", { name: t(prof), mode: t(m.contentAuto ? "mt.modeAuto" : "mt.modeManual"),
+                                                             sp: pc(m.speech), bw: fmtNum(m.bw / 1000, 1) })]);
+    rows.splice(rows.length - 1, 0,
+      ["mt.rowMicro", t("mt.valMicro", { t: sg(m.trans, 1), tn: sg(m.transNow, 1), u: sg(m.up, 1), un: sg(m.upNow, 1) })],
+      ["mt.rowExciter", t("mt.valExciter", { ex: fmtNum(m.exciter * 100, 1), wm: fmtNum(m.warmth * 100, 1), body: sg(m.body, 1) })],
+      ["mt.rowSpeech", t("mt.valSpeech", { lc: pc(m.lowCut), pr: sg(m.presence, 1), lvl: sg(m.level, 1) })]);
+  }
   table.innerHTML = "";
   rows.forEach(([k, v]) => {
     const tr = document.createElement("tr");
@@ -3530,6 +3547,8 @@ function applyEngineState(st) {
       const mods = st.modules || {};
       if (st.magic) {
         setCtl("magicAmount", st.magic.amount);
+        if (typeof st.magic.character === "number") setCtl("magicCharacter", st.magic.character);
+        if (typeof st.magic.content === "number") setCtl("magicContent", st.magic.content);
         magicCompare = !!st.magic.compare;
       }
       ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'magic'].forEach(m => {

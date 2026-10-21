@@ -1,12 +1,16 @@
 #pragma once
 /**
  * @file magic_touch.hpp
- * @brief Magic Touch: automatikus, visszafogott hangszépítő (docs/plans/magic-touch.md, 1–2. ütem).
+ * @brief Magic Touch: automatikus, visszafogott hangszépítő (docs/plans/magic-touch.md, 1–4. ütem).
  *
  * Hangút (valós idejű szál, késleltetés nélkül, csak IIR szűrők és burkolók):
  *
- *   bemenet -> mély-közép vágás (150–300 Hz, csúcsszűrő) -> levegő (high shelf, 10,5 kHz)
- *           -> de-esser (dinamikus csillapítás 5 kHz felett) -> hangerő-kiegyenlítés
+ *   bemenet -> beszéd: mélyvágás 80 Hz alatt -> mély-közép vágás (150–300 Hz, csúcsszűrő)
+ *           -> Meleg karakter: mély polc (150 Hz) -> beszéd: jelenlét (2,2 kHz) -> levegő (high shelf, 10,5 kHz)
+ *           -> de-esser (dinamikus csillapítás 5 kHz felett)
+ *           -> exciter (páros felharmonikusok: 3–9 kHz -> 6 kHz felett; Meleg: 120–600 Hz -> 200 Hz felett)
+ *           -> mikrodinamika (tranziens-kiemelés, a halk részek finom emelése; a csúcsot nem viszi −1 dBFS fölé)
+ *           -> hangerő-kiegyenlítés (beszédnél a szintkiegyenlítéssel együtt)
  *           -> oldaljel (S): fokozatos mono basszus (két mély polcszűrő) + tágítás 150 Hz felett (magas polc);
  *              a középjel (M) érintetlen, 0 dB-es polcoknál az oldaljel is -> kimenet
  *
@@ -14,10 +18,12 @@
  * mély eltávolítása) után nem emeli vissza a szintet.
  *
  * Elemzés (a lánc háttérszálán): rövid idejű hangosság és LRA (ITU-R BS.1770, EBU Tech 3342),
- * csúcstényező, 1/3 oktávos átlagspektrum (mély-közép többlet, élesség, levegő arány), sziszegés,
- * zajpadló (sziszegés), mély sávi sztereó korreláció, szélesség (S/M 150 Hz felett).
+ * csúcstényező, 1/3 oktávos átlagspektrum (mély-közép többlet, élesség, levegő arány, sávszélesség),
+ * sziszegés, zajpadló (sziszegés), mély sávi sztereó korreláció, szélesség (S/M 150 Hz felett),
+ * tartalom (beszéd: halk keretek aránya, 4 Hz körüli moduláció, kevés mély; archív: letört sávszélesség).
  * A döntések szabályrendszerből jönnek (nem egyetlen összegzett számból), lassan változnak,
- * és a kemény korlátokon belül maradnak. A kimenet hangossága a bemenetével egyezik.
+ * és a kemény korlátokon belül maradnak. A Karakter és a felismert tartalom a szabályok súlyait
+ * állítja. A kimenet hangossága a bemenetével egyezik (beszédnél a hosszú távú átlaga).
  *
  * Az A/B összehasonlításnál az eredeti jel szól (rövid áttűnéssel); mivel a feldolgozott jel
  * hangossága a bemenetével egyezik, a két állapot hangerőre kiegyenlített.
@@ -40,16 +46,58 @@ namespace ee_analyzer::magic {
 
 // ------------------------------------------------------------------ kemény korlátok (100 %-on is)
 constexpr float kMaxLowMidCutDb = 3.0f;    // mély-közép vágás
-constexpr float kMaxAirDb = 2.0f;          // levegő emelés (a terv: legfeljebb +2–3 dB)
+constexpr float kMaxAirDb = 2.5f;          // levegő emelés (a terv: legfeljebb +2–3 dB; a Fényes karakternél)
 constexpr float kMaxDeessDb = 4.0f;        // de-esser csillapítás
 constexpr float kMaxWidthDb = 1.5f;        // oldaljel emelés 150 Hz felett
 constexpr float kMaxMakeupDb = 4.0f;       // hangerő-kiegyenlítés
+constexpr float kMaxTransientDb = 1.2f;    // tranziens-kiemelés (+15 %: 20·log10(1,15) ≈ 1,2 dB)
+constexpr float kMaxUpwardDb = 2.0f;       // a halk részek emelése
+constexpr float kMaxExciterMix = 0.12f;    // exciter keverés (a terv: legfeljebb 10–15 %)
+constexpr float kMaxWarmthMix = 0.08f;     // meleg felharmonikusok keverése (Meleg karakter)
+constexpr float kMaxBodyDb = 2.0f;         // Meleg karakter: mély polc 150 Hz
+constexpr float kMaxPresenceDb = 1.5f;     // beszéd: jelenlét 2,2 kHz (élességnél nincs)
+constexpr float kMaxLevelDb = 6.0f;        // beszéd szintkiegyenlítés
+constexpr float kPeakCeiling = 0.891f;     // −1 dBFS: a mikrodinamika a csúcsot ennél nem viszi feljebb
 constexpr double kCrossoverHz = 120.0;     // a mély sáv határa a mérésnél (korreláció)
 // Fokozatos mono basszus: két egyforma mély polcszűrő az oldaljelen (75 Hz, teljes erővel 2 × −12 dB):
 // 50 Hz alatt kb. −20 dB (közel mono), 80 Hz −11 dB, 120 Hz −4 dB, 150 Hz −2 dB, 200 Hz felett < 1 dB
 constexpr double kMonoShelfHz = 75.0;
 constexpr float kMonoShelfDb = 12.0f;
 constexpr double kWidthShelfHz = 200.0;    // a tágítás 150 Hz felett hat
+
+/** Karakter (a felhasználó ízlése; a Harman-vizsgálatban sem volt egyetlen görbe mindenkinek jó). */
+enum Character : int32_t { kCharNatural = 0, kCharWarm = 1, kCharBright = 2, kCharSpacious = 3 };
+/** Tartalom választó (0: automatikus felismerés). */
+enum ContentSel : int32_t { kContentAuto = 0, kContentMusic = 1, kContentSpeech = 2, kContentArchive = 3 };
+/** A használt profil (a diagnosztikában is). */
+enum Profile : uint32_t { kProfMusic = 0, kProfMusicDense = 1, kProfMusicDynamic = 2, kProfSpeech = 3, kProfArchive = 4 };
+
+/** A szabályok súlyai tartalmi profilonként (docs/plans/magic-touch.md, „Tartalmi profilok”). */
+struct ProfileWeights { float lowMid, air, exciter, transient, upward, width, warmth; bool speech; };
+inline const ProfileWeights& profileWeights(uint32_t p) {
+    static const ProfileWeights w[5] = {
+        //  mély-k. levegő exciter tranz. emelés tágítás meleg  beszéd
+        { 1.0f, 1.0f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, false },   // zene
+        { 1.0f, 1.0f, 0.3f, 0.6f, 1.0f, 1.0f, 0.5f, false },   // túltömörített zene: nincs erős exciter, visszafogott tranziens
+        { 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.5f, false },   // akusztikus / élő: minimális beavatkozás
+        { 1.0f, 0.3f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, true  },   // beszéd: érthetőség, stabil szint
+        { 1.0f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, false },   // archív: sávszélesség és élet, zajkiemelés nélkül
+    };
+    return w[std::min<uint32_t>(p, 4)];
+}
+
+/** A Karakter hatása a szabályokra (minden a kemény korlátokon belül). */
+struct CharacterWeights { float airMax, airThr, airTilt, exciterBias, warmth, bodyDb, lowMid, widthThr, widthSlope; };
+inline const CharacterWeights& characterWeights(int32_t c) {
+    static const CharacterWeights w[4] = {
+        // levegő: max, küszöb, dőlés; exciter, meleg, mély polc, mély-k., tágítás: küszöb, meredekség
+        { 2.0f,  -8.0f,  0.0f, 0.0f, 0.0f, 0.0f,       1.0f, -14.0f, 0.15f },   // Természetes
+        { 1.0f, -10.0f, -1.0f, 0.0f, 1.0f, kMaxBodyDb, 0.6f, -14.0f, 0.15f },   // Meleg
+        { 2.5f,  -2.0f,  0.0f, 0.4f, 0.0f, 0.0f,       1.0f, -14.0f, 0.15f },   // Fényes
+        { 2.0f,  -8.0f,  0.0f, 0.0f, 0.0f, 0.0f,       1.0f,  -8.0f, 0.25f },   // Tágas
+    };
+    return w[std::clamp(c, 0, 3)];
+}
 
 // ------------------------------------------------------------------ szűrők
 struct Biquad {
@@ -149,6 +197,21 @@ struct MagicDiag {
     float monoBass = 0;          // 0..1
     float widthGainDb = 0;
     float makeupDb = 0;
+    // 3–4. ütem
+    uint32_t content = kProfMusic; // a használt profil (Profile)
+    uint32_t contentAuto = 1;      // 1: automatikus felismerés
+    float speechScore = 0;         // 0..1 (beszéd-jelleg)
+    float bandwidthHz = 20000;     // a spektrum letörése (archív felvétel jele)
+    float transientDb = 0;         // a tranziens-kiemelés legnagyobb megengedett értéke
+    float transientNowDb = 0;      // pillanatnyi (az utolsó időszak legnagyobbja)
+    float upwardDb = 0;            // a halk részek emelésének legnagyobb megengedett értéke
+    float upwardNowDb = 0;
+    float exciterMix = 0;          // 0..1
+    float warmthMix = 0;           // 0..1
+    float bodyDb = 0;              // Meleg karakter: mély polc
+    float presenceDb = 0;          // beszéd: jelenlét
+    float lowCut = 0;              // beszéd: mélyvágás (0..1)
+    float levelDb = 0;             // beszéd szintkiegyenlítés
 };
 
 /** Seqlock a diagnosztikához (POD; folyamatok közötti közös memóriában is használható). */
@@ -177,14 +240,19 @@ struct DiagBlock {
 
 /** A diagnosztika JSON töredékként (a motor állapotüzenetébe: "magic":{...}). */
 inline std::string diagToJson(const MagicDiag& d) {
-    char b[640];
+    char b[1024];
     std::snprintf(b, sizeof(b),
                   "{\"valid\":%u,\"silent\":%u,\"lufs\":%.1f,\"lra\":%.1f,\"crest\":%.1f,\"lowMid\":%.2f,\"lowMidHz\":%.0f,"
                   "\"harsh\":%.2f,\"sib\":%.2f,\"air\":%.1f,\"hiss\":%.2f,\"lfCorr\":%.2f,\"sideMid\":%.1f,"
-                  "\"cut\":%.2f,\"airGain\":%.2f,\"deess\":%.2f,\"deessNow\":%.2f,\"mono\":%.2f,\"width\":%.2f,\"makeup\":%.2f}",
+                  "\"cut\":%.2f,\"airGain\":%.2f,\"deess\":%.2f,\"deessNow\":%.2f,\"mono\":%.2f,\"width\":%.2f,\"makeup\":%.2f,"
+                  "\"content\":%u,\"contentAuto\":%u,\"speech\":%.2f,\"bw\":%.0f,\"trans\":%.2f,\"transNow\":%.2f,"
+                  "\"up\":%.2f,\"upNow\":%.2f,\"exciter\":%.3f,\"warmth\":%.3f,\"body\":%.2f,\"presence\":%.2f,"
+                  "\"lowCut\":%.2f,\"level\":%.2f}",
                   d.valid, d.silent, d.lufsShort, d.lra, d.crestDb, d.lowMidExcessDb, d.lowMidFreqHz, d.harshness, d.sibilance,
                   d.airRatioDb, d.hiss, d.lfCorr, d.sideMidDb, d.lowMidCutDb, d.airGainDb, d.deessDepthDb, d.deessNowDb,
-                  d.monoBass, d.widthGainDb, d.makeupDb);
+                  d.monoBass, d.widthGainDb, d.makeupDb, d.content, d.contentAuto, d.speechScore, d.bandwidthHz,
+                  d.transientDb, d.transientNowDb, d.upwardDb, d.upwardNowDb, d.exciterMix, d.warmthMix, d.bodyDb,
+                  d.presenceDb, d.lowCut, d.levelDb);
     return b;
 }
 
@@ -271,6 +339,24 @@ public:
         for (int c = 0; c < 2; ++c) designHighpass(deessHp_[c], fs, std::min(5000.0, 0.4 * fs), std::sqrt(0.5));
         designHighpass(scHp_, fs, std::min(4500.0, 0.4 * fs), std::sqrt(0.5));
         airEnabled_ = fs >= 32000;
+        for (int c = 0; c < 2; ++c) {
+            designHighpass(lowCut_[c], fs, 80.0, std::sqrt(0.5));
+            // exciter: a 3–9 kHz sáv páros felharmonikusai 6 kHz felett (a 3–5 kHz-et nem emeli)
+            designHighpass(exHp_[c], fs, std::min(3000.0, 0.2 * fs), std::sqrt(0.5));
+            designLowpass(exLp_[c], fs, std::min(9000.0, 0.2 * fs), std::sqrt(0.5));
+            designHighpass(exPost_[c], fs, std::min(6000.0, 0.3 * fs), std::sqrt(0.5));
+            // meleg felharmonikusok: a 120–600 Hz sávból, 200 Hz felett
+            designHighpass(wmHp_[c], fs, 120.0, std::sqrt(0.5));
+            designLowpass(wmLp_[c], fs, 600.0, std::sqrt(0.5));
+            designHighpass(wmPost_[c], fs, 200.0, std::sqrt(0.5));
+        }
+        exEnabled_ = fs >= 32000;
+        exCoef_ = static_cast<float>(1.0 - std::exp(-1.0 / (0.005 * fs)));                             // 5 ms
+        wmCoef_ = static_cast<float>(1.0 - std::exp(-1.0 / (0.020 * fs)));                             // 20 ms
+        tfCoef_ = static_cast<float>(1.0 - std::exp(-1.0 / (0.002 * fs)));                             // 2 ms
+        tsCoef_ = static_cast<float>(1.0 - std::exp(-1.0 / (0.040 * fs)));                             // 40 ms
+        upAtt_ = static_cast<float>(1.0 - std::exp(-1.0 / (0.005 * fs)));                              // 5 ms
+        upRel_ = static_cast<float>(1.0 - std::exp(-1.0 / (0.150 * fs)));                              // 150 ms
         subCoef_ = static_cast<float>(1.0 - std::exp(-static_cast<double>(kSub) / (0.05 * fs)));     // 50 ms simítás
         scCoef_ = static_cast<float>(1.0 - std::exp(-1.0 / (0.003 * fs)));                            // 3 ms energia
         grAtt_ = static_cast<float>(1.0 - std::exp(-static_cast<double>(kSub) / (0.002 * fs)));      // 2 ms
@@ -283,19 +369,29 @@ public:
     }
 
     /** Vezérlés (a lánc paraméterváltásakor, valós idejű szálról is hívható). */
-    void setControl(float amountPct, bool compare, bool crossfeedOn) {
+    void setControl(float amountPct, bool compare, bool crossfeedOn, int32_t character = kCharNatural,
+                    int32_t content = kContentAuto) {
         amount_.store(std::clamp(amountPct, 0.0f, 100.0f) / 100.0f, std::memory_order_relaxed);
         compare_ = compare;
         crossfeed_.store(crossfeedOn, std::memory_order_relaxed);
+        character_.store(std::clamp(character, 0, 3), std::memory_order_relaxed);
+        content_.store(std::clamp(content, 0, 3), std::memory_order_relaxed);
     }
 
     /** Belső állapot törlése (bekapcsoláskor, hogy ne régi állapotból induljon). */
     void reset() {
-        for (int c = 0; c < 2; ++c) { lowMid_[c].reset(); air_[c].reset(); deessHp_[c].reset(); sMono_[c].reset(); }
+        for (int c = 0; c < 2; ++c) {
+            lowMid_[c].reset(); air_[c].reset(); deessHp_[c].reset(); sMono_[c].reset();
+            lowCut_[c].reset(); body_[c].reset(); pres_[c].reset();
+            exHp_[c].reset(); exLp_[c].reset(); exPost_[c].reset(); wmHp_[c].reset(); wmLp_[c].reset(); wmPost_[c].reset();
+            exEnv_[c] = wmEnv_[c] = 0.0f;
+        }
         sWide_.reset();
         scHp_.reset();
         eSc_ = eBb_ = 0.0f;
         gr_ = 0.0f;
+        tFast_ = tSlow_ = upEnv_ = 0.0f;
+        microG_ = 1.0f;
         cmpMix_ = compare_ ? 1.0f : 0.0f;
     }
 
@@ -306,17 +402,37 @@ public:
         std::memcpy(dryL_.data(), L, n * sizeof(float));
         std::memcpy(dryR_.data(), R, n * sizeof(float));
 
-        float grMax = 0.0f;
+        float grMax = 0.0f, tMax = 0.0f, uMax = 0.0f;
         for (size_t off = 0; off < n; off += kSub) {
             const size_t m = std::min(kSub, n - off);
             stepParams();
             float* l = L + off;
             float* r = R + off;
-            // 1. mély-közép vágás és 2. levegő (0 dB-nél nem futnak: a jel érintetlen)
+            // 0. beszéd: mélyvágás 80 Hz alatt (áttűnéssel be és ki)
+            if (lowCutActive_) {
+                const float w = cur_.lowCut;
+                for (size_t i = 0; i < m; ++i) {
+                    l[i] += w * (lowCut_[0].process(l[i]) - l[i]);
+                    r[i] += w * (lowCut_[1].process(r[i]) - r[i]);
+                }
+            }
+            // 1. mély-közép vágás, Meleg: mély polc, beszéd: jelenlét, 2. levegő (0 dB-nél nem futnak: a jel érintetlen)
             if (lowMidActive_) {
                 for (size_t i = 0; i < m; ++i) {
                     l[i] = lowMid_[0].process(l[i]);
                     r[i] = lowMid_[1].process(r[i]);
+                }
+            }
+            if (bodyActive_) {
+                for (size_t i = 0; i < m; ++i) {
+                    l[i] = body_[0].process(l[i]);
+                    r[i] = body_[1].process(r[i]);
+                }
+            }
+            if (presActive_) {
+                for (size_t i = 0; i < m; ++i) {
+                    l[i] = pres_[0].process(l[i]);
+                    r[i] = pres_[1].process(r[i]);
                 }
             }
             if (airActive_) {
@@ -346,12 +462,22 @@ public:
                 l[i] += g1 * hl;
                 r[i] += g1 * hr;
             }
+            // 4. exciter: páros felharmonikusok (h = sáv² / sáv RMS: a szinttel arányos, mint egy lágy telítés
+            //    második felharmonikusa), csak a felharmonikusok sávjában keverve
+            if (exActive_) exciter(l, r, m, exHp_, exLp_, exPost_, exEnv_, exCoef_, cur_.exMix);
+            if (warmActive_) exciter(l, r, m, wmHp_, wmLp_, wmPost_, wmEnv_, wmCoef_, cur_.warmMix);
+            // 5. mikrodinamika
+            if (microActive_) microDynamics(l, r, m, tMax, uMax);
         }
         post_.write(L, R, static_cast<uint32_t>(n));   // a hangerő-kiegyenlítés előtti jel (az elemzésnek)
-        deessNow_.store(grMax, std::memory_order_relaxed);
+        // pillanatnyi értékek: a legnagyobb a legutóbbi közlés óta (az elemzés nullázza)
+        storeMax(deessNow_, grMax);
+        storeMax(transNow_, tMax);
+        storeMax(upNow_, uMax);
 
-        // 4. hangerő-kiegyenlítés
-        const float mkTarget = std::pow(10.0f, tgt_.makeupDb.load(std::memory_order_relaxed) / 20.0f);
+        // 6. hangerő-kiegyenlítés (beszédnél a szintkiegyenlítéssel együtt)
+        const float mkTarget = std::pow(10.0f, (tgt_.makeupDb.load(std::memory_order_relaxed) +
+                                                tgt_.levelDb.load(std::memory_order_relaxed)) / 20.0f);
         if (mk_ != 1.0f || mkTarget != 1.0f) {
             for (size_t i = 0; i < n; ++i) {
                 mk_ += 0.0005f * (mkTarget - mk_);
@@ -359,7 +485,7 @@ public:
                 R[i] *= mk_;
             }
         }
-        // 5. Oldaljel (S): fokozatos mono basszus és tágítás. A középjel (M) nem változik, és 0 dB-es
+        // 7. Oldaljel (S): fokozatos mono basszus és tágítás. A középjel (M) nem változik, és 0 dB-es
         //    polcoknál az oldaljel sem: a rendben lévő felvétel fázisa és csúcsai érintetlenek maradnak
         if (msActive_) {
             for (size_t i = 0; i < n; ++i) {
@@ -369,7 +495,7 @@ public:
                 R[i] = mid - side;
             }
         }
-        // 6. A/B áttűnés
+        // 8. A/B áttűnés
         const float cmpTarget = compare_ ? 1.0f : 0.0f;
         if (cmpMix_ != 0.0f || cmpTarget != 0.0f) {
             for (size_t i = 0; i < n; ++i) {
@@ -408,11 +534,67 @@ public:
 private:
     struct Smoothed {
         float mono = 0, widthDb = 0, lowMidDb = 0, lowMidHz = 200, airDb = 0, deessDepth = 0, deessThresh = 0;
+        float lowCut = 0, bodyDb = 0, presDb = 0, exMix = 0, warmMix = 0, transDb = 0, upDb = 0, refDb = -20;
     };
     struct Targets {
         std::atomic<float> mono{0}, widthDb{0}, lowMidDb{0}, lowMidHz{200}, airDb{0}, deessDepth{0}, deessThresh{-6},
                            makeupDb{0};
+        std::atomic<float> lowCut{0}, bodyDb{0}, presDb{0}, exMix{0}, warmMix{0}, transDb{0}, upDb{0}, refDb{-20}, levelDb{0};
     };
+
+    static void storeMax(std::atomic<float>& a, float v) {
+        if (v > a.load(std::memory_order_relaxed)) a.store(v, std::memory_order_relaxed);
+    }
+
+    /** Páros felharmonikus-keltő: sáv (HP+LP) -> sáv² / RMS -> HP (az egyenszint és a különbségi hangok nélkül). */
+    static void exciter(float* l, float* r, size_t m, Biquad* hp, Biquad* lp, Biquad* post, float* env, float coef, float mix) {
+        float* ch[2] = { l, r };
+        for (int c = 0; c < 2; ++c) {
+            float* x = ch[c];
+            float e = env[c];
+            for (size_t i = 0; i < m; ++i) {
+                const float b = lp[c].process(hp[c].process(x[i]));
+                e += coef * (b * b - e);
+                const float h = post[c].process(b * b / std::sqrt(e + 1e-12f));
+                x[i] += mix * h;
+            }
+            env[c] = e;
+        }
+    }
+
+    /**
+     * Mikrodinamika (sztereó csatolt, a 32 mintás alblokkon belül lineárisan változó erősítés):
+     * - tranziens-kiemelés: a gyors (2 ms) és a lassú (40 ms) teljesítmény-burkoló aránya (3 dB felett);
+     * - a halk részek emelése: a 3 s-os szinthez képest 18 dB-lel halkabb részeken, a csend és a zajpadló kivételével.
+     * A csúcs nem kerül −1 dBFS fölé (ha a bemenetben sem volt ott), így nincs klippelés.
+     */
+    void microDynamics(float* l, float* r, size_t m, float& tMax, float& uMax) {
+        float tDb = 0.0f, uDb = 0.0f;
+        if (cur_.transDb > 0.0f && tSlow_ > 1e-12f) {
+            const float ratioDb = 10.0f * std::log10((tFast_ + 1e-12f) / tSlow_);
+            tDb = std::clamp((ratioDb - 3.0f) * 0.4f, 0.0f, cur_.transDb);
+        }
+        if (cur_.upDb > 0.0f && upEnv_ > 1e-12f) {
+            const float e = 10.0f * std::log10(upEnv_);
+            uDb = std::clamp((cur_.refDb - 18.0f - e) * 0.25f, 0.0f, cur_.upDb) *
+                  std::clamp((e - (cur_.refDb - 50.0f)) / 5.0f, 0.0f, 1.0f);
+        }
+        tMax = std::max(tMax, tDb);
+        uMax = std::max(uMax, uDb);
+        const float g0 = microG_, g1 = std::pow(10.0f, (tDb + uDb) / 20.0f), step = (g1 - g0) / static_cast<float>(m);
+        for (size_t i = 0; i < m; ++i) {
+            const float p = 0.5f * (l[i] * l[i] + r[i] * r[i]);
+            tFast_ += tfCoef_ * (p - tFast_);
+            tSlow_ += tsCoef_ * (p - tSlow_);
+            upEnv_ += (p > upEnv_ ? upAtt_ : upRel_) * (p - upEnv_);
+            float g = g0 + step * static_cast<float>(i + 1);
+            const float pk = std::max(std::fabs(l[i]), std::fabs(r[i]));
+            if (g > 1.0f && pk * g > kPeakCeiling) g = std::max(1.0f, kPeakCeiling / pk);
+            l[i] *= g;
+            r[i] *= g;
+        }
+        microG_ = g1;
+    }
 
     void stepParams() {
         const float k = subCoef_;
@@ -425,11 +607,33 @@ private:
         cur_.airDb += k * (aDb - cur_.airDb);
         cur_.deessDepth += k * (tgt_.deessDepth.load(std::memory_order_relaxed) - cur_.deessDepth);
         cur_.deessThresh = tgt_.deessThresh.load(std::memory_order_relaxed);
+        cur_.lowCut += k * (tgt_.lowCut.load(std::memory_order_relaxed) - cur_.lowCut);
+        cur_.bodyDb += k * (tgt_.bodyDb.load(std::memory_order_relaxed) - cur_.bodyDb);
+        cur_.presDb += k * (tgt_.presDb.load(std::memory_order_relaxed) - cur_.presDb);
+        cur_.exMix += k * (tgt_.exMix.load(std::memory_order_relaxed) - cur_.exMix);
+        cur_.warmMix += k * (tgt_.warmMix.load(std::memory_order_relaxed) - cur_.warmMix);
+        cur_.transDb += k * (tgt_.transDb.load(std::memory_order_relaxed) - cur_.transDb);
+        cur_.upDb += k * (tgt_.upDb.load(std::memory_order_relaxed) - cur_.upDb);
+        cur_.refDb += k * (tgt_.refDb.load(std::memory_order_relaxed) - cur_.refDb);
+        // A fokozatok, amelyekhez nem kell új szűrő-együttható: csak akkor futnak, ha van mit tenniük
+        const bool lc = cur_.lowCut > 0.0005f;
+        if (lc && !lowCutActive_) { lowCut_[0].reset(); lowCut_[1].reset(); }
+        lowCutActive_ = lc;
+        const bool ex = exEnabled_ && cur_.exMix > 1e-4f;
+        if (ex && !exActive_) for (int c = 0; c < 2; ++c) { exHp_[c].reset(); exLp_[c].reset(); exPost_[c].reset(); exEnv_[c] = 0; }
+        exActive_ = ex;
+        const bool wm = cur_.warmMix > 1e-4f;
+        if (wm && !warmActive_) for (int c = 0; c < 2; ++c) { wmHp_[c].reset(); wmLp_[c].reset(); wmPost_[c].reset(); wmEnv_[c] = 0; }
+        warmActive_ = wm;
+        const bool md = cur_.transDb > 0.005f || cur_.upDb > 0.005f || microG_ != 1.0f;
+        if (md && !microActive_) { tFast_ = tSlow_ = upEnv_ = 0.0f; microG_ = 1.0f; }
+        microActive_ = md;
         // Új együtthatók, ha a simított érték érezhetően eltér a legutóbb beállítottól
         const Smoothed& a = applied_;
         if (coefDirty_ || std::fabs(cur_.lowMidDb - a.lowMidDb) > 0.01f || std::fabs(cur_.lowMidHz - a.lowMidHz) > 0.5f ||
             std::fabs(cur_.airDb - a.airDb) > 0.01f || std::fabs(cur_.mono - a.mono) > 0.001f ||
-            std::fabs(cur_.widthDb - a.widthDb) > 0.01f) {
+            std::fabs(cur_.widthDb - a.widthDb) > 0.01f || std::fabs(cur_.bodyDb - a.bodyDb) > 0.01f ||
+            std::fabs(cur_.presDb - a.presDb) > 0.01f) {
             updateCoefs();
         }
     }
@@ -441,6 +645,8 @@ private:
             designPeaking(lowMid_[c], fs_, cur_.lowMidHz, cur_.lowMidDb, 1.0);
             if (airEnabled_) designHighShelf(air_[c], fs_, 10500.0, cur_.airDb, 0.9);
             designLowShelf(sMono_[c], fs_, kMonoShelfHz, -kMonoShelfDb * cur_.mono, 1.0);
+            designLowShelf(body_[c], fs_, 150.0, cur_.bodyDb, 0.8);
+            designPeaking(pres_[c], fs_, 2200.0, cur_.presDb, 1.2);
         }
         designHighShelf(sWide_, fs_, kWidthShelfHz, cur_.widthDb, 0.9);
         // A fokozatok csak akkor futnak, ha van mit tenniük: különben a jel bitre érintetlen
@@ -451,9 +657,15 @@ private:
         const bool lm = std::fabs(cur_.lowMidDb) > 0.005f;
         if (lm && !lowMidActive_) { lowMid_[0].reset(); lowMid_[1].reset(); }
         lowMidActive_ = lm;
-        const bool air = airEnabled_ && cur_.airDb > 0.005f;
+        const bool air = airEnabled_ && std::fabs(cur_.airDb) > 0.005f;
         if (air && !airActive_) { air_[0].reset(); air_[1].reset(); }
         airActive_ = air;
+        const bool body = cur_.bodyDb > 0.005f;
+        if (body && !bodyActive_) { body_[0].reset(); body_[1].reset(); }
+        bodyActive_ = body;
+        const bool pres = cur_.presDb > 0.005f;
+        if (pres && !presActive_) { pres_[0].reset(); pres_[1].reset(); }
+        presActive_ = pres;
     }
 
     // --- elemzés ---
@@ -499,7 +711,12 @@ private:
             bandOk_[b] = hi < 0.5 * fs;
         }
         specAvg_.fill(0.0);
+        specFast_.fill(0.0);
         specFrames_ = 0;
+        envN_ = envPos_ = 0;
+        crestAvg_ = 0; crestN_ = 0;
+        lvlRefP_ = 0; lvlRefValid_ = false;
+        speechAvg_ = 0; group_ = kGroupMusic; pendingGroup_ = kGroupMusic; pendingSecs_ = 0; profile_ = kProfMusic;
         blocks_.clear(); stHist_.resize(600); hfHist_.resize(400); bbHist_.resize(400); sibHist_.resize(800);
         blkPos_ = hfPos_ = sibPos_ = 0;
         blk_ = Block{};
@@ -549,6 +766,10 @@ private:
             sibAcc_ += sb * sb; sibBb_ += mono * mono;
             if (++sibPos_ >= sibFrameLen_) {
                 const double eb = sibBb_ / static_cast<double>(sibFrameLen_);
+                // a tartalomfelismeréshez: a 10 ms-os keretek szintje (burkoló, 100 Hz)
+                envRing_[envPos_] = static_cast<float>(eb);
+                envPos_ = (envPos_ + 1) % kEnvLen;
+                envN_ = std::min(envN_ + 1, kEnvLen);
                 if (toDb(eb) > -55.0) sibHist_.push(toDb(sibAcc_ / static_cast<double>(sibFrameLen_)) - toDb(eb));
                 sibAcc_ = sibBb_ = 0; sibPos_ = 0;
             }
@@ -575,17 +796,22 @@ private:
         // ingadozzon a beavatkozás; új számnál (csend után) gyors indulás
         const double alpha = static_cast<double>(fftHop_) / (20.0 * static_cast<double>(aFs_));
         const double a = specFrames_ < 20 ? 1.0 / static_cast<double>(specFrames_ + 1) : alpha;
+        // a tartalomfelismeréshez rövidebb átlag (τ ≈ 4 s)
+        const double af = std::max(a, static_cast<double>(fftHop_) / (4.0 * static_cast<double>(aFs_)));
         for (int b = 0; b < kBands; ++b) {
             double p = 0;
             for (size_t k = bandLo_[b]; k <= bandHi_[b]; ++k) p += std::norm(fftWork_[k]);
             specAvg_[b] += a * (p - specAvg_[b]);
+            specFast_[b] += af * (p - specFast_[b]);
         }
         ++specFrames_;
     }
 
     struct Decision {
         float lowMid = 0, lowMidHz = 200, air = 0, deess = 0, deessThr = -6, mono = 0, width = 0, makeup = 0;
+        float lowCut = 0, body = 0, presence = 0, exciter = 0, warmth = 0, transient = 0, upward = 0, level = 0, refDb = -20;
     };
+    enum Group : uint32_t { kGroupMusic = 0, kGroupSpeech = 1, kGroupArchive = 2 };
 
     void endBlock(bool havePost) {
         ++blockCount_;
@@ -598,6 +824,7 @@ private:
         const double lPre = -0.691 + toDb(kPre / cnt), lPost = -0.691 + toDb(kPost / cnt);
         stHist_.push(lPre);
         dg_.lufsShort = static_cast<float>(lPre);
+        st_.refDb = static_cast<float>(toDb(raw / cnt));   // a mikrodinamika viszonyítási szintje (3 s, súlyozatlan)
         dg_.crestDb = static_cast<float>(20.0 * std::log10(std::max(peak, 1e-9) / std::sqrt(std::max(raw / cnt, 1e-18))));
         // mély sáv korreláció és szélesség (lassú átlag, csak ha van jel)
         const double ab = 0.02;   // ~5 s
@@ -631,11 +858,41 @@ private:
             const float want = std::clamp(static_cast<float>(lPre - lPost), -kMaxMakeupDb, kMaxMakeupDb);
             st_.makeup = slew(st_.makeup, want, 0.05f);   // 0,5 dB/s
         }
+        level(I, n, silent);
         publish();
+    }
+
+    /**
+     * Beszéd szintkiegyenlítés (EBU R128 szerinti mérés): a 3 s-os hangosság a felvétel hosszú távú (τ ≈ 50 s,
+     * kapuzott) átlagához igazodik, legfeljebb ±6 dB-lel és 1 dB/s sebességgel. A hosszú távú hangosság így
+     * nem változik (nem hangosít); szünetben a beállítás áll.
+     */
+    void level(float I, double n, bool silent) {
+        const bool speech = profileWeights(profile_).speech;
+        const double lBlk = -0.691 + toDb(blk_.kPre / n);
+        if (speech && !silent && lBlk > -50.0) {
+            const double refDb = lvlRefValid_ ? toDb(lvlRefP_) : lBlk;
+            if (lBlk > refDb - 20.0) {   // relatív kapu: a halk részek nem húzzák le az átlagot
+                const double p = std::pow(10.0, lBlk / 10.0);
+                if (!lvlRefValid_) { lvlRefP_ = p; lvlRefValid_ = true; }
+                lvlRefP_ += 0.002 * (p - lvlRefP_);
+            }
+        }
+        float want = 0.0f;
+        if (speech && lvlRefValid_) {
+            const double lShort = blocks_.empty() ? -70.0 : static_cast<double>(dg_.lufsShort);
+            if (silent || lShort < -50.0) want = st_.level;   // szünet: áll
+            else want = std::clamp(static_cast<float>(toDb(lvlRefP_) - lShort), -kMaxLevelDb, kMaxLevelDb) * I;
+        }
+        st_.level = slew(st_.level, want, 0.1f);   // 1 dB/s
     }
 
     void restartMeasurements() {
         specAvg_.fill(0.0);
+        specFast_.fill(0.0);
+        envN_ = envPos_ = 0;
+        crestN_ = 0;
+        pendingSecs_ = 0;   // a profil marad, amíg az új szám nem egyértelmű
         specFrames_ = 0;
         hfHist_.clear(); bbHist_.clear(); sibHist_.clear(); stHist_.clear();
         lfValid_ = whValid_ = false;
@@ -674,6 +931,109 @@ private:
             const double dynB = bbHist_.percentile(0.9, tmp_) - bbHist_.percentile(0.1, tmp_);
             dg_.hiss = static_cast<float>(std::clamp((dynB - dynH - 2.0) / 10.0, 0.0, 1.0));
         }
+        // csúcstényező: lassú átlag (≈ 10 s) a döntésekhez, csak jel közben
+        if (!dg_.silent) {
+            crestAvg_ = crestN_ == 0 ? dg_.crestDb : crestAvg_ + 0.1f * (dg_.crestDb - crestAvg_);
+            ++crestN_;
+        }
+        classifyContent();
+    }
+
+    /**
+     * Beszéd-jelleg (0..1) a 10 ms-os burkolóból és a rövid átlagspektrumból:
+     * - a halk keretek aránya (1 s-os szakaszonként az átlag felénél halkabb keretek; beszédben a szünetek miatt sok),
+     * - a burkoló 4 Hz körüli (2,5–6,5 Hz) modulációja (a szótagok üteme),
+     * - kevés mély (40–80 Hz) a 200 Hz–2 kHz sávhoz képest.
+     */
+    float speechFeatures() {
+        if (envN_ < 300) return -1.0f;   // legalább 3 s
+        const auto at = [&](size_t back) { return envRing_[(envPos_ + kEnvLen - 1 - back) % kEnvLen]; };
+        // halk keretek aránya (az utolsó legfeljebb 5 s, 1 s-os szakaszok, a csendes szakaszok nélkül)
+        double lowFrac = 0; int segs = 0;
+        for (size_t s0 = 0; s0 + 100 <= std::min<size_t>(envN_, 500); s0 += 100) {
+            double mean = 0;
+            for (size_t i = 0; i < 100; ++i) mean += std::sqrt(static_cast<double>(at(s0 + i)));
+            mean /= 100.0;
+            if (20.0 * std::log10(mean + 1e-12) < -50.0) continue;
+            int low = 0;
+            for (size_t i = 0; i < 100; ++i) if (std::sqrt(static_cast<double>(at(s0 + i))) < 0.5 * mean) ++low;
+            lowFrac += low / 100.0; ++segs;
+        }
+        if (segs == 0) return -1.0f;
+        lowFrac /= segs;
+        // a burkoló modulációs spektruma (az utolsó 2,56 s, Hann ablak)
+        constexpr size_t N = 256;
+        const size_t nn = std::min<size_t>(N, envN_);
+        double mean = 0;
+        for (size_t i = 0; i < nn; ++i) mean += std::sqrt(static_cast<double>(at(i)));
+        mean /= static_cast<double>(nn);
+        double e4 = 0, eAll = 0;
+        for (size_t k = 1; k <= 30; ++k) {   // 0,39 .. 11,7 Hz
+            std::complex<double> acc{};
+            for (size_t i = 0; i < nn; ++i) {
+                const double w = 0.5 - 0.5 * std::cos(2 * kPi * static_cast<double>(i) / static_cast<double>(nn - 1));
+                const double v = (std::sqrt(static_cast<double>(at(nn - 1 - i))) - mean) * w;
+                acc += v * std::polar(1.0, -2 * kPi * static_cast<double>(k * i) / static_cast<double>(nn));
+            }
+            const double f = static_cast<double>(k) * 100.0 / static_cast<double>(nn), p = std::norm(acc);
+            if (f >= 0.5) eAll += p;
+            if (f >= 2.5 && f <= 6.5) e4 += p;
+        }
+        const double mod4 = eAll > 0 ? e4 / eAll : 0.0;
+        // mély (40–80 Hz) a 200 Hz – 2 kHz sávokhoz képest (sávonkénti átlag)
+        double lf = 0, mid = 0;
+        for (int b = 3; b <= 6; ++b) lf += specFast_[b];
+        for (int b = 10; b <= 20; ++b) mid += specFast_[b];
+        const double lfRel = toDb(lf / 4.0) - toDb(mid / 11.0);
+        lowFrac_ = static_cast<float>(lowFrac); mod4_ = static_cast<float>(mod4); lfRel_ = static_cast<float>(lfRel);
+        const double s1 = std::clamp((lowFrac - 0.12) / 0.2, 0.0, 1.0);
+        const double s2 = std::clamp((mod4 - 0.2) / 0.25, 0.0, 1.0);
+        const double s3 = std::clamp((-lfRel - 12.0) / 12.0, 0.0, 1.0);
+        return static_cast<float>(0.4 * s1 + 0.3 * s2 + 0.3 * s3);
+    }
+
+    /**
+     * Tartalom: beszéd / zene / archív felvétel. Automatikus módban a profil csak akkor vált, ha az új tartalom
+     * 8 másodpercig egyértelmű; a zenei alprofil (túltömörített, akusztikus / élő) a csúcstényezőből és az LRA-ból jön.
+     */
+    void classifyContent() {
+        const float sc = speechFeatures();
+        if (sc >= 0.0f) speechAvg_ += 0.3f * (sc - speechAvg_);
+        dg_.speechScore = speechAvg_;
+        const int32_t sel = content_.load(std::memory_order_relaxed);
+        dg_.contentAuto = sel == kContentAuto ? 1u : 0u;
+        if (sel == kContentMusic) { group_ = kGroupMusic; pendingSecs_ = 0; }
+        else if (sel == kContentSpeech) { group_ = kGroupSpeech; pendingSecs_ = 0; }
+        else if (sel == kContentArchive) { group_ = kGroupArchive; pendingSecs_ = 0; }
+        else if (sc >= 0.0f && !dg_.silent && dg_.valid) {
+            // archív jel: 14,5 kHz alatt letört spektrum, vagy közel mono, zajos felvétel
+            const bool archive = dg_.bandwidthHz < 14500.0f || (dg_.sideMidDb < -35.0f && dg_.hiss > 0.5f);
+            int cand = -1;
+            if (speechAvg_ > 0.6f) cand = kGroupSpeech;
+            else if (speechAvg_ < 0.4f) cand = archive ? kGroupArchive : kGroupMusic;
+            if (cand >= 0) {
+                if (static_cast<uint32_t>(cand) == pendingGroup_) ++pendingSecs_;
+                else { pendingGroup_ = static_cast<uint32_t>(cand); pendingSecs_ = 1; }
+                if (pendingSecs_ >= 8) group_ = pendingGroup_;
+            } else {
+                pendingSecs_ = 0;
+            }
+        }
+        if (group_ == kGroupSpeech) profile_ = kProfSpeech;
+        else if (group_ == kGroupArchive) profile_ = kProfArchive;
+        else {
+            // zenei alprofil (hiszterézissel); az LRA-hoz legalább 10 s előzmény kell
+            const bool lraOk = stHist_.size() >= 100 && crestN_ >= 5;
+            const float c = crestAvg_, lra = dg_.lra;
+            uint32_t p = profile_ <= kProfMusicDynamic ? profile_ : kProfMusic;
+            if (!lraOk) { /* új szám: az előző alprofil marad, amíg nincs elég előzmény */ }
+            else if (p == kProfMusicDense) { if (c > 11.0f || lra > 6.0f) p = kProfMusic; }
+            else if (p == kProfMusicDynamic) { if (lra < 10.0f && (c < 14.0f || lra < 5.0f)) p = kProfMusic; }
+            else if (c < 10.0f && lra < 5.0f) p = kProfMusicDense;
+            else if ((c > 15.0f && lra > 6.0f) || lra > 12.0f) p = kProfMusicDynamic;
+            profile_ = p;
+        }
+        dg_.content = profile_;
     }
 
     /** Az átlagspektrumból: mély-közép többlet, élesség, levegő arány. */
@@ -690,6 +1050,16 @@ private:
         }
         if (cnt < 5) return;
         const double slope = (cnt * sxy - sx * sy) / std::max(1e-12, cnt * sxx - sx * sx), icpt = (sy - slope * sx) / cnt;
+        // sávszélesség: az első meredek letörés 5 kHz felett (≥ 12 dB egy harmad oktávon, a jel alá 30 dB-lel)
+        double ref = 0;
+        for (int b = 17; b <= 23; ++b) ref += db[b];
+        ref /= 7.0;
+        int top = 0;
+        for (int b = 24; b < kBands && bandOk_[b]; ++b) top = b;
+        int cut = top;
+        for (int b = 24; b < top; ++b)
+            if (db[b] - db[b + 1] >= 12.0 && db[b + 1] < ref - 30.0 && db[b] > ref - 45.0) { cut = b; break; }
+        dg_.bandwidthHz = static_cast<float>(top == 0 ? 0.0 : bandCenter(cut) * std::pow(2.0, 1.0 / 6.0));
         const auto res = [&](int b) { return db[b] - (icpt + slope * std::log2(bandCenter(b))); };
         // mély-közép (160, 200, 250 Hz sávok)
         double lm = 0, best = -1e9; int bestB = 10;
@@ -702,7 +1072,9 @@ private:
         hr /= 4.0;
         double curv = -1e9;
         const auto sm3 = [&](int b) { return (db[b - 1] + db[b] + db[b + 1]) / 3.0; };
-        for (int b = 21; b <= 24; ++b) curv = std::max(curv, sm3(b) - 0.5 * (sm3(b - 3) + sm3(b + 3)));
+        // (sávkorlátos felvételnél a letörés előtti lejtő miatt a görbület nem mérvadó: csak a trendvonal feletti rész számít)
+        if (cut > 28)
+            for (int b = 21; b <= 24; ++b) curv = std::max(curv, sm3(b) - 0.5 * (sm3(b - 3) + sm3(b + 3)));
         dg_.harshness = static_cast<float>(std::clamp((std::max(hr + 1.0, 0.0) + std::max(curv - 2.0, 0.0)) / 4.0, 0.0, 1.0));
         // levegő arány: 10–16 kHz a 2–8 kHz-hez képest
         double hi = 0, mid = 0;
@@ -717,15 +1089,43 @@ private:
 
     /** Szabályrendszer (100 ms-onként): minden modul a saját mérése alapján, korlátok között. */
     void decide(float I) {
+        const ProfileWeights& pw = profileWeights(profile_);
+        const CharacterWeights& cw = characterWeights(character_.load(std::memory_order_relaxed));
         // mély-közép többlet: csak a trendvonal fölötti rész, 1 dB felett
-        const float lowMid = -std::clamp((dg_.lowMidExcessDb - 1.0f) * 1.0f, 0.0f, kMaxLowMidCutDb) * I;
+        const float lowMid = -std::clamp((dg_.lowMidExcessDb - 1.0f) * 1.0f, 0.0f, kMaxLowMidCutDb) * pw.lowMid * cw.lowMid * I;
         st_.lowMid = slew(st_.lowMid, lowMid, 0.05f);   // 0,5 dB/s
         st_.lowMidHz = slew(st_.lowMidHz, dg_.lowMidFreqHz, 5.0f);
         // levegő: ha hiányzik, de nem zajos, nem éles, nem sziszegő és nem sávkorlátos a felvétel
         const bool bandLimited = dg_.airRatioDb < -35.0f;
-        float air = bandLimited ? 0.0f : std::clamp((-8.0f - dg_.airRatioDb) * 0.3f, 0.0f, kMaxAirDb);
-        air *= (1.0f - dg_.hiss) * (1.0f - 0.7f * dg_.harshness) * (1.0f - 0.5f * dg_.sibilance) * I;
+        float air = bandLimited ? 0.0f : std::clamp((cw.airThr - dg_.airRatioDb) * 0.3f, 0.0f, std::min(cw.airMax, kMaxAirDb));
+        air *= (1.0f - dg_.hiss) * (1.0f - 0.7f * dg_.harshness) * (1.0f - 0.5f * dg_.sibilance) * pw.air * I;
+        air += cw.airTilt * I;   // Meleg: a magas enyhe visszafogása
         st_.air = slew(st_.air, air, 0.05f);
+        // exciter: ahol a magas hiányzik (tompa vagy sávkorlátos felvétel), a 3–9 kHz sáv felharmonikusaival;
+        // zajnál, élességnél és sziszegésnél vissza (a susogást és az érdességet ne erősítse)
+        const float dull = bandLimited ? 1.0f : std::clamp((-10.0f - dg_.airRatioDb) / 10.0f, 0.0f, 1.0f);
+        const float ex = kMaxExciterMix * std::clamp(dull * pw.exciter + cw.exciterBias * (pw.exciter > 0.0f ? 1.0f : 0.0f), 0.0f, 1.0f) *
+                         (1.0f - dg_.hiss) * (1.0f - dg_.harshness) * (1.0f - 0.7f * dg_.sibilance) * I;
+        st_.exciter = slew(st_.exciter, ex, 0.005f);   // 5 %/s
+        // Meleg karakter: mély-közép felharmonikusok és mély polc, de nem a már dobozos felvételre
+        const float boxy = std::clamp(dg_.lowMidExcessDb / 3.0f, 0.0f, 1.0f);
+        const float warm = kMaxWarmthMix * cw.warmth * pw.warmth * (1.0f - boxy) * (1.0f - 0.5f * dg_.harshness) * I;
+        st_.warmth = slew(st_.warmth, warm, 0.005f);
+        st_.body = slew(st_.body, cw.bodyDb * (1.0f - boxy) * (pw.speech ? 0.0f : 1.0f) * I, 0.05f);
+        // mikrodinamika: lapos dinamikánál (alacsony csúcstényező, alacsony LRA) finom tranziens-kiemelés és a halk
+        // részek emelése; további kompresszió és limitálás nincs
+        const bool lraOk = stHist_.size() >= 100 && crestN_ >= 5;
+        const float lowCrest = lraOk ? std::clamp((12.0f - crestAvg_) / 4.0f, 0.0f, 1.0f) : 0.0f;
+        const float lowLra = lraOk ? std::clamp((6.0f - dg_.lra) / 4.0f, 0.0f, 1.0f) : 0.0f;
+        st_.transient = slew(st_.transient, kMaxTransientDb * lowCrest * (0.5f + 0.5f * lowLra) * pw.transient *
+                                                (1.0f - 0.5f * dg_.harshness) * I, 0.05f);
+        st_.upward = slew(st_.upward, kMaxUpwardDb * lowLra * (1.0f - dg_.hiss) * pw.upward * I, 0.05f);
+        // beszéd: mélyvágás 80 Hz alatt, enyhe jelenlét 2,2 kHz-en, ha nincs élesség és sziszegés
+        st_.lowCut = slew(st_.lowCut, pw.speech ? std::min(1.0f, 2.0f * I) : 0.0f, 0.05f);
+        const float pres = pw.speech ? kMaxPresenceDb * std::clamp(1.0f - dg_.harshness / 0.3f, 0.0f, 1.0f) *
+                                           std::clamp(1.0f - dg_.sibilance / 0.3f, 0.0f, 1.0f) * (1.0f - 0.5f * dg_.hiss) * I
+                                     : 0.0f;
+        st_.presence = slew(st_.presence, pres, 0.05f);
         // de-esser: csak a felvételre jellemzőnél jóval erősebb kitöréseket fogja vissza (a medián fölött
         // legalább 12 dB-lel és a 95. percentilis fölött), hogy a cintányérokat és a lábcint ne tompítsa
         const float deess = std::clamp(1.5f + 2.5f * dg_.sibilance + 0.5f * st_.air, 0.0f, kMaxDeessDb) * I;
@@ -738,8 +1138,8 @@ private:
         // tágítás 150 Hz felett: csak keskeny (de nem mono) keverésnél, és ha a Crossfeed nincs bekapcsolva
         dg_.sideMidDb = whValid_ ? static_cast<float>(toDb(whS_) - toDb(whM_)) : -100.0f;
         const bool cf = crossfeed_.load(std::memory_order_relaxed);
-        const float width = (cf || dg_.sideMidDb < -40.0f || dg_.sideMidDb > -14.0f)
-                                ? 0.0f : std::clamp((-14.0f - dg_.sideMidDb) * 0.15f, 0.0f, kMaxWidthDb) * I;
+        const float width = (cf || dg_.sideMidDb < -40.0f || dg_.sideMidDb > cw.widthThr)
+                                ? 0.0f : std::clamp((cw.widthThr - dg_.sideMidDb) * cw.widthSlope, 0.0f, kMaxWidthDb) * pw.width * I;
         st_.width = slew(st_.width, width, 0.05f);
     }
 
@@ -752,10 +1152,29 @@ private:
         tgt_.mono.store(st_.mono, std::memory_order_relaxed);
         tgt_.widthDb.store(st_.width, std::memory_order_relaxed);
         tgt_.makeupDb.store(st_.makeup, std::memory_order_relaxed);
+        tgt_.lowCut.store(st_.lowCut, std::memory_order_relaxed);
+        tgt_.bodyDb.store(st_.body, std::memory_order_relaxed);
+        tgt_.presDb.store(st_.presence, std::memory_order_relaxed);
+        tgt_.exMix.store(st_.exciter, std::memory_order_relaxed);
+        tgt_.warmMix.store(st_.warmth, std::memory_order_relaxed);
+        tgt_.transDb.store(st_.transient, std::memory_order_relaxed);
+        tgt_.upDb.store(st_.upward, std::memory_order_relaxed);
+        tgt_.refDb.store(st_.refDb, std::memory_order_relaxed);
+        tgt_.levelDb.store(st_.level, std::memory_order_relaxed);
+        dg_.lowCut = st_.lowCut;
+        dg_.bodyDb = st_.body;
+        dg_.presenceDb = st_.presence;
+        dg_.exciterMix = st_.exciter;
+        dg_.warmthMix = st_.warmth;
+        dg_.transientDb = st_.transient;
+        dg_.transientNowDb = transNow_.exchange(0.0f, std::memory_order_relaxed);
+        dg_.upwardDb = st_.upward;
+        dg_.upwardNowDb = upNow_.exchange(0.0f, std::memory_order_relaxed);
+        dg_.levelDb = st_.level;
         dg_.lowMidCutDb = st_.lowMid;
         dg_.airGainDb = st_.air;
         dg_.deessDepthDb = st_.deess;
-        dg_.deessNowDb = deessNow_.load(std::memory_order_relaxed);
+        dg_.deessNowDb = deessNow_.exchange(0.0f, std::memory_order_relaxed);
         dg_.monoBass = st_.mono;
         dg_.widthGainDb = st_.width;
         dg_.makeupDb = st_.makeup;
@@ -766,9 +1185,15 @@ private:
     uint32_t fs_ = 48000;
     Biquad sMono_[2], sWide_;             // oldaljel: két mély polc (mono basszus), magas polc (tágítás)
     Biquad lowMid_[2], air_[2], deessHp_[2], scHp_;
+    Biquad lowCut_[2], body_[2], pres_[2];
+    Biquad exHp_[2], exLp_[2], exPost_[2], wmHp_[2], wmLp_[2], wmPost_[2];
     bool airEnabled_ = true, coefDirty_ = true, compare_ = false, msActive_ = false, lowMidActive_ = false, airActive_ = false;
+    bool exEnabled_ = true, lowCutActive_ = false, bodyActive_ = false, presActive_ = false, exActive_ = false,
+         warmActive_ = false, microActive_ = false;
     float subCoef_ = 0.1f, scCoef_ = 0.01f, grAtt_ = 0.5f, grRel_ = 0.01f, cmpStep_ = 0.001f;
+    float exCoef_ = 0.004f, wmCoef_ = 0.001f, tfCoef_ = 0.01f, tsCoef_ = 0.0005f, upAtt_ = 0.004f, upRel_ = 0.0001f;
     float eSc_ = 0, eBb_ = 0, gr_ = 0, mk_ = 1.0f, cmpMix_ = 0.0f;
+    float exEnv_[2] = { 0, 0 }, wmEnv_[2] = { 0, 0 }, tFast_ = 0, tSlow_ = 0, upEnv_ = 0, microG_ = 1.0f;
     Smoothed cur_, applied_;
     std::vector<float> dryL_, dryR_;
 
@@ -776,7 +1201,8 @@ private:
     std::atomic<uint32_t> fsShared_{0};
     std::atomic<float> amount_{0.5f};
     std::atomic<bool> crossfeed_{false};
-    std::atomic<float> deessNow_{0.0f};
+    std::atomic<int32_t> character_{kCharNatural}, content_{kContentAuto};
+    std::atomic<float> deessNow_{0.0f}, transNow_{0.0f}, upNow_{0.0f};
     Targets tgt_;
     // A gyűrűk a kupacon (egyenként 512 KB): a lánc vermen is létrehozható marad (pl. tesztekben, Windowson 1 MB verem)
     using Ring = StereoTapRing<65536>;
@@ -798,8 +1224,16 @@ private:
     std::vector<std::complex<double>> fftWork_;
     std::array<size_t, kBands> bandLo_{}, bandHi_{};
     std::array<bool, kBands> bandOk_{};
-    std::array<double, kBands> specAvg_{};
+    std::array<double, kBands> specAvg_{}, specFast_{};
     size_t specFrames_ = 0;
+    static constexpr size_t kEnvLen = 512;      // 5,12 s a 10 ms-os keretekből
+    std::array<float, kEnvLen> envRing_{};
+    size_t envN_ = 0, envPos_ = 0;
+    float crestAvg_ = 0, speechAvg_ = 0, lowFrac_ = 0, mod4_ = 0, lfRel_ = 0;
+    size_t crestN_ = 0;
+    double lvlRefP_ = 0;
+    bool lvlRefValid_ = false;
+    uint32_t group_ = kGroupMusic, pendingGroup_ = kGroupMusic, pendingSecs_ = 0, profile_ = kProfMusic;
     Block blk_;
     std::vector<Block> blocks_;
     History stHist_{600}, hfHist_{400}, bbHist_{400}, sibHist_{800};
