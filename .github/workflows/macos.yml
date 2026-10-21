@@ -86,7 +86,11 @@ jobs:
             if ./build-arm64/$t; then echo "$t arm64: OK"; else echo "::error::$t (arm64) sikertelen"; fail=1; fi
             echo "::endgroup::"
             echo "::group::$t (x86_64)"
-            if arch -x86_64 ./build-x86_64/$t; then echo "$t x86_64: OK"; else echo "::error::$t (x86_64) sikertelen"; fail=1; fi
+            if arch -x86_64 ./build-x86_64/$t; then echo "$t x86_64: OK"; else
+              echo "::error::$t (x86_64) sikertelen"; fail=1
+              # hol állt le: hibakereső alatt újra (visszakövetés és a hibás utasítás)
+              lldb --batch --arch x86_64 -o run -o "bt 15" -o "disassemble -p -c 4" -o "register read rip" -- ./build-x86_64/$t 2>&1 | tail -n 70 || true
+            fi
             echo "::endgroup::"
           done
           exit $fail
