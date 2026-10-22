@@ -136,6 +136,9 @@ for a in arm64 x86_64; do
         echo "  $a: $line"
         case "$line" in *"weak external"*) ;; *) err "$a: $s nem gyenge kötésű (macOS $min alatt nem indulna)" ;; esac
     done
+    # Az összes erősen kötött Objective-C osztály (az SDK nem mindegyiknél jelzi, melyik macOS-től van)
+    echo "  $a: erősen kötött osztályok:" $(grep -v "weak external" "$RUNNER_TEMP/undef.txt" |
+        sed -n 's/.*_OBJC_CLASS_\$_\([A-Za-z0-9_]*\) (from \([A-Za-z0-9]*\)).*/\1(\2)/p' | sort -u)
 done
 echo "::endgroup::"
 
@@ -144,7 +147,8 @@ launch() {   # $1: az alkalmazás, $2: leírás, $3: a folyamat várt útvonala
     local path=$1 what=$2 want_exe=$3 start ok=1 pid i
     start=0
     [ -f "$log" ] && start=$(wc -l < "$log" | tr -d ' ')
-    open "$path" || { err "$what: az open hibát jelzett"; return 1; }
+    open "$path" &
+    opener=$!
     for i in $(seq 1 30); do nc -z 127.0.0.1 $port 2>/dev/null && break; sleep 1; done
     nc -z 127.0.0.1 $port 2>/dev/null || { err "$what: a motor hídja nem indult el ($port)"; ok=0; }
     for i in $(seq 1 30); do
@@ -165,6 +169,8 @@ launch() {   # $1: az alkalmazás, $2: leírás, $3: a folyamat várt útvonala
             *) err "$what: nem a várt helyről fut: $exe_now" ;;
         esac
     fi
+    if kill -0 $opener 2>/dev/null; then err "$what: az open nem tért vissza"; kill $opener; ok=0
+    elif ! wait $opener; then err "$what: az open hibát jelzett"; ok=0; fi
     echo "::group::$what: napló"; tail -n +"$((start + 1))" "$log" 2>/dev/null; echo "::endgroup::"
     return $((1 - ok))
 }
@@ -175,17 +181,25 @@ quit_app() {   # $1: leírás
     for i in 1 2 3 4 5; do nc -z 127.0.0.1 $port 2>/dev/null || break; sleep 1; done
 }
 
-# 6a. Első indítási kísérlet karanténnal: a Gatekeeper megállítja (nincs Apple-hitelesítés)
+# 6a. Első indítási kísérlet karanténnal: a Gatekeeper megállítja (nincs Apple-hitelesítés). Ilyenkor a folyamat
+# már létezik, de áll, és az open a figyelmeztető ablak válaszára vár; elindulni csak a híd megnyílásából látszik.
 echo "::group::Indítás karanténnal"
-open "$app" 2>&1 || true
-blocked=1
-for i in $(seq 1 10); do pgrep -x Aqulify >/dev/null && { blocked=0; break; }; sleep 1; done
-if [ $blocked = 1 ]; then
-    echo "a Gatekeeper megállította az első indítást (várható; a README első indítás lépései kellenek)"
-else
-    note "macOS $os_ver: a karanténos alkalmazás engedélyezés nélkül elindult (a CI gépen a Gatekeeper ki lehet kapcsolva)"
+open "$app" &
+opener=$!
+for i in $(seq 1 20); do nc -z 127.0.0.1 $port 2>/dev/null && break; sleep 1; done
+if nc -z 127.0.0.1 $port 2>/dev/null; then
+    note "macOS $os_ver: a karanténos alkalmazás engedélyezés nélkül elindult (a CI gépen a Gatekeeper engedékenyebb lehet)"
     quit_app "karanténos indítás"
+else
+    held=nem; pgrep -x Aqulify >/dev/null && held=igen
+    waiting=nem; kill -0 $opener 2>/dev/null && waiting=igen
+    echo "a Gatekeeper megállította az első indítást (várható; a README első indítás lépései kellenek)"
+    echo "  a folyamat létrejött, de áll: $held; az open a figyelmeztető ablakra vár: $waiting"
 fi
+kill $opener 2>/dev/null; wait $opener 2>/dev/null
+killall -KILL Aqulify 2>/dev/null
+killall CoreServicesUIAgent 2>/dev/null || true    # a figyelmeztető ablak (a rendszer szükség esetén újraindítja)
+sleep 2
 echo "::endgroup::"
 
 # 6b. Engedélyezés után (Megnyitás mindenképp; itt: a karantén levétele), majd újraindítás a mentett beállításokkal

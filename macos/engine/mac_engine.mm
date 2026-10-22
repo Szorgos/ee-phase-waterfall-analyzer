@@ -348,8 +348,12 @@ struct Engine::Impl {
             UInt32 psize = sizeof(own);
             AudioObjectGetPropertyData(kAudioObjectSystemObject, &pa, sizeof(pid), &pid, &psize, &own);
             NSArray<NSNumber*>* exclude = own != kAudioObjectUnknown ? @[ @(own) ] : @[];
+            // Az SDK a CATapDescription osztályt nem jelöli 14.2-esnek: a közvetlen hivatkozás erős kötést adna, és a
+            // program macOS 14.2 előtt el sem indulna. Ezért név szerint, futásidőben kérjük el.
+            Class tapClass = NSClassFromString(@"CATapDescription");
+            if (!tapClass) return false;
             // Minden alkalmazás hangja, a saját kimenetünk nélkül (különben visszacsatolás lenne)
-            CATapDescription* desc = [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:exclude];
+            CATapDescription* desc = [[tapClass alloc] initStereoGlobalTapButExcludeProcesses:exclude];
             desc.name = @"Aqulify";
             desc.privateTap = YES;
             desc.muteBehavior = CATapMutedWhenTapped;   // az eredeti hang néma, amíg a motor olvassa
