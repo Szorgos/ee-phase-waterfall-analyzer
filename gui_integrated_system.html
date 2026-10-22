@@ -2114,11 +2114,11 @@ function drawFreqScale(force) {
 
 // ---------------------------------------------------------------- a zenei jel frekvenciatartománya (ottragadó jelek)
 // A spektrum legalsó és legfelső, a zenében ténylegesen jelen lévő sávját mutatja a skálán. A jelek a
-// szélső értéken „ottragadnak”, és csak néhány másodperc után, lassan húzódnak vissza.
+// szélső értéken rövid ideig „ottragadnak”, majd gyorsan húzódnak vissza.
 let fsGeom = null;
 const FS_RANGE = { lo: null, hi: null, loHoldUntil: 0, hiHoldUntil: 0, last: 0 };
-const FS_HOLD_MS = 600;           // gyorsabb reakció: csak 600 ms-ig tartja a szélső értéket (korábban 4000 ms volt)
-const FS_RETURN_BANDS_PER_S = 35; // gyors visszahúzódás az aktuális frekvenciák felé (korábban 6 sáv/mp volt)
+const FS_HOLD_MS = 200;            // fürge reakció: csak 200 ms-ig tartja a szélső értéket (korábban 600, előtte 4000 ms)
+const FS_RETURN_BANDS_PER_S = 100; // gyors visszahúzódás az aktuális frekvenciák felé (korábban 35, előtte 6 sáv/mp)
 const FS_LO_PERSIST_MS = 300;     // az alsó határ ennyi idő alatti jelenlétből (lásd updateFreqRange)
 const FS_LO_RECENT = [];          // { t, lo } az utolsó FS_LO_PERSIST_MS-ból
 
