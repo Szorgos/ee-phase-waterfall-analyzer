@@ -140,7 +140,7 @@ A Linuxos és a Windowsos ág ugyanazt a C++ DSP láncot futtatja (`include/aeth
 
 ## 🍎 macOS verzió
 
-Letöltés (az 1.7.0 kiadástól): **[Aqulify-macOS.dmg – mindig a legújabb kiadás](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg)** (egy alkalmazás Apple Silicon és Intel Macre, macOS 12 vagy újabb). Nyisd meg, és húzd az **Aqulify**-t az *Alkalmazások* mappába.
+Letöltés (az 1.7.1 kiadástól): **[Aqulify-macOS.dmg – mindig a legújabb kiadás](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg)** (egy alkalmazás Apple Silicon és Intel Macre, macOS 12 vagy újabb). Nyisd meg, és húzd az **Aqulify**-t az *Alkalmazások* mappába.
 
 Az Aqulify itt egyetlen alkalmazás: a motor a menüsorban fut (hullámforma ikon), az ablakban a megszokott felület látszik. Az ablak bezárása után a hangfeldolgozás folytatódik; a felület a menüsor-ikonból nyitható újra, és ott kapcsolható be az *Indítás bejelentkezéskor* is (macOS 13-tól).
 

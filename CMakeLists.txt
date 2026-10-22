@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(aqulify 
-    VERSION 1.7.0
+    VERSION 1.7.1
     DESCRIPTION "Aqulify - Real-time Phase, Group Delay & Acoustic Waterfall DSP Suite"
     LANGUAGES C CXX
 )
@@ -209,8 +209,8 @@ endif()
 
 # macOS: Aqulify.app (menüsor-ikon, saját ablak és a Core Audio motor egy alkalmazásban)
 if(APPLE)
-    if(PROJECT_VERSION VERSION_LESS 1.7.0)
-        message(FATAL_ERROR "A macOS változat az 1.7.0-val indult: régebbi verzió nem fordítható macOS-re")
+    if(PROJECT_VERSION VERSION_LESS 1.7.1)
+        message(FATAL_ERROR "A macOS változat az 1.7.1-gyel indult: régebbi verzió nem fordítható macOS-re")
     endif()
     enable_language(OBJCXX)
     set(CMAKE_OBJCXX_STANDARD 20)
