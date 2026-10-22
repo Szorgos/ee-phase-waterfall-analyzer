@@ -304,7 +304,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   /* ======================================================= */
   /* FELSŐ 3D VÍZESÉS SÁV                                   */
   /* ======================================================= */
-  .top-spectrum-strip { position: relative; width: 100%; height: clamp(230px, 32vh, 420px); background: #070B10; border-bottom: 1px solid var(--aq-line); overflow: hidden; }
+  .top-spectrum-strip { position: relative; width: 100%; background: #070B10; border-bottom: 1px solid var(--aq-line); overflow: hidden; }
+  .wf-stage { position: relative; width: 100%; height: clamp(230px, 32vh, 420px); overflow: hidden; }
+  .strip-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; row-gap: 6px; padding: 8px 16px; background: var(--aq-bg-2); border-bottom: 1px solid var(--aq-line); }
   canvas#waterfallCanvas { width: 100%; height: 100%; display: block; }
   .wf-nogl { position: absolute; inset: 0 0 30px; display: flex; align-items: center; justify-content: center; padding: 0 24px; text-align: center; color: var(--aq-text-2); font-size: 0.9rem; pointer-events: none; }
   .wf-nogl[hidden] { display: none; }
@@ -323,7 +325,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .freq-scale-live.stale .fs-mark { background: rgba(79, 209, 197, 0.45); }
   .freq-scale-live.stale .fs-stat { color: rgba(79, 209, 197, 0.45); }
 
-  .strip-overlay { position: absolute; top: 12px; left: 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none; }
+  .strip-overlay { display: flex; flex-direction: row; align-items: center; gap: 8px; pointer-events: none; }
   .strip-badge { background: rgba(13, 20, 28, 0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--aq-line); border-radius: 999px; padding: 5px 12px; font-size: 0.74rem; color: var(--aq-text-2); }
   .strip-badge strong { color: var(--aq-accent); font-weight: 600; }
   @keyframes donateSubtlePulse {
@@ -354,7 +356,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .aether-toast.show { opacity: 1; transform: translateY(0); }
 
   /* A bal felső felirat (Top-Strip 3D) helyét szabadon hagyja; keskeny ablakban több sorba tördel */
-  .strip-controls { position: absolute; top: 12px; right: 16px; left: 260px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; row-gap: 6px; align-items: center; z-index: 10; pointer-events: none; }
+  .strip-controls { flex: 1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; row-gap: 6px; align-items: center; z-index: 10; pointer-events: none; }
   .strip-controls > * { pointer-events: auto; }
   .strip-controls .ctrl-group { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; background: rgba(13, 20, 28, 0.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--aq-line); border-radius: 10px; padding: 3px 4px 3px 6px; }
   .strip-controls select.mini-select { max-width: 290px; text-overflow: ellipsis; }
@@ -497,7 +499,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   canvas#eqCanvas { display: block; width: 100%; height: clamp(260px, 34vh, 440px); cursor: crosshair; }
   /* Alacsony ablak (pl. a legkisebb 1000×640): a vízesés és a grafikon kisebb, így a sávszerkesztő görgetés nélkül látszik */
   @media (max-height: 720px) {
-    .top-spectrum-strip { height: clamp(180px, 30vh, 420px); }
+    .wf-stage { height: clamp(180px, 30vh, 420px); }
     canvas#eqCanvas { height: clamp(200px, 32vh, 440px); }
   }
   .eq-zoom-overlay {
@@ -734,67 +736,70 @@ if (!window.THREE) window.THREE = (function () {
   <!-- 1. KESKENY FELSŐ 3D VÍZESÉS SÁV                         -->
   <!-- ======================================================= -->
   <div class="top-spectrum-strip">
-    <canvas id="waterfallCanvas"></canvas>
-    <div id="wfNoWebgl" class="wf-nogl" hidden data-i18n="wf.noWebgl">A 3D vízesés ezen a gépen nem jeleníthető meg (nincs WebGL). A hangfeldolgozás és a többi beállítás működik.</div>
-    <!-- Frekvenciaskála a vízesés első (alsó) éléhez igazítva -->
-    <canvas id="freqScaleCanvas" class="freq-scale" aria-hidden="true"></canvas>
-    <div id="freqScaleLive" class="freq-scale-live" aria-hidden="true">
-      <div class="fs-band"></div><div class="fs-mark"></div><div class="fs-mark"></div><span class="fs-stat"></span><span class="fs-stat"></span>
-    </div>
-
-    <div class="strip-overlay">
-      <div class="strip-badge" data-wf3d>
-        Top-Strip 3D: <strong id="lblResolution">160 sáv × 120 lépcső</strong>
+    <!-- Eszközsáv a vízesés fölött: a vezérlők nem takarják a 3D grafikát -->
+    <div class="strip-toolbar">
+      <div class="strip-overlay">
+        <div class="strip-badge" data-wf3d>
+          Top-Strip 3D: <strong id="lblResolution">160 sáv × 120 lépcső</strong>
+        </div>
+        <div class="prering-note" id="hudPreRingBadge" style="display:none;" title="FIR / FFT / SPM módban (lineáris fázis) a meredek szűrők előtt kis előcsengés keletkezhet. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik – ez így rendben van." data-i18n-title="prering.title">
+          <span id="hudGlowDot" style="display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--aq-amber); margin-right:4px; vertical-align:middle;"></span><span data-i18n="prering.text">Lineáris fázis: előcsengés lehetséges</span>
+        </div>
       </div>
-      <div class="prering-note" id="hudPreRingBadge" style="display:none;" title="FIR / FFT / SPM módban (lineáris fázis) a meredek szűrők előtt kis előcsengés keletkezhet. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik – ez így rendben van." data-i18n-title="prering.title">
-        <span id="hudGlowDot" style="display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--aq-amber); margin-right:4px; vertical-align:middle;"></span><span data-i18n="prering.text">Lineáris fázis: előcsengés lehetséges</span>
+      <div class="strip-controls">
+        <!-- Időlépcsők állítása -->
+        <span class="ctrl-group" data-wf3d><span class="ctrl-label" data-i18n="strip.time">Idő:</span>
+        <select id="selectTimeSteps" class="mini-select">
+          <option value="60" data-i18n="strip.t60">60 lépcső (Gyors)</option>
+          <option value="120" selected data-i18n="strip.t120">120 lépcső (Normál)</option>
+          <option value="180" data-i18n="strip.t180">180 lépcső (Mély)</option>
+        </select></span>
+
+        <!-- EQ MÓDVÁLASZTÓ (EasyEffects / LSP: IIR, FIR, FFT, SPM) -->
+        <span class="ctrl-group"><span class="ctrl-label" data-i18n="strip.eqMode">EQ Mód:</span>
+        <select id="selectEqMode" class="mini-select">
+          <option value="0" selected>IIR</option>
+          <option value="1">FIR</option>
+          <option value="2">FFT</option>
+          <option value="3">SPM</option>
+        </select></span>
+
+        <!-- DECRAMPING (EasyEffects / LSP: 44,1 kHz-hez viszonyított túlmintavételezés) -->
+        <span class="ctrl-group"><span class="ctrl-label">Decramp:</span>
+        <select id="selectDecramp" class="mini-select" title="Decramping: túlmintavételezés IIR és FIR módban (44,1 kHz-hez viszonyítva)" data-i18n-title="strip.decrampTitle">
+          <option value="0">Off</option>
+          <option value="1">x2</option>
+          <option value="2">x3</option>
+          <option value="3" selected>x4</option>
+          <option value="4">x6</option>
+          <option value="5">x8</option>
+        </select></span>
+
+        <!-- FAKÍTÁS / TELÍTETTSÉG CSÚSZKA -->
+        <span class="ctrl-group" data-wf3d title="Vízesés telítettsége / fakítása" data-i18n-title="strip.fadeTitle"><span class="ctrl-label" data-i18n="strip.fade">Fakítás:</span>
+        <input type="range" id="sliderWfFade" min="0" max="100" value="100" class="ee-slider" style="width:75px; vertical-align:middle; cursor:pointer;" oninput="updateWfFade(this.value)">
+        </span>
+
+        <span class="ctrl-group"><button class="mini-btn" id="btnEqBypass">EQ: KI (Bypass)</button>
+        <button class="mini-btn" id="btnCameraAngle" data-wf3d>Nézőpont: 3D</button>
+        <button class="mini-btn" id="btnFlowDir" data-wf3d title="Vízesés iránya: lefelé (az új sorok hátul indulnak) vagy felfelé (az új sorok elöl, a skálánál indulnak)" data-i18n-title="strip.flowTitle">Folyás: lefelé</button></span>
+
+        <!-- TRAPÉZKORREKCIÓ (mint a kivetítőnél): a hátsó él szélessége -->
+        <span class="ctrl-group" data-wf3d><span class="ctrl-label" data-i18n="strip.keystone">Trapéz:</span>
+        <button class="mini-btn icon-only" id="btnKeystoneLess" title="Trapézkorrekció: keskenyebb hátsó él" data-i18n-title="strip.keystoneLess" data-i18n-aria-label="strip.keystoneLess"><svg class="aq-icon" aria-hidden="true"><use href="#i-trap-narrow"/></svg></button>
+        <span class="ctrl-value" id="lblKeystone">0</span>
+        <button class="mini-btn icon-only" id="btnKeystoneMore" title="Trapézkorrekció: szélesebb hátsó él" data-i18n-title="strip.keystoneMore" data-i18n-aria-label="strip.keystoneMore"><svg class="aq-icon" aria-hidden="true"><use href="#i-trap-wide"/></svg></button>
+        <button class="mini-btn icon-only" id="btnKeystoneReset" hidden title="Trapézkorrekció alaphelyzetbe" data-i18n-title="strip.keystoneReset" data-i18n-aria-label="strip.keystoneReset"><svg class="aq-icon" aria-hidden="true"><use href="#i-reset"/></svg></button></span>
       </div>
     </div>
-
-    <div class="strip-controls">
-      <!-- Időlépcsők állítása -->
-      <span class="ctrl-group" data-wf3d><span class="ctrl-label" data-i18n="strip.time">Idő:</span>
-      <select id="selectTimeSteps" class="mini-select">
-        <option value="60" data-i18n="strip.t60">60 lépcső (Gyors)</option>
-        <option value="120" selected data-i18n="strip.t120">120 lépcső (Normál)</option>
-        <option value="180" data-i18n="strip.t180">180 lépcső (Mély)</option>
-      </select></span>
-
-      <!-- EQ MÓDVÁLASZTÓ (EasyEffects / LSP: IIR, FIR, FFT, SPM) -->
-      <span class="ctrl-group"><span class="ctrl-label" data-i18n="strip.eqMode">EQ Mód:</span>
-      <select id="selectEqMode" class="mini-select">
-        <option value="0" selected>IIR</option>
-        <option value="1">FIR</option>
-        <option value="2">FFT</option>
-        <option value="3">SPM</option>
-      </select></span>
-
-      <!-- DECRAMPING (EasyEffects / LSP: 44,1 kHz-hez viszonyított túlmintavételezés) -->
-      <span class="ctrl-group"><span class="ctrl-label">Decramp:</span>
-      <select id="selectDecramp" class="mini-select" title="Decramping: túlmintavételezés IIR és FIR módban (44,1 kHz-hez viszonyítva)" data-i18n-title="strip.decrampTitle">
-        <option value="0">Off</option>
-        <option value="1">x2</option>
-        <option value="2">x3</option>
-        <option value="3" selected>x4</option>
-        <option value="4">x6</option>
-        <option value="5">x8</option>
-      </select></span>
-
-      <!-- FAKÍTÁS / TELÍTETTSÉG CSÚSZKA -->
-      <span class="ctrl-group" data-wf3d title="Vízesés telítettsége / fakítása" data-i18n-title="strip.fadeTitle"><span class="ctrl-label" data-i18n="strip.fade">Fakítás:</span>
-      <input type="range" id="sliderWfFade" min="0" max="100" value="100" class="ee-slider" style="width:75px; vertical-align:middle; cursor:pointer;" oninput="updateWfFade(this.value)">
-      </span>
-
-      <span class="ctrl-group"><button class="mini-btn" id="btnEqBypass">EQ: KI (Bypass)</button>
-      <button class="mini-btn" id="btnCameraAngle" data-wf3d>Nézőpont: 3D</button>
-      <button class="mini-btn" id="btnFlowDir" data-wf3d title="Vízesés iránya: lefelé (az új sorok hátul indulnak) vagy felfelé (az új sorok elöl, a skálánál indulnak)" data-i18n-title="strip.flowTitle">Folyás: lefelé</button></span>
-
-      <!-- TRAPÉZKORREKCIÓ (mint a kivetítőnél): a hátsó él szélessége -->
-      <span class="ctrl-group" data-wf3d><span class="ctrl-label" data-i18n="strip.keystone">Trapéz:</span>
-      <button class="mini-btn icon-only" id="btnKeystoneLess" title="Trapézkorrekció: keskenyebb hátsó él" data-i18n-title="strip.keystoneLess" data-i18n-aria-label="strip.keystoneLess"><svg class="aq-icon" aria-hidden="true"><use href="#i-trap-narrow"/></svg></button>
-      <span class="ctrl-value" id="lblKeystone">0</span>
-      <button class="mini-btn icon-only" id="btnKeystoneMore" title="Trapézkorrekció: szélesebb hátsó él" data-i18n-title="strip.keystoneMore" data-i18n-aria-label="strip.keystoneMore"><svg class="aq-icon" aria-hidden="true"><use href="#i-trap-wide"/></svg></button>
-      <button class="mini-btn icon-only" id="btnKeystoneReset" hidden title="Trapézkorrekció alaphelyzetbe" data-i18n-title="strip.keystoneReset" data-i18n-aria-label="strip.keystoneReset"><svg class="aq-icon" aria-hidden="true"><use href="#i-reset"/></svg></button></span>
+    <div class="wf-stage">
+      <canvas id="waterfallCanvas"></canvas>
+      <div id="wfNoWebgl" class="wf-nogl" hidden data-i18n="wf.noWebgl">A 3D vízesés ezen a gépen nem jeleníthető meg (nincs WebGL). A hangfeldolgozás és a többi beállítás működik.</div>
+      <!-- Frekvenciaskála a vízesés első (alsó) éléhez igazítva -->
+      <canvas id="freqScaleCanvas" class="freq-scale" aria-hidden="true"></canvas>
+      <div id="freqScaleLive" class="freq-scale-live" aria-hidden="true">
+        <div class="fs-band"></div><div class="fs-mark"></div><div class="fs-mark"></div><span class="fs-stat"></span><span class="fs-stat"></span>
+      </div>
     </div>
   </div>
 
