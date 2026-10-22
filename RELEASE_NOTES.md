@@ -1,3 +1,6 @@
+### Javítások (1.7.4)
+- **EQ grafikon – késleltetés és fázis a mélyeken:** APO (DR) módú sávoknál (pl. AutoEq / Equalizer APO profiloknál), bekapcsolt decrampnál (alapérték: x4) a narancs késleltetés-görbe kb. 10–40 Hz között lépcsőzetesen ugrált (x4-nél kb. 0,8 ms-os, x8-nál akár 3 ms-os ugrásokkal), a fázis- és a dB-görbe kissé remegett. Ezt a grafikon számításának pontatlansága okozta: a hangfeldolgozás helyes volt, csak a kijelzés nem. A görbék mostantól simák, és pontosan a valódi hangfeldolgozást mutatják.
+
 ### Újdonságok (1.7.3)
 - **Felületi animációk:**
   - **Gombsor csúszka (Tab Glider):** a modulválasztó gombsoron az aktív lekerekített négyzet finom lendülettel és átméretezéssel csúszik át a kattintott fül alá.
