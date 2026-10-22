@@ -2,6 +2,7 @@
 - **macOS (új):** Aqulify.app egy alkalmazásként Apple Silicon és Intel Macre (macOS 12-től), menüsor-ikonnal és saját ablakkal, ugyanazzal a DSP lánccal és felülettel. macOS 14.2-től a rendszerhangot illesztőprogram nélkül, a rendszerhang-rögzítési engedéllyel veszi át; régebbi rendszeren (vagy engedély nélkül) a BlackHole 2ch virtuális eszközzel működik. A kimenet a rendszer alapértelmezettje vagy a felületen választott eszköz. A fordítást és az indítást GitHub macOS gépen ellenőriztük; valódi Macen, hanggal még nem próbáltuk.
 
 ### Javítások (1.7.1)
+- **Felület:** WebGL nélkül (pl. virtuális gépen vagy letiltott grafikus gyorsítással) a felület eddig betöltés közben leállt, és nem csatlakozott a motorhoz. Most működik; a 3D vízesés helyén ilyenkor üzenet látszik.
 - **Windows:** AVX2 nélküli processzoron (pl. sok Pentium és Celeron, régebbi Intel és AMD) a Convolver használatakor leállt a motor, illetve az Equalizer APO-ba töltött plugin: a beépített FFTW könyvtár a teljes kódjában AVX2 utasításokat használt. Most SSE2-vel fordul, ami minden 64 bites processzoron megvan.
 - **Felület ↔ motor:** egy épp nem olvasó felület (pl. háttérbe tett ablak) nem akasztja meg a motor kapcsolatait, és nem vesznek el a beállítások; egyszerre több felület is nyitva lehet, és az egyikben tett változtatás a többiben is megjelenik.
 

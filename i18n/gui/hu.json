@@ -118,6 +118,7 @@
   "cam.top": "Felülnézet",
   "cam.label": "Nézőpont: {name}",
   "cam.initial": "Nézőpont: 3D",
+  "wf.noWebgl": "A 3D vízesés ezen a gépen nem jeleníthető meg (nincs WebGL). A hangfeldolgozás és a többi beállítás működik.",
   "strip.resolution": "{bins} sáv × {steps} lépcső",
   "lim.armOn": "BEKAPCSOLVA (negatív preamp: {ceil} dB, {os})",
   "lim.armKeep": "{state} ({ceil} dB, {os}; nincs negatív preamp, állapota nem változott)",

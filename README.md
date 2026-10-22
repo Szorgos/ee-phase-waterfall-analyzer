@@ -150,7 +150,7 @@ Az Aqulify itt egyetlen alkalmazás: a motor a menüsorban fut (hullámforma iko
 * Beállítások: `~/Library/Application Support/Aqulify`, napló: `~/Library/Logs/Aqulify/aqulify.log` (a menüsor-ikonból is megnyitható).
 * **Eltávolítás:** lépj ki az Aqulify-ból (menüsor-ikon → Kilépés), majd húzd az alkalmazást az *Alkalmazások* mappából a Kukába. Illesztőprogramot, rendszerbővítményt vagy háttérszolgáltatást nem telepít; a hangkimenet kilépéskor visszaáll, a bekapcsolt *Indítás bejelentkezéskor* az alkalmazással együtt megszűnik. A beállítások, a napló és a felület gyorsítótára a saját mappádban marad; ezeket így törölheted:
   ```
-  rm -rf ~/Library/Application\ Support/Aqulify ~/Library/Logs/Aqulify ~/Library/WebKit/io.github.szorgos.Aqulify ~/Library/Caches/io.github.szorgos.Aqulify
+  rm -rf ~/Library/Application\ Support/Aqulify ~/Library/Logs/Aqulify ~/Library/WebKit/io.github.szorgos.Aqulify ~/Library/Caches/io.github.szorgos.Aqulify ~/Library/Preferences/io.github.szorgos.Aqulify.plist
   ```
   A rendszerhang-rögzítési engedély bejegyzése (*Rendszerbeállítások → Adatvédelem és biztonság*) ott kikapcsolható. A BlackHole-t (ha telepítetted) a saját eltávolítója távolítja el.
 

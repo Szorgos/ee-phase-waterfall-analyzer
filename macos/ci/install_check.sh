@@ -143,6 +143,16 @@ done
 echo "::endgroup::"
 
 # 6. Indítás. Az indítást figyeli: fut-e a folyamat, él-e a híd, és csatlakozik-e az ablak felülete.
+gui_diag() {   # ha az ablak felülete nem csatlakozik: a WebKit folyamatai, hibajelentései és rendszernaplója
+    echo "::group::$1: a felület hibakeresése"
+    ps ax -o pid,stat,etime,command | grep -i -E "webkit|aqulify" | grep -v grep
+    ls -lt ~/Library/Logs/DiagnosticReports 2>/dev/null | head -n 10
+    log show --last 2m --style compact \
+        --predicate 'process == "Aqulify" OR process BEGINSWITH "com.apple.WebKit"' 2>/dev/null |
+        grep -i -E "error|fail|crash|denied|webgl|gpu|sandbox|terminat" | tail -n 80
+    screencapture -x "$RUNNER_TEMP/screenshot.png" 2>/dev/null || true
+    echo "::endgroup::"
+}
 launch() {   # $1: az alkalmazás, $2: leírás, $3: a folyamat várt útvonala
     local path=$1 what=$2 want_exe=$3 start ok=1 pid i
     start=0
@@ -155,7 +165,7 @@ launch() {   # $1: az alkalmazás, $2: leírás, $3: a folyamat várt útvonala
         tail -n +"$((start + 1))" "$log" 2>/dev/null | grep -q "Grafikus felület csatlakozott" && break; sleep 1
     done
     tail -n +"$((start + 1))" "$log" 2>/dev/null | grep -q "Grafikus felület csatlakozott" ||
-        { err "$what: az ablak felülete nem csatlakozott a motorhoz"; ok=0; }
+        { err "$what: az ablak felülete nem csatlakozott a motorhoz"; ok=0; gui_diag "$what"; }
     [ $ok = 1 ] && { python3 "$here/ws_status.py" $port 20 || { err "$what: a híd nem küld állapotot"; ok=0; }; }
     pid=$(pgrep -x Aqulify | head -n1)
     if [ -z "$pid" ]; then
@@ -215,6 +225,7 @@ mnt2=$(mktemp -d "$RUNNER_TEMP/mnt.XXXX")
 if hdiutil attach -nobrowse -readonly -noautoopen -mountpoint "$mnt2" "$plain" >/dev/null; then
     launch "$mnt2/Aqulify.app" "Indítás a DMG-ről" "$mnt2/Aqulify.app/Contents/MacOS/$(basename "$exe")"
     quit_app "DMG-ről indítás"
+    sleep 2
     hdiutil detach "$mnt2" >/dev/null || hdiutil detach -force "$mnt2" >/dev/null
 else
     err "a karantén nélküli DMG nem csatolható"

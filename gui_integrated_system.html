@@ -219,6 +219,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   /* ======================================================= */
   .top-spectrum-strip { position: relative; width: 100%; height: clamp(230px, 32vh, 420px); background: #070B10; border-bottom: 1px solid var(--aq-line); overflow: hidden; }
   canvas#waterfallCanvas { width: 100%; height: 100%; display: block; }
+  .wf-nogl { position: absolute; inset: 0 0 30px; display: flex; align-items: center; justify-content: center; padding: 0 24px; text-align: center; color: var(--aq-text-2); font-size: 0.9rem; pointer-events: none; }
+  .wf-nogl[hidden] { display: none; }
   /* Linux saját ablak (WebKitGTK): a GTK-s léptetőnyilak szélesebbek, mint Windowson, ezért ott a mezők
      szélesebbek (JS), a szám jobbra igazodik, így a nyilak megmaradnak és az érték is teljesen látszik */
   html.wkgtk input[type="number"] { text-align: right; padding-right: 2px; }
@@ -550,6 +552,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   <!-- ======================================================= -->
   <div class="top-spectrum-strip">
     <canvas id="waterfallCanvas"></canvas>
+    <div id="wfNoWebgl" class="wf-nogl" hidden data-i18n="wf.noWebgl">A 3D vízesés ezen a gépen nem jeleníthető meg (nincs WebGL). A hangfeldolgozás és a többi beállítás működik.</div>
     <!-- Frekvenciaskála a vízesés első (alsó) éléhez igazítva -->
     <canvas id="freqScaleCanvas" class="freq-scale" aria-hidden="true"></canvas>
     <div id="freqScaleLive" class="freq-scale-live" aria-hidden="true">
@@ -557,7 +560,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     </div>
 
     <div class="strip-overlay">
-      <div class="strip-badge">
+      <div class="strip-badge" data-wf3d>
         Top-Strip 3D: <strong id="lblResolution">160 sáv × 120 lépcső</strong>
       </div>
       <div class="prering-note" id="hudPreRingBadge" style="display:none;" title="FIR / FFT / SPM módban (lineáris fázis) a meredek szűrők előtt kis előcsengés keletkezhet. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik – ez így rendben van." data-i18n-title="prering.title">
@@ -567,7 +570,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
     <div class="strip-controls">
       <!-- Időlépcsők állítása -->
-      <span class="ctrl-group"><span class="ctrl-label" data-i18n="strip.time">Idő:</span>
+      <span class="ctrl-group" data-wf3d><span class="ctrl-label" data-i18n="strip.time">Idő:</span>
       <select id="selectTimeSteps" class="mini-select">
         <option value="60" data-i18n="strip.t60">60 lépcső (Gyors)</option>
         <option value="120" selected data-i18n="strip.t120">120 lépcső (Normál)</option>
@@ -595,16 +598,16 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       </select></span>
 
       <!-- FAKÍTÁS / TELÍTETTSÉG CSÚSZKA -->
-      <span class="ctrl-group" title="Vízesés telítettsége / fakítása" data-i18n-title="strip.fadeTitle"><span class="ctrl-label" data-i18n="strip.fade">Fakítás:</span>
+      <span class="ctrl-group" data-wf3d title="Vízesés telítettsége / fakítása" data-i18n-title="strip.fadeTitle"><span class="ctrl-label" data-i18n="strip.fade">Fakítás:</span>
       <input type="range" id="sliderWfFade" min="0" max="100" value="100" class="ee-slider" style="width:75px; vertical-align:middle; cursor:pointer;" oninput="updateWfFade(this.value)">
       </span>
 
       <span class="ctrl-group"><button class="mini-btn" id="btnEqBypass">EQ: KI (Bypass)</button>
-      <button class="mini-btn" id="btnCameraAngle">Nézőpont: 3D</button>
-      <button class="mini-btn" id="btnFlowDir" title="Vízesés iránya: lefelé (az új sorok hátul indulnak) vagy felfelé (az új sorok elöl, a skálánál indulnak)" data-i18n-title="strip.flowTitle">Folyás: lefelé</button></span>
+      <button class="mini-btn" id="btnCameraAngle" data-wf3d>Nézőpont: 3D</button>
+      <button class="mini-btn" id="btnFlowDir" data-wf3d title="Vízesés iránya: lefelé (az új sorok hátul indulnak) vagy felfelé (az új sorok elöl, a skálánál indulnak)" data-i18n-title="strip.flowTitle">Folyás: lefelé</button></span>
 
       <!-- TRAPÉZKORREKCIÓ (mint a kivetítőnél): a hátsó él szélessége -->
-      <span class="ctrl-group"><span class="ctrl-label" data-i18n="strip.keystone">Trapéz:</span>
+      <span class="ctrl-group" data-wf3d><span class="ctrl-label" data-i18n="strip.keystone">Trapéz:</span>
       <button class="mini-btn icon-only" id="btnKeystoneLess" title="Trapézkorrekció: keskenyebb hátsó él" data-i18n-title="strip.keystoneLess" data-i18n-aria-label="strip.keystoneLess"><svg class="aq-icon" aria-hidden="true"><use href="#i-trap-narrow"/></svg></button>
       <span class="ctrl-value" id="lblKeystone">0</span>
       <button class="mini-btn icon-only" id="btnKeystoneMore" title="Trapézkorrekció: szélesebb hátsó él" data-i18n-title="strip.keystoneMore" data-i18n-aria-label="strip.keystoneMore"><svg class="aq-icon" aria-hidden="true"><use href="#i-trap-wide"/></svg></button>
@@ -1232,9 +1235,23 @@ function setCamera(v) {
   camera.lookAt(...v.look);
 }
 
-const renderer = new THREE.WebGLRenderer({ canvas: wfCanvas, antialias: true });
-renderer.setSize(wfCanvas.clientWidth, wfCanvas.clientHeight, false);   // a CSS-méret marad 100 %: az ablakkal együtt méreteződik
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// WebGL nélkül (pl. virtuális gépen vagy letiltott grafikus gyorsítással) a 3D vízesés nem rajzolható, a felület többi
+// része ettől még működik: a vászon helyén üzenet, a 3D vezérlők rejtve
+const renderer = (() => {
+  try {
+    return new THREE.WebGLRenderer({ canvas: wfCanvas, antialias: true });
+  } catch (e) {
+    console.warn("[3D] WebGL nem érhető el:", e);
+    return null;
+  }
+})();
+if (renderer) {
+  renderer.setSize(wfCanvas.clientWidth, wfCanvas.clientHeight, false);   // a CSS-méret marad 100 %: az ablakkal együtt méreteződik
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+} else {
+  document.getElementById("wfNoWebgl").hidden = false;
+  document.querySelectorAll("[data-wf3d]").forEach(el => { el.style.display = "none"; });
+}
 
 const FREQ_BINS = 160;
 let TIME_SLICES = 120; // Alapértelmezett, de állítható!
@@ -1836,6 +1853,7 @@ function animate3D() {
                   (nowMs - liveSpectrumTime < 450);
     drawFreqScaleFrame(fresh ? liveSpectrumLevels : null);
   }
+  if (!renderer) return;                      // WebGL nélkül csak a frekvenciaskála él
 
   if (!wfLastStep) wfLastStep = nowMs - WF_STEP_MS;
   let wfSteps = Math.floor((nowMs - wfLastStep) / WF_STEP_MS);

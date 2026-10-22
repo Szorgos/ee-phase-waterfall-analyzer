@@ -60,6 +60,18 @@ bool allowedExternalUrl(NSString* url) {
     return false;
 }
 
+/** A felület (JavaScript) hibái a naplóba; csak az első 20, hogy egy képkockánként ismétlődő hiba ne töltse tele. */
+void logGuiError(id body) {
+    static int count = 0;
+    if (++count > 20) {
+        if (count == 21) std::cerr << "[Felület] A további hibák nem kerülnek a naplóba.\n";
+        return;
+    }
+    NSString* s = [body isKindOfClass:[NSString class]] ? (NSString*)body : [body description];
+    if (s.length > 400) s = [s substringToIndex:400];
+    std::cerr << "[Felület] Hiba: " << s.UTF8String << "\n";
+}
+
 std::string logPath() {
     const char* h = std::getenv("HOME");
     return std::string(h && *h ? h : ".") + "/Library/Logs/Aqulify/aqulify.log";
@@ -516,6 +528,18 @@ struct Core {
                            initWithSource:@"window.aetherOpenUrl = function (u) { window.webkit.messageHandlers.aetherOpenUrl.postMessage(String(u)); };"
                             injectionTime:WKUserScriptInjectionTimeAtDocumentStart
                          forMainFrameOnly:YES]];
+    // A felület hibái a naplóba (az ablakban nincs fejlesztői konzol)
+    [ucc addScriptMessageHandler:self name:@"aetherLog"];
+    [ucc addUserScript:[[WKUserScript alloc]
+                           initWithSource:@"(function () {"
+                                           "  var log = function (m) { try { window.webkit.messageHandlers.aetherLog.postMessage(String(m)); } catch (e) {} };"
+                                           "  window.addEventListener('error', function (e) {"
+                                           "    log(e.message + ' (' + String(e.filename || '').split('/').pop() + ':' + e.lineno + ')'); });"
+                                           "  window.addEventListener('unhandledrejection', function (e) {"
+                                           "    log('Promise: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)); });"
+                                           "})();"
+                            injectionTime:WKUserScriptInjectionTimeAtDocumentStart
+                         forMainFrameOnly:YES]];
     cfg.userContentController = ucc;
     web_ = [[WKWebView alloc] initWithFrame:window_.contentView.bounds configuration:cfg];
     web_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
@@ -539,6 +563,7 @@ struct Core {
     web_ = nil;
     window_ = nil;
     [web.configuration.userContentController removeScriptMessageHandlerForName:@"aetherOpenUrl"];
+    [web.configuration.userContentController removeScriptMessageHandlerForName:@"aetherLog"];
     web.UIDelegate = nil;
     web.navigationDelegate = nil;
     win.delegate = nil;
@@ -552,6 +577,10 @@ struct Core {
 // ------------------------------------------------------------------ WKWebView
 
 - (void)userContentController:(WKUserContentController*)ucc didReceiveScriptMessage:(WKScriptMessage*)message {
+    if ([message.name isEqualToString:@"aetherLog"]) {
+        logGuiError(message.body);
+        return;
+    }
     if (![message.name isEqualToString:@"aetherOpenUrl"] || ![message.body isKindOfClass:[NSString class]]) return;
     NSString* url = message.body;
     if (allowedExternalUrl(url)) [NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:url]];
@@ -581,7 +610,16 @@ struct Core {
 }
 
 - (void)webViewWebContentProcessDidTerminate:(WKWebView*)webView {
+    std::cerr << "[Felület] A WebKit tartalomfolyamata leállt; újratöltés.\n";
     [webView reload];
+}
+
+- (void)webView:(WKWebView*)webView didFailProvisionalNavigation:(WKNavigation*)navigation withError:(NSError*)error {
+    std::cerr << "[Felület] Nem tölthető be: " << error.localizedDescription.UTF8String << "\n";
+}
+
+- (void)webView:(WKWebView*)webView didFailNavigation:(WKNavigation*)navigation withError:(NSError*)error {
+    std::cerr << "[Felület] Betöltési hiba: " << error.localizedDescription.UTF8String << "\n";
 }
 
 - (void)webView:(WKWebView*)webView
