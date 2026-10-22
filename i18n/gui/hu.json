@@ -226,6 +226,7 @@
   "engine.liveAnalysis": "Élő analízis – {src}{sr}",
   "engine.device": "Eszköz: {device}",
   "engine.analysisOnly": "Csak analízis: a DSP beállítások az Aqulify EQ APO plugin telepítése után hatnak a hangra.",
+  "engine.pluginNotLoaded": "A hangfeldolgozás nem fut: az Equalizer APO nem töltötte be az Aqulify pluginját (frissítés után a régi maradhatott betöltve). Indítsd újra a gépet, vagy a Windows Audio szolgáltatást.",
   "engine.live": "Élő – {src}{sr}",
   "engine.grTitle": "Limiter erősítéscsökkentés: {v} dB",
   "engine.macPermission": "Engedély szükséges",

@@ -73,6 +73,8 @@
   "ops.errMkdir": "HIBA: nem hozható létre: {path}",
   "ops.errCopyPlugin": "HIBA: a plugin nem másolható ide: {path}",
   "ops.pluginCopied": "Plugin bemásolva: {path}",
+  "ops.audioRestarted": "A Windows hangszolgáltatás újraindítva: az új plugin azonnal betöltődik.",
+  "ops.audioRestartFailed": "A Windows hangszolgáltatás nem indítható újra: az új plugin a gép újraindítása után töltődik be.",
   "ops.errConfigDir": "HIBA: az EQ APO config mappa nem érhető el: {path}",
   "ops.errWrite": "HIBA: nem írható: {path}",
   "ops.manualDisabled": "Korábban kézzel felvett Aqulify plugin sor kikapcsolva ({n} db).",

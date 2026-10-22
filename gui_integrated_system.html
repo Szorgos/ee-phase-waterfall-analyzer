@@ -288,6 +288,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     flex-direction: column;
   }
 
+  .dsp-warn { background: var(--aq-amber, #E3B66B); color: #1A1206; font-weight: 600; font-size: 0.86rem; padding: 8px 24px; text-align: center; }
+  .dsp-warn[hidden] { display: none; }
   header { background: var(--aq-bg-2); border-bottom: 1px solid var(--aq-line); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
   .title-group { display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 1rem; min-width: 0; flex: 0 1 auto; }
   /* Keskeny ablakban (1000–1200 px) a cím szövege rövidül, semmi nem csúszik egymásra és nem törik két sorba */
@@ -725,6 +727,8 @@ if (!window.THREE) window.THREE = (function () {
       </div>
     </div>
   </header>
+  <!-- Windows: a telepített plugin nem fut (pl. frissítés után a hangszolgáltatás a régit tartja betöltve) -->
+  <div id="dspWarn" class="dsp-warn" hidden data-i18n="engine.pluginNotLoaded">A hangfeldolgozás nem fut: az Equalizer APO nem töltötte be az Aqulify pluginját (frissítés után a régi maradhatott betöltve). Indítsd újra a gépet, vagy a Windows Audio szolgáltatást.</div>
 
   <!-- ======================================================= -->
   <!-- 1. KESKENY FELSŐ 3D VÍZESÉS SÁV                         -->
@@ -4405,16 +4409,20 @@ function updateEngineBadge() {
   const badge = document.getElementById("pipewireLiveBadge");
   if (!badge) return;
   if (!isPipewireConnected) {
+    const warn = document.getElementById("dspWarn");
+    if (warn) warn.hidden = true;
     badge.className = "status-badge off";
     badge.textContent = t("engine.offline");
     badge.title = t("engine.offlineTitle");
     return;
   }
   const st = engineStatus || {};
+  const warn = document.getElementById("dspWarn");
+  if (warn) warn.hidden = !(st.platform === "windows" && st.dspActive === false && st.pluginExpected);
   const src = st.source || t("engine.src");
   const sr = st.sr ? ` • ${(st.sr / 1000).toFixed(1)} kHz` : "";
   if (st.platform === "windows" && st.dspActive === false) {
-    badge.className = "status-badge info";
+    badge.className = st.pluginExpected ? "status-badge warning" : "status-badge info";
     badge.textContent = t("engine.liveAnalysis", { src, sr });
     badge.title = (st.device ? t("engine.device", { device: st.device }) + "\n" : "") + t("engine.analysisOnly");
   } else if (st.platform === "macos" && st.dspActive === false && st.problem) {

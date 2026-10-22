@@ -226,6 +226,7 @@
   "engine.liveAnalysis": "Live analysis – {src}{sr}",
   "engine.device": "Device: {device}",
   "engine.analysisOnly": "Analysis only: the DSP settings affect the sound after the Aqulify EQ APO plugin is installed.",
+  "engine.pluginNotLoaded": "Audio processing is not running: Equalizer APO has not loaded the Aqulify plugin (after an update the old one may still be loaded). Restart the computer or the Windows Audio service.",
   "engine.live": "Live – {src}{sr}",
   "engine.grTitle": "Limiter gain reduction: {v} dB",
   "engine.macPermission": "Permission needed",

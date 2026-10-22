@@ -322,8 +322,17 @@ public:
                           loopback_.sampleRate());
             s += buf;
             s += ",\"device\":\"" + jsonEscape(loopback_.deviceName()) + "\"";
+            // A telepítő beillesztette a plugint, de az nem jelentkezik (pl. frissítés után a régi fut még)
+            if (pluginIntegrated()) s += ",\"pluginExpected\":true";
         }
         return s;
+    }
+
+    /** A telepítő beillesztette-e a plugint az Equalizer APO-ba (HKLM\Software\Aqulify, EqApoIntegrated). */
+    static bool pluginIntegrated() {
+        DWORD v = 0, size = sizeof(v);
+        return RegGetValueW(HKEY_LOCAL_MACHINE, L"Software\\Aqulify", L"EqApoIntegrated", RRF_RT_REG_DWORD, nullptr, &v,
+                            &size) == ERROR_SUCCESS && v != 0;
     }
 
     /** A Magic Touch mérései (csak a pluginból: WASAPI loopbacknél nincs DSP). Üres, ha nincs adat. */

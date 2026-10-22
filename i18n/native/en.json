@@ -73,6 +73,8 @@
   "ops.errMkdir": "ERROR: could not create: {path}",
   "ops.errCopyPlugin": "ERROR: the plugin could not be copied to: {path}",
   "ops.pluginCopied": "Plugin copied: {path}",
+  "ops.audioRestarted": "Windows Audio service restarted: the new plugin is loaded right away.",
+  "ops.audioRestartFailed": "The Windows Audio service could not be restarted: the new plugin is loaded after a restart.",
   "ops.errConfigDir": "ERROR: the EQ APO config folder is not accessible: {path}",
   "ops.errWrite": "ERROR: could not write: {path}",
   "ops.manualDisabled": "Previously added manual Aqulify plugin line disabled (count: {n}).",

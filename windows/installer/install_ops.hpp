@@ -168,14 +168,38 @@ inline bool writeFileBytes(const std::wstring& path, const void* data, size_t le
  * Fájl cseréje akkor is, ha egy futó folyamat (pl. audiodg.exe) betöltve tartja:
  * a zárolt fájl átnevezhető, így a régi példány újraindításig "félreáll", az új a helyére kerül.
  */
-inline bool replaceFile(const std::wstring& dst, const void* data, size_t len, Logger log) {
+inline bool replaceFile(const std::wstring& dst, const void* data, size_t len, Logger log, bool* setAside = nullptr) {
+    if (setAside) *setAside = false;
     if (writeFileBytes(dst, data, len)) return true;
     if (!fileExists(dst)) return false;
     const std::wstring aside = dst + L".old-" + std::to_wstring(GetTickCount64());
     if (!MoveFileExW(dst.c_str(), aside.c_str(), MOVEFILE_REPLACE_EXISTING)) return false;
     MoveFileExW(aside.c_str(), nullptr, MOVEFILE_DELAY_UNTIL_REBOOT);
     if (log) log(aq_i18n::fmtw(aq_i18n::Msg::ops_fileAside, { { "path", aq_i18n::narrow(aside) } }));
+    if (setAside) *setAside = true;
     return writeFileBytes(dst, data, len);
+}
+
+/**
+ * A Windows hangszolgáltatás (Audiosrv) újraindítása. Az audiodg.exe a régi plugint tartja betöltve, amíg él:
+ * enélkül frissítés után a régi plugin futna tovább, és nem látná az új motor beállításait (a gép
+ * újraindításáig). Az újraindítás alatt a hang egy pillanatra megszakad.
+ */
+inline bool restartAudioService(Logger log) {
+    SC_HANDLE scm = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
+    if (!scm) return false;
+    bool ok = false;
+    if (SC_HANDLE svc = OpenServiceW(scm, L"Audiosrv", SERVICE_STOP | SERVICE_START | SERVICE_QUERY_STATUS)) {
+        SERVICE_STATUS st{};
+        if (ControlService(svc, SERVICE_CONTROL_STOP, &st) || GetLastError() == ERROR_SERVICE_NOT_ACTIVE) {
+            for (int i = 0; i < 100 && QueryServiceStatus(svc, &st) && st.dwCurrentState != SERVICE_STOPPED; ++i) Sleep(100);
+            ok = StartServiceW(svc, 0, nullptr) || GetLastError() == ERROR_SERVICE_ALREADY_RUNNING;
+        }
+        CloseServiceHandle(svc);
+    }
+    CloseServiceHandle(scm);
+    if (log) log(aq_i18n::trw(ok ? aq_i18n::Msg::ops_audioRestarted : aq_i18n::Msg::ops_audioRestartFailed));
+    return ok;
 }
 
 /** Fájl törlése; ha zárolt, újraindításkori törlésre ütemezi. */
@@ -418,12 +442,15 @@ inline bool hasLine(const std::wstring& text, const std::wstring& wanted) {
     return false;
 }
 
-/** A plugin beillesztése: Aqulify.txt + "Include:" sor a config.txt végére (idempotens). */
-inline bool integrateEqApo(const EqApoInfo& apo, const void* dll, size_t dllSize, Logger log) {
+/**
+ * A plugin beillesztése: Aqulify.txt + "Include:" sor a config.txt végére (idempotens).
+ * @param pluginInUse true, ha a régi plugin be volt töltve (félretéve): ilyenkor a hangszolgáltatást újra kell indítani.
+ */
+inline bool integrateEqApo(const EqApoInfo& apo, const void* dll, size_t dllSize, Logger log, bool* pluginInUse = nullptr) {
     const std::wstring pluginDir = joinPath(apo.installPath, L"VSTPlugins\\Aqulify");
     if (!createDirs(pluginDir)) { log(aq_i18n::fmtw(aq_i18n::Msg::ops_errMkdir, { { "path", aq_i18n::narrow(pluginDir) } })); return false; }
     const std::wstring dllPath = joinPath(pluginDir, L"Aqulify.dll");
-    if (!replaceFile(dllPath, dll, dllSize, log)) { log(aq_i18n::fmtw(aq_i18n::Msg::ops_errCopyPlugin, { { "path", aq_i18n::narrow(dllPath) } })); return false; }
+    if (!replaceFile(dllPath, dll, dllSize, log, pluginInUse)) { log(aq_i18n::fmtw(aq_i18n::Msg::ops_errCopyPlugin, { { "path", aq_i18n::narrow(dllPath) } })); return false; }
     log(aq_i18n::fmtw(aq_i18n::Msg::ops_pluginCopied, { { "path", aq_i18n::narrow(dllPath) } }));
 
     if (!createDirs(apo.configPath)) { log(aq_i18n::fmtw(aq_i18n::Msg::ops_errConfigDir, { { "path", aq_i18n::narrow(apo.configPath) } })); return false; }

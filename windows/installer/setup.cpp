@@ -152,8 +152,11 @@ public:
 
         if (opt.integrateApo && apo.installed) {
             phase(T(Msg::setup_phaseIntegrate));
-            if (dllData) res.apoIntegrated = integrateEqApo(apo, dllData, dllSize, log);
+            bool pluginInUse = false;
+            if (dllData) res.apoIntegrated = integrateEqApo(apo, dllData, dllSize, log, &pluginInUse);
             regWriteDword(HKEY_LOCAL_MACHINE, kAppKey, L"EqApoIntegrated", res.apoIntegrated ? 1 : 0);
+            // Frissítés: a régi plugin a hangszolgáltatás újraindításáig betöltve maradna (lásd restartAudioService)
+            if (res.apoIntegrated && pluginInUse) restartAudioService(log);
         } else if (opt.integrateApo) {
             log(T(Msg::setup_logAnalyzerOnly));
         }
