@@ -335,15 +335,74 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   /* ALSÓ FŐ PANEL: TABOK ÉS MODULOK                        */
   /* ======================================================= */
   .main-content { flex: 1; padding: 20px 24px 32px 24px; background: var(--aq-bg); display: flex; flex-direction: column; gap: 16px; }
-  .plugin-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: var(--aq-bg-2); border: 1px solid var(--aq-line); border-radius: 14px; width: fit-content; max-width: 100%; font-size: 0.88rem; }
-  .tab-btn { padding: 8px 16px; min-height: 38px; border-radius: 10px; cursor: pointer; color: var(--aq-text-2); font-weight: 500; background: none; border: 1px solid transparent; transition: background .15s, color .15s; display: inline-flex; align-items: center; gap: 8px; }
-  .tab-btn:hover { color: var(--aq-text); background: rgba(255,255,255,0.03); }
-  .tab-btn.active { background: var(--aq-surface-2); color: var(--aq-text); border-color: var(--aq-line-2); }
+  .plugin-tabs {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px;
+    background: var(--aq-bg-2);
+    border: 1px solid var(--aq-line);
+    border-radius: 14px;
+    width: fit-content;
+    max-width: 100%;
+    font-size: 0.88rem;
+    isolation: isolate;
+  }
+  .tab-glider {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    height: 38px;
+    background: var(--aq-surface-2);
+    border: 1px solid var(--aq-line-2);
+    border-radius: 10px;
+    pointer-events: none;
+    z-index: 1;
+    transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
+                width 300ms cubic-bezier(0.16, 1, 0.3, 1),
+                height 300ms cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 150ms ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+    opacity: 0;
+  }
+  .tab-btn {
+    position: relative;
+    z-index: 2;
+    padding: 8px 16px;
+    min-height: 38px;
+    border-radius: 10px;
+    cursor: pointer;
+    color: var(--aq-text-2);
+    font-weight: 500;
+    background: transparent;
+    border: 1px solid transparent;
+    transition: color .2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+  }
+  .tab-btn:hover { color: var(--aq-text); }
+  .tab-btn.active { color: var(--aq-text); }
   .module-dot { width: 8px; height: 8px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid #5A6E82; display: inline-block; flex: 0 0 auto; font-size: 0; transition: background .15s, border-color .15s, box-shadow .15s; }
   .module-dot.active { background: var(--aq-accent); border-color: var(--aq-accent); box-shadow: 0 0 0 3px var(--aq-accent-soft); }
 
-  /* MODUL TARTALMAK */
-  .tab-pane { display: none; flex-direction: column; gap: 12px; }
+  /* MODUL TARTALMAK ÉS OLDALRA CSÚSZÓ NÉZET */
+  .tab-panes-viewport {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    min-height: 360px;
+    transition: height 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .tab-pane {
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    box-sizing: border-box;
+  }
   .tab-pane.active { display: flex; }
 
   /* 2D EQ GRAFIKON */
@@ -525,7 +584,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     <div class="title-group">
       <svg class="app-mark" viewBox="0 0 28 28" aria-hidden="true"><path d="M3 13c3-4 5-4 8 0s5 4 8 0 5-4 6-2" fill="none" stroke="#4FD1C5" stroke-width="2.2" stroke-linecap="round"/><path d="M3 19.5c3-3 5-3 8 0s5 3 8 0 5-3 6-1.5" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round"/></svg>
       <span class="app-title" title="Aqulify • Audiofil DSP Rendszer" data-i18n="app.title" data-i18n-title="app.title">Aqulify • Audiofil DSP Rendszer</span>
-      <span class="app-version" id="lblAppVersion" data-gui-version="1.7.2" title="Verziószám" data-i18n-title="ver.title">v1.7.2</span>
+      <span class="app-version" id="lblAppVersion" data-gui-version="1.7.3" title="Verziószám" data-i18n-title="ver.title">v1.7.3</span>
     </div>
     <!-- EQ PROFILOK: aktív profil neve, választás, mentés, átnevezés, törlés -->
     <div id="presetBar" class="preset-bar" title="EQ profilok: AutoEq importkor és kézi beállításkor automatikusan mentődnek, újraindítás után is választhatók" data-i18n-title="preset.barTitle">
@@ -620,16 +679,18 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   <!-- ======================================================= -->
   <div class="main-content">
     <div class="plugin-tabs">
-      <button class="tab-btn active" id="tabBtn-eq" onclick="switchTab('eq')"><span class="module-dot" id="dot-eq"></span>Equalizer</button>
-      <button class="tab-btn" id="tabBtn-crossfeed" onclick="switchTab('crossfeed')"><span class="module-dot" id="dot-crossfeed"></span>Crossfeed</button>
-      <button class="tab-btn" id="tabBtn-convolver" onclick="switchTab('convolver')"><span class="module-dot" id="dot-convolver"></span>Convolver</button>
-      <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter')"><span class="module-dot" id="dot-limiter"></span>Limiter</button>
-      <button class="tab-btn" id="tabBtn-bass" onclick="switchTab('bass')"><span class="module-dot" id="dot-bass"></span>Bass Enhancer</button>
-      <button class="tab-btn" id="tabBtn-magic" onclick="switchTab('magic')"><span class="module-dot" id="dot-magic"></span>Magic Touch</button>
+      <div class="tab-glider" id="tabGlider"></div>
+      <button class="tab-btn active" id="tabBtn-eq" onclick="switchTab('eq', this)"><span class="module-dot" id="dot-eq"></span>Equalizer</button>
+      <button class="tab-btn" id="tabBtn-crossfeed" onclick="switchTab('crossfeed', this)"><span class="module-dot" id="dot-crossfeed"></span>Crossfeed</button>
+      <button class="tab-btn" id="tabBtn-convolver" onclick="switchTab('convolver', this)"><span class="module-dot" id="dot-convolver"></span>Convolver</button>
+      <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter', this)"><span class="module-dot" id="dot-limiter"></span>Limiter</button>
+      <button class="tab-btn" id="tabBtn-bass" onclick="switchTab('bass', this)"><span class="module-dot" id="dot-bass"></span>Bass Enhancer</button>
+      <button class="tab-btn" id="tabBtn-magic" onclick="switchTab('magic', this)"><span class="module-dot" id="dot-magic"></span>Magic Touch</button>
     </div>
 
-    <!-- 1. TAB: EQUALIZER (A MÁR KÉSZ 2D FÁZIS- ÉS GÖRBERAJZOLÓVAL) -->
-    <div class="tab-pane active" id="pane-eq">
+    <div class="tab-panes-viewport" id="tabPanesViewport">
+      <!-- 1. TAB: EQUALIZER (A MÁR KÉSZ 2D FÁZIS- ÉS GÖRBERAJZOLÓVAL) -->
+      <div class="tab-pane active" id="pane-eq">
       <div class="eq-canvas-wrapper">
         <canvas id="eqCanvas"></canvas>
         <!-- 2D ZOOM & SKÁLA LEBEGŐ PANEL -->
@@ -1002,6 +1063,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
         </details>
       </div>
     </div>
+    </div> <!-- /tab-panes-viewport -->
 
   </div>
 </div>
@@ -1207,22 +1269,162 @@ function sendParamToPipewire(type, val) {
 }
 
 // =========================================================================
-// TAB VÁLTÓ LOGIKA
+// TAB VÁLTÓ LOGIKA & OLDALRA CSÚSZÓ ANIMÁCIÓ (GLIDER & VIEWPORT SLIDE)
 // =========================================================================
-function switchTab(tabId, el) {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+const TAB_ORDER = ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'magic'];
+let currentActiveTab = 'eq';
+let tabSlideTimer = null;
 
-  const activeBtn = el || (window.event ? window.event.currentTarget : null);
-  if (activeBtn) activeBtn.classList.add('active');
-  const targetPane = document.getElementById('pane-' + tabId);
-  if (targetPane) targetPane.classList.add('active');
-
-  if (tabId === 'eq') {
-    setTimeout(resizeEq, 25);
-  } else if (tabId === 'convolver') {
-    setTimeout(drawConvWaveform, 25);
+function updateTabGlider(targetBtn, instant) {
+  const glider = document.getElementById("tabGlider");
+  const container = document.querySelector(".plugin-tabs");
+  if (!glider || !container) return;
+  const btn = targetBtn || container.querySelector(`.tab-btn[id="tabBtn-${currentActiveTab}"]`) || container.querySelector(".tab-btn.active");
+  if (!btn) {
+    glider.style.opacity = "0";
+    return;
   }
+  const cRect = container.getBoundingClientRect();
+  const bRect = btn.getBoundingClientRect();
+  const left = bRect.left - cRect.left;
+  const top = bRect.top - cRect.top;
+  const w = bRect.width;
+  const h = bRect.height;
+
+  if (instant) {
+    const prevTransition = glider.style.transition;
+    glider.style.transition = "none";
+    glider.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+    glider.style.width = `${w}px`;
+    glider.style.height = `${h}px`;
+    glider.style.opacity = "1";
+    glider.offsetHeight; // reflow
+    glider.style.transition = prevTransition;
+  } else {
+    glider.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+    glider.style.width = `${w}px`;
+    glider.style.height = `${h}px`;
+    glider.style.opacity = "1";
+  }
+}
+
+function switchTab(tabId, el) {
+  if (tabId === currentActiveTab && document.getElementById('pane-' + tabId)?.classList.contains('active')) {
+    updateTabGlider();
+    return;
+  }
+
+  const oldTabId = currentActiveTab;
+  currentActiveTab = tabId;
+
+  // 1. Gombsor kijelölés és a finoman átcsúszó glider animálása
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  const activeBtn = el || document.getElementById('tabBtn-' + tabId);
+  if (activeBtn) activeBtn.classList.add('active');
+  updateTabGlider(activeBtn, false);
+
+  // 2. Alsó panelek közötti oldalra csúszó animáció
+  const oldPane = document.getElementById('pane-' + oldTabId);
+  const newPane = document.getElementById('pane-' + tabId);
+  const viewport = document.getElementById('tabPanesViewport');
+
+  if (tabSlideTimer) {
+    clearTimeout(tabSlideTimer);
+    tabSlideTimer = null;
+  }
+
+  if (!oldPane || !newPane || oldPane === newPane || !viewport) {
+    document.querySelectorAll('.tab-pane').forEach(p => {
+      p.classList.remove('active');
+      p.style.display = '';
+      p.style.position = '';
+      p.style.transform = '';
+      p.style.opacity = '';
+    });
+    if (newPane) newPane.classList.add('active');
+    if (tabId === 'eq') setTimeout(resizeEq, 25);
+    else if (tabId === 'convolver') setTimeout(drawConvWaveform, 25);
+    return;
+  }
+
+  const oldIdx = TAB_ORDER.indexOf(oldTabId);
+  const newIdx = TAB_ORDER.indexOf(tabId);
+  const goingRight = (newIdx >= 0 && oldIdx >= 0) ? (newIdx > oldIdx) : true;
+
+  // Subtle slide: elegáns 80px elmozdulás a képernyő szélességétől függetlenül
+  const offsetPx = 80;
+  const oldExitX = goingRight ? -offsetPx : offsetPx;
+  const newEnterX = goingRight ? offsetPx : -offsetPx;
+
+  // Induló magasság rögzítése
+  const startH = oldPane.offsetHeight;
+  viewport.style.height = startH + 'px';
+
+  // Régi panel kicsúszási beállítása
+  oldPane.style.position = 'absolute';
+  oldPane.style.top = '0';
+  oldPane.style.left = '0';
+  oldPane.style.width = '100%';
+  oldPane.style.pointerEvents = 'none';
+  oldPane.style.zIndex = '1';
+  oldPane.style.transition = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1), opacity 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+  oldPane.style.transform = 'translate3d(0, 0, 0)';
+  oldPane.style.opacity = '1';
+
+  // Új panel kezdeti pozíciója
+  newPane.classList.add('active');
+  newPane.style.display = 'flex';
+  newPane.style.position = 'relative';
+  newPane.style.width = '100%';
+  newPane.style.zIndex = '2';
+  newPane.style.pointerEvents = 'none';
+  newPane.style.transition = 'none';
+  newPane.style.transform = `translate3d(${newEnterX}px, 0, 0)`;
+  newPane.style.opacity = '0';
+
+  const targetH = newPane.offsetHeight;
+
+  // Reflow kényszerítése
+  newPane.offsetHeight;
+
+  // Csúszó animáció indítása a következő frame-ben
+  requestAnimationFrame(() => {
+    viewport.style.height = (targetH > 0 ? targetH : startH) + 'px';
+
+    oldPane.style.transform = `translate3d(${oldExitX}px, 0, 0)`;
+    oldPane.style.opacity = '0';
+
+    newPane.style.transition = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1), opacity 300ms cubic-bezier(0.16, 1, 0.3, 1)';
+    newPane.style.transform = 'translate3d(0, 0, 0)';
+    newPane.style.opacity = '1';
+  });
+
+  if (tabId === 'eq') setTimeout(resizeEq, 25);
+  else if (tabId === 'convolver') setTimeout(drawConvWaveform, 25);
+
+  // Animáció befejezése utáni takarítás
+  tabSlideTimer = setTimeout(() => {
+    document.querySelectorAll('.tab-pane').forEach(p => {
+      if (p !== newPane) {
+        p.classList.remove('active');
+        p.style.display = '';
+      }
+      p.style.position = '';
+      p.style.top = '';
+      p.style.left = '';
+      p.style.width = '';
+      p.style.zIndex = '';
+      p.style.pointerEvents = '';
+      p.style.transition = '';
+      p.style.transform = '';
+      p.style.opacity = '';
+    });
+    viewport.style.height = '';
+    tabSlideTimer = null;
+
+    if (tabId === 'eq') resizeEq();
+    else if (tabId === 'convolver') drawConvWaveform();
+  }, 320);
 }
 
 // =========================================================================
@@ -2062,7 +2264,10 @@ function resizeAllViews() {
   }
 }
 function resizeEq() { resizeAllViews(); }
-window.addEventListener("resize", resizeAllViews);
+window.addEventListener("resize", () => {
+  resizeAllViews();
+  updateTabGlider(null, true);
+});
 
 // EasyEffects / LSP sáv: type 0..11 (Off, Bell, Hi-pass, Hi-shelf, Lo-pass, Lo-shelf, Notch, Resonance,
 // Allpass, Bandpass, Ladder-pass, Ladder-rej), mode 0..6 (RLC/BWC/LRX BT/MT, APO DR), slope 0..3 (x1..x4)
@@ -2310,9 +2515,9 @@ function scheduleEqSync() {
   }, 40);
 }
 
-function drawEq() {
+function drawEq(opts) {
   scheduleEqSync();
-  schedulePresetAutosave();
+  if (!opts || !opts.suppressAutosave) schedulePresetAutosave();
 
   // Automatikus preamp: klippelésnél bekapcsol, és a görbe csúcsát követi (fel és le is, legfeljebb 0 dB-ig)
   const curvePk = curvePeakDb();
@@ -2500,19 +2705,32 @@ function paintEq() {
   }
 
   // EQ Görbe (Összegzett átvitel a Preamp hatásával együtt)
+  const hasProfile = !!(activePresetName && nodes.length > 0);
   if (showEqCurve) {
-    eqCtx.strokeStyle = "#6FB7FF";
-    eqCtx.lineWidth = 2.4 * dpr;
-    eqCtx.beginPath();
-    for (let i = 0; i < points.length; i++) {
-      const y = clampY(dbToY(points[i].mag_db + currentPreamp, G));
-      if (i === 0) eqCtx.moveTo(points[i].x, y); else eqCtx.lineTo(points[i].x, y);
+    if (hasProfile) {
+      eqCtx.strokeStyle = "#6FB7FF";
+      eqCtx.lineWidth = 2.4 * dpr;
+      eqCtx.beginPath();
+      for (let i = 0; i < points.length; i++) {
+        const y = clampY(dbToY(points[i].mag_db + currentPreamp, G));
+        if (i === 0) eqCtx.moveTo(points[i].x, y); else eqCtx.lineTo(points[i].x, y);
+      }
+      eqCtx.stroke();
+    } else {
+      // Nincs kiválasztott profil: diszkrét egyenes vonal a 0 dB szintnél
+      const yZero = clampY(dbToY(0, G));
+      eqCtx.strokeStyle = "rgba(111, 183, 255, 0.45)";
+      eqCtx.lineWidth = 1.5 * dpr;
+      eqCtx.beginPath();
+      eqCtx.moveTo(padLeft, yZero);
+      eqCtx.lineTo(padLeft + plotW, yZero);
+      eqCtx.stroke();
     }
-    eqCtx.stroke();
   }
   // A nézeten kívül futó görberész a szélen halvány szaggatott vonallal jelzi, hogy a görbe ott folytatódik
-  let eqOutOfView = nodes.some(n => n.freq >= eqMinFreq && n.freq <= eqMaxFreq && nodeView(n, G, ovBox).off !== 0);
-  if (showEqCurve) {
+  let eqOutOfView = false;
+  if (hasProfile && showEqCurve) {
+    eqOutOfView = nodes.some(n => n.freq >= eqMinFreq && n.freq <= eqMaxFreq && nodeView(n, G, ovBox).off !== 0);
     const yTop = padTop + 1.5 * dpr, yBot = padTop + plotH - 1.5 * dpr;
     eqCtx.strokeStyle = "rgba(111, 183, 255, 0.55)";
     eqCtx.lineWidth = 1.6 * dpr;
@@ -2558,44 +2776,46 @@ function paintEq() {
 
   eqCtx.restore(); // Vágás vége
 
-  // Fogantyúk
-  nodes.forEach((node, index) => {
-    const nv = nodeView(node, G, ovBox);
-    const nx = nv.x;
-    const isSelected = (node.id === selectedNodeId);
+  // Fogantyúk (csak ha van kiválasztott profil)
+  if (hasProfile) {
+    nodes.forEach((node, index) => {
+      const nv = nodeView(node, G, ovBox);
+      const nx = nv.x;
+      const isSelected = (node.id === selectedNodeId);
 
-    if (nx < padLeft - 10 * dpr || nx > padLeft + plotW + 10 * dpr) return;
-    // A nézeten kívüli (fölötte / alatta lévő, vagy a zoom panel alá eső) sáv a szélen nyílként látszik
-    if (nv.off) {
-      const up = nv.off < 0;
-      const ey = nv.y, d = (up ? -1 : 1) * 6 * dpr;
+      if (nx < padLeft - 10 * dpr || nx > padLeft + plotW + 10 * dpr) return;
+      // A nézeten kívüli (fölötte / alatta lévő, vagy a zoom panel alá eső) sáv a szélen nyílként látszik
+      if (nv.off) {
+        const up = nv.off < 0;
+        const ey = nv.y, d = (up ? -1 : 1) * 6 * dpr;
+        eqCtx.fillStyle = node.color;
+        eqCtx.beginPath();
+        eqCtx.moveTo(nx, ey + d); eqCtx.lineTo(nx - 6 * dpr, ey - d * 0.4); eqCtx.lineTo(nx + 6 * dpr, ey - d * 0.4);
+        eqCtx.closePath(); eqCtx.fill();
+        if (isSelected) { eqCtx.strokeStyle = "#E8EEF4"; eqCtx.lineWidth = 1.5 * dpr; eqCtx.stroke(); }
+        return;
+      }
+      const ny = nv.y;
+
+      if (isSelected) {
+        eqCtx.strokeStyle = "#E8EEF4";
+        eqCtx.lineWidth = 2 * dpr;
+        eqCtx.beginPath();
+        eqCtx.arc(nx, ny, 9 * dpr, 0, Math.PI * 2);
+        eqCtx.stroke();
+      }
+
       eqCtx.fillStyle = node.color;
       eqCtx.beginPath();
-      eqCtx.moveTo(nx, ey + d); eqCtx.lineTo(nx - 6 * dpr, ey - d * 0.4); eqCtx.lineTo(nx + 6 * dpr, ey - d * 0.4);
-      eqCtx.closePath(); eqCtx.fill();
-      if (isSelected) { eqCtx.strokeStyle = "#E8EEF4"; eqCtx.lineWidth = 1.5 * dpr; eqCtx.stroke(); }
-      return;
-    }
-    const ny = nv.y;
+      eqCtx.arc(nx, ny, 5.5 * dpr, 0, Math.PI * 2);
+      eqCtx.fill();
 
-    if (isSelected) {
-      eqCtx.strokeStyle = "#E8EEF4";
-      eqCtx.lineWidth = 2 * dpr;
-      eqCtx.beginPath();
-      eqCtx.arc(nx, ny, 9 * dpr, 0, Math.PI * 2);
-      eqCtx.stroke();
-    }
-
-    eqCtx.fillStyle = node.color;
-    eqCtx.beginPath();
-    eqCtx.arc(nx, ny, 5.5 * dpr, 0, Math.PI * 2);
-    eqCtx.fill();
-
-    eqCtx.fillStyle = "#0A0F15";
-    eqCtx.font = "600 " + (7.5 * dpr) + "px 'Inter Variable', Inter, sans-serif";
-    eqCtx.textAlign = "center";
-    eqCtx.fillText(index + 1, nx, ny + 2.5 * dpr);
-  });
+      eqCtx.fillStyle = "#0A0F15";
+      eqCtx.font = "600 " + (7.5 * dpr) + "px 'Inter Variable', Inter, sans-serif";
+      eqCtx.textAlign = "center";
+      eqCtx.fillText(index + 1, nx, ny + 2.5 * dpr);
+    });
+  }
 }
 
 // Drag & Drop és Pásztázás az EQ-n
@@ -2873,13 +3093,13 @@ document.getElementById("selectEqMode").onchange = (e) => {
   applyEqModeUi(parseInt(e.target.value, 10));
   sendCurveMsg({ type: "set_eq_mode", val: currentEqMode });
   rememberEqModeInPreset();
-  drawEq();
+  drawEq({ suppressAutosave: true });
 };
 
 document.getElementById("selectDecramp").onchange = (e) => {
   applyDecrampUi(parseInt(e.target.value, 10));
   sendCurveMsg({ type: "set_decramp", val: currentDecramp });
-  drawEq();
+  drawEq({ suppressAutosave: true });
 };
 
 // =========================================================================
@@ -4444,12 +4664,11 @@ function refreshPresetUi() {
   if (!sel) return;
   sel.innerHTML = "";
   const names = Object.keys(presetsDoc.presets).sort((a, b) => a.localeCompare(b, AQ_LOCALES[aqLang] || "en"));
-  if (!activePresetName) {
-    const o = document.createElement("option");
-    o.value = "";
-    o.textContent = names.length ? t("preset.noneSelected") : t("preset.none");
-    sel.appendChild(o);
-  }
+  const oNone = document.createElement("option");
+  oNone.value = "";
+  oNone.textContent = t("preset.noneSelected");
+  sel.appendChild(oNone);
+
   names.forEach(n => {
     const o = document.createElement("option");
     o.value = n;
@@ -4512,7 +4731,25 @@ function loadPreset(name) {
 }
 
 function onPresetSelected(name) {
-  if (!name) return;
+  if (!name) {
+    activePresetName = null;
+    nodes = [];
+    selectedNodeId = null;
+    currentPreamp = 0.0;
+    autoPreampMode = false;
+    const inp = document.getElementById("inputPreamp");
+    if (inp) inp.value = "0.0";
+    setPreampBadge("preamp.clean", 0, "optimal");
+    setModuleActive('eq', false);
+    armLimiterForProfile(0.0, false);
+    updateEqUI();
+    drawEq({ suppressAutosave: true });
+    presetBaseSig = snapshotSig(eqSnapshot());
+    persistPresets();
+    refreshPresetUi();
+    showToast(t("preset.noneSelected"), 2000);
+    return;
+  }
   loadPreset(name);
   showToast(t("preset.loaded", { name }), 2500);
 }
@@ -4548,28 +4785,30 @@ function deletePreset() {
 
 /**
  * Kézi beállítás automatikus mentése: saját profilnál az aktív profilba ír; importált (AutoEq)
- * profil módosításakor, vagy ha nincs aktív profil, a felhasználó első valódi módosításakor újat hoz létre.
+ * profil módosításakor új, saját profilt hoz létre, ha a sávok módosulnak.
+ * Ha nincs aktív profil, nem hoz létre szellemprofilt.
  */
 function schedulePresetAutosave() {
   if (suppressEngineSync || !userTouchedUi) return;
   clearTimeout(presetAutosaveTimer);
   presetAutosaveTimer = setTimeout(() => {
     if (suppressEngineSync) return;
+    if (!activePresetName) return;
     const sn = eqSnapshot();
-    const cur = activePresetName ? presetsDoc.presets[activePresetName] : null;
-    if (cur) {
-      if (snapshotSig(cur) === snapshotSig(sn)) return;
-      if (cur.kind === "autoeq" || cur.kind === "import") {
-        // Az importált (AutoEq) profil érintetlen marad: a kézi módosítás új, saját profilba kerül
-        createPresetFromCurrent(activePresetName + t("preset.modifiedSuffix"), "manual");
-        showToast(t("preset.modifiedToast", { name: activePresetName }), 3500);
-        return;
-      }
-      Object.assign(cur, sn, { updated: new Date().toISOString() });
-      persistPresets();
-    } else if (nodes.length > 0 && snapshotSig(sn) !== presetBaseSig) {   // üres EQ-ból és változatlan sávokból nem készül profil
-      createPresetFromCurrent(t("preset.mine"), "manual");
+    const cur = presetsDoc.presets[activePresetName];
+    if (!cur) return;
+    if (snapshotSig(cur) === snapshotSig(sn)) return;
+    if (cur.kind === "autoeq" || cur.kind === "import") {
+      // Csak akkor hozunk létre módosított profilt, ha valóban módosultak a sávok
+      const bandsEqual = JSON.stringify(cur.bands) === JSON.stringify(sn.bands);
+      if (bandsEqual) return;
+      // Az importált (AutoEq) profil érintetlen marad: a kézi sávmódosítás új, saját profilba kerül
+      createPresetFromCurrent(activePresetName + t("preset.modifiedSuffix"), "manual");
+      showToast(t("preset.modifiedToast", { name: activePresetName }), 3500);
+      return;
     }
+    Object.assign(cur, sn, { updated: new Date().toISOString() });
+    persistPresets();
   }, 900);
 }
 
@@ -4615,6 +4854,7 @@ function refreshDynamicTexts() {
   updateDeleteNodeButton();
   drawEq();
   drawConvWaveform();
+  updateTabGlider(null, true);
   if (modalImport && modalImport.style.display === "flex") {
     filterHeadphones(document.getElementById("headphoneSearchInput").value);
     const fmt = document.getElementById("lblDetectedFormat");
@@ -4622,6 +4862,7 @@ function refreshDynamicTexts() {
   }
 }
 setLanguage(aqLang, false);
+setTimeout(() => { updateTabGlider(null, true); }, 60);
 
 // Induláskor háttérben előkészítjük a 8 850+ modellt tartalmazó teljes AutoEq indexet és csatlakozunk a hangmotorhoz (PipeWire / Windows)
 setTimeout(() => {

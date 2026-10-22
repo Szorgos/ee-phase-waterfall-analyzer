@@ -1,3 +1,12 @@
+### Újdonságok (1.7.3)
+- **Felületi animációk:**
+  - **Gombsor csúszka (Tab Glider):** a modulválasztó gombsoron az aktív lekerekített négyzet finom lendülettel és átméretezéssel csúszik át a kattintott fül alá.
+  - **Kezelőfelületek oldalra csúszása:** az alsó panelek (EQ, Crossfeed, Convolver, Limiter, Bass Enhancer, Magic Touch) között természetes, irányhelyes oldalra csúszó animációval és sima magasságkövetéssel vált a felület.
+
+### Javítások (1.7.3)
+- **EQ profil nélküli állapot:** ha nincs kiválasztva EQ profil, a 2D felületen nem látszanak félrevezető hullámos görbék vagy fogantyúk, hanem tiszta, egyenes 0 dB-es kék vonal fut. A legördülő menüben mindig elérhető a *- nincs kiválasztva -* opció, ami tiszta bypass alaphelyzetbe állítja az EQ-t.
+- **Módváltás (IIR / FIR / FFT / SPM és Decramp):** a szűrési módok és decramp beállítások közötti váltás nem hoz létre szellemprofilokat (sem „Saját profil”-t, sem indokolatlan „– módosított” másolatot).
+
 ### Újdonságok (1.7.2)
 - **Bass Enhancer:** a felület is az EasyEffectsét követi: mérő mutatja a keltett felharmonikusok szintjét, a Blend egész lépésekben állítható (−10: 3., +10: 2. felharmonikus). A hangzás és az alapértékek nem változtak, ezek eddig is az EasyEffectséi voltak.
 
