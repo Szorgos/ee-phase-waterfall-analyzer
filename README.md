@@ -148,6 +148,11 @@ Az Aqulify itt egyetlen alkalmazás: a motor a menüsorban fut (hullámforma iko
 * **Régebbi macOS (12 – 14.1), vagy ha nem adsz engedélyt:** telepítsd az ingyenes [BlackHole 2ch](https://existential.audio/blackhole/) virtuális hangeszközt. Az Aqulify magától felismeri, a rendszer kimenetét a BlackHole-ra állítja, a feldolgozott hangot pedig a valódi eszközre küldi; kilépéskor az eredeti kimenet visszaáll.
 * **Kimenet:** alapból a rendszer alapértelmezett kimenete (követi, ha a Hangbeállításokban másikat választasz); a felület fejlécében adott eszköz is választható.
 * Beállítások: `~/Library/Application Support/Aqulify`, napló: `~/Library/Logs/Aqulify/aqulify.log` (a menüsor-ikonból is megnyitható).
+* **Eltávolítás:** lépj ki az Aqulify-ból (menüsor-ikon → Kilépés), majd húzd az alkalmazást az *Alkalmazások* mappából a Kukába. Illesztőprogramot, rendszerbővítményt vagy háttérszolgáltatást nem telepít; a hangkimenet kilépéskor visszaáll, a bekapcsolt *Indítás bejelentkezéskor* az alkalmazással együtt megszűnik. A beállítások, a napló és a felület gyorsítótára a saját mappádban marad; ezeket így törölheted:
+  ```
+  rm -rf ~/Library/Application\ Support/Aqulify ~/Library/Logs/Aqulify ~/Library/WebKit/io.github.szorgos.Aqulify ~/Library/Caches/io.github.szorgos.Aqulify
+  ```
+  A rendszerhang-rögzítési engedély bejegyzése (*Rendszerbeállítások → Adatvédelem és biztonság*) ott kikapcsolható. A BlackHole-t (ha telepítetted) a saját eltávolítója távolítja el.
 
 ### ⚠️ Az alkalmazás nincs az Apple-nél hitelesítve – így indíthatod el
 
