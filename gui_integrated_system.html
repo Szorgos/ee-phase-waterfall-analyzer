@@ -622,6 +622,23 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 <!-- three.js: helyi példány (Windows csomag, offline), különben CDN -->
 <script src="three.min.js"></script>
 <script>if (!window.THREE) document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');</script>
+<script>
+// Ha a three.js sehonnan nem tölthető be (sem a mappából, sem a CDN-ről), a 3D-s kód inert helyettesítőre fut, hogy a
+// felület többi része (a motorral való kapcsolat is) ne álljon le. A WebGL-renderer létrehozása hibát dob, így a
+// vízesés helyén üzenet látszik, a 3D-s vezérlők pedig rejtve maradnak (lásd: renderer, wfNoWebgl).
+if (!window.THREE) window.THREE = (function () {
+  const inert = () => new Proxy(function () {}, {
+    get: (t, k) => (k === Symbol.toPrimitive || k === "valueOf") ? () => 0 : k === "toString" ? () => "" : inert(),
+    set: () => true,
+    construct: () => inert(),
+    apply: () => inert(),
+  });
+  return new Proxy({}, {
+    get: (t, k) => k === "WebGLRenderer" ? function () { throw new Error("A three.js nem töltődött be"); }
+                 : k === "DoubleSide" ? 2 : inert(),
+  });
+})();
+</script>
 <script src="autoeq_index.js"></script>
 <script src="gui_i18n.js"></script>
 <script>
