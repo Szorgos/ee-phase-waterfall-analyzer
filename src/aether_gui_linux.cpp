@@ -143,21 +143,28 @@ void ensureEngineRunning() {
     for (int i = 0; i < 30 && !engineReachable(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(100));
 }
 
-/** A GTK címsor (kliensoldali dekoráció) a felület sötét színeit kapja, a rendszertémától függetlenül. */
-void applyDarkTitlebar() {
-    GtkCssProvider* css = gtk_css_provider_new();
-    gtk_css_provider_load_from_data(css,
-        "headerbar, .titlebar, .titlebar:backdrop, headerbar:backdrop {"
-        "  background: #0A0F15; background-image: none; color: #E8EEF4;"
-        "  border-bottom: 1px solid #1F2C3A; box-shadow: none; }"
-        "headerbar .title, .titlebar .title { color: #E8EEF4; }"
-        "headerbar button, .titlebar button { color: #A3B3C2; background: transparent; border: none; box-shadow: none; }"
-        "headerbar button:hover, .titlebar button:hover { background: rgba(255,255,255,0.06); color: #E8EEF4; }"
-        "decoration { box-shadow: 0 3px 12px rgba(0,0,0,0.5); }",
-        -1, nullptr);
-    gtk_style_context_add_provider_for_screen(gdk_screen_get_default(), GTK_STYLE_PROVIDER(css),
-                                              GTK_STYLE_PROVIDER_PRIORITY_USER);
-    g_object_unref(css);
+/** A GTK címsor (kliensoldali dekoráció) a felület témájának színeit kapja (a felület szól, ha téma vált). */
+void applyTitlebar(bool light) {
+    static GtkCssProvider* css = nullptr;
+    if (!css) {
+        css = gtk_css_provider_new();
+        gtk_style_context_add_provider_for_screen(gdk_screen_get_default(), GTK_STYLE_PROVIDER(css),
+                                                  GTK_STYLE_PROVIDER_PRIORITY_USER);
+    }
+    const char* bg = light ? "#E9EEF4" : "#0A0F15";
+    const char* fg = light ? "#0F172A" : "#E8EEF4";
+    const char* line = light ? "#D8E0E9" : "#1F2C3A";
+    const char* btn = light ? "#475569" : "#A3B3C2";
+    const char* hover = light ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.06)";
+    const std::string rules =
+        std::string("headerbar, .titlebar, .titlebar:backdrop, headerbar:backdrop {") +
+        "  background: " + bg + "; background-image: none; color: " + fg + ";" +
+        "  border-bottom: 1px solid " + line + "; box-shadow: none; }" +
+        "headerbar .title, .titlebar .title { color: " + fg + "; }" +
+        "headerbar button, .titlebar button { color: " + btn + "; background: transparent; border: none; box-shadow: none; }" +
+        "headerbar button:hover, .titlebar button:hover { background: " + hover + "; color: " + fg + "; }" +
+        "decoration { box-shadow: 0 3px 12px rgba(0,0,0," + (light ? "0.18" : "0.5") + "); }";
+    gtk_css_provider_load_from_data(css, rules.c_str(), -1, nullptr);
 }
 
 /**
@@ -205,7 +212,7 @@ int main() {
             if (settings) {
                 g_object_set(settings, "gtk-application-prefer-dark-theme", TRUE, nullptr);
             }
-            applyDarkTitlebar();
+            applyTitlebar(false);   // a felület betöltése után a saját témája szerint (aetherSetTheme)
             gtk_window_set_icon_name(GTK_WINDOW(win.value()), "aqulify");
             std::string iconFile = folder + "/../../icons/hicolor/256x256/apps/aqulify.png";
             if (fileExists(iconFile)) {
@@ -225,6 +232,11 @@ int main() {
             g_unix_signal_add(SIGTERM, onQuitSignal, win.value());
             g_unix_signal_add(SIGINT, onQuitSignal, win.value());
         }
+        // A felület témája (req: ["light"] vagy ["dark"]): a címsor ugyanazt a színt kapja
+        w.bind("aetherSetTheme", [](const std::string& req) -> std::string {
+            applyTitlebar(req.find("\"light\"") != std::string::npos);
+            return "null";
+        });
         w.bind("aetherOpenUrl", [](const std::string& req) -> std::string {
             const std::string target = allowedExternalUrl(req);
             if (!target.empty()) g_app_info_launch_default_for_uri(target.c_str(), nullptr, nullptr);

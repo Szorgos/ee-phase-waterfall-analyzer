@@ -1302,6 +1302,12 @@ function applyTheme() {
   document.documentElement.setAttribute("data-theme-setting", currentThemeSetting);
   document.documentElement.style.colorScheme = effective;
   const isLight = effective === "light";
+  // Saját ablakban a címsor is a témát követi (Windows / Linux: aetherSetTheme, macOS: aetherTheme üzenet)
+  try {
+    if (typeof window.aetherSetTheme === "function") window.aetherSetTheme(effective);
+    else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.aetherTheme)
+      window.webkit.messageHandlers.aetherTheme.postMessage(effective);
+  } catch (e) {}
 
   // 3D Three.js vászon és rács frissítése
   if (typeof scene !== "undefined" && scene) {

@@ -119,6 +119,17 @@ bool activateExistingWindow() {
     return false;
 }
 
+/** A címsor a felület témáját követi; régebbi Windowson (10) csak a sötét / világos mód hat, a szín nem. */
+void setTitlebarTheme(HWND hwnd, bool light) {
+    const BOOL dark = light ? FALSE : TRUE;
+    DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof(dark));
+    // Windows 11: a címsor a felület fejlécének színét kapja
+    const COLORREF caption = light ? RGB(233, 238, 244) : RGB(10, 15, 21);
+    const COLORREF text = light ? RGB(15, 23, 42) : RGB(232, 238, 244);
+    DwmSetWindowAttribute(hwnd, 35 /* DWMWA_CAPTION_COLOR */, &caption, sizeof(caption));
+    DwmSetWindowAttribute(hwnd, 36 /* DWMWA_TEXT_COLOR */, &text, sizeof(text));
+}
+
 void styleWindow(HWND hwnd) {
     // Ikon a saját erőforrásból (1-es ICON)
     HINSTANCE inst = GetModuleHandleW(nullptr);
@@ -128,13 +139,7 @@ void styleWindow(HWND hwnd) {
     if (HICON small = static_cast<HICON>(LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON,
                                                       GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0)))
         SendMessageW(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(small));
-    // Sötét címsor (a felület sötét témájú); régebbi Windowson egyszerűen hatástalan
-    const BOOL dark = TRUE;
-    DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof(dark));
-    // Windows 11: a címsor a felület háttérszínét kapja; korábbi Windowson hatástalan
-    const COLORREF caption = RGB(10, 15, 21), text = RGB(232, 238, 244);
-    DwmSetWindowAttribute(hwnd, 35 /* DWMWA_CAPTION_COLOR */, &caption, sizeof(caption));
-    DwmSetWindowAttribute(hwnd, 36 /* DWMWA_TEXT_COLOR */, &text, sizeof(text));
+    setTitlebarTheme(hwnd, false);   // a felület betöltése után a saját témája szerint (aetherSetTheme)
 }
 
 /** A WebView2 háttere betöltés előtt is a felület háttérszíne (nincs fehér villanás). */
@@ -195,6 +200,12 @@ void runWindow(const std::wstring& guiFolder) {
     if (win.ok()) styleWindow(static_cast<HWND>(win.value()));
     setWebViewBackground(w);
 
+    // A felület témája (req: ["light"] vagy ["dark"]): a címsor ugyanazt a színt kapja
+    const HWND hwnd = win.ok() ? static_cast<HWND>(win.value()) : nullptr;
+    w.bind("aetherSetTheme", [hwnd](const std::string& req) -> std::string {
+        if (hwnd) setTitlebarTheme(hwnd, req.find("\"light\"") != std::string::npos);
+        return "null";
+    });
     w.bind("aetherOpenUrl", [](const std::string& req) -> std::string {
         const std::string url = allowedExternalUrl(req);
         if (!url.empty()) {

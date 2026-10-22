@@ -529,6 +529,8 @@ struct Core {
                            initWithSource:@"window.aetherOpenUrl = function (u) { window.webkit.messageHandlers.aetherOpenUrl.postMessage(String(u)); };"
                             injectionTime:WKUserScriptInjectionTimeAtDocumentStart
                          forMainFrameOnly:YES]];
+    // A felület témája: a címsor és az ablak háttere követi (aetherTheme: "light" / "dark")
+    [ucc addScriptMessageHandler:self name:@"aetherTheme"];
     // A felület hibái a naplóba (az ablakban nincs fejlesztői konzol)
     [ucc addScriptMessageHandler:self name:@"aetherLog"];
     [ucc addUserScript:[[WKUserScript alloc]
@@ -565,6 +567,7 @@ struct Core {
     window_ = nil;
     [web.configuration.userContentController removeScriptMessageHandlerForName:@"aetherOpenUrl"];
     [web.configuration.userContentController removeScriptMessageHandlerForName:@"aetherLog"];
+    [web.configuration.userContentController removeScriptMessageHandlerForName:@"aetherTheme"];
     web.UIDelegate = nil;
     web.navigationDelegate = nil;
     win.delegate = nil;
@@ -580,6 +583,14 @@ struct Core {
 - (void)userContentController:(WKUserContentController*)ucc didReceiveScriptMessage:(WKScriptMessage*)message {
     if ([message.name isEqualToString:@"aetherLog"]) {
         logGuiError(message.body);
+        return;
+    }
+    if ([message.name isEqualToString:@"aetherTheme"]) {
+        const bool light = [message.body isKindOfClass:[NSString class]] && [(NSString*)message.body isEqualToString:@"light"];
+        window_.appearance = [NSAppearance appearanceNamed:light ? NSAppearanceNameAqua : NSAppearanceNameDarkAqua];
+        window_.backgroundColor = light ? [NSColor colorWithSRGBRed:244 / 255.0 green:246 / 255.0 blue:249 / 255.0 alpha:1.0]
+                                        : [NSColor colorWithSRGBRed:10 / 255.0 green:15 / 255.0 blue:21 / 255.0 alpha:1.0];
+        if (@available(macOS 12.0, *)) web_.underPageBackgroundColor = window_.backgroundColor;
         return;
     }
     if (![message.name isEqualToString:@"aetherOpenUrl"] || ![message.body isKindOfClass:[NSString class]]) return;
