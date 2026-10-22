@@ -2119,6 +2119,8 @@ let fsGeom = null;
 const FS_RANGE = { lo: null, hi: null, loHoldUntil: 0, hiHoldUntil: 0, last: 0 };
 const FS_HOLD_MS = 600;           // gyorsabb reakció: csak 600 ms-ig tartja a szélső értéket (korábban 4000 ms volt)
 const FS_RETURN_BANDS_PER_S = 35; // gyors visszahúzódás az aktuális frekvenciák felé (korábban 6 sáv/mp volt)
+const FS_LO_PERSIST_MS = 300;     // az alsó határ ennyi idő alatti jelenlétből (lásd updateFreqRange)
+const FS_LO_RECENT = [];          // { t, lo } az utolsó FS_LO_PERSIST_MS-ból
 
 // Az elmúlt 10 másodperc legmélyebb és legmagasabb mért frekvenciájának csúcsérték-tárolója
 const FS_HISTORY_10S = []; // { t, loFreq, hiFreq }
@@ -2162,14 +2164,22 @@ function updateFreqRange(levels, now) {
     let mx = 0;
     for (let i = 0; i < levels.length; i++) mx = Math.max(mx, levels[i]);
     // jelen lévőnek számít: -66 dBFS fölött, a felső határnál a pillanatnyi csúcstól legfeljebb 48 dB-re, az
-    // alsónál legfeljebb 30 dB-re (0..1 = -90..0 dBFS). Lent szigorúbb a küszöb: a hangos basszus hangindításai
+    // alsónál legfeljebb 24 dB-re (0..1 = -90..0 dBFS). Lent szigorúbb a küszöb: a hangos basszus hangindításai
     // a csúcs alatt 25–40 dB-lel egészen 0 Hz-ig szétterülnek, ez nem a zene legmélyebb hangja.
-    const thrHi = Math.max(24 / 90, mx - 48 / 90), thrLo = Math.max(24 / 90, mx - 30 / 90);
+    const thrHi = Math.max(24 / 90, mx - 48 / 90), thrLo = Math.max(24 / 90, mx - 24 / 90);
     if (mx > 24 / 90) {
       for (let i = 0; i < levels.length; i++) { if (levels[i] >= thrLo && lo < 0) lo = i; if (levels[i] >= thrHi) hi = i; }
       const scale = FREQ_BINS / levels.length;
       lo *= scale; hi *= scale;
     }
+  }
+  // Az alsó határ az, ami az utolsó 300 ms 70 %-ában jelen volt: egy hangindítás pillanatnyi szétterülése
+  // nem rántja le a jelet a skála aljára (ott ragadna, és lassan húzódna vissza)
+  FS_LO_RECENT.push({ t: now, lo });
+  while (FS_LO_RECENT.length && now - FS_LO_RECENT[0].t > FS_LO_PERSIST_MS) FS_LO_RECENT.shift();
+  if (lo >= 0) {
+    const los = FS_LO_RECENT.filter(e => e.lo >= 0).map(e => e.lo).sort((a, b) => a - b);
+    lo = los[Math.floor(los.length * 0.7)];
   }
   if (lo >= 0) {
     if (FS_RANGE.lo === null || lo <= FS_RANGE.lo) { FS_RANGE.lo = lo; FS_RANGE.loHoldUntil = now + FS_HOLD_MS; }

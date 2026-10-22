@@ -168,7 +168,10 @@ public:
                 const double lowPeak = bandPeak(bufLow_, f0 / lowBinHz, f1 / lowBinHz, 0.0, nullptr);
                 const double lowDb = 20.0 * std::log10(std::max(1e-12, lowPeak * lowNorm));
                 const double w = std::clamp((kLowBlendHz - fc) / (kLowBlendHz - kLowOnlyHz), 0.0, 1.0);
-                db = w * lowDb + (1.0 - w) * db;
+                // A két felbontás közül a kisebb érték: a hosszú ablak időbeli elkenődése (egy elhalt basszushang
+                // még 340 ms-ig látszana, a hangindítás szétterülne 0 Hz-ig) a rövid ablakban nincs meg, a rövid
+                // ablak frekvencia-szivárgása pedig a hosszúban
+                db = w * std::min(lowDb, db) + (1.0 - w) * db;
             }
             levels_[b] = static_cast<float>(std::clamp((db - floorDb_) / (ceilDb_ - floorDb_), 0.0, 1.0));
             phaseDeg_[b] = (std::abs(cross) > 1e-12) ? static_cast<float>(std::arg(cross) * 180.0 / pi) : 0.0f;
