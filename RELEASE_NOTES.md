@@ -1,3 +1,15 @@
+### Újdonságok (1.7.6)
+- **Verziószám az ablak címsorában** (Windows, Linux, macOS), és a címsor színe is a felület témáját követi (sötét / világos).
+- **3D vízesés:** a vezérlők a háló két oldalára kerültek, a szélesebb soroktól lefelé a keskenyebbekig, így nem takarják a grafikát. Ha az ablakban nem férnek el a háló mellett (keskeny ablak, oldal- vagy felülnézet), a vízesés fölötti sávba kerülnek.
+- **Frekvenciatartomány-jelző:** az alsó jel a zene valódi legmélyebb hangját mutatja; basszusváltáskor és dobütésnél nem ugrik le a skála aljára, és a jelek fürgébben követik a zenét.
+
+### Javítások (1.7.6)
+- **Windows:** frissítés után a hangfeldolgozás csak a gép újraindításával indult el újra (a régi plugin a hangszolgáltatásban maradt). A telepítő most újraindítja a Windows hangszolgáltatását; ha a plugin mégsem fut, a felület tetején figyelmeztetés jelenik meg.
+- **EQ profilok:** a nézet állítása (nagyítás, dB-tartomány) és az EQ mód váltása nem hoz létre „– módosított” profilt. Egy betöltött profil pontjainak kézi mozgatásakor az új profil „– egyedi” utótagot kap.
+- **EQ grafikon:** a narancs késleltetés-görbe IIR módban is sima (eddig szögletes volt); kézzel felvett sávoknál, profil nélkül is látszik a görbe és a fogantyúk.
+- **Modulfülek:** a kijelölés pontosan a kiválasztott fülön ül.
+- **Felület:** ha a three.js nem tölthető be, a felület akkor is csatlakozik a motorhoz.
+
 ### Újdonságok (1.7.5)
 - **Világos és sötét téma (Light & Dark Theme):**
   - **3 állású témaválasztó a fejlécben:** Választható *Rendszer* (a Windows, Linux vagy macOS témabeállítását követi valós időben), *Sötét* és *Világos* megjelenés.
