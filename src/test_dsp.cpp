@@ -116,6 +116,31 @@ static void testEqualizer() {
         CHECK(mag[1] < -10.0 && std::abs(mag[0]) < 2.0 && std::abs(mag[2]) < 2.0,
               "Ladder-pass ugyanígy: 100 Hz %.1f / 1 kHz %.1f / 8 kHz %.1f dB", mag[0], mag[1], mag[2]);
     }
+    {
+        // APO (DR) mély polc decramp x4 / x8 mellett: a grafikon görbéje és csoportkésleltetése mélyen is sima
+        // (float számításnál a cos(w) lépcsőzetes volt: kb. 0,8 ms-os ugrások 10-30 Hz között)
+        for (int decr : { 3, 5 }) {
+            ParamData d = bellParams(0);
+            d.eqDecramp = decr;
+            d.bands[0].type = static_cast<int32_t>(EqBandType::LoShelf);
+            d.bands[0].mode = static_cast<int32_t>(EqFilterMode::ApoDr);
+            d.bands[0].freq = 105.0f; d.bands[0].gainDb = 6.0f; d.bands[0].q = 0.7f;
+            constexpr size_t N = 64;
+            float f[N], mag[N], ph[N];
+            for (size_t i = 0; i < N; ++i) f[i] = static_cast<float>(10.0 * std::pow(10.0, i / double(N - 1)));   // 10 .. 100 Hz
+            ee::Equalizer::response(d, 48000, f, N, mag, ph);
+            double gd[N] = {}, maxJump = 0.0;
+            for (size_t i = 0; i + 1 < N; ++i) {
+                double dp = ph[i + 1] - ph[i];
+                while (dp > 180) dp -= 360;
+                while (dp < -180) dp += 360;
+                gd[i] = -(dp / 360.0) / (f[i + 1] - f[i]) * 1000.0;
+                if (i >= 2) maxJump = std::max(maxJump, std::abs(gd[i] - 2.0 * gd[i - 1] + gd[i - 2]));   // görbület: zajra érzékeny
+            }
+            CHECK(maxJump < 0.05, "APO mély polc, decramp %s: a csoportkésleltetés sima 10-100 Hz között (legnagyobb törés %.3f ms)",
+                  decr == 3 ? "x4" : "x8", maxJump);
+        }
+    }
 }
 
 static void testLimiter() {

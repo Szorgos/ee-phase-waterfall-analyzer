@@ -566,31 +566,33 @@ namespace lsp
 
                 case FM_APO:
                 {
-                    // Calculating normalized frequency, wrapped for maximal accuracy:
-                    const float kf  = C_PI_MUL_2 / float(nSampleRate);
-                    const float lf  = nSampleRate * 0.5f;
-
-                    while (count > 0)
+                    // Aqulify: double pontosságú számítás. Float-ban a cos(w) mély frekvencián (nagy belső
+                    // mintavételnél) lépcsőzetes, a nevező kioltásos; a görbe és a csoportkésleltetés zajos lett.
+                    // A hangfeldolgozást nem érinti, csak a frekvenciamenet-grafikont.
+                    const double kf = 6.283185307179586 / double(nSampleRate);
+                    const double lf = nSampleRate * 0.5;
+                    for (size_t k=0; k<count; ++k)
                     {
-                        const size_t to_do  = lsp_min(count, STACK_BUF_SIZE >> 1);
-
-                        // Compute transfer function
-                        float *df       = freqs;
-                        for (size_t i=0; i<to_do; ++i, df += 2)
+                        const double w   = lsp_min(double(f[k]), lf) * kf;
+                        const double cw  = cos(w), sw = sin(w);
+                        const double c2w = cos(2.0 * w), s2w = sin(2.0 * w);
+                        double r_re = 1.0, r_im = 0.0;
+                        for (size_t i=0; i<nItems; ++i)
                         {
-                            float w     = f[i];
-                            float f     = lsp_min(w, lf) * kf;
-                            df[0]       = cosf(f);
-                            df[1]       = sinf(f);
+                            const dsp::f_cascade_t *c = &vItems[i];
+                            const double alpha = double(c->t[0]) + double(c->t[1]) * cw + double(c->t[2]) * c2w;
+                            const double beta  = double(c->t[1]) * sw + double(c->t[2]) * s2w;
+                            const double gamma = double(c->b[0]) + double(c->b[1]) * cw + double(c->b[2]) * c2w;
+                            const double delta = double(c->b[1]) * sw + double(c->b[2]) * s2w;
+                            const double mag   = 1.0 / (gamma * gamma + delta * delta);
+                            const double w_re  = mag * (alpha * gamma - beta * delta);
+                            const double w_im  = mag * (alpha * delta + beta * gamma);
+                            const double b_re  = r_re * w_re - r_im * w_im;
+                            const double b_im  = r_re * w_im + r_im * w_re;
+                            r_re = b_re; r_im = b_im;
                         }
-
-                        apo_complex_transfer_calc_ri(re, im, freqs, to_do);
-
-                        // Update pointers
-                        re         += to_do;
-                        im         += to_do;
-                        f          += to_do;
-                        count      -= to_do;
+                        re[k] = float(r_re);
+                        im[k] = float(r_im);
                     }
                     break;
                 }
