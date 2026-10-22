@@ -20,6 +20,13 @@
 
 ---
 
+## 2.1. Ütem: Világos és Sötét téma (Light Theme & System Default) ✅ (KÉSZ - v1.7.5)
+- [x] **3-állású témakapcsoló:** Rendszer alapértelmezett (OS preferenciához igazodó valós idejű követés `matchMedia` eseményfigyelővel), Manuális Sötét és Manuális Világos mód.
+- [x] **Audiofil Light Theme dizájn:** Tiszta fehér kártyák, finom Adwaita/macOS stílusú határolóvonalak, magas kontrasztú tipográfia és mélytürkiz akcentusszín.
+- [x] **Canvas & WebGL témakövetés:** A 3D Three.js vízesés háttere és trapézrácsa, a frekvenciaskála feliratai és osztásai, a 2D parametrikus EQ rácsvonalai és csomópont-kijelölése, valamint a Convolver impulzusvászna azonnal átváltanak téma szerint.
+
+---
+
 ## 3. Ütem: Nemzetköziesítés (i18n) bővítése ⏳ (Későbbi szakasz)
 *Cél: A jelenlegi magyar és angol nyelv mellett a legfontosabb nemzetközi audiofil és felhasználói piacok lefedése.*
 

@@ -306,5 +306,9 @@
   "mt.humVal": "{hz} Hz, {n} tag, legfeljebb −{cut} dB",
   "mt.nrNone": "nincs",
   "mt.nrBand": "sávonkénti, legfeljebb {db} dB (most {now} dB)",
-  "mt.nrRnn": "RNNoise, legfeljebb {db} dB"
+  "mt.nrRnn": "RNNoise, legfeljebb {db} dB",
+  "theme.title": "Téma megjelenése (Rendszer / Sötét / Világos)",
+  "theme.system": "💻 Rendszer",
+  "theme.dark": "🌙 Sötét",
+  "theme.light": "☀️ Világos"
 }

@@ -1,3 +1,9 @@
+### Újdonságok (1.7.5)
+- **Világos és sötét téma (Light & Dark Theme):**
+  - **3 állású témaválasztó a fejlécben:** Választható *Rendszer* (a Windows, Linux vagy macOS témabeállítását követi valós időben), *Sötét* és *Világos* megjelenés.
+  - **Finomhangolt audiofil színpaletta:** Világos módban elegáns tiszta kártyák és panelek, magas kontrasztú feliratok, mélytürkiz akcentusszín.
+  - **Teljes grafikus illeszkedés:** A 3D vízesés Three.js háttere és rácsa, a frekvenciaskála, a 2D EQ vászon rácsvonalai és feliratai, a zoom információs panel és a Convolver impulzus-előnézet mind dinamikusan igazodnak a kiválasztott témához.
+
 ### Javítások (1.7.4)
 - **EQ grafikon – késleltetés és fázis a mélyeken:** APO (DR) módú sávoknál (pl. AutoEq / Equalizer APO profiloknál), bekapcsolt decrampnál (alapérték: x4) a narancs késleltetés-görbe kb. 10–40 Hz között lépcsőzetesen ugrált (x4-nél kb. 0,8 ms-os, x8-nál akár 3 ms-os ugrásokkal), a fázis- és a dB-görbe kissé remegett. Ezt a grafikon számításának pontatlansága okozta: a hangfeldolgozás helyes volt, csak a kijelzés nem. A görbék mostantól simák, és pontosan a valódi hangfeldolgozást mutatják.
 

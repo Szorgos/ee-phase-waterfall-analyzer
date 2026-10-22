@@ -158,6 +158,91 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     --ee-text-secondary: var(--aq-text-2);
   }
 
+  /* ======================================================= */
+  /* VILÁGOS TÉMA TOKENEK (Light Theme)                      */
+  /* ======================================================= */
+  :root[data-theme="light"] {
+    --aq-bg: #F4F6F9;          /* ablak háttere */
+    --aq-bg-2: #E9EEF4;        /* fejléc, süllyesztett felületek, grafikonok */
+    --aq-surface: #FFFFFF;     /* kártyák, panelek */
+    --aq-surface-2: #EDF2F7;   /* kiemelt, rámutatás */
+    --aq-input: #FFFFFF;       /* beviteli mezők */
+    --aq-line: #D8E0E9;        /* elválasztók, keretek */
+    --aq-line-2: #B8C6D4;      /* rámutatás / aktív keret */
+    --aq-text: #0F172A;        /* fő szövegszín */
+    --aq-text-2: #475569;      /* másodlagos leírások */
+    --aq-text-3: #64748B;      /* halvány kísérőszöveg */
+    --aq-accent: #0D9488;      /* elegáns audiofil mélytürkiz */
+    --aq-accent-2: #0F766E;    /* kiemelt értékek, magas kontraszt */
+    --aq-accent-ink: #FFFFFF;  /* fehér szöveg akcentus gombokon */
+    --aq-accent-soft: rgba(13, 148, 136, 0.12);
+    --aq-amber: #D97706;       /* előerősítés, késleltetés görbe */
+    --aq-violet: #7C3AED;      /* fázis görbe */
+    --aq-success: #16A34A;     /* siker állapot */
+    --aq-warn: #EA580C;        /* figyelmeztetés */
+    --aq-danger: #DC2626;      /* hiba / veszély */
+    --aq-info: #0284C7;        /* információ */
+    color-scheme: light !important;
+  }
+
+  :root[data-theme="light"] body {
+    color-scheme: light !important;
+    background: var(--aq-bg);
+    color: var(--aq-text);
+  }
+  :root[data-theme="light"] select,
+  :root[data-theme="light"] input,
+  :root[data-theme="light"] textarea,
+  :root[data-theme="light"] button,
+  :root[data-theme="light"] .ee-input {
+    color-scheme: light !important;
+  }
+  :root[data-theme="light"] select.mini-select,
+  :root[data-theme="light"] select.ee-select {
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%230D9488' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  }
+  :root[data-theme="light"] select.mini-select option,
+  :root[data-theme="light"] select.ee-select option {
+    background-color: #FFFFFF !important;
+    color: #0F172A !important;
+  }
+  :root[data-theme="light"] .top-spectrum-strip {
+    background: #E2E8F0;
+  }
+  :root[data-theme="light"] .freq-scale {
+    background: linear-gradient(to top, rgba(226,232,240,0.96) 0%, rgba(226,232,240,0.75) 55%, rgba(226,232,240,0) 100%);
+  }
+  :root[data-theme="light"] .strip-badge,
+  :root[data-theme="light"] .strip-controls .ctrl-group {
+    background: rgba(255, 255, 255, 0.88);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+  :root[data-theme="light"] .eq-zoom-overlay {
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  }
+  :root[data-theme="light"] .adw-btn:hover {
+    background: #E2E8F0;
+  }
+  :root[data-theme="light"] .status-badge.off {
+    background: rgba(0, 0, 0, 0.04);
+    color: var(--aq-text-2);
+    border-color: var(--aq-line-2);
+  }
+  :root[data-theme="light"] .support-pop {
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.12);
+  }
+  :root[data-theme="light"] .aether-toast {
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.12);
+  }
+  :root[data-theme="light"] .aq-modal {
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.15) !important;
+  }
+  :root[data-theme="light"] .tab-glider {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+  }
+  select.theme-select { min-width: 104px; max-width: 130px; text-overflow: ellipsis; }
+
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--aq-font); }
   html, body {
     width: 100%;
@@ -539,6 +624,19 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 <script>if (!window.THREE) document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');</script>
 <script src="autoeq_index.js"></script>
 <script src="gui_i18n.js"></script>
+<script>
+// Korai témainicializálás a villanásmentes (FOUC) megjelenítéshez
+(function initThemeEarly() {
+  let saved = null;
+  try { saved = localStorage.getItem("aqulify_theme"); } catch (e) {}
+  var setting = saved || "system";
+  var eff = setting === "system" ?
+    ((window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark") : setting;
+  document.documentElement.setAttribute("data-theme", eff);
+  document.documentElement.setAttribute("data-theme-setting", setting);
+  document.documentElement.style.colorScheme = eff;
+})();
+</script>
 </head>
 <body>
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
@@ -584,7 +682,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     <div class="title-group">
       <svg class="app-mark" viewBox="0 0 28 28" aria-hidden="true"><path d="M3 13c3-4 5-4 8 0s5 4 8 0 5-4 6-2" fill="none" stroke="#4FD1C5" stroke-width="2.2" stroke-linecap="round"/><path d="M3 19.5c3-3 5-3 8 0s5 3 8 0 5-3 6-1.5" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round"/></svg>
       <span class="app-title" title="Aqulify • Audiofil DSP Rendszer" data-i18n="app.title" data-i18n-title="app.title">Aqulify • Audiofil DSP Rendszer</span>
-      <span class="app-version" id="lblAppVersion" data-gui-version="1.7.4" title="Verziószám" data-i18n-title="ver.title">v1.7.4</span>
+      <span class="app-version" id="lblAppVersion" data-gui-version="1.7.5" title="Verziószám" data-i18n-title="ver.title">v1.7.5</span>
     </div>
     <!-- EQ PROFILOK: aktív profil neve, választás, mentés, átnevezés, törlés -->
     <div id="presetBar" class="preset-bar" title="EQ profilok: AutoEq importkor és kézi beállításkor automatikusan mentődnek, újraindítás után is választhatók" data-i18n-title="preset.barTitle">
@@ -595,6 +693,11 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       <button class="mini-btn" id="btnPresetDelete" onclick="deletePreset()" title="Aktív profil törlése" data-i18n-title="preset.delete" data-i18n-aria-label="preset.delete"><svg class="aq-icon" aria-hidden="true"><use href="#i-trash"/></svg></button>
     </div>
     <div class="header-right" style="display:flex; align-items:center; gap:12px;">
+      <select id="selectTheme" class="mini-select theme-select" title="Téma megjelenése (Rendszer / Sötét / Világos)" data-i18n-title="theme.title" onchange="setTheme(this.value, true)">
+        <option value="system" data-i18n="theme.system">💻 Rendszer</option>
+        <option value="dark" data-i18n="theme.dark">🌙 Sötét</option>
+        <option value="light" data-i18n="theme.light">☀️ Világos</option>
+      </select>
       <select id="selectLang" class="mini-select lang-select" title="Nyelv" data-i18n-title="lang.title" onchange="setLanguage(this.value, true)"></select>
       <button id="btnSupport" class="support-link" onclick="toggleSupport(event)" title="Az Aqulify ingyenes (donateware). Ha hasznos, egy kis támogatással segítheted a fejlesztést." data-i18n-title="support.btnTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-heart"/></svg><span data-i18n="support.btn">Támogatás</span></button>
       <span id="pipewireLiveBadge" class="status-badge off">Motor Offline</span>
@@ -1148,6 +1251,66 @@ function setLanguage(code, persist) {
   document.documentElement.lang = aqLang;
 })();
 
+// =========================================================================
+// TÉMA KEZELÉS (Világos / Sötét / Rendszer alapértelmezett)
+// =========================================================================
+var currentThemeSetting = "system";
+
+function getSystemTheme() {
+  return (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+}
+
+function getEffectiveTheme(setting) {
+  return setting === "system" ? getSystemTheme() : setting;
+}
+
+function setTheme(mode, persist) {
+  if (mode !== "light" && mode !== "dark" && mode !== "system") mode = "system";
+  currentThemeSetting = mode;
+  if (persist) {
+    try { localStorage.setItem("aqulify_theme", mode); } catch (e) {}
+  }
+  const sel = document.getElementById("selectTheme");
+  if (sel) sel.value = mode;
+  applyTheme();
+}
+
+function applyTheme() {
+  const effective = getEffectiveTheme(currentThemeSetting);
+  document.documentElement.setAttribute("data-theme", effective);
+  document.documentElement.setAttribute("data-theme-setting", currentThemeSetting);
+  document.documentElement.style.colorScheme = effective;
+  const isLight = effective === "light";
+
+  // 3D Three.js vászon és rács frissítése
+  if (typeof scene !== "undefined" && scene) {
+    scene.background = isLight ? new THREE.Color(0xe2e8f0) : new THREE.Color(0x0a0f15);
+    if (typeof buildGrid === "function") buildGrid();
+    if (typeof wireMesh !== "undefined" && wireMesh && wireMesh.material) {
+      wireMesh.material.color.setHex(isLight ? 0x94a3b8 : 0x1f2c3a);
+      wireMesh.material.opacity = isLight ? 0.35 : 0.22;
+    }
+  }
+
+  // 2D Canvasok újrarajzolása az új színekkel
+  if (typeof drawEq === "function") drawEq();
+  if (typeof drawFreqScale === "function") drawFreqScale();
+  if (typeof drawConvWaveform === "function") drawConvWaveform();
+}
+
+(function initTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem("aqulify_theme"); } catch (e) {}
+  currentThemeSetting = saved || "system";
+  if (window.matchMedia) {
+    try {
+      window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
+        if (currentThemeSetting === "system") applyTheme();
+      });
+    } catch (e) {}
+  }
+})();
+
 // Globális PipeWire WebSocket híd változók (hoisting & TDZ védelem)
 var pipewireWs = null;
 var isPipewireConnected = false;
@@ -1432,7 +1595,8 @@ function switchTab(tabId, el) {
 // =========================================================================
 const wfCanvas = document.getElementById("waterfallCanvas");
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0f15);
+const isLightInit = document.documentElement.getAttribute("data-theme") === "light";
+scene.background = new THREE.Color(isLightInit ? 0xe2e8f0 : 0x0a0f15);
 
 const camera = new THREE.PerspectiveCamera(38, wfCanvas.clientWidth / wfCanvas.clientHeight, 0.1, 1000);
 const cameraViews = [
@@ -1500,7 +1664,9 @@ let grid = null;
 function buildGrid() {
   if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
   const pts = [], cols = [];
-  const cMain = new THREE.Color(0x2b3d50), cSub = new THREE.Color(0x16212d);
+  const isLight = document.documentElement.getAttribute("data-theme") === "light";
+  const cMain = isLight ? new THREE.Color(0x94a3b8) : new THREE.Color(0x2b3d50);
+  const cSub = isLight ? new THREE.Color(0xcbd5e1) : new THREE.Color(0x16212d);
   const add = (x1, z1, x2, z2, c) => {
     pts.push(x1 * keystoneAt(z1), -0.05, z1, x2 * keystoneAt(z2), -0.05, z2);
     cols.push(c.r, c.g, c.b, c.r, c.g, c.b);
@@ -1623,8 +1789,14 @@ function rebuildMesh() {
   const colors = new Float32Array(count * 3);
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
+  const isLightMesh = document.documentElement.getAttribute("data-theme") === "light";
   const material = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
-  const wireMaterial = new THREE.MeshBasicMaterial({ color: 0x1f2c3a, wireframe: true, transparent: true, opacity: 0.22 });
+  const wireMaterial = new THREE.MeshBasicMaterial({
+    color: isLightMesh ? 0x94a3b8 : 0x1f2c3a,
+    wireframe: true,
+    transparent: true,
+    opacity: isLightMesh ? 0.35 : 0.22
+  });
 
   mesh = new THREE.Mesh(geometry, material);
   wireMesh = new THREE.Mesh(geometry, wireMaterial);
@@ -1846,7 +2018,8 @@ function drawFreqScale(force) {
   const w = wfCanvas.clientWidth, h = wfCanvas.clientHeight;
   const sh = WF_SCALE_H;                        // .freq-scale magassága (rejtve a clientHeight 0 lenne)
   const dpr = window.devicePixelRatio || 1;
-  const key = `${w}x${h}|${currentViewIdx}|${dpr}|${wfKeystone}`;
+  const theme = document.documentElement.getAttribute("data-theme") || "dark";
+  const key = `${w}x${h}|${currentViewIdx}|${dpr}|${wfKeystone}|${theme}`;
   if (!force && key === freqScaleKey) return;
   freqScaleKey = key;
   camera.updateMatrixWorld();
@@ -1872,8 +2045,9 @@ function drawFreqScale(force) {
   c.beginPath(); c.moveTo(x0, baseY); c.lineTo(x1, baseY); c.stroke();
   c.globalAlpha = 1;
 
+  const isLight = theme === "light";
   // Kis osztások
-  c.strokeStyle = "rgba(127, 146, 166, 0.40)";
+  c.strokeStyle = isLight ? "rgba(100, 116, 139, 0.45)" : "rgba(127, 146, 166, 0.40)";
   c.lineWidth = 1;
   for (const f of FS_MINOR) {
     const x = Math.round(freqScreenX(f, w, h, edgeY)) + 0.5;
@@ -1888,7 +2062,7 @@ function drawFreqScale(force) {
   for (const L of labels) {                     // előbb a fő feliratok, utána a köztesek a szabad helyekre
     const xr = freqScreenX(L.f, w, h, edgeY);
     const x = Math.round(xr) + 0.5;
-    c.strokeStyle = L.major ? "rgba(163, 179, 194, 0.75)" : "rgba(127, 146, 166, 0.55)";
+    c.strokeStyle = L.major ? (isLight ? "rgba(51, 65, 85, 0.85)" : "rgba(163, 179, 194, 0.75)") : (isLight ? "rgba(100, 116, 139, 0.65)" : "rgba(127, 146, 166, 0.55)");
     c.beginPath(); c.moveTo(x, baseY - (L.major ? 4 : 3)); c.lineTo(x, baseY + 3); c.stroke();
     c.font = L.major ? "600 10.5px sans-serif" : "500 9.5px sans-serif";
     const label = fmt(L.f);
@@ -1896,11 +2070,11 @@ function drawFreqScale(force) {
     const tx = Math.min(w - tw / 2 - 2, Math.max(tw / 2 + 2, xr));
     const l = tx - tw / 2 - 5, r = tx + tw / 2 + 5;
     if (placed.some(p => l < p.r && r > p.l)) continue;   // ütköző feliratot kihagyjuk (keskeny ablak)
-    c.fillStyle = L.major ? "#A3B3C2" : "rgba(127, 146, 166, 0.75)";
+    c.fillStyle = L.major ? (isLight ? "#334155" : "#A3B3C2") : (isLight ? "#64748B" : "rgba(127, 146, 166, 0.75)");
     c.fillText(label, tx, baseY + (L.major ? 5 : 6));
     placed.push({ l, r });
   }
-  c.fillStyle = "rgba(185, 184, 181, 0.55)";
+  c.fillStyle = isLight ? "#64748B" : "rgba(185, 184, 181, 0.55)";
   c.textAlign = "left";
   c.font = "10px sans-serif";
   if (x0 > 34) c.fillText("Hz", Math.max(4, x0 - 28), baseY + 5);
@@ -2580,11 +2754,13 @@ function paintEq() {
   const G = eqGeom();
   const { padLeft, padTop, plotW, plotH, midY } = G;
 
+  const isLight = document.documentElement.getAttribute("data-theme") === "light";
+
   // Rács
-  eqCtx.strokeStyle = "#1A2633";
+  eqCtx.strokeStyle = isLight ? "#E2E8F0" : "#1A2633";
   eqCtx.lineWidth = 1 * dpr;
   const candidateFreqs = [20, 30, 40, 50, 70, 100, 150, 200, 300, 500, 700, 1000, 1500, 2000, 3000, 5000, 7000, 10000, 15000, 20000];
-  eqCtx.fillStyle = "#7F92A6";
+  eqCtx.fillStyle = isLight ? "#64748B" : "#7F92A6";
   eqCtx.font = (9.5 * dpr) + "px 'Inter Variable', Inter, sans-serif";
   eqCtx.textAlign = "center";
 
@@ -2594,7 +2770,7 @@ function paintEq() {
     const x = getX(gf, plotW, padLeft);
     if (x < padLeft || x > padLeft + plotW) continue;
     const isMajor = [50, 100, 500, 1000, 5000, 10000].includes(gf);
-    eqCtx.strokeStyle = isMajor ? "#22303F" : "#17222D";
+    eqCtx.strokeStyle = isMajor ? (isLight ? "#CBD5E1" : "#22303F") : (isLight ? "#E2E8F0" : "#17222D");
     eqCtx.beginPath();
     eqCtx.moveTo(x, padTop); eqCtx.lineTo(x, padTop + plotH);
     eqCtx.stroke();
@@ -2615,11 +2791,11 @@ function paintEq() {
     const y = dbToY(db, G);
     if (y < padTop + 4 * dpr || y > padTop + plotH - 4 * dpr) continue;
     const isZero = Math.abs(db) < 1e-9;
-    eqCtx.strokeStyle = isZero ? "#2B3D50" : "#1A2633";
+    eqCtx.strokeStyle = isZero ? (isLight ? "#94A3B8" : "#2B3D50") : (isLight ? "#E2E8F0" : "#1A2633");
     eqCtx.beginPath();
     eqCtx.moveTo(padLeft, y); eqCtx.lineTo(padLeft + plotW, y);
     eqCtx.stroke();
-    eqCtx.fillStyle = isZero ? "#E8EEF4" : "#7F92A6";
+    eqCtx.fillStyle = isZero ? (isLight ? "#0F172A" : "#E8EEF4") : (isLight ? "#64748B" : "#7F92A6");
     eqCtx.fillText((db > 0 ? "+" : "") + (isZero ? "0" : db.toFixed(dbDec)) + " dB", padLeft - 6 * dpr, y + 3 * dpr);
   }
 
@@ -2768,9 +2944,9 @@ function paintEq() {
       parts.push(`${f(dbBottom)} … ${f(dbTop)} dB`);
     }
     const zt = `${parts.join(" • ")} • ${t("canvas.dragPan")}`;
-    eqCtx.fillStyle = "rgba(13, 20, 28, 0.84)";   // olvasható maradjon a görbék fölött is
+    eqCtx.fillStyle = isLight ? "rgba(241, 245, 249, 0.90)" : "rgba(13, 20, 28, 0.84)";   // olvasható maradjon a görbék fölött is
     eqCtx.fillRect(padLeft + 4 * dpr, padTop + plotH - 20 * dpr, eqCtx.measureText(zt).width + 8 * dpr, 16 * dpr);
-    eqCtx.fillStyle = "rgba(163, 179, 194, 0.95)";
+    eqCtx.fillStyle = isLight ? "#1E293B" : "rgba(163, 179, 194, 0.95)";
     eqCtx.fillText(zt, padLeft + 8 * dpr, padTop + plotH - 8 * dpr);
   }
 
@@ -2792,13 +2968,13 @@ function paintEq() {
         eqCtx.beginPath();
         eqCtx.moveTo(nx, ey + d); eqCtx.lineTo(nx - 6 * dpr, ey - d * 0.4); eqCtx.lineTo(nx + 6 * dpr, ey - d * 0.4);
         eqCtx.closePath(); eqCtx.fill();
-        if (isSelected) { eqCtx.strokeStyle = "#E8EEF4"; eqCtx.lineWidth = 1.5 * dpr; eqCtx.stroke(); }
+        if (isSelected) { eqCtx.strokeStyle = isLight ? "#0F172A" : "#E8EEF4"; eqCtx.lineWidth = 1.5 * dpr; eqCtx.stroke(); }
         return;
       }
       const ny = nv.y;
 
       if (isSelected) {
-        eqCtx.strokeStyle = "#E8EEF4";
+        eqCtx.strokeStyle = isLight ? "#0F172A" : "#E8EEF4";
         eqCtx.lineWidth = 2 * dpr;
         eqCtx.beginPath();
         eqCtx.arc(nx, ny, 9 * dpr, 0, Math.PI * 2);
@@ -3839,12 +4015,13 @@ function loadSampleIr(type) {
 /** Valódi IR rajzolása (helyi minták vagy a motor előnézete). true, ha rajzolt. */
 function drawRealIrWaveform(canvas) {
   if (!convIrLocal && !convIrRemote) return false;
+  const isLight = document.documentElement.getAttribute("data-theme") === "light";
   const ctx = canvas.getContext("2d");
   const w = canvas.width = canvas.clientWidth;
   const h = canvas.height = canvas.clientHeight;
-  ctx.fillStyle = "#0C131B";
+  ctx.fillStyle = isLight ? "#F8FAFC" : "#0C131B";
   ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = "#16212D";
+  ctx.strokeStyle = isLight ? "#E2E8F0" : "#16212D";
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (let x = 0; x < w; x += 40) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
@@ -3871,7 +4048,7 @@ function drawRealIrWaveform(canvas) {
       ctx.stroke();
     });
     ctx.globalAlpha = 1;
-    ctx.fillStyle = "#A3B3C2";
+    ctx.fillStyle = isLight ? "#475569" : "#A3B3C2";
     ctx.fillText(`${(convIrLocal.channels[0].length / convIrLocal.sr * 1000).toFixed(0)} ms`, w - 60, h - 6);
   } else {
     // Motor előnézet: burkológörbe dB-ben (-60..0)
@@ -3884,7 +4061,7 @@ function drawRealIrWaveform(canvas) {
     ctx.lineTo(w, h);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = "#A3B3C2";
+    ctx.fillStyle = isLight ? "#475569" : "#A3B3C2";
     ctx.fillText(t("cv.envelope"), 8, 14);
   }
   return true;
@@ -3894,18 +4071,19 @@ function drawConvWaveform() {
   const canvas = document.getElementById("convCanvas");
   if (!canvas) return;
   if (drawRealIrWaveform(canvas)) return;
+  const isLight = document.documentElement.getAttribute("data-theme") === "light";
   const ctx = canvas.getContext("2d");
   const w = canvas.width = canvas.clientWidth;
   const h = canvas.height = canvas.clientHeight;
-  ctx.fillStyle = "#0C131B";
+  ctx.fillStyle = isLight ? "#F8FAFC" : "#0C131B";
   ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = "#16212D";
+  ctx.strokeStyle = isLight ? "#E2E8F0" : "#16212D";
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (let x = 0; x < w; x += 40) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
   for (let y = 0; y < h; y += 20) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
   ctx.stroke();
-  ctx.strokeStyle = "#1F2C3A";
+  ctx.strokeStyle = isLight ? "#CBD5E1" : "#1F2C3A";
   ctx.beginPath();
   ctx.moveTo(0, h / 2);
   ctx.lineTo(w, h / 2);
@@ -4862,6 +5040,7 @@ function refreshDynamicTexts() {
   }
 }
 setLanguage(aqLang, false);
+setTheme(currentThemeSetting, false);
 setTimeout(() => { updateTabGlider(null, true); }, 60);
 
 // Induláskor háttérben előkészítjük a 8 850+ modellt tartalmazó teljes AutoEq indexet és csatlakozunk a hangmotorhoz (PipeWire / Windows)

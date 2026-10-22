@@ -306,5 +306,9 @@
   "mt.humVal": "{hz} Hz, {n} harmonics, up to −{cut} dB",
   "mt.nrNone": "none",
   "mt.nrBand": "band-wise, up to {db} dB (now {now} dB)",
-  "mt.nrRnn": "RNNoise, up to {db} dB"
+  "mt.nrRnn": "RNNoise, up to {db} dB",
+  "theme.title": "Theme appearance (System / Dark / Light)",
+  "theme.system": "💻 System",
+  "theme.dark": "🌙 Dark",
+  "theme.light": "☀️ Light"
 }
