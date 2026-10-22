@@ -1,3 +1,9 @@
+### Újdonságok (1.7.2)
+- **Bass Enhancer:** a felület is az EasyEffectsét követi: mérő mutatja a keltett felharmonikusok szintjét, a Blend egész lépésekben állítható (−10: 3., +10: 2. felharmonikus). A hangzás és az alapértékek nem változtak, ezek eddig is az EasyEffectséi voltak.
+
+### Javítások (1.7.2)
+- **Crossfeed:** az előbeállítások közötti váltás nem kapcsolja be a modult; kikapcsolt modulnál a BE/KI gomb röviden felvillan.
+
 ### Újdonságok (1.7.1)
 - **macOS (új):** Aqulify.app egy alkalmazásként Apple Silicon és Intel Macre (macOS 12-től), menüsor-ikonnal és saját ablakkal, ugyanazzal a DSP lánccal és felülettel. macOS 14.2-től a rendszerhangot illesztőprogram nélkül, a rendszerhang-rögzítési engedéllyel veszi át; régebbi rendszeren (vagy engedély nélkül) a BlackHole 2ch virtuális eszközzel működik. A kimenet a rendszer alapértelmezettje vagy a felületen választott eszköz. A fordítást és az indítást GitHub macOS gépen ellenőriztük; valódi Macen, hanggal még nem próbáltuk.
 
