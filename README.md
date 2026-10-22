@@ -58,10 +58,10 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
    * **Bass Enhancer (Calf):** pszichoakusztikai hiányzó alaphang szintézis (amount, harmonics, scope, floor, blend, listen, bemeneti és kimeneti erősítés).
 
 5. **Magic Touch – automatikus, visszafogott hangszépítő:**
-   * Elemzi a lejátszott felvételt (hangosság és dinamika BS.1770 / EBU 3342 szerint, hangszín, sziszegés, zajpadló, sztereókép), és csak azt igazítja, ami hiányzik vagy zavaró, kemény korlátokkal: mély-közép vágás, levegő, de-esser, mono basszus, tágítás, mikrodinamika, exciter. A kimenet hangossága megegyezik a bemenetével; rendben lévő felvételen a jel bitre érintetlen.
+   * Elemzi a lejátszott felvételt, és csak azt igazítja, ami hiányzik vagy zavaró. A kimenet hangossága megegyezik a bemenetével; rendben lévő felvételen a jel bitre érintetlen.
    * **Karakter:** Természetes, Meleg, Fényes, Tágas. **Tartalom:** Automatikus (felismeréssel), Zene, Beszéd, Archív felvétel.
-   * **Helyreállítás:** 50/60 Hz-es zümmögés eltávolítása, kattanásjavítás, zajcsökkentés (beszédnél RNNoise). Késleltetés csak akkor lép fel, ha a kattanásjavítás (2,7 ms) vagy az RNNoise (32,7 ms) dolgozik.
-   * Intenzitás csúszka, hangerőre kiegyenlített A/B összehasonlítás, részletes diagnosztika ([terv és működés](docs/plans/magic-touch.md)).
+   * **Helyreállítás:** 50/60 Hz-es zümmögés eltávolítása, kattanásjavítás, zajcsökkentés.
+   * Intenzitás csúszka, hangerőre kiegyenlített A/B összehasonlítás, részletes diagnosztika.
 
 6. **Motor és felület:**
    * Linuxon PipeWire virtuális kimenet („Aqulify”), Windowson Equalizer APO plugin. A hangszál zárak nélkül veszi át a beállításokat; a modulok be- és kikapcsolása, valamint az EQ-mód és a decramp váltása rövid le- és felúsztatással, kattanás nélkül történik (lineáris fázisú módra váltáskor a kimenet a módhoz tartozó késleltetés kitöltéséig, kb. 0,1 s-ig néma). A felület és a grafika külön folyamatban fut, nem tartja fel a lejátszást.
@@ -224,7 +224,7 @@ cmake --build build -j$(nproc)
 │   ├── shared_state.hpp        # Plugin <-> motor közös memória elrendezés (Windows)
 │   ├── mini_json.hpp           # Függőségmentes JSON olvasó a vezérlőüzenetekhez
 │   ├── aq_i18n.hpp             # Nyelvválasztás és szövegek a natív részekhez (aq_i18n_strings.hpp: előállítva)
-│   ├── magic_touch.hpp         # Magic Touch: automatikus, visszafogott hangszépítő (docs/plans/magic-touch.md)
+│   ├── magic_touch.hpp         # Magic Touch: automatikus, visszafogott hangszépítő
 │   ├── magic_restore.hpp       # Magic Touch helyreállítás: de-hum, kattanásjavítás, zajcsökkentés
 │   ├── magic_dsp.hpp           # Magic Touch közös szűrői és elemző segédei
 │   ├── rnn_denoise.hpp         # RNNoise burkoló (src/rnn_denoise.cpp)

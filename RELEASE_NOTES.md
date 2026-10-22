@@ -1,9 +1,7 @@
 ### Újdonságok (1.7.0)
 - **Magic Touch:** új, automatikus és visszafogott hangszépítő modul a lánc elején, Linuxon és Windowson ugyanazzal a kóddal. Elemzi a lejátszott felvételt, és csak azt igazítja, ami hiányzik vagy zavaró; a kimenet hangossága megegyezik a bemenetével, rendben lévő felvételen a jel bitre érintetlen, 0 %-on a modul kimarad a láncból.
-  - *Hangszín és tér:* mély-közép vágás (legfeljebb 3 dB), levegő (legfeljebb +2 dB), de-esser (legfeljebb 4 dB), fokozatos mono basszus, tágítás 150 Hz felett (Crossfeed mellett nincs).
-  - *Mikrodinamika és exciter:* tranziens-kiemelés és a halk részek finom emelése, csak lapos dinamikánál; páros felharmonikusok 6 kHz felett, ahol a magas hiányzik.
   - *Karakter:* Természetes, Meleg, Fényes, Tágas. *Tartalom:* Automatikus (felismeréssel), Zene, Beszéd, Archív felvétel.
-  - *Helyreállítás:* az 50/60 Hz-es zümmögés eltávolítása, kattanásjavítás, zajcsökkentés (beszédnél RNNoise). Késleltetés csak akkor lép fel, ha a kattanásjavítás (2,7 ms) vagy az RNNoise (32,7 ms) dolgozik.
+  - *Helyreállítás:* az 50/60 Hz-es zümmögés eltávolítása, kattanásjavítás, zajcsökkentés.
   - Intenzitás csúszka, hangerőre kiegyenlített A/B összehasonlítás, részletes diagnosztika.
 - **Új megjelenés:** sötét, „víz és fény” arculat türkiz kiemelőszínnel; beágyazott Inter és IBM Plex Mono betűtípus (hálózat nélkül is); egységes vonalas ikonok az emojik helyett; színesebb vízesés-skála a valódi zene szintjeihez igazítva (mélykék → ibolya → kék → türkiz → zöld → sárga → narancs → korall a csúcsokon); kitöltött csúszkák, új állapotjelvények és modulpontok. Linuxon a címsor, Windows 11-en a címsor színe is a felülethez igazodik, és a felület háttere már betöltés előtt is sötét.
 - **Magyar és angol nyelv mindenhol:** a felület (nyelvválasztó a fejlécben, alapból a rendszer nyelve), Windowson a tálcamenü, az üzenetablakok, a telepítő és az eltávolító, Linuxon az `install.sh` / `uninstall.sh`, a menübejegyzés és a PipeWire kimenet neve.
