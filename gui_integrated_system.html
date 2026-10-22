@@ -306,7 +306,15 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   /* ======================================================= */
   .top-spectrum-strip { position: relative; width: 100%; background: #070B10; border-bottom: 1px solid var(--aq-line); overflow: hidden; }
   .wf-stage { position: relative; width: 100%; height: clamp(230px, 32vh, 420px); overflow: hidden; }
-  .strip-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; row-gap: 6px; padding: 8px 16px; background: var(--aq-bg-2); border-bottom: 1px solid var(--aq-line); }
+  /* Eszközsáv a vízesés fölött (tartalék, ha a vezérlők nem férnek el a háló két oldalán) */
+  .strip-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; row-gap: 6px; padding: 8px 16px; background: var(--aq-bg-2); border-bottom: 1px solid var(--aq-line); }
+  .strip-col-right { justify-content: flex-end; }
+  /* A háló két oldalán: bal és jobb felső sarok, a széles soroktól lefelé a keskenyebbekig, a szélekhez igazítva */
+  .top-spectrum-strip.docked .strip-toolbar { position: absolute; top: 0; left: 0; right: 0; z-index: 10; flex-wrap: nowrap; align-items: flex-start; padding: 8px 12px; background: none; border: 0; pointer-events: none; }
+  .top-spectrum-strip.docked .strip-col { flex-direction: column; flex-wrap: nowrap; gap: 4px; }
+  .top-spectrum-strip.docked .strip-col-left { align-items: flex-start; }
+  .top-spectrum-strip.docked .strip-col-right { align-items: flex-end; }
+  .top-spectrum-strip.docked .strip-controls .ctrl-group { padding: 1px 3px 1px 5px; }   /* tömörebb sorok: több fér a háló mellé */
   canvas#waterfallCanvas { width: 100%; height: 100%; display: block; }
   .wf-nogl { position: absolute; inset: 0 0 30px; display: flex; align-items: center; justify-content: center; padding: 0 24px; text-align: center; color: var(--aq-text-2); font-size: 0.9rem; pointer-events: none; }
   .wf-nogl[hidden] { display: none; }
@@ -325,7 +333,6 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .freq-scale-live.stale .fs-mark { background: rgba(79, 209, 197, 0.45); }
   .freq-scale-live.stale .fs-stat { color: rgba(79, 209, 197, 0.45); }
 
-  .strip-overlay { display: flex; flex-direction: row; align-items: center; gap: 8px; pointer-events: none; }
   .strip-badge { background: rgba(13, 20, 28, 0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--aq-line); border-radius: 999px; padding: 5px 12px; font-size: 0.74rem; color: var(--aq-text-2); }
   .strip-badge strong { color: var(--aq-accent); font-weight: 600; }
   @keyframes donateSubtlePulse {
@@ -355,8 +362,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .aether-toast::before { content: ""; position: absolute; left: 16px; top: 16px; width: 10px; height: 10px; border-radius: 50%; background: var(--aq-accent); box-shadow: 0 0 0 4px var(--aq-accent-soft); }
   .aether-toast.show { opacity: 1; transform: translateY(0); }
 
-  /* A bal felső felirat (Top-Strip 3D) helyét szabadon hagyja; keskeny ablakban több sorba tördel */
-  .strip-controls { flex: 1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; row-gap: 6px; align-items: center; z-index: 10; pointer-events: none; }
+  .strip-controls { display: flex; flex-wrap: wrap; gap: 8px; row-gap: 6px; align-items: center; pointer-events: none; }
   .strip-controls > * { pointer-events: auto; }
   .strip-controls .ctrl-group { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; background: rgba(13, 20, 28, 0.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--aq-line); border-radius: 10px; padding: 3px 4px 3px 6px; }
   .strip-controls select.mini-select { max-width: 290px; text-overflow: ellipsis; }
@@ -736,17 +742,11 @@ if (!window.THREE) window.THREE = (function () {
   <!-- 1. KESKENY FELSŐ 3D VÍZESÉS SÁV                         -->
   <!-- ======================================================= -->
   <div class="top-spectrum-strip">
-    <!-- Eszközsáv a vízesés fölött: a vezérlők nem takarják a 3D grafikát -->
-    <div class="strip-toolbar">
-      <div class="strip-overlay">
-        <div class="strip-badge" data-wf3d>
-          Top-Strip 3D: <strong id="lblResolution">160 sáv × 120 lépcső</strong>
-        </div>
-        <div class="prering-note" id="hudPreRingBadge" style="display:none;" title="FIR / FFT / SPM módban (lineáris fázis) a meredek szűrők előtt kis előcsengés keletkezhet. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik – ez így rendben van." data-i18n-title="prering.title">
-          <span id="hudGlowDot" style="display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--aq-amber); margin-right:4px; vertical-align:middle;"></span><span data-i18n="prering.text">Lineáris fázis: előcsengés lehetséges</span>
-        </div>
-      </div>
-      <div class="strip-controls">
+    <!-- A vezérlők a háló két oldalán, a széles soroktól a keskenyek felé (mint a trapéz alakú háló melletti üres
+         sarkok); ha az ablakban nem férnek el a háló mellett, eszközsávként a vízesés fölé kerülnek -->
+    <div class="strip-toolbar" id="stripToolbar">
+      <!-- Bal oldal: a vízesés megjelenítése -->
+      <div class="strip-controls strip-col strip-col-left">
         <!-- Időlépcsők állítása -->
         <span class="ctrl-group" data-wf3d><span class="ctrl-label" data-i18n="strip.time">Idő:</span>
         <select id="selectTimeSteps" class="mini-select">
@@ -754,7 +754,28 @@ if (!window.THREE) window.THREE = (function () {
           <option value="120" selected data-i18n="strip.t120">120 lépcső (Normál)</option>
           <option value="180" data-i18n="strip.t180">180 lépcső (Mély)</option>
         </select></span>
-
+        <!-- a felirata a nézettel változik (legfeljebb „Nézőpont: 3D Izometrikus”), ezért fent, a szélesebb sorok között -->
+        <span class="ctrl-group" data-wf3d><button class="mini-btn" id="btnCameraAngle" data-wf3d>Nézőpont: 3D</button></span>
+        <!-- TRAPÉZKORREKCIÓ (mint a kivetítőnél): a hátsó él szélessége -->
+        <span class="ctrl-group" data-wf3d><span class="ctrl-label" data-i18n="strip.keystone">Trapéz:</span>
+        <button class="mini-btn icon-only" id="btnKeystoneLess" title="Trapézkorrekció: keskenyebb hátsó él" data-i18n-title="strip.keystoneLess" data-i18n-aria-label="strip.keystoneLess"><svg class="aq-icon" aria-hidden="true"><use href="#i-trap-narrow"/></svg></button>
+        <span class="ctrl-value" id="lblKeystone">0</span>
+        <button class="mini-btn icon-only" id="btnKeystoneMore" title="Trapézkorrekció: szélesebb hátsó él" data-i18n-title="strip.keystoneMore" data-i18n-aria-label="strip.keystoneMore"><svg class="aq-icon" aria-hidden="true"><use href="#i-trap-wide"/></svg></button>
+        <button class="mini-btn icon-only" id="btnKeystoneReset" hidden title="Trapézkorrekció alaphelyzetbe" data-i18n-title="strip.keystoneReset" data-i18n-aria-label="strip.keystoneReset"><svg class="aq-icon" aria-hidden="true"><use href="#i-reset"/></svg></button></span>
+        <!-- FAKÍTÁS / TELÍTETTSÉG CSÚSZKA -->
+        <span class="ctrl-group" data-wf3d title="Vízesés telítettsége / fakítása" data-i18n-title="strip.fadeTitle"><span class="ctrl-label" data-i18n="strip.fade">Fakítás:</span>
+        <input type="range" id="sliderWfFade" min="0" max="100" value="100" class="ee-slider" style="width:75px; vertical-align:middle; cursor:pointer;" oninput="updateWfFade(this.value)">
+        </span>
+        <span class="ctrl-group" data-wf3d><button class="mini-btn" id="btnFlowDir" data-wf3d title="Vízesés iránya: lefelé (az új sorok hátul indulnak) vagy felfelé (az új sorok elöl, a skálánál indulnak)" data-i18n-title="strip.flowTitle">Folyás: lefelé</button></span>
+      </div>
+      <!-- Jobb oldal: hangfeldolgozás és állapot -->
+      <div class="strip-controls strip-col strip-col-right">
+        <div class="prering-note" id="hudPreRingBadge" style="display:none;" title="FIR / FFT / SPM módban (lineáris fázis) a meredek szűrők előtt kis előcsengés keletkezhet. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik – ez így rendben van." data-i18n-title="prering.title">
+          <span id="hudGlowDot" style="display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--aq-amber); margin-right:4px; vertical-align:middle;"></span><span data-i18n="prering.text">Lineáris fázis: előcsengés lehetséges</span>
+        </div>
+        <div class="strip-badge" data-wf3d>
+          Top-Strip 3D: <strong id="lblResolution">160 sáv × 120 lépcső</strong>
+        </div>
         <!-- EQ MÓDVÁLASZTÓ (EasyEffects / LSP: IIR, FIR, FFT, SPM) -->
         <span class="ctrl-group"><span class="ctrl-label" data-i18n="strip.eqMode">EQ Mód:</span>
         <select id="selectEqMode" class="mini-select">
@@ -763,7 +784,6 @@ if (!window.THREE) window.THREE = (function () {
           <option value="2">FFT</option>
           <option value="3">SPM</option>
         </select></span>
-
         <!-- DECRAMPING (EasyEffects / LSP: 44,1 kHz-hez viszonyított túlmintavételezés) -->
         <span class="ctrl-group"><span class="ctrl-label">Decramp:</span>
         <select id="selectDecramp" class="mini-select" title="Decramping: túlmintavételezés IIR és FIR módban (44,1 kHz-hez viszonyítva)" data-i18n-title="strip.decrampTitle">
@@ -774,22 +794,7 @@ if (!window.THREE) window.THREE = (function () {
           <option value="4">x6</option>
           <option value="5">x8</option>
         </select></span>
-
-        <!-- FAKÍTÁS / TELÍTETTSÉG CSÚSZKA -->
-        <span class="ctrl-group" data-wf3d title="Vízesés telítettsége / fakítása" data-i18n-title="strip.fadeTitle"><span class="ctrl-label" data-i18n="strip.fade">Fakítás:</span>
-        <input type="range" id="sliderWfFade" min="0" max="100" value="100" class="ee-slider" style="width:75px; vertical-align:middle; cursor:pointer;" oninput="updateWfFade(this.value)">
-        </span>
-
-        <span class="ctrl-group"><button class="mini-btn" id="btnEqBypass">EQ: KI (Bypass)</button>
-        <button class="mini-btn" id="btnCameraAngle" data-wf3d>Nézőpont: 3D</button>
-        <button class="mini-btn" id="btnFlowDir" data-wf3d title="Vízesés iránya: lefelé (az új sorok hátul indulnak) vagy felfelé (az új sorok elöl, a skálánál indulnak)" data-i18n-title="strip.flowTitle">Folyás: lefelé</button></span>
-
-        <!-- TRAPÉZKORREKCIÓ (mint a kivetítőnél): a hátsó él szélessége -->
-        <span class="ctrl-group" data-wf3d><span class="ctrl-label" data-i18n="strip.keystone">Trapéz:</span>
-        <button class="mini-btn icon-only" id="btnKeystoneLess" title="Trapézkorrekció: keskenyebb hátsó él" data-i18n-title="strip.keystoneLess" data-i18n-aria-label="strip.keystoneLess"><svg class="aq-icon" aria-hidden="true"><use href="#i-trap-narrow"/></svg></button>
-        <span class="ctrl-value" id="lblKeystone">0</span>
-        <button class="mini-btn icon-only" id="btnKeystoneMore" title="Trapézkorrekció: szélesebb hátsó él" data-i18n-title="strip.keystoneMore" data-i18n-aria-label="strip.keystoneMore"><svg class="aq-icon" aria-hidden="true"><use href="#i-trap-wide"/></svg></button>
-        <button class="mini-btn icon-only" id="btnKeystoneReset" hidden title="Trapézkorrekció alaphelyzetbe" data-i18n-title="strip.keystoneReset" data-i18n-aria-label="strip.keystoneReset"><svg class="aq-icon" aria-hidden="true"><use href="#i-reset"/></svg></button></span>
+        <span class="ctrl-group"><button class="mini-btn" id="btnEqBypass">EQ: KI (Bypass)</button></span>
       </div>
     </div>
     <div class="wf-stage">
@@ -2054,6 +2059,7 @@ function drawFreqScale(force) {
   const key = `${w}x${h}|${currentViewIdx}|${dpr}|${wfKeystone}|${theme}`;
   if (!force && key === freqScaleKey) return;
   freqScaleKey = key;
+  stripLayoutDirty = true;                      // a vezérlők helye is újra eldől (layoutStripControls)
   camera.updateMatrixWorld();
   freqScaleCanvas.width = Math.round(w * dpr);  // a méret beállítása a vászon korábbi tartalmát is eldobja
   freqScaleCanvas.height = Math.round(sh * dpr);
@@ -2110,6 +2116,77 @@ function drawFreqScale(force) {
   c.textAlign = "left";
   c.font = "10px sans-serif";
   if (x0 > 34) c.fillText("Hz", Math.max(4, x0 - 28), baseY + 5);
+}
+
+// ---------------------------------------------------------------- a vízesés vezérlői a háló két oldalán
+// A vezérlők a háló melletti üres sarkokba kerülnek (.docked), ha egyik sem ér bele a háló képébe (a
+// legmagasabb csúcsokat is beleértve); különben eszközsávként a vízesés fölött maradnak. Méret-, nézet-,
+// trapéz- és feliratváltozáskor újra eldől.
+const wfStrip = document.querySelector(".top-spectrum-strip");
+const stripToolbar = document.getElementById("stripToolbar");
+var stripLayoutDirty = true;   // var: a drawFreqScale már a betöltés elején is hívódhat (téma)
+if (stripToolbar && window.MutationObserver) {
+  new MutationObserver(() => { stripLayoutDirty = true; })
+    .observe(stripToolbar, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["style", "hidden"] });
+}
+
+/** A háló képének (konvex) körvonala a vásznon, képpontban. */
+function wfSilhouette(w, h) {
+  const kb = keystoneBack(), hw = planeWidth / 2, hd = planeDepth / 2, pts = [];
+  for (const [x, z] of [[-hw, hd], [hw, hd], [-hw * kb, -hd], [hw * kb, -hd]]) {
+    for (const y of [0, WF_MAX_H]) {
+      _fsVec.set(x, y, z).project(camera);
+      pts.push([(_fsVec.x + 1) / 2 * w, (1 - _fsVec.y) / 2 * h]);
+    }
+  }
+  pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const half = (list) => {
+    const out = [];
+    for (const p of list) {
+      while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], p) <= 0) out.pop();
+      out.push(p);
+    }
+    out.pop();
+    return out;
+  };
+  return half(pts).concat(half(pts.slice().reverse()));
+}
+
+/** Metszi-e a téglalap ({l, t, r, b}) a konvex sokszöget (elválasztó tengelyek tétele)? */
+function rectHitsPolygon(rc, poly) {
+  const corners = [[rc.l, rc.t], [rc.r, rc.t], [rc.r, rc.b], [rc.l, rc.b]];
+  const sep = (nx, ny) => {
+    let pMin = Infinity, pMax = -Infinity, rMin = Infinity, rMax = -Infinity;
+    for (const p of poly) { const d = p[0] * nx + p[1] * ny; pMin = Math.min(pMin, d); pMax = Math.max(pMax, d); }
+    for (const c of corners) { const d = c[0] * nx + c[1] * ny; rMin = Math.min(rMin, d); rMax = Math.max(rMax, d); }
+    return pMax < rMin || rMax < pMin;
+  };
+  if (sep(1, 0) || sep(0, 1)) return false;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length];
+    if (sep(b[1] - a[1], a[0] - b[0])) return false;
+  }
+  return true;
+}
+
+function layoutStripControls() {
+  if (!wfStrip || !stripToolbar) return;
+  const w = wfCanvas.clientWidth, h = wfCanvas.clientHeight;
+  wfStrip.classList.add("docked");
+  let fits = !!renderer && w > 0 && h > 0;
+  if (fits) {
+    camera.updateMatrixWorld();
+    const poly = wfSilhouette(w, h);
+    const box = wfCanvas.getBoundingClientRect(), gap = 4, bottom = h - WF_SCALE_H;
+    const side = (sel) => [...stripToolbar.querySelectorAll(sel + " > *")].filter(el => el.offsetParent !== null)
+      .map(el => { const r = el.getBoundingClientRect(); return { l: r.left - box.left - gap, t: r.top - box.top - gap, r: r.right - box.left + gap, b: r.bottom - box.top + gap }; });
+    const left = side(".strip-col-left"), right = side(".strip-col-right");
+    const all = left.concat(right);
+    const leftEdge = Math.max(-Infinity, ...left.map(r => r.r)), rightEdge = Math.min(Infinity, ...right.map(r => r.l));
+    fits = leftEdge < rightEdge && all.every(r => r.b - gap <= bottom && !rectHitsPolygon(r, poly));
+  }
+  if (!fits) wfStrip.classList.remove("docked");
 }
 
 // ---------------------------------------------------------------- a zenei jel frekvenciatartománya (ottragadó jelek)
@@ -2277,6 +2354,7 @@ function animate3D() {
   requestAnimationFrame(animate3D);
   if (document.hidden) return;                // rejtett (pl. kis méretre tett) ablakban nincs mit rajzolni
   drawFreqScale(false);
+  if (stripLayoutDirty) { stripLayoutDirty = false; layoutStripControls(); }
   const nowMs = performance.now();
   {
     const fresh = isPipewireConnected && liveSpectrumLevels && liveSpectrumLevels.length > 0 &&
