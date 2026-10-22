@@ -446,8 +446,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
   .tab-glider {
     position: absolute;
-    top: 4px;
-    left: 4px;
+    top: 0;               /* a helyét a JS adja (translate3d), a gomb pontos helyére */
+    left: 0;
     height: 38px;
     background: var(--aq-surface-2);
     border: 1px solid var(--aq-line-2);
@@ -1486,8 +1486,9 @@ function updateTabGlider(targetBtn, instant) {
   }
   const cRect = container.getBoundingClientRect();
   const bRect = btn.getBoundingClientRect();
-  const left = bRect.left - cRect.left;
-  const top = bRect.top - cRect.top;
+  // az abszolút pozíció a tároló kereten belüli sarkától számít: a keret szélességét le kell vonni
+  const left = bRect.left - cRect.left - container.clientLeft;
+  const top = bRect.top - cRect.top - container.clientTop;
   const w = bRect.width;
   const h = bRect.height;
 
@@ -5207,6 +5208,8 @@ function refreshDynamicTexts() {
 setLanguage(aqLang, false);
 setTheme(currentThemeSetting, false);
 setTimeout(() => { updateTabGlider(null, true); }, 60);
+// a betűtípus betöltése után (más szélességű feliratok) is a gomb pontos méretét veszi fel
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => updateTabGlider(null, true));
 
 // Induláskor háttérben előkészítjük a 8 850+ modellt tartalmazó teljes AutoEq indexet és csatlakozunk a hangmotorhoz (PipeWire / Windows)
 setTimeout(() => {
