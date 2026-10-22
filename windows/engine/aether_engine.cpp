@@ -250,6 +250,13 @@ public:
         return loopback_.sampleRate();
     }
 
+    /** A Bass Enhancer felharmonikus-szintje (dB) a pluginból; plugin nélkül nincs feldolgozás (-100). */
+    double bassHarmonicsDb() {
+        std::lock_guard<std::mutex> lk(mutex_);
+        if (pluginActive_ && mapping_.state()) return mapping_.state()->bassHarmonicsDb.load();
+        return -100.0;
+    }
+
     /** Új konvolver IR a GUI-ból: tárolás, mentés a pluginnak, és átadás a közös memórián. */
     void setIr(IrData&& ir) {
         {
@@ -416,6 +423,7 @@ int main(int argc, char** argv) {
     BridgeCallbacks cb;
     cb.pullAudio = [&](float* lr, size_t maxFrames) { return sources.pull(lr, maxFrames); };
     cb.sampleRate = [&]() { return sources.sampleRate(); };
+    cb.bassHarmonics = [&]() { return sources.bassHarmonicsDb(); };
     cb.getParams = [&]() { std::lock_guard<std::mutex> lk(paramMutex); return current; };
     cb.setParams = [&](const ParamData& p) {
         {

@@ -48,6 +48,8 @@ struct BridgeCallbacks {
     std::function<std::string()> statusFields;
     /** Aktuális limiter csillapítás dB-ben (opcionális, a spektrum üzenethez). */
     std::function<double()> gainReduction;
+    /** A Bass Enhancer felharmonikus-szintje dB-ben (opcionális, a spektrum üzenethez). */
+    std::function<double()> bassHarmonics;
     /** Új konvolver impulzusválasz a GUI-ból (üres IrData = törlés). */
     std::function<void(IrData&&)> setIr;
     /** A betöltött IR adatai (név, mintavétel, előnézet) az állapotüzenethez. */
@@ -728,6 +730,10 @@ private:
         if (cb_.gainReduction) {
             s += ",\"gr\":";
             appendFloat(s, cb_.gainReduction(), 2);
+        }
+        if (cb_.bassHarmonics) {
+            s += ",\"bh\":";
+            appendFloat(s, cb_.bassHarmonics(), 1);
         }
         s += "}";
         return s;

@@ -963,6 +963,18 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
         <p class="module-desc" data-i18n="bass.desc">Kisebb hangfalakhoz és mélyhiányos fejhallgatókhoz: nem pusztán hangerőt emel (ami membrántorzítást és akusztikai zörgést okozna), hanem felharmonikusokat generál, amit az agy a mély alaphang jelenléteként dekódol.</p>
 
         <div class="param-grid" id="bassControls"></div>
+        <div class="param-grid" style="grid-template-columns: repeat(3, 1fr);">
+          <!-- A keltett felharmonikusok szintje (mint az EasyEffectsben: -100 … +10 dB) -->
+          <div class="param-box" style="grid-column: span 2;">
+            <span class="title" data-i18n="bass.meterTitle">Felharmonikusok szintje (Harmonics)</span>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+              <div style="flex:1; height:12px; background:var(--aq-input); border:1px solid var(--aq-line); border-radius:6px; overflow:hidden;">
+                <div id="meterBassBar" style="width:0%; height:100%; background:linear-gradient(90deg, #4FD1C5, #E3B66B); transition:width 0.05s ease-out;"></div>
+              </div>
+              <span id="lblBassHarm" style="font-size:0.72rem; font-family:var(--aq-mono); color:var(--aq-text-2); width:85px; text-align:right;">-inf dB</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3823,7 +3835,7 @@ buildControls("bassControls", [
   { id: "bassAmount", kind: "num", label: "ctl.bassAmount", min: -100, max: 36, smin: -36, smax: 36, step: 0.1, unit: "dB", def: 0, sign: true },
   { id: "bassHarmonics", kind: "num", label: "ctl.bassHarmonics", min: 0.1, max: 10, step: 0.1, unit: "", def: 8.5 },
   { id: "bassScope", kind: "num", label: "ctl.bassScope", min: 10, max: 250, step: 1, unit: "Hz", def: 100 },
-  { id: "bassBlend", kind: "num", label: "ctl.bassBlend", min: -10, max: 10, step: 0.1, unit: "", def: 0, sign: true },
+  { id: "bassBlend", kind: "num", label: "ctl.bassBlend", min: -10, max: 10, step: 1, unit: "", def: 0, sign: true, hint: "ctl.bassBlendHint" },
   { id: "bassFloorActive", kind: "toggle", label: "ctl.bassFloorActive", def: false, after: v => showBox("bassFloor", v) },
   { id: "bassFloor", kind: "num", label: "ctl.bassFloor", min: 10, max: 120, step: 1, unit: "Hz", def: 20 },
   { id: "bassListen", kind: "toggle", label: "ctl.bassListen", def: false },
@@ -4108,6 +4120,16 @@ const ENGINE_PORTS = [47810, 47811, 47812, 47813, 47814, 8080];
 let enginePortIdx = 0;
 let engineVerified = false;
 
+/** A Bass Enhancer felharmonikus-szintje (dB), az EasyEffects mérőjéhez hasonlóan -100 … +10 dB között. */
+function updateBassMeter(db) {
+  const bar = document.getElementById("meterBassBar");
+  const lbl = document.getElementById("lblBassHarm");
+  if (!bar || !lbl) return;
+  const v = Math.max(-100, Math.min(10, db));
+  bar.style.width = ((v + 100) / 110 * 100).toFixed(1) + "%";
+  lbl.innerText = v <= -99.5 ? "-inf dB" : `${v.toFixed(0)} dB`;
+}
+
 var lastGrDb = 0;   // utolsó erősítéscsökkentés (nyelvváltáskor a felirat újraírásához)
 function updateLimiterMeters(peakDb, grDb) {
   const levelBar = document.getElementById("meterLevelBar");
@@ -4248,6 +4270,7 @@ function initPipewireBridge() {
             liveSpectrumTime = performance.now();
           }
           updateLimiterMeters(data.peak, data.gr);
+          if (typeof data.bh === "number") updateBassMeter(data.bh);
         } else if (data.type === "state") {
           if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);
           syncLanguageWithEngine(data.language);
@@ -4299,6 +4322,7 @@ function initPipewireBridge() {
       engineStatus = null;
       updateEngineBadge();
       updateLimiterMeters(-90, 0);
+      updateBassMeter(-100);
       updateMagicDiag(null);
       if (engineVerified) {
         setTimeout(initPipewireBridge, 3000);           // ugyanazon a porton újrakapcsolódás

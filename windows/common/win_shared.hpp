@@ -113,6 +113,7 @@ private:
         new (&state_->ownerTickMs) std::atomic<uint64_t>(0);
         new (&state_->activeInstances) std::atomic<uint32_t>(0);
         new (&state_->gainReductionDb) std::atomic<float>(0.0f);
+        new (&state_->bassHarmonicsDb) std::atomic<float>(-100.0f);
         new (&state_->tap.writePos) std::atomic<uint64_t>(0);
         new (&state_->params.seq) std::atomic<uint32_t>(0);
         new (&state_->ir.seq) std::atomic<uint32_t>(0);

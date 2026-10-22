@@ -306,6 +306,7 @@ struct Core {
         c->engine.params.write(p);
     };
     cb.gainReduction = [c]() { return c->engine.chain.gainReductionDb(); };
+    cb.bassHarmonics = [c]() { return c->engine.chain.bassHarmonicsDb(); };
     cb.setOutputSink = [c](const std::string& target) { c->setOutput(target); };
     cb.statusFields = [c]() { return c->statusFields(); };
     cb.setIr = [c](IrData&& ir) {

@@ -279,6 +279,7 @@ int main(int argc, char* argv[]) {
         node.params.write(p);
     };
     cb.gainReduction = [&]() { return node.chain.gainReductionDb(); };
+    cb.bassHarmonics = [&]() { return node.chain.bassHarmonicsDb(); };
 
     std::string cachedSinksJson = "[]";
     std::string cachedCurrentSink = "";

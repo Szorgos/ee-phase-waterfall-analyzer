@@ -231,6 +231,7 @@ private:
                 st->tap.write(outL, outR, static_cast<uint32_t>(n));
                 st->sampleRate.store(static_cast<uint32_t>(sampleRate_), std::memory_order_relaxed);
                 st->gainReductionDb.store(static_cast<float>(chain_.gainReductionDb()), std::memory_order_relaxed);
+                st->bassHarmonicsDb.store(static_cast<float>(chain_.bassHarmonicsDb()), std::memory_order_relaxed);
                 st->ownerTickMs.store(now, std::memory_order_release);
             }
         }

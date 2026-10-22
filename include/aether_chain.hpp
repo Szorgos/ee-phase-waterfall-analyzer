@@ -139,6 +139,8 @@ public:
 
     /** Limiter erősítéscsökkentés dB-ben (negatív szám, 0 = nincs csillapítás). */
     double gainReductionDb() const { return current_.has(kFlagLimiter) ? -limiter_.gainReductionDb() : 0.0; }
+    /** A Bass Enhancer által keltett felharmonikusok szintje dB-ben (a Calf "meter_drive"; kikapcsolva -100). */
+    double bassHarmonicsDb() const { return current_.has(kFlagBass) ? bass_.harmonicsDb() : -100.0; }
     size_t limiterLatencySamples() const { return current_.has(kFlagLimiter) ? limiter_.latency() : 0; }
     size_t eqLatencySamples() const { return current_.has(kFlagEq) ? eq_.latency() : 0; }
     bool convolverActive() const { return irStage_.active != nullptr; }
