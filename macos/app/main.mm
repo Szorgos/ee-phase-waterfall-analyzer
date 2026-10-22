@@ -511,7 +511,7 @@ struct Core {
                                                     NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable
                                             backing:NSBackingStoreBuffered
                                               defer:NO];
-    window_.title = @"Aqulify";
+    window_.title = [NSString stringWithUTF8String:"Aqulify " AQULIFY_VERSION];   // az ablak címsora a verziószámmal
     window_.releasedWhenClosed = NO;
     window_.delegate = self;
     window_.minSize = NSMakeSize(1000, 640);

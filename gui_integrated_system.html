@@ -4387,17 +4387,24 @@ function pushAllToEngine() {
 
 function setInput(id, v) { const el = document.getElementById(id); if (el && v !== undefined && v !== null) el.value = v; }
 
-/** Verziófelirat: ha a motor más verziójú, mint a felület (pl. félbemaradt frissítés), azt is jelzi. */
+/**
+ * Verziófelirat: a verziószám az ablak címsorában van; a logó mellett csak akkor látszik, ha a motor más
+ * verziójú, mint a felület (pl. félbemaradt frissítés), vagy ha a felület böngészőben fut (nincs saját címsor).
+ */
 function updateVersionLabel() {
   const el = document.getElementById("lblAppVersion");
   if (!el) return;
   const gui = el.dataset.guiVersion;
   const eng = isPipewireConnected && engineStatus && typeof engineStatus.version === "string" ? engineStatus.version : null;
+  const ownWindow = !!(window.chrome && window.chrome.webview) || !!(window.webkit && window.webkit.messageHandlers) ||
+                    typeof window.aetherOpenUrl === "function";
   if (eng && eng !== gui) {
+    el.hidden = false;
     el.innerText = t("ver.mismatch", { gui, eng });
     el.style.color = "var(--ee-orange)";
     el.title = t("ver.mismatchTitle");
   } else {
+    el.hidden = ownWindow;
     el.innerText = `v${gui}`;
     el.style.color = "var(--ee-text-secondary)";
     el.title = eng ? t("ver.both") : t("ver.title");

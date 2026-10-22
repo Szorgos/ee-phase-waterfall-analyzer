@@ -45,8 +45,11 @@ void guiLog(const std::string& msg) {
     std::fclose(f);
 }
 
+#ifndef AQULIFY_VERSION
+#define AQULIFY_VERSION "0.0.0"
+#endif
 constexpr const wchar_t* kTitle = L"Aqulify";
-constexpr const char* kTitleUtf8 = "Aqulify";
+constexpr const char* kTitleUtf8 = "Aqulify " AQULIFY_VERSION;   // az ablak címsora a verziószámmal
 constexpr const wchar_t* kVirtualHost = L"aqulify.local";
 constexpr const char* kStartUrl = "https://aqulify.local/gui_integrated_system.html";
 
@@ -103,10 +106,11 @@ int openInBrowser(const std::wstring& guiFolder) {
 /** Ha már nyitva van egy ablakunk, előtérbe hozzuk. */
 bool activateExistingWindow() {
     HWND w = nullptr;
-    while ((w = FindWindowExW(nullptr, w, nullptr, kTitle)) != nullptr) {
-        wchar_t cls[64];
-        GetClassNameW(w, cls, 64);
-        if (_wcsicmp(cls, L"webview") != 0) continue; // csak a saját (webview) ablakunk számít
+    // A címsorban a verzió is ott van: a saját (webview) ablakot a cím eleje azonosítja, bármelyik verzióé
+    while ((w = FindWindowExW(nullptr, w, L"webview", nullptr)) != nullptr) {
+        wchar_t title[64];
+        GetWindowTextW(w, title, 64);
+        if (wcsncmp(title, kTitle, wcslen(kTitle)) != 0) continue;
         if (IsIconic(w)) ShowWindow(w, SW_RESTORE);
         else ShowWindow(w, SW_SHOW);
         SetForegroundWindow(w);

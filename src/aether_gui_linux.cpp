@@ -26,6 +26,10 @@
 
 #include "aq_i18n.hpp"
 
+#ifndef AQULIFY_VERSION
+#define AQULIFY_VERSION "0.0.0"
+#endif
+
 namespace {
 
 bool fileExists(const std::string& p) {
@@ -193,7 +197,7 @@ int main() {
 
     try {
         webview::webview w(false, nullptr);
-        w.set_title("Aqulify");
+        w.set_title("Aqulify " AQULIFY_VERSION);   // az ablak címsora a verziószámmal
         w.set_size(1480, 940, WEBVIEW_HINT_NONE);
         w.set_size(1000, 640, WEBVIEW_HINT_MIN);
         if (auto win = w.window(); win.ok()) {
