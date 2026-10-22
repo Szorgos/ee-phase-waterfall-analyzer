@@ -248,7 +248,7 @@
   "preset.saved": "Profile saved: {name}",
   "preset.promptRename": "New name for the profile:",
   "preset.confirmDelete": "Delete the \"{name}\" profile? (The current EQ settings will not change.)",
-  "preset.modifiedSuffix": " – modified",
+  "preset.modifiedSuffix": " – custom",
   "preset.modifiedToast": "Manual change: new profile created – {name}",
   "mt.desc": "Automatic, restrained sound enhancer: it analyses the recording being played and only corrects what is missing or disturbing (boxy low-mids, dull highs, out-of-phase bass, narrow mix). It does not make things louder and does not compress: the output loudness matches the input.",
   "mt.abTitle": "Before / after comparison, loudness-matched",

@@ -248,7 +248,7 @@
   "preset.saved": "Profil elmentve: {name}",
   "preset.promptRename": "Profil új neve:",
   "preset.confirmDelete": "Törlöd a(z) \"{name}\" profilt? (A jelenlegi EQ-beállítás nem változik.)",
-  "preset.modifiedSuffix": " – módosított",
+  "preset.modifiedSuffix": " – egyedi",
   "preset.modifiedToast": "Kézi módosítás: új profil készült – {name}",
   "mt.desc": "Automatikus, visszafogott hangszépítő: elemzi a lejátszott felvételt, és csak azt igazítja, ami hiányzik vagy zavaró (dobozhang, tompa magasak, ellenfázisú mély, keskeny keverés). Nem hangosít és nem tömörít: a kimenet hangossága megegyezik a bemenetével.",
   "mt.abTitle": "Előtte / utána összehasonlítás, hangerőre kiegyenlítve",

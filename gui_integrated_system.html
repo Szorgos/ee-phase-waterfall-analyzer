@@ -4795,8 +4795,17 @@ function eqSnapshot() {
     eqMode: currentEqMode
   };
 }
+/**
+ * A sávok összevethető alakja: a tárolt profil (importból kerekítetlen, hiányzó mezőkkel) és a felület sávjai
+ * ugyanazzal az egységesítéssel és kerekítéssel. Így a nézet (nagyítás, dB-tartomány) állítása vagy a görbe
+ * újrarajzolása nem számít módosításnak, csak a sávok tényleges változása.
+ */
+function bandsSig(list) {
+  return JSON.stringify((list || []).map((b, i) => normBand(b, i))
+    .map(b => [b.type, b.mode, b.slope, +b.freq.toFixed(2), +b.gain.toFixed(2), +b.q.toFixed(3), +b.width.toFixed(3)]));
+}
 // Az EQ mód (IIR / FIR / FFT / SPM) nem a profil hangolása: a váltása nem számít módosításnak
-function snapshotSig(sn) { return JSON.stringify([sn.bands, sn.preamp]); }
+function snapshotSig(sn) { return JSON.stringify([bandsSig(sn.bands), +(+(sn.preamp || 0)).toFixed(2)]); }
 /** Az EQ mód az aktív profilban helyben megmarad: új profil nem készül, az importált profil sávjai érintetlenek. */
 function rememberEqModeInPreset() {
   const cur = activePresetName ? presetsDoc.presets[activePresetName] : null;
@@ -4995,7 +5004,7 @@ function schedulePresetAutosave() {
     if (snapshotSig(cur) === snapshotSig(sn)) return;
     if (cur.kind === "autoeq" || cur.kind === "import") {
       // Csak akkor hozunk létre módosított profilt, ha valóban módosultak a sávok
-      const bandsEqual = JSON.stringify(cur.bands) === JSON.stringify(sn.bands);
+      const bandsEqual = bandsSig(cur.bands) === bandsSig(sn.bands);
       if (bandsEqual) return;
       // Az importált (AutoEq) profil érintetlen marad: a kézi sávmódosítás új, saját profilba kerül
       createPresetFromCurrent(activePresetName + t("preset.modifiedSuffix"), "manual");
