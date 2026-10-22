@@ -2568,6 +2568,34 @@ function engineCurveAt(f) {
   return { mag: r.mag[lo] + t * (r.mag[hi] - r.mag[lo]), ph: p0 + t * (p1 - p0), i: lo };
 }
 
+/**
+ * Csoportkésleltetés (ms) a motor fázisgörbéjéből. A meredekséget a szomszédos pontpárok közepén számoljuk, és a
+ * frekvencián (log tengelyen) a közepek között simán átmenünk: pontpáronként állandó értékkel a narancs görbe
+ * lépcsős lenne (a 256 mérési pont között sok képpont van).
+ */
+function engineGroupDelayAt(f) {
+  const r = engineEqResponse;
+  const fr = r.freq, n = fr.length;
+  if (!r._gd) {
+    const gd = new Float64Array(n - 1), lf = new Float64Array(n - 1);
+    for (let i = 0; i < n - 1; i++) {
+      let dp = r.phase[i + 1] - r.phase[i];
+      while (dp > 180) dp -= 360;
+      while (dp < -180) dp += 360;
+      gd[i] = -(dp / 360) / (fr[i + 1] - fr[i]) * 1000;
+      lf[i] = 0.5 * (Math.log(fr[i]) + Math.log(fr[i + 1]));   // a pontpár közepe (log frekvencián)
+    }
+    r._gd = gd; r._gdLogF = lf;
+  }
+  const gd = r._gd, lf = r._gdLogF, m = gd.length, x = Math.log(f);
+  if (x <= lf[0]) return gd[0];
+  if (x >= lf[m - 1]) return gd[m - 1];
+  let lo = 0, hi = m - 1;
+  while (hi - lo > 1) { const k = (lo + hi) >> 1; if (lf[k] <= x) lo = k; else hi = k; }
+  const t = (x - lf[lo]) / (lf[hi] - lf[lo]);
+  return gd[lo] + t * (gd[hi] - gd[lo]);
+}
+
 // --- A motor görbéje (eq_response) csak akkor használható, ha a felület jelenlegi sávjaihoz tartozik ---
 // A görbét érintő üzenetek sorszámot kapnak; a motor a válaszban visszaküldi, így tudjuk, melyik
 // sávállapotra számolta. Amíg az új görbe nem érkezik meg, a helyi közelítés rajzol és ebből számol
@@ -2607,12 +2635,7 @@ function evalChain(f) {
       return { mag_db: c.mag, phase_deg: 0, delay_ms: latMs };
     }
     // IIR: csoportkésleltetés a fázisgörbe meredekségéből (+ a decramp túlmintavételező késleltetése)
-    const i = Math.min(Math.max(c.i, 0), r.freq.length - 2);
-    let dp = r.phase[i + 1] - r.phase[i];
-    while (dp > 180) dp -= 360;
-    while (dp < -180) dp += 360;
-    const gd = -(dp / 360) / (r.freq[i + 1] - r.freq[i]) * 1000;
-    return { mag_db: c.mag, phase_deg: c.ph, delay_ms: gd + latMs };
+    return { mag_db: c.mag, phase_deg: c.ph, delay_ms: engineGroupDelayAt(f) + latMs };
   }
   let tot_re = 1, tot_im = 0, tot_delay = 0;
   for (let flt of nodes) {
@@ -2908,7 +2931,9 @@ function paintEq() {
   }
 
   // EQ Görbe (Összegzett átvitel a Preamp hatásával együtt)
-  const hasProfile = !!(activePresetName && nodes.length > 0);
+  // Valódi görbe és fogantyúk, ha van sáv (profillal vagy anélkül, kézzel felvéve): a DSP is ezt alkalmazza.
+  // Egyenes 0 dB-es vonal csak akkor, ha nincs profil és sáv sincs.
+  const hasProfile = nodes.length > 0;
   if (showEqCurve) {
     if (hasProfile) {
       eqCtx.strokeStyle = "#6FB7FF";
@@ -2920,7 +2945,7 @@ function paintEq() {
       }
       eqCtx.stroke();
     } else {
-      // Nincs kiválasztott profil: diszkrét egyenes vonal a 0 dB szintnél
+      // Nincs sáv (nincs kiválasztott profil sem): diszkrét egyenes vonal a 0 dB szintnél
       const yZero = clampY(dbToY(0, G));
       eqCtx.strokeStyle = "rgba(111, 183, 255, 0.45)";
       eqCtx.lineWidth = 1.5 * dpr;
@@ -2979,7 +3004,7 @@ function paintEq() {
 
   eqCtx.restore(); // Vágás vége
 
-  // Fogantyúk (csak ha van kiválasztott profil)
+  // Fogantyúk (ha van sáv)
   if (hasProfile) {
     nodes.forEach((node, index) => {
       const nv = nodeView(node, G, ovBox);
