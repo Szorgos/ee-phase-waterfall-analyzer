@@ -68,6 +68,27 @@ static void testEqualizer() {
               ee::Equalizer::decrampFactor(2, 44100) == 3 && ee::Equalizer::decrampFactor(5, 192000) == 2,
           "decramp tényezők (48k: 1/2/4/6/8, 96k x4 -> 2, 44,1k x3 -> 3, 192k x8 -> 2)");
 
+    // APO mély polc nagy belső mintavételnél (decramp x6 / x8 = 288 / 384 kHz): a mélyeken ugyanazt adja, mint
+    // decramp nélkül (float együttható-számítással 20 Hz-en +0,8 dB volt az eltérés)
+    {
+        ParamData d = bellParams(6);
+        d.bands[0].type = static_cast<int32_t>(EqBandType::LoShelf);
+        d.bands[0].freq = 105.0f;
+        d.bands[0].q = 0.7f;
+        double ref = 0.0, worst = 0.0;
+        for (int dc : { 0, 4, 5 }) {
+            d.eqDecramp = dc;
+            ee::Equalizer eq;
+            eq.setSampleRate(48000);
+            eq.update(d);
+            std::vector<float> L = sine(20.0, 0.1, 192000, sr), R = L;
+            runBlocks([&](float* l, float* r, size_t m) { eq.process(l, r, m); }, L, R, 512);
+            const double g = 20 * std::log10(toneAmp(L, 96000, 20.0, sr) / 0.1);
+            if (dc == 0) ref = g; else worst = std::max(worst, std::abs(g - ref));
+        }
+        CHECK(worst < 0.3, "APO mély polc 105 Hz +6 dB, decramp x6 / x8: 20 Hz-en legfeljebb %.2f dB eltérés a decramp nélkülitől", worst);
+    }
+
     const char* modeNames[] = { "IIR", "FIR", "FFT", "SPM" };
     for (int eqMode = 0; eqMode < 4; ++eqMode) {
         for (int fm : { 0, 6 }) {

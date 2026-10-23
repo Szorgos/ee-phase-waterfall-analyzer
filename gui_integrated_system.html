@@ -773,6 +773,9 @@ if (!window.THREE) window.THREE = (function () {
         <div class="prering-note" id="hudPreRingBadge" style="display:none;" title="FIR / FFT / SPM módban (lineáris fázis) a meredek szűrők előtt kis előcsengés keletkezhet. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik – ez így rendben van." data-i18n-title="prering.title">
           <span id="hudGlowDot" style="display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--aq-amber); margin-right:4px; vertical-align:middle;"></span><span data-i18n="prering.text">Lineáris fázis: előcsengés lehetséges</span>
         </div>
+        <div class="prering-note" id="hudDecrampNote" style="display:none;" title="Decramp x6 / x8 mellett a nagyon magas belső mintavétel (288 / 384 kHz) miatt a mély szűrők néhány tized dB-lel eltérhetnek a beállítottól. 44,1 / 48 kHz-en az x4 a magas hangoknál is elég, és pontos." data-i18n-title="decramp.noteTitle">
+          <span style="display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--aq-amber); margin-right:4px; vertical-align:middle;"></span><span data-i18n="decramp.note">Decramp x6 / x8: a mélyek kevésbé pontosak</span>
+        </div>
         <div class="strip-badge" data-wf3d>
           Top-Strip 3D: <strong id="lblResolution">160 sáv × 120 lépcső</strong>
         </div>
@@ -1404,6 +1407,7 @@ function setModuleActive(mod, active) {
   // Előcsengés-jelzés: lineáris fázisú mód (FIR / FFT / SPM) és bekapcsolt EQ – bármi kapcsolja be az EQ-t
   const prBadge = document.getElementById('hudPreRingBadge');
   if (mod === 'eq' && prBadge) prBadge.style.display = (isFirMode && active) ? "block" : "none";
+  if (mod === 'eq') updateDecrampNote();
 
   if (mod === 'eq' && typeof drawEq === 'function') drawEq();
   if (mod === 'magic') {
@@ -3405,11 +3409,18 @@ function applyEqModeUi(mode) {
   // FIR / FFT / SPM: lineáris fázis (előcsengés lehetséges)
   isFirMode = currentEqMode !== 0;
   document.getElementById("hudPreRingBadge").style.display = (isFirMode && isEqEnabled) ? "block" : "none";
+  updateDecrampNote();
 }
 function applyDecrampUi(v) {
   currentDecramp = Math.max(0, Math.min(5, v | 0));
   const sel = document.getElementById("selectDecramp");
   if (sel) sel.value = String(currentDecramp);
+  updateDecrampNote();
+}
+/** Decramp x6 / x8 (IIR és FIR módban, bekapcsolt EQ-nál): a mély szűrők néhány tized dB-lel pontatlanabbak. */
+function updateDecrampNote() {
+  const el = document.getElementById("hudDecrampNote");
+  if (el) el.style.display = (isEqEnabled && currentEqMode <= 1 && currentDecramp >= 4) ? "block" : "none";
 }
 document.getElementById("selectEqMode").onchange = (e) => {
   applyEqModeUi(parseInt(e.target.value, 10));

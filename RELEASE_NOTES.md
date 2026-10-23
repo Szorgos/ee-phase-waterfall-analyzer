@@ -1,3 +1,9 @@
+### Javítások (következő kiadás)
+- **EQ – Decramp x6 / x8:** ezekben az állásokban a mélyek eltértek a beállítottól: 48 kHz-en egy 105 Hz-es, +6 dB-es mély polc x8-nál 20 Hz-en +6,8 dB-t adott, x6-nál +5,5 dB-t. Emiatt a görbe is megváltozott, és az automatikus preamp miatt a hang halkabb lett. Az Off és x4 közötti állásokat ez nem érintette.
+  - *Oka:* az LSP Parametric Equalizer float pontossággal számolja a szűrők együtthatóit, ami 288 / 384 kHz-es belső mintavételnél a mély frekvenciákon már pontatlan. Ez az LSP eredeti viselkedése, ezért az **EasyEffectsben is így működik**, mert ugyanezt az equalizert használja (az LSP jelenlegi forráskódjában is így számol).
+  - *Javítás:* az Aqulify az APO (DR) szűrőket (ezeket hozza létre az AutoEq és az Equalizer APO import) most double pontossággal számolja: az eltérés x6 / x8-nál legfeljebb kb. 0,2 dB, Off és x4 között nem változik semmi. A többi szűrőmódnál (RLC, BWC, LRX) x6 / x8 mellett továbbra is lehet néhány tized dB eltérés.
+  - x6 / x8 állásban a vízesés jobb felső sarkában figyelmeztetés jelenik meg. 44,1 / 48 kHz-en az x4 ajánlott: a magas hangoknál is elég, és pontos.
+
 ### Újdonságok (1.7.6)
 - **Verziószám az ablak címsorában** (Windows, Linux, macOS), és a címsor színe is a felület témáját követi (sötét / világos).
 - **3D vízesés:** a vezérlők a háló két oldalára kerültek, a szélesebb soroktól lefelé a keskenyebbekig, így nem takarják a grafikát. Ha az ablakban nem férnek el a háló mellett (keskeny ablak, oldal- vagy felülnézet), a vízesés fölötti sávba kerülnek.

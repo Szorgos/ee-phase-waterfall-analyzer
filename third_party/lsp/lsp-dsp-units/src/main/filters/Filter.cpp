@@ -1496,14 +1496,18 @@ namespace lsp
 
         void Filter::calc_apo_filter(size_t type, const filter_params_t *fp)
         {
-            float a0, a1, a2;
-            float b0, b1, b2;
+            // Aqulify: double pontosságú számítás. Float-ban a cos(w) mély frekvencián nagy belső mintavételnél
+            // (decramp x6 / x8: 288 / 384 kHz) alig tér el 1-től, a kivonások pontatlanok, és a szűrő erősítése
+            // mélyen akár 0,8 dB-lel eltér (pl. 105 Hz-es mély polc 20 Hz-en). Az eredmény float marad
+            // (a biquad-feldolgozás float), de a kerekítés csak a végén történik.
+            double a0, a1, a2;
+            double b0, b1, b2;
 
-            float omega    = C_PI_MUL_2 * fp->fFreq / float(nSampleRate);
-            float cs       = sinf(omega);
-            float cc       = cosf(omega); // Have to use trig functions for both to have correct sign
-            float Q        = (fp->fQuality > MIN_APO_Q) ? fp->fQuality : MIN_APO_Q;
-            float alpha    = 0.5f * cs / Q;
+            double omega   = 2.0 * M_PI * double(fp->fFreq) / double(nSampleRate);
+            double cs      = sin(omega);
+            double cc      = cos(omega); // Have to use trig functions for both to have correct sign
+            double Q       = (fp->fQuality > MIN_APO_Q) ? double(fp->fQuality) : double(MIN_APO_Q);
+            double alpha   = 0.5 * cs / Q;
 
             // In LSP convention, the b coefficients are in the denominator. The a coefficients are in the
             // numerator. This is opposite to the most usual convention.
@@ -1513,67 +1517,67 @@ namespace lsp
             {
                 case FLT_DR_APO_LOPASS:
                 {
-                    float A     = fp->fGain;
+                    double A    = fp->fGain;
 
-                    a0 = A * 0.5f * (1.0f - cc);
-                    a1 = A * (1.0f - cc);
+                    a0 = A * 0.5 * (1.0 - cc);
+                    a1 = A * (1.0 - cc);
                     a2 = a0;
-                    b0 = 1.0f + alpha;
-                    b1 = -2.0f * cc;
-                    b2 = 1.0f - alpha;
+                    b0 = 1.0 + alpha;
+                    b1 = -2.0 * cc;
+                    b2 = 1.0 - alpha;
 
                     break;
                 }
 
                 case FLT_DR_APO_HIPASS:
                 {
-                    float A     = fp->fGain;
+                    double A    = fp->fGain;
 
-                    a0 = A * 0.5f * (1.0f + cc);
-                    a1 = A * (-1.0f - cc);
+                    a0 = A * 0.5 * (1.0 + cc);
+                    a1 = A * (-1.0 - cc);
                     a2 = a0;
-                    b0 = 1.0f + alpha;
-                    b1 = -2.0f * cc;
-                    b2 = 1.0f - alpha;
+                    b0 = 1.0 + alpha;
+                    b1 = -2.0 * cc;
+                    b2 = 1.0 - alpha;
 
                     break;
                 }
 
                 case FLT_DR_APO_BANDPASS:
                 {
-                    float A     = fp->fGain;
+                    double A    = fp->fGain;
 
                     a0 = A * alpha;
-                    a1 = 0.0f;
+                    a1 = 0.0;
                     a2 = A * -alpha;
-                    b0 = 1.0f + alpha;
-                    b1 = -2.0f * cc;
-                    b2 = 1.0f - alpha;
+                    b0 = 1.0 + alpha;
+                    b1 = -2.0 * cc;
+                    b2 = 1.0 - alpha;
 
                     break;
                 }
 
                 case FLT_DR_APO_NOTCH:
                 {
-                    float A     = fp->fGain;
+                    double A    = fp->fGain;
 
                     a0 = A;
-                    a1 = A * -2.0f * cc;
+                    a1 = A * -2.0 * cc;
                     a2 = a0;
-                    b0 = 1.0f + alpha;
-                    b1 = -2.0f * cc;
-                    b2 = 1.0f - alpha;
+                    b0 = 1.0 + alpha;
+                    b1 = -2.0 * cc;
+                    b2 = 1.0 - alpha;
 
                     break;
                 }
 
                 case FLT_DR_APO_ALLPASS:
                 {
-                    float A     = fp->fGain;
+                    double A    = fp->fGain;
 
-                    a0 = A * (1.0f - alpha);
-                    a1 = A * -2.0f * cc;
-                    a2 = A * (1.0f + alpha);
+                    a0 = A * (1.0 - alpha);
+                    a1 = A * -2.0 * cc;
+                    a2 = A * (1.0 + alpha);
                     b0 = a2;
                     b1 = a1;
                     b2 = a0;
@@ -1583,44 +1587,44 @@ namespace lsp
 
                 case FLT_DR_APO_PEAKING:
                 {
-                    float A     = sqrtf(fp->fGain);
+                    double A    = sqrt(double(fp->fGain));
 
-                    a0 = 1.0f + alpha * A;
-                    a1 = -2.0f * cc;
-                    a2 = 1.0f - alpha * A;
-                    b0 = 1.0f + alpha / A;
+                    a0 = 1.0 + alpha * A;
+                    a1 = -2.0 * cc;
+                    a2 = 1.0 - alpha * A;
+                    b0 = 1.0 + alpha / A;
                     b1 = a1;
-                    b2 = 1.0f - alpha / A;
+                    b2 = 1.0 - alpha / A;
 
                     break;
                 }
 
                 case FLT_DR_APO_LOSHELF:
                 {
-                    float A     = sqrtf(fp->fGain);
-                    float beta  = 2.0f * alpha * sqrtf(A);
+                    double A    = sqrt(double(fp->fGain));
+                    double beta = 2.0 * alpha * sqrt(A);
 
-                    a0 = A * ((A + 1.0f) - (A - 1.0f) * cc + beta);
-                    a1 = 2.0f * A * ((A - 1.0f) - (A + 1.0f) * cc);
-                    a2 = A * ((A + 1.0f) - (A - 1.0f) * cc - beta);
-                    b0 = (A + 1.0f) + (A - 1.0f) * cc + beta;
-                    b1 = -2.0f * ((A - 1.0f) + (A + 1.0f) * cc);
-                    b2 = (A + 1.0f) + (A - 1.0f) * cc - beta;
+                    a0 = A * ((A + 1.0) - (A - 1.0) * cc + beta);
+                    a1 = 2.0 * A * ((A - 1.0) - (A + 1.0) * cc);
+                    a2 = A * ((A + 1.0) - (A - 1.0) * cc - beta);
+                    b0 = (A + 1.0) + (A - 1.0) * cc + beta;
+                    b1 = -2.0 * ((A - 1.0) + (A + 1.0) * cc);
+                    b2 = (A + 1.0) + (A - 1.0) * cc - beta;
 
                     break;
                 }
 
                 case FLT_DR_APO_HISHELF:
                 {
-                    float A     = sqrtf(fp->fGain);
-                    float beta  = 2.0 * alpha * sqrtf(A);
+                    double A    = sqrt(double(fp->fGain));
+                    double beta = 2.0 * alpha * sqrt(A);
 
-                    a0 = A * ((A + 1.0f) + (A - 1.0f) * cc + beta);
-                    a1 = -2.0f * A * ((A - 1.0f) + (A + 1.0f) * cc);
-                    a2 = A * ((A + 1.0f) + (A - 1.0f) * cc - beta);
-                    b0 = (A + 1.0f) - (A - 1.0f) * cc + beta;
-                    b1 = 2.0f * ((A - 1.0f) - (A + 1.0f) * cc);
-                    b2 = (A + 1.0f) - (A - 1.0f) * cc - beta;
+                    a0 = A * ((A + 1.0) + (A - 1.0) * cc + beta);
+                    a1 = -2.0 * A * ((A - 1.0) + (A + 1.0) * cc);
+                    a2 = A * ((A + 1.0) + (A - 1.0) * cc - beta);
+                    b0 = (A + 1.0) - (A - 1.0) * cc + beta;
+                    b1 = 2.0 * ((A - 1.0) - (A + 1.0) * cc);
+                    b2 = (A + 1.0) - (A - 1.0) * cc - beta;
 
                     break;
                 }
@@ -1634,12 +1638,12 @@ namespace lsp
                 return;
 
             // Storing with appropriate normalisation and sign as required by biquad_process_x1().
-            const float rb0 = 1.0f / b0;
-            f->b0   = a0 * rb0;
-            f->b1   = a1 * rb0;
-            f->b2   = a2 * rb0;
-            f->a1   = -b1 * rb0;
-            f->a2   = -b2 * rb0;
+            const double rb0 = 1.0 / b0;
+            f->b0   = float(a0 * rb0);
+            f->b1   = float(a1 * rb0);
+            f->b2   = float(a2 * rb0);
+            f->a1   = float(-b1 * rb0);
+            f->a2   = float(-b2 * rb0);
             f->p0   = 0.0f;
             f->p1   = 0.0f;
             f->p2   = 0.0f;
