@@ -1,3 +1,6 @@
+### Fejlesztési irány
+- A következő kiadások az 1.x változat csiszolására összpontosítanak: hibajavítások, pontosság és kezelhetőség.
+
 ### Újdonságok (következő kiadás)
 - **Magic Touch – „Bátor” tartomány:** az intenzitás 200 %-ig állítható. 100 % fölött a hatás fokozatosan erősebb, és jó minőségű felvételen is hallható; 100 %-ig a hangzás nem változott. A hangerő-kiegyenlítés és a védelmek (zaj, élesség, sziszegés) ott is működnek, a javító funkciók (zúgás, kattanás, zaj) nem erősödnek.
 
