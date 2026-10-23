@@ -4561,22 +4561,28 @@ function updateVersionLabel() {
 }
 
 /**
- * Windows: a plugin be van illesztve az Equalizer APO-ba, de nem fut. Leggyakrabban azért, mert a hang egy olyan
- * eszközön szól (pl. bedugott USB hangkártya), amelyen nincs bekapcsolva az Equalizer APO; ritkábban frissítés után a
- * régi plugin maradt betöltve. A gomb az Equalizer APO Configuratorát nyitja meg (csak ha megvan a gépen).
+ * Windows: a plugin be van illesztve az Equalizer APO-ba, de nem fut. A motor (dspState) megmondja, miért:
+ * szünetben az Equalizer APO leállítja a hangfolyamot és vele a plugint (ez nem hiba: nincs sáv, csak a jelvény
+ * mutatja); hiba, ha szól a zene, de a plugin nem indul; másik eszköz (pl. bedugott USB hangkártya, amelyen nincs
+ * bekapcsolva az Equalizer APO); nincs lejátszóeszköz. Régebbi motornál (dspState nélkül) a régi viselkedés marad.
+ * A gomb az Equalizer APO Configuratorát nyitja meg (csak ha megvan a gépen, és csak ott, ahol segít).
  */
 function updateDspWarn(st) {
   const warn = document.getElementById("dspWarn");
   if (!warn) return;
-  const show = st.platform === "windows" && st.dspActive === false && !!st.pluginExpected;
+  const state = st.dspState;
+  const show = st.platform === "windows" && st.dspActive === false && !!st.pluginExpected &&
+               state !== "idle" && state !== "active";
   warn.hidden = !show;
   if (!show) return;
   const text = document.getElementById("dspWarnText");
   const device = st.device || "?";
-  const msg = st.apoDevice ? t("engine.apoOtherDevice", { device, apoDevice: st.apoDevice }) : t("engine.pluginNotLoaded", { device });
+  const msg = state === "noDevice" ? t("engine.noDevice")
+            : st.apoDevice ? t("engine.apoOtherDevice", { device, apoDevice: st.apoDevice })
+            : t("engine.pluginNotLoaded", { device });
   if (text && text.textContent !== msg) text.textContent = msg;
   const btn = document.getElementById("btnApoConfigurator");
-  if (btn) btn.hidden = !(st.apoConfigurator && typeof window.aetherOpenApoConfigurator === "function");
+  if (btn) btn.hidden = !(state !== "noDevice" && st.apoConfigurator && typeof window.aetherOpenApoConfigurator === "function");
 }
 
 function updateEngineBadge() {
@@ -4595,7 +4601,12 @@ function updateEngineBadge() {
   updateDspWarn(st);
   const src = st.source || t("engine.src");
   const sr = st.sr ? ` • ${(st.sr / 1000).toFixed(1)} kHz` : "";
-  if (st.platform === "windows" && st.dspActive === false) {
+  if (st.platform === "windows" && st.dspActive === false && st.dspState === "idle") {
+    // szünet: a hangfeldolgozás a lejátszással együtt magától indul (nem hiba)
+    badge.className = "status-badge info";
+    badge.textContent = t("engine.idle");
+    badge.title = (st.device ? t("engine.device", { device: st.device }) + "\n" : "") + t("engine.idleTitle");
+  } else if (st.platform === "windows" && st.dspActive === false) {
     badge.className = st.pluginExpected ? "status-badge warning" : "status-badge info";
     badge.textContent = t("engine.liveAnalysis", { src, sr });
     badge.title = (st.device ? t("engine.device", { device: st.device }) + "\n" : "") + t("engine.analysisOnly");
