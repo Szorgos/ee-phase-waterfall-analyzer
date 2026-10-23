@@ -39,6 +39,7 @@
 #include "param_block.hpp"
 #include "aq_i18n.hpp"
 #include "../common/win_shared.hpp"
+#include "../common/eqapo_paths.hpp"
 #include "wasapi_loopback.hpp"
 #include "tray.hpp"
 
@@ -192,7 +193,7 @@ bool hasArg(int argc, char** argv, const char* a) {
 /** Az EQ APO plugin közös memóriájának figyelése és a jelforrás kiválasztása. */
 class SourceManager {
 public:
-    explicit SourceManager(win::WasapiLoopback& lb) : loopback_(lb) {}
+    explicit SourceManager(win::WasapiLoopback& lb) : loopback_(lb), apoDevice_(loadApoDevice()) {}
 
     /** Rendszeresen hívandó (pl. 250 ms-onként) a fő szálból. */
     void poll(const ParamData& currentParams) {
@@ -217,6 +218,15 @@ public:
                                 : "[Forrás] WASAPI loopback (csak analízis; a DSP-hez az EQ APO plugin kell).\n");
             if (alive) pluginReadPos_ = mapping_.state()->tap.writePos.load();
             else loopbackReadPos_ = loopback_.ring().writePos.load();
+        }
+        // Az eszköz, amelyen a plugin fut (az alapértelmezett lejátszóeszköz): ha később egy másik eszközre
+        // vált a hang (pl. bedugott USB hangkártya), a felület meg tudja mondani, hol működött eddig
+        if (pluginActive_) {
+            const std::string dev = loopback_.deviceName();
+            if (!dev.empty() && dev != apoDevice_) {
+                apoDevice_ = dev;
+                saveApoDevice(dev);
+            }
         }
     }
 
@@ -321,9 +331,15 @@ public:
             std::snprintf(buf, sizeof(buf), ",\"source\":\"WASAPI loopback\",\"dspActive\":false,\"sr\":%u",
                           loopback_.sampleRate());
             s += buf;
-            s += ",\"device\":\"" + jsonEscape(loopback_.deviceName()) + "\"";
-            // A telepítő beillesztette a plugint, de az nem jelentkezik (pl. frissítés után a régi fut még)
-            if (pluginIntegrated()) s += ",\"pluginExpected\":true";
+            const std::string dev = loopback_.deviceName();
+            s += ",\"device\":\"" + jsonEscape(dev) + "\"";
+            // A telepítő beillesztette a plugint, de az nem jelentkezik: a mostani eszközön nincs bekapcsolva az
+            // Equalizer APO (pl. új USB hangkártya), vagy frissítés után a régi plugin fut még
+            if (pluginIntegrated()) {
+                s += ",\"pluginExpected\":true";
+                if (!apoDevice_.empty() && apoDevice_ != dev) s += ",\"apoDevice\":\"" + jsonEscape(apoDevice_) + "\"";
+                if (!win::eqApoConfiguratorPath().empty()) s += ",\"apoConfigurator\":true";
+            }
         }
         return s;
     }
@@ -356,6 +372,25 @@ private:
         return st->activeInstances.load() > 0 && tick != 0 && now >= tick && now - tick < 600000;
     }
 
+    /** Az eszköz neve, amelyen a plugin legutóbb futott (HKCU\Software\Aqulify, ApoDevice; UTF-8). */
+    static std::string loadApoDevice() {
+        wchar_t buf[512] = {};
+        DWORD size = sizeof(buf);
+        if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Aqulify", L"ApoDevice", RRF_RT_REG_SZ, nullptr, buf, &size) !=
+            ERROR_SUCCESS)
+            return {};
+        const int n = WideCharToMultiByte(CP_UTF8, 0, buf, -1, nullptr, 0, nullptr, nullptr);
+        if (n <= 1) return {};
+        std::string out(static_cast<size_t>(n - 1), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, buf, -1, out.data(), n, nullptr, nullptr);
+        return out;
+    }
+    static void saveApoDevice(const std::string& name) {
+        const std::wstring w = win::utf8ToWide(name);
+        RegSetKeyValueW(HKEY_CURRENT_USER, L"Software\\Aqulify", L"ApoDevice", REG_SZ, w.c_str(),
+                        static_cast<DWORD>((w.size() + 1) * sizeof(wchar_t)));
+    }
+
     static std::string jsonEscape(const std::string& in) {
         std::string out;
         for (char c : in) {
@@ -373,6 +408,7 @@ private:
     uint64_t pluginReadPos_ = 0;
     uint64_t loopbackReadPos_ = 0;
     uint64_t lastPluginData_ = 0;
+    std::string apoDevice_;
     std::mutex irMutex_;
     IrData ir_;
 };

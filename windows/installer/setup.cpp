@@ -242,6 +242,7 @@ int runUninstall(bool silent) {
     deleteTree(joinPath(knownFolder(FOLDERID_CommonPrograms), L"Aqulify"));
     regDeleteValue(HKEY_CURRENT_USER, kRunKey, L"Aqulify");
     regDeleteValue(HKEY_LOCAL_MACHINE, kRunKey, L"Aqulify");
+    regDeleteValue(HKEY_CURRENT_USER, L"Software\\Aqulify", L"ApoDevice");   // a motor jegyzi meg (az eszköz neve)
     regDeleteTree(HKEY_LOCAL_MACHINE, kUninstallKey);
     regDeleteTree(HKEY_LOCAL_MACHINE, kAppKey);
     if (dirExists(installDir) && fileExists(joinPath(installDir, L"Aqulify.exe"))) deleteTree(installDir);

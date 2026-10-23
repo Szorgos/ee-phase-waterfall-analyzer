@@ -290,6 +290,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
   .dsp-warn { background: var(--aq-amber, #E3B66B); color: #1A1206; font-weight: 600; font-size: 0.86rem; padding: 8px 24px; text-align: center; }
   .dsp-warn[hidden] { display: none; }
+  .dsp-warn-btn { margin-left: 12px; padding: 3px 10px; border-radius: 6px; border: 1px solid rgba(26, 18, 6, 0.45); background: rgba(255, 255, 255, 0.35); color: #1A1206; font: inherit; font-size: 0.8rem; cursor: pointer; }
+  .dsp-warn-btn:hover { background: rgba(255, 255, 255, 0.6); }
+  .dsp-warn-btn[hidden] { display: none; }
   header { background: var(--aq-bg-2); border-bottom: 1px solid var(--aq-line); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
   .title-group { display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 1rem; min-width: 0; flex: 0 1 auto; }
   /* Keskeny ablakban (1000–1200 px) a cím szövege rövidül, semmi nem csúszik egymásra és nem törik két sorba */
@@ -736,7 +739,8 @@ if (!window.THREE) window.THREE = (function () {
     </div>
   </header>
   <!-- Windows: a telepített plugin nem fut (pl. frissítés után a hangszolgáltatás a régit tartja betöltve) -->
-  <div id="dspWarn" class="dsp-warn" hidden data-i18n="engine.pluginNotLoaded">A hangfeldolgozás nem fut: az Equalizer APO nem töltötte be az Aqulify pluginját (frissítés után a régi maradhatott betöltve). Indítsd újra a gépet, vagy a Windows Audio szolgáltatást.</div>
+  <!-- Windows: a hang olyan eszközön szól, ahol az Aqulify plugin nem fut (a szöveget az updateEngineBadge írja) -->
+  <div id="dspWarn" class="dsp-warn" hidden><span id="dspWarnText"></span><button type="button" id="btnApoConfigurator" class="dsp-warn-btn" hidden data-i18n="engine.apoConfigurator" title="Jelöld be a listában ezt a hangeszközt, majd indítsd újra a gépet, amikor az Equalizer APO kéri." data-i18n-title="engine.apoConfiguratorTitle">Equalizer APO Configurator megnyitása</button></div>
 
   <!-- ======================================================= -->
   <!-- 1. KESKENY FELSŐ 3D VÍZESÉS SÁV                         -->
@@ -4547,6 +4551,25 @@ function updateVersionLabel() {
   }
 }
 
+/**
+ * Windows: a plugin be van illesztve az Equalizer APO-ba, de nem fut. Leggyakrabban azért, mert a hang egy olyan
+ * eszközön szól (pl. bedugott USB hangkártya), amelyen nincs bekapcsolva az Equalizer APO; ritkábban frissítés után a
+ * régi plugin maradt betöltve. A gomb az Equalizer APO Configuratorát nyitja meg (csak ha megvan a gépen).
+ */
+function updateDspWarn(st) {
+  const warn = document.getElementById("dspWarn");
+  if (!warn) return;
+  const show = st.platform === "windows" && st.dspActive === false && !!st.pluginExpected;
+  warn.hidden = !show;
+  if (!show) return;
+  const text = document.getElementById("dspWarnText");
+  const device = st.device || "?";
+  const msg = st.apoDevice ? t("engine.apoOtherDevice", { device, apoDevice: st.apoDevice }) : t("engine.pluginNotLoaded", { device });
+  if (text && text.textContent !== msg) text.textContent = msg;
+  const btn = document.getElementById("btnApoConfigurator");
+  if (btn) btn.hidden = !(st.apoConfigurator && typeof window.aetherOpenApoConfigurator === "function");
+}
+
 function updateEngineBadge() {
   updateVersionLabel();
   const badge = document.getElementById("pipewireLiveBadge");
@@ -4560,8 +4583,7 @@ function updateEngineBadge() {
     return;
   }
   const st = engineStatus || {};
-  const warn = document.getElementById("dspWarn");
-  if (warn) warn.hidden = !(st.platform === "windows" && st.dspActive === false && st.pluginExpected);
+  updateDspWarn(st);
   const src = st.source || t("engine.src");
   const sr = st.sr ? ` • ${(st.sr / 1000).toFixed(1)} kHz` : "";
   if (st.platform === "windows" && st.dspActive === false) {
@@ -4578,6 +4600,15 @@ function updateEngineBadge() {
     badge.textContent = t("engine.live", { src, sr });
     badge.title = (typeof st.gr === "number" && st.gr < -0.05) ? t("engine.grTitle", { v: st.gr.toFixed(1) }) : "";
   }
+}
+
+{
+  const btn = document.getElementById("btnApoConfigurator");
+  if (btn) btn.onclick = () => {
+    Promise.resolve(window.aetherOpenApoConfigurator && window.aetherOpenApoConfigurator()).then((ok) => {
+      if (ok === false || ok === "false") showToast(t("engine.apoConfiguratorFailed"));
+    }).catch(() => showToast(t("engine.apoConfiguratorFailed")));
+  };
 }
 
 // A motorban tárolt impulzusválasz megjelenítése

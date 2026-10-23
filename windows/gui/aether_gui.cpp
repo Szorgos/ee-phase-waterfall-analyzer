@@ -27,6 +27,7 @@
 #include <string>
 
 #include "aq_i18n.hpp"
+#include "../common/eqapo_paths.hpp"
 
 namespace {
 
@@ -215,6 +216,14 @@ void runWindow(const std::wstring& guiFolder) {
             ShellExecuteW(nullptr, L"open", wurl.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         }
         return "null";
+    });
+    // Az Equalizer APO eszközválasztója (pl. új USB hangkártya bekapcsolásához): rendszergazdaként indul (UAC)
+    w.bind("aetherOpenApoConfigurator", [](const std::string&) -> std::string {
+        const std::wstring exe = ee_analyzer::win::eqApoConfiguratorPath();
+        if (exe.empty()) return "false";
+        const std::wstring dir = exe.substr(0, exe.find_last_of(L'\\'));
+        const auto r = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"runas", exe.c_str(), nullptr, dir.c_str(), SW_SHOWNORMAL));
+        return r > 32 ? "true" : "false";
     });
     if (mapVirtualHost(w, guiFolder)) {
         w.navigate(kStartUrl);
