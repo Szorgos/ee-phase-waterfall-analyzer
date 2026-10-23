@@ -11,6 +11,7 @@
 #include "param_block.hpp"
 #include "tap_ring.hpp"
 #include "mini_json.hpp"
+#include "dsp_state.hpp"
 
 using namespace ee_analyzer;
 
@@ -258,6 +259,50 @@ static void testJson() {
     CHECK(!json::parse("{\"type\":", bad), "hibás JSON elutasítva");
 }
 
+static void testDspState() {
+    std::printf("[6] Hangfeldolgozás állapota (szünet / hiba / másik eszköz / nincs eszköz)\n");
+    DspStateInput in;
+    in.device = in.apoDevice = "Hangszórók";
+    in.pluginAlive = true;
+    CHECK(classifyDspState(in) == DspState::Active, "a plugin fut: aktív");
+    in.pluginAlive = false;
+    CHECK(classifyDspState(in) == DspState::Idle, "ugyanaz az eszköz, nincs hang: szünet (nem hiba)");
+    in.playingMs = 2900;
+    CHECK(classifyDspState(in) == DspState::Idle, "2,9 s zene plugin nélkül: még szünet (a plugin indulhat)");
+    in.playingMs = 3000;
+    CHECK(classifyDspState(in) == DspState::NotLoaded, "3 s zene plugin nélkül: hiba");
+    in.playingMs = 0;
+    in.device = "USB DAC";
+    CHECK(classifyDspState(in) == DspState::OtherDevice, "másik eszköz: jelezve, lejátszás nélkül is");
+    in.deviceOk = false;
+    CHECK(classifyDspState(in) == DspState::NoDevice, "nincs lejátszóeszköz");
+    in.deviceOk = true;
+    in.apoDevice.clear();
+    CHECK(classifyDspState(in) == DspState::Idle, "még sosem futott plugin, nincs hang: szünet");
+    in.playingMs = 5000;
+    CHECK(classifyDspState(in) == DspState::NotLoaded, "még sosem futott plugin, szól a zene: hiba");
+
+    // Lejátszás felismerése a jelszintből (48 kHz, 10 ms-os blokkok)
+    const double sr = 48000.0;
+    std::vector<float> tone(480 * 2), quiet(480 * 2, 1e-5f), zero(480 * 2, 0.0f);
+    for (size_t i = 0; i < 480; ++i) tone[2 * i] = tone[2 * i + 1] = 0.1f * static_cast<float>(std::sin(2 * 3.14159265 * 440 * i / sr));
+    PlaybackDetector pd;
+    for (int i = 0; i < 100; ++i) pd.push(quiet.data(), 480, sr);
+    CHECK(pd.playingMs() == 0.0, "zajpadló (−100 dBFS) 1 s-ig: nem lejátszás");
+    for (int i = 0; i < 350; ++i) pd.push(tone.data(), 480, sr);
+    const double after = pd.playingMs();
+    for (int i = 0; i < 100; ++i) pd.push(zero.data(), 480, sr);   // 1 s szünet két szám között
+    const double gap = pd.playingMs();
+    for (int i = 0; i < 100; ++i) pd.push(tone.data(), 480, sr);
+    CHECK(std::abs(after - 3500.0) < 1.0 && gap > after && pd.playingMs() > gap,
+          "3,5 s zene: %.0f ms; 1 s csend nem szakítja meg (%.0f ms, utána %.0f ms)", after, gap, pd.playingMs());
+    for (int i = 0; i < 200; ++i) pd.push(zero.data(), 480, sr);
+    CHECK(pd.playingMs() == 0.0, "2 s csend: a lejátszás véget ért");
+    for (int i = 0; i < 100; ++i) pd.push(tone.data(), 480, sr);
+    pd.idle(2000.0);
+    CHECK(pd.playingMs() == 0.0, "2 s adat nélkül (a lehallgatás nem ad mintát): nincs lejátszás");
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
@@ -267,6 +312,7 @@ int main() {
     testSeqlock();
     testTapRing();
     testJson();
+    testDspState();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }
