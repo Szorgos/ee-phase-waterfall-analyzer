@@ -40,6 +40,7 @@
 #include "aq_i18n.hpp"
 #include "../common/win_shared.hpp"
 #include "../common/eqapo_paths.hpp"
+#include "dsp_state.hpp"
 #include "wasapi_loopback.hpp"
 #include "tray.hpp"
 
@@ -218,7 +219,9 @@ public:
                                 : "[Forrás] WASAPI loopback (csak analízis; a DSP-hez az EQ APO plugin kell).\n");
             if (alive) pluginReadPos_ = mapping_.state()->tap.writePos.load();
             else loopbackReadPos_ = loopback_.ring().writePos.load();
+            playback_.reset();   // a lejátszás mérése a plugin leállásától indul
         }
+        if (!loopback_.active()) playback_.reset();   // nincs lehallgatás (nincs eszköz): nincs lejátszás
         // Az eszköz, amelyen a plugin fut (az alapértelmezett lejátszóeszköz): ha később egy másik eszközre
         // vált a hang (pl. bedugott USB hangkártya), a felület meg tudja mondani, hol működött eddig
         if (pluginActive_) {
@@ -251,7 +254,9 @@ public:
             }
             return 0;
         }
-        return readTapRing(loopback_.ring(), loopbackReadPos_, lr, maxFrames);
+        const size_t n = readTapRing(loopback_.ring(), loopbackReadPos_, lr, maxFrames);
+        playback_.push(lr, n, loopback_.sampleRate());   // szól-e a zene, miközben a plugin nem fut
+        return n;
     }
 
     double sampleRate() {
@@ -327,6 +332,7 @@ public:
                           mapping_.state()->sampleRate.load(), mapping_.state()->activeInstances.load(),
                           static_cast<double>(mapping_.state()->gainReductionDb.load()));
             s += buf;
+            s += ",\"dspState\":\"active\"";
         } else {
             std::snprintf(buf, sizeof(buf), ",\"source\":\"WASAPI loopback\",\"dspActive\":false,\"sr\":%u",
                           loopback_.sampleRate());
@@ -336,6 +342,13 @@ public:
             // A telepítő beillesztette a plugint, de az nem jelentkezik: a mostani eszközön nincs bekapcsolva az
             // Equalizer APO (pl. új USB hangkártya), vagy frissítés után a régi plugin fut még
             if (pluginIntegrated()) {
+                // szünet (nem hiba), hiba, másik eszköz vagy nincs eszköz (dsp_state.hpp)
+                DspStateInput in;
+                in.deviceOk = loopback_.active();
+                in.device = dev;
+                in.apoDevice = apoDevice_;
+                in.playingMs = playback_.playingMs();
+                s += ",\"dspState\":\"" + std::string(dspStateName(classifyDspState(in))) + "\"";
                 s += ",\"pluginExpected\":true";
                 if (!apoDevice_.empty() && apoDevice_ != dev) s += ",\"apoDevice\":\"" + jsonEscape(apoDevice_) + "\"";
                 if (!win::eqApoConfiguratorPath().empty()) s += ",\"apoConfigurator\":true";
@@ -409,6 +422,7 @@ private:
     uint64_t loopbackReadPos_ = 0;
     uint64_t lastPluginData_ = 0;
     std::string apoDevice_;
+    PlaybackDetector playback_;
     std::mutex irMutex_;
     IrData ir_;
 };
