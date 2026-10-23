@@ -1,8 +1,11 @@
 ### Fejlesztési irány
 - A következő kiadások az 1.x változat csiszolására összpontosítanak: hibajavítások, pontosság és kezelhetőség.
 
-### Újdonságok (következő kiadás)
+### Újdonságok (1.7.8)
 - **Magic Touch – „Bátor” tartomány:** az intenzitás 200 %-ig állítható. 100 % fölött a hatás fokozatosan erősebb, és jó minőségű felvételen is hallható; 100 %-ig a hangzás nem változott. A hangerő-kiegyenlítés és a védelmek (zaj, élesség, sziszegés) ott is működnek, a javító funkciók (zúgás, kattanás, zaj) nem erősödnek.
+
+### Javítások (1.7.8)
+- **Windows – szünet a lejátszásban:** néhány perc csend után megjelent a narancssárga „A hangfeldolgozás nem fut…” figyelmeztetés, pedig nem volt hiba: szünetben az Equalizer APO leállítja a hangfolyamot, és vele az Aqulify hangfeldolgozását is, lejátszáskor pedig magától újraindítja. Most szünetben nincs figyelmeztetés, csak a jelvény mutatja: „Készenlét – nincs lejátszás”. Figyelmeztetés akkor jelenik meg, ha szól a zene, de a hangfeldolgozás nem indul el; ha a hang olyan eszközön szól, amelyen nincs bekapcsolva az Equalizer APO; vagy ha nincs elérhető lejátszóeszköz (pl. kihúzott hangkártya).
 
 ### Javítások (1.7.7)
 - **Windows – új hangeszköz (pl. USB hangkártya):** bedugás után a Windows az új eszközre váltja a hangot, de az Equalizer APO csak azokon az eszközökön fut, amelyeken a Configuratorában bekapcsolták, így ott az Aqulify hangfeldolgozása sem működött. A felület eddig félrevezető hibaüzenetet írt (frissítési hibára utalt). Most megnevezi az eszközt, és azt is, amelyiken eddig működött a hangfeldolgozás, és egy gombbal megnyitja az Equalizer APO Configuratort: ott be kell jelölni az új eszközt, majd újraindítani a gépet. A régi eszközre visszaváltva a hangfeldolgozás magától folytatódik, mint eddig.
