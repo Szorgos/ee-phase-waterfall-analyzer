@@ -1,3 +1,6 @@
+### Újdonságok (következő kiadás)
+- **Magic Touch – „Bátor” tartomány:** az intenzitás 200 %-ig állítható. 100 % fölött a hatás fokozatosan erősebb, és jó minőségű felvételen is hallható; 100 %-ig a hangzás nem változott. A hangerő-kiegyenlítés és a védelmek (zaj, élesség, sziszegés) ott is működnek, a javító funkciók (zúgás, kattanás, zaj) nem erősödnek.
+
 ### Javítások (1.7.7)
 - **Windows – új hangeszköz (pl. USB hangkártya):** bedugás után a Windows az új eszközre váltja a hangot, de az Equalizer APO csak azokon az eszközökön fut, amelyeken a Configuratorában bekapcsolták, így ott az Aqulify hangfeldolgozása sem működött. A felület eddig félrevezető hibaüzenetet írt (frissítési hibára utalt). Most megnevezi az eszközt, és azt is, amelyiken eddig működött a hangfeldolgozás, és egy gombbal megnyitja az Equalizer APO Configuratort: ott be kell jelölni az új eszközt, majd újraindítani a gépet. A régi eszközre visszaváltva a hangfeldolgozás magától folytatódik, mint eddig.
 - **EQ – Decramp x6 / x8:** ezekben az állásokban a mélyek eltértek a beállítottól: 48 kHz-en egy 105 Hz-es, +6 dB-es mély polc x8-nál 20 Hz-en +6,8 dB-t adott, x6-nál +5,5 dB-t. Emiatt a görbe is megváltozott, és az automatikus preamp miatt a hang halkabb lett. Az Off és x4 közötti állásokat ez nem érintette.

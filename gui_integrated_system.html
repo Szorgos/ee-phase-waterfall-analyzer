@@ -599,6 +599,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .param-box .title { font-size: 0.72rem; color: var(--aq-text-3); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
   .param-box .val { font: 500 1.1rem var(--aq-mono); }
   .param-box [id^="lbl-"] { font-family: var(--aq-mono) !important; font-weight: 500 !important; color: var(--aq-accent-2) !important; }
+  .param-box [id^="lbl-"].ctl-bold { color: var(--aq-amber) !important; }   /* Magic Touch 100 % fölött („Bátor”) */
   @media (max-width: 1100px) { .param-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
   /* Csúszkák: vékony sín, akcentus kitöltés, kerek fogantyú */
@@ -4406,7 +4407,15 @@ setCtl("bassFloorActive", false);
 
 // --- Magic Touch (automatikus hangszépítő; docs/plans/magic-touch.md)
 buildControls("magicControls", [
-  { id: "magicAmount", kind: "num", label: "ctl.magicAmount", min: 0, max: 100, step: 1, unit: "%", def: 50, hint: "ctl.magicAmountHint" },
+  // 100 % fölött „Bátor” tartomány (200 %-ig): a hangszépítő korlátok a kétszeresükig nőnek (magic_touch.hpp)
+  { id: "magicAmount", kind: "num", label: "ctl.magicAmount", min: 0, max: 200, step: 1, unit: "%", def: 50, hint: "ctl.magicAmountHint",
+    after: (v) => {
+      const lbl = document.getElementById("lbl-magicAmount");
+      if (!lbl) return;
+      const bold = v > 100;
+      if (bold) lbl.innerText += " · " + t("mt.bold");
+      lbl.classList.toggle("ctl-bold", bold);
+    } },
   { id: "magicCharacter", kind: "select", label: "ctl.magicCharacter", optKeys: true, def: 0,
     options: ["mt.charNatural", "mt.charWarm", "mt.charBright", "mt.charSpacious"] },
   { id: "magicContent", kind: "select", label: "ctl.magicContent", optKeys: true, def: 0,

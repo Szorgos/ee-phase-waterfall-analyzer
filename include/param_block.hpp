@@ -117,7 +117,7 @@ struct ParamData {
     float convOutputGainDb = 0.0f;
 
     // --- Magic Touch (az Aqulify saját modulja, docs/plans/magic-touch.md) ---
-    float magicAmount = 50.0f;     // % (0 .. 100): az intenzitás
+    float magicAmount = 50.0f;     // % (0 .. 200): az intenzitás (100 % fölött „Bátor” tartomány)
     int32_t magicCompare = 0;      // A/B: 1 = az eredeti (feldolgozatlan) jel szól, hangerőre kiegyenlítve
     int32_t magicCharacter = 0;    // Karakter: 0 Természetes, 1 Meleg, 2 Fényes, 3 Tágas
     int32_t magicContent = 0;      // Tartalom: 0 Automatikus, 1 Zene, 2 Beszéd, 3 Archív felvétel
@@ -216,7 +216,7 @@ inline void sanitizeParams(ParamData& d) {
     cl(d.convWetDb, -100.0f, 20.0f, 0.0f);
     cl(d.convInputGainDb, -36.0f, 36.0f, 0.0f);
     cl(d.convOutputGainDb, -36.0f, 36.0f, 0.0f);
-    cl(d.magicAmount, 0.0f, 100.0f, 50.0f);
+    cl(d.magicAmount, 0.0f, 200.0f, 50.0f);
     ci(d.magicCompare, 0, 1);
     ci(d.magicCharacter, 0, 3);
     ci(d.magicContent, 0, 3);

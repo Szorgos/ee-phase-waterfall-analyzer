@@ -539,14 +539,16 @@ static double rmsDb(const std::vector<float>& x, size_t from) {
     return 10.0 * std::log10(e / static_cast<double>(x.size() - from) + 1e-30);
 }
 
-static void checkLimits(const MagicRun& r, const char* what) {
-    CHECK(r.maxCut <= magic::kMaxLowMidCutDb + 1e-3f && r.maxAir <= magic::kMaxAirDb + 1e-3f &&
-          r.maxDeess <= magic::kMaxDeessDb + 1e-3f && r.maxWidth <= magic::kMaxWidthDb + 1e-3f &&
-          r.maxMakeup <= magic::kMaxMakeupDb + 1e-3f && r.maxMono <= 1.0f &&
-          r.maxTrans <= magic::kMaxTransientDb + 1e-3f && r.maxTransNow <= magic::kMaxTransientDb + 1e-3f &&
-          r.maxUp <= magic::kMaxUpwardDb + 1e-3f && r.maxExc <= magic::kMaxExciterMix + 1e-4f &&
-          r.maxWarm <= magic::kMaxWarmthMix + 1e-4f && r.maxBody <= magic::kMaxBodyDb + 1e-3f &&
-          r.maxPres <= magic::kMaxPresenceDb + 1e-3f && r.maxLevel <= magic::kMaxLevelDb + 1e-3f && r.minAir >= -3.0f &&
+/** A korlátok ellenőrzése; B: a „Bátor” tartomány mértéke (0 = legfeljebb 100 %, 1 = 200 %), ahogy a decide() bővíti őket. */
+static void checkLimits(const MagicRun& r, const char* what, float B = 0.0f) {
+    const float k = 1.0f + B;
+    CHECK(r.maxCut <= magic::kMaxLowMidCutDb * (1.0f + 0.67f * B) + 1e-3f && r.maxAir <= magic::kMaxAirDb * k + 1e-3f &&
+          r.maxDeess <= magic::kMaxDeessDb * (1.0f + 0.5f * B) + 1e-3f && r.maxWidth <= magic::kMaxWidthDb * k + 1e-3f &&
+          r.maxMakeup <= magic::kMaxMakeupDb * (1.0f + 0.5f * B) + 1e-3f && r.maxMono <= 1.0f &&
+          r.maxTrans <= magic::kMaxTransientDb * k + 1e-3f && r.maxTransNow <= magic::kMaxTransientDb * k + 1e-3f &&
+          r.maxUp <= magic::kMaxUpwardDb * k + 1e-3f && r.maxExc <= magic::kMaxExciterMix * (1.0f + 0.67f * B) + 1e-4f &&
+          r.maxWarm <= magic::kMaxWarmthMix * k + 1e-4f && r.maxBody <= magic::kMaxBodyDb * k + 1e-3f &&
+          r.maxPres <= magic::kMaxPresenceDb * k + 1e-3f && r.maxLevel <= magic::kMaxLevelDb + 1e-3f && r.minAir >= -3.0f * k &&
           r.maxHum <= magic::kMaxHumCutDb + 1e-3f && r.maxNr <= magic::kMaxNrDb + 1e-3f,
           "Magic Touch korlátok (%s): vágás %.2f, levegő %.2f, de-esser %.2f, tágítás %.2f, kiegyenlítés %.2f dB, "
           "tranziens %.2f dB, emelés %.2f dB, exciter %.0f %%, meleg %.0f %%, szintkiegyenlítés %.2f dB",
@@ -782,6 +784,43 @@ static void testMagicTouch() {
               "archív: profil %u, sávszélesség %.0f Hz, élesség %.2f, exciter %.0f %%, 13-20 kHz %+.1f dB, hangosság %+.2f LU",
               r.last.content, r.last.bandwidthHz, r.last.harshness, r.last.exciterMix * 100.0f, dHi, dAll);
         checkLimits(r, "archív");
+    }
+    // 8b. „Bátor” tartomány (200 %): ugyanazokon a jeleken erősebb beavatkozás, a kibővített korlátokon belül; a
+    // rendben lévő jelen (rózsaszín zaj) is van hatás, 100 %-on ott nincs
+    {
+        struct Case { const char* name; int kind; };
+        for (const Case c : { Case{ "rendben lévő jel", 0 }, Case{ "keskeny keverés", 1 }, Case{ "archív", 2 } }) {
+            auto make = [&](std::vector<float>& L, std::vector<float>& R) {
+                if (c.kind == 0) { L = pinkNoise(n, 1, 0.25); R = L; }
+                else if (c.kind == 1) {
+                    const std::vector<float> M = pinkNoise(n, 4, 0.2), S = pinkNoise(n, 5, 0.02);
+                    L.resize(n); R.resize(n);
+                    for (size_t i = 0; i < n; ++i) { L[i] = M[i] + S[i]; R[i] = M[i] - S[i]; }
+                } else {
+                    L = pinkNoise(n, 11, 0.25);
+                    magic::Biquad lp[6];
+                    for (auto& f : lp) magic::designLowpass(f, sr, 10000.0, 0.7071);
+                    for (float& v : L) for (auto& f : lp) v = f.process(v);
+                    R = L;
+                }
+            };
+            double diff[2] = { 0, 0 };
+            MagicRun runs[2];
+            for (int k = 0; k < 2; ++k) {
+                auto mt = std::make_unique<magic::MagicTouch>();
+                mt->setControl(k == 0 ? 100.0f : 200.0f, false, false);
+                std::vector<float> L, R;
+                make(L, R);
+                const std::vector<float> inL = L;
+                runs[k] = runMagic(*mt, L, R);
+                double e = 0, ein = 0;
+                for (size_t i = tail; i < n; ++i) { const double d = L[i] - inL[i]; e += d * d; ein += static_cast<double>(inL[i]) * inL[i]; }
+                diff[k] = 10.0 * std::log10(e / ein + 1e-30);   // a változás energiája a jelhez képest (dB)
+            }
+            CHECK(diff[1] > diff[0] + 3.0 && (c.kind != 0 || diff[1] > -40.0),
+                  "Bátor (200 %%), %s: a változás %.1f dB a jelhez képest (100 %%-on %.1f dB)", c.name, diff[1], diff[0]);
+            checkLimits(runs[1], c.name, 1.0f);
+        }
     }
     // 9. Beszéd: automatikus felismerés (legfeljebb kb. 15 s), mélyvágás, szintkiegyenlítés (a második fele 8 dB-lel halkabb)
     {
