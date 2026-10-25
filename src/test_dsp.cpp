@@ -1201,6 +1201,98 @@ static void testConvolverToggle() {
           "konvolver kikapcsolva: a jel azonnal, bit-pontosan érintetlen (nincs utánhangzás)");
 }
 
+/** Konvolver futtatása egy jelen (A/B-vel vagy anélkül); a háttérszál a blokkok előtt betölti az IR-t. */
+static std::vector<float> convRunAb(bool compare, const std::vector<float>& x, size_t block) {
+    AetherChain chain;
+    chain.setSampleRate(48000.0);
+    chain.startWorker();
+    IrData ir;
+    ir.sampleRate = 48000;
+    ir.name = "teszt";
+    ir.left.assign(64, 0.0f);
+    ir.left[0] = 0.5f;   // tiszta, felezett másolat: a kimenet a bemenet 0,5-szerese, zita-késleltetéssel
+    chain.submitIr(ir);
+    ParamData d = transparentParams();
+    d.set(kFlagConvolver, true);
+    d.convAutogain = 0;
+    d.convCompare = compare ? 1 : 0;
+    chain.applyParamsRT(d);
+    std::vector<float> warm(block, 0.0f), warm2(block, 0.0f);
+    for (int i = 0; i < 4; ++i) chain.process(warm.data(), warm2.data(), block);
+    chain.waitIdle();
+    for (int i = 0; i < 4; ++i) chain.process(warm.data(), warm2.data(), block);
+    std::vector<float> L = x, R = x;
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, block);
+    return L;
+}
+
+/** A legnagyobb korrelációjú eltolás: b[i + lag] ~ a[i] (a és b azonos hosszú, a futó része számít). */
+static long bestLag(const std::vector<float>& a, const std::vector<float>& b, size_t from, long maxLag) {
+    long best = 0;
+    double bestC = -1e30;
+    for (long k = 0; k <= maxLag; ++k) {
+        double c = 0;
+        for (size_t i = from; i + k < b.size(); ++i) c += static_cast<double>(a[i]) * b[i + k];
+        if (c > bestC) { bestC = c; best = k; }
+    }
+    return best;
+}
+
+/** A/B összehasonlítás: az eredeti hangerőre kiegyenlített, és időben illeszkedik a feldolgozotthoz. */
+static void testAbCompare() {
+    std::printf("[11] A/B összehasonlítás: hangerő-kiegyenlítés és időbeli illeszkedés\n");
+    const double sr = 48000.0;
+    std::mt19937 rng(21);
+    std::uniform_real_distribution<float> u(-0.5f, 0.5f);
+    std::vector<float> x(48000);
+    for (auto& v : x) v = u(rng);
+
+    // Konvolver: a feldolgozott (wet) jel és az A/B-ben szóló eredeti (dry, szintre igazítva)
+    const size_t block = 480;
+    const std::vector<float> wet = convRunAb(false, x, block);
+    const std::vector<float> ab = convRunAb(true, x, block);
+    const size_t from = 24000;
+    const long lag = bestLag(x, wet, from, 2000);
+    CHECK(lag == static_cast<long>(ee::ZitaInstance::latencyFor(static_cast<uint32_t>(block))),
+          "konvolver: a feldolgozott jel késleltetése %ld minta (a blokkméret %zu: %zu)", lag, block,
+          ee::ZitaInstance::latencyFor(static_cast<uint32_t>(block)));
+    const std::vector<float> wet384 = convRunAb(false, x, 384);
+    const long lag384 = bestLag(x, wet384, from, 2000);
+    CHECK(lag384 == static_cast<long>(ee::ZitaInstance::latencyFor(384)) && lag384 == 128,
+          "konvolver: 384-es blokknál a késleltetés %ld minta (várt 128)", lag384);
+    double num = 0, den = 0;
+    for (size_t i = from; i < x.size(); ++i) { num += (ab[i] - wet[i]) * (ab[i] - wet[i]); den += wet[i] * wet[i]; }
+    CHECK(num / den < 0.02, "konvolver A/B: az eredeti az átlagos hangerőn a feldolgozottal egyezik (eltérés %.1f dB)",
+          10.0 * std::log10(num / den));
+
+    // EQ (IIR, nincs késleltetés): a kimenet a bemenet skálázott másolata, a feldolgozott hangerőn
+    ParamData d = bellParams(0);
+    d.eqCompare = 1;
+    AetherChain chain;
+    chain.setSampleRate(sr);
+    chain.applyParamsRT(d);
+    std::vector<float> L = x, R = x;
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, block);
+    double xy = 0, xx = 0;
+    for (size_t i = from; i < x.size(); ++i) { xy += static_cast<double>(L[i]) * x[i]; xx += static_cast<double>(x[i]) * x[i]; }
+    const double c = xy / xx;   // a legjobb skálázás a bemenetre
+    double res = 0, tot = 0;
+    for (size_t i = from; i < x.size(); ++i) { res += (L[i] - c * x[i]) * (L[i] - c * x[i]); tot += L[i] * L[i]; }
+    CHECK(res / tot < 1e-4, "EQ A/B: a kimenet a bemenet %.3f-szorosa (maradék %.1e)", c, res / tot);
+
+    // A feldolgozott EQ-szint (A/B nélkül) és az A/B-ben szóló szint egyezik
+    ParamData d0 = bellParams(0);
+    AetherChain chain0;
+    chain0.setSampleRate(sr);
+    chain0.applyParamsRT(d0);
+    std::vector<float> P = x, P2 = x;
+    runBlocks([&](float* l, float* r, size_t m) { chain0.process(l, r, m); }, P, P2, block);
+    double ep = 0, ea = 0;
+    for (size_t i = from; i < x.size(); ++i) { ep += static_cast<double>(P[i]) * P[i]; ea += static_cast<double>(L[i]) * L[i]; }
+    CHECK(std::abs(10.0 * std::log10(ea / ep)) < 0.3, "EQ A/B: az eredeti hangereje a feldolgozotthoz képest %.2f dB",
+          10.0 * std::log10(ea / ep));
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify DSP modulteszt (EasyEffects könyvtárak)\n");
@@ -1217,6 +1309,7 @@ int main() {
     testMagicTouch();
     testMonoBass();
     testConvolverToggle();
+    testAbCompare();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

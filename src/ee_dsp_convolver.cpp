@@ -229,6 +229,15 @@ bool ZitaInstance::init(const ConvKernel& k, uint32_t quantum) {
     return true;
 }
 
+size_t ZitaInstance::latencyFor(uint32_t quantum) {
+    // A init() blokkméret-illesztésével egyezik: a FIFO a kettőhatvány blokkokat dolgozza fel, a maradék késlelteti
+    if (quantum == 0 || (quantum & (quantum - 1U)) == 0U) return 0;
+    uint32_t blocksize = quantum;
+    while ((blocksize & (blocksize - 1)) != 0 && blocksize > 2) blocksize--;
+    blocksize = std::max<uint32_t>(blocksize, 64);
+    return quantum % blocksize;
+}
+
 bool ZitaInstance::process(float* L, float* R, size_t n) {
     if (failed_.load(std::memory_order_relaxed) || n != quantum_) return false;
     Impl& p = *p_;

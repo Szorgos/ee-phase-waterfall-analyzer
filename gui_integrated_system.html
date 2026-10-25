@@ -820,6 +820,7 @@ if (!window.THREE) window.THREE = (function () {
           <option value="5">x8</option>
         </select></span>
         <span class="ctrl-group"><button class="mini-btn" id="btnEqBypass">EQ: KI (Bypass)</button></span>
+        <span class="ctrl-group"><button class="mini-btn" id="btnConvBypass">Konvolver: KI (Bypass)</button></span>
       </div>
     </div>
     <div class="wf-stage">
@@ -947,6 +948,7 @@ if (!window.THREE) window.THREE = (function () {
       <button class="adw-btn active-opt" id="btnTogglePhase" data-curve style="--curve:#5ED6A0;" title="Zöld szaggatott fázisgörbe megjelenítése / elrejtése (hangra nincs hatással)" data-i18n-title="eq.phaseTitle" data-i18n="eq.phaseBtn">Fázis (°)</button>
       <!-- EQ be/ki: ugyanaz, mint a vízesés melletti gomb (btnEqBypass); a két példány állapota mindig egyezik -->
       <button class="adw-btn" id="btnEqBypassTab">EQ: KI (Bypass)</button>
+      <button class="adw-btn" id="btnEqAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
       <!-- 2D ZOOM ESZKÖZSÁV: a grafikon alatti gombsorban, jobbra zárva -->
       <div class="eq-zoom-overlay">
         <span class="zoom-lbl" data-i18n="zoom.dbScale">dB skála:</span>
@@ -1100,6 +1102,8 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <span class="status-badge off" id="badgeStatus-convolver" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
+            <button class="adw-btn" id="btnConvBypassTab">Konvolver: KI (Bypass)</button>
+            <button class="adw-btn" id="btnConvAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
             <button type="button" class="aq-switch" id="btnToggle-convolver" onclick="toggleModule('convolver')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
             <label class="adw-btn" style="cursor:pointer; font-size:0.78rem;">
               <svg class="aq-icon" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="cv.browse">WAV / IRS Tallózása...</span>
@@ -1438,6 +1442,11 @@ function setModuleActive(mod, active) {
   else if (mod === 'bass') isBassEnabled = active;
   else if (mod === 'magic') isMagicEnabled = active;
   else if (mod === 'mono') isMonoEnabled = active;
+  // EQ és Konvolver: egyszerre csak az egyik. A másik kikapcsolódik (mint az IR-importnál).
+  if (active && mod === 'eq' && isConvolverEnabled) setModuleActive('convolver', false);
+  if (active && mod === 'convolver' && isEqEnabled) setModuleActive('eq', false);
+  if (!active && mod === 'eq') eqAbOn = false;
+  if (!active && mod === 'convolver') convAbOn = false;
 
   const dot = document.getElementById('dot-' + mod);
   if (dot) {
@@ -1460,6 +1469,13 @@ function setModuleActive(mod, active) {
   if (mod === 'eq' && tabEqBtn) {
     tabEqBtn.className = active ? 'adw-btn primary active' : 'adw-btn';
   }
+  if (mod === 'convolver') {
+    const topCv = document.getElementById('btnConvBypass');
+    if (topCv) topCv.className = active ? 'mini-btn active' : 'mini-btn';
+    const tabCv = document.getElementById('btnConvBypassTab');
+    if (tabCv) tabCv.className = active ? 'adw-btn primary active' : 'adw-btn';
+  }
+  renderAbButtons();
   renderModuleTexts(mod);
   // Előcsengés-jelzés: lineáris fázisú mód (FIR / FFT / SPM) és bekapcsolt EQ – bármi kapcsolja be az EQ-t
   const prBadge = document.getElementById('hudPreRingBadge');
@@ -1492,6 +1508,29 @@ function renderModuleTexts(mod) {
   if (mod === 'eq' && topEqBtn) topEqBtn.innerText = active ? t('eq.bypassOn') : t('eq.bypassOff');
   const tabEqBtn = document.getElementById('btnEqBypassTab');
   if (mod === 'eq' && tabEqBtn) tabEqBtn.innerText = active ? t('eq.bypassOn') : t('eq.bypassOff');
+  if (mod === 'convolver') {
+    const topCv = document.getElementById('btnConvBypass');
+    if (topCv) topCv.innerText = active ? t('conv.bypassOn') : t('conv.bypassOff');
+    const tabCv = document.getElementById('btnConvBypassTab');
+    if (tabCv) tabCv.innerText = active ? t('conv.bypassOn') : t('conv.bypassOff');
+  }
+}
+
+/** A/B: az eredeti (hangerőre kiegyenlített) jel szól-e. Az EQ-hoz és a Konvolverhez külön. */
+var eqAbOn = false, convAbOn = false;
+function renderAbButtons() {
+  [['eq', eqAbOn, isEqEnabled], ['convolver', convAbOn, isConvolverEnabled]].forEach(([mod, on, enabled]) => {
+    const b = document.getElementById(mod === 'eq' ? 'btnEqAbTab' : 'btnConvAbTab');
+    if (!b) return;
+    b.style.display = enabled ? '' : 'none';
+    b.className = on ? 'adw-btn primary active' : 'adw-btn';
+    b.innerText = t(on ? 'ab.original' : 'ab.processed');
+  });
+}
+function toggleAb(mod) {
+  if (mod === 'eq') { eqAbOn = !eqAbOn; sendEngine({ type: "set_eq_compare", compare: eqAbOn ? 1 : 0 }); }
+  else { convAbOn = !convAbOn; sendEngine({ type: "set_conv_compare", compare: convAbOn ? 1 : 0 }); }
+  renderAbButtons();
 }
 
 /** Kikapcsolt modul beállításakor a be/ki gomb röviden felvillan: a változás csak bekapcsolva hallható. */
@@ -2007,6 +2046,14 @@ const btnEqBypassTab = document.getElementById("btnEqBypassTab");
 if (btnEqBypassTab) {
   btnEqBypassTab.onclick = () => setModuleActive('eq', !isEqEnabled);
 }
+const btnConvBypass = document.getElementById("btnConvBypass");
+if (btnConvBypass) btnConvBypass.onclick = () => setModuleActive('convolver', !isConvolverEnabled);
+const btnConvBypassTab = document.getElementById("btnConvBypassTab");
+if (btnConvBypassTab) btnConvBypassTab.onclick = () => setModuleActive('convolver', !isConvolverEnabled);
+const btnEqAbTab = document.getElementById("btnEqAbTab");
+if (btnEqAbTab) btnEqAbTab.onclick = () => toggleAb('eq');
+const btnConvAbTab = document.getElementById("btnConvAbTab");
+if (btnConvAbTab) btnConvAbTab.onclick = () => toggleAb('convolver');
 
 const btnCameraAngle = document.getElementById("btnCameraAngle");
 if (btnCameraAngle) {
@@ -4927,6 +4974,7 @@ function applyEngineState(st, fromSync) {
         if (typeof st.magic.content === "number") setCtl("magicContent", st.magic.content);
         magicCompare = !!st.magic.compare;
       }
+      if (st.ab) { eqAbOn = !!st.ab.eq; convAbOn = !!st.ab.conv; }
       if (st.monoBass) {
         setCtl("monoSubsonic", Math.max(0, MONO_SUBSONIC_HZ.indexOf(st.monoBass.subsonicHz)));
         setCtl("monoAmount", st.monoBass.amount);
@@ -4935,6 +4983,7 @@ function applyEngineState(st, fromSync) {
         if (m in mods) setModuleActive(m, !!mods[m]);
       });
       renderMagicCompare();
+      renderAbButtons();
       currentPreamp = typeof st.preamp === "number" ? st.preamp : 0.0;
       autoPreampMode = false;
       setPreampBadge(currentPreamp === 0 ? "preamp.clean" : "preamp.saved", currentPreamp, currentPreamp === 0 ? "optimal" : "info");
@@ -5510,6 +5559,7 @@ document.addEventListener("click", (e) => {
 /** Nyelvváltáskor minden futás közben előállított felirat újra (a statikusakat az applyI18nDom intézi). */
 function refreshDynamicTexts() {
   ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'].forEach(renderModuleTexts);
+  renderAbButtons();
   renderMagicCompare();
   updateMagicDiag(magicDiagLast);
   updateCameraLabel();

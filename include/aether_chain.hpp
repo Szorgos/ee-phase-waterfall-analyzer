@@ -27,6 +27,7 @@
 #include "ee_dsp.hpp"
 #include "magic_touch.hpp"
 #include "mono_bass.hpp"
+#include "ab_compare.hpp"
 
 namespace ee_analyzer {
 
@@ -157,6 +158,8 @@ public:
         eq_.reset();
         bass_.reset();
         monoBass_.reset();
+        abEq_.reset();
+        abConv_.reset();
         crossfeed_.reset();
         limiter_.reset();
         if (irStage_.active) irStage_.active->reset();
@@ -179,6 +182,8 @@ private:
         limiter_.setSampleRate(sr);
         bass_.setSampleRate(sr);
         monoBass_.setSampleRate(sr);
+        abEq_.setSampleRate(sr, kChunk);
+        abConv_.setSampleRate(sr, kChunk);
         crossfeed_.setSampleRate(sr);
         sampleRate_.store(sr);
         // Mintavétel-váltáskor a lánc úgyis újraindul: a függő váltás azonnal érvényes
@@ -365,11 +370,18 @@ private:
             for (size_t i = 0; i < m; ++i) { L[i] *= preampCur_; R[i] *= preampCur_; }
         }
 
-        if (d.has(kFlagEq)) eq_.process(L, R, m);
+        if (d.has(kFlagEq)) abEq_.process(L, R, m, eq_.latency(), d.eqCompare != 0,
+                                          [this](float* a, float* b, size_t n) { eq_.process(a, b, n); });
         if (d.has(kFlagBass)) bass_.process(L, R, m);
         if (d.has(kFlagMono)) monoBass_.process(L, R, m);
         if (d.has(kFlagCrossfeed)) crossfeed_.process(L, R, m);
-        runConvolver(L, R, m, d.has(kFlagConvolver));
+        if (d.has(kFlagConvolver)) {
+            // A konvolver saját késleltetése (blokkméret-illesztés): ugyanannyival késlelteti az eredeti ágat
+            abConv_.process(L, R, m, ee::ZitaInstance::latencyFor(static_cast<uint32_t>(m)), d.convCompare != 0,
+                            [this](float* a, float* b, size_t n) { runConvolver(a, b, n, true); });
+        } else {
+            runConvolver(L, R, m, false);
+        }
 
         if (d.has(kFlagLimiter)) {
             limiter_.process(L, R, m);
@@ -497,6 +509,7 @@ private:
     ee::Equalizer eq_;
     ee::BassEnhancer bass_;
     mono::MonoBass monoBass_;
+    abcmp::AbCompare abEq_, abConv_;
     ee::Crossfeed crossfeed_;
     ee::Limiter limiter_;
     ParamData current_;

@@ -596,6 +596,15 @@ private:
             else if (mod == "magic") p.set(kFlagMagic, on);
             else if (mod == "mono") p.set(kFlagMono, on);
             else changed = false;
+            // Az EQ és a Konvolver egymást kizárja: a másik kikapcsolódik
+            if (on && mod == "eq") p.set(kFlagConvolver, false);
+            if (on && mod == "convolver") p.set(kFlagEq, false);
+            if (!on && mod == "eq") p.eqCompare = 0;              // kikapcsolt modulnál az A/B is kikapcsol
+            if (!on && mod == "convolver") p.convCompare = 0;
+        } else if (type == "set_eq_compare") {
+            p.eqCompare = num(msg, "compare", p.eqCompare) != 0.0 ? 1 : 0;
+        } else if (type == "set_conv_compare") {
+            p.convCompare = num(msg, "compare", p.convCompare) != 0.0 ? 1 : 0;
         } else if (type == "set_mono") {
             p.subsonicHz = static_cast<int32_t>(num(msg, "subsonic", p.subsonicHz));
             p.monoAmount = static_cast<float>(num(msg, "amount", p.monoAmount));
@@ -847,6 +856,7 @@ private:
         s += ",\"compare\":" + std::to_string(p.magicCompare);
         s += ",\"character\":" + std::to_string(p.magicCharacter);
         s += ",\"content\":" + std::to_string(p.magicContent) + '}';
+        s += ",\"ab\":{\"eq\":" + std::to_string(p.eqCompare) + ",\"conv\":" + std::to_string(p.convCompare) + '}';
         s += ",\"monoBass\":{\"subsonicHz\":" + std::to_string(p.subsonicHz);
         s += ",\"amount\":"; appendFloat(s, p.monoAmount, 1); s += '}';
         if (cb_.getIr) {

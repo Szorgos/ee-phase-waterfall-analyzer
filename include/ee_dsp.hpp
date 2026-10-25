@@ -166,6 +166,11 @@ public:
     /** @param quantum a hoszt blokkmérete (ebből számolja az EasyEffects a zita blokkméretét) */
     bool init(const ConvKernel& k, uint32_t quantum);
     uint32_t quantum() const { return quantum_; }
+    /**
+     * A kimenet késleltetése a bemenethez képest (minta), hoszt-blokkméret mellett. Kettőhatvány blokknál közvetlen
+     * a feldolgozás (0); más blokkméretnél a zita kettőhatvány blokkjai miatt a blokkméret és a blokk maradéka.
+     */
+    static size_t latencyFor(uint32_t quantum);
     /** Valós idejű: n == quantum() mintát dolgoz fel helyben; false, ha a példány leállt (túlterhelés). */
     bool process(float* L, float* R, size_t n);
     bool failed() const { return failed_.load(std::memory_order_relaxed); }
