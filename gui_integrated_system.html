@@ -319,8 +319,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .top-spectrum-strip.docked .strip-col-right { align-items: flex-end; }
   .top-spectrum-strip.docked .strip-controls .ctrl-group { padding: 1px 3px 1px 5px; }   /* tömörebb sorok: több fér a háló mellé */
   canvas#waterfallCanvas { width: 100%; height: 100%; display: block; }
-  .wf-nogl { position: absolute; inset: 0 0 30px; display: flex; align-items: center; justify-content: center; padding: 0 24px; text-align: center; color: var(--aq-text-2); font-size: 0.9rem; pointer-events: none; }
-  .wf-nogl[hidden] { display: none; }
+  canvas#spec2dCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; color: var(--aq-text-2); pointer-events: none; }
+  canvas#spec2dCanvas[hidden] { display: none; }
   /* Linux saját ablak (WebKitGTK): a GTK-s léptetőnyilak szélesebbek, mint Windowson, ezért ott a mezők
      szélesebbek (JS), a szám jobbra igazodik, így a nyilak megmaradnak és az érték is teljesen látszik */
   html.wkgtk input[type="number"] { text-align: right; padding-right: 2px; }
@@ -656,7 +656,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 <script>
 // Ha a three.js sehonnan nem tölthető be (sem a mappából, sem a CDN-ről), a 3D-s kód inert helyettesítőre fut, hogy a
 // felület többi része (a motorral való kapcsolat is) ne álljon le. A WebGL-renderer létrehozása hibát dob, így a
-// vízesés helyén üzenet látszik, a 3D-s vezérlők pedig rejtve maradnak (lásd: renderer, wfNoWebgl).
+// vízesés helyén a 2D-s spektrumnézet látszik (lásd: renderer, wfView).
 if (!window.THREE) window.THREE = (function () {
   const inert = () => new Proxy(function () {}, {
     get: (t, k) => (k === Symbol.toPrimitive || k === "valueOf") ? () => 0 : k === "toString" ? () => "" : inert(),
@@ -769,6 +769,8 @@ if (!window.THREE) window.THREE = (function () {
     <div class="strip-toolbar" id="stripToolbar">
       <!-- Bal oldal: a vízesés megjelenítése -->
       <div class="strip-controls strip-col strip-col-left">
+        <!-- 2D / 3D nézet: a 2D kevesebb számítást igényel (gyenge géphez) -->
+        <span class="ctrl-group" id="grpWfView"><button class="mini-btn" id="btnWfView" onclick="toggleWfView()">2D nézet</button></span>
         <!-- Időlépcsők állítása -->
         <span class="ctrl-group" data-wf3d><span class="ctrl-label" data-i18n="strip.time">Idő:</span>
         <select id="selectTimeSteps" class="mini-select">
@@ -825,7 +827,8 @@ if (!window.THREE) window.THREE = (function () {
     </div>
     <div class="wf-stage">
       <canvas id="waterfallCanvas"></canvas>
-      <div id="wfNoWebgl" class="wf-nogl" hidden data-i18n="wf.noWebgl">A 3D vízesés ezen a gépen nem jeleníthető meg (nincs WebGL). A hangfeldolgozás és a többi beállítás működik.</div>
+      <!-- 2D spektrumnézet: a 3D vízesés helyett (gyenge gépen, vagy ha nincs WebGL) ugyanazokból az adatokból -->
+      <canvas id="spec2dCanvas" aria-label="Spektrum (2D)" hidden></canvas>
       <!-- Frekvenciaskála a vízesés első (alsó) éléhez igazítva -->
       <canvas id="freqScaleCanvas" class="freq-scale" aria-hidden="true"></canvas>
       <div id="freqScaleLive" class="freq-scale-live" aria-hidden="true">
@@ -1756,7 +1759,7 @@ function setCamera(v) {
 }
 
 // WebGL nélkül (pl. virtuális gépen vagy letiltott grafikus gyorsítással) a 3D vízesés nem rajzolható, a felület többi
-// része ettől még működik: a vászon helyén üzenet, a 3D vezérlők rejtve
+// része ettől még működik: a 2D-s spektrumnézet látszik, a 3D vezérlők rejtve
 const renderer = (() => {
   try {
     return new THREE.WebGLRenderer({ canvas: wfCanvas, antialias: true });
@@ -1769,7 +1772,6 @@ if (renderer) {
   renderer.setSize(wfCanvas.clientWidth, wfCanvas.clientHeight, false);   // a CSS-méret marad 100 %: az ablakkal együtt méreteződik
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 } else {
-  document.getElementById("wfNoWebgl").hidden = false;
   document.querySelectorAll("[data-wf3d]").forEach(el => { el.style.display = "none"; });
 }
 
@@ -2467,18 +2469,92 @@ function drawFreqScaleFrame(levels) {
 // sebességgel; a lépcsőszám így mindig ugyanakkora időt fed le: 60 = 1 s, 120 = 2 s, 180 = 3 s).
 const WF_STEP_MS = 1000 / 60;
 let wfLastStep = 0;
+// =========================================================================
+// 2D SPEKTRUMNÉZET (WebGL helyett): ugyanaz a 160 sávos adat, ugyanaz a frekvenciatengely (freqToAxis)
+// =========================================================================
+const SPEC2D_TICKS = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+let wfView = "3d";
+try { wfView = localStorage.getItem("aqulify_wf_view") === "2d" ? "2d" : "3d"; } catch (e) {}
+if (!renderer) wfView = "2d";   // WebGL nélkül csak a 2D nézet érhető el
+
+function drawSpec2d(levels) {
+  if (!spec2dCtx) return;
+  const w = spec2dCanvas.clientWidth, h = spec2dCanvas.clientHeight;
+  if (!(w > 0 && h > 0)) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
+  if (spec2dCanvas.width !== pw || spec2dCanvas.height !== ph) { spec2dCanvas.width = pw; spec2dCanvas.height = ph; }
+  const c = spec2dCtx;
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, w, h);
+  const top = 8, bottom = h - 24, plotH = bottom - top;
+  const xOf = (f) => freqToAxis(f) * w;
+  const textColor = getComputedStyle(spec2dCanvas).color;
+  c.lineWidth = 1;
+  c.strokeStyle = "rgba(128,128,128,0.22)";
+  c.fillStyle = textColor;
+  c.font = "11px sans-serif";
+  c.textAlign = "center";
+  c.textBaseline = "alphabetic";
+  SPEC2D_TICKS.forEach((f) => {
+    const x = Math.round(xOf(f)) + 0.5;
+    c.beginPath(); c.moveTo(x, top); c.lineTo(x, bottom); c.stroke();
+    c.fillText(f >= 1000 ? (f / 1000) + "k" : String(f), x, h - 6);
+  });
+  c.beginPath(); c.moveTo(0, bottom + 0.5); c.lineTo(w, bottom + 0.5); c.stroke();
+  if (!levels || levels.length === 0) return;
+  const n = levels.length;
+  const pts = [];
+  for (let b = 0; b < FREQ_BINS; b++) {
+    const v = Math.max(0, Math.min(1, levels[Math.min(n - 1, Math.floor(b / FREQ_BINS * n))]));
+    pts.push([xOf(bandFreq(b)), bottom - v * plotH]);
+  }
+  c.beginPath();
+  c.moveTo(pts[0][0], bottom);
+  pts.forEach(([x, y]) => c.lineTo(x, y));
+  c.lineTo(pts[FREQ_BINS - 1][0], bottom);
+  c.closePath();
+  c.fillStyle = "rgba(79,209,197,0.28)";
+  c.fill();
+  c.beginPath();
+  pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+  c.strokeStyle = "#4FD1C5";
+  c.lineWidth = 1.5;
+  c.stroke();
+}
+
+/** A nézet kijelzése: 2D-nél a vászon és a 3D-s frekvenciaskála rejtve, a gomb a másik nézetre vált. */
+function applyWfView() {
+  const is2d = wfView === "2d";
+  if (spec2dCanvas) spec2dCanvas.hidden = !is2d;
+  waterfallCanvas.style.display = is2d ? "none" : "";
+  freqScaleCanvas.style.display = is2d ? "none" : "";
+  const b = document.getElementById("btnWfView");
+  if (b) b.innerText = t(is2d ? "wf.view3d" : "wf.view2d");
+  const g = document.getElementById("grpWfView");
+  if (g) g.style.display = renderer ? "" : "none";
+}
+function toggleWfView() {
+  if (!renderer) return;
+  wfView = wfView === "2d" ? "3d" : "2d";
+  try { localStorage.setItem("aqulify_wf_view", wfView); } catch (e) {}
+  applyWfView();
+}
+const spec2dCanvas = document.getElementById("spec2dCanvas");
+const spec2dCtx = spec2dCanvas ? spec2dCanvas.getContext("2d") : null;
+applyWfView();
+
 function animate3D() {
   requestAnimationFrame(animate3D);
   if (document.hidden) return;                // rejtett (pl. kis méretre tett) ablakban nincs mit rajzolni
   drawFreqScale(false);
   if (stripLayoutDirty) { stripLayoutDirty = false; layoutStripControls(); }
   const nowMs = performance.now();
-  {
-    const fresh = isPipewireConnected && liveSpectrumLevels && liveSpectrumLevels.length > 0 &&
-                  (nowMs - liveSpectrumTime < 450);
-    drawFreqScaleFrame(fresh ? liveSpectrumLevels : null);
-  }
-  if (!renderer) return;                      // WebGL nélkül csak a frekvenciaskála él
+  const fresh = isPipewireConnected && liveSpectrumLevels && liveSpectrumLevels.length > 0 &&
+                (nowMs - liveSpectrumTime < 450);
+  if (wfView === "2d") { drawSpec2d(fresh ? liveSpectrumLevels : null); return; }
+  drawFreqScaleFrame(fresh ? liveSpectrumLevels : null);
+  if (!renderer) return;
 
   if (!wfLastStep) wfLastStep = nowMs - WF_STEP_MS;
   let wfSteps = Math.floor((nowMs - wfLastStep) / WF_STEP_MS);
@@ -5558,6 +5634,7 @@ document.addEventListener("click", (e) => {
 
 /** Nyelvváltáskor minden futás közben előállított felirat újra (a statikusakat az applyI18nDom intézi). */
 function refreshDynamicTexts() {
+  applyWfView();
   ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'].forEach(renderModuleTexts);
   renderAbButtons();
   renderMagicCompare();
