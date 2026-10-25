@@ -1,8 +1,13 @@
 ### Fejlesztési irány
 - A következő kiadások az 1.x változat csiszolására összpontosítanak: hibajavítások, pontosság és kezelhetőség.
 
-### Változások (következő kiadás)
+### Változások (1.8.0)
+- **EQ – a Decramp alapértéke Off (eddig x4):** az AutoEq a profilokat 44,1 kHz-es digitális szűrőkkel illeszti, és az Equalizer APO is így számol. Decramp nélkül az Aqulify pontosan ezt a görbét adja (0,01 dB-en belül). Az x4 a magas hangokat 5 kHz fölött 1–2 dB-lel átformálta, 48 kHz-en pedig a keskeny mély sávokat (pl. 30 Hz, Q4) kb. 1 dB-lel pontatlanabbá tette. Az x2–x4 továbbra is választható a kézzel rajzolt, magas hangokat érintő görbékhez. A már mentett beállítás nem változik.
+- **EQ – a Decramp x6 / x8 megszűnt:** a mérések szerint keskeny mély sávoknál (pl. 30 Hz, Q4) több dB-lel eltértek a beállítottól, és az x4-hez képest nem adtak hallható előnyt. Választható: Off, x2, x3, x4. A korábban mentett x6 / x8 beállítás x4-ként töltődik be. (Ez pontosítja az 1.7.7-es bejegyzést is: a „legfeljebb kb. 0,2 dB” csak a széles mély polcra volt igaz.)
 - **Felület – elrendezés:** az EQ grafikon alatti gombsor és a zoom-eszköztár egy sorban van; ha nem fér el, a feliratok fokozatosan rövidülnek (ikonok maradnak, a súgó is). A vízesés vezérlői ismét a háló két oldalán állnak, fentről lefelé szélesség szerint csökkenő sorrendben (a nézőpont és a folyásirány egy sorban); ha így sem férnek el, előbb tömörebb sorokkal, és csak kis ablakban kerülnek a vízesés fölé.
+
+### Javítások (1.8.0)
+- **EQ FIR módban, bekapcsolt Decramp mellett:** a motor a valódinál jóval nagyobb késleltetést jelzett (48 kHz-en x4-nél 128 ms-ot a valódi 32 ms helyett). Emiatt az EQ A/B összehasonlításánál az eredeti jel később szólt, mint a feldolgozott, és váltáskor időugrás hallatszott; a modulváltáskor kivárt csend is hosszabb volt. Most a jelzett késleltetés a valódi.
 - **Burn-in – biztonság:** futás alatt az Autogain is kikapcsol (eddig felhúzhatta a −30 dBFS-es zajszintet). Ha a felület futás közben bezárul, a következő indításkor a modulok visszaállnak a futás előtti állapotba. Csak a gép alvását tiltja, a kijelző elalhat; Linuxon a tiltás a felület kilépésekor (összeomláskor is) magától megszűnik. A −18 dBFS-es csúcskorlát lágy, nem vág.
 - **Takarékos mód:** az automatikus bekapcsolás csak az adott futásra szól (nem marad meg), és csak az aktív ablakban mér; 75 Hz-es kijelzőn nem kapcsol be tévesen.
 - **Mappa importálása:** a WAV impulzusválaszokat a lista csak a fejlécükből olvassa, nagy mappánál is gyors.
@@ -12,9 +17,6 @@
   - eltérő verziónál a felület megnevezi a futó motort (az elérési útját), és leírja a teendőt;
   - az `install.sh` figyelmeztet, ha csomagos telepítés is van a gépen;
   - a Fedora-csomag frissítéskor újraindítja a futó motort (eddig a régi a következő bejelentkezésig futott).
-- **EQ – a Decramp alapértéke Off (eddig x4):** az AutoEq a profilokat 44,1 kHz-es digitális szűrőkkel illeszti, és az Equalizer APO is így számol. Decramp nélkül az Aqulify pontosan ezt a görbét adja (0,01 dB-en belül). Az x4 a magas hangokat 5 kHz fölött 1–2 dB-lel átformálta, 48 kHz-en pedig a keskeny mély sávokat (pl. 30 Hz, Q4) kb. 1 dB-lel pontatlanabbá tette. Az x2–x4 továbbra is választható a kézzel rajzolt, magas hangokat érintő görbékhez. A már mentett beállítás nem változik.
-- **Javítás – EQ FIR módban, bekapcsolt Decramp mellett:** a motor a valódinál jóval nagyobb késleltetést jelzett (48 kHz-en x4-nél 128 ms-ot a valódi 32 ms helyett). Emiatt az EQ A/B összehasonlításánál az eredeti jel később szólt, mint a feldolgozott, és váltáskor időugrás hallatszott; a modulváltáskor kivárt csend is hosszabb volt. Most a jelzett késleltetés a valódi.
-- **EQ – a Decramp x6 / x8 megszűnt:** a mérések szerint keskeny mély sávoknál (pl. 30 Hz, Q4) több dB-lel eltértek a beállítottól, és az x4-hez képest nem adtak hallható előnyt. Választható: Off, x2, x3, x4. A korábban mentett x6 / x8 beállítás x4-ként töltődik be. (Ez pontosítja az 1.7.7-es bejegyzést is: a „legfeljebb kb. 0,2 dB” csak a széles mély polcra volt igaz.)
 
 ### Újdonságok (1.7.9)
 - **Mono és mélyvágás (új modul):** 10 / 20 / 30 Hz-es, 24 dB/oktávos mélyvágás, és 0–100 %-os mono-keverés 100 Hz alatt. A középső csatorna nem változik. Alapból ki.
