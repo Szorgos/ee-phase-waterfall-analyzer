@@ -1,6 +1,10 @@
 ### Fejlesztési irány
 - A következő kiadások az 1.x változat csiszolására összpontosítanak: hibajavítások, pontosság és kezelhetőség.
 
+### Változások (következő kiadás)
+- **EQ – a Decramp alapértéke Off (eddig x4):** az AutoEq a profilokat 44,1 kHz-es digitális szűrőkkel illeszti, és az Equalizer APO is így számol. Decramp nélkül az Aqulify pontosan ezt a görbét adja (0,01 dB-en belül). Az x4 a magas hangokat 5 kHz fölött 1–2 dB-lel átformálta, 48 kHz-en pedig a keskeny mély sávokat (pl. 30 Hz, Q4) kb. 1 dB-lel pontatlanabbá tette. Az x2–x4 továbbra is választható a kézzel rajzolt, magas hangokat érintő görbékhez. A már mentett beállítás nem változik.
+- **Pontosítás az 1.7.7-es bejegyzéshez:** a Decramp x6 / x8 eltérése széles mély polcnál legfeljebb kb. 0,2 dB, de keskeny mély sávoknál (pl. 30 Hz, Q4) több dB is lehet.
+
 ### Újdonságok (1.7.9)
 - **Mono és mélyvágás (új modul):** 10 / 20 / 30 Hz-es, 24 dB/oktávos mélyvágás, és 0–100 %-os mono-keverés 100 Hz alatt. A középső csatorna nem változik. Alapból ki.
 - **Autogain (új modul, kísérleti):** az EBU R128 rövid távú (3 s-os) hangosságát a megadott célszintre igazítja (alapból −18 LUFS, legfeljebb ±6 dB, kb. 1 dB/s sebességgel). A konvolver után, a limiter előtt működik. Alapból ki; a hallgatói tesztje még hátravan.

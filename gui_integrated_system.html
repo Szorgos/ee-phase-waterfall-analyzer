@@ -798,7 +798,7 @@ if (!window.THREE) window.THREE = (function () {
         <div class="prering-note" id="hudPreRingBadge" style="display:none;" title="FIR / FFT / SPM módban (lineáris fázis) a meredek szűrők előtt kis előcsengés keletkezhet. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik – ez így rendben van." data-i18n-title="prering.title">
           <span id="hudGlowDot" style="display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--aq-amber); margin-right:4px; vertical-align:middle;"></span><span data-i18n="prering.text">Lineáris fázis: előcsengés lehetséges</span>
         </div>
-        <div class="prering-note" id="hudDecrampNote" style="display:none;" title="Decramp x6 / x8 mellett a nagyon magas belső mintavétel (288 / 384 kHz) miatt a mély szűrők néhány tized dB-lel eltérhetnek a beállítottól. 44,1 / 48 kHz-en az x4 a magas hangoknál is elég, és pontos." data-i18n-title="decramp.noteTitle">
+        <div class="prering-note" id="hudDecrampNote" style="display:none;" title="Decramp x6 / x8 mellett a nagyon magas belső mintavétel (288 / 384 kHz) miatt a mély szűrők eltérhetnek a beállítottól: széles sávoknál néhány tized dB-lel, keskeny mély sávoknál (pl. 30 Hz, Q4) akár több dB-lel. AutoEq- és Equalizer APO-profilokhoz az Off a pontos; az x2–x4 a kézzel rajzolt, magas hangokat érintő görbékhez hasznos." data-i18n-title="decramp.noteTitle">
           <span style="display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--aq-amber); margin-right:4px; vertical-align:middle;"></span><span data-i18n="decramp.note">Decramp x6 / x8: a mélyek kevésbé pontosak</span>
         </div>
         <div class="strip-badge" data-wf3d>
@@ -815,10 +815,10 @@ if (!window.THREE) window.THREE = (function () {
         <!-- DECRAMPING (EasyEffects / LSP: 44,1 kHz-hez viszonyított túlmintavételezés) -->
         <span class="ctrl-group"><span class="ctrl-label">Decramp:</span>
         <select id="selectDecramp" class="mini-select" title="Decramping: túlmintavételezés IIR és FIR módban (44,1 kHz-hez viszonyítva)" data-i18n-title="strip.decrampTitle">
-          <option value="0">Off</option>
+          <option value="0" selected>Off</option>
           <option value="1">x2</option>
           <option value="2">x3</option>
-          <option value="3" selected>x4</option>
+          <option value="3">x4</option>
           <option value="4">x6</option>
           <option value="5">x8</option>
         </select></span>
@@ -1458,7 +1458,7 @@ var lastSentPreamp = null;
 var eqSyncTimer = null;
 
 var currentEqMode = 0;      // 0 = IIR, 1 = FIR, 2 = FFT, 3 = SPM (EasyEffects / LSP)
-var currentDecramp = 3;     // 0 = Off, 1 = x2, 2 = x3, 3 = x4, 4 = x6, 5 = x8
+var currentDecramp = 0;     // 0 = Off, 1 = x2, 2 = x3, 3 = x4, 4 = x6, 5 = x8 (Off: pontosan az AutoEq / Equalizer APO görbéje)
 var engineEqResponse = null; // a motor által számolt (LSP) EQ frekvenciamenet
 var isEqEnabled = false;
 var isFirMode = false;
@@ -3723,7 +3723,7 @@ function applyDecrampUi(v) {
   if (sel) sel.value = String(currentDecramp);
   updateDecrampNote();
 }
-/** Decramp x6 / x8 (IIR és FIR módban, bekapcsolt EQ-nál): a mély szűrők néhány tized dB-lel pontatlanabbak. */
+/** Decramp x6 / x8 (IIR és FIR módban, bekapcsolt EQ-nál): a mély szűrők pontatlanabbak (keskeny mély sávoknál akár több dB). */
 function updateDecrampNote() {
   const el = document.getElementById("hudDecrampNote");
   if (el) el.style.display = (isEqEnabled && currentEqMode <= 1 && currentDecramp >= 4) ? "block" : "none";

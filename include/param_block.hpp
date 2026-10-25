@@ -75,7 +75,8 @@ struct ParamData {
 
     // --- Equalizer (LSP para_equalizer) ---
     int32_t eqMode = 0;          // EqMode
-    int32_t eqDecramp = 3;       // 0 = Off, 1 = x2, 2 = x3, 3 = x4, 4 = x6, 5 = x8 (44,1 kHz-hez viszonyítva)
+    int32_t eqDecramp = 0;       // 0 = Off, 1 = x2, 2 = x3, 3 = x4, 4 = x6, 5 = x8 (44,1 kHz-hez viszonyítva).
+                                 // Off: pontosan az AutoEq / Equalizer APO görbéje (T06 jelentés)
 
     // --- Crossfeed (libbs2b) ---
     float crossfeedFcut = 700.0f;  // Hz (300 .. 2000)
