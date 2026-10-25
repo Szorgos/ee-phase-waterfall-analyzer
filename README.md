@@ -72,6 +72,14 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
 
 ## 🚀 Telepítés Linuxon (Egyetlen Parancsból)
 
+> ### 📦 **Gyors Telepítés Linuxra (Bármely disztribúció):**
+> Nyiss meg egy terminált, és másold be az alábbi parancsot:
+> ```bash
+> curl -sSL https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz | tar -xz && cd Aqulify-Linux-* && ./install.sh
+> ```
+> *(vagy `wget`-tel: `wget -qO- https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz | tar -xz && cd Aqulify-Linux-* && ./install.sh`)*  
+> 👉 Közvetlen csomagletöltés: **[Aqulify-Linux.tar.gz letöltése – mindig a legújabb kiadás](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)**
+
 ### Fedora: COPR-tárolóból (ajánlott, automatikus frissítéssel)
 
 ```bash
@@ -90,25 +98,15 @@ sudo dnf install ./aqulify-*.x86_64.rpm
 
 A csomag a rendszerbe telepít (menü, ikon, Discover / GNOME Szoftver adatlap), a motor bejelentkezéskor magától indul (`systemctl --user status aqulify`). Eltávolítás: `sudo dnf remove aqulify`.
 
-### Bármely disztribúció: telepítő szkript
-A telepítő szkript automatikusan felismeri a disztribúciót, felrakja a szükséges csomagokat, lefordítja a C++ motort és regisztrálja az asztali alkalmazásikont (a saját mappádba, root jog nélkül).
-
-### 1. Letöltés és Telepítés:
-A [legújabb kiadásnál](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest) töltsd le az `Aqulify-Linux-<verzió>.tar.gz` csomagot, majd:
-
-```bash
-tar xzf Aqulify-Linux-*.tar.gz
-cd Aqulify-Linux-*/
-./install.sh
-```
-
-Vagy a fejlesztői változat a GitHubról (frissítés: `git pull`, majd újra `./install.sh`):
+### Bármely disztribúció: forrásból klónozva (fejlesztői változat)
+A telepítő szkript automatikusan felismeri a disztribúciót, felrakja a szükséges csomagokat, lefordítja a C++ motort és regisztrálja az asztali alkalmazásikont (a saját mappádba, root jog nélkül):
 
 ```bash
 git clone https://github.com/Szorgos/ee-phase-waterfall-analyzer.git
 cd ee-phase-waterfall-analyzer
 ./install.sh
 ```
+*(Frissítéshez a mappában elegendő kiadni: `git pull && ./install.sh`)*
 
 ### 2. Támogatott Linux Disztribúciók:
 * **Ubuntu / Debian / Linux Mint / Pop!_OS:** `apt-get` csomagkezelővel

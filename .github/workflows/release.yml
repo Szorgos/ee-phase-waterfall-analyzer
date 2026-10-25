@@ -62,6 +62,9 @@ jobs:
           NAME="Aqulify-Linux-${VER}"
           git archive --format=tar.gz --prefix="${NAME}/" -o "${NAME}.tar.gz" HEAD
           sha256sum "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256"
+          # Állandó nevű példány: a README "legújabb kiadás" és a terminálos egyparancsos telepítő linkje erre mutat
+          cp "${NAME}.tar.gz" Aqulify-Linux.tar.gz
+          cp "${NAME}.tar.gz.sha256" Aqulify-Linux.tar.gz.sha256
           echo "file=${NAME}.tar.gz" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
@@ -70,6 +73,8 @@ jobs:
           path: |
             ${{ steps.pkg.outputs.file }}
             ${{ steps.pkg.outputs.file }}.sha256
+            Aqulify-Linux.tar.gz
+            Aqulify-Linux.tar.gz.sha256
 
   # Fedora RPM (ugyanaz a spec és SRPM-készítés, amit a COPR használ): ellenőrzi a csomagolást, és a kiadáshoz csatolja
   fedora-rpm:
@@ -259,6 +264,8 @@ jobs:
             ${{ steps.name.outputs.file }}
             ${{ steps.name.outputs.file }}.sha256
             Aqulify-Setup.exe
+            Aqulify-Linux.tar.gz
+            Aqulify-Linux.tar.gz.sha256
             ${{ needs.linux-package.outputs.file }}
             ${{ needs.linux-package.outputs.file }}.sha256
             ${{ needs.fedora-rpm.outputs.file }}
@@ -274,6 +281,8 @@ jobs:
             ${{ steps.name.outputs.file }}
             ${{ steps.name.outputs.file }}.sha256
             Aqulify-Setup.exe
+            Aqulify-Linux.tar.gz
+            Aqulify-Linux.tar.gz.sha256
             ${{ needs.linux-package.outputs.file }}
             ${{ needs.linux-package.outputs.file }}.sha256
             ${{ needs.fedora-rpm.outputs.file }}
