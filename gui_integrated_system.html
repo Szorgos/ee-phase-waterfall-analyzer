@@ -421,6 +421,20 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .adw-btn.selected { background: var(--aq-accent-soft); border-color: rgba(79, 209, 197, 0.55); color: var(--aq-accent-2); }
   @keyframes aqNudge { 0%, 100% { box-shadow: 0 0 0 0 rgba(79, 209, 197, 0); border-color: var(--aq-line-2); } 50% { box-shadow: 0 0 0 4px rgba(79, 209, 197, 0.35); border-color: var(--aq-accent); } }
   .adw-btn.nudge { animation: aqNudge 0.6s ease-in-out 3; }
+  /* Kétállású KI/BE váltó a modulok fejlécében: a kiemelés oldalra csúszik, mint a fülek közötti váltásnál */
+  .aq-switch { position: relative; display: inline-flex; align-items: stretch; width: 92px; height: 30px; padding: 0; flex-shrink: 0;
+               border-radius: 8px; border: 1px solid var(--aq-line-2); background: var(--aq-surface-2); cursor: pointer; overflow: hidden;
+               font: inherit; color: var(--aq-text-3); transition: border-color .15s; }
+  .aq-switch:hover { border-color: var(--aq-text-3); }
+  .aq-switch:focus-visible { outline: 2px solid var(--aq-accent); outline-offset: 2px; }
+  .aq-switch-knob { position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc(50% - 2px); border-radius: 6px;
+                    background: var(--aq-accent-soft); border: 1px solid rgba(79, 209, 197, 0.55);
+                    transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1); }
+  .aq-switch.on .aq-switch-knob { transform: translateX(100%); }
+  .aq-switch-lbl { position: relative; z-index: 1; flex: 1 1 50%; display: flex; align-items: center; justify-content: center;
+                   font-size: 0.78rem; font-weight: 600; letter-spacing: 0.02em; transition: color .2s ease; }
+  .aq-switch:not(.on) .aq-lbl-off, .aq-switch.on .aq-lbl-on { color: var(--aq-text); }
+  .aq-switch.nudge { animation: aqNudge 0.6s ease-in-out 3; }
   /* A görbe vagy egy sáv kilóg a látható dB tartományból: az Igazít gomb kiemelve */
   .eq-zoom-overlay .zoom-btn.attn { border-color: var(--aq-amber); color: var(--aq-amber); box-shadow: 0 0 0 1px rgba(227, 182, 107, 0.35); }
   select.mini-select option, select.ee-select option {
@@ -1053,7 +1067,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <h3 style="margin:0;"><svg class="aq-icon" aria-hidden="true"><use href="#i-headphones"/></svg><span data-i18n="cf.title">Crossfeed Szimulátor (Bauer bs2b / Meier)</span></h3>
             <span class="status-badge off" id="badgeStatus-crossfeed" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
           </div>
-          <button class="adw-btn" id="btnToggle-crossfeed" onclick="toggleModule('crossfeed')" data-i18n="mod.btnOff">KI</button>
+          <button type="button" class="aq-switch" id="btnToggle-crossfeed" onclick="toggleModule('crossfeed')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
         </div>
         <p class="module-desc" data-i18n="cf.desc">Megszünteti a fejhallgatók „fej közepében szóló”, természetellenes sztereó izolációját. Kiszámolja a fej akusztikai árnyékolását és késleltetését (ITD/ILD), így a zene nem a füleidben, hanem előtted, mint egy igazi stúdió hangfalpár szólal meg.</p>
 
@@ -1077,7 +1091,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <span class="status-badge off" id="badgeStatus-convolver" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
-            <button class="adw-btn" id="btnToggle-convolver" onclick="toggleModule('convolver')" data-i18n="mod.btnOff">KI</button>
+            <button type="button" class="aq-switch" id="btnToggle-convolver" onclick="toggleModule('convolver')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
             <label class="adw-btn" style="cursor:pointer; font-size:0.78rem;">
               <svg class="aq-icon" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="cv.browse">WAV / IRS Tallózása...</span>
               <input type="file" id="convFileInput" accept=".wav,.irs" style="display:none;" onchange="handleConvFileSelect(event)">
@@ -1114,7 +1128,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <span style="font-size:0.75rem; color:var(--ee-text-secondary);" title="A túlmintavételezés a Túlmintavételezés választóban állítható" data-i18n-title="lim.ovsTitle">
               <span data-i18n="lim.ovsLabel">Túlmintavételezés:</span> <strong id="lblLimOvsTop" style="color:var(--ee-green);">True Peak/24 bit</strong>
             </span>
-            <button class="adw-btn" id="btnToggle-limiter" onclick="toggleModule('limiter')" data-i18n="mod.btnOff">KI</button>
+            <button type="button" class="aq-switch" id="btnToggle-limiter" onclick="toggleModule('limiter')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
           </div>
         </div>
 
@@ -1163,7 +1177,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <span style="font-size:0.75rem; color:var(--ee-text-secondary);">
               <span data-i18n="bass.principle">Elv:</span> <strong style="color:var(--ee-curve-cyan);">Missing Fundamental</strong>
             </span>
-            <button class="adw-btn" id="btnToggle-bass" onclick="toggleModule('bass')" data-i18n="mod.btnOff">KI</button>
+            <button type="button" class="aq-switch" id="btnToggle-bass" onclick="toggleModule('bass')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
           </div>
         </div>
 
@@ -1194,7 +1208,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
           </div>
           <div style="display:flex; align-items:center; gap:12px;">
             <button class="adw-btn" id="btnMagicCompare" onclick="toggleMagicCompare()" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
-            <button class="adw-btn" id="btnToggle-magic" onclick="toggleModule('magic')" data-i18n="mod.btnOff">KI</button>
+            <button type="button" class="aq-switch" id="btnToggle-magic" onclick="toggleModule('magic')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
           </div>
         </div>
 
@@ -1401,7 +1415,7 @@ function setModuleActive(mod, active) {
   }
 
   const btn = document.getElementById('btnToggle-' + mod);
-  if (btn) btn.className = active ? 'adw-btn primary active' : 'adw-btn';
+  if (btn) { btn.classList.toggle('on', active); btn.setAttribute('aria-checked', String(active)); }
 
   const badge = document.getElementById('badgeStatus-' + mod);
   if (badge) {
@@ -1440,7 +1454,7 @@ function moduleIsActive(mod) {
 function renderModuleTexts(mod) {
   const active = moduleIsActive(mod);
   const btn = document.getElementById('btnToggle-' + mod);
-  if (btn) { btn.innerText = active ? t('mod.btnOn') : t('mod.btnOff'); btn.removeAttribute('data-i18n'); }
+  if (btn) { btn.classList.toggle('on', active); btn.setAttribute('aria-checked', String(active)); }
   const badge = document.getElementById('badgeStatus-' + mod);
   if (badge) { badge.innerText = active ? t('mod.on') : t('mod.off'); badge.removeAttribute('data-i18n'); }
   const topEqBtn = document.getElementById('btnEqBypass');
