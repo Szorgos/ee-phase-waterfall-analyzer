@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <random>
 #include <thread>
 #include <vector>
@@ -327,6 +328,19 @@ static void testSelfPath() {
 #endif
 }
 
+/** NaN-védelem a beállításokban: csak -ffast-math nélkül működik (a fordító ott a v == v-t mindig igaznak veszi). */
+static void testNanGuard() {
+    std::printf("[8] Érvénytelen (NaN) beállítás kiszűrése\n");
+    ParamData d = transparentParams();
+    volatile float nan = std::numeric_limits<float>::quiet_NaN();
+    d.preampDb = nan;
+    d.bassScopeHz = nan;
+    d.agcTargetLufs = nan;
+    sanitizeParams(d);
+    CHECK(d.preampDb == 0.0f && d.bassScopeHz == 100.0f && d.agcTargetLufs == -18.0f,
+          "NaN -> alapérték (preamp %.1f dB, scope %.1f Hz, célszint %.1f LUFS)", d.preampDb, d.bassScopeHz, d.agcTargetLufs);
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
@@ -338,6 +352,7 @@ int main() {
     testJson();
     testDspState();
     testSelfPath();
+    testNanGuard();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

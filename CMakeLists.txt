@@ -17,11 +17,13 @@ if(MINGW)
 endif()
 add_subdirectory(third_party)
 
-# Fordítási figyelmeztetések és optimalizációk
+# Fordítási figyelmeztetések és optimalizációk. A -ffast-math (/fp:fast) szándékosan nincs: Apple Silicon-on (clang)
+# a tesztben elhagyott két ParamData-mezőírást (a Bass Enhancer így 0 Hz-es szűrőt kapott), és a NaN-ellenőrzéseket
+# (sanitizeParams: v == v) is kiiktatja. A teljes lánc CPU-igénye nélküle kb. 3 %-kal több (0,86 -> 0,89 % egy magon).
 if(MSVC)
-    add_compile_options(/W4 /O2 /fp:fast)
+    add_compile_options(/W4 /O2)
 else()
-    add_compile_options(-Wall -Wextra -O3 -ffast-math)
+    add_compile_options(-Wall -Wextra -O3)
 endif()
 
 # MinGW alatt minden bináris statikus C++ futtatókörnyezettel készül (nincs extra DLL-függőség): lásd fent
@@ -36,7 +38,8 @@ target_link_libraries(aqulify_ee PUBLIC aq_lsp aq_calf aq_bs2b aq_speex aq_zita 
 target_link_libraries(aqulify_ee PRIVATE aq_rnnoise)
 set_target_properties(aqulify_ee PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(NOT MSVC)
-    # A könyvtárakból átvett jelfeldolgozó kód az eredetivel azonos lebegőpontos szabályokkal fusson
+    # A könyvtárakból átvett jelfeldolgozó kód az eredetivel azonos lebegőpontos szabályokkal fusson (biztosíték:
+    # a -ffast-math globálisan sincs bekapcsolva)
     target_compile_options(aqulify_ee PRIVATE -fno-fast-math)
 endif()
 

@@ -2,6 +2,7 @@
 - A következő kiadások az 1.x változat csiszolására összpontosítanak: hibajavítások, pontosság és kezelhetőség.
 
 ### Változások (következő kiadás)
+- **Fordítás – nincs több „fast-math”:** Apple Silicon-on (macOS, clang) a gyorsított lebegőpontos fordítás egy tesztben elhagyta a Bass Enhancer két beállításának beírását, így a modul nem működött. Ugyanez a kapcsoló a hibás (NaN) beállítások kiszűrését is kiiktatta. Mostantól minden pontos lebegőpontos szabályokkal fordul. A hangzás nem változik (a mért kimenet bitre azonos), a CPU-igény kb. 3 %-kal nagyobb (egy magon 0,86 % helyett 0,89 % a teljes lánccal).
 - **Linux – régi motor fut az új felület mellett („v1.7.7 · motor v1.6.3”):** ez akkor fordul elő, ha a gépen a saját telepítős (`install.sh`, `~/.local`) és a csomagból telepített (Fedora / COPR, `/usr`) változat is fent van. A saját telepítés szolgáltatása elsőbbséget kap, ezért annak a régi motorja indul. Most:
   - eltérő verziónál a felület megnevezi a futó motort (az elérési útját), és leírja a teendőt;
   - az `install.sh` figyelmeztet, ha csomagos telepítés is van a gépen;
