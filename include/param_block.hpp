@@ -24,7 +24,7 @@ namespace ee_analyzer {
 constexpr uint32_t kMaxEqBands = 32;
 
 /** A params.bin fájl és a közös memória paraméter-formátumának verziója. */
-constexpr uint32_t kParamLayoutVersion = 7;
+constexpr uint32_t kParamLayoutVersion = 8;
 
 enum ParamFlags : uint32_t {
     kFlagEq        = 1u << 0,
@@ -125,6 +125,7 @@ struct ParamData {
 
     // --- Mono és mélyvágás (mono_bass.hpp, a v7-ben került a végére) ---
     int32_t subsonicHz = 0;        // 0 = ki, 10 / 20 / 30 Hz: 24 dB/oktáves felüláteresztő a teljes jelen
+    float monoAmount = 0.0f;       // % (0 .. 100): az oldalsó jel 100 Hz alatti részének mono-keverése (0 = ki)
 
     bool has(uint32_t f) const { return (flags & f) != 0; }
     void set(uint32_t f, bool on) { flags = on ? (flags | f) : (flags & ~f); }
@@ -225,6 +226,7 @@ inline void sanitizeParams(ParamData& d) {
     ci(d.magicCharacter, 0, 3);
     ci(d.magicContent, 0, 3);
     if (d.subsonicHz != 10 && d.subsonicHz != 20 && d.subsonicHz != 30) d.subsonicHz = 0;
+    cl(d.monoAmount, 0.0f, 100.0f, 0.0f);
 }
 
 /** A params.bin v4 mérete: a Magic Touch mezői előtti rész (v5-ben ezek a végére kerültek). */
@@ -233,6 +235,8 @@ constexpr size_t kParamSizeV4 = offsetof(ParamData, magicAmount);
 constexpr size_t kParamSizeV5 = offsetof(ParamData, magicCharacter);
 /** A params.bin v6 mérete: a mélyvágás (v7-ben) mezője előtti rész. */
 constexpr size_t kParamSizeV6 = offsetof(ParamData, subsonicHz);
+/** A params.bin v7 mérete: a mono-keverés (v8-ban) mezője előtti rész. */
+constexpr size_t kParamSizeV7 = offsetof(ParamData, monoAmount);
 
 // ------------------------------------------------------------------ régi (v2/v3) params.bin átvétele
 
@@ -249,15 +253,16 @@ struct ParamDataV3 {
 
 /**
  * Paraméterfájl tartalmának betöltése (a 12 bájtos fejléc után).
- * v7: közvetlen másolat. v6: a mélyvágás nélkül (alap: ki), v5: ugyanaz a Karakter és a Tartalom nélkül, v4: a Magic Touch
- * mezői nélkül (ezek alapértéket kapnak). v2/v3: a régi saját DSP beállításai a megfelelő EasyEffects paraméterekre:
- * a régi RBJ biquad sávok "APO (DR)" szűrőmódot kapnak (ugyanaz a hangolás), a többi az alapértéket.
+ * v8: közvetlen másolat. v7: a mono-keverés nélkül (alap: 0 %), v6: a mélyvágás nélkül (alap: ki), v5: ugyanaz a Karakter
+ * és a Tartalom nélkül, v4: a Magic Touch mezői nélkül (ezek alapértéket kapnak). v2/v3: a régi saját DSP beállításai a
+ * megfelelő EasyEffects paraméterekre: a régi RBJ biquad sávok "APO (DR)" szűrőmódot kapnak (ugyanaz a hangolás), a többi
+ * az alapértéket.
  */
 inline bool loadParamBytes(const char* bytes, size_t len, uint32_t version, uint32_t size, ParamData& out) {
     if (size > len) return false;
-    if (version == kParamLayoutVersion || version == 6 || version == 5 || version == 4) {
-        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : version == 6 ? kParamSizeV6
-                          : version == 5 ? kParamSizeV5 : kParamSizeV4;
+    if (version == kParamLayoutVersion || version == 7 || version == 6 || version == 5 || version == 4) {
+        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : version == 7 ? kParamSizeV7
+                          : version == 6 ? kParamSizeV6 : version == 5 ? kParamSizeV5 : kParamSizeV4;
         if (size != want) return false;
         ParamData d{};
         std::memcpy(static_cast<void*>(&d), bytes, want);

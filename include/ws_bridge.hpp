@@ -598,6 +598,7 @@ private:
             else changed = false;
         } else if (type == "set_mono") {
             p.subsonicHz = static_cast<int32_t>(num(msg, "subsonic", p.subsonicHz));
+            p.monoAmount = static_cast<float>(num(msg, "amount", p.monoAmount));
         } else if (type == "set_crossfeed") {
             p.crossfeedFcut = static_cast<float>(num(msg, "fcut", p.crossfeedFcut));
             p.crossfeedFeedDb = static_cast<float>(num(msg, "feed", p.crossfeedFeedDb));
@@ -846,7 +847,8 @@ private:
         s += ",\"compare\":" + std::to_string(p.magicCompare);
         s += ",\"character\":" + std::to_string(p.magicCharacter);
         s += ",\"content\":" + std::to_string(p.magicContent) + '}';
-        s += ",\"monoBass\":{\"subsonicHz\":" + std::to_string(p.subsonicHz) + '}';
+        s += ",\"monoBass\":{\"subsonicHz\":" + std::to_string(p.subsonicHz);
+        s += ",\"amount\":"; appendFloat(s, p.monoAmount, 1); s += '}';
         if (cb_.getIr) {
             IrData ir = cb_.getIr();
             s += ",\"ir\":";

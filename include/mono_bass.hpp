@@ -1,11 +1,16 @@
 #pragma once
 /**
  * @file mono_bass.hpp
- * @brief Mélyvágás (10 / 20 / 30 Hz) felüláteresztővel. A modul a láncban a Bass Enhancer után, a Crossfeed előtt fut.
+ * @brief Mono és mélyvágás. A modul a láncban a Bass Enhancer után, a Crossfeed előtt fut.
  *
- * A szűrő 24 dB/oktáves Linkwitz–Riley 4. rendű: két egymás utáni Butterworth 2. rendű szakasz. Ezt a bal és a jobb
- * csatornán, a teljes jelen alkalmazzuk. A modul kikapcsolt állapotban (a láncban) nem fut, így bit-pontosan átlátszó.
+ * Két szűrő, mindkettő 24 dB/oktáves Linkwitz–Riley 4. rendű (két egymás utáni Butterworth 2. rendű szakasz):
+ *   - Mélyvágás (10 / 20 / 30 Hz): a bal és a jobb csatornán, a teljes jelen.
+ *   - Mono-keverés (0–100 %, 100 Hz alatt): az oldalsó jel (S = (L−R)/2) mély részét keveri a középsőbe:
+ *     S_out = (1−a)·S + a·HP100(S). A középső jel (M = (L+R)/2) érintetlen marad, így a fázisa sem változik.
+ *
+ * Kikapcsolt modulnál (a láncban nem hívjuk) és 0 % keverésnél, vágás nélkül a kimenet bit-pontosan a bemenet.
  */
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -17,6 +22,8 @@ namespace mono {
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kButterworthQ = 0.70710678118654752440;   // 1 / sqrt(2)
+constexpr double kMonoHz = 100.0;                          // a mono-keverés felső határa (fix)
+constexpr double kMixRampMs = 20.0;                        // a keverés változása ennyi idő alatt simul
 
 /** Másodrendű felüláteresztő (RBJ-kialakítás), kétszeres pontosságú állapottal. */
 class HighPass2 {
@@ -57,47 +64,71 @@ private:
     HighPass2 a_, b_;
 };
 
-/** A mélyvágás modul. A fc-t (10 / 20 / 30 Hz, 0 = ki) a paraméterekből kapja; a szűrőt csak változáskor tervezi újra. */
 class MonoBass {
 public:
     void setSampleRate(uint32_t sr) {
         sr_ = sr > 0 ? static_cast<double>(sr) : 48000.0;
+        side_.design(kMonoHz, sr_);
+        side_.reset();
+        aStep_ = 1.0 / (kMixRampMs * 0.001 * sr_);
         const int32_t hz = subsonicHz();
         subHz_ = -1;   // a jelenlegi fc-t új mintavételi frekvencián tervezzük újra
-        update(hz);
+        setSubsonic(hz);
     }
 
     /** A valós idejű szálon, a beállítás életbe lépésekor. */
-    void update(int32_t subsonicHz) {
-        if (subsonicHz == subHz_) return;
-        subHz_ = subsonicHz;
-        if (subHz_ > 0) {
-            subL_.design(static_cast<double>(subHz_), sr_);
-            subR_.design(static_cast<double>(subHz_), sr_);
-        }
-        reset();
+    void update(const ParamData& d) {
+        aTarget_ = std::clamp(static_cast<double>(d.monoAmount) / 100.0, 0.0, 1.0);
+        setSubsonic(d.subsonicHz);
     }
 
-    /** Csak bekapcsolt modulnál hívandó; a fc = 0 (ki) ilyenkor sincs hatással. */
+    /** Csak bekapcsolt modulnál hívandó. A mono-szűrő állapota a modul teljes ideje alatt fut, így a keverés bármikor pontos. */
     void process(float* L, float* R, size_t n) {
-        if (subHz_ <= 0) return;
         for (size_t i = 0; i < n; ++i) {
-            L[i] = static_cast<float>(subL_.process(L[i]));
-            R[i] = static_cast<float>(subR_.process(R[i]));
+            double l = L[i], r = R[i];
+            if (subHz_ > 0) {
+                l = subL_.process(l);
+                r = subR_.process(r);
+            }
+            const double s = 0.5 * (l - r);
+            const double sLow = side_.process(s);   // az oldalsó jel 100 Hz alatti része, a keveréshez
+            if (aCur_ != aTarget_) aCur_ += std::clamp(aTarget_ - aCur_, -aStep_, aStep_);
+            if (aCur_ > 0.0) {
+                const double m = 0.5 * (l + r);
+                const double sOut = s + aCur_ * (sLow - s);
+                l = m + sOut;
+                r = m - sOut;
+            }
+            L[i] = static_cast<float>(l);
+            R[i] = static_cast<float>(r);
         }
     }
 
     void reset() {
         subL_.reset();
         subR_.reset();
+        side_.reset();
     }
 
     int32_t subsonicHz() const { return subHz_ < 0 ? 0 : subHz_; }
 
 private:
+    void setSubsonic(int32_t hz) {
+        if (hz == subHz_) return;
+        subHz_ = hz;
+        if (subHz_ > 0) {
+            subL_.design(static_cast<double>(subHz_), sr_);
+            subR_.design(static_cast<double>(subHz_), sr_);
+        }
+        subL_.reset();
+        subR_.reset();
+    }
+
     double sr_ = 48000.0;
     int32_t subHz_ = 0;
     HighPass4 subL_, subR_;
+    HighPass4 side_;
+    double aTarget_ = 0.0, aCur_ = 0.0, aStep_ = 0.0;
 };
 
 } // namespace mono

@@ -1127,6 +1127,41 @@ static void testMonoBass() {
     ParamData offHz = transparentParams();
     offHz.subsonicHz = 20;
     CHECK(passesUnchanged(offHz), "modul kikapcsolva (a vágás 20 Hz-re állítva): bit-pontosan átlátszó");
+
+    // Mono-keverés: a bal csatornán csak szinusz szól, így M = S = a jel fele. A középső csatorna (M) nem változhat,
+    // az oldalsó (S) 100 Hz alatt a HP4 szerint csökken (50 Hz: −24,6 dB, 100 Hz: −6 dB), 1 kHz-en nem.
+    auto monoLevels = [&](double f, double amount, double& mDb, double& sDb) {
+        AetherChain chain;
+        chain.setSampleRate(sr);
+        ParamData d = transparentParams();
+        d.set(kFlagMono, true);
+        d.monoAmount = static_cast<float>(amount);
+        chain.applyParamsRT(d);
+        const size_t n = static_cast<size_t>(4.0 * sr);
+        std::vector<float> L = sine(f, 0.5, n, sr), R(n, 0.0f);
+        runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 480);
+        std::vector<float> M(n), S(n);
+        for (size_t i = 0; i < n; ++i) { M[i] = 0.5f * (L[i] + R[i]); S[i] = 0.5f * (L[i] - R[i]); }
+        const size_t from = n - static_cast<size_t>(sr);
+        mDb = 20.0 * std::log10(toneAmp(M, from, f, sr) / 0.25);
+        sDb = 20.0 * std::log10(toneAmp(S, from, f, sr) / 0.25);
+    };
+    double m50, s50, m100, s100, m1k, s1k, m50h, s50h;
+    monoLevels(50.0, 100.0, m50, s50);
+    monoLevels(100.0, 100.0, m100, s100);
+    monoLevels(1000.0, 100.0, m1k, s1k);
+    monoLevels(50.0, 50.0, m50h, s50h);
+    CHECK(std::abs(s50 + 24.6) < 0.5 && std::abs(s100 + 6.0) < 0.3 && std::abs(s1k) < 0.1,
+          "mono 100%%: oldalsó szint 50 Hz %.2f dB, 100 Hz %.2f dB, 1 kHz %.2f dB (LR4, fc 100 Hz)", s50, s100, s1k);
+    CHECK(std::abs(m50) < 0.05 && std::abs(m100) < 0.05 && std::abs(m1k) < 0.05,
+          "mono 100%%: a középső csatorna érintetlen (50 Hz %.3f, 100 Hz %.3f, 1 kHz %.3f dB)", m50, m100, m1k);
+    // A keverés komplex összeg: a HP4 fázisa 50 Hz-en kb. −87°, ezért az eredő amplitúdó |0,5 + 0,5·H|
+    const double x = 50.0 / 100.0;
+    const std::complex<double> hp2 = -x * x / std::complex<double>(1.0 - x * x, std::sqrt(2.0) * x);
+    const std::complex<double> h = hp2 * hp2;   // Linkwitz–Riley 4.: két azonos szakasz
+    const double expect = 20.0 * std::log10(std::abs(0.5 + 0.5 * h));
+    CHECK(std::abs(s50h - expect) < 0.1 && std::abs(m50h) < 0.05,
+          "mono 50%%: 50 Hz-es oldalsó szint %.2f dB (várt %.2f dB, a fázissal együtt)", s50h, expect);
 }
 
 int main() {

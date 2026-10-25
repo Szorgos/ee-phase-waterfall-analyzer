@@ -277,7 +277,7 @@ private:
         magic_.setControl(d.magicAmount, d.magicCompare != 0, d.has(kFlagCrossfeed), d.magicCharacter, d.magicContent);
         eq_.update(d);
         bass_.update(d);
-        monoBass_.update(d.subsonicHz);
+        monoBass_.update(d);
         crossfeed_.update(d);
         limiter_.update(d);
         convIn_ = ee::dbToGain(d.convInputGainDb);

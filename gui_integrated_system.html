@@ -1215,7 +1215,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
           </div>
         </div>
 
-        <p class="module-desc" data-i18n="mono.desc">A kiválasztott frekvencia alatti mélyeket 24 dB/oktáves felüláteresztővel levágja a teljes jelből (rumble és hangszóróvédelem), a két csatornán azonosan.</p>
+        <p class="module-desc" data-i18n="mono.desc">Mélyvágás: a kiválasztott frekvencia alatti mélyeket 24 dB/oktáves felüláteresztővel levágja (rumble és hangszóróvédelem). Mono: a 100 Hz alatti sztereó basszust a két csatornán azonos (összegzett) basszusra keveri; a középső csatorna nem változik.</p>
 
         <div class="param-grid" id="monoControls"></div>
       </div>
@@ -4496,11 +4496,12 @@ setCtl("bassFloorActive", false);
 buildControls("monoControls", [
   { id: "monoSubsonic", kind: "select", label: "ctl.monoSubsonic", optKeys: true, def: 0,
     options: ["mono.subOff", "mono.sub10", "mono.sub20", "mono.sub30"] },
+  { id: "monoAmount", kind: "num", label: "ctl.monoAmount", min: 0, max: 100, step: 1, unit: "%", def: 0 },
 ], () => { sendMono(); nudgeIfOff('mono'); });
 const MONO_SUBSONIC_HZ = [0, 10, 20, 30];
 
 function sendMono() {
-  sendEngine({ type: "set_mono", subsonic: MONO_SUBSONIC_HZ[getCtl("monoSubsonic")] || 0 });
+  sendEngine({ type: "set_mono", subsonic: MONO_SUBSONIC_HZ[getCtl("monoSubsonic")] || 0, amount: getCtl("monoAmount") });
 }
 
 // --- Magic Touch (automatikus hangszépítő; docs/plans/magic-touch.md)
@@ -4769,7 +4770,10 @@ function applyEngineState(st, fromSync) {
         if (typeof st.magic.content === "number") setCtl("magicContent", st.magic.content);
         magicCompare = !!st.magic.compare;
       }
-      if (st.monoBass) setCtl("monoSubsonic", Math.max(0, MONO_SUBSONIC_HZ.indexOf(st.monoBass.subsonicHz)));
+      if (st.monoBass) {
+        setCtl("monoSubsonic", Math.max(0, MONO_SUBSONIC_HZ.indexOf(st.monoBass.subsonicHz)));
+        setCtl("monoAmount", st.monoBass.amount);
+      }
       ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'].forEach(m => {
         if (m in mods) setModuleActive(m, !!mods[m]);
       });

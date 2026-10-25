@@ -166,6 +166,11 @@ static void testParamFile() {
     CHECK(loadParamBytes(reinterpret_cast<const char*>(&dm), kParamSizeV6, 6, static_cast<uint32_t>(kParamSizeV6), r6) &&
               r6.has(kFlagMagic) && r6.magicAmount == 70.0f && r6.subsonicHz == 0,
           "v6 paraméterfájl átvétele (Mélyvágás: ki)");
+    // v7 (mono-keverés előtti) fájl: a beállítások megmaradnak, a mono-keverés 0 %
+    ParamData r7{};
+    CHECK(loadParamBytes(reinterpret_cast<const char*>(&dm), kParamSizeV7, 7, static_cast<uint32_t>(kParamSizeV7), r7) &&
+              r7.magicAmount == 70.0f && r7.monoAmount == 0.0f,
+          "v7 paraméterfájl átvétele (Mono-keverés: 0 %%)");
     // Tartományon kívüli választó: a megengedett tartományba kerül
     ParamData dx = d;
     dx.magicCharacter = 9; dx.magicContent = -4;
