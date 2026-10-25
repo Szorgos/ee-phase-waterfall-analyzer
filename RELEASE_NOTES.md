@@ -1,6 +1,20 @@
 ### Fejlesztési irány
 - A következő kiadások az 1.x változat csiszolására összpontosítanak: hibajavítások, pontosság és kezelhetőség.
 
+### Újdonságok (1.7.9)
+- **Mono és mélyvágás (új modul):** 10 / 20 / 30 Hz-es, 24 dB/oktávos mélyvágás, és 0–100 %-os mono-keverés 100 Hz alatt. A középső csatorna nem változik. Alapból ki.
+- **Autogain (új modul, kísérleti):** az EBU R128 rövid távú (3 s-os) hangosságát a megadott célszintre igazítja (alapból −18 LUFS, legfeljebb ±6 dB, kb. 1 dB/s sebességgel). A konvolver után, a limiter előtt működik. Alapból ki; a hallgatói tesztje még hátravan.
+- **Burn-in (fejhallgató-bejárató):** rózsaszín, barna és fehér zaj, −30 dBFS átlagszint és −18 dBFS csúcskorlát, 20 Hz-es felüláteresztővel, 10 másodperces be- és kifutással, 1 perc csenddel 10 percenként. Futás alatt az EQ, a Convolver és a többi modul kikapcsol, utána visszaáll. A gépet ébren tartja (Windows; Linuxon systemd-inhibit). Kárfelelősség-kizárással használható.
+- **Mappa importálása:** több EQ-profil vagy egy mappa egyszerre; csak a használható fájlok jelennek meg. IR-fájl importálásakor a Convolver bekapcsol, az EQ kikapcsol.
+- **EQ és Konvolver:** egyszerre csak az egyik lehet bekapcsolva. Mindkettőnél A/B összehasonlítás van: az eredeti és a feldolgozott hang között hangerő-kiegyenlítéssel.
+- **Modulok be/ki kapcsolója:** kétállású váltó, a kiemelés oldalra csúszik. Az EQ fülön külön be-/kikapcsoló gomb van.
+- **EQ grafikon:** automatikus függőleges illesztés („Auto” gomb), importkor és profilbetöltéskor.
+- **Takarékos mód gyenge gépeken:** a spektrum 30 Hz-en frissül, automatikus észleléssel és kézi kapcsolóval.
+- **2D spektrumnézet:** a 3D vízesés helyett is választható, WebGL nélkül is fut.
+
+### Javítások (1.7.9)
+- **Magic Touch:** kikapcsoláskor a diagnosztikai táblázat halványan megmarad, és nincs görgetési ugrás.
+
 ### Újdonságok (1.7.8)
 - **Magic Touch – „Bátor” tartomány:** az intenzitás 200 %-ig állítható. 100 % fölött a hatás fokozatosan erősebb, és jó minőségű felvételen is hallható; 100 %-ig a hangzás nem változott. A hangerő-kiegyenlítés és a védelmek (zaj, élesség, sziszegés) ott is működnek, a javító funkciók (zúgás, kattanás, zaj) nem erősödnek.
 
