@@ -537,8 +537,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .eq-zoom-overlay input.zoom-slider { width: 70px; }
 
   .eq-bottom-bar { background: var(--aq-surface); border: 1px solid var(--aq-line); border-radius: var(--aq-radius-l); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
-  .node-readout { display: flex; align-items: center; gap: 10px; font-size: 0.84rem; flex-wrap: wrap; }
-  .actions-group { display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; max-width: 100%; }
+  /* Két sor: fent a gombsor (balra a gombok, jobbra a zoom-eszköztár), lent a sáv-szerkesztő. Keskeny ablakban a
+     zoom a gombok alá törik, jobbra zárva. */
+  .node-readout { display: flex; align-items: center; gap: 10px; font-size: 0.84rem; flex-wrap: wrap; order: 2; flex: 1 1 100%; }
+  .actions-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; max-width: 100%; order: 1; flex: 1 1 auto; }
   .stat-group { display: flex; gap: 6px; align-items: center; }
   .stat-group span.lbl { color: var(--aq-text-2); font-size: 0.76rem; }
   .stat-group small { color: var(--aq-text-3); font-size: 0.74rem; }
