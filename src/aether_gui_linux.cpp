@@ -26,6 +26,25 @@
 
 #include "aq_i18n.hpp"
 
+// Ébren tartás (burn-in): a systemd-inhibit zárat tart a saját process groupjában, leállításkor az egész csoport megszűnik
+static pid_t g_keepAwakePid = -1;
+static void setKeepAwakeLinux(bool on) {
+    if (on && g_keepAwakePid < 0) {
+        const pid_t pid = fork();
+        if (pid == 0) {
+            setpgid(0, 0);
+            execlp("systemd-inhibit", "systemd-inhibit", "--what=idle:sleep", "--who=Aqulify", "--why=Burn-in",
+                   "sleep", "infinity", static_cast<char*>(nullptr));
+            _exit(127);
+        }
+        if (pid > 0) g_keepAwakePid = pid;
+    } else if (!on && g_keepAwakePid > 0) {
+        kill(-g_keepAwakePid, SIGTERM);
+        waitpid(g_keepAwakePid, nullptr, 0);
+        g_keepAwakePid = -1;
+    }
+}
+
 #ifndef AQULIFY_VERSION
 #define AQULIFY_VERSION "0.0.0"
 #endif
@@ -240,6 +259,12 @@ int main() {
         w.bind("aetherOpenUrl", [](const std::string& req) -> std::string {
             const std::string target = allowedExternalUrl(req);
             if (!target.empty()) g_app_info_launch_default_for_uri(target.c_str(), nullptr, nullptr);
+            return "null";
+        });
+        // Burn-in alatt nincs alvás: a systemd-inhibit zárat tart, amíg a gyerekfolyamat (sleep infinity) fut.
+        // Nem systemd-s rendszeren a hívás nem tesz semmit (az exec sikertelen).
+        w.bind("aetherKeepAwake", [](const std::string& req) -> std::string {
+            setKeepAwakeLinux(req.find("true") != std::string::npos);
             return "null";
         });
         w.navigate(url);

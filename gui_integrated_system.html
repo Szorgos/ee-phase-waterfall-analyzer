@@ -747,6 +747,7 @@ if (!window.THREE) window.THREE = (function () {
         <option value="light" data-i18n="theme.light">☀️ Világos</option>
       </select>
       <select id="selectLang" class="mini-select lang-select" title="Nyelv" data-i18n-title="lang.title" onchange="setLanguage(this.value, true)"></select>
+      <button class="mini-btn" id="btnBurnIn" onclick="openBurnIn()" data-i18n="burnin.btn">Burn-in</button>
       <button id="btnSupport" class="support-link" onclick="toggleSupport(event)" title="Az Aqulify ingyenes (donateware). Ha hasznos, egy kis támogatással segítheted a fejlesztést." data-i18n-title="support.btnTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-heart"/></svg><span data-i18n="support.btn">Támogatás</span></button>
       <span id="pipewireLiveBadge" class="status-badge off">Motor Offline</span>
       <div id="physicalSinkWrap" style="font-size:0.8rem; color:var(--ee-text-secondary); display:none; align-items:center; gap:6px;">
@@ -981,7 +982,23 @@ if (!window.THREE) window.THREE = (function () {
 </div>
 
   <!-- AUTOEQ ÉS SQUIGLINK PROFIL IMPORTÁLÓ ÉS ONLINE KERESŐ MODAL -->
-  <div id="modalImport" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;">
+  <div id="modalBurnIn" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;">
+  <div class="aq-modal" style="width:560px; max-width:calc(100vw - 32px); display:flex; flex-direction:column; gap:14px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
+      <span style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="burnin.title">Burn-in (fejhallgató-bejárató)</span>
+      <button class="icon-btn" onclick="closeBurnIn()" title="Bezárás" data-i18n-title="common.close" data-i18n-aria-label="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+    <p class="module-desc" data-i18n="burnin.desc">Rózsaszín, barna és fehér zaj váltakozva, 20 Hz-es felüláteresztővel és 10 másodperces be- és kifutással. Négyszögjel nincs benne.</p>
+    <div class="aq-note" style="font-size:0.78rem; color:var(--aq-text-2);" data-i18n="burnin.warning">Az EQ, a Konvolver és minden további modul burn-in alatt kikapcsol, a futás után visszaáll. A hangerőt az eszközön állítsd alacsonyra. Nem vállalunk garanciát az esetleges károkért.</div>
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span style="font-size:0.85rem;" data-i18n="burnin.duration">Időtartam:</span>
+      <select id="selBurnIn" class="mini-select"></select>
+      <button class="adw-btn primary" id="btnBurnInStart" onclick="burnInToggle()" data-i18n="burnin.start">Indítás</button>
+    </div>
+    <div id="burnInStatus" style="font-size:0.85rem; color:var(--aq-text-2); min-height:1.2em;"></div>
+  </div>
+</div>
+<div id="modalImport" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;">
     <div class="aq-modal" style="width:650px; max-width:calc(100vw - 32px); max-height:90vh; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
       
       <!-- Modál Fejléc -->
@@ -4000,6 +4017,245 @@ document.getElementById("btnImportAutoEq").onclick = () => {
   filterHeadphones(document.getElementById("headphoneSearchInput").value);
   document.getElementById("headphoneSearchInput").focus();
 };
+
+// =========================================================================
+// BURN-IN (fejhallgató-bejárató): rózsaszín, barna és fehér zaj váltakozva (AudioWorklet, a böngészőben).
+// Biztonsági alapértékek: a teljes sáv RMS-e legfeljebb −30 dBFS, a csúcs −18 dBFS; 20 Hz-es (LR4) felüláteresztő;
+// 10 mp be- és kifutás; 10 percenként 3 perc rózsaszín, 3 perc barna, 3 perc fehér, 1 perc csend. Négyszögjel nincs.
+// Futás alatt az EQ, a Konvolver és minden további modul ki van kapcsolva, a futás után visszaáll.
+// =========================================================================
+const BURN_IN_MINUTES = [10, 60, 240, 480, 720, 960, 1440, 2160, 2880];   // 10 perc, 1, 4, 8, 12, 16, 24, 36, 48 óra
+const BURN_IN_WORKLET = `
+class BurnInProcessor extends AudioWorkletProcessor {
+  constructor(options) {
+    super();
+    const o = options.processorOptions;
+    const sr = sampleRate;
+    this.sr = sr;
+    this.cycle = Math.round(o.cycleSec * sr);
+    this.seg = Math.round(this.cycle * 0.3);                       // zajtípusonként 3 perc / 10 perc
+    this.ramp = Math.max(1, Math.min(Math.round(5 * sr), Math.floor(this.seg / 2)));
+    this.fadeLen = Math.max(1, Math.round(o.fadeSec * sr));
+    this.total = Math.round(o.durationSec * sr);
+    this.pos = 0;
+    this.stopAt = -1;
+    this.finished = false;
+    this.peak = Math.pow(10, -18 / 20);
+    const target = Math.pow(10, -30 / 20);
+    const hc = hpCoeffs(20, sr, Math.SQRT1_2);
+    const types = ['pink', 'brown', 'white'];
+    this.gain = types.map((t) => target / calibrate(t, hc, sr));
+    this.chains = [0, 1].map((c) => types.map((t, k) => ({
+      noise: new Noise(t, 1000 * (c + 1) + 7 * (k + 1)),
+      h1: new Biquad(hc), h2: new Biquad(hc)
+    })));
+    this.port.onmessage = (e) => {
+      if (e.data && e.data.type === 'stop' && this.stopAt < 0) this.stopAt = this.pos + this.fadeLen;
+    };
+  }
+  process(inputs, outputs) {
+    if (this.finished) return false;
+    const out = outputs[0];
+    const frames = out[0].length;
+    for (let i = 0; i < frames; i++) {
+      const done = this.pos >= this.total || (this.stopAt >= 0 && this.pos >= this.stopAt);
+      if (done) {
+        for (let c = 0; c < out.length; c++) out[c][i] = 0;
+        this.finished = true;
+        this.port.postMessage({ type: 'done' });
+        return false;
+      }
+      const t = this.pos % this.cycle;
+      let master = 1;
+      if (this.pos < this.fadeLen) master = this.pos / this.fadeLen;
+      const remain = this.total - this.pos;
+      if (remain < this.fadeLen) master = Math.min(master, remain / this.fadeLen);
+      if (this.stopAt >= 0) master = Math.min(master, Math.max(0, (this.stopAt - this.pos) / this.fadeLen));
+      const env = [0, 0, 0];
+      for (let k = 0; k < 3; k++) {
+        const s0 = k * this.seg, s1 = s0 + this.seg;
+        if (t >= s0 && t < s1) env[k] = Math.min(1, (t - s0) / this.ramp, (s1 - t) / this.ramp);
+      }
+      for (let c = 0; c < out.length; c++) {
+        const ch = this.chains[c < 2 ? c : 0];
+        let v = 0;
+        for (let k = 0; k < 3; k++) {
+          const x = ch[k];
+          const y = x.h2.process(x.h1.process(x.noise.next()));
+          v += env[k] * this.gain[k] * y;
+        }
+        v *= master;
+        out[c][i] = Math.max(-this.peak, Math.min(this.peak, v));
+      }
+      this.pos++;
+      if (this.pos % this.sr === 0) this.port.postMessage({ type: 'progress', pos: this.pos });
+    }
+    return true;
+  }
+}
+class Rng {
+  constructor(seed) { this.s = (seed >>> 0) || 1; }
+  next() {
+    let x = this.s;
+    x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+    this.s = x >>> 0;
+    return this.s / 2147483648 - 1;
+  }
+}
+class Noise {
+  constructor(type, seed) { this.type = type; this.rng = new Rng(seed); this.b = [0, 0, 0, 0, 0, 0, 0]; this.brown = 0; }
+  next() {
+    const w = this.rng.next();
+    if (this.type === 'white') return w;
+    if (this.type === 'brown') { this.brown = (this.brown + 0.02 * w) / 1.02; return this.brown * 3.5; }
+    const b = this.b;   // rózsaszín (Paul Kellet, egyszerűsített)
+    b[0] = 0.99886 * b[0] + w * 0.0555179;
+    b[1] = 0.99332 * b[1] + w * 0.0750759;
+    b[2] = 0.96900 * b[2] + w * 0.1538520;
+    b[3] = 0.86650 * b[3] + w * 0.3104856;
+    b[4] = 0.55000 * b[4] + w * 0.5329522;
+    b[5] = -0.7616 * b[5] - w * 0.0168980;
+    const out = b[0] + b[1] + b[2] + b[3] + b[4] + b[5] + b[6] + w * 0.5362;
+    b[6] = w * 0.115926;
+    return out * 0.11;
+  }
+}
+class Biquad {
+  constructor(c) { this.c = c; this.z1 = 0; this.z2 = 0; }
+  process(x) {
+    const c = this.c;
+    const y = c.b0 * x + this.z1;
+    this.z1 = c.b1 * x - c.a1 * y + this.z2;
+    this.z2 = c.b2 * x - c.a2 * y;
+    return y;
+  }
+}
+function hpCoeffs(fc, sr, q) {
+  const w0 = 2 * Math.PI * fc / sr, cw = Math.cos(w0), al = Math.sin(w0) / (2 * q), a0 = 1 + al;
+  return { b0: (1 + cw) / 2 / a0, b1: -(1 + cw) / a0, b2: (1 + cw) / 2 / a0, a1: -2 * cw / a0, a2: (1 - al) / a0 };
+}
+/** Egy zajtípus RMS-e a szűrés után (1 mp, rögzített mag): ebből a szint-együtthatója. */
+function calibrate(type, hc, sr) {
+  const n = new Noise(type, 12345), h1 = new Biquad(hc), h2 = new Biquad(hc);
+  let s = 0;
+  for (let i = 0; i < sr; i++) { const y = h2.process(h1.process(n.next())); s += y * y; }
+  return Math.sqrt(s / sr);
+}
+registerProcessor('burn-in', BurnInProcessor);
+`;
+
+let burnCtx = null, burnNode = null, burnSaved = null, burnStartMs = 0, burnTotalSec = 0, burnStopping = false, burnWake = null;
+const BURN_MODULES = ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'];
+
+function fmtBurnTime(sec) {
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), x = Math.floor(sec % 60);
+  return (h ? h + ':' : '') + String(m).padStart(h ? 2 : 1, '0') + ':' + String(x).padStart(2, '0');
+}
+function burnInLabel(min) { return min >= 60 ? t('burnin.hours', { n: min / 60 }) : t('burnin.minutes', { n: min }); }
+
+function initBurnInOptions() {
+  const sel = document.getElementById('selBurnIn');
+  if (!sel || sel.options.length) return;
+  BURN_IN_MINUTES.forEach((m) => {
+    const o = document.createElement('option');
+    o.value = String(m * 60);
+    o.textContent = burnInLabel(m);
+    sel.appendChild(o);
+  });
+  sel.value = String(10 * 60);
+}
+function openBurnIn() {
+  initBurnInOptions();
+  document.getElementById('modalBurnIn').style.display = 'flex';
+  renderBurnInState();
+}
+function closeBurnIn() {
+  document.getElementById('modalBurnIn').style.display = 'none';
+}
+function renderBurnInState() {
+  const running = !!burnNode;
+  const btn = document.getElementById('btnBurnInStart');
+  const sel = document.getElementById('selBurnIn');
+  if (btn) btn.innerText = t(running ? 'burnin.stop' : 'burnin.start');
+  if (sel) sel.disabled = running;
+}
+
+/** Ébren tartás: a natív híd (Windows, Linux), és ahol van, a képernyőzár-tiltás (WakeLock). */
+async function setKeepAwake(on) {
+  try { if (typeof window.aetherKeepAwake === 'function') window.aetherKeepAwake(on); } catch (e) {}
+  try {
+    if (!('wakeLock' in navigator)) return;
+    if (on) burnWake = await navigator.wakeLock.request('screen');
+    else if (burnWake) { await burnWake.release(); burnWake = null; }
+  } catch (e) { burnWake = null; }
+}
+
+async function burnInToggle() {
+  if (burnNode) { burnInStop(); return; }
+  if (!window.AudioContext || !window.AudioWorkletNode) { showToast(t('burnin.unsupported'), 6000); return; }
+  const sec = Number(document.getElementById('selBurnIn').value) || 600;
+  // Modulok kikapcsolása, az előző állapot megőrzésével (a futás után visszaáll)
+  burnSaved = {};
+  BURN_MODULES.forEach((m) => { burnSaved[m] = moduleIsActive(m); });
+  BURN_MODULES.forEach((m) => setModuleActive(m, false));
+  burnCtx = new AudioContext();
+  const url = 'data:application/javascript;charset=utf-8,' + encodeURIComponent(BURN_IN_WORKLET);
+  try {
+    await burnCtx.audioWorklet.addModule(url);
+  } catch (e) {
+    burnCtx.close(); burnCtx = null;
+    burnRestoreModules();
+    showToast(t('burnin.unsupported'), 6000);
+    return;
+  }
+  burnNode = new AudioWorkletNode(burnCtx, 'burn-in', {
+    numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
+    processorOptions: { durationSec: sec, cycleSec: 600, fadeSec: 10 }
+  });
+  burnTotalSec = sec;
+  burnStopping = false;
+  burnNode.port.onmessage = (e) => {
+    if (e.data.type === 'done') burnInFinish();
+    else if (e.data.type === 'progress') updateBurnInStatus(e.data.pos / burnCtx.sampleRate);
+  };
+  burnNode.connect(burnCtx.destination);
+  burnStartMs = performance.now();
+  await burnCtx.resume();
+  setKeepAwake(true);
+  renderBurnInState();
+  updateBurnInStatus(0);
+}
+
+function burnInStop() {
+  if (!burnNode || burnStopping) return;
+  burnStopping = true;
+  burnNode.port.postMessage({ type: 'stop' });   // 10 mp kifutás, utána a 'done' üzenet
+  const st = document.getElementById('burnInStatus');
+  if (st) st.innerText = t('burnin.stopping');
+}
+
+function updateBurnInStatus(elapsedSec) {
+  const st = document.getElementById('burnInStatus');
+  if (!st || !burnNode || burnStopping) return;
+  st.innerText = t('burnin.running', { elapsed: fmtBurnTime(elapsedSec), total: fmtBurnTime(burnTotalSec) });
+}
+
+function burnRestoreModules() {
+  if (!burnSaved) return;
+  BURN_MODULES.forEach((m) => { if (burnSaved[m]) setModuleActive(m, true); });
+  burnSaved = null;
+}
+
+function burnInFinish() {
+  if (burnNode) { try { burnNode.disconnect(); } catch (e) {} burnNode = null; }
+  if (burnCtx) { try { burnCtx.close(); } catch (e) {} burnCtx = null; }
+  burnStopping = false;
+  burnRestoreModules();
+  setKeepAwake(false);
+  const st = document.getElementById('burnInStatus');
+  if (st) st.innerText = t('burnin.done');
+  renderBurnInState();
+}
 
 function closeImportModal() {
   modalImport.style.display = "none";

@@ -217,6 +217,11 @@ void runWindow(const std::wstring& guiFolder) {
         }
         return "null";
     });
+    // Burn-in alatt a gép ne aludjon el (a kijelző elalhat): a felület kéri és oldja fel
+    w.bind("aetherKeepAwake", [](const std::string& req) -> std::string {
+        SetThreadExecutionState(req.find("true") != std::string::npos ? (ES_CONTINUOUS | ES_SYSTEM_REQUIRED) : ES_CONTINUOUS);
+        return "null";
+    });
     // Az Equalizer APO eszközválasztója (pl. új USB hangkártya bekapcsolásához): rendszergazdaként indul (UAC)
     w.bind("aetherOpenApoConfigurator", [](const std::string&) -> std::string {
         const std::wstring exe = ee_analyzer::win::eqApoConfiguratorPath();
