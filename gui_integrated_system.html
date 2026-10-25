@@ -929,6 +929,8 @@ if (!window.THREE) window.THREE = (function () {
       <button class="adw-btn active-opt" id="btnToggleEqCurve" data-curve style="--curve:#6FB7FF;" title="Kék EQ átviteli görbe megjelenítése / elrejtése (hangra nincs hatással)" data-i18n-title="eq.curveTitle" data-i18n="eq.curveBtn">EQ Görbe (dB)</button>
       <button class="adw-btn active-opt" id="btnToggleDelay" data-curve style="--curve:#F2A65A;" title="Narancs csoportkésleltetés görbe megjelenítése / elrejtése (hangra nincs hatással)" data-i18n-title="eq.delayTitle" data-i18n="eq.delayBtn">Késleltetés (ms)</button>
       <button class="adw-btn active-opt" id="btnTogglePhase" data-curve style="--curve:#5ED6A0;" title="Zöld szaggatott fázisgörbe megjelenítése / elrejtése (hangra nincs hatással)" data-i18n-title="eq.phaseTitle" data-i18n="eq.phaseBtn">Fázis (°)</button>
+      <!-- EQ be/ki: ugyanaz, mint a vízesés melletti gomb (btnEqBypass); a két példány állapota mindig egyezik -->
+      <button class="adw-btn" id="btnEqBypassTab">EQ: KI (Bypass)</button>
       <!-- 2D ZOOM ESZKÖZSÁV: a grafikon alatti gombsorban, jobbra zárva -->
       <div class="eq-zoom-overlay">
         <span class="zoom-lbl" data-i18n="zoom.dbScale">dB skála:</span>
@@ -1410,6 +1412,10 @@ function setModuleActive(mod, active) {
   if (mod === 'eq' && topEqBtn) {
     topEqBtn.className = active ? 'mini-btn active' : 'mini-btn';
   }
+  const tabEqBtn = document.getElementById('btnEqBypassTab');
+  if (mod === 'eq' && tabEqBtn) {
+    tabEqBtn.className = active ? 'adw-btn primary active' : 'adw-btn';
+  }
   renderModuleTexts(mod);
   // Előcsengés-jelzés: lineáris fázisú mód (FIR / FFT / SPM) és bekapcsolt EQ – bármi kapcsolja be az EQ-t
   const prBadge = document.getElementById('hudPreRingBadge');
@@ -1439,6 +1445,8 @@ function renderModuleTexts(mod) {
   if (badge) { badge.innerText = active ? t('mod.on') : t('mod.off'); badge.removeAttribute('data-i18n'); }
   const topEqBtn = document.getElementById('btnEqBypass');
   if (mod === 'eq' && topEqBtn) topEqBtn.innerText = active ? t('eq.bypassOn') : t('eq.bypassOff');
+  const tabEqBtn = document.getElementById('btnEqBypassTab');
+  if (mod === 'eq' && tabEqBtn) tabEqBtn.innerText = active ? t('eq.bypassOn') : t('eq.bypassOff');
 }
 
 /** Kikapcsolt modul beállításakor a be/ki gomb röviden felvillan: a változás csak bekapcsolva hallható. */
@@ -1948,6 +1956,10 @@ if (selGlow) {
 const btnEqBypass = document.getElementById("btnEqBypass");
 if (btnEqBypass) {
   btnEqBypass.onclick = () => setModuleActive('eq', !isEqEnabled);
+}
+const btnEqBypassTab = document.getElementById("btnEqBypassTab");
+if (btnEqBypassTab) {
+  btnEqBypassTab.onclick = () => setModuleActive('eq', !isEqEnabled);
 }
 
 const btnCameraAngle = document.getElementById("btnCameraAngle");
