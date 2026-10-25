@@ -512,11 +512,11 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     canvas#eqCanvas { height: clamp(200px, 32vh, 440px); }
   }
   .eq-zoom-overlay {
-    position: absolute;
-    top: 10px;
-    right: 12px;
-    z-index: 10;
     display: flex;
+    flex-wrap: wrap;            /* keskeny ablakban több sorba törik, nem lóg ki a sávból */
+    max-width: 100%;
+    margin-left: auto;          /* a gombsor jobb szélére zár, akár külön sorba törik */
+    justify-content: flex-end;
     align-items: center;
     gap: 6px;
     background: rgba(13, 20, 28, 0.82);
@@ -538,7 +538,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
   .eq-bottom-bar { background: var(--aq-surface); border: 1px solid var(--aq-line); border-radius: var(--aq-radius-l); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
   .node-readout { display: flex; align-items: center; gap: 10px; font-size: 0.84rem; flex-wrap: wrap; }
-  .actions-group { display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+  .actions-group { display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; max-width: 100%; }
   .stat-group { display: flex; gap: 6px; align-items: center; }
   .stat-group span.lbl { color: var(--aq-text-2); font-size: 0.76rem; }
   .stat-group small { color: var(--aq-text-3); font-size: 0.74rem; }
@@ -835,29 +835,6 @@ if (!window.THREE) window.THREE = (function () {
       <div class="tab-pane active" id="pane-eq">
       <div class="eq-canvas-wrapper">
         <canvas id="eqCanvas"></canvas>
-        <!-- 2D ZOOM & SKÁLA LEBEGŐ PANEL -->
-        <div class="eq-zoom-overlay">
-          <span class="zoom-lbl" data-i18n="zoom.dbScale">dB skála:</span>
-          <select id="selectEqDbRange" class="ee-select" title="Függőleges (dB) nagyítás. Folyamatosan: Ctrl+Shift+görgő a kurzor magasságánál; fel-le eltolás: húzás (jobb gombbal mindig) vagy Alt+görgő" data-i18n-title="zoom.dbTitle">
-            <option value="1">±1 dB</option>
-            <option value="3">±3 dB</option>
-            <option value="6">±6 dB</option>
-            <option value="12">±12 dB</option>
-            <option value="24" selected>±24 dB</option>
-            <option value="36">±36 dB</option>
-            <option value="48">±48 dB</option>
-            <option value="custom" id="optEqDbCustom" hidden>±24 dB</option>
-          </select>
-          <button id="btnEqFitY" class="adw-btn zoom-btn" title="Görbére igazítás: a dB skála és a függőleges eltolás úgy áll be, hogy a teljes görbe és minden sáv látsszon" data-i18n-title="zoom.fitTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-fit"/></svg><span data-i18n="zoom.fit">Igazít</span></button>
-          <span class="zoom-divider"></span>
-          <span class="zoom-lbl">Zoom:</span>
-          <button id="btnEqZoomOut" class="adw-btn zoom-btn" title="Kicsinyítés" data-i18n-title="zoom.out" data-i18n-aria-label="zoom.out"><svg class="aq-icon" aria-hidden="true"><use href="#i-zoom-out"/></svg></button>
-          <input type="range" id="sliderEqZoom" min="100" max="500" value="100" step="10" class="ee-slider zoom-slider" title="Frekvencia zoom (1.0x - 5.0x)" data-i18n-title="zoom.sliderTitle">
-          <span id="lblEqZoom" class="zoom-val">1.0x</span>
-          <button id="btnEqZoomIn" class="adw-btn zoom-btn" title="Nagyítás" data-i18n-title="zoom.in" data-i18n-aria-label="zoom.in"><svg class="aq-icon" aria-hidden="true"><use href="#i-zoom-in"/></svg></button>
-          <button id="btnEqZoomReset" class="adw-btn zoom-btn" title="Nagyítás, eltolás és skála alaphelyzetbe (1.0x, ±24 dB, 0 dB középen)" data-i18n-title="zoom.resetTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-reset"/></svg><span data-i18n="zoom.reset">Reset</span></button>
-          <button id="btnEqExpandHeight" class="adw-btn zoom-btn" title="Grafikon megnövelése (nagy nézet)"><svg class="aq-icon" aria-hidden="true"><use href="#i-expand"/></svg></button>
-        </div>
       </div>
 
       <div class="eq-bottom-bar">
@@ -950,6 +927,29 @@ if (!window.THREE) window.THREE = (function () {
       <button class="adw-btn active-opt" id="btnToggleEqCurve" data-curve style="--curve:#6FB7FF;" title="Kék EQ átviteli görbe megjelenítése / elrejtése (hangra nincs hatással)" data-i18n-title="eq.curveTitle" data-i18n="eq.curveBtn">EQ Görbe (dB)</button>
       <button class="adw-btn active-opt" id="btnToggleDelay" data-curve style="--curve:#F2A65A;" title="Narancs csoportkésleltetés görbe megjelenítése / elrejtése (hangra nincs hatással)" data-i18n-title="eq.delayTitle" data-i18n="eq.delayBtn">Késleltetés (ms)</button>
       <button class="adw-btn active-opt" id="btnTogglePhase" data-curve style="--curve:#5ED6A0;" title="Zöld szaggatott fázisgörbe megjelenítése / elrejtése (hangra nincs hatással)" data-i18n-title="eq.phaseTitle" data-i18n="eq.phaseBtn">Fázis (°)</button>
+      <!-- 2D ZOOM ESZKÖZSÁV: a grafikon alatti gombsorban, jobbra zárva -->
+      <div class="eq-zoom-overlay">
+        <span class="zoom-lbl" data-i18n="zoom.dbScale">dB skála:</span>
+        <select id="selectEqDbRange" class="ee-select" title="Függőleges (dB) nagyítás. Folyamatosan: Ctrl+Shift+görgő a kurzor magasságánál; fel-le eltolás: húzás (jobb gombbal mindig) vagy Alt+görgő" data-i18n-title="zoom.dbTitle">
+          <option value="1">±1 dB</option>
+          <option value="3">±3 dB</option>
+          <option value="6">±6 dB</option>
+          <option value="12">±12 dB</option>
+          <option value="24" selected>±24 dB</option>
+          <option value="36">±36 dB</option>
+          <option value="48">±48 dB</option>
+          <option value="custom" id="optEqDbCustom" hidden>±24 dB</option>
+        </select>
+        <button id="btnEqFitY" class="adw-btn zoom-btn" title="Görbére igazítás: a dB skála és a függőleges eltolás úgy áll be, hogy a teljes görbe és minden sáv látsszon" data-i18n-title="zoom.fitTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-fit"/></svg><span data-i18n="zoom.fit">Igazít</span></button>
+        <span class="zoom-divider"></span>
+        <span class="zoom-lbl">Zoom:</span>
+        <button id="btnEqZoomOut" class="adw-btn zoom-btn" title="Kicsinyítés" data-i18n-title="zoom.out" data-i18n-aria-label="zoom.out"><svg class="aq-icon" aria-hidden="true"><use href="#i-zoom-out"/></svg></button>
+        <input type="range" id="sliderEqZoom" min="100" max="500" value="100" step="10" class="ee-slider zoom-slider" title="Frekvencia zoom (1.0x - 5.0x)" data-i18n-title="zoom.sliderTitle">
+        <span id="lblEqZoom" class="zoom-val">1.0x</span>
+        <button id="btnEqZoomIn" class="adw-btn zoom-btn" title="Nagyítás" data-i18n-title="zoom.in" data-i18n-aria-label="zoom.in"><svg class="aq-icon" aria-hidden="true"><use href="#i-zoom-in"/></svg></button>
+        <button id="btnEqZoomReset" class="adw-btn zoom-btn" title="Nagyítás, eltolás és skála alaphelyzetbe (1.0x, ±24 dB, 0 dB középen)" data-i18n-title="zoom.resetTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-reset"/></svg><span data-i18n="zoom.reset">Reset</span></button>
+        <button id="btnEqExpandHeight" class="adw-btn zoom-btn" title="Grafikon megnövelése (nagy nézet)"><svg class="aq-icon" aria-hidden="true"><use href="#i-expand"/></svg></button>
+      </div>
     </div>
   </div>
 </div>
@@ -2510,7 +2510,7 @@ function dbToY(db, g) { return g.midY - ((db - eqDbCenter) / eqDbRange) * (g.plo
 function yToDb(y, g) { return eqDbCenter - ((y - g.midY) / (g.plotH * 0.45)) * eqDbRange; }
 /** A lebegő zoom panel helye a vászon képpontjaiban (ami alatta van, az nem látszik és nem kattintható). */
 function eqOverlayBox() {
-  const ov = document.querySelector(".eq-zoom-overlay");
+  const ov = document.querySelector(".eq-canvas-wrapper .eq-zoom-overlay");   // csak ha a grafikon fölött lebeg
   if (!ov) return null;
   const cr = eqCanvas.getBoundingClientRect(), o = ov.getBoundingClientRect();
   if (!cr.width || !o.width) return null;
