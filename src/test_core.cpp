@@ -12,6 +12,7 @@
 #include "tap_ring.hpp"
 #include "mini_json.hpp"
 #include "dsp_state.hpp"
+#include "self_path.hpp"
 
 using namespace ee_analyzer;
 
@@ -313,6 +314,19 @@ static void testDspState() {
     CHECK(pd.playingMs() == 0.0, "2 s adat nélkül (a lehallgatás nem ad mintát): nincs lejátszás");
 }
 
+/** A motor saját elérési útja (T28): Linuxon a futó program teljes útja, máshol üres. */
+static void testSelfPath() {
+    std::printf("[7] A futó program elérési útja (verzióeltérés diagnosztikája)\n");
+    const std::string p = selfExePath();
+#if defined(__linux__)
+    const std::string tail = "/test_core";
+    CHECK(p.size() > tail.size() && p.compare(p.size() - tail.size(), tail.size(), tail) == 0 && p[0] == '/',
+          "Linux: %s", p.c_str());
+#else
+    CHECK(p.empty(), "nem Linux: üres (a felület nem ír ki elérési utat)");
+#endif
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
@@ -323,6 +337,7 @@ int main() {
     testTapRing();
     testJson();
     testDspState();
+    testSelfPath();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

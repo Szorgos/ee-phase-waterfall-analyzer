@@ -72,6 +72,10 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.szor
 %preun
 %systemd_user_preun aqulify.service
 
+# Frissítéskor a futó motor újraindul, különben a régi verzió fut tovább a következő bejelentkezésig (T28)
+%postun
+%systemd_user_postun_with_restart aqulify.service
+
 %files
 %license LICENSE
 %doc README.md RELEASE_NOTES.md

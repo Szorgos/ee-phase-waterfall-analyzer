@@ -32,6 +32,7 @@
 #include "mini_json.hpp"
 #include "ir_data.hpp"
 #include "ee_dsp.hpp"
+#include "self_path.hpp"
 
 namespace ee_analyzer {
 
@@ -786,6 +787,9 @@ private:
 #ifdef AQULIFY_VERSION
         s += ",\"version\":\"" AQULIFY_VERSION "\"";   // a felület ebből látja, ha a motor más verziójú
 #endif
+        // A motor elérési útja: verzióeltérésnél a felület megnevezi a futó (régi) motort
+        static const std::string exe = selfExePath();
+        if (!exe.empty()) s += ",\"exe\":\"" + jsonEscape(exe) + "\"";
         if (cb_.statusFields) {
             std::string extra = cb_.statusFields();
             if (!extra.empty()) { s += ','; s += extra; }

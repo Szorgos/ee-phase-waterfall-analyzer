@@ -5258,7 +5258,9 @@ function updateVersionLabel() {
     el.hidden = false;
     el.innerText = t("ver.mismatch", { gui, eng });
     el.style.color = "var(--ee-orange)";
-    el.title = t("ver.mismatchTitle");
+    // A futó motor elérési útja (Linux): így látszik, ha egy régi telepítés motorja indult el
+    const exe = typeof engineStatus.exe === "string" ? engineStatus.exe : "";
+    el.title = t("ver.mismatchTitle") + (exe ? "\n" + t("ver.enginePath", { path: exe }) : "");
   } else {
     el.hidden = ownWindow;
     el.innerText = `v${gui}`;

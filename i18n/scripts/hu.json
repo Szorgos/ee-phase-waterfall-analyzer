@@ -8,6 +8,7 @@
   "inst.unknownDistro2": "a saját ablakhoz: gtk3 és webkit2gtk-4.1 (vagy 4.0) fejlesztői csomag.",
   "inst.noWebkit": "A WebKitGTK csomag nem települt: a felület böngészőben fog megnyílni.",
   "inst.noPwCli": "A pw-cli nem található. Biztosan PipeWire a hangrendszered?",
+  "inst.systemPkg": "Csomagból telepített Aqulify is van a gépen (/usr/bin). Ez a telepítés (~/.local) mostantól elsőbbséget kap; ha a csomagost használnád, utána futtasd az ./uninstall.sh-t.",
   "inst.step2": "[2/6] Fordítás...",
   "inst.rnnSystem": "RNNoise (beszéd zajcsökkentés): a rendszer csomagja.",
   "inst.rnnDownload": "RNNoise modell letöltése (Ubuntu archívum, kb. 19 MB)...",

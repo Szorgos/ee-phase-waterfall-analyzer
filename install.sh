@@ -42,6 +42,7 @@ msg_text() {
         inst.unknownDistro2) f='a saját ablakhoz: gtk3 és webkit2gtk-4.1 (vagy 4.0) fejlesztői csomag.' ;;
         inst.noWebkit) f='A WebKitGTK csomag nem települt: a felület böngészőben fog megnyílni.' ;;
         inst.noPwCli) f='A pw-cli nem található. Biztosan PipeWire a hangrendszered?' ;;
+        inst.systemPkg) f='Csomagból telepített Aqulify is van a gépen (/usr/bin). Ez a telepítés (~/.local) mostantól elsőbbséget kap; ha a csomagost használnád, utána futtasd az ./uninstall.sh-t.' ;;
         inst.step2) f='[2/6] Fordítás...' ;;
         inst.rnnSystem) f='RNNoise (beszéd zajcsökkentés): a rendszer csomagja.' ;;
         inst.rnnDownload) f='RNNoise modell letöltése (Ubuntu archívum, kb. 19 MB)...' ;;
@@ -89,6 +90,7 @@ msg_text() {
         inst.unknownDistro2) f='for the app window: gtk3 and webkit2gtk-4.1 (or 4.0) development packages.' ;;
         inst.noWebkit) f='The WebKitGTK package was not installed: the interface will open in a browser.' ;;
         inst.noPwCli) f='pw-cli was not found. Is your sound system really PipeWire?' ;;
+        inst.systemPkg) f='A packaged Aqulify is also installed (/usr/bin). This installation (~/.local) takes precedence from now on; to use the packaged one instead, run ./uninstall.sh afterwards.' ;;
         inst.step2) f='[2/6] Building...' ;;
         inst.rnnSystem) f='RNNoise (speech noise reduction): system package.' ;;
         inst.rnnDownload) f='Downloading the RNNoise model (Ubuntu archive, about 19 MB)...' ;;
@@ -200,6 +202,8 @@ esac
 [ "$GUI_PKGS_OK" = 1 ] || warn "$(msg inst.noWebkit)"
 
 command -v pw-cli >/dev/null 2>&1 || warn "$(msg inst.noPwCli)"
+# Két telepítés egyszerre (T28): a ~/.config/systemd/user szolgáltatás felülírja a csomagét, így a ~/.local motor indul
+if [ -x /usr/bin/aqulify-engine ]; then warn "$(msg inst.systemPkg)"; fi
 
 # ------------------------------------------------------------------ 2. fordítás
 say "\n$(msg inst.step2)"
