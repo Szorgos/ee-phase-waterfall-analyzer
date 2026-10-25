@@ -1164,6 +1164,43 @@ static void testMonoBass() {
           "mono 50%%: 50 Hz-es oldalsó szint %.2f dB (várt %.2f dB, a fázissal együtt)", s50h, expect);
 }
 
+/** Konvolver be- és kikapcsolása: kikapcsolva a jel az átúsztatás után azonnal érintetlen (mint az EQ-nál). */
+static void testConvolverToggle() {
+    std::printf("[10] Konvolver ki-bekapcsolása: átúsztatás, azonnali bypass\n");
+    const double sr = 48000.0;
+    AetherChain chain;
+    chain.setSampleRate(sr);
+    chain.startWorker();
+    IrData ir;
+    ir.sampleRate = 48000;
+    ir.name = "teszt";
+    ir.left.assign(2000, 0.0f);
+    ir.left[10] = 0.5f;
+    chain.submitIr(ir);
+    ParamData on = transparentParams();
+    on.set(kFlagConvolver, true);
+    on.convAutogain = 0;
+    chain.applyParamsRT(on);
+    std::vector<float> z(480, 0.0f), z2(480, 0.0f);
+    chain.process(z.data(), z2.data(), z.size());
+    const bool idle = chain.waitIdle();
+    for (int i = 0; i < 3; ++i) chain.process(z.data(), z2.data(), z.size());
+    CHECK(idle && chain.convolverActive(), "konvolver bekapcsolva, IR betöltve");
+
+    ParamData off = transparentParams();
+    chain.applyParamsRT(off);
+    std::mt19937 rng(11);
+    std::uniform_real_distribution<float> u(-0.9f, 0.9f);
+    std::vector<float> L(9600), R(9600);
+    for (auto& v : L) v = u(rng);
+    for (auto& v : R) v = u(rng);
+    const std::vector<float> L0 = L, R0 = R;
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 480);
+    const size_t from = 4800;   // az átúsztatás (5 ms le, 5 ms fel) után
+    CHECK(std::equal(L.begin() + from, L.end(), L0.begin() + from) && std::equal(R.begin() + from, R.end(), R0.begin() + from),
+          "konvolver kikapcsolva: a jel azonnal, bit-pontosan érintetlen (nincs utánhangzás)");
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify DSP modulteszt (EasyEffects könyvtárak)\n");
@@ -1179,6 +1216,7 @@ int main() {
     testDeclick(256);
     testMagicTouch();
     testMonoBass();
+    testConvolverToggle();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

@@ -196,7 +196,7 @@ private:
 
     /** Kell-e kattanásmentes (le-fel úsztatott) váltás a két beállítás között. */
     static bool needsDeclick(const ParamData& a, const ParamData& b) {
-        const uint32_t mods = kFlagEq | kFlagBass | kFlagMono | kFlagCrossfeed | kFlagLimiter;
+        const uint32_t mods = kFlagEq | kFlagBass | kFlagMono | kFlagCrossfeed | kFlagConvolver | kFlagLimiter;
         if ((a.flags & mods) != (b.flags & mods)) return true;
         if (magicActive(a) != magicActive(b)) return true;
         if (b.has(kFlagMono) && a.subsonicHz != b.subsonicHz) return true;
@@ -305,19 +305,28 @@ private:
             for (size_t i = 0; i < m; ++i) { L[i] *= convOut_; R[i] *= convOut_; }
     }
 
-    /** Konvolver fokozat: ha van új példány, egy blokknyi keresztúsztatással cserél. */
-    void runConvolver(float* L, float* R, size_t m) {
+    /**
+     * Konvolver fokozat: ha van új példány, egy blokknyi keresztúsztatással cserél. Kikapcsolva (on = false) a jel
+     * érintetlen: az utánhangzás nem szól tovább, a példányt a munkaszál cseréli le a háttérben.
+     */
+    void runConvolver(float* L, float* R, size_t m, bool on) {
         Stage& st = irStage_;
         Update* u = nullptr;
         if (st.retired.load(std::memory_order_acquire) == nullptr) {
             u = st.pending.exchange(nullptr, std::memory_order_acq_rel);
         }
         if (!u) {
-            if (st.active) convolverPath(st.active, L, R, m);
+            if (on && st.active) convolverPath(st.active, L, R, m);
             return;
         }
         ee::ZitaInstance* oldInst = st.active;
         ee::ZitaInstance* newInst = u->inst;
+        if (!on) {
+            st.active = newInst;
+            u->old = oldInst;
+            st.retired.store(u, std::memory_order_release);
+            return;
+        }
         std::memcpy(aL_.data(), L, m * sizeof(float));
         std::memcpy(aR_.data(), R, m * sizeof(float));
         std::memcpy(bL_.data(), L, m * sizeof(float));
@@ -360,7 +369,7 @@ private:
         if (d.has(kFlagBass)) bass_.process(L, R, m);
         if (d.has(kFlagMono)) monoBass_.process(L, R, m);
         if (d.has(kFlagCrossfeed)) crossfeed_.process(L, R, m);
-        runConvolver(L, R, m);
+        runConvolver(L, R, m, d.has(kFlagConvolver));
 
         if (d.has(kFlagLimiter)) {
             limiter_.process(L, R, m);

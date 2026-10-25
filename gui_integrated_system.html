@@ -4332,18 +4332,30 @@ function renderFolderImportList(scanning) {
   box.append(btn);
 }
 
-/** Profil mentése fájlból: nem változtatja az aktív EQ-t (kötegelt importhoz). */
+/**
+ * Egy EQ-fájl profiljának felépítése ugyanúgy, mint az egyedi importnál: a fájl preampja, ha van; különben az
+ * automatikus védelem a fájl görbéjére. Az aktív EQ állapotát (sávok, preamp, mód) változatlanul hagyja.
+ */
+function buildImportedPreset(parsed) {
+  const saved = { nodes, selectedNodeId, currentPreamp, autoPreampMode };
+  nodes = parsed.bands.map((b, i) => normBand(b, i));
+  selectedNodeId = nodes.length ? nodes[0].id : null;
+  refreshCurveSource();
+  let finalPreamp = 0.0;
+  if (parsed.preamp !== null) finalPreamp = parsed.preamp;
+  else if (curvePeakDb() > 0.05) finalPreamp = autoGuardPreamp();
+  currentPreamp = finalPreamp;
+  const snap = Object.assign(eqSnapshot(), { eqMode: 0 });   // az egyedi import is IIR módra állítja az EQ-t
+  ({ nodes, selectedNodeId, currentPreamp, autoPreampMode } = saved);
+  refreshCurveSource();
+  return snap;
+}
+
+/** Profil mentése egy fájlból (kötegelt importhoz): az aktív EQ-t nem változtatja. */
 function savePresetFromFile(baseName, parsed) {
   const n = uniquePresetName(baseName);
   const now = new Date().toISOString();
-  presetsDoc.presets[n] = {
-    bands: bandsSnapshot(parsed.bands.map((b, i) => normBand(b, i))),
-    preamp: +(parsed.preamp ?? 0).toFixed(2),
-    eqMode: currentEqMode,
-    kind: "import",
-    created: now,
-    updated: now,
-  };
+  presetsDoc.presets[n] = Object.assign(buildImportedPreset(parsed), { kind: "import", created: now, updated: now });
   return n;
 }
 
