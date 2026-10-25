@@ -844,6 +844,7 @@ if (!window.THREE) window.THREE = (function () {
       <button class="tab-btn" id="tabBtn-convolver" onclick="switchTab('convolver', this)"><span class="module-dot" id="dot-convolver"></span>Convolver</button>
       <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter', this)"><span class="module-dot" id="dot-limiter"></span>Limiter</button>
       <button class="tab-btn" id="tabBtn-bass" onclick="switchTab('bass', this)"><span class="module-dot" id="dot-bass"></span>Bass Enhancer</button>
+      <button class="tab-btn" id="tabBtn-mono" onclick="switchTab('mono', this)"><span class="module-dot" id="dot-mono"></span>Mono</button>
       <button class="tab-btn" id="tabBtn-magic" onclick="switchTab('magic', this)"><span class="module-dot" id="dot-magic"></span>Magic Touch</button>
     </div>
 
@@ -1201,6 +1202,25 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
       </div>
     </div>
 
+    <!-- 5. TAB: MONO ÉS MÉLYVÁGÁS (mono_bass.hpp) -->
+    <div class="tab-pane" id="pane-mono">
+      <div class="module-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <h3 style="margin:0;"><svg class="aq-icon" aria-hidden="true"><use href="#i-speaker"/></svg><span data-i18n="mono.title">Mono és mélyvágás</span></h3>
+            <span class="status-badge off" id="badgeStatus-mono" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button type="button" class="aq-switch" id="btnToggle-mono" onclick="toggleModule('mono')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
+          </div>
+        </div>
+
+        <p class="module-desc" data-i18n="mono.desc">A kiválasztott frekvencia alatti mélyeket 24 dB/oktáves felüláteresztővel levágja a teljes jelből (rumble és hangszóróvédelem), a két csatornán azonosan.</p>
+
+        <div class="param-grid" id="monoControls"></div>
+      </div>
+    </div>
+
     <div class="tab-pane" id="pane-magic">
       <div class="module-card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -1397,6 +1417,7 @@ var isConvolverEnabled = false;
 var isLimiterEnabled = false;
 var isBassEnabled = false;
 var isMagicEnabled = false;
+var isMonoEnabled = false;
 var magicCompare = false;     // A/B: true = az eredeti jel szól
 var currentPreamp = 0.0;
 // Automatikus preamp: indulásnál 0 dB; ha az EQ-görbe klippelne, a preamp a görbe csúcsához igazodik.
@@ -1410,6 +1431,7 @@ function setModuleActive(mod, active) {
   else if (mod === 'limiter') isLimiterEnabled = active;
   else if (mod === 'bass') isBassEnabled = active;
   else if (mod === 'magic') isMagicEnabled = active;
+  else if (mod === 'mono') isMonoEnabled = active;
 
   const dot = document.getElementById('dot-' + mod);
   if (dot) {
@@ -1450,7 +1472,8 @@ function setModuleActive(mod, active) {
 
 function moduleIsActive(mod) {
   return mod === 'eq' ? isEqEnabled : mod === 'crossfeed' ? isCrossfeedEnabled : mod === 'convolver' ? isConvolverEnabled
-       : mod === 'limiter' ? isLimiterEnabled : mod === 'bass' ? isBassEnabled : mod === 'magic' ? isMagicEnabled : false;
+       : mod === 'limiter' ? isLimiterEnabled : mod === 'bass' ? isBassEnabled : mod === 'magic' ? isMagicEnabled
+       : mod === 'mono' ? isMonoEnabled : false;
 }
 /** A modul BE/KI gombjának, állapotjelvényének (és az EQ felső gombjának) felirata a választott nyelven. */
 function renderModuleTexts(mod) {
@@ -1485,6 +1508,7 @@ function toggleModule(mod) {
   else if (mod === 'limiter') curr = isLimiterEnabled;
   else if (mod === 'bass') curr = isBassEnabled;
   else if (mod === 'magic') curr = isMagicEnabled;
+  else if (mod === 'mono') curr = isMonoEnabled;
   setModuleActive(mod, !curr);
 }
 
@@ -1506,7 +1530,7 @@ function sendParamToPipewire(type, val) {
 // =========================================================================
 // TAB VÁLTÓ LOGIKA & OLDALRA CSÚSZÓ ANIMÁCIÓ (GLIDER & VIEWPORT SLIDE)
 // =========================================================================
-const TAB_ORDER = ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'magic'];
+const TAB_ORDER = ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'];
 let currentActiveTab = 'eq';
 let tabSlideTimer = null;
 
@@ -3854,6 +3878,7 @@ function processAutoEqImport() {
   setModuleActive('crossfeed', false);
   setModuleActive('convolver', false);
   setModuleActive('bass', false);
+  setModuleActive('mono', false);
 
   // Limiter: negatív preamp esetén automatikusan bekapcsol (-1,0 dB, True Peak/24 bit)
   const limiterInfo = armLimiterForProfile(finalPreamp, true);
@@ -4467,6 +4492,17 @@ buildControls("bassControls", [
 // A vezérlők létrehozása után (az „Alsó határ frekvencia” doboza csak most létezik): kikapcsolt alsó határnál rejtve
 setCtl("bassFloorActive", false);
 
+// --- Mono és mélyvágás (mono_bass.hpp): a 0 Hz (ki) és a 10 / 20 / 30 Hz közötti választás indexe
+buildControls("monoControls", [
+  { id: "monoSubsonic", kind: "select", label: "ctl.monoSubsonic", optKeys: true, def: 0,
+    options: ["mono.subOff", "mono.sub10", "mono.sub20", "mono.sub30"] },
+], () => { sendMono(); nudgeIfOff('mono'); });
+const MONO_SUBSONIC_HZ = [0, 10, 20, 30];
+
+function sendMono() {
+  sendEngine({ type: "set_mono", subsonic: MONO_SUBSONIC_HZ[getCtl("monoSubsonic")] || 0 });
+}
+
 // --- Magic Touch (automatikus hangszépítő; docs/plans/magic-touch.md)
 buildControls("magicControls", [
   // 100 % fölött „Bátor” tartomány (200 %-ig): a hangszépítő korlátok a kétszeresükig nőnek (magic_touch.hpp)
@@ -4588,12 +4624,12 @@ markCrossfeedPreset();
 
 /** A teljes felületi állapot elküldése a motornak. */
 function pushAllToEngine() {
-  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'magic'].forEach(m => {
+  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'].forEach(m => {
     sendParamToPipewire('set_module_' + m, moduleIsActive(m) ? 1 : 0);
   });
   sendCurveMsg({ type: "set_eq_mode", val: currentEqMode });
   sendCurveMsg({ type: "set_decramp", val: currentDecramp });
-  sendBass(); sendLimiter(); sendCrossfeed(); sendConvolver(); sendMagic();
+  sendBass(); sendLimiter(); sendCrossfeed(); sendConvolver(); sendMagic(); sendMono();
   lastSentPreamp = currentPreamp;
   sendParamToPipewire("set_preamp", currentPreamp);
   lastSentEqSig = null;   // a sávokat mindenképp átadjuk
@@ -4733,7 +4769,8 @@ function applyEngineState(st, fromSync) {
         if (typeof st.magic.content === "number") setCtl("magicContent", st.magic.content);
         magicCompare = !!st.magic.compare;
       }
-      ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'magic'].forEach(m => {
+      if (st.monoBass) setCtl("monoSubsonic", Math.max(0, MONO_SUBSONIC_HZ.indexOf(st.monoBass.subsonicHz)));
+      ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'].forEach(m => {
         if (m in mods) setModuleActive(m, !!mods[m]);
       });
       renderMagicCompare();
@@ -4766,13 +4803,13 @@ function applyEngineState(st, fromSync) {
     } else if (activePresetName && presetsDoc.presets[activePresetName]) {
       // A motor üres (pl. első indítás új gépen), de van mentett aktív profil: azt töltjük be
       applyPresetData(presetsDoc.presets[activePresetName]);
-      ['crossfeed', 'convolver', 'limiter', 'bass', 'magic'].forEach(m => setModuleActive(m, false));
+      ['crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'].forEach(m => setModuleActive(m, false));
       setModuleActive('eq', nodes.length > 0);
       armLimiterForProfile(currentPreamp, false);
     } else {
       // A motor még sosem kapott beállítást: teljesen tiszta, kikapcsolt (bypass) alapállapot
       nodes.forEach(n => { n.gain = 0.0; });
-      ['crossfeed', 'convolver', 'limiter', 'bass', 'eq', 'magic'].forEach(m => setModuleActive(m, false));
+      ['crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'eq', 'magic'].forEach(m => setModuleActive(m, false));
       currentPreamp = 0.0;
       autoPreampMode = false;
       setPreampBadge("preamp.clean", 0, "optimal");
@@ -5308,7 +5345,7 @@ document.addEventListener("click", (e) => {
 
 /** Nyelvváltáskor minden futás közben előállított felirat újra (a statikusakat az applyI18nDom intézi). */
 function refreshDynamicTexts() {
-  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'magic'].forEach(renderModuleTexts);
+  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'].forEach(renderModuleTexts);
   renderMagicCompare();
   updateMagicDiag(magicDiagLast);
   updateCameraLabel();

@@ -26,6 +26,7 @@
 #include "ir_data.hpp"
 #include "ee_dsp.hpp"
 #include "magic_touch.hpp"
+#include "mono_bass.hpp"
 
 namespace ee_analyzer {
 
@@ -155,6 +156,7 @@ public:
         magic_.reset();
         eq_.reset();
         bass_.reset();
+        monoBass_.reset();
         crossfeed_.reset();
         limiter_.reset();
         if (irStage_.active) irStage_.active->reset();
@@ -176,6 +178,7 @@ private:
         eq_.setSampleRate(sr);
         limiter_.setSampleRate(sr);
         bass_.setSampleRate(sr);
+        monoBass_.setSampleRate(sr);
         crossfeed_.setSampleRate(sr);
         sampleRate_.store(sr);
         // Mintavétel-váltáskor a lánc úgyis újraindul: a függő váltás azonnal érvényes
@@ -193,9 +196,10 @@ private:
 
     /** Kell-e kattanásmentes (le-fel úsztatott) váltás a két beállítás között. */
     static bool needsDeclick(const ParamData& a, const ParamData& b) {
-        const uint32_t mods = kFlagEq | kFlagBass | kFlagCrossfeed | kFlagLimiter;
+        const uint32_t mods = kFlagEq | kFlagBass | kFlagMono | kFlagCrossfeed | kFlagLimiter;
         if ((a.flags & mods) != (b.flags & mods)) return true;
         if (magicActive(a) != magicActive(b)) return true;
+        if (b.has(kFlagMono) && a.subsonicHz != b.subsonicHz) return true;
         if (b.has(kFlagEq) && (a.eqMode != b.eqMode || a.eqDecramp != b.eqDecramp)) return true;
         if (b.has(kFlagLimiter) && (a.limOversampling != b.limOversampling || a.limLookaheadMs != b.limLookaheadMs))
             return true;
@@ -214,6 +218,7 @@ private:
         if (eqWasReset_) eq_.reset();
         if (current_.has(kFlagLimiter)) limiter_.reset();
         if (current_.has(kFlagBass) && !old.has(kFlagBass)) bass_.reset();
+        if (current_.has(kFlagMono) && !old.has(kFlagMono)) monoBass_.reset();
         if (current_.has(kFlagCrossfeed) && !old.has(kFlagCrossfeed)) crossfeed_.reset();
         if (magicActive(current_) && !magicActive(old)) magic_.reset();
     }
@@ -272,6 +277,7 @@ private:
         magic_.setControl(d.magicAmount, d.magicCompare != 0, d.has(kFlagCrossfeed), d.magicCharacter, d.magicContent);
         eq_.update(d);
         bass_.update(d);
+        monoBass_.update(d.subsonicHz);
         crossfeed_.update(d);
         limiter_.update(d);
         convIn_ = ee::dbToGain(d.convInputGainDb);
@@ -352,6 +358,7 @@ private:
 
         if (d.has(kFlagEq)) eq_.process(L, R, m);
         if (d.has(kFlagBass)) bass_.process(L, R, m);
+        if (d.has(kFlagMono)) monoBass_.process(L, R, m);
         if (d.has(kFlagCrossfeed)) crossfeed_.process(L, R, m);
         runConvolver(L, R, m);
 
@@ -480,6 +487,7 @@ private:
     magic::MagicTouch magic_;
     ee::Equalizer eq_;
     ee::BassEnhancer bass_;
+    mono::MonoBass monoBass_;
     ee::Crossfeed crossfeed_;
     ee::Limiter limiter_;
     ParamData current_;

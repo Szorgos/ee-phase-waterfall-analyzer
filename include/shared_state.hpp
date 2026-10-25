@@ -13,12 +13,12 @@
 namespace ee_analyzer {
 
 constexpr uint32_t kSharedMagic = 0x41455448;   // 'AETH'
-constexpr uint32_t kSharedVersion = 7;
+constexpr uint32_t kSharedVersion = 8;
 
 // A plugin (szolgáltatásként futó audiodg) a Global\ névtérben hozza létre;
 // ha erre nincs joga (pl. DAW-ban vagy az EQ APO szerkesztőben), a Local\ névtérbe esik vissza.
-constexpr const wchar_t* kSharedNameGlobal = L"Global\\AqulifyShared_v7";
-constexpr const wchar_t* kSharedNameLocal = L"Local\\AqulifyShared_v7";
+constexpr const wchar_t* kSharedNameGlobal = L"Global\\AqulifyShared_v8";
+constexpr const wchar_t* kSharedNameLocal = L"Local\\AqulifyShared_v8";
 
 using SharedTapRing = StereoTapRing<65536>; // ~1,4 s 48 kHz-en
 

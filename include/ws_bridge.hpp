@@ -594,7 +594,10 @@ private:
             else if (mod == "limiter") p.set(kFlagLimiter, on);
             else if (mod == "bass") p.set(kFlagBass, on);
             else if (mod == "magic") p.set(kFlagMagic, on);
+            else if (mod == "mono") p.set(kFlagMono, on);
             else changed = false;
+        } else if (type == "set_mono") {
+            p.subsonicHz = static_cast<int32_t>(num(msg, "subsonic", p.subsonicHz));
         } else if (type == "set_crossfeed") {
             p.crossfeedFcut = static_cast<float>(num(msg, "fcut", p.crossfeedFcut));
             p.crossfeedFeedDb = static_cast<float>(num(msg, "feed", p.crossfeedFeedDb));
@@ -802,6 +805,7 @@ private:
         s += ",\"limiter\":"; s += p.has(kFlagLimiter) ? "1" : "0";
         s += ",\"bass\":"; s += p.has(kFlagBass) ? "1" : "0";
         s += ",\"magic\":"; s += p.has(kFlagMagic) ? "1" : "0";
+        s += ",\"mono\":"; s += p.has(kFlagMono) ? "1" : "0";
         s += "},\"crossfeedPreset\":" + std::to_string(p.crossfeedPreset);
         s += ",\"eqMode\":" + std::to_string(p.eqMode);
         s += ",\"decramp\":" + std::to_string(p.eqDecramp);
@@ -842,6 +846,7 @@ private:
         s += ",\"compare\":" + std::to_string(p.magicCompare);
         s += ",\"character\":" + std::to_string(p.magicCharacter);
         s += ",\"content\":" + std::to_string(p.magicContent) + '}';
+        s += ",\"monoBass\":{\"subsonicHz\":" + std::to_string(p.subsonicHz) + '}';
         if (cb_.getIr) {
             IrData ir = cb_.getIr();
             s += ",\"ir\":";

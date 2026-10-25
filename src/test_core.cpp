@@ -161,6 +161,11 @@ static void testParamFile() {
     CHECK(loadParamBytes(reinterpret_cast<const char*>(&dm), kParamSizeV5, 5, static_cast<uint32_t>(kParamSizeV5), r5) &&
               r5.has(kFlagMagic) && r5.magicAmount == 70.0f && r5.magicCharacter == 0 && r5.magicContent == 0,
           "v5 paraméterfájl átvétele (Karakter: Természetes, Tartalom: Automatikus)");
+    // v6 (mélyvágás előtti) fájl: a beállítások megmaradnak, a mélyvágás kikapcsolt
+    ParamData r6{};
+    CHECK(loadParamBytes(reinterpret_cast<const char*>(&dm), kParamSizeV6, 6, static_cast<uint32_t>(kParamSizeV6), r6) &&
+              r6.has(kFlagMagic) && r6.magicAmount == 70.0f && r6.subsonicHz == 0,
+          "v6 paraméterfájl átvétele (Mélyvágás: ki)");
     // Tartományon kívüli választó: a megengedett tartományba kerül
     ParamData dx = d;
     dx.magicCharacter = 9; dx.magicContent = -4;

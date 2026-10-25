@@ -1074,6 +1074,61 @@ static void testMagicTouch() {
     }
 }
 
+/** A tiszta szinusz szintje a mélyvágás után (a lánc teljes útján, a belépő átúsztatás után). */
+static double subsonicGainDb(double f, int32_t subHz, double sr) {
+    AetherChain chain;
+    chain.setSampleRate(sr);
+    ParamData d = transparentParams();
+    d.set(kFlagMono, true);
+    d.subsonicHz = subHz;
+    chain.applyParamsRT(d);
+    const size_t n = static_cast<size_t>(4.0 * sr);
+    std::vector<float> L = sine(f, 0.5, n, sr), R = L;
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 480);
+    return 20.0 * std::log10(toneAmp(L, n - static_cast<size_t>(sr), f, sr) / 0.5);
+}
+
+/** Véletlen jel a lánc után, a kapcsolás átúsztatása utáni része megegyezik-e a bemenettel (bit-pontosan). */
+static bool passesUnchanged(const ParamData& d) {
+    AetherChain chain;
+    chain.setSampleRate(48000.0);
+    chain.applyParamsRT(d);
+    std::mt19937 rng(7);
+    std::uniform_real_distribution<float> u(-0.9f, 0.9f);
+    std::vector<float> L(24000), R(24000);
+    for (auto& v : L) v = u(rng);
+    for (auto& v : R) v = u(rng);
+    const std::vector<float> L0 = L, R0 = R;
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 480);
+    const size_t from = 4800;   // az első 0,1 s az átúsztatás (5 ms le, 5 ms fel) miatt nem számít
+    return std::equal(L.begin() + from, L.end(), L0.begin() + from) && std::equal(R.begin() + from, R.end(), R0.begin() + from);
+}
+
+static void testMonoBass() {
+    std::printf("[9] Mélyvágás (10 / 20 / 30 Hz, 24 dB/oktáves) és a kikapcsolt modul\n");
+    const double sr = 48000.0;
+    for (int32_t hz : { 10, 20, 30 }) {
+        const double gc = subsonicGainDb(hz, hz, sr), g2c = subsonicGainDb(2.0 * hz, hz, sr);
+        const double g4c = subsonicGainDb(4.0 * hz, hz, sr);
+        CHECK(std::abs(gc + 6.0) < 0.3 && g2c > -0.7 && g2c < 0.0 && std::abs(g4c) < 0.1,
+              "%d Hz: fc-n %.2f dB (LR4: −6 dB), 2·fc-n %.2f dB, 4·fc-n %.2f dB", hz, gc, g2c, g4c);
+    }
+    const double g = subsonicGainDb(100.0, 30, sr);
+    CHECK(std::abs(g) < 0.1, "30 Hz-es vágás mellett 100 Hz szintje %.3f dB (a hangzás érintetlen)", g);
+
+    ParamData bad = transparentParams();
+    bad.subsonicHz = 15;
+    sanitizeParams(bad);
+    CHECK(bad.subsonicHz == 0, "érvénytelen vágási frekvencia (15 Hz) kikapcsolva");
+
+    ParamData on0 = transparentParams();
+    on0.set(kFlagMono, true);
+    CHECK(passesUnchanged(on0), "modul bekapcsolva, de vágás ki: bit-pontosan átlátszó");
+    ParamData offHz = transparentParams();
+    offHz.subsonicHz = 20;
+    CHECK(passesUnchanged(offHz), "modul kikapcsolva (a vágás 20 Hz-re állítva): bit-pontosan átlátszó");
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify DSP modulteszt (EasyEffects könyvtárak)\n");
@@ -1088,6 +1143,7 @@ int main() {
     testDeclick(1024);
     testDeclick(256);
     testMagicTouch();
+    testMonoBass();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }
