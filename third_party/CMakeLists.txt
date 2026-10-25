@@ -170,6 +170,17 @@ else()
     target_link_libraries(aq_fftw INTERFACE PkgConfig::FFTW3F)
 endif()
 
+# ---------------------------------------------------------------- libebur128 (EBU R128 hangosságmérés, Autogain)
+# A bundled queue/sys/queue.h a mingw-hez és a régebbi libc-khez kell; a többi platformon a rendszeré is megfelel.
+add_library(aq_ebur128 STATIC ${TP}/libebur128/ebur128.c)
+target_include_directories(aq_ebur128 SYSTEM PUBLIC ${TP}/libebur128)
+target_include_directories(aq_ebur128 PRIVATE ${TP}/libebur128/queue)
+set_target_properties(aq_ebur128 PROPERTIES C_STANDARD 99 POSITION_INDEPENDENT_CODE ON)
+target_compile_options(aq_ebur128 PRIVATE ${AQ_TP_NOWARN})
+if(NOT WIN32)
+    target_link_libraries(aq_ebur128 PUBLIC m)
+endif()
+
 # ---------------------------------------------------------------- zita-convolver
 add_library(aq_zita STATIC ${TP}/zita-convolver/zita-convolver.cc)
 target_include_directories(aq_zita SYSTEM PUBLIC ${TP}/zita-convolver)

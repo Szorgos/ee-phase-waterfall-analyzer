@@ -28,7 +28,7 @@ Jelölés: ✅ megvan, 🟡 részben megvan, ⬜ még nincs.
 
 | # | EasyEffects plugin | Rövid leírás | AetherAudio |
 |---|---|---|---|
-| 1 | Autogain | Automatikus hangerő-kiegyenlítés a mért hangosság (LUFS, EBU R128) alapján. | ⬜ |
+| 1 | Autogain | Automatikus hangerő-kiegyenlítés a mért hangosság (LUFS, EBU R128) alapján. Libebur128 (MIT), a konvolver után, a limiter előtt; alapból ki. Hallgatói teszt hátra. | ✅ |
 | 2 | Bass Enhancer | Felharmonikusokat ad a mélyekhez, hogy kis hangszórón is hallatszódjon a basszus. | ✅ `bass_enhancer.hpp` |
 | 3 | Bass Loudness | Hangerőfüggő mély-kiemelés: halk hallgatásnál több basszus. | ⬜ |
 | 4 | Compressor | Dinamikatömörítő (küszöb, arány, attack, release, knee, oldallánc). | ⬜ |

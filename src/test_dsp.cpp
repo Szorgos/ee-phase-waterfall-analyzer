@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "aether_chain.hpp"
+#include "ebur128.h"
 
 using namespace ee_analyzer;
 
@@ -1293,6 +1294,105 @@ static void testAbCompare() {
           10.0 * std::log10(ea / ep));
 }
 
+/** Rövid távú (3 s-os) EBU R128 hangosság a jel végén: a libebur128 referencia-mérése. */
+static double shortTermLufs(const std::vector<float>& L, const std::vector<float>& R, size_t from, double sr) {
+    ebur128_state* st = ebur128_init(2, static_cast<unsigned long>(sr), EBUR128_MODE_S);
+    const size_t frames = L.size() - from;
+    std::vector<float> il(2 * frames);
+    for (size_t i = 0; i < frames; ++i) { il[2 * i] = L[from + i]; il[2 * i + 1] = R[from + i]; }
+    ebur128_add_frames_float(st, il.data(), frames);
+    double out = 0.0;
+    ebur128_loudness_shortterm(st, &out);
+    ebur128_destroy(&st);
+    return out;
+}
+
+/** Az Autogain-lánc futtatása; a gain nyomvonala blokkonként (480 minta). */
+static void runAutogain(const std::vector<float>& in, double target, double maxDb, std::vector<float>& L,
+                        std::vector<float>& R, std::vector<double>* trace) {
+    AetherChain chain;
+    chain.setSampleRate(48000.0);
+    ParamData d = transparentParams();
+    d.set(kFlagAutogain, true);
+    d.agcTargetLufs = static_cast<float>(target);
+    d.agcMaxGainDb = static_cast<float>(maxDb);
+    chain.applyParamsRT(d);
+    L = in;
+    R = in;
+    for (size_t off = 0; off < L.size(); off += 480) {
+        const size_t m = std::min<size_t>(480, L.size() - off);
+        chain.process(L.data() + off, R.data() + off, m);
+        if (trace) trace->push_back(chain.autogainDb());
+    }
+}
+
+static void testAutogain() {
+    std::printf("[14] Autogain (EBU R128 rövid távú hangosság, libebur128)\n");
+    const double sr = 48000.0;
+    // Referencia: 1 kHz-es szinusz, A = 0,1 (−20 dBFS), mindkét csatornán. BS.1770 szerint
+    // L = −0,691 + 10·log10(2 · A²/2 · |H_K(1 kHz)|²), ahol H_K a K-súlyozás (két biquad, 48 kHz-es együtthatók).
+    const std::complex<double> zi = std::polar(1.0, -2.0 * kPi * 1000.0 / 48000.0);   // z⁻¹ az 1 kHz-en
+    auto biquad = [&](double b0, double b1, double b2, double a1, double a2) {
+        return (b0 + b1 * zi + b2 * zi * zi) / (1.0 + a1 * zi + a2 * zi * zi);
+    };
+    const std::complex<double> kGain = biquad(1.53512485958697, -2.69169618940638, 1.19839281085285,
+                                              -1.69065929318241, 0.73248077421585)     // 1. szakasz: magasárkád
+                                     * biquad(1.0, -2.0, 1.0, -1.99004745483398, 0.99007225036621);   // 2. szakasz: RLB
+    const double kDb = 20.0 * std::log10(std::abs(kGain));
+    const double refLufs = -0.691 + 20.0 * std::log10(0.1) + kDb;
+    const size_t n = static_cast<size_t>(12.0 * sr);
+    const std::vector<float> tone = sine(1000.0, 0.1, n, sr);
+    const double inLufs = shortTermLufs(tone, tone, n - static_cast<size_t>(3.0 * sr), sr);
+    CHECK(std::abs(inLufs - refLufs) < 0.05, "libebur128 referencia: %.2f LUFS (BS.1770 számítás: %.2f LUFS, K-súlyozás 1 kHz-en %+.2f dB)",
+          inLufs, refLufs, kDb);
+
+    // Célra igazítás: a gain a cél és a bemenet különbsége, a kimenet hangossága a célszinten (−18 LUFS) áll.
+    std::vector<float> L, R;
+    std::vector<double> trace;
+    runAutogain(tone, -18.0, 6.0, L, R, &trace);
+    const double outLufs = shortTermLufs(L, R, n - static_cast<size_t>(3.0 * sr), sr);
+    const double expGain = -18.0 - refLufs;
+    CHECK(std::abs(outLufs + 18.0) < 0.2 && std::abs(trace.back() - expGain) < 0.1,
+          "célszint: kimenet %.2f LUFS (cél −18), gain %.2f dB (várt %+.2f dB)", outLufs, trace.back(), expGain);
+
+    // Halk jel (−40 dBFS): a gain a +6 dB-es határig nő, legfeljebb 1 dB/s sebességgel
+    const std::vector<float> quiet = sine(1000.0, 0.01, n, sr);
+    runAutogain(quiet, -18.0, 6.0, L, R, &trace);
+    const double at5 = trace[499];   // t = 5,0 s (a mérés 3 s után indul, így kb. +2 dB)
+    CHECK(std::abs(trace.back() - 6.0) < 0.05 && std::abs(at5 - 2.0) < 0.3,
+          "halk jel: gain 5 s-nál %.2f dB (várt kb. +2), a végén %.2f dB (a határ +6 dB)", at5, trace.back());
+
+    // Csend: amint a 3 s-os ablak teljesen néma, a gain megáll
+    std::vector<float> gap = sine(1000.0, 0.1, static_cast<size_t>(5.0 * sr), sr);
+    gap.resize(n, 0.0f);
+    runAutogain(gap, -18.0, 6.0, L, R, &trace);
+    const double at8 = trace[799], at10 = trace[999];
+    CHECK(std::abs(at10 - at8) < 0.01, "csend után a gain nem változik (8 s: %.3f dB, 10 s: %.3f dB)", at8, at10);
+
+    // A bekapcsolás utáni első 3 s-ban (mérés nélkül) a jel bit-pontosan átmegy
+    std::vector<float> early;
+    runAutogain(tone, -18.0, 6.0, early, R, nullptr);
+    bool exact = true;
+    for (size_t i = 2400; i < 2 * 48000 && exact; ++i) exact = early[i] == tone[i];
+    CHECK(exact, "bekapcsolás után az első 2 s bit-pontosan átmegy (a mérés még nem indult)");
+
+    ParamData bad = transparentParams();
+    bad.agcTargetLufs = -50.0f;
+    bad.agcMaxGainDb = 40.0f;
+    sanitizeParams(bad);
+    CHECK(bad.agcTargetLufs == -30.0f && bad.agcMaxGainDb == 12.0f, "érvénytelen célszint és határ a tartományba szorítva");
+
+    // A v9 paraméterfájl (Autogain nélkül) betöltése: a modul kikapcsolva, az alapértékek érvényesek
+    ParamData old9 = transparentParams();
+    old9.agcTargetLufs = -23.0f;   // a v9-ben nincs mező: ez nem kerülhet a fájlba
+    std::vector<char> bytes(sizeof(ParamData));
+    std::memcpy(bytes.data(), &old9, sizeof(ParamData));
+    ParamData loaded{};
+    const bool ok = loadParamBytes(bytes.data(), kParamSizeV9, 9, static_cast<uint32_t>(kParamSizeV9), loaded);
+    CHECK(ok && !loaded.has(kFlagAutogain) && loaded.agcTargetLufs == -18.0f && loaded.agcMaxGainDb == 6.0f,
+          "v9 paraméterfájl betöltése: Autogain ki, célszint −18 LUFS, határ 6 dB");
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify DSP modulteszt (EasyEffects könyvtárak)\n");
@@ -1310,6 +1410,7 @@ int main() {
     testMonoBass();
     testConvolverToggle();
     testAbCompare();
+    testAutogain();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

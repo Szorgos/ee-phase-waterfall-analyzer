@@ -595,6 +595,7 @@ private:
             else if (mod == "bass") p.set(kFlagBass, on);
             else if (mod == "magic") p.set(kFlagMagic, on);
             else if (mod == "mono") p.set(kFlagMono, on);
+            else if (mod == "autogain") p.set(kFlagAutogain, on);
             else changed = false;
             // Az EQ és a Konvolver egymást kizárja: a másik kikapcsolódik
             if (on && mod == "eq") p.set(kFlagConvolver, false);
@@ -608,6 +609,9 @@ private:
         } else if (type == "set_mono") {
             p.subsonicHz = static_cast<int32_t>(num(msg, "subsonic", p.subsonicHz));
             p.monoAmount = static_cast<float>(num(msg, "amount", p.monoAmount));
+        } else if (type == "set_autogain") {
+            p.agcTargetLufs = static_cast<float>(num(msg, "target", p.agcTargetLufs));
+            p.agcMaxGainDb = static_cast<float>(num(msg, "maxGain", p.agcMaxGainDb));
         } else if (type == "set_crossfeed") {
             p.crossfeedFcut = static_cast<float>(num(msg, "fcut", p.crossfeedFcut));
             p.crossfeedFeedDb = static_cast<float>(num(msg, "feed", p.crossfeedFeedDb));
@@ -816,6 +820,7 @@ private:
         s += ",\"bass\":"; s += p.has(kFlagBass) ? "1" : "0";
         s += ",\"magic\":"; s += p.has(kFlagMagic) ? "1" : "0";
         s += ",\"mono\":"; s += p.has(kFlagMono) ? "1" : "0";
+        s += ",\"autogain\":"; s += p.has(kFlagAutogain) ? "1" : "0";
         s += "},\"crossfeedPreset\":" + std::to_string(p.crossfeedPreset);
         s += ",\"eqMode\":" + std::to_string(p.eqMode);
         s += ",\"decramp\":" + std::to_string(p.eqDecramp);
@@ -859,6 +864,8 @@ private:
         s += ",\"ab\":{\"eq\":" + std::to_string(p.eqCompare) + ",\"conv\":" + std::to_string(p.convCompare) + '}';
         s += ",\"monoBass\":{\"subsonicHz\":" + std::to_string(p.subsonicHz);
         s += ",\"amount\":"; appendFloat(s, p.monoAmount, 1); s += '}';
+        s += ",\"autogain\":{\"target\":"; appendFloat(s, p.agcTargetLufs, 1);
+        s += ",\"maxGain\":"; appendFloat(s, p.agcMaxGainDb, 1); s += '}';
         if (cb_.getIr) {
             IrData ir = cb_.getIr();
             s += ",\"ir\":";

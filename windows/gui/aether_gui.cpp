@@ -28,6 +28,7 @@
 
 #include "aq_i18n.hpp"
 #include "../common/eqapo_paths.hpp"
+#include "keep_awake.hpp"
 
 namespace {
 
@@ -219,7 +220,7 @@ void runWindow(const std::wstring& guiFolder) {
     });
     // Burn-in alatt a gép ne aludjon el (a kijelző elalhat): a felület kéri és oldja fel
     w.bind("aetherKeepAwake", [](const std::string& req) -> std::string {
-        SetThreadExecutionState(req.find("true") != std::string::npos ? (ES_CONTINUOUS | ES_SYSTEM_REQUIRED) : ES_CONTINUOUS);
+        ee_analyzer::keepawake::set(req.find("true") != std::string::npos);
         return "null";
     });
     // Az Equalizer APO eszközválasztója (pl. új USB hangkártya bekapcsolásához): rendszergazdaként indul (UAC)

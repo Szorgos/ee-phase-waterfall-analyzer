@@ -24,7 +24,7 @@ namespace ee_analyzer {
 constexpr uint32_t kMaxEqBands = 32;
 
 /** A params.bin fájl és a közös memória paraméter-formátumának verziója. */
-constexpr uint32_t kParamLayoutVersion = 9;
+constexpr uint32_t kParamLayoutVersion = 10;
 
 enum ParamFlags : uint32_t {
     kFlagEq        = 1u << 0,
@@ -34,6 +34,7 @@ enum ParamFlags : uint32_t {
     kFlagBass      = 1u << 4,
     kFlagMagic     = 1u << 5,   // Magic Touch
     kFlagMono      = 1u << 6,   // Mono és mélyvágás (mono_bass.hpp)
+    kFlagAutogain  = 1u << 7,   // Autogain (autogain.hpp)
     kFlagInitialized = 1u << 31, // a GUI legalább egyszer beállította
 };
 
@@ -130,6 +131,10 @@ struct ParamData {
     // --- A/B összehasonlítás (ab_compare.hpp): az eredeti jel szól, a feldolgozottal azonos hangerőn (0 / 1) ---
     int32_t eqCompare = 0;
     int32_t convCompare = 0;
+
+    // --- Autogain (autogain.hpp, a v10-ben került a végére) ---
+    float agcTargetLufs = -18.0f;  // -30 .. -6: a rövid távú hangosság célszintje (LUFS)
+    float agcMaxGainDb = 6.0f;     // 0,5 .. 12: a legnagyobb erősítés és csillapítás (dB)
 
     bool has(uint32_t f) const { return (flags & f) != 0; }
     void set(uint32_t f, bool on) { flags = on ? (flags | f) : (flags & ~f); }
@@ -233,6 +238,8 @@ inline void sanitizeParams(ParamData& d) {
     cl(d.monoAmount, 0.0f, 100.0f, 0.0f);
     ci(d.eqCompare, 0, 1);
     ci(d.convCompare, 0, 1);
+    cl(d.agcTargetLufs, -30.0f, -6.0f, -18.0f);
+    cl(d.agcMaxGainDb, 0.5f, 12.0f, 6.0f);
 }
 
 /** A params.bin v4 mérete: a Magic Touch mezői előtti rész (v5-ben ezek a végére kerültek). */
@@ -245,6 +252,8 @@ constexpr size_t kParamSizeV6 = offsetof(ParamData, subsonicHz);
 constexpr size_t kParamSizeV7 = offsetof(ParamData, monoAmount);
 /** A params.bin v8 mérete: az A/B összehasonlítás (v9-ben) mezői előtti rész. */
 constexpr size_t kParamSizeV8 = offsetof(ParamData, eqCompare);
+/** A params.bin v9 mérete: az Autogain mezői (v10-ben) előtti rész. */
+constexpr size_t kParamSizeV9 = offsetof(ParamData, agcTargetLufs);
 
 // ------------------------------------------------------------------ régi (v2/v3) params.bin átvétele
 
@@ -268,8 +277,8 @@ struct ParamDataV3 {
  */
 inline bool loadParamBytes(const char* bytes, size_t len, uint32_t version, uint32_t size, ParamData& out) {
     if (size > len) return false;
-    if (version == kParamLayoutVersion || version == 8 || version == 7 || version == 6 || version == 5 || version == 4) {
-        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : version == 8 ? kParamSizeV8
+    if (version == kParamLayoutVersion || version == 9 || version == 8 || version == 7 || version == 6 || version == 5 || version == 4) {
+        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : version == 9 ? kParamSizeV9 : version == 8 ? kParamSizeV8
                           : version == 7 ? kParamSizeV7 : version == 6 ? kParamSizeV6 : version == 5 ? kParamSizeV5 : kParamSizeV4;
         if (size != want) return false;
         ParamData d{};

@@ -12,6 +12,7 @@ kivéve ahol jelölve van; mindegyik a saját licencével.
 | `lsp/lsp-dsp-units` | https://github.com/lsp-plugins/lsp-dsp-units | 1.0.38 | LGPL-3.0-or-later |
 | `calf` | https://github.com/calf-studio-gear/calf (a1f87a4): `biquad.h`, `primitives.h`; a Bass Enhancer kódja `calf_bass_enhancer.h`-ban (LV2 port- és mérőkód nélkül) | | LGPL-2.1-or-later |
 | `libbs2b` | https://github.com/alexmarsev/libbs2b | 3.1.0 | MIT |
+| `libebur128` | https://github.com/jiixyj/libebur128 (67b33ab): EBU R128 / ITU-R BS.1770 hangosságmérés (Autogain); a `queue/sys/queue.h` a mingw-hez kell | 1.2.6 | MIT (`libebur128/COPYING`) |
 | `speexdsp` | https://github.com/xiph/speexdsp (7a15878): resampler; `speexdsp_config_types.h` a configure kimenete helyett | | BSD-3-Clause |
 | `zita-convolver` | Fons Adriaensen zita-convolvere az Ardour hordozható változatában (https://github.com/Ardour/ardour, libs/zita-convolver, 1e41d33) | 4.0.0 | GPL-3.0-or-later |
 | `rnnoise` | https://gitlab.xiph.org/xiph/rnnoise (a 0.2-es kiadás kódja a 372f7b4 javítással: „Fix compilation errors.”, a Debian `fix-compilation-errors.patch` foltja); a fordításhoz szükséges fájlok, a betanított modell nélkül | 0.2 | BSD-3-Clause |

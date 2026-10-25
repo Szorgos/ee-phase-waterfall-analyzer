@@ -3,7 +3,7 @@
  * @file aether_chain.hpp
  * @brief A teljes Aqulify DSP lánc (Linux PipeWire csomópont és Windows EQ APO plugin közös magja).
  *
- *   Magic Touch -> Preamp -> Equalizer (LSP) -> Bass Enhancer (Calf) -> Crossfeed (bs2b) -> Convolver (zita) -> Limiter (LSP)
+ *   Magic Touch -> Preamp -> Equalizer (LSP) -> Bass Enhancer (Calf) -> Crossfeed (bs2b) -> Convolver (zita) -> Autogain (libebur128) -> Limiter (LSP)
  *
  * A Magic Touch (magic_touch.hpp) a felvételt javítja, ezért a lánc elején van; az elemzése a háttérszálon fut.
  * A modulok az EasyEffects-szel azonos könyvtárakat és beállítás-leképezést használnak (ee_dsp.hpp).
@@ -27,6 +27,7 @@
 #include "ee_dsp.hpp"
 #include "magic_touch.hpp"
 #include "mono_bass.hpp"
+#include "autogain.hpp"
 #include "ab_compare.hpp"
 
 namespace ee_analyzer {
@@ -144,6 +145,8 @@ public:
     /** A Bass Enhancer által keltett felharmonikusok szintje dB-ben (a Calf "meter_drive"; kikapcsolva -100). */
     double bassHarmonicsDb() const { return current_.has(kFlagBass) ? bass_.harmonicsDb() : -100.0; }
     size_t limiterLatencySamples() const { return current_.has(kFlagLimiter) ? limiter_.latency() : 0; }
+    /** Az Autogain pillanatnyi erősítése dB-ben (0 = nincs változtatás). A valós idejű szál írja, ezért csak leállított láncnál olvasd. */
+    double autogainDb() const { return autogain_.gainDb(); }
     size_t eqLatencySamples() const { return current_.has(kFlagEq) ? eq_.latency() : 0; }
     bool convolverActive() const { return irStage_.active != nullptr; }
 
@@ -158,6 +161,7 @@ public:
         eq_.reset();
         bass_.reset();
         monoBass_.reset();
+        autogain_.reset();
         abEq_.reset();
         abConv_.reset();
         crossfeed_.reset();
@@ -182,6 +186,7 @@ private:
         limiter_.setSampleRate(sr);
         bass_.setSampleRate(sr);
         monoBass_.setSampleRate(sr);
+        autogain_.setSampleRate(sr);
         abEq_.setSampleRate(sr, kChunk);
         abConv_.setSampleRate(sr, kChunk);
         crossfeed_.setSampleRate(sr);
@@ -201,7 +206,7 @@ private:
 
     /** Kell-e kattanásmentes (le-fel úsztatott) váltás a két beállítás között. */
     static bool needsDeclick(const ParamData& a, const ParamData& b) {
-        const uint32_t mods = kFlagEq | kFlagBass | kFlagMono | kFlagCrossfeed | kFlagConvolver | kFlagLimiter;
+        const uint32_t mods = kFlagEq | kFlagBass | kFlagMono | kFlagCrossfeed | kFlagConvolver | kFlagLimiter | kFlagAutogain;
         if ((a.flags & mods) != (b.flags & mods)) return true;
         if (magicActive(a) != magicActive(b)) return true;
         if (b.has(kFlagMono) && a.subsonicHz != b.subsonicHz) return true;
@@ -224,6 +229,7 @@ private:
         if (current_.has(kFlagLimiter)) limiter_.reset();
         if (current_.has(kFlagBass) && !old.has(kFlagBass)) bass_.reset();
         if (current_.has(kFlagMono) && !old.has(kFlagMono)) monoBass_.reset();
+        if (current_.has(kFlagAutogain) && !old.has(kFlagAutogain)) autogain_.reset();
         if (current_.has(kFlagCrossfeed) && !old.has(kFlagCrossfeed)) crossfeed_.reset();
         if (magicActive(current_) && !magicActive(old)) magic_.reset();
     }
@@ -283,6 +289,7 @@ private:
         eq_.update(d);
         bass_.update(d);
         monoBass_.update(d);
+        autogain_.update(d);
         crossfeed_.update(d);
         limiter_.update(d);
         convIn_ = ee::dbToGain(d.convInputGainDb);
@@ -382,6 +389,8 @@ private:
         } else {
             runConvolver(L, R, m, false);
         }
+
+        if (d.has(kFlagAutogain)) autogain_.process(L, R, m);
 
         if (d.has(kFlagLimiter)) {
             limiter_.process(L, R, m);
@@ -509,6 +518,7 @@ private:
     ee::Equalizer eq_;
     ee::BassEnhancer bass_;
     mono::MonoBass monoBass_;
+    agc::Autogain autogain_;
     abcmp::AbCompare abEq_, abConv_;
     ee::Crossfeed crossfeed_;
     ee::Limiter limiter_;

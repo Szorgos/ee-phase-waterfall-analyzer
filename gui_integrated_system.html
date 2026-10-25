@@ -850,6 +850,7 @@ if (!window.THREE) window.THREE = (function () {
       <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter', this)"><span class="module-dot" id="dot-limiter"></span>Limiter</button>
       <button class="tab-btn" id="tabBtn-bass" onclick="switchTab('bass', this)"><span class="module-dot" id="dot-bass"></span>Bass Enhancer</button>
       <button class="tab-btn" id="tabBtn-mono" onclick="switchTab('mono', this)"><span class="module-dot" id="dot-mono"></span>Mono</button>
+      <button class="tab-btn" id="tabBtn-autogain" onclick="switchTab('autogain', this)"><span class="module-dot" id="dot-autogain"></span>Autogain</button>
       <button class="tab-btn" id="tabBtn-magic" onclick="switchTab('magic', this)"><span class="module-dot" id="dot-magic"></span>Magic Touch</button>
     </div>
 
@@ -1251,6 +1252,25 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
       </div>
     </div>
 
+    <!-- 6. TAB: AUTOGAIN (autogain.hpp, EBU R128 rövid távú hangosság) -->
+    <div class="tab-pane" id="pane-autogain">
+      <div class="module-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <h3 style="margin:0;"><svg class="aq-icon" aria-hidden="true"><use href="#i-speaker"/></svg><span data-i18n="agc.title">Autogain</span></h3>
+            <span class="status-badge off" id="badgeStatus-autogain" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button type="button" class="aq-switch" id="btnToggle-autogain" onclick="toggleModule('autogain')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
+          </div>
+        </div>
+
+        <p class="module-desc" data-i18n="agc.desc">Automatikus szintkiegyenlítés: a rövid távú (3 s) hangosságot a célszintre igazítja, legfeljebb a megadott mértékig. A változás lassú (kb. 1 dB/s), így nem pumpál.</p>
+
+        <div class="param-grid" id="autogainControls"></div>
+      </div>
+    </div>
+
     <div class="tab-pane" id="pane-magic">
       <div class="module-card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -1448,6 +1468,7 @@ var isLimiterEnabled = false;
 var isBassEnabled = false;
 var isMagicEnabled = false;
 var isMonoEnabled = false;
+var isAutogainEnabled = false;
 var magicCompare = false;     // A/B: true = az eredeti jel szól
 var currentPreamp = 0.0;
 // Automatikus preamp: indulásnál 0 dB; ha az EQ-görbe klippelne, a preamp a görbe csúcsához igazodik.
@@ -1462,6 +1483,7 @@ function setModuleActive(mod, active) {
   else if (mod === 'bass') isBassEnabled = active;
   else if (mod === 'magic') isMagicEnabled = active;
   else if (mod === 'mono') isMonoEnabled = active;
+  else if (mod === 'autogain') isAutogainEnabled = active;
   // EQ és Konvolver: egyszerre csak az egyik. A másik kikapcsolódik (mint az IR-importnál).
   if (active && mod === 'eq' && isConvolverEnabled) setModuleActive('convolver', false);
   if (active && mod === 'convolver' && isEqEnabled) setModuleActive('eq', false);
@@ -1515,7 +1537,7 @@ function setModuleActive(mod, active) {
 function moduleIsActive(mod) {
   return mod === 'eq' ? isEqEnabled : mod === 'crossfeed' ? isCrossfeedEnabled : mod === 'convolver' ? isConvolverEnabled
        : mod === 'limiter' ? isLimiterEnabled : mod === 'bass' ? isBassEnabled : mod === 'magic' ? isMagicEnabled
-       : mod === 'mono' ? isMonoEnabled : false;
+       : mod === 'mono' ? isMonoEnabled : mod === 'autogain' ? isAutogainEnabled : false;
 }
 /** A modul BE/KI gombjának, állapotjelvényének (és az EQ felső gombjának) felirata a választott nyelven. */
 function renderModuleTexts(mod) {
@@ -1574,6 +1596,7 @@ function toggleModule(mod) {
   else if (mod === 'bass') curr = isBassEnabled;
   else if (mod === 'magic') curr = isMagicEnabled;
   else if (mod === 'mono') curr = isMonoEnabled;
+  else if (mod === 'autogain') curr = isAutogainEnabled;
   setModuleActive(mod, !curr);
 }
 
@@ -1595,7 +1618,7 @@ function sendParamToPipewire(type, val) {
 // =========================================================================
 // TAB VÁLTÓ LOGIKA & OLDALRA CSÚSZÓ ANIMÁCIÓ (GLIDER & VIEWPORT SLIDE)
 // =========================================================================
-const TAB_ORDER = ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'];
+const TAB_ORDER = ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'magic'];
 let currentActiveTab = 'eq';
 let tabSlideTimer = null;
 
@@ -4316,6 +4339,7 @@ function processAutoEqImport() {
   setModuleActive('convolver', false);
   setModuleActive('bass', false);
   setModuleActive('mono', false);
+  setModuleActive('autogain', false);
 
   // Limiter: negatív preamp esetén automatikusan bekapcsol (-1,0 dB, True Peak/24 bit)
   const limiterInfo = armLimiterForProfile(finalPreamp, true);
@@ -5086,6 +5110,16 @@ function sendMono() {
   sendEngine({ type: "set_mono", subsonic: MONO_SUBSONIC_HZ[getCtl("monoSubsonic")] || 0, amount: getCtl("monoAmount") });
 }
 
+// --- Autogain (autogain.hpp): a rövid távú hangosság célszintje és a legnagyobb erősítés
+buildControls("autogainControls", [
+  { id: "agcTarget", kind: "num", label: "agc.target", min: -30, max: -6, step: 0.5, unit: "LUFS", def: -18, hint: "agc.targetHint" },
+  { id: "agcMaxGain", kind: "num", label: "agc.maxGain", min: 0.5, max: 12, step: 0.5, unit: "dB", def: 6, hint: "agc.maxGainHint" },
+], () => { sendAutogain(); nudgeIfOff('autogain'); });
+
+function sendAutogain() {
+  sendEngine({ type: "set_autogain", target: getCtl("agcTarget"), maxGain: getCtl("agcMaxGain") });
+}
+
 // --- Magic Touch (automatikus hangszépítő; docs/plans/magic-touch.md)
 buildControls("magicControls", [
   // 100 % fölött „Bátor” tartomány (200 %-ig): a hangszépítő korlátok a kétszeresükig nőnek (magic_touch.hpp)
@@ -5207,12 +5241,12 @@ markCrossfeedPreset();
 
 /** A teljes felületi állapot elküldése a motornak. */
 function pushAllToEngine() {
-  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'].forEach(m => {
+  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'magic'].forEach(m => {
     sendParamToPipewire('set_module_' + m, moduleIsActive(m) ? 1 : 0);
   });
   sendCurveMsg({ type: "set_eq_mode", val: currentEqMode });
   sendCurveMsg({ type: "set_decramp", val: currentDecramp });
-  sendBass(); sendLimiter(); sendCrossfeed(); sendConvolver(); sendMagic(); sendMono();
+  sendBass(); sendLimiter(); sendCrossfeed(); sendConvolver(); sendMagic(); sendMono(); sendAutogain();
   lastSentPreamp = currentPreamp;
   sendParamToPipewire("set_preamp", currentPreamp);
   lastSentEqSig = null;   // a sávokat mindenképp átadjuk
@@ -5357,7 +5391,11 @@ function applyEngineState(st, fromSync) {
         setCtl("monoSubsonic", Math.max(0, MONO_SUBSONIC_HZ.indexOf(st.monoBass.subsonicHz)));
         setCtl("monoAmount", st.monoBass.amount);
       }
-      ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'].forEach(m => {
+      if (st.autogain) {
+        setCtl("agcTarget", st.autogain.target);
+        setCtl("agcMaxGain", st.autogain.maxGain);
+      }
+      ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'magic'].forEach(m => {
         if (m in mods) setModuleActive(m, !!mods[m]);
       });
       renderMagicCompare();
@@ -5391,13 +5429,13 @@ function applyEngineState(st, fromSync) {
     } else if (activePresetName && presetsDoc.presets[activePresetName]) {
       // A motor üres (pl. első indítás új gépen), de van mentett aktív profil: azt töltjük be
       applyPresetData(presetsDoc.presets[activePresetName]);
-      ['crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'].forEach(m => setModuleActive(m, false));
+      ['crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'magic'].forEach(m => setModuleActive(m, false));
       setModuleActive('eq', nodes.length > 0);
       armLimiterForProfile(currentPreamp, false);
     } else {
       // A motor még sosem kapott beállítást: teljesen tiszta, kikapcsolt (bypass) alapállapot
       nodes.forEach(n => { n.gain = 0.0; });
-      ['crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'eq', 'magic'].forEach(m => setModuleActive(m, false));
+      ['crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'eq', 'magic'].forEach(m => setModuleActive(m, false));
       currentPreamp = 0.0;
       autoPreampMode = false;
       setPreampBadge("preamp.clean", 0, "optimal");
@@ -5937,7 +5975,7 @@ document.addEventListener("click", (e) => {
 /** Nyelvváltáskor minden futás közben előállított felirat újra (a statikusakat az applyI18nDom intézi). */
 function refreshDynamicTexts() {
   applyWfView();
-  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'].forEach(renderModuleTexts);
+  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'magic'].forEach(renderModuleTexts);
   renderAbButtons();
   renderMagicCompare();
   updateMagicDiag(magicDiagLast);

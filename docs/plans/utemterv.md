@@ -62,7 +62,7 @@
 
 ## 6. Ütem: További EasyEffects plugin-paritás 📋
 *Részletes követés: [`docs/plans/easyeffects-plugins.md`](file:///docs/plans/easyeffects-plugins.md)*
-- [ ] Autogain (EBU R128 / LUFS mérés alapján)
+- [x] Autogain (EBU R128 / LUFS mérés alapján; a hallgatói teszt hátra)
 - [ ] Compressor & Deesser
 - [ ] Exciter & Crystalizer
 - [ ] Multiband dinamikai modulok

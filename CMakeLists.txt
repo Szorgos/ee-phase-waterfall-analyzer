@@ -32,7 +32,7 @@ set(EE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 # 1. DSP Mag Könyvtár (Platformfüggetlen Interface könyvtár)
 add_library(aqulify_ee STATIC src/ee_dsp_lsp.cpp src/ee_dsp_misc.cpp src/ee_dsp_convolver.cpp src/rnn_denoise.cpp)
 target_include_directories(aqulify_ee PUBLIC ${EE_INCLUDE_DIR})
-target_link_libraries(aqulify_ee PUBLIC aq_lsp aq_calf aq_bs2b aq_speex aq_zita)
+target_link_libraries(aqulify_ee PUBLIC aq_lsp aq_calf aq_bs2b aq_speex aq_zita aq_ebur128)
 target_link_libraries(aqulify_ee PRIVATE aq_rnnoise)
 set_target_properties(aqulify_ee PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(NOT MSVC)
@@ -60,6 +60,10 @@ target_link_libraries(test_dsp PRIVATE ee_dsp_core Threads::Threads)
 # 7. Tesztalkalmazás: mintavételi frekvencia × blokkméret mátrix (átlátszóság, blokkfüggetlenség, szintek)
 add_executable(test_matrix src/test_matrix.cpp)
 target_link_libraries(test_matrix PRIVATE ee_dsp_core Threads::Threads)
+
+# 8. Tesztalkalmazás: ébren tartás (burn-in) a Windows-os hídon; nem Windows-on kihagyva
+add_executable(test_keepawake src/test_keepawake.cpp)
+target_link_libraries(test_keepawake PRIVATE ee_dsp_core)
 
 if(WIN32)
     # ------------------------------------------------------------------
