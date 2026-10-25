@@ -4,7 +4,7 @@
 ### Változások (következő kiadás)
 - **EQ – a Decramp alapértéke Off (eddig x4):** az AutoEq a profilokat 44,1 kHz-es digitális szűrőkkel illeszti, és az Equalizer APO is így számol. Decramp nélkül az Aqulify pontosan ezt a görbét adja (0,01 dB-en belül). Az x4 a magas hangokat 5 kHz fölött 1–2 dB-lel átformálta, 48 kHz-en pedig a keskeny mély sávokat (pl. 30 Hz, Q4) kb. 1 dB-lel pontatlanabbá tette. Az x2–x4 továbbra is választható a kézzel rajzolt, magas hangokat érintő görbékhez. A már mentett beállítás nem változik.
 - **Javítás – EQ FIR módban, bekapcsolt Decramp mellett:** a motor a valódinál jóval nagyobb késleltetést jelzett (48 kHz-en x4-nél 128 ms-ot a valódi 32 ms helyett). Emiatt az EQ A/B összehasonlításánál az eredeti jel később szólt, mint a feldolgozott, és váltáskor időugrás hallatszott; a modulváltáskor kivárt csend is hosszabb volt. Most a jelzett késleltetés a valódi.
-- **Pontosítás az 1.7.7-es bejegyzéshez:** a Decramp x6 / x8 eltérése széles mély polcnál legfeljebb kb. 0,2 dB, de keskeny mély sávoknál (pl. 30 Hz, Q4) több dB is lehet.
+- **EQ – a Decramp x6 / x8 megszűnt:** a mérések szerint keskeny mély sávoknál (pl. 30 Hz, Q4) több dB-lel eltértek a beállítottól, és az x4-hez képest nem adtak hallható előnyt. Választható: Off, x2, x3, x4. A korábban mentett x6 / x8 beállítás x4-ként töltődik be. (Ez pontosítja az 1.7.7-es bejegyzést is: a „legfeljebb kb. 0,2 dB” csak a széles mély polcra volt igaz.)
 
 ### Újdonságok (1.7.9)
 - **Mono és mélyvágás (új modul):** 10 / 20 / 30 Hz-es, 24 dB/oktávos mélyvágás, és 0–100 %-os mono-keverés 100 Hz alatt. A középső csatorna nem változik. Alapból ki.

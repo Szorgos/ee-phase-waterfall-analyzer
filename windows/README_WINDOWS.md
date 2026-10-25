@@ -48,7 +48,7 @@ A felület saját ablakban fut (`AqulifyGui.exe`, Microsoft WebView2 – a Windo
 
 | Modul | Megvalósítás |
 |---|---|
-| **EQ** | LSP Parametric Equalizer (lsp-dsp-units): IIR, FIR, FFT és SPM mód; sávonként 12 típus, RLC / BWC / LRX / APO szűrőmód, x1–x4 meredekség; decramp (Off, x2–x8, 44,1 kHz-hez viszonyítva) |
+| **EQ** | LSP Parametric Equalizer (lsp-dsp-units): IIR, FIR, FFT és SPM mód; sávonként 12 típus, RLC / BWC / LRX / APO szűrőmód, x1–x4 meredekség; decramp (Off, x2–x4, 44,1 kHz-hez viszonyítva; alapból Off) |
 | **Crossfeed** | libbs2b: Bauer bs2b (700 Hz / 4,5 dB), Jan Meier (650 Hz / 9,5 dB), közeltéri stúdió (600 Hz / 3,5 dB) vagy egyedi vágási frekvencia és szint |
 | **Convolver** | zita-convolver (FFTW3); WAV/IRS betöltés (16/24/32 bit, float), újramintavételezés SpeexDSP-vel, IR szélesség, autogain, dry / wet. Max. 262 144 minta |
 | **Bass Enhancer** | Calf Bass Enhancer: amount, harmonics, scope, floor, blend, listen |

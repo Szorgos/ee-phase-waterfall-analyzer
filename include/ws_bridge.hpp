@@ -623,7 +623,7 @@ private:
             p.eqMode = std::clamp(mode, 0, 3);
             eqChanged = true;
         } else if (type == "set_decramp" && val) {
-            p.eqDecramp = std::clamp(static_cast<int32_t>(val->numberOr(0.0)), 0, 5);
+            p.eqDecramp = std::clamp(static_cast<int32_t>(val->numberOr(0.0)), 0, 3);
             eqChanged = true;
         } else if (type == "set_limiter") {
             p.limMode = static_cast<int32_t>(num(msg, "mode", p.limMode));

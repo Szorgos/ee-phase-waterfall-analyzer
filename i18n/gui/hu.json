@@ -19,8 +19,6 @@
   "sink.title": "Válassz kimeneti hangeszközt (Laptop Hangszóró, USB Audio vagy HDMI)",
   "prering.title": "FIR / FFT / SPM módban (lineáris fázis) a meredek szűrők előtt kis előcsengés keletkezhet. Mértéke általában olyan kicsi, hogy a vízesésen alig látszik – ez így rendben van.",
   "prering.text": "Lineáris fázis: előcsengés lehetséges",
-  "decramp.note": "Decramp x6 / x8: a mélyek kevésbé pontosak",
-  "decramp.noteTitle": "Decramp x6 / x8 mellett a nagyon magas belső mintavétel (288 / 384 kHz) miatt a mély szűrők eltérhetnek a beállítottól: széles sávoknál néhány tized dB-lel, keskeny mély sávoknál (pl. 30 Hz, Q4) akár több dB-lel. AutoEq- és Equalizer APO-profilokhoz az Off a pontos; az x2–x4 a kézzel rajzolt, magas hangokat érintő görbékhez hasznos.",
   "strip.time": "Idő:",
   "strip.t60": "60 lépcső (Gyors)",
   "strip.t120": "120 lépcső (Normál)",

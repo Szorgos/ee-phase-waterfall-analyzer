@@ -75,7 +75,7 @@ struct ParamData {
 
     // --- Equalizer (LSP para_equalizer) ---
     int32_t eqMode = 0;          // EqMode
-    int32_t eqDecramp = 0;       // 0 = Off, 1 = x2, 2 = x3, 3 = x4, 4 = x6, 5 = x8 (44,1 kHz-hez viszonyítva).
+    int32_t eqDecramp = 0;       // 0 = Off, 1 = x2, 2 = x3, 3 = x4 (44,1 kHz-hez viszonyítva; az x6 / x8 megszűnt).
                                  // Off: pontosan az AutoEq / Equalizer APO görbéje (T06 jelentés)
 
     // --- Crossfeed (libbs2b) ---
@@ -201,7 +201,7 @@ inline void sanitizeParams(ParamData& d) {
         cl(b.width, 0.0f, 12.0f, 4.0f);
     }
     ci(d.eqMode, 0, 3);
-    ci(d.eqDecramp, 0, 5);
+    ci(d.eqDecramp, 0, 3);   // az x6 / x8 megszűnt (a mély, keskeny sávokat rontotta, T06): a mentett 4 / 5 -> x4
     ci(d.crossfeedPreset, 0, 3);
     cl(d.crossfeedFcut, 300.0f, 2000.0f, 700.0f);
     cl(d.crossfeedFeedDb, 1.0f, 15.0f, 4.5f);
@@ -311,7 +311,7 @@ inline bool loadParamBytes(const char* bytes, size_t len, uint32_t version, uint
         n.q = b.q;
     }
     d.eqMode = o.eqMode == 0 ? 0 : 1;
-    d.eqDecramp = o.eqDecramp >= 8 ? 5 : o.eqDecramp >= 4 ? 3 : o.eqDecramp >= 2 ? 1 : 0;
+    d.eqDecramp = o.eqDecramp >= 4 ? 3 : o.eqDecramp >= 2 ? 1 : 0;
     d.crossfeedPreset = std::clamp(o.crossfeedPreset, 0, 2);
     d.crossfeedFcut = o.crossfeedCutoffHz;
     d.crossfeedFeedDb = o.crossfeedFeedDb;

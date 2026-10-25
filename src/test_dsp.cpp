@@ -69,25 +69,16 @@ static void testEqualizer() {
               ee::Equalizer::decrampFactor(2, 44100) == 3 && ee::Equalizer::decrampFactor(5, 192000) == 2,
           "decramp tényezők (48k: 1/2/4/6/8, 96k x4 -> 2, 44,1k x3 -> 3, 192k x8 -> 2)");
 
-    // APO mély polc nagy belső mintavételnél (decramp x6 / x8 = 288 / 384 kHz): a mélyeken ugyanazt adja, mint
-    // decramp nélkül (float együttható-számítással 20 Hz-en +0,8 dB volt az eltérés)
+    // Az x6 / x8 megszűnt (a mély, keskeny sávokat rontotta, T06): a mentett 4 / 5 x4-ként töltődik be
     {
-        ParamData d = bellParams(6);
-        d.bands[0].type = static_cast<int32_t>(EqBandType::LoShelf);
-        d.bands[0].freq = 105.0f;
-        d.bands[0].q = 0.7f;
-        double ref = 0.0, worst = 0.0;
-        for (int dc : { 0, 4, 5 }) {
-            d.eqDecramp = dc;
-            ee::Equalizer eq;
-            eq.setSampleRate(48000);
-            eq.update(d);
-            std::vector<float> L = sine(20.0, 0.1, 192000, sr), R = L;
-            runBlocks([&](float* l, float* r, size_t m) { eq.process(l, r, m); }, L, R, 512);
-            const double g = 20 * std::log10(toneAmp(L, 96000, 20.0, sr) / 0.1);
-            if (dc == 0) ref = g; else worst = std::max(worst, std::abs(g - ref));
-        }
-        CHECK(worst < 0.3, "APO mély polc 105 Hz +6 dB, decramp x6 / x8: 20 Hz-en legfeljebb %.2f dB eltérés a decramp nélkülitől", worst);
+        ParamData d = transparentParams();
+        d.eqDecramp = 5;
+        sanitizeParams(d);
+        ParamData d4 = transparentParams();
+        d4.eqDecramp = 4;
+        sanitizeParams(d4);
+        CHECK(d.eqDecramp == 3 && d4.eqDecramp == 3 && transparentParams().eqDecramp == 0,
+              "decramp: az alapérték Off, a régi x6 / x8 beállítás x4 lesz");
     }
 
     const char* modeNames[] = { "IIR", "FIR", "FFT", "SPM" };
@@ -139,9 +130,9 @@ static void testEqualizer() {
               "Ladder-pass ugyanígy: 100 Hz %.1f / 1 kHz %.1f / 8 kHz %.1f dB", mag[0], mag[1], mag[2]);
     }
     {
-        // APO (DR) mély polc decramp x4 / x8 mellett: a grafikon görbéje és csoportkésleltetése mélyen is sima
+        // APO (DR) mély polc decramp x4 mellett: a grafikon görbéje és csoportkésleltetése mélyen is sima
         // (float számításnál a cos(w) lépcsőzetes volt: kb. 0,8 ms-os ugrások 10-30 Hz között)
-        for (int decr : { 3, 5 }) {
+        for (int decr : { 3 }) {
             ParamData d = bellParams(0);
             d.eqDecramp = decr;
             d.bands[0].type = static_cast<int32_t>(EqBandType::LoShelf);
@@ -160,7 +151,7 @@ static void testEqualizer() {
                 if (i >= 2) maxJump = std::max(maxJump, std::abs(gd[i] - 2.0 * gd[i - 1] + gd[i - 2]));   // görbület: zajra érzékeny
             }
             CHECK(maxJump < 0.05, "APO mély polc, decramp %s: a csoportkésleltetés sima 10-100 Hz között (legnagyobb törés %.3f ms)",
-                  decr == 3 ? "x4" : "x8", maxJump);
+                  "x4", maxJump);
         }
     }
 }
@@ -432,9 +423,9 @@ static void testDeclick(size_t kBlk) {
     d.eqMode = 1; run("FFT -> FIR");
     d.eqMode = 3; run("FIR -> SPM");
     d.eqMode = 0; run("IIR mód");
-    for (int dc : {0, 1, 2, 4, 5, 3}) { d.eqDecramp = dc; run("decramp váltás"); }
+    for (int dc : {0, 1, 2, 3}) { d.eqDecramp = dc; run("decramp váltás"); }
     d.eqMode = 1; d.eqDecramp = 0; run("FIR, decramp ki");
-    d.eqDecramp = 5; run("FIR, decramp x8");
+    d.eqDecramp = 3; run("FIR, decramp x4");
     d.eqMode = 0; d.eqDecramp = 3; run("IIR, decramp x4");
     d.set(kFlagLimiter, true); run("limiter be");
     d.limOversampling = 0; run("limiter túlmintavételezés ki");
@@ -1299,7 +1290,7 @@ static void testEqLatency() {
     std::printf("[15] EQ késleltetés (FIR / FFT, Decramp mellett is) és az A/B időbeli illeszkedése\n");
     const uint32_t sr = 48000;
     const int32_t apo = static_cast<int32_t>(EqFilterMode::ApoDr);
-    const char* decName[6] = { "Off", "x2", "x3", "x4", "x6", "x8" };
+    const char* decName[4] = { "Off", "x2", "x3", "x4" };
     auto peakOf = [&](const ParamData& d, size_t& lat) {
         ee::Equalizer eq;
         eq.setSampleRate(sr);
@@ -1315,7 +1306,7 @@ static void testEqLatency() {
         for (size_t i = 1; i < n; ++i) if (std::abs(L[i]) > std::abs(L[p])) p = i;
         return p;
     };
-    for (int dc = 0; dc < 6; ++dc) {
+    for (int dc = 0; dc < 4; ++dc) {
         size_t lat = 0;
         const size_t p = peakOf(bellParams(apo, 1, dc), lat);
         CHECK(lat == p, "FIR, Decramp %s: jelentett késleltetés %zu minta, az impulzusválasz csúcsa %zu", decName[dc], lat, p);
