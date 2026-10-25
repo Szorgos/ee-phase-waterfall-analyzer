@@ -31,11 +31,12 @@ jobs:
         shell: bash
         run: python -m pip install --quiet ninja
 
+      # A sha256sum a stdin-ről olvas: a Windows-os útvonal visszaperjelet tenne a hash elé
       - name: FFTW 3.3.10 forrás (ellenőrzött)
         shell: bash
         run: |
           for i in 1 2 3; do curl -fsSL -o "$RUNNER_TEMP/fftw.tar.gz" https://www.fftw.org/fftw-3.3.10.tar.gz && break; sleep 15; done
-          got=$(sha256sum "$RUNNER_TEMP/fftw.tar.gz" | cut -d' ' -f1)
+          got=$(sha256sum < "$RUNNER_TEMP/fftw.tar.gz" | cut -d' ' -f1)
           want=56c932549852cddcfafdab3820b0200c7742675be92179e59e6215b340e26467
           if [ "$got" != "$want" ]; then echo "::error title=FFTW::sha256 eltérés: $got"; exit 1; fi
           tar -xzf "$RUNNER_TEMP/fftw.tar.gz" -C "$RUNNER_TEMP"
@@ -44,7 +45,7 @@ jobs:
         shell: bash
         run: |
           for i in 1 2 3; do curl -fsSL -o "$RUNNER_TEMP/rnnoise.tar.xz" http://archive.ubuntu.com/ubuntu/pool/universe/r/rnnoise/rnnoise_0.2+ds.orig.tar.xz && break; sleep 15; done
-          got=$(sha256sum "$RUNNER_TEMP/rnnoise.tar.xz" | cut -d' ' -f1)
+          got=$(sha256sum < "$RUNNER_TEMP/rnnoise.tar.xz" | cut -d' ' -f1)
           want=db2718ee4a0b294bfbbe198fe94aabfdc8cd0d77cb9cd95d76c7a818ad805f0b
           if [ "$got" != "$want" ]; then echo "::error title=RNNoise::sha256 eltérés: $got"; exit 1; fi
           mkdir -p "$RUNNER_TEMP/rnnoise-model"
