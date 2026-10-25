@@ -299,6 +299,7 @@
   "ctl.magicContent": "Content",
   "ctl.monoSubsonic": "Subsonic cut",
   "ctl.monoAmount": "Mono mix (below 100 Hz)",
+  "ctl.monoAmountHint": "Phase shift: below 100 Hz the side bass is phase-rotated (at 100 %, about 90° at 50 Hz). The mono sum (center channel) does not change.",
   "mt.charNatural": "Natural",
   "mt.charWarm": "Warm",
   "mt.charBright": "Bright",

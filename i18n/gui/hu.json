@@ -299,6 +299,7 @@
   "ctl.magicContent": "Tartalom",
   "ctl.monoSubsonic": "Mélyvágás",
   "ctl.monoAmount": "Mono keverés (100 Hz alatt)",
+  "ctl.monoAmountHint": "Fázisfordítás: 100 Hz alatt az oldalsó basszus fázisa elfordul (100 %-nál 50 Hz-en kb. 90°). A mono-összeg (középső csatorna) nem változik.",
   "mt.charNatural": "Természetes",
   "mt.charWarm": "Meleg",
   "mt.charBright": "Fényes",

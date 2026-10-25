@@ -4496,7 +4496,7 @@ setCtl("bassFloorActive", false);
 buildControls("monoControls", [
   { id: "monoSubsonic", kind: "select", label: "ctl.monoSubsonic", optKeys: true, def: 0,
     options: ["mono.subOff", "mono.sub10", "mono.sub20", "mono.sub30"] },
-  { id: "monoAmount", kind: "num", label: "ctl.monoAmount", min: 0, max: 100, step: 1, unit: "%", def: 0 },
+  { id: "monoAmount", kind: "num", label: "ctl.monoAmount", min: 0, max: 100, step: 1, unit: "%", def: 0, hint: "ctl.monoAmountHint" },
 ], () => { sendMono(); nudgeIfOff('mono'); });
 const MONO_SUBSONIC_HZ = [0, 10, 20, 30];
 
