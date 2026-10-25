@@ -217,10 +217,6 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     background: rgba(255, 255, 255, 0.88);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   }
-  :root[data-theme="light"] .eq-zoom-overlay {
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-  }
   :root[data-theme="light"] .adw-btn:hover {
     background: #E2E8F0;
   }
@@ -318,6 +314,14 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .top-spectrum-strip.docked .strip-col-left { align-items: flex-start; }
   .top-spectrum-strip.docked .strip-col-right { align-items: flex-end; }
   .top-spectrum-strip.docked .strip-controls .ctrl-group { padding: 1px 3px 1px 5px; }   /* tömörebb sorok: több fér a háló mellé */
+  /* Ha így sem fér a háló mellé: alacsonyabb sorok, kisebb betű (layoutStripControls), csak utána kerül a háló fölé */
+  .top-spectrum-strip.docked.compact .strip-col { gap: 2px; }
+  .top-spectrum-strip.docked.compact .strip-controls .ctrl-group { padding: 0 2px 0 4px; gap: 4px; }
+  .top-spectrum-strip.docked.compact .mini-btn { min-height: 22px; padding: 2px 7px; font-size: 0.7rem; }
+  .top-spectrum-strip.docked.compact select.mini-select { min-height: 22px; padding-top: 1px; padding-bottom: 1px; font-size: 0.7rem; }
+  .top-spectrum-strip.docked.compact .ctrl-label, .top-spectrum-strip.docked.compact .ctrl-value { font-size: 0.68rem; }
+  .top-spectrum-strip.docked.compact .strip-badge { padding: 2px 9px; font-size: 0.68rem; }
+  .top-spectrum-strip.docked.compact #sliderWfFade { width: 54px !important; }
   canvas#waterfallCanvas { width: 100%; height: 100%; display: block; }
   canvas#spec2dCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; color: var(--aq-text-2); pointer-events: none; }
   canvas#spec2dCanvas[hidden] { display: none; }
@@ -525,21 +529,14 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     .wf-stage { height: clamp(180px, 30vh, 420px); }
     canvas#eqCanvas { height: clamp(200px, 32vh, 440px); }
   }
+  /* A zoom-eszköztár a gombsor része (egy sorban, jobbra zárva), nem lebegő panel */
   .eq-zoom-overlay {
     display: flex;
-    flex-wrap: wrap;            /* keskeny ablakban több sorba törik, nem lóg ki a sávból */
-    max-width: 100%;
-    margin-left: auto;          /* a gombsor jobb szélére zár, akár külön sorba törik */
-    justify-content: flex-end;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    margin-left: auto;
     align-items: center;
     gap: 6px;
-    background: rgba(13, 20, 28, 0.82);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid var(--aq-line);
-    border-radius: 12px;
-    padding: 4px 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     pointer-events: auto;
   }
   .eq-zoom-overlay .zoom-lbl { font-size: 0.74rem; color: var(--aq-text-2); font-weight: 500; }
@@ -551,10 +548,20 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .eq-zoom-overlay input.zoom-slider { width: 44px; }
 
   .eq-bottom-bar { background: var(--aq-surface); border: 1px solid var(--aq-line); border-radius: var(--aq-radius-l); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
-  /* Két sor: fent a gombsor (balra a gombok, jobbra a zoom-eszköztár), lent a sáv-szerkesztő. Keskeny ablakban a
-     zoom a gombok alá törik, jobbra zárva. */
+  /* Két sor: fent a gombsor (balra a gombok, jobbra a zoom-eszköztár) egyetlen sorban, lent a sáv-szerkesztő.
+     Ha a gombsor nem fér el, fokozatosan tömörödik (fitEqActionRow): .tight, .tighter, .tightest; csak végső esetben tördel. */
   .node-readout { display: flex; align-items: center; gap: 10px; font-size: 0.84rem; flex-wrap: wrap; order: 2; flex: 1 1 100%; }
-  .actions-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; max-width: 100%; order: 1; flex: 1 1 auto; }
+  .actions-group { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; min-width: 0; max-width: 100%; order: 1; flex: 1 1 100%; }
+  .actions-group > .adw-btn { flex-shrink: 0; }
+  .actions-group.tight { gap: 6px; }
+  .actions-group.tight .zoom-lbl, .actions-group.tight .zoom-divider { display: none; }
+  .actions-group.tight .zoom-btn > span { display: none; }            /* Igazít, Reset: csak ikon (a súgó marad) */
+  .actions-group.tight .adw-btn { padding: 4px 9px; font-size: 0.76rem; }
+  .actions-group.tighter { gap: 4px; }
+  .actions-group.tighter .adw-btn { padding: 3px 7px; font-size: 0.72rem; min-height: 26px; gap: 4px; }
+  .actions-group.tighter .zoom-val { display: none; }
+  .actions-group.tightest #btnImportAutoEq > span, .actions-group.tightest #sliderEqZoom { display: none; }   /* ikon marad, a súgó is */
+  .actions-group.wrap { flex-wrap: wrap; row-gap: 6px; }
   .stat-group { display: flex; gap: 6px; align-items: center; }
   .stat-group span.lbl { color: var(--aq-text-2); font-size: 0.76rem; }
   .stat-group small { color: var(--aq-text-3); font-size: 0.74rem; }
@@ -779,8 +786,9 @@ if (!window.THREE) window.THREE = (function () {
           <option value="120" selected data-i18n="strip.t120">120 lépcső (Normál)</option>
           <option value="180" data-i18n="strip.t180">180 lépcső (Mély)</option>
         </select></span>
-        <!-- a felirata a nézettel változik (legfeljebb „Nézőpont: 3D Izometrikus”), ezért fent, a szélesebb sorok között -->
-        <span class="ctrl-group" data-wf3d><button class="mini-btn" id="btnCameraAngle" data-wf3d>Nézőpont: 3D</button></span>
+        <!-- Nézőpont és folyásirány egy sorban (kevesebb sor fér a háló mellé). A sorrendet a layoutStripControls
+             szélesség szerint állítja be. -->
+        <span class="ctrl-group" data-wf3d><button class="mini-btn" id="btnCameraAngle" data-wf3d>Nézőpont: 3D</button><button class="mini-btn" id="btnFlowDir" data-wf3d title="Vízesés iránya: lefelé (az új sorok hátul indulnak) vagy felfelé (az új sorok elöl, a skálánál indulnak)" data-i18n-title="strip.flowTitle">Folyás: lefelé</button></span>
         <!-- TRAPÉZKORREKCIÓ (mint a kivetítőnél): a hátsó él szélessége -->
         <span class="ctrl-group" data-wf3d><span class="ctrl-label" data-i18n="strip.keystone">Trapéz:</span>
         <button class="mini-btn icon-only" id="btnKeystoneLess" title="Trapézkorrekció: keskenyebb hátsó él" data-i18n-title="strip.keystoneLess" data-i18n-aria-label="strip.keystoneLess"><svg class="aq-icon" aria-hidden="true"><use href="#i-trap-narrow"/></svg></button>
@@ -791,7 +799,6 @@ if (!window.THREE) window.THREE = (function () {
         <span class="ctrl-group" data-wf3d title="Vízesés telítettsége / fakítása" data-i18n-title="strip.fadeTitle"><span class="ctrl-label" data-i18n="strip.fade">Fakítás:</span>
         <input type="range" id="sliderWfFade" min="0" max="100" value="100" class="ee-slider" style="width:75px; vertical-align:middle; cursor:pointer;" oninput="updateWfFade(this.value)">
         </span>
-        <span class="ctrl-group" data-wf3d><button class="mini-btn" id="btnFlowDir" data-wf3d title="Vízesés iránya: lefelé (az új sorok hátul indulnak) vagy felfelé (az új sorok elöl, a skálánál indulnak)" data-i18n-title="strip.flowTitle">Folyás: lefelé</button></span>
       </div>
       <!-- Jobb oldal: hangfeldolgozás és állapot -->
       <div class="strip-controls strip-col strip-col-right">
@@ -963,7 +970,7 @@ if (!window.THREE) window.THREE = (function () {
           <option value="custom" id="optEqDbCustom" hidden>±24 dB</option>
         </select>
         <button id="btnEqFitY" class="adw-btn zoom-btn" title="Görbére igazítás: a dB skála és a függőleges eltolás úgy áll be, hogy a teljes görbe és minden sáv látsszon" data-i18n-title="zoom.fitTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-fit"/></svg><span data-i18n="zoom.fit">Igazít</span></button>
-          <button id="btnEqAutoFit" class="adw-btn zoom-btn primary active" aria-pressed="true" title="Automatikus illesztés: importáláskor és profilbetöltéskor a függőleges nézet a görbéhez igazodik. Kézi nagyítás vagy eltolás kikapcsolja." data-i18n-title="zoom.autoTitle" data-i18n="zoom.auto">Auto</button>
+        <button id="btnEqAutoFit" class="adw-btn zoom-btn primary active" aria-pressed="true" title="Automatikus illesztés: importáláskor és profilbetöltéskor a függőleges nézet a görbéhez igazodik. Kézi nagyítás vagy eltolás kikapcsolja." data-i18n-title="zoom.autoTitle" data-i18n="zoom.auto">Auto</button>
         <span class="zoom-divider"></span>
         <span class="zoom-lbl">Zoom:</span>
         <button id="btnEqZoomOut" class="adw-btn zoom-btn" title="Kicsinyítés" data-i18n-title="zoom.out" data-i18n-aria-label="zoom.out"><svg class="aq-icon" aria-hidden="true"><use href="#i-zoom-out"/></svg></button>
@@ -1562,6 +1569,7 @@ function renderAbButtons() {
     b.className = on ? 'adw-btn primary active' : 'adw-btn';
     b.innerText = t(on ? 'ab.original' : 'ab.processed');
   });
+  if (typeof fitEqActionRow === "function") fitEqActionRow();   // az A/B gomb megjelenése a gombsor szélességét is változtatja
 }
 function toggleAb(mod) {
   if (mod === 'eq') { eqAbOn = !eqAbOn; sendEngine({ type: "set_eq_compare", compare: eqAbOn ? 1 : 0 }); }
@@ -2278,9 +2286,10 @@ function drawFreqScale(force) {
 const wfStrip = document.querySelector(".top-spectrum-strip");
 const stripToolbar = document.getElementById("stripToolbar");
 var stripLayoutDirty = true;   // var: a drawFreqScale már a betöltés elején is hívódhat (téma)
+var stripMo = null;            // a saját elrendezési változtatásainkat (sorrend) a layoutStripControls végén eldobjuk
 if (stripToolbar && window.MutationObserver) {
-  new MutationObserver(() => { stripLayoutDirty = true; })
-    .observe(stripToolbar, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["style", "hidden"] });
+  stripMo = new MutationObserver(() => { stripLayoutDirty = true; });
+  stripMo.observe(stripToolbar, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["style", "hidden"] });
 }
 
 /** A háló képének (konvex) körvonala a vásznon, képpontban. */
@@ -2323,23 +2332,46 @@ function rectHitsPolygon(rc, poly) {
   return true;
 }
 
+/**
+ * Oszloponként szélesség szerint csökkenő sorrend (fent a legszélesebb): a háló képe felfelé keskenyedik, így a
+ * sarkokban fent több a hely. A sorrend a feliratok hosszától függ (nyelv, állapot), ezért mérés alapján dől el.
+ */
+function setStripOrder(on) {
+  for (const col of stripToolbar.querySelectorAll(".strip-col")) {
+    const items = [...col.children].map((el, i) => ({ el, i, w: on && el.offsetParent !== null ? el.getBoundingClientRect().width : 0 }));
+    if (on) items.sort((a, b) => b.w - a.w || a.i - b.i);
+    items.forEach((x, k) => { const v = on ? String(k) : ""; if (x.el.style.order !== v) x.el.style.order = v; });
+  }
+}
+
 function layoutStripControls() {
   if (!wfStrip || !stripToolbar) return;
   const w = wfCanvas.clientWidth, h = wfCanvas.clientHeight;
-  wfStrip.classList.add("docked");
-  let fits = !!renderer && w > 0 && h > 0;
-  if (fits) {
+  let fits = false;
+  if (renderer && w > 0 && h > 0) {
     camera.updateMatrixWorld();
     const poly = wfSilhouette(w, h);
-    const box = wfCanvas.getBoundingClientRect(), gap = 4, bottom = h - WF_SCALE_H;
-    const side = (sel) => [...stripToolbar.querySelectorAll(sel + " > *")].filter(el => el.offsetParent !== null)
-      .map(el => { const r = el.getBoundingClientRect(); return { l: r.left - box.left - gap, t: r.top - box.top - gap, r: r.right - box.left + gap, b: r.bottom - box.top + gap }; });
-    const left = side(".strip-col-left"), right = side(".strip-col-right");
-    const all = left.concat(right);
-    const leftEdge = Math.max(-Infinity, ...left.map(r => r.r)), rightEdge = Math.min(Infinity, ...right.map(r => r.l));
-    fits = leftEdge < rightEdge && all.every(r => r.b - gap <= bottom && !rectHitsPolygon(r, poly));
+    const gap = 4, bottom = h - WF_SCALE_H;
+    // Először normál méretben, utána tömörebb sorokkal; ha egyik sem fér el, eszközsávként a vízesés fölé kerül
+    for (const compact of [false, true]) {
+      wfStrip.classList.add("docked");
+      wfStrip.classList.toggle("compact", compact);
+      setStripOrder(true);
+      const box = wfCanvas.getBoundingClientRect();
+      const side = (sel) => [...stripToolbar.querySelectorAll(sel + " > *")].filter(el => el.offsetParent !== null)
+        .map(el => { const r = el.getBoundingClientRect(); return { l: r.left - box.left - gap, t: r.top - box.top - gap, r: r.right - box.left + gap, b: r.bottom - box.top + gap }; });
+      const left = side(".strip-col-left"), right = side(".strip-col-right");
+      const all = left.concat(right);
+      const leftEdge = Math.max(-Infinity, ...left.map(r => r.r)), rightEdge = Math.min(Infinity, ...right.map(r => r.l));
+      fits = leftEdge < rightEdge && all.every(r => r.b - gap <= bottom && !rectHitsPolygon(r, poly));
+      if (fits) break;
+    }
   }
-  if (!fits) wfStrip.classList.remove("docked");
+  if (!fits) {
+    wfStrip.classList.remove("docked", "compact");
+    setStripOrder(false);
+  }
+  if (stripMo) stripMo.takeRecords();   // a sorrend beállítása nem indít újabb elrendezést
 }
 
 // ---------------------------------------------------------------- a zenei jel frekvenciatartománya (ottragadó jelek)
@@ -2510,11 +2542,16 @@ const WF_FRAME_FULL_MS = 1000 / 60, WF_FRAME_ECO_MS = 1000 / 30;
 let wfEco = false;
 try { wfEco = localStorage.getItem("aqulify_wf_eco") === "1"; } catch (e) {}
 let wfLastDraw = 0, wfWorkEma = 0, wfLagEma = 0, wfLoadSince = 0;
+let wfLastRaf = 0, wfRafBase = 1000 / 60;   // a kijelző képfrissítési ideje (lassan felejtő minimum)
 
-function saveWfEco() {
-  try { localStorage.setItem("aqulify_wf_eco", wfEco ? "1" : "0"); } catch (e) {}
+function renderWfEcoBtn() {
   const b = document.getElementById("btnWfEco");
   if (b) b.innerText = t(wfEco ? "wf.ecoOn" : "wf.ecoOff");
+}
+/** Csak a kézi választás marad meg újraindítás után; az automatikus váltás az adott futásra szól. */
+function saveWfEco() {
+  try { localStorage.setItem("aqulify_wf_eco", wfEco ? "1" : "0"); } catch (e) {}
+  renderWfEcoBtn();
 }
 function toggleWfEco() {
   wfEco = !wfEco;
@@ -2523,6 +2560,7 @@ function toggleWfEco() {
 }
 
 const SPEC2D_TICKS = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+let spec2dColorTheme = null, spec2dTextColor = "#888";
 let wfView = "3d";
 try { wfView = localStorage.getItem("aqulify_wf_view") === "2d" ? "2d" : "3d"; } catch (e) {}
 if (!renderer) wfView = "2d";   // WebGL nélkül csak a 2D nézet érhető el
@@ -2539,7 +2577,10 @@ function drawSpec2d(levels) {
   c.clearRect(0, 0, w, h);
   const top = 8, bottom = h - 24, plotH = bottom - top;
   const xOf = (f) => freqToAxis(f) * w;
-  const textColor = getComputedStyle(spec2dCanvas).color;
+  // A felirat színe a témától függ: csak témaváltáskor kérdezzük le (a stílus-lekérdezés képkockánként drága)
+  const theme = document.documentElement.getAttribute("data-theme") || "";
+  if (spec2dColorTheme !== theme) { spec2dColorTheme = theme; spec2dTextColor = getComputedStyle(spec2dCanvas).color; }
+  const textColor = spec2dTextColor;
   c.lineWidth = 1;
   c.strokeStyle = "rgba(128,128,128,0.22)";
   c.fillStyle = textColor;
@@ -2577,13 +2618,14 @@ function drawSpec2d(levels) {
 function applyWfView() {
   const is2d = wfView === "2d";
   if (spec2dCanvas) spec2dCanvas.hidden = !is2d;
-  waterfallCanvas.style.display = is2d ? "none" : "";
+  wfCanvas.style.display = is2d ? "none" : "";
   freqScaleCanvas.style.display = is2d ? "none" : "";
   const b = document.getElementById("btnWfView");
-  if (b) b.innerText = t(is2d ? "wf.view3d" : "wf.view2d");
-  const b2 = document.getElementById("btnWfView");
-  if (b2) b2.style.display = renderer ? "" : "none";
-  saveWfEco();
+  if (b) {
+    b.innerText = t(is2d ? "wf.view3d" : "wf.view2d");
+    b.style.display = renderer ? "" : "none";
+  }
+  renderWfEcoBtn();
 }
 function toggleWfView() {
   if (!renderer) return;
@@ -2597,19 +2639,24 @@ applyWfView();
 
 // =========================================================================
 // TAKARÉKOS MÓD (gyenge gépen): a vízesés és a 2D-s nézet 30 Hz-en frissül 60 Hz helyett.
-// A gépet a rajzolás ideje és az ütemtartás alapján figyeli: ha tartósan nem bírja, magától átvált (és megmarad).
-// Kézzel is be-ki kapcsolható a vezérlősorban.
+// A gépet a rajzolás ideje és az ütemtartás alapján figyeli: ha tartósan nem bírja, magától átvált erre a futásra
+// (nem marad meg: a következő indításkor újra mér). Kézzel is be-ki kapcsolható a vezérlősorban, az megmarad.
 // =========================================================================
-/** Egy kirajzolt képkocka terhelésének mérése: a munkaidő és az ütemtartás (mennyivel késett a kép). */
+/**
+ * Egy kirajzolt képkocka terhelésének mérése: a munkaidő és az ütemtartás. A késést a kijelző saját ütemén mérjük
+ * (pl. 75 Hz-es kijelzőn minden második frissítéskor rajzolunk, ez nem késés). Csak az aktív (fókuszban lévő)
+ * ablakban mér: háttérben a böngésző lassíthatja a képfrissítést.
+ */
 function wfNoteFrame(nowMs, workMs, dtMs) {
-  if (wfEco || dtMs > 200) return;                       // háttérből visszatérve az első kép nem mérés
+  if (wfEco || dtMs > 200 || !document.hasFocus()) { wfLoadSince = 0; return; }
   if (!wfLoadSince) wfLoadSince = nowMs;
-  if (nowMs - wfLoadSince < 4000) return;                // indulás után rövid bemelegedés
+  if (nowMs - wfLoadSince < 4000) return;                // indulás és visszatérés után rövid bemelegedés
+  const expected = Math.ceil((WF_FRAME_FULL_MS - 2) / wfRafBase) * wfRafBase;
   wfWorkEma += 0.05 * (workMs - wfWorkEma);
-  wfLagEma += 0.05 * (Math.max(0, dtMs - WF_FRAME_FULL_MS) - wfLagEma);
+  wfLagEma += 0.05 * (Math.max(0, dtMs - expected - 1) - wfLagEma);
   if (wfWorkEma > 12 || wfLagEma > 8) {
     wfEco = true;
-    saveWfEco();
+    renderWfEcoBtn();
     showToast(t("wf.ecoAuto"), 6000);
   }
 }
@@ -2618,6 +2665,11 @@ function animate3D() {
   requestAnimationFrame(animate3D);
   if (document.hidden) return;                // rejtett (pl. kis méretre tett) ablakban nincs mit rajzolni
   const now = performance.now();
+  if (wfLastRaf) {
+    const d = now - wfLastRaf;
+    if (d >= 4 && d < 100) wfRafBase = Math.min(d, wfRafBase + 0.02);   // lassan felejtő minimum: a kijelző üteme
+  }
+  wfLastRaf = now;
   const interval = wfEco ? WF_FRAME_ECO_MS : WF_FRAME_FULL_MS;
   if (wfLastDraw && now - wfLastDraw < interval - 2) return;   // takarékos módban ebben a képkockában nincs rajzolás
   const dt = wfLastDraw ? now - wfLastDraw : 0;
@@ -4031,7 +4083,7 @@ document.getElementById("btnImportAutoEq").onclick = () => {
 
 // =========================================================================
 // BURN-IN (fejhallgató-bejárató): rózsaszín, barna és fehér zaj váltakozva (AudioWorklet, a böngészőben).
-// Biztonsági alapértékek: a teljes sáv RMS-e legfeljebb −30 dBFS, a csúcs −18 dBFS; 20 Hz-es (LR4) felüláteresztő;
+// Biztonsági alapértékek: a teljes sáv RMS-e legfeljebb −30 dBFS, a csúcs −18 dBFS (lágy korlátozással, softLimit); 20 Hz-es (LR4) felüláteresztő;
 // 10 mp be- és kifutás; 10 percenként 3 perc rózsaszín, 3 perc barna, 3 perc fehér, 1 perc csend. Négyszögjel nincs.
 // Futás alatt az EQ, a Konvolver és minden további modul ki van kapcsolva, a futás után visszaáll.
 // =========================================================================
@@ -4096,7 +4148,7 @@ class BurnInProcessor extends AudioWorkletProcessor {
           v += env[k] * this.gain[k] * y;
         }
         v *= master;
-        out[c][i] = Math.max(-this.peak, Math.min(this.peak, v));
+        out[c][i] = softLimit(v, this.peak);
       }
       this.pos++;
       if (this.pos % this.sr === 0) this.port.postMessage({ type: 'progress', pos: this.pos });
@@ -4141,6 +4193,12 @@ class Biquad {
     return y;
   }
 }
+/** Lágy csúcskorlát: a térd (a plafon 70 %-a) alatt érintetlen, fölötte simán közelít a plafonhoz (nincs kemény vágás). */
+function softLimit(v, peak) {
+  const k = 0.7 * peak, a = Math.abs(v);
+  if (a <= k) return v;
+  return Math.sign(v) * (k + (peak - k) * Math.tanh((a - k) / (peak - k)));
+}
 function hpCoeffs(fc, sr, q) {
   const w0 = 2 * Math.PI * fc / sr, cw = Math.cos(w0), al = Math.sin(w0) / (2 * q), a0 = 1 + al;
   return { b0: (1 + cw) / 2 / a0, b1: -(1 + cw) / a0, b2: (1 + cw) / 2 / a0, a1: -2 * cw / a0, a2: (1 - al) / a0 };
@@ -4156,7 +4214,9 @@ registerProcessor('burn-in', BurnInProcessor);
 `;
 
 let burnCtx = null, burnNode = null, burnSaved = null, burnStartMs = 0, burnTotalSec = 0, burnStopping = false, burnWake = null;
-const BURN_MODULES = ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'magic'];
+// Minden modul, amely a jelet módosítja: az Autogain a −30 dBFS-es szintet is megemelné
+const BURN_MODULES = ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'magic'];
+const BURN_SAVED_KEY = 'aqulify_burnin_saved';   // a futás előtti modulállapot (ha a felület futás közben bezárul)
 
 function fmtBurnTime(sec) {
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), x = Math.floor(sec % 60);
@@ -4191,9 +4251,15 @@ function renderBurnInState() {
   if (sel) sel.disabled = running;
 }
 
-/** Ébren tartás: a natív híd (Windows, Linux), és ahol van, a képernyőzár-tiltás (WakeLock). */
+/**
+ * Ébren tartás: a natív híd (Windows, Linux) csak az alvást tiltja, a kijelző elalhat (akár 48 órás futásnál is).
+ * Böngészőben, natív híd nélkül a képernyőzár-tiltás (WakeLock) az egyetlen lehetőség.
+ */
 async function setKeepAwake(on) {
-  try { if (typeof window.aetherKeepAwake === 'function') window.aetherKeepAwake(on); } catch (e) {}
+  if (typeof window.aetherKeepAwake === 'function') {
+    try { window.aetherKeepAwake(on); } catch (e) {}
+    return;
+  }
   try {
     if (!('wakeLock' in navigator)) return;
     if (on) burnWake = await navigator.wakeLock.request('screen');
@@ -4208,6 +4274,8 @@ async function burnInToggle() {
   // Modulok kikapcsolása, az előző állapot megőrzésével (a futás után visszaáll)
   burnSaved = {};
   BURN_MODULES.forEach((m) => { burnSaved[m] = moduleIsActive(m); });
+  // Ha a felület futás közben bezárul, a következő indításkor innen állnak vissza a modulok (recoverInterruptedBurnIn)
+  try { localStorage.setItem(BURN_SAVED_KEY, JSON.stringify(burnSaved)); } catch (e) {}
   BURN_MODULES.forEach((m) => setModuleActive(m, false));
   burnCtx = new AudioContext();
   const url = 'data:application/javascript;charset=utf-8,' + encodeURIComponent(BURN_IN_WORKLET);
@@ -4255,6 +4323,18 @@ function burnRestoreModules() {
   if (!burnSaved) return;
   BURN_MODULES.forEach((m) => { if (burnSaved[m]) setModuleActive(m, true); });
   burnSaved = null;
+  try { localStorage.removeItem(BURN_SAVED_KEY); } catch (e) {}
+}
+
+/** Félbeszakadt burn-in (a felület futás közben bezárult): a modulok visszaállítása a motor állapotának betöltése után. */
+function recoverInterruptedBurnIn() {
+  if (burnNode) return;
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(BURN_SAVED_KEY) || "null"); } catch (e) {}
+  if (!saved || typeof saved !== "object") return;
+  burnSaved = saved;
+  burnRestoreModules();
+  showToast(t('burnin.restored'), 8000);
 }
 
 function burnInFinish() {
@@ -4499,6 +4579,28 @@ const btnEqAutoFit = document.getElementById("btnEqAutoFit");
 if (btnEqAutoFit) btnEqAutoFit.onclick = () => { setEqAutoFit(!eqAutoFit); if (eqAutoFit) fitEqDbView(); };
 updateEqAutoFitBtn();
 
+/** Az EQ gombsora egy sorban marad: ha nem fér el, fokozatosan tömörödik (.tight, .tighter); csak végső esetben tördel. */
+// (függvénydeklaráció: a renderAbButtons már a betöltés elején is hívhatja, ezért nem használ később létrejövő változót)
+function fitEqActionRow() {
+  const row = document.querySelector(".eq-bottom-bar .actions-group");
+  if (!row || !row.clientWidth) return;
+  row.classList.remove("tight", "tighter", "tightest", "wrap");
+  for (const cls of ["tight", "tighter", "tightest", "wrap"]) {
+    if (row.scrollWidth <= row.clientWidth + 1) return;
+    row.classList.add(cls);
+  }
+}
+{
+  // Csak a szélesség változása számít: a tördelés a magasságot változtatja, az nem indíthat újabb illesztést
+  const bar = document.querySelector(".eq-bottom-bar");
+  let barW = -1;
+  if (bar && window.ResizeObserver) new ResizeObserver((ents) => {
+    const w = Math.round(ents[0].contentRect.width);
+    if (w !== barW) { barW = w; fitEqActionRow(); }
+  }).observe(bar);
+  fitEqActionRow();
+}
+
 const btnEqZoomIn = document.getElementById("btnEqZoomIn");
 if (btnEqZoomIn) btnEqZoomIn.onclick = () => setEqZoom(eqZoomX + 0.5);
 
@@ -4699,16 +4801,37 @@ async function scanImportFiles(files) {
         const parsed = parseApoParametric(await file.text());
         if (parsed.bands.length > 0) items.push({ kind: "eq", name: importBaseName(file.name), parsed });
       } else if (IMPORT_IR_RE.test(file.name)) {
-        const dec = await decodeIrFile(file);
-        if (dec.channels.length > 0 && dec.channels[0].length > 0) {
-          items.push({ kind: "ir", file, sr: dec.sr, frames: dec.channels[0].length });
-        }
+        const info = await probeIrFile(file);
+        if (info.frames > 0) items.push({ kind: "ir", file, sr: info.sr, frames: info.frames });
       }
     } catch (err) {
       // nem olvasható fájl: kimarad a listából
     }
   }
   return items;
+}
+
+/**
+ * Az IR-fájl adatai a listához. WAV-nál csak a fejlécet olvassa (nagy mappánál nem dekódol minden fájlt);
+ * más formátumnál, vagy ha a fejléc nem értelmezhető, teljes dekódolás. A választott IR-t az importálás dekódolja.
+ */
+async function probeIrFile(file) {
+  const head = new DataView(await file.slice(0, 65536).arrayBuffer());
+  const tag = (o) => String.fromCharCode(head.getUint8(o), head.getUint8(o + 1), head.getUint8(o + 2), head.getUint8(o + 3));
+  if (head.byteLength >= 12 && tag(0) === "RIFF" && tag(8) === "WAVE") {
+    let off = 12, fmt = null;
+    while (off + 8 <= head.byteLength) {
+      const id = tag(off), size = head.getUint32(off + 4, true);
+      if (id === "fmt " && off + 24 <= head.byteLength) {
+        fmt = { ch: head.getUint16(off + 10, true), sr: head.getUint32(off + 12, true), bits: head.getUint16(off + 22, true) };
+      } else if (id === "data" && fmt && fmt.ch > 0 && fmt.bits >= 8 && fmt.sr > 0) {
+        return { sr: fmt.sr, frames: Math.floor(size / (fmt.ch * (fmt.bits >> 3))) };
+      }
+      off += 8 + size + (size & 1);
+    }
+  }
+  const dec = await decodeIrFile(file);
+  return { sr: dec.sr, frames: dec.channels.length > 0 ? dec.channels[0].length : 0 };
 }
 
 async function handleImportFiles(list) {
@@ -5449,6 +5572,7 @@ function applyEngineState(st, fromSync) {
   }
   // Offline betöltött IR feltöltése, ha a motorban még nincs meg
   if (convIrLocal && (!st.ir || st.ir.name !== convIrLocal.name)) uploadIrToEngine();
+  recoverInterruptedBurnIn();
 }
 
 // A motor az első szabad portot használja ebből a listából (Windows: aether_engine.cpp, Linux: 8080)
@@ -5966,7 +6090,7 @@ document.addEventListener("click", (e) => {
 function refreshDynamicTexts() {
   applyWfView();
   ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'magic'].forEach(renderModuleTexts);
-  renderAbButtons();
+  renderAbButtons();   // a végén a gombsor illesztése is (fitEqActionRow): a feliratok hossza nyelvenként más
   renderMagicCompare();
   updateMagicDiag(magicDiagLast);
   updateCameraLabel();

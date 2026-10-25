@@ -161,6 +161,7 @@
   "burnin.stopping": "Leállítás (kifutás)…",
   "burnin.running": "Fut: {elapsed} / {total}",
   "burnin.done": "Kész.",
+  "burnin.restored": "Az előző burn-in félbeszakadt (a felület bezárult): a modulok visszaálltak a futás előtti állapotba.",
   "burnin.unsupported": "Ez a böngésző nem támogatja a burn-in hangjelet (AudioWorklet).",
   "burnin.minutes": "{n} perc",
   "burnin.hours": "{n} óra",

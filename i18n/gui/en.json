@@ -161,6 +161,7 @@
   "burnin.stopping": "Stopping (fading out)…",
   "burnin.running": "Running: {elapsed} / {total}",
   "burnin.done": "Finished.",
+  "burnin.restored": "The previous burn-in was interrupted (the interface closed): the modules are restored to their state before the run.",
   "burnin.unsupported": "This browser does not support the burn-in signal (AudioWorklet).",
   "burnin.minutes": "{n} min",
   "burnin.hours": "{n} h",

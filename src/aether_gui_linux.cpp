@@ -23,21 +23,32 @@
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
+#include <spawn.h>
 
 #include "aq_i18n.hpp"
 
-// Ébren tartás (burn-in): a systemd-inhibit zárat tart a saját process groupjában, leállításkor az egész csoport megszűnik
+extern char** environ;
+
+/**
+ * Ébren tartás (burn-in): a systemd-inhibit alvás-zárat tart, amíg a gyerekfolyamata fut. Csak az alvást tiltja,
+ * a kijelző elalhat. A gyerek a `tail --pid=<felület>` : a felület kilépésekor (összeomláskor is) magától leáll,
+ * így a zár nem marad meg. posix_spawn (nem fork + exec, ami többszálú GTK-programban nem biztonságos); a saját
+ * folyamatcsoportot a spawn állítja be, így a leállítás nem versenyez vele.
+ */
 static pid_t g_keepAwakePid = -1;
 static void setKeepAwakeLinux(bool on) {
     if (on && g_keepAwakePid < 0) {
-        const pid_t pid = fork();
-        if (pid == 0) {
-            setpgid(0, 0);
-            execlp("systemd-inhibit", "systemd-inhibit", "--what=idle:sleep", "--who=Aqulify", "--why=Burn-in",
-                   "sleep", "infinity", static_cast<char*>(nullptr));
-            _exit(127);
-        }
-        if (pid > 0) g_keepAwakePid = pid;
+        const std::string pidArg = "--pid=" + std::to_string(getpid());
+        const char* argv[] = { "systemd-inhibit", "--what=sleep", "--who=Aqulify", "--why=Burn-in",
+                               "tail", pidArg.c_str(), "-f", "/dev/null", nullptr };
+        posix_spawnattr_t attr;
+        posix_spawnattr_init(&attr);
+        posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP);
+        posix_spawnattr_setpgroup(&attr, 0);
+        pid_t pid = -1;
+        if (posix_spawnp(&pid, "systemd-inhibit", nullptr, &attr, const_cast<char* const*>(argv), environ) == 0)
+            g_keepAwakePid = pid;   // nem systemd-s rendszeren a spawn sikertelen: nincs ébren tartás
+        posix_spawnattr_destroy(&attr);
     } else if (!on && g_keepAwakePid > 0) {
         kill(-g_keepAwakePid, SIGTERM);
         waitpid(g_keepAwakePid, nullptr, 0);
