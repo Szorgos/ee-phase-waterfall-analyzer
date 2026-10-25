@@ -1294,6 +1294,57 @@ static void testAbCompare() {
           10.0 * std::log10(ea / ep));
 }
 
+/** EQ késleltetés lineáris fázisú módban: a jelentett érték a valódi (az impulzusválasz csúcsa), Decramp mellett is. */
+static void testEqLatency() {
+    std::printf("[15] EQ késleltetés (FIR / FFT, Decramp mellett is) és az A/B időbeli illeszkedése\n");
+    const uint32_t sr = 48000;
+    const int32_t apo = static_cast<int32_t>(EqFilterMode::ApoDr);
+    const char* decName[6] = { "Off", "x2", "x3", "x4", "x6", "x8" };
+    auto peakOf = [&](const ParamData& d, size_t& lat) {
+        ee::Equalizer eq;
+        eq.setSampleRate(sr);
+        eq.update(d);
+        std::vector<float> z(480, 0.0f), z2(480, 0.0f);
+        for (int i = 0; i < 100; ++i) eq.process(z.data(), z2.data(), 480);
+        lat = eq.latency();
+        const size_t n = 1u << 14;
+        std::vector<float> L(n, 0.0f), R(n, 0.0f);
+        L[0] = R[0] = 1.0f;
+        runBlocks([&](float* l, float* r, size_t m) { eq.process(l, r, m); }, L, R, 480);
+        size_t p = 0;
+        for (size_t i = 1; i < n; ++i) if (std::abs(L[i]) > std::abs(L[p])) p = i;
+        return p;
+    };
+    for (int dc = 0; dc < 6; ++dc) {
+        size_t lat = 0;
+        const size_t p = peakOf(bellParams(apo, 1, dc), lat);
+        CHECK(lat == p, "FIR, Decramp %s: jelentett késleltetés %zu minta, az impulzusválasz csúcsa %zu", decName[dc], lat, p);
+    }
+    size_t latFft = 0;
+    const size_t pFft = peakOf(bellParams(apo, 2, 0), latFft);
+    CHECK(latFft == pFft, "FFT: jelentett késleltetés %zu minta, az impulzusválasz csúcsa %zu", latFft, pFft);
+
+    // FIR + Decramp x4: az A/B-ben szóló eredeti jel ugyanannyit késik, mint a feldolgozott (nincs időugrás váltáskor)
+    std::mt19937 rng(15);
+    std::uniform_real_distribution<float> u(-0.5f, 0.5f);
+    std::vector<float> x(2 * sr);
+    for (auto& v : x) v = u(rng);
+    auto run = [&](bool compare) {
+        ParamData d = bellParams(apo, 1, 3);
+        d.eqCompare = compare ? 1 : 0;
+        AetherChain chain;
+        chain.setSampleRate(sr);
+        chain.applyParamsRT(d);
+        std::vector<float> L = x, R = x;
+        runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 480);
+        return L;
+    };
+    const std::vector<float> proc = run(false), orig = run(true);
+    const long ahead = bestLag(orig, proc, sr, 3000), behind = bestLag(proc, orig, sr, 3000);
+    CHECK(ahead == 0 && behind == 0, "FIR x4 A/B: az eredeti és a feldolgozott jel között %ld / %ld minta eltolás (várt 0)",
+          ahead, behind);
+}
+
 /** Rövid távú (3 s-os) EBU R128 hangosság a jel végén: a libebur128 referencia-mérése. */
 static double shortTermLufs(const std::vector<float>& L, const std::vector<float>& R, size_t from, double sr) {
     ebur128_state* st = ebur128_init(2, static_cast<unsigned long>(sr), EBUR128_MODE_S);
@@ -1411,6 +1462,7 @@ int main() {
     testConvolverToggle();
     testAbCompare();
     testAutogain();
+    testEqLatency();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

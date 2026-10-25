@@ -223,6 +223,16 @@ dspu::over_mode_t calc_oversampler_mode(dspu::equalizer_mode_t eq_mode, size_t d
     return dspu::over_mode_t::OM_NONE;
 }
 
+/**
+ * Az EQ késleltetése az eredeti mintavételen. A dspu::Equalizer a túlmintavételezett tartományban fut, így a
+ * get_latency() ottani mintákban adja meg (FIR módban x4-nél 6144 belső minta = 1536 eredeti). A para_equalizer
+ * plugin ezt osztás nélkül adja össze az oversampler késleltetésével; a mért valódi késleltetés az osztott érték
+ * (T06 jelentés). IIR-nél 0, FFT / SPM módban nincs túlmintavételezés (1×), ott nem változik semmi.
+ */
+size_t eqLatencyBase(size_t eqLatency, size_t oversampling) {
+    return oversampling > 1 ? eqLatency / oversampling : eqLatency;
+}
+
 /** Egy sáv LSP szűrőparaméterei (para_equalizer::update_settings, solo/mute/inspect nélkül). */
 void band_params(const ParamData& d, size_t j, dspu::filter_params_t* fp) {
     if (j >= std::min<size_t>(d.numBands, EQ_FILTERS)) {
@@ -369,7 +379,7 @@ struct Equalizer::Impl {
             if (mode_changed) c.sEqualizer.set_smooth(false);
             const size_t eq_lat = c.sEqualizer.get_latency();
             if (mode_changed) c.sEqualizer.set_smooth(true);
-            lat = std::max(lat, ovs_lat + eq_lat);
+            lat = std::max(lat, ovs_lat + eqLatencyBase(eq_lat, c.sOversampler.get_oversampling()));
         }
         latency = lat;
     }
@@ -453,7 +463,8 @@ void Equalizer::process(float* L, float* R, size_t n) {
     p_->process(L, R, n);
     // A FIR/FFT/SPM átkonfigurálás a feldolgozáskor történik; a késleltetés utána érvényes
     size_t lat = 0;
-    for (auto& c : p_->ch) lat = std::max(lat, c.sOversampler.latency() + c.sEqualizer.get_latency());
+    for (auto& c : p_->ch)
+        lat = std::max(lat, c.sOversampler.latency() + eqLatencyBase(c.sEqualizer.get_latency(), c.sOversampler.get_oversampling()));
     p_->latency = lat;
 }
 size_t Equalizer::latency() const { return p_->latency; }
