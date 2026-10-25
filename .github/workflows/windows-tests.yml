@@ -31,7 +31,8 @@ jobs:
         shell: bash
         run: python -m pip install --quiet ninja
 
-      # A sha256sum a stdin-ről olvas: a Windows-os útvonal visszaperjelet tenne a hash elé
+      # A sha256sum a stdin-ről olvas (a Windows-os útvonal visszaperjelet tenne a hash elé); a tar --force-local
+      # (a D: meghajtóbetű kettőspontja különben távoli gépnek látszik)
       - name: FFTW 3.3.10 forrás (ellenőrzött)
         shell: bash
         run: |
@@ -39,7 +40,7 @@ jobs:
           got=$(sha256sum < "$RUNNER_TEMP/fftw.tar.gz" | cut -d' ' -f1)
           want=56c932549852cddcfafdab3820b0200c7742675be92179e59e6215b340e26467
           if [ "$got" != "$want" ]; then echo "::error title=FFTW::sha256 eltérés: $got"; exit 1; fi
-          tar -xzf "$RUNNER_TEMP/fftw.tar.gz" -C "$RUNNER_TEMP"
+          tar --force-local -xzf "$RUNNER_TEMP/fftw.tar.gz" -C "$RUNNER_TEMP"
 
       - name: RNNoise modell (az Ubuntu forráscsomagjából)
         shell: bash
@@ -49,7 +50,7 @@ jobs:
           want=db2718ee4a0b294bfbbe198fe94aabfdc8cd0d77cb9cd95d76c7a818ad805f0b
           if [ "$got" != "$want" ]; then echo "::error title=RNNoise::sha256 eltérés: $got"; exit 1; fi
           mkdir -p "$RUNNER_TEMP/rnnoise-model"
-          tar -xJf "$RUNNER_TEMP/rnnoise.tar.xz" -C "$RUNNER_TEMP/rnnoise-model" --strip-components=2 rnnoise-0.2/src/rnnoise_data.c rnnoise-0.2/src/rnnoise_data.h
+          tar --force-local -xJf "$RUNNER_TEMP/rnnoise.tar.xz" -C "$RUNNER_TEMP/rnnoise-model" --strip-components=2 rnnoise-0.2/src/rnnoise_data.c rnnoise-0.2/src/rnnoise_data.h
 
       - name: Fordítás (tesztek, Windows)
         shell: bash
