@@ -267,6 +267,7 @@
   "mt.diagTitle": "Részletek / diagnosztika",
   "mt.bold": "Bátor",
   "mt.noData": "Nincs adat: kapcsold be a Magic Touchot (a motornak futnia kell; Windowson az EQ APO pluginnal működik).",
+  "mt.offLast": "Kikapcsolva – az utolsó mérés látszik",
   "mt.collecting": "Elemzés… (az első döntésekhez néhány másodperc kell)",
   "mt.silent": "Csend: a beállítások várnak",
   "mt.running": "Működik",

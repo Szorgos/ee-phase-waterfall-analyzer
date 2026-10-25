@@ -604,6 +604,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   /* Magic Touch: diagnosztika */
   .magic-diag { margin-top: 8px; border: 1px solid var(--aq-line); border-radius: var(--aq-radius-m); background: var(--aq-bg-2); padding: 12px 16px; }
   .magic-diag summary { cursor: pointer; font-size: 0.86rem; font-weight: 600; color: var(--aq-text-2); }
+  .magic-diag.magic-diag-off table, .magic-diag.magic-diag-off .magic-diag-state { opacity: 0.45; transition: opacity .2s ease; }
   .magic-diag-state { font-size: 0.82rem; color: var(--aq-accent); margin: 10px 0 6px; }
   .magic-diag table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
   .magic-diag td { padding: 5px 8px 5px 0; vertical-align: top; border-top: 1px solid rgba(31, 44, 58, 0.6); }
@@ -4472,12 +4473,16 @@ var magicDiagLast = null;
 function updateMagicDiag(m) {
   magicDiagLast = m || null;
   const state = document.getElementById("magicDiagState"), table = document.getElementById("magicDiagTable");
+  const box = document.getElementById("magicDiag");
   if (!state || !table) return;
   if (!m || !isMagicEnabled) {
-    state.textContent = t("mt.noData");
-    table.innerHTML = "";
+    // Nincs élő adat: a táblázat megmarad az utolsó mérésekkel, halványan. Így a panel magassága nem változik
+    // (kiürítéskor a görgetés az oldal tetejére ugrana, ha alul voltunk).
+    if (box) box.classList.toggle("magic-diag-off", true);
+    state.textContent = t(isMagicEnabled ? "mt.noData" : (table.innerHTML ? "mt.offLast" : "mt.noData"));
     return;
   }
+  if (box) box.classList.remove("magic-diag-off");
   state.textContent = !m.valid ? t("mt.collecting") : m.silent ? t("mt.silent") : t("mt.running");
   const sg = (v, d) => (v > 0 ? "+" : "") + fmtNum(v, d);
   const pc = v => fmtNum(Math.round(v * 100), 0);

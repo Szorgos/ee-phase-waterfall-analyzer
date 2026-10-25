@@ -267,6 +267,7 @@
   "mt.diagTitle": "Details / diagnostics",
   "mt.bold": "Bold",
   "mt.noData": "No data: turn on Magic Touch (the engine must be running; on Windows it works with the EQ APO plugin).",
+  "mt.offLast": "Off – showing the last measurement",
   "mt.collecting": "Analysing… (the first decisions take a few seconds)",
   "mt.silent": "Silence: settings on hold",
   "mt.running": "Running",
