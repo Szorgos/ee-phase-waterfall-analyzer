@@ -770,7 +770,7 @@ if (!window.THREE) window.THREE = (function () {
       <!-- Bal oldal: a vízesés megjelenítése -->
       <div class="strip-controls strip-col strip-col-left">
         <!-- 2D / 3D nézet: a 2D kevesebb számítást igényel (gyenge géphez) -->
-        <span class="ctrl-group" id="grpWfView"><button class="mini-btn" id="btnWfView" onclick="toggleWfView()">2D nézet</button></span>
+        <span class="ctrl-group" id="grpWfView"><button class="mini-btn" id="btnWfView" onclick="toggleWfView()">2D nézet</button><button class="mini-btn" id="btnWfEco" onclick="toggleWfEco()">Takarékos: KI</button></span>
         <!-- Időlépcsők állítása -->
         <span class="ctrl-group" data-wf3d><span class="ctrl-label" data-i18n="strip.time">Idő:</span>
         <select id="selectTimeSteps" class="mini-select">
@@ -2472,6 +2472,22 @@ let wfLastStep = 0;
 // =========================================================================
 // 2D SPEKTRUMNÉZET (WebGL helyett): ugyanaz a 160 sávos adat, ugyanaz a frekvenciatengely (freqToAxis)
 // =========================================================================
+const WF_FRAME_FULL_MS = 1000 / 60, WF_FRAME_ECO_MS = 1000 / 30;
+let wfEco = false;
+try { wfEco = localStorage.getItem("aqulify_wf_eco") === "1"; } catch (e) {}
+let wfLastDraw = 0, wfWorkEma = 0, wfLagEma = 0, wfLoadSince = 0;
+
+function saveWfEco() {
+  try { localStorage.setItem("aqulify_wf_eco", wfEco ? "1" : "0"); } catch (e) {}
+  const b = document.getElementById("btnWfEco");
+  if (b) b.innerText = t(wfEco ? "wf.ecoOn" : "wf.ecoOff");
+}
+function toggleWfEco() {
+  wfEco = !wfEco;
+  wfLoadSince = 0; wfWorkEma = 0; wfLagEma = 0;   // kézi váltásnál a mérés újrakezdődik
+  saveWfEco();
+}
+
 const SPEC2D_TICKS = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
 let wfView = "3d";
 try { wfView = localStorage.getItem("aqulify_wf_view") === "2d" ? "2d" : "3d"; } catch (e) {}
@@ -2531,8 +2547,9 @@ function applyWfView() {
   freqScaleCanvas.style.display = is2d ? "none" : "";
   const b = document.getElementById("btnWfView");
   if (b) b.innerText = t(is2d ? "wf.view3d" : "wf.view2d");
-  const g = document.getElementById("grpWfView");
-  if (g) g.style.display = renderer ? "" : "none";
+  const b2 = document.getElementById("btnWfView");
+  if (b2) b2.style.display = renderer ? "" : "none";
+  saveWfEco();
 }
 function toggleWfView() {
   if (!renderer) return;
@@ -2544,12 +2561,41 @@ const spec2dCanvas = document.getElementById("spec2dCanvas");
 const spec2dCtx = spec2dCanvas ? spec2dCanvas.getContext("2d") : null;
 applyWfView();
 
+// =========================================================================
+// TAKARÉKOS MÓD (gyenge gépen): a vízesés és a 2D-s nézet 30 Hz-en frissül 60 Hz helyett.
+// A gépet a rajzolás ideje és az ütemtartás alapján figyeli: ha tartósan nem bírja, magától átvált (és megmarad).
+// Kézzel is be-ki kapcsolható a vezérlősorban.
+// =========================================================================
+/** Egy kirajzolt képkocka terhelésének mérése: a munkaidő és az ütemtartás (mennyivel késett a kép). */
+function wfNoteFrame(nowMs, workMs, dtMs) {
+  if (wfEco || dtMs > 200) return;                       // háttérből visszatérve az első kép nem mérés
+  if (!wfLoadSince) wfLoadSince = nowMs;
+  if (nowMs - wfLoadSince < 4000) return;                // indulás után rövid bemelegedés
+  wfWorkEma += 0.05 * (workMs - wfWorkEma);
+  wfLagEma += 0.05 * (Math.max(0, dtMs - WF_FRAME_FULL_MS) - wfLagEma);
+  if (wfWorkEma > 12 || wfLagEma > 8) {
+    wfEco = true;
+    saveWfEco();
+    showToast(t("wf.ecoAuto"), 6000);
+  }
+}
+
 function animate3D() {
   requestAnimationFrame(animate3D);
   if (document.hidden) return;                // rejtett (pl. kis méretre tett) ablakban nincs mit rajzolni
+  const now = performance.now();
+  const interval = wfEco ? WF_FRAME_ECO_MS : WF_FRAME_FULL_MS;
+  if (wfLastDraw && now - wfLastDraw < interval - 2) return;   // takarékos módban ebben a képkockában nincs rajzolás
+  const dt = wfLastDraw ? now - wfLastDraw : 0;
+  wfLastDraw = now;
+  const work0 = performance.now();
+  drawWfFrame(now);
+  wfNoteFrame(now, performance.now() - work0, dt);
+}
+
+function drawWfFrame(nowMs) {
   drawFreqScale(false);
   if (stripLayoutDirty) { stripLayoutDirty = false; layoutStripControls(); }
-  const nowMs = performance.now();
   const fresh = isPipewireConnected && liveSpectrumLevels && liveSpectrumLevels.length > 0 &&
                 (nowMs - liveSpectrumTime < 450);
   if (wfView === "2d") { drawSpec2d(fresh ? liveSpectrumLevels : null); return; }
