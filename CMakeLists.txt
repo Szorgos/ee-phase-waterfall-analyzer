@@ -57,6 +57,10 @@ target_link_libraries(test_core PRIVATE ee_dsp_core Threads::Threads)
 add_executable(test_dsp src/test_dsp.cpp)
 target_link_libraries(test_dsp PRIVATE ee_dsp_core Threads::Threads)
 
+# 7. Tesztalkalmazás: mintavételi frekvencia × blokkméret mátrix (átlátszóság, blokkfüggetlenség, szintek)
+add_executable(test_matrix src/test_matrix.cpp)
+target_link_libraries(test_matrix PRIVATE ee_dsp_core Threads::Threads)
+
 if(WIN32)
     # ------------------------------------------------------------------
     # Windows: Aqulify.exe motor + Aqulify.dll (Equalizer APO plugin, VST 2.4 ABI)
