@@ -40,6 +40,8 @@
   "zoom.dbTitle": "Függőleges (dB) nagyítás. Folyamatosan: Ctrl+Shift+görgő a kurzor magasságánál; fel-le eltolás: húzás (jobb gombbal mindig) vagy Alt+görgő",
   "zoom.fitTitle": "Görbére igazítás: a dB skála és a függőleges eltolás úgy áll be, hogy a teljes görbe és minden sáv látsszon",
   "zoom.fit": "Igazít",
+  "zoom.auto": "Auto",
+  "zoom.autoTitle": "Automatikus illesztés: importáláskor és profilbetöltéskor a függőleges nézet a görbéhez igazodik. Kézi nagyítás vagy eltolás kikapcsolja.",
   "zoom.out": "Kicsinyítés",
   "zoom.sliderTitle": "Frekvencia zoom (1.0x - 5.0x)",
   "zoom.in": "Nagyítás",

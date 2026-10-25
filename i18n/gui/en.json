@@ -40,6 +40,8 @@
   "zoom.dbTitle": "Vertical (dB) zoom. Continuous: Ctrl+Shift+wheel at the cursor height; move up/down: drag (always with the right button) or Alt+wheel",
   "zoom.fitTitle": "Fit to curve: the dB scale and vertical offset are set so that the whole curve and every band are visible",
   "zoom.fit": "Fit",
+  "zoom.auto": "Auto",
+  "zoom.autoTitle": "Automatic fit: when importing or loading a profile, the vertical view fits the curve. Manual zoom or pan turns it off.",
   "zoom.out": "Zoom out",
   "zoom.sliderTitle": "Frequency zoom (1.0x - 5.0x)",
   "zoom.in": "Zoom in",

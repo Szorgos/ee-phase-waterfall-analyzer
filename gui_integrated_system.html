@@ -545,10 +545,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .eq-zoom-overlay .zoom-lbl { font-size: 0.74rem; color: var(--aq-text-2); font-weight: 500; }
   .eq-zoom-overlay .zoom-val { font: 500 0.74rem var(--aq-mono); color: var(--aq-text); min-width: 30px; text-align: center; }
   .eq-zoom-overlay .zoom-divider { width: 1px; height: 16px; background: var(--aq-line); margin: 0 2px; }
-  .eq-zoom-overlay .zoom-btn { padding: 0 8px; font-size: 0.74rem; height: 26px; line-height: 24px; border-radius: 7px; background: var(--aq-surface); border-color: var(--aq-line); color: var(--aq-text); cursor: pointer; }
+  .eq-zoom-overlay .zoom-btn { padding: 0 6px; font-size: 0.74rem; height: 26px; line-height: 24px; border-radius: 7px; background: var(--aq-surface); border-color: var(--aq-line); color: var(--aq-text); cursor: pointer; }
   .eq-zoom-overlay .zoom-btn:hover { background: var(--aq-surface-2); border-color: var(--aq-line-2); }
   .eq-zoom-overlay select.ee-select { padding-top: 2px !important; padding-bottom: 2px !important; font-size: 0.74rem !important; min-height: 26px; }
-  .eq-zoom-overlay input.zoom-slider { width: 70px; }
+  .eq-zoom-overlay input.zoom-slider { width: 44px; }
 
   .eq-bottom-bar { background: var(--aq-surface); border: 1px solid var(--aq-line); border-radius: var(--aq-radius-l); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
   /* Két sor: fent a gombsor (balra a gombok, jobbra a zoom-eszköztár), lent a sáv-szerkesztő. Keskeny ablakban a
@@ -960,6 +960,7 @@ if (!window.THREE) window.THREE = (function () {
           <option value="custom" id="optEqDbCustom" hidden>±24 dB</option>
         </select>
         <button id="btnEqFitY" class="adw-btn zoom-btn" title="Görbére igazítás: a dB skála és a függőleges eltolás úgy áll be, hogy a teljes görbe és minden sáv látsszon" data-i18n-title="zoom.fitTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-fit"/></svg><span data-i18n="zoom.fit">Igazít</span></button>
+          <button id="btnEqAutoFit" class="adw-btn zoom-btn primary active" aria-pressed="true" title="Automatikus illesztés: importáláskor és profilbetöltéskor a függőleges nézet a görbéhez igazodik. Kézi nagyítás vagy eltolás kikapcsolja." data-i18n-title="zoom.autoTitle" data-i18n="zoom.auto">Auto</button>
         <span class="zoom-divider"></span>
         <span class="zoom-lbl">Zoom:</span>
         <button id="btnEqZoomOut" class="adw-btn zoom-btn" title="Kicsinyítés" data-i18n-title="zoom.out" data-i18n-aria-label="zoom.out"><svg class="aq-icon" aria-hidden="true"><use href="#i-zoom-out"/></svg></button>
@@ -2578,6 +2579,29 @@ try {
   if (savedDbRange > 0) eqDbRange = Math.max(EQ_DB_RANGE_MIN, Math.min(EQ_DB_RANGE_MAX, savedDbRange));
 } catch (e) {}
 
+// Automatikus függőleges illesztés: importáláskor és profilbetöltéskor a nézet a görbéhez igazodik.
+// A kézi függőleges nagyítás vagy eltolás kikapcsolja (a beállítás megmarad újraindítás után is).
+let eqAutoFit = true;
+try { if (localStorage.getItem("aqulify_eq_autofit") === "0") eqAutoFit = false; } catch (e) {}
+function updateEqAutoFitBtn() {
+  const b = document.getElementById("btnEqAutoFit");
+  if (!b) return;
+  b.classList.toggle("active", eqAutoFit);
+  b.classList.toggle("primary", eqAutoFit);
+  b.setAttribute("aria-pressed", String(eqAutoFit));
+}
+function setEqAutoFit(on) {
+  if (eqAutoFit === on) return;
+  eqAutoFit = on;
+  try { localStorage.setItem("aqulify_eq_autofit", on ? "1" : "0"); } catch (e) {}
+  updateEqAutoFitBtn();
+}
+/** Illesztés egy felhasználói művelet (import, profilbetöltés) után: a rajzolás után fut, így a profil preampja már beállt. */
+function scheduleEqAutoFit() {
+  if (!eqAutoFit) return;
+  requestAnimationFrame(() => { if (eqAutoFit) fitEqDbView(); });
+}
+
 const eqCanvas = document.getElementById("eqCanvas");
 const eqCtx = eqCanvas.getContext("2d");
 
@@ -3226,6 +3250,7 @@ window.addEventListener("mousemove", (e) => {
     updateEqUI();
     drawEq();
   } else if (isCanvasPanning) {
+    setEqAutoFit(false);
     const rect = eqCanvas.getBoundingClientRect();
     const G = eqGeom();
     const sx = eqCanvas.width / rect.width, sy = eqCanvas.height / rect.height;
@@ -3254,6 +3279,7 @@ eqCanvas.onwheel = (e) => {
   if (!dir) return;
   // Billentyűkombináció esetén kényelmi zoom/pan:
   if (e.ctrlKey && e.shiftKey) {
+    setEqAutoFit(false);
     // Függőleges nagyítás a kurzor magasságánál (a kurzor alatti dB-érték helyben marad)
     const rect = eqCanvas.getBoundingClientRect();
     const G = eqGeom();
@@ -3269,6 +3295,7 @@ eqCanvas.onwheel = (e) => {
     return;
   }
   if (e.altKey) {
+    setEqAutoFit(false);
     // Függőleges eltolás: lefelé görgetve lejjebb (kisebb dB-értékek felé) látunk
     setEqDbView(eqDbRange, eqDbCenter - dir * (2 * eqDbRange / 0.9) * 0.08);
     return;
@@ -3714,6 +3741,7 @@ function applyParsedAutoEqProfile(text, modelName, sourceName) {
 
   nodes = parsedNodes;
   selectedNodeId = nodes[0].id;
+  scheduleEqAutoFit();
 
   // DUPLA PREAMP VÉDELEM:
   let finalPreamp = 0.0;
@@ -3793,6 +3821,7 @@ function processAutoEqImport() {
   // Szűrők átadása
   nodes = parsedNodes;
   selectedNodeId = nodes[0].id;
+  scheduleEqAutoFit();
 
   // INTELLIGENS DUPLA-PREAMP VÉDELEM:
   let finalPreamp = 0.0;
@@ -3985,12 +4014,16 @@ const selectEqDbRange = document.getElementById("selectEqDbRange");
 if (selectEqDbRange) {
   updateDbRangeSelect();
   selectEqDbRange.onchange = (e) => {
+    setEqAutoFit(false);
     const v = parseFloat(e.target.value);
     if (v > 0) setEqDbView(v, eqDbCenter);   // a gyorsgomb a nagyítást állítja, az eltolás marad
   };
 }
 const btnEqFitY = document.getElementById("btnEqFitY");
 if (btnEqFitY) btnEqFitY.onclick = () => fitEqDbView();
+const btnEqAutoFit = document.getElementById("btnEqAutoFit");
+if (btnEqAutoFit) btnEqAutoFit.onclick = () => { setEqAutoFit(!eqAutoFit); if (eqAutoFit) fitEqDbView(); };
+updateEqAutoFitBtn();
 
 const btnEqZoomIn = document.getElementById("btnEqZoomIn");
 if (btnEqZoomIn) btnEqZoomIn.onclick = () => setEqZoom(eqZoomX + 0.5);
@@ -5159,6 +5192,7 @@ function loadPreset(name) {
   if (!p) return;
   activePresetName = name;
   applyPresetData(p);
+  scheduleEqAutoFit();
   sendCurveMsg({ type: "set_eq_mode", val: currentEqMode });
   setModuleActive('eq', nodes.length > 0);
   armLimiterForProfile(currentPreamp, false);
