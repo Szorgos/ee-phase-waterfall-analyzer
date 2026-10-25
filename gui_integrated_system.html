@@ -1032,9 +1032,15 @@ if (!window.THREE) window.THREE = (function () {
           <span style="font-size:0.75rem; color:var(--ee-text-secondary);" data-i18n="imp.loadFile">Fájl betöltése számítógépről (.txt / .csv):</span>
           <label class="adw-btn" style="cursor:pointer; font-size:0.75rem; padding:4px 10px;">
             <svg class="aq-icon" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="imp.browse">Fájl / Mappa Tallózása...</span>
-            <input type="file" id="fileEqUpload" accept=".txt,.csv" style="display:none;" onchange="handleFileSelect(event)">
+            <input type="file" id="fileEqUpload" accept=".txt,.csv,.wav,.irs" multiple style="display:none;" onchange="handleFileSelect(event)">
+          </label>
+          <label class="adw-btn" style="cursor:pointer; font-size:0.75rem; padding:4px 10px;">
+            <svg class="aq-icon" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="imp.addFolder">Mappa hozzáadása</span>
+            <input type="file" id="folderImportInput" webkitdirectory multiple style="display:none;" onchange="handleImportFiles([...this.files]); this.value='';">
           </label>
         </div>
+
+        <div id="folderImportBox" class="aq-note" style="display:none; flex-direction:column; gap:6px; padding:10px 12px; font-size:0.75rem;"></div>
 
         <div id="lblDetectedFormat" style="font-size:0.72rem; color:var(--ee-curve-cyan); font-weight:600; display:none;">
           <span data-i18n="imp.detected">Észlelt formátum:</span> <span id="detectedFormatName"></span>
@@ -3387,7 +3393,13 @@ bindBandInput(inputWidth, "width", 2);
 // FÁJL TALLÓZÓ ÉS FORMÁTUM FELISMERŐ
 // =========================================================================
 function handleFileSelect(event) {
-  const file = event.target.files[0];
+  const files = event.target.files;
+  if (files.length > 1 || (files.length === 1 && IMPORT_IR_RE.test(files[0].name))) {
+    handleImportFiles([...files]);
+    event.target.value = "";
+    return;
+  }
+  const file = files[0];
   if (!file) return;
 
   lastImportFileName = file.name.replace(/\.[^.]+$/, "").replace(/\s*ParametricEQ$/i, "");
@@ -4209,17 +4221,7 @@ async function handleConvFileSelect(e) {
   const info = document.getElementById("convIrInfo");
   info.innerText = t("cv.loading", { name: file.name });
   try {
-    const buf = await file.arrayBuffer();
-    let dec = decodeWavNative(buf);
-    if (!dec) {
-      // Egyéb formátum: a böngésző dekódolója (a környezet mintavételére konvertál)
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const ab = await ctx.decodeAudioData(buf.slice(0));
-      const chans = [];
-      for (let c = 0; c < Math.min(2, ab.numberOfChannels); c++) chans.push(ab.getChannelData(c).slice());
-      dec = { sr: ab.sampleRate, channels: chans };
-      ctx.close();
-    }
+    const dec = await decodeIrFile(file);
     setConvIr(file.name, dec.sr, dec.channels);
     if (!isConvolverEnabled) setModuleActive('convolver', true);
   } catch (err) {
@@ -4227,6 +4229,149 @@ async function handleConvFileSelect(e) {
     alert(t("cv.badFile") + "\n" + err);
   }
   e.target.value = "";
+}
+
+/** IR-fájl dekódolása: WAV a saját olvasóval, egyéb formátum a böngésző dekódolójával (a környezet mintavételére). */
+async function decodeIrFile(file) {
+  const buf = await file.arrayBuffer();
+  const dec = decodeWavNative(buf);
+  if (dec) return dec;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const ab = await ctx.decodeAudioData(buf.slice(0));
+  const chans = [];
+  for (let c = 0; c < Math.min(2, ab.numberOfChannels); c++) chans.push(ab.getChannelData(c).slice());
+  ctx.close();
+  return { sr: ab.sampleRate, channels: chans };
+}
+
+// =========================================================================
+// KÖTEGES IMPORT: több fájl vagy egy mappa (EQ-profilok és IR-ek)
+// Csak a használható fájlok jelennek meg: EQ-nál van APO-szűrő, IR-nél dekódolható impulzusválasz.
+// =========================================================================
+const IMPORT_EQ_RE = /\.(txt|csv)$/i;
+const IMPORT_IR_RE = /\.(wav|irs)$/i;
+let folderImportItems = [];
+
+function importBaseName(name) { return name.replace(/\.[^.]+$/, "").replace(/\s*ParametricEQ$/i, ""); }
+
+async function scanImportFiles(files) {
+  const items = [];
+  for (const file of files) {
+    try {
+      if (IMPORT_EQ_RE.test(file.name)) {
+        const parsed = parseApoParametric(await file.text());
+        if (parsed.bands.length > 0) items.push({ kind: "eq", name: importBaseName(file.name), parsed });
+      } else if (IMPORT_IR_RE.test(file.name)) {
+        const dec = await decodeIrFile(file);
+        if (dec.channels.length > 0 && dec.channels[0].length > 0) {
+          items.push({ kind: "ir", file, sr: dec.sr, frames: dec.channels[0].length });
+        }
+      }
+    } catch (err) {
+      // nem olvasható fájl: kimarad a listából
+    }
+  }
+  return items;
+}
+
+async function handleImportFiles(list) {
+  const files = list.filter(f => IMPORT_EQ_RE.test(f.name) || IMPORT_IR_RE.test(f.name));
+  renderFolderImportList(true);
+  folderImportItems = await scanImportFiles(files);
+  renderFolderImportList(false);
+}
+
+function renderFolderImportList(scanning) {
+  const box = document.getElementById("folderImportBox");
+  if (!box) return;
+  const mk = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+  box.replaceChildren();
+  box.style.display = "flex";
+  if (scanning) { box.append(mk("span", "", t("imp.folderScanning"))); return; }
+  if (folderImportItems.length === 0) { box.append(mk("span", "", t("imp.folderEmpty"))); return; }
+  box.append(mk("span", "", t("imp.folderTitle")));
+  const row = (input, label, meta) => {
+    const r = mk("label", "");
+    r.style.cssText = "display:flex; align-items:center; gap:8px; cursor:pointer;";
+    r.append(input, mk("span", "", label), mk("small", "", meta));
+    return r;
+  };
+  folderImportItems.forEach((it, i) => {
+    if (it.kind !== "eq") return;
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = true;
+    cb.dataset.idx = String(i);
+    box.append(row(cb, it.name, `${t("imp.kindEq")} · ${t("imp.bands", { n: it.parsed.bands.length })}`));
+  });
+  const irItems = folderImportItems.map((it, i) => ({ it, i })).filter(x => x.it.kind === "ir");
+  if (irItems.length > 0) {
+    box.append(mk("span", "", t("imp.irPickTitle")));
+    const none = document.createElement("input");
+    none.type = "radio";
+    none.name = "irPick";
+    none.value = "-1";
+    none.checked = true;
+    box.append(row(none, t("imp.irNone"), ""));
+    irItems.forEach(({ it, i }) => {
+      const rb = document.createElement("input");
+      rb.type = "radio";
+      rb.name = "irPick";
+      rb.value = String(i);
+      box.append(row(rb, it.file.name, `${t("imp.kindIr")} · ${it.sr} Hz · ${(it.frames / it.sr).toFixed(2)} s`));
+    });
+  }
+  const btn = mk("button", "adw-btn primary", t("imp.folderImport"));
+  btn.type = "button";
+  btn.onclick = applyFolderImport;
+  box.append(btn);
+}
+
+/** Profil mentése fájlból: nem változtatja az aktív EQ-t (kötegelt importhoz). */
+function savePresetFromFile(baseName, parsed) {
+  const n = uniquePresetName(baseName);
+  const now = new Date().toISOString();
+  presetsDoc.presets[n] = {
+    bands: bandsSnapshot(parsed.bands.map((b, i) => normBand(b, i))),
+    preamp: +(parsed.preamp ?? 0).toFixed(2),
+    eqMode: currentEqMode,
+    kind: "import",
+    created: now,
+    updated: now,
+  };
+  return n;
+}
+
+async function applyFolderImport() {
+  const box = document.getElementById("folderImportBox");
+  const eqPicks = [...box.querySelectorAll("input[data-idx]:checked")].map(i => folderImportItems[+i.dataset.idx]);
+  const irSel = box.querySelector("input[name=irPick]:checked");
+  const irItem = irSel && irSel.value !== "-1" ? folderImportItems[+irSel.value] : null;
+  eqPicks.forEach(it => savePresetFromFile(it.name, it.parsed));
+  if (eqPicks.length > 0) { persistPresets(); refreshPresetUi(); }
+  let irDone = false;
+  if (irItem) {
+    try {
+      const dec = await decodeIrFile(irItem.file);
+      setConvIr(irItem.file.name, dec.sr, dec.channels);
+      setModuleActive('convolver', true);
+      setModuleActive('eq', false);
+      irDone = true;
+    } catch (err) {
+      alert(t("cv.badFile") + "\n" + err);
+    }
+  }
+  if (eqPicks.length > 0 || irDone) {
+    alert(t("imp.folderDone", { count: eqPicks.length }) + (irDone ? " " + t("imp.folderDoneIr", { name: irItem.file.name }) : ""));
+  }
+  folderImportItems = [];
+  box.replaceChildren();
+  box.style.display = "none";
 }
 
 /** Szintetikus példa impulzusválaszok (valódi adat, a motor is ezt kapja). */
@@ -5096,10 +5241,13 @@ function showToast(text, ms) {
   el._t = setTimeout(() => el.classList.remove("show"), ms || 6000);
 }
 
+function bandsSnapshot(list) {
+  return list.map(n => ({ type: n.type, mode: n.mode, slope: n.slope, freq: +(+n.freq).toFixed(2), gain: +(+n.gain).toFixed(2),
+                          q: +(+n.q).toFixed(3), width: +(+n.width).toFixed(3) }));
+}
 function eqSnapshot() {
   return {
-    bands: nodes.map(n => ({ type: n.type, mode: n.mode, slope: n.slope, freq: +(+n.freq).toFixed(2), gain: +(+n.gain).toFixed(2),
-                             q: +(+n.q).toFixed(3), width: +(+n.width).toFixed(3) })),
+    bands: bandsSnapshot(nodes),
     preamp: +(+currentPreamp).toFixed(2),
     eqMode: currentEqMode
   };
