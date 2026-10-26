@@ -68,6 +68,12 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.szor
 
 %post
 %systemd_user_post aqulify.service
+# Frissítéskor ($1 = 2) az új csomag is jelzi a motor újraindítását: a régi csomag %postun része ezt az 1.8.0 előtt
+# még nem tette meg, ezért 1.7.x-ről frissítve a régi motor a következő bejelentkezésig futott tovább. A tényleges
+# újraindítás a tranzakció végén történik (systemd-update-helper, csak a futó motort indítja újra).
+if [ $1 -ge 2 ]; then
+%systemd_user_postun_with_restart aqulify.service
+fi
 
 %preun
 %systemd_user_preun aqulify.service
