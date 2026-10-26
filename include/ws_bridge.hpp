@@ -67,8 +67,13 @@ struct BridgeCallbacks {
     std::function<std::string()> magicDiagJson;
 };
 
-/** Az EQ profil-dokumentum maximális mérete (bájt). */
-constexpr size_t kBridgeMaxPresetBytes = 2u << 20;
+/**
+ * Az EQ profil-dokumentum maximális mérete (bájt). Egy 10 sávos AutoEq-profil kb. 830 bájt, így ez kb. 15 000 profil
+ * (egy teljes AutoEq-mappa importja); 2 MB-nál (kb. 2500 profil) a nagyobb dokumentumot a motor nem mentette el.
+ * A felület (PRESET_DOC_MAX_BYTES) ugyanezt a határt tartja. A JSON-ba ágyazott szöveg a kódolással kb. 1,2-szeres:
+ * így is belefér a 20 MB-os WebSocket-keretbe.
+ */
+constexpr size_t kBridgeMaxPresetBytes = 12u << 20;
 
 /** A GUI által küldött IR maximális hossza (frame). */
 constexpr uint32_t kBridgeMaxIrFrames = 262144;
