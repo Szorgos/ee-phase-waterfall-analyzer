@@ -1154,6 +1154,45 @@ static void testMonoBass() {
     const double expect = 20.0 * std::log10(std::abs(0.5 + 0.5 * h));
     CHECK(std::abs(s50h - expect) < 0.1 && std::abs(m50h) < 0.05,
           "mono 50%%: 50 Hz-es oldalsó szint %.2f dB (várt %.2f dB, a fázissal együtt)", s50h, expect);
+
+    // Állítható határfrekvencia: 200 Hz-nél a 200 Hz-es oldalsó jel −6 dB (LR4 fc), a 100 Hz-es kb. −24,6 dB,
+    // 50 Hz-nél a 100 Hz-es már csak kb. −0,5 dB (egy oktávval a határ fölött); a középső csatorna érintetlen
+    auto monoAt = [&](double f, double fc, double& mDb, double& sDb) {
+        AetherChain chain;
+        chain.setSampleRate(sr);
+        ParamData d = transparentParams();
+        d.set(kFlagMono, true);
+        d.monoAmount = 100.0f;
+        d.monoFreqHz = static_cast<float>(fc);
+        chain.applyParamsRT(d);
+        const size_t n = static_cast<size_t>(4.0 * sr);
+        std::vector<float> L = sine(f, 0.5, n, sr), R(n, 0.0f);
+        runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 480);
+        std::vector<float> M(n), S(n);
+        for (size_t i = 0; i < n; ++i) { M[i] = 0.5f * (L[i] + R[i]); S[i] = 0.5f * (L[i] - R[i]); }
+        const size_t from = n - static_cast<size_t>(sr);
+        mDb = 20.0 * std::log10(toneAmp(M, from, f, sr) / 0.25);
+        sDb = 20.0 * std::log10(toneAmp(S, from, f, sr) / 0.25);
+    };
+    double m200, s200, m100f, s100f, m100l, s100l;
+    monoAt(200.0, 200.0, m200, s200);
+    monoAt(100.0, 200.0, m100f, s100f);
+    monoAt(100.0, 50.0, m100l, s100l);
+    const double x4 = 100.0 / 50.0;
+    const std::complex<double> hp4 = std::pow(-x4 * x4 / std::complex<double>(1.0 - x4 * x4, std::sqrt(2.0) * x4), 2);
+    const double s100Expect = 20.0 * std::log10(std::abs(hp4));
+    CHECK(std::abs(s200 + 6.0) < 0.3 && std::abs(s100f + 24.6) < 0.5 && std::abs(s100l - s100Expect) < 0.1,
+          "mono határ 200 Hz: oldalsó 200 Hz %.2f dB, 100 Hz %.2f dB; határ 50 Hz: 100 Hz %.2f dB (várt %.2f)",
+          s200, s100f, s100l, s100Expect);
+    CHECK(std::abs(m200) < 0.05 && std::abs(m100f) < 0.05 && std::abs(m100l) < 0.05,
+          "állítható határnál is érintetlen a középső csatorna (%.3f / %.3f / %.3f dB)", m200, m100f, m100l);
+    ParamData badHz = transparentParams();
+    badHz.monoFreqHz = 1000.0f;
+    sanitizeParams(badHz);
+    ParamData nanHz = transparentParams();
+    nanHz.monoFreqHz = std::nanf("");
+    sanitizeParams(nanHz);
+    CHECK(badHz.monoFreqHz == 250.0f && nanHz.monoFreqHz == 100.0f, "érvénytelen határfrekvencia: 1000 Hz -> 250 Hz, NaN -> 100 Hz");
 }
 
 /** Konvolver be- és kikapcsolása: kikapcsolva a jel az átúsztatás után azonnal érintetlen (mint az EQ-nál). */
@@ -1283,6 +1322,42 @@ static void testAbCompare() {
     for (size_t i = from; i < x.size(); ++i) { ep += static_cast<double>(P[i]) * P[i]; ea += static_cast<double>(L[i]) * L[i]; }
     CHECK(std::abs(10.0 * std::log10(ea / ep)) < 0.3, "EQ A/B: az eredeti hangereje a feldolgozotthoz képest %.2f dB",
           10.0 * std::log10(ea / ep));
+
+    // Bass Enhancer és Mono: A/B-ben a kimenet a bemenet skálázott másolata (késleltetés nélkül), a feldolgozott hangerején
+    auto abRun = [&](uint32_t flag, bool compare) {
+        ParamData p = transparentParams();
+        p.set(flag, true);
+        if (flag == kFlagBass) { p.bassAmountDb = 12.0f; p.bassCompare = compare ? 1 : 0; }
+        else { p.monoAmount = 100.0f; p.monoFreqHz = 150.0f; p.monoCompare = compare ? 1 : 0; }
+        AetherChain ch;
+        ch.setSampleRate(sr);
+        ch.applyParamsRT(p);
+        std::vector<float> A = x, B(x.size());
+        for (size_t i = 0; i < x.size(); ++i) B[i] = 0.3f * x[(i + 4800) % x.size()];   // a jobb csatorna más: van oldalsó jel
+        runBlocks([&](float* l, float* r, size_t m) { ch.process(l, r, m); }, A, B, block);
+        return A;
+    };
+    for (uint32_t flag : { static_cast<uint32_t>(kFlagBass), static_cast<uint32_t>(kFlagMono) }) {
+        const char* name = flag == kFlagBass ? "Bass Enhancer" : "Mono";
+        const std::vector<float> proc = abRun(flag, false), orig = abRun(flag, true);
+        double sxy = 0, sxx = 0;
+        for (size_t i = from; i < x.size(); ++i) { sxy += static_cast<double>(orig[i]) * x[i]; sxx += static_cast<double>(x[i]) * x[i]; }
+        const double k = sxy / sxx;
+        double r2 = 0, t2 = 0, e1 = 0, e2 = 0;
+        for (size_t i = from; i < x.size(); ++i) {
+            r2 += (orig[i] - k * x[i]) * (orig[i] - k * x[i]);
+            t2 += static_cast<double>(orig[i]) * orig[i];
+            e1 += static_cast<double>(proc[i]) * proc[i];
+            e2 += static_cast<double>(orig[i]) * orig[i];
+        }
+        double dp = 0;   // a feldolgozott jel valóban eltér a bemenettől (különben a teszt semmit nem mérne)
+        for (size_t i = from; i < x.size(); ++i) dp += (proc[i] - x[i]) * (proc[i] - x[i]);
+        // A szintkiegyenlítés lassan követ (300 ms), ezért a Bass Enhancernél a skálázás nem teljesen állandó: a maradék
+        // így is két nagyságrenddel kisebb, mint a feldolgozott jel eltérése a bemenettől
+        CHECK(r2 / t2 < 1e-3 && dp / sxx > 100.0 * r2 / t2 && std::abs(10.0 * std::log10(e2 / e1)) < 0.3,
+              "%s A/B: a kimenet a bemenet %.3f-szorosa (maradék %.1e; a feldolgozotté %.1e), hangerő-eltérés a feldolgozotthoz %.2f dB",
+              name, k, r2 / t2, dp / sxx, 10.0 * std::log10(e2 / e1));
+    }
 }
 
 /** EQ késleltetés lineáris fázisú módban: a jelentett érték a valódi (az impulzusválasz csúcsa), Decramp mellett is. */
@@ -1433,6 +1508,17 @@ static void testAutogain() {
     const bool ok = loadParamBytes(bytes.data(), kParamSizeV9, 9, static_cast<uint32_t>(kParamSizeV9), loaded);
     CHECK(ok && !loaded.has(kFlagAutogain) && loaded.agcTargetLufs == -18.0f && loaded.agcMaxGainDb == 6.0f,
           "v9 paraméterfájl betöltése: Autogain ki, célszint −18 LUFS, határ 6 dB");
+
+    // A v10 paraméterfájl (a mono határfrekvencia és a Bass / Mono A/B nélkül): 100 Hz (mint addig), A/B ki
+    ParamData old10 = transparentParams();
+    old10.agcTargetLufs = -23.0f;   // ez már a v10 része
+    old10.monoFreqHz = 200.0f;      // ez nem: a v10-ben nincs ilyen mező
+    old10.bassCompare = 1;
+    std::memcpy(bytes.data(), &old10, sizeof(ParamData));
+    ParamData loaded10{};
+    const bool ok10 = loadParamBytes(bytes.data(), kParamSizeV10, 10, static_cast<uint32_t>(kParamSizeV10), loaded10);
+    CHECK(ok10 && loaded10.agcTargetLufs == -23.0f && loaded10.monoFreqHz == 100.0f && loaded10.bassCompare == 0 &&
+          loaded10.monoCompare == 0, "v10 paraméterfájl betöltése: célszint megmarad, mono határ 100 Hz, Bass / Mono A/B ki");
 }
 
 int main() {

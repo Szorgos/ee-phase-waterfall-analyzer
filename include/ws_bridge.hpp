@@ -603,13 +603,20 @@ private:
             if (on && mod == "convolver") p.set(kFlagEq, false);
             if (!on && mod == "eq") p.eqCompare = 0;              // kikapcsolt modulnál az A/B is kikapcsol
             if (!on && mod == "convolver") p.convCompare = 0;
+            if (!on && mod == "bass") p.bassCompare = 0;
+            if (!on && mod == "mono") p.monoCompare = 0;
         } else if (type == "set_eq_compare") {
             p.eqCompare = num(msg, "compare", p.eqCompare) != 0.0 ? 1 : 0;
         } else if (type == "set_conv_compare") {
             p.convCompare = num(msg, "compare", p.convCompare) != 0.0 ? 1 : 0;
+        } else if (type == "set_bass_compare") {
+            p.bassCompare = num(msg, "compare", p.bassCompare) != 0.0 ? 1 : 0;
+        } else if (type == "set_mono_compare") {
+            p.monoCompare = num(msg, "compare", p.monoCompare) != 0.0 ? 1 : 0;
         } else if (type == "set_mono") {
             p.subsonicHz = static_cast<int32_t>(num(msg, "subsonic", p.subsonicHz));
             p.monoAmount = static_cast<float>(num(msg, "amount", p.monoAmount));
+            p.monoFreqHz = static_cast<float>(num(msg, "freq", p.monoFreqHz));
         } else if (type == "set_autogain") {
             p.agcTargetLufs = static_cast<float>(num(msg, "target", p.agcTargetLufs));
             p.agcMaxGainDb = static_cast<float>(num(msg, "maxGain", p.agcMaxGainDb));
@@ -865,9 +872,11 @@ private:
         s += ",\"compare\":" + std::to_string(p.magicCompare);
         s += ",\"character\":" + std::to_string(p.magicCharacter);
         s += ",\"content\":" + std::to_string(p.magicContent) + '}';
-        s += ",\"ab\":{\"eq\":" + std::to_string(p.eqCompare) + ",\"conv\":" + std::to_string(p.convCompare) + '}';
+        s += ",\"ab\":{\"eq\":" + std::to_string(p.eqCompare) + ",\"conv\":" + std::to_string(p.convCompare) +
+             ",\"bass\":" + std::to_string(p.bassCompare) + ",\"mono\":" + std::to_string(p.monoCompare) + '}';
         s += ",\"monoBass\":{\"subsonicHz\":" + std::to_string(p.subsonicHz);
-        s += ",\"amount\":"; appendFloat(s, p.monoAmount, 1); s += '}';
+        s += ",\"amount\":"; appendFloat(s, p.monoAmount, 1);
+        s += ",\"freqHz\":"; appendFloat(s, p.monoFreqHz, 0); s += '}';
         s += ",\"autogain\":{\"target\":"; appendFloat(s, p.agcTargetLufs, 1);
         s += ",\"maxGain\":"; appendFloat(s, p.agcMaxGainDb, 1); s += '}';
         if (cb_.getIr) {

@@ -290,14 +290,20 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .dsp-warn-btn:hover { background: rgba(255, 255, 255, 0.6); }
   .dsp-warn-btn[hidden] { display: none; }
   header { background: var(--aq-bg-2); border-bottom: 1px solid var(--aq-line); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-  .title-group { display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 1rem; min-width: 0; flex: 0 1 auto; }
-  /* Keskeny ablakban (1000–1200 px) a cím szövege rövidül, semmi nem csúszik egymásra és nem törik két sorba */
+  .title-group { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 1rem; flex: 0 1 auto; }
+  /* Keskeny ablakban (1000–1200 px) csak az alcím rövidül, majd eltűnik: az ikon, a név és a verzió mindig
+     teljesen látszik, semmi nem csúszik egymásra és nem törik két sorba. Az alcím rácsa (minmax(0, auto)) nem
+     számít bele a csoport legkisebb szélességébe, így a csoport sosem lesz keskenyebb az ikonnál, névnél, verziónál. */
   .title-group > * { flex-shrink: 0; }
-  .title-group > .app-title { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .title-group > .app-title { flex-shrink: 1; display: grid; grid-template-columns: minmax(0, auto); }
+  .app-title > span { overflow: hidden; white-space: nowrap; }
+  .app-title.clipped > span { visibility: hidden; }   /* csonka alcím helyett semmi (a helye megmarad: nem ugrál) */
   .app-mark { width: 30px; height: 30px; display: block; }
-  .app-title { font-size: 1.05rem; font-weight: 600; letter-spacing: 0.01em; color: var(--aq-text); }
+  .app-brand { font-size: 1.05rem; font-weight: 700; letter-spacing: 0.01em; color: var(--aq-text); white-space: nowrap; }
+  .app-title { font-size: 0.9rem; font-weight: 500; color: var(--aq-text-2); }
   .app-version { font: 500 0.72rem var(--aq-mono); color: var(--aq-text-3); background: var(--aq-surface); border: 1px solid var(--aq-line); border-radius: 6px; padding: 2px 7px; }
-  .header-right { flex-shrink: 0; }
+  .header-right { flex-shrink: 1; min-width: 0; }
+  .header-right > * { flex-shrink: 0; }   /* csak a Kimenet választó rövidül (lent) */
   .header-right .status-badge, .header-right .support-link { white-space: nowrap; }
 
   /* ======================================================= */
@@ -337,6 +343,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .freq-scale-live .fs-mark { top: 3.5px; left: -0.25px; width: 1.5px; height: 12px; background: rgba(79, 209, 197, 0.95); will-change: transform; }
   .freq-scale-live .fs-stat { top: 1.5px; font: 500 9px var(--aq-mono); line-height: 9px; color: var(--aq-accent); white-space: nowrap; }
   .freq-scale-live.stale .fs-band { background: rgba(79, 209, 197, 0.05); }
+  /* 2D nézet: az alapvonal (9,5 px) a 2D tengely vonalára esik (a vászon aljától 24 px), a min / max a feliratsorba */
+  .freq-scale-live.in2d { bottom: 3px; }
+  .freq-scale-live.in2d .fs-stat { top: 19px; }
   .freq-scale-live.stale .fs-mark { background: rgba(79, 209, 197, 0.45); }
   .freq-scale-live.stale .fs-stat { color: rgba(79, 209, 197, 0.45); }
 
@@ -364,6 +373,15 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .preset-bar { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 0 auto; }   /* nem nyomódik össze: helyette a cím rövidül */
   .preset-lbl { font-size: 0.82rem; color: var(--aq-text-2); }
   .preset-select { min-width: 140px; max-width: 340px; }
+  /* Keskeny ablakban (a legkisebb ablak 1000 px) a fejléc tömörebb: a Támogatás gombból csak a szív marad (a felirat
+     a buborékban), a jobb oldal pedig a Kimenet választónál rövidül, nem csúszik a név és a profil fölé */
+  #physicalSinkWrap { flex: 0 1 auto; }
+  #selectPhysicalSink { min-width: 90px; flex: 0 1 auto; }
+  @media (max-width: 1200px) {
+    header { padding-left: 14px; padding-right: 14px; gap: 10px; }
+    .preset-select { max-width: 150px; }
+    .support-link > span { display: none; }
+  }
   .prering-note { font-size: 0.66rem; color: var(--aq-text-3); padding: 2px 4px; letter-spacing: 0.2px; }
   .aether-toast { position: fixed; right: 24px; bottom: 24px; z-index: 9999; max-width: 440px; background: var(--aq-surface); border: 1px solid var(--aq-line-2); border-left: 0; color: var(--aq-text); border-radius: var(--aq-radius-m); padding: 12px 16px 12px 40px; font-size: 0.84rem; line-height: 1.45; white-space: pre-line; box-shadow: 0 14px 36px rgba(0,0,0,0.5); opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; pointer-events: none; }
   .aether-toast::before { content: ""; position: absolute; left: 16px; top: 16px; width: 10px; height: 10px; border-radius: 50%; background: var(--aq-accent); box-shadow: 0 0 0 4px var(--aq-accent-soft); }
@@ -736,7 +754,8 @@ if (!window.THREE) window.THREE = (function () {
   <header>
     <div class="title-group">
       <svg class="app-mark" viewBox="0 0 28 28" aria-hidden="true"><path d="M3 13c3-4 5-4 8 0s5 4 8 0 5-4 6-2" fill="none" stroke="#4FD1C5" stroke-width="2.2" stroke-linecap="round"/><path d="M3 19.5c3-3 5-3 8 0s5 3 8 0 5-3 6-1.5" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round"/></svg>
-      <span class="app-title" title="Aqulify • Audiofil DSP Rendszer" data-i18n="app.title" data-i18n-title="app.title">Aqulify • Audiofil DSP Rendszer</span>
+      <span class="app-brand" title="Aqulify • Audiofil DSP Rendszer" data-i18n-title="app.title">Aqulify</span>
+      <span class="app-title" title="Aqulify • Audiofil DSP Rendszer" data-i18n-title="app.title"><span data-i18n="app.subtitle">Audiofil DSP Rendszer</span></span>
       <span class="app-version" id="lblAppVersion" data-gui-version="1.8.0" title="Verziószám" data-i18n-title="ver.title">v1.8.0</span>
     </div>
     <!-- EQ PROFILOK: aktív profil neve, választás, mentés, átnevezés, törlés -->
@@ -1213,6 +1232,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <span style="font-size:0.75rem; color:var(--ee-text-secondary);">
               <span data-i18n="bass.principle">Elv:</span> <strong style="color:var(--ee-curve-cyan);">Missing Fundamental</strong>
             </span>
+            <button class="adw-btn" id="btnBassAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
             <button type="button" class="aq-switch" id="btnToggle-bass" onclick="toggleModule('bass')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
           </div>
         </div>
@@ -1244,11 +1264,12 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <span class="status-badge off" id="badgeStatus-mono" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
           </div>
           <div style="display:flex; align-items:center; gap:12px;">
+            <button class="adw-btn" id="btnMonoAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
             <button type="button" class="aq-switch" id="btnToggle-mono" onclick="toggleModule('mono')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
           </div>
         </div>
 
-        <p class="module-desc" data-i18n="mono.desc">Mélyvágás: a kiválasztott frekvencia alatti mélyeket 24 dB/oktáves felüláteresztővel levágja (rumble és hangszóróvédelem). Mono: a 100 Hz alatti sztereó basszust a két csatornán azonos (összegzett) basszusra keveri; a középső csatorna nem változik.</p>
+        <p class="module-desc" data-i18n="mono.desc">Mélyvágás: a kiválasztott frekvencia alatti mélyeket 24 dB/oktáves felüláteresztővel levágja (rumble és hangszóróvédelem). Mono: a határfrekvencia (alapérték 100 Hz) alatti sztereó basszust a két csatornán azonos (összegzett) basszusra keveri; a középső csatorna nem változik.</p>
 
         <div class="param-grid" id="monoControls"></div>
       </div>
@@ -1489,8 +1510,7 @@ function setModuleActive(mod, active) {
   // EQ és Konvolver: egyszerre csak az egyik. A másik kikapcsolódik (mint az IR-importnál).
   if (active && mod === 'eq' && isConvolverEnabled) setModuleActive('convolver', false);
   if (active && mod === 'convolver' && isEqEnabled) setModuleActive('eq', false);
-  if (!active && mod === 'eq') eqAbOn = false;
-  if (!active && mod === 'convolver') convAbOn = false;
+  if (!active && AB_MODS && mod in AB_MODS) setAb(mod, false);   // kikapcsolt modulnál az A/B is kikapcsol (a motor is így tesz)
 
   const dot = document.getElementById('dot-' + mod);
   if (dot) {
@@ -1559,21 +1579,30 @@ function renderModuleTexts(mod) {
   }
 }
 
-/** A/B: az eredeti (hangerőre kiegyenlített) jel szól-e. Az EQ-hoz és a Konvolverhez külön. */
-var eqAbOn = false, convAbOn = false;
+/** A/B: az eredeti (hangerőre kiegyenlített) jel szól-e. Az EQ-hoz, a Konvolverhez, a Bass Enhancerhez és a Monóhoz külön. */
+var eqAbOn = false, convAbOn = false, bassAbOn = false, monoAbOn = false;
+// modul -> [gomb, üzenettípus]
+var AB_MODS = { eq: ['btnEqAbTab', 'set_eq_compare'], convolver: ['btnConvAbTab', 'set_conv_compare'],
+                bass: ['btnBassAbTab', 'set_bass_compare'], mono: ['btnMonoAbTab', 'set_mono_compare'] };
+function abIsOn(mod) { return mod === 'eq' ? eqAbOn : mod === 'convolver' ? convAbOn : mod === 'bass' ? bassAbOn : monoAbOn; }
+function setAb(mod, on) {
+  if (mod === 'eq') eqAbOn = on; else if (mod === 'convolver') convAbOn = on; else if (mod === 'bass') bassAbOn = on; else monoAbOn = on;
+}
 function renderAbButtons() {
-  [['eq', eqAbOn, isEqEnabled], ['convolver', convAbOn, isConvolverEnabled]].forEach(([mod, on, enabled]) => {
-    const b = document.getElementById(mod === 'eq' ? 'btnEqAbTab' : 'btnConvAbTab');
+  if (!AB_MODS) return;   // a betöltés legelején (a deklaráció sora előtt) még nincs mit kirajzolni
+  Object.keys(AB_MODS).forEach((mod) => {
+    const b = document.getElementById(AB_MODS[mod][0]);
     if (!b) return;
-    b.style.display = enabled ? '' : 'none';
+    const on = abIsOn(mod);
+    b.style.display = moduleIsActive(mod) ? '' : 'none';
     b.className = on ? 'adw-btn primary active' : 'adw-btn';
     b.innerText = t(on ? 'ab.original' : 'ab.processed');
   });
   if (typeof fitEqActionRow === "function") fitEqActionRow();   // az A/B gomb megjelenése a gombsor szélességét is változtatja
 }
 function toggleAb(mod) {
-  if (mod === 'eq') { eqAbOn = !eqAbOn; sendEngine({ type: "set_eq_compare", compare: eqAbOn ? 1 : 0 }); }
-  else { convAbOn = !convAbOn; sendEngine({ type: "set_conv_compare", compare: convAbOn ? 1 : 0 }); }
+  setAb(mod, !abIsOn(mod));
+  sendEngine({ type: AB_MODS[mod][1], compare: abIsOn(mod) ? 1 : 0 });
   renderAbButtons();
 }
 
@@ -2098,6 +2127,10 @@ const btnEqAbTab = document.getElementById("btnEqAbTab");
 if (btnEqAbTab) btnEqAbTab.onclick = () => toggleAb('eq');
 const btnConvAbTab = document.getElementById("btnConvAbTab");
 if (btnConvAbTab) btnConvAbTab.onclick = () => toggleAb('convolver');
+const btnBassAbTab = document.getElementById("btnBassAbTab");
+if (btnBassAbTab) btnBassAbTab.onclick = () => toggleAb('bass');
+const btnMonoAbTab = document.getElementById("btnMonoAbTab");
+if (btnMonoAbTab) btnMonoAbTab.onclick = () => toggleAb('mono');
 
 const btnCameraAngle = document.getElementById("btnCameraAngle");
 if (btnCameraAngle) {
@@ -2478,22 +2511,29 @@ function fsStyle(el, prop, val) {
 function fsShow(el, on) { fsStyle(el, "display", on ? "block" : "none"); }
 function fsPx(v) { return (Math.round(v * 4) / 4) + "px"; }   // negyed képpontra kerekítve: apró mozgás nem ír ki újat
 
-function drawFreqScaleFrame(levels) {
+/**
+ * w2d > 0: 2D nézet, a jelek a 2D tengelyen (a vászon teljes szélességén, freqToAxis szerint), a min / max a
+ * feliratsorban. Különben a 3D vízesés első élén (fsGeom).
+ */
+function drawFreqScaleFrame(levels, w2d) {
   const L = fsLive;
   if (!L) return;
-  const visible = !!fsGeom && freqScaleCanvas.style.display !== "none";
+  const in2d = w2d > 0;
+  const g = in2d ? { w: w2d, x0: 0, x1: w2d } : fsGeom;
+  const visible = in2d || (!!fsGeom && freqScaleCanvas.style.display !== "none");
   fsShow(L.root, visible);
   if (!visible) return;
+  if (L.in2d !== in2d) { L.in2d = in2d; L.root.classList.toggle("in2d", in2d); }
+  const xOf = in2d ? (f) => freqToAxis(f) * g.w : (f) => freqScreenX(f, g.w, g.h, g.edgeY);
   const now = performance.now();
   updateFreqRange(levels, now);
-  const g = fsGeom;
   const has = FS_RANGE.lo !== null;
   [L.band, L.markLo, L.markHi].forEach(el => fsShow(el, has));
   if (!has) { fsShow(L.statMin, false); fsShow(L.statMax, false); return; }
   const live = !!levels;
   if (L.stale !== !live) { L.stale = !live; L.root.classList.toggle("stale", !live); }
-  const xl = freqScreenX(bandFreq(FS_RANGE.lo), g.w, g.h, g.edgeY);
-  const xh = freqScreenX(bandFreq(FS_RANGE.hi), g.w, g.h, g.edgeY);
+  const xl = xOf(bandFreq(FS_RANGE.lo));
+  const xh = xOf(bandFreq(FS_RANGE.hi));
   // a lefedett tartomány halvány sávja az alapvonalon (1 px széles elem, vízszintesen nyújtva)
   fsStyle(L.band, "transform", `translateX(${fsPx(xl)}) scaleX(${Math.max(1, Math.round((xh - xl) * 4) / 4)})`);
   // ottragadó jelek: picike függőleges vonal mindkét irányba az alapvonaltól
@@ -2520,10 +2560,11 @@ function drawFreqScaleFrame(levels) {
   let changed = false;
   if (L.statMin.textContent !== strMin) { L.statMin.textContent = strMin; changed = true; }
   if (L.statMax.textContent !== strMax) { L.statMax.textContent = strMax; changed = true; }
-  const posKey = `${g.w}|${g.x0}|${g.x1}`;
+  const posKey = `${in2d}|${g.w}|${g.x0}|${g.x1}`;
   if (changed || posKey !== L.posKey) {         // a felirat szélességét csak szövegváltozáskor mérjük
     L.posKey = posKey;
     const twMin = L.statMin.getBoundingClientRect().width, twMax = L.statMax.getBoundingClientRect().width;
+    L.twMin = twMin; L.twMax = twMax;           // a 2D nézet a feliratsorban ennyi helyet hagy nekik
     // Bal szél: legmélyebb frekvencia (a skála kezdete előtt); jobb szél: legmagasabb (a skála vége után)
     fsStyle(L.statMin, "transform", `translateX(${fsPx(Math.max(4, g.x0 - 6 - twMin))})`);
     fsStyle(L.statMax, "transform", `translateX(${fsPx(Math.min(g.w - 4 - twMax, g.x1 + 6))})`);
@@ -2587,10 +2628,16 @@ function drawSpec2d(levels) {
   c.font = "11px sans-serif";
   c.textAlign = "center";
   c.textBaseline = "alphabetic";
+  // A min / max felirat (drawFreqScaleFrame) a feliratsor két szélén áll: az oda eső osztásfelirat elmarad
+  const L = fsLive;
+  const stat = !!L && L.in2d && !!L.statMin._fs && L.statMin._fs.display === "block";
+  const resL = stat ? 4 + (L.twMin || 0) + 6 : -Infinity, resR = stat ? w - 4 - (L.twMax || 0) - 6 : Infinity;
   SPEC2D_TICKS.forEach((f) => {
     const x = Math.round(xOf(f)) + 0.5;
     c.beginPath(); c.moveTo(x, top); c.lineTo(x, bottom); c.stroke();
-    c.fillText(f >= 1000 ? (f / 1000) + "k" : String(f), x, h - 6);
+    const label = f >= 1000 ? (f / 1000) + "k" : String(f);
+    const hw = c.measureText(label).width / 2;
+    if (x - hw >= resL && x + hw <= resR) c.fillText(label, x, h - 6);
   });
   c.beginPath(); c.moveTo(0, bottom + 0.5); c.lineTo(w, bottom + 0.5); c.stroke();
   if (!levels || levels.length === 0) return;
@@ -2684,8 +2731,13 @@ function drawWfFrame(nowMs) {
   if (stripLayoutDirty) { stripLayoutDirty = false; layoutStripControls(); }
   const fresh = isPipewireConnected && liveSpectrumLevels && liveSpectrumLevels.length > 0 &&
                 (nowMs - liveSpectrumTime < 450);
-  if (wfView === "2d") { drawSpec2d(fresh ? liveSpectrumLevels : null); return; }
-  drawFreqScaleFrame(fresh ? liveSpectrumLevels : null);
+  if (wfView === "2d") {
+    // A tartományjelek és a min / max 2D-ben is élnek (a 2D tengelyen); előbb ezek, mert a 2D felirat helyet hagy nekik
+    drawFreqScaleFrame(fresh ? liveSpectrumLevels : null, spec2dCanvas.clientWidth);
+    drawSpec2d(fresh ? liveSpectrumLevels : null);
+    return;
+  }
+  drawFreqScaleFrame(fresh ? liveSpectrumLevels : null, 0);
   if (!renderer) return;
 
   if (!wfLastStep) wfLastStep = nowMs - WF_STEP_MS;
@@ -4600,6 +4652,17 @@ function fitEqActionRow() {
   }).observe(bar);
   fitEqActionRow();
 }
+{
+  // A fejléc alcíme (a név mellett) csak teljes egészében látszik: ha nem fér el, rejtve marad (csonka szöveg helyett).
+  // A láthatóság nem változtat a szélességen, így nincs visszacsatolás. Nyelvváltáskor a szöveg is változik.
+  const sub = document.querySelector(".app-title"), span = sub && sub.firstElementChild;
+  const fitSub = () => sub.classList.toggle("clipped", span.scrollWidth > span.clientWidth + 1);
+  if (span && window.ResizeObserver) {
+    new ResizeObserver(fitSub).observe(sub);
+    new MutationObserver(fitSub).observe(span, { childList: true, characterData: true, subtree: true });
+    fitSub();
+  }
+}
 
 const btnEqZoomIn = document.getElementById("btnEqZoomIn");
 if (btnEqZoomIn) btnEqZoomIn.onclick = () => setEqZoom(eqZoomX + 0.5);
@@ -5214,11 +5277,13 @@ buildControls("monoControls", [
   { id: "monoSubsonic", kind: "select", label: "ctl.monoSubsonic", optKeys: true, def: 0,
     options: ["mono.subOff", "mono.sub10", "mono.sub20", "mono.sub30"] },
   { id: "monoAmount", kind: "num", label: "ctl.monoAmount", min: 0, max: 100, step: 1, unit: "%", def: 0, hint: "ctl.monoAmountHint" },
+  { id: "monoFreq", kind: "num", label: "ctl.monoFreq", min: 40, max: 250, step: 1, unit: "Hz", def: 100, hint: "ctl.monoFreqHint" },
 ], () => { sendMono(); nudgeIfOff('mono'); });
 const MONO_SUBSONIC_HZ = [0, 10, 20, 30];
 
 function sendMono() {
-  sendEngine({ type: "set_mono", subsonic: MONO_SUBSONIC_HZ[getCtl("monoSubsonic")] || 0, amount: getCtl("monoAmount") });
+  sendEngine({ type: "set_mono", subsonic: MONO_SUBSONIC_HZ[getCtl("monoSubsonic")] || 0, amount: getCtl("monoAmount"),
+               freq: getCtl("monoFreq") });
 }
 
 // --- Autogain (autogain.hpp): a rövid távú hangosság célszintje és a legnagyobb erősítés
@@ -5499,10 +5564,11 @@ function applyEngineState(st, fromSync) {
         if (typeof st.magic.content === "number") setCtl("magicContent", st.magic.content);
         magicCompare = !!st.magic.compare;
       }
-      if (st.ab) { eqAbOn = !!st.ab.eq; convAbOn = !!st.ab.conv; }
+      if (st.ab) { eqAbOn = !!st.ab.eq; convAbOn = !!st.ab.conv; bassAbOn = !!st.ab.bass; monoAbOn = !!st.ab.mono; }
       if (st.monoBass) {
         setCtl("monoSubsonic", Math.max(0, MONO_SUBSONIC_HZ.indexOf(st.monoBass.subsonicHz)));
         setCtl("monoAmount", st.monoBass.amount);
+        if (typeof st.monoBass.freqHz === "number") setCtl("monoFreq", st.monoBass.freqHz);
       }
       if (st.autogain) {
         setCtl("agcTarget", st.autogain.target);

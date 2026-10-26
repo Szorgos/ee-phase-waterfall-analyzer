@@ -5,8 +5,9 @@
  *
  * Két szűrő, mindkettő 24 dB/oktáves Linkwitz–Riley 4. rendű (két egymás utáni Butterworth 2. rendű szakasz):
  *   - Mélyvágás (10 / 20 / 30 Hz): a bal és a jobb csatornán, a teljes jelen.
- *   - Mono-keverés (0–100 %, 100 Hz alatt): az oldalsó jel (S = (L−R)/2) mély részét keveri a középsőbe:
- *     S_out = (1−a)·S + a·HP100(S). A középső jel (M = (L+R)/2) érintetlen marad, így a fázisa sem változik.
+ *   - Mono-keverés (0–100 %, a határfrekvencia alatt; 40–250 Hz, alapérték 100 Hz): az oldalsó jel (S = (L−R)/2) mély
+ *     részét keveri a középsőbe: S_out = (1−a)·S + a·HP(S). A középső jel (M = (L+R)/2) érintetlen marad, így a fázisa
+ *     sem változik. Alsó határ nincs: a legmélyebb sávot a mélyvágás kezeli, a mono-keverésnek ott a legkisebb a hatása.
  *
  * Kikapcsolt modulnál (a láncban nem hívjuk) és 0 % keverésnél, vágás nélkül a kimenet bit-pontosan a bemenet.
  */
@@ -22,7 +23,7 @@ namespace mono {
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kButterworthQ = 0.70710678118654752440;   // 1 / sqrt(2)
-constexpr double kMonoHz = 100.0;                          // a mono-keverés felső határa (fix)
+constexpr double kMonoHz = 100.0;                          // a mono-keverés felső határának alapértéke
 constexpr double kMixRampMs = 20.0;                        // a keverés változása ennyi idő alatt simul
 
 /** Másodrendű felüláteresztő (RBJ-kialakítás), kétszeres pontosságú állapottal. */
@@ -68,7 +69,7 @@ class MonoBass {
 public:
     void setSampleRate(uint32_t sr) {
         sr_ = sr > 0 ? static_cast<double>(sr) : 48000.0;
-        side_.design(kMonoHz, sr_);
+        side_.design(monoHz_, sr_);
         side_.reset();
         aStep_ = 1.0 / (kMixRampMs * 0.001 * sr_);
         const int32_t hz = subsonicHz();
@@ -80,7 +81,12 @@ public:
     void update(const ParamData& d) {
         aTarget_ = std::clamp(static_cast<double>(d.monoAmount) / 100.0, 0.0, 1.0);
         setSubsonic(d.subsonicHz);
+        // Új határfrekvencia: csak az együtthatók cserélődnek, az állapot marad (a csúszka húzása közben sincs kattanás)
+        const double hz = std::clamp(static_cast<double>(d.monoFreqHz), 40.0, 250.0);
+        if (hz != monoHz_) { monoHz_ = hz; side_.design(monoHz_, sr_); }
     }
+
+    double monoHz() const { return monoHz_; }
 
     /** Csak bekapcsolt modulnál hívandó. A mono-szűrő állapota a modul teljes ideje alatt fut, így a keverés bármikor pontos. */
     void process(float* L, float* R, size_t n) {
@@ -91,7 +97,7 @@ public:
                 r = subR_.process(r);
             }
             const double s = 0.5 * (l - r);
-            const double sLow = side_.process(s);   // az oldalsó jel 100 Hz alatti része, a keveréshez
+            const double sLow = side_.process(s);   // az oldalsó jel a határfrekvencia fölötti része (HP), a keveréshez
             if (aCur_ != aTarget_) aCur_ += std::clamp(aTarget_ - aCur_, -aStep_, aStep_);
             if (aCur_ > 0.0) {
                 const double m = 0.5 * (l + r);
@@ -125,6 +131,7 @@ private:
     }
 
     double sr_ = 48000.0;
+    double monoHz_ = kMonoHz;
     int32_t subHz_ = 0;
     HighPass4 subL_, subR_;
     HighPass4 side_;

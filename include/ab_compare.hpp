@@ -1,7 +1,8 @@
 #pragma once
 /**
  * @file ab_compare.hpp
- * @brief A/B összehasonlítás egy modullal (EQ vagy Konvolver): a feldolgozott és az eredeti jel hangerőre kiegyenlítve.
+ * @brief A/B összehasonlítás egy modullal (EQ, Konvolver, Bass Enhancer vagy Mono): a feldolgozott és az eredeti jel
+ *        hangerőre kiegyenlítve.
  *
  * A modul mindig fut, az eredeti jel a modul bemenetéből jön, a modul késleltetésével (így a két ág időben illeszkedik).
  * A szintkülönbséget a két ág futó RMS-aránya adja, így az eredeti ugyanakkora hangerőn szól, mint a feldolgozott.

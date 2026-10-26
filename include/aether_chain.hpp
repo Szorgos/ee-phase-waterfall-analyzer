@@ -164,6 +164,8 @@ public:
         autogain_.reset();
         abEq_.reset();
         abConv_.reset();
+        abBass_.reset();
+        abMono_.reset();
         crossfeed_.reset();
         limiter_.reset();
         if (irStage_.active) irStage_.active->reset();
@@ -189,6 +191,8 @@ private:
         autogain_.setSampleRate(sr);
         abEq_.setSampleRate(sr, kChunk);
         abConv_.setSampleRate(sr, kChunk);
+        abBass_.setSampleRate(sr, kChunk);
+        abMono_.setSampleRate(sr, kChunk);
         crossfeed_.setSampleRate(sr);
         sampleRate_.store(sr);
         // Mintavétel-váltáskor a lánc úgyis újraindul: a függő váltás azonnal érvényes
@@ -379,8 +383,11 @@ private:
 
         if (d.has(kFlagEq)) abEq_.process(L, R, m, eq_.latency(), d.eqCompare != 0,
                                           [this](float* a, float* b, size_t n) { eq_.process(a, b, n); });
-        if (d.has(kFlagBass)) bass_.process(L, R, m);
-        if (d.has(kFlagMono)) monoBass_.process(L, R, m);
+        // A Bass Enhancer és a Mono nem késleltet: az A/B eredeti ága késleltetés nélkül illeszkedik
+        if (d.has(kFlagBass)) abBass_.process(L, R, m, 0, d.bassCompare != 0,
+                                              [this](float* a, float* b, size_t n) { bass_.process(a, b, n); });
+        if (d.has(kFlagMono)) abMono_.process(L, R, m, 0, d.monoCompare != 0,
+                                              [this](float* a, float* b, size_t n) { monoBass_.process(a, b, n); });
         if (d.has(kFlagCrossfeed)) crossfeed_.process(L, R, m);
         if (d.has(kFlagConvolver)) {
             // A konvolver saját késleltetése (blokkméret-illesztés): ugyanannyival késlelteti az eredeti ágat
@@ -519,7 +526,7 @@ private:
     ee::BassEnhancer bass_;
     mono::MonoBass monoBass_;
     agc::Autogain autogain_;
-    abcmp::AbCompare abEq_, abConv_;
+    abcmp::AbCompare abEq_, abConv_, abBass_, abMono_;
     ee::Crossfeed crossfeed_;
     ee::Limiter limiter_;
     ParamData current_;
