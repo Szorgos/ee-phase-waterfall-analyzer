@@ -1,6 +1,17 @@
 ### Fejlesztési irány
 - A következő kiadások az 1.x változat csiszolására összpontosítanak: hibajavítások, pontosság és kezelhetőség.
 
+### Változások (1.8.1)
+- **Mono – állítható határfrekvencia:** a mono-keverés felső határa 40 és 250 Hz között állítható (eddig fix 100 Hz; ez maradt az alapérték, így a mentett beállítás hangja nem változik). 80–120 Hz a szokásos; magasabb értéknél a hangszerek térhatása is szűkül. Alsó határ nincs: a legmélyebb sávot a mélyvágás kezeli.
+- **A/B összehasonlítás a Bass Enhancerhez és a Monóhoz is:** ugyanúgy, mint az EQ-nál és a Konvolvernél: az eredeti és a feldolgozott hang között, hangerőre kiegyenlítve.
+- **Mappa importálása:** a fájlok listája görgethető (sok fájlnál eddig csak az első néhány volt elérhető), egy kapcsolóval mind kijelölhető vagy mind kivehető, és az Importálás gomb mutatja a kijelölt profilok számát.
+- **Linux – egyparancsos telepítés:** a README-ben egy terminálparanccsal letölthető és telepíthető a legújabb kiadás (`Aqulify-Linux.tar.gz`, állandó néven a kiadások mellett).
+
+### Javítások (1.8.1)
+- **Mappa importálása – nagy mappánál elveszhettek a profilok:** a motor a profilokat legfeljebb 2 MB-ig mentette (kb. 2500 AutoEq-profil); a nagyobb listát nem mentette el, és a következő indításkor a régi lista visszaállt. Most a határ 12 MB (kb. 15 000 profil), és ha egy import nem fér el, a felület megmondja, hány profil maradt ki.
+- **2D spektrumnézet:** a skála alsó és felső frekvenciáját mutató jelek és a min / max felirat egy helyben álltak (a 3D nézetből maradtak). Most a 2D tengelyen követik a zenét.
+- **Fejléc keskeny ablakban:** a program neve „A..”-ra rövidült, és összemosódott az ikonnal. Most a név mindig teljesen látszik, csak az alcím rövidül vagy tűnik el, és semmi nem csúszik egymásra.
+
 ### Változások (1.8.0)
 - **EQ – a Decramp alapértéke Off (eddig x4):** az AutoEq a profilokat 44,1 kHz-es digitális szűrőkkel illeszti, és az Equalizer APO is így számol. Decramp nélkül az Aqulify pontosan ezt a görbét adja (0,01 dB-en belül). Az x4 a magas hangokat 5 kHz fölött 1–2 dB-lel átformálta, 48 kHz-en pedig a keskeny mély sávokat (pl. 30 Hz, Q4) kb. 1 dB-lel pontatlanabbá tette. Az x2–x4 továbbra is választható a kézzel rajzolt, magas hangokat érintő görbékhez. A már mentett beállítás nem változik.
 - **EQ – a Decramp x6 / x8 megszűnt:** a mérések szerint keskeny mély sávoknál (pl. 30 Hz, Q4) több dB-lel eltértek a beállítottól, és az x4-hez képest nem adtak hallható előnyt. Választható: Off, x2, x3, x4. A korábban mentett x6 / x8 beállítás x4-ként töltődik be. (Ez pontosítja az 1.7.7-es bejegyzést is: a „legfeljebb kb. 0,2 dB” csak a széles mély polcra volt igaz.)
