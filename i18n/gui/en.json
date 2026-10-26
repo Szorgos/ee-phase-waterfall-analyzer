@@ -148,6 +148,7 @@
   "conv.bypassOff": "Convolver: OFF (Bypass)",
   "ab.processed": "A/B: processed",
   "ab.original": "A/B: original (level-matched)",
+  "ab.needModule": "Turn the module on to use the A/B comparison",
   "cam.iso": "3D isometric",
   "cam.side": "Side profile",
   "cam.top": "Top view",

@@ -148,6 +148,7 @@
   "conv.bypassOff": "Konvolver: KI (Bypass)",
   "ab.processed": "A/B: feldolgozott",
   "ab.original": "A/B: eredeti (kiegyenlítve)",
+  "ab.needModule": "Az A/B összehasonlításhoz előbb kapcsold be a modult",
   "cam.iso": "3D Izometrikus",
   "cam.side": "Oldalsó Profil",
   "cam.top": "Felülnézet",

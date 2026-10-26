@@ -614,6 +614,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .adw-btn { background: var(--aq-surface-2); border: 1px solid var(--aq-line-2); color: var(--aq-text); padding: 5px 12px; min-height: 30px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: background .15s, border-color .15s, color .15s; }
   .adw-btn:hover { background: #1C2938; border-color: var(--aq-text-3); }
   .adw-btn.primary { background: var(--aq-accent); border-color: var(--aq-accent); color: var(--aq-accent-ink); font-weight: 600; }
+  .adw-btn:disabled, .adw-btn:disabled:hover { opacity: 0.4; cursor: default; background: var(--aq-surface-2); border-color: var(--aq-line-2); }
   .adw-btn.primary:hover { background: var(--aq-accent-2); border-color: var(--aq-accent-2); }
   .adw-btn.danger { color: var(--aq-danger); }
   .adw-btn.danger:hover { border-color: var(--aq-danger); }
@@ -1149,7 +1150,6 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <span class="status-badge off" id="badgeStatus-convolver" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
-            <button class="adw-btn" id="btnConvBypassTab">Konvolver: KI (Bypass)</button>
             <button class="adw-btn" id="btnConvAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
             <button type="button" class="aq-switch" id="btnToggle-convolver" onclick="toggleModule('convolver')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
             <label class="adw-btn" style="cursor:pointer; font-size:0.78rem;">
@@ -1598,8 +1598,12 @@ function renderAbButtons() {
   Object.keys(AB_MODS).forEach((mod) => {
     const b = document.getElementById(AB_MODS[mod][0]);
     if (!b) return;
-    const on = abIsOn(mod);
-    b.style.display = moduleIsActive(mod) ? '' : 'none';
+    // A gomb mindig látszik (különben kikapcsolt modulnál úgy tűnik, nincs A/B); kikapcsolt modulnál nem nyomható,
+    // és a súgó megmondja, miért
+    const on = abIsOn(mod), active = moduleIsActive(mod);
+    b.style.display = '';
+    b.disabled = !active;
+    b.title = t(active ? 'mt.abTitle' : 'ab.needModule');
     b.className = on ? 'adw-btn primary active' : 'adw-btn';
     b.innerText = t(on ? 'ab.original' : 'ab.processed');
   });
