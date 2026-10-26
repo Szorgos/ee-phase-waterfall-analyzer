@@ -1,6 +1,11 @@
 ### Fejlesztési irány
 - A következő kiadások az 1.x változat csiszolására összpontosítanak: hibajavítások, pontosság és kezelhetőség.
 
+### Változások (1.8.3)
+- **Impulzusválasz-profilok:** a mappa importálásánál a WAV / IRS fájlok közül tetszőleges számú választható (eddig egyszerre csak egy), és mindegyikből profil lesz (🔊 jellel a profillistában). Azonos tartalmú fájlból csak egy profil készül. Egyetlen WAV importja után a profil rögtön meg is nyílik.
+- **A profil kapcsolja a modulokat:** impulzusválasz-profil megnyitásakor a Konvolver bekapcsol, az EQ kikapcsol; EQ-profilnál az EQ kapcsol be, és a Konvolver mindig kikapcsol (eddig bekapcsolva maradhatott). A „nincs kiválasztva” impulzusválasz-profil után a Konvolvert is kikapcsolja.
+- **Az impulzusválaszokat a motor tárolja** (Linux: `~/.config/aqulify/irs`, macOS: `~/Library/Application Support/Aqulify/irs`, Windows: `%APPDATA%\Aqulify\irs`), így újraindítás után is megvannak. Profil törlésekor az impulzusválasz is törlődik, ha más profil nem használja. Ha egy profil impulzusválasza hiányzik, a Konvolver kikapcsol, és a felület kéri a fájl újbóli importálását (nem szól a korábbi impulzusválasszal).
+
 ### Javítások (1.8.2)
 - **A/B gomb:** az EQ, a Konvolver, a Bass Enhancer és a Mono fülén mindig látszik. Kikapcsolt modulnál halvány és nem nyomható, a súgója megmondja, hogy előbb a modult kell bekapcsolni (eddig ilyenkor eltűnt, és úgy tűnt, nincs A/B).
 - **Konvolver:** a fül fejlécében egy be/ki kapcsoló maradt (a „Konvolver: KI (Bypass)” gomb ugyanazt tette, mint a mellette lévő KI/BE váltó). A vízesés fölötti gyorsgomb megmaradt.
