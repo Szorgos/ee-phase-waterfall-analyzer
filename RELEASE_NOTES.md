@@ -1,6 +1,12 @@
 ### Fejlesztési irány
 - A következő kiadások az 1.x változat csiszolására összpontosítanak: hibajavítások, pontosság és kezelhetőség.
 
+### Változások (1.8.4)
+- **Kisebb videokártya-terhelés:** zene nélkül, a vízesés lecsengése után a felület nem rajzol (eddig csendben is folyamatosan, 60 kép/s-mal rajzolt). Új hang vagy bármilyen kezelés (kattintás, görgetés, billentyű) azonnal felébreszti.
+- **Eltakart ablak:** ha az Aqulify ablakát más ablakok teljesen eltakarják, a vízesés nem rajzolódik (Windows és macOS). Ha az ablak látszik, de másik ablak az aktív, legfeljebb 30 kép/s.
+- **Vizualizáció ki-be kapcsolója és 6 minőségi fokozat** (a vízesés fölötti sávban): 1 = 2D spektrum; 2–3 = 3D 30 kép/s; 4–5 = 3D 60 kép/s; 6 = 3D 60 kép/s túlmintavételezéssel (a legszebb kép, a legnagyobb terhelés). Alapértelmezett a 3. fokozat; kikapcsolva semmi nem rajzolódik. A korábbi „Takarékos” gomb helyett gyenge gépen a 4–6. fokozat az adott futásra magától 30 kép/s-ra vált.
+- **Fedora:** a csomag frissítésekor a futó motor régebbi verzióról frissítve is újraindul.
+
 ### Változások (1.8.3)
 - **Impulzusválasz-profilok:** a mappa importálásánál a WAV / IRS fájlok közül tetszőleges számú választható (eddig egyszerre csak egy), és mindegyikből profil lesz (🔊 jellel a profillistában). Azonos tartalmú fájlból csak egy profil készül. Egyetlen WAV importja után a profil rögtön meg is nyílik.
 - **A profil kapcsolja a modulokat:** impulzusválasz-profil megnyitásakor a Konvolver bekapcsol, az EQ kikapcsol; EQ-profilnál az EQ kapcsol be, és a Konvolver mindig kikapcsol (eddig bekapcsolva maradhatott). A „nincs kiválasztva” impulzusválasz-profil után a Konvolvert is kikapcsolja.
