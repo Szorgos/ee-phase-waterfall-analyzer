@@ -1,6 +1,12 @@
 ### Fejlesztési irány
 - A következő kiadások az 1.x változat csiszolására összpontosítanak: hibajavítások, pontosság és kezelhetőség.
 
+### Javítások (1.8.2)
+- **A/B gomb:** az EQ, a Konvolver, a Bass Enhancer és a Mono fülén mindig látszik. Kikapcsolt modulnál halvány és nem nyomható, a súgója megmondja, hogy előbb a modult kell bekapcsolni (eddig ilyenkor eltűnt, és úgy tűnt, nincs A/B).
+- **Konvolver:** a fül fejlécében egy be/ki kapcsoló maradt (a „Konvolver: KI (Bypass)” gomb ugyanazt tette, mint a mellette lévő KI/BE váltó). A vízesés fölötti gyorsgomb megmaradt.
+- **Linux – egyparancsos telepítés:** a parancs a `~/Aqulify` mappába csomagol ki, így korábbi kicsomagolt példányok mellett sem akad el; `curl` nélkül `wget`-tel tölt le, hibás letöltésnél a telepítő nem indul. Frissítés ugyanazzal a paranccsal, eltávolítás: `~/Aqulify/uninstall.sh`.
+- **Linux – ellenőrzőösszeg:** az állandó nevű `Aqulify-Linux.tar.gz.sha256` a saját fájlnevével készül, így a `sha256sum -c` ellenőrzés működik.
+
 ### Változások (1.8.1)
 - **Mono – állítható határfrekvencia:** a mono-keverés felső határa 40 és 250 Hz között állítható (eddig fix 100 Hz; ez maradt az alapérték, így a mentett beállítás hangja nem változik). 80–120 Hz a szokásos; magasabb értéknél a hangszerek térhatása is szűkül. Alsó határ nincs: a legmélyebb sávot a mélyvágás kezeli.
 - **A/B összehasonlítás a Bass Enhancerhez és a Monóhoz is:** ugyanúgy, mint az EQ-nál és a Konvolvernél: az eredeti és a feldolgozott hang között, hangerőre kiegyenlítve.
