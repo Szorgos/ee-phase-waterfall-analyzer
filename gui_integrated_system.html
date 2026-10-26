@@ -331,6 +331,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   canvas#waterfallCanvas { width: 100%; height: 100%; display: block; }
   canvas#spec2dCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; color: var(--aq-text-2); pointer-events: none; }
   canvas#spec2dCanvas[hidden] { display: none; }
+  .wf-off-note { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--aq-text-2); font-size: 0.8rem; pointer-events: none; }
+  .wf-off-note[hidden] { display: none; }
+  .wf-stage.wf-off .freq-scale-live { display: none !important; }
   /* Linux saját ablak (WebKitGTK): a GTK-s léptetőnyilak szélesebbek, mint Windowson, ezért ott a mezők
      szélesebbek (JS), a szám jobbra igazodik, így a nyilak megmaradnak és az érték is teljesen látszik */
   html.wkgtk input[type="number"] { text-align: right; padding-right: 2px; }
@@ -802,8 +805,16 @@ if (!window.THREE) window.THREE = (function () {
     <div class="strip-toolbar" id="stripToolbar">
       <!-- Bal oldal: a vízesés megjelenítése -->
       <div class="strip-controls strip-col strip-col-left">
-        <!-- 2D / 3D nézet: a 2D kevesebb számítást igényel (gyenge géphez) -->
-        <span class="ctrl-group" id="grpWfView"><button class="mini-btn" id="btnWfView" onclick="toggleWfView()">2D nézet</button><button class="mini-btn" id="btnWfEco" onclick="toggleWfEco()">Takarékos: KI</button></span>
+        <!-- Vizualizáció ki-be és minőségi fokozata: 1 = 2D (a legkisebb terhelés), 2–6 = 3D egyre szebben -->
+        <span class="ctrl-group" id="grpWfView"><button class="mini-btn" id="btnWfOn" onclick="toggleWfOn()">Vizualizáció: BE</button>
+        <select id="selectWfLevel" class="mini-select" onchange="setWfLevel(this.value)" title="Minőségi fokozat: magasabb fokozat szebb képet ad, de jobban terheli a videokártyát" data-i18n-title="wf.levelTitle">
+          <option value="1" data-i18n="wf.lv1">1 · 2D</option>
+          <option value="2" data-i18n="wf.lv2">2 · 3D takarékos</option>
+          <option value="3" data-i18n="wf.lv3">3 · 3D</option>
+          <option value="4" data-i18n="wf.lv4">4 · 3D 60 kép/s</option>
+          <option value="5" data-i18n="wf.lv5">5 · 3D éles</option>
+          <option value="6" data-i18n="wf.lv6">6 · 3D legszebb</option>
+        </select></span>
         <!-- Időlépcsők állítása -->
         <span class="ctrl-group" data-wf3d><span class="ctrl-label" data-i18n="strip.time">Idő:</span>
         <select id="selectTimeSteps" class="mini-select">
@@ -857,6 +868,7 @@ if (!window.THREE) window.THREE = (function () {
       <canvas id="waterfallCanvas"></canvas>
       <!-- 2D spektrumnézet: a 3D vízesés helyett (gyenge gépen, vagy ha nincs WebGL) ugyanazokból az adatokból -->
       <canvas id="spec2dCanvas" aria-label="Spektrum (2D)" hidden></canvas>
+      <div id="wfOffNote" class="wf-off-note" hidden data-i18n="wf.offNote">Vizualizáció kikapcsolva</div>
       <!-- Frekvenciaskála a vízesés első (alsó) éléhez igazítva -->
       <canvas id="freqScaleCanvas" class="freq-scale" aria-hidden="true"></canvas>
       <div id="freqScaleLive" class="freq-scale-live" aria-hidden="true">
@@ -1850,7 +1862,7 @@ const renderer = (() => {
 })();
 if (renderer) {
   renderer.setSize(wfCanvas.clientWidth, wfCanvas.clientHeight, false);   // a CSS-méret marad 100 %: az ablakkal együtt méreteződik
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));           // a fokozat (applyWfView) később felülírja
 } else {
   document.querySelectorAll("[data-wf3d]").forEach(el => { el.style.display = "none"; });
 }
@@ -2589,31 +2601,37 @@ let wfLastStep = 0;
 // 2D SPEKTRUMNÉZET (WebGL helyett): ugyanaz a 160 sávos adat, ugyanaz a frekvenciatengely (freqToAxis)
 // =========================================================================
 const WF_FRAME_FULL_MS = 1000 / 60, WF_FRAME_ECO_MS = 1000 / 30;
-let wfEco = false;
-try { wfEco = localStorage.getItem("aqulify_wf_eco") === "1"; } catch (e) {}
 let wfLastDraw = 0, wfWorkEma = 0, wfLagEma = 0, wfLoadSince = 0;
 let wfLastRaf = 0, wfRafBase = 1000 / 60;   // a kijelző képfrissítési ideje (lassan felejtő minimum)
 
-function renderWfEcoBtn() {
-  const b = document.getElementById("btnWfEco");
-  if (b) b.innerText = t(wfEco ? "wf.ecoOn" : "wf.ecoOff");
-}
-/** Csak a kézi választás marad meg újraindítás után; az automatikus váltás az adott futásra szól. */
-function saveWfEco() {
-  try { localStorage.setItem("aqulify_wf_eco", wfEco ? "1" : "0"); } catch (e) {}
-  renderWfEcoBtn();
-}
-function toggleWfEco() {
-  wfEco = !wfEco;
-  wfLoadSince = 0; wfWorkEma = 0; wfLagEma = 0;   // kézi váltásnál a mérés újrakezdődik
-  saveWfEco();
-}
+// =========================================================================
+// VIZUALIZÁCIÓ: ki-be kapcsoló és 6 minőségi fokozat. Kikapcsolva semmi nem rajzolódik.
+// A pixelsűrűség a kijelző sajátjához (devicePixelRatio) mért szorzó: 0,75 = kisebb felbontás (lágyabb kép),
+// 1 = a kijelző felbontása (legfeljebb 2), 2 = túlmintavételezés (simább vonalak, kevesebb moiré; legfeljebb 3).
+// =========================================================================
+const WF_LEVELS = {
+  1: { view: "2d", ms: WF_FRAME_ECO_MS },
+  2: { view: "3d", ms: WF_FRAME_ECO_MS, scale: 0.75, max: 2 },
+  3: { view: "3d", ms: WF_FRAME_ECO_MS, scale: 1, max: 2 },
+  4: { view: "3d", ms: WF_FRAME_FULL_MS, scale: 0.75, max: 2 },
+  5: { view: "3d", ms: WF_FRAME_FULL_MS, scale: 1, max: 2 },
+  6: { view: "3d", ms: WF_FRAME_FULL_MS, scale: 2, max: 3 }
+};
+const WF_LEVEL_DEFAULT = 3;
+let wfOn = true, wfLevel = WF_LEVEL_DEFAULT;
+let wfAutoEco = false;   // gyenge gépen az adott futásra 30 kép/s (wfNoteFrame); kézi fokozatváltás visszaállítja
+try {
+  wfOn = localStorage.getItem("aqulify_wf_on") !== "0";
+  const lv = parseInt(localStorage.getItem("aqulify_wf_level"), 10);
+  if (lv >= 1 && lv <= 6) wfLevel = lv;
+  else if (localStorage.getItem("aqulify_wf_view") === "2d") wfLevel = 1;   // a korábbi 2D-s nézet választása
+} catch (e) {}
+if (!renderer) wfLevel = 1;   // WebGL nélkül csak a 2D nézet érhető el
+let wfView = WF_LEVELS[wfLevel].view;
+function wfFrameMs() { return wfAutoEco ? Math.max(WF_FRAME_ECO_MS, WF_LEVELS[wfLevel].ms) : WF_LEVELS[wfLevel].ms; }
 
 const SPEC2D_TICKS = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
 let spec2dColorTheme = null, spec2dTextColor = "#888";
-let wfView = "3d";
-try { wfView = localStorage.getItem("aqulify_wf_view") === "2d" ? "2d" : "3d"; } catch (e) {}
-if (!renderer) wfView = "2d";   // WebGL nélkül csak a 2D nézet érhető el
 
 function drawSpec2d(levels) {
   if (!spec2dCtx) return;
@@ -2670,33 +2688,66 @@ function drawSpec2d(levels) {
   c.stroke();
 }
 
-/** A nézet kijelzése: 2D-nél a vászon és a 3D-s frekvenciaskála rejtve, a gomb a másik nézetre vált. */
-function applyWfView() {
+/**
+ * A kijelzés a ki-be állapot és a fokozat szerint: kikapcsolva minden vászon rejtve (felirat jelzi), 2D-nél a 3D-s
+ * vászon és frekvenciaskála rejtve. A 3D pixelsűrűségét a fokozat adja. resize: felhasználói váltásnál a vásznak
+ * méretét újra kell számolni (a rejtett vászon mérete 0 volt); induláskor ezt a betöltés végi méretezés intézi.
+ */
+function applyWfView(resize) {
+  wfView = WF_LEVELS[wfLevel].view;
   const is2d = wfView === "2d";
-  if (spec2dCanvas) spec2dCanvas.hidden = !is2d;
-  wfCanvas.style.display = is2d ? "none" : "";
-  freqScaleCanvas.style.display = is2d ? "none" : "";
-  const b = document.getElementById("btnWfView");
-  if (b) {
-    b.innerText = t(is2d ? "wf.view3d" : "wf.view2d");
-    b.style.display = renderer ? "" : "none";
+  if (spec2dCanvas) spec2dCanvas.hidden = !wfOn || !is2d;
+  wfCanvas.style.display = wfOn && !is2d ? "" : "none";
+  freqScaleCanvas.style.display = wfOn && !is2d ? "" : "none";
+  const note = document.getElementById("wfOffNote");
+  if (note) {
+    note.hidden = wfOn;
+    note.innerText = t("wf.offNote");
+    note.parentElement.classList.toggle("wf-off", !wfOn);
   }
-  renderWfEcoBtn();
+  const b = document.getElementById("btnWfOn");
+  if (b) b.innerText = t(wfOn ? "wf.on" : "wf.off");
+  const sel = document.getElementById("selectWfLevel");
+  if (sel) {
+    sel.value = String(wfLevel);
+    sel.style.display = wfOn ? "" : "none";
+    for (const o of sel.options) o.disabled = !renderer && o.value !== "1";
+  }
+  if (renderer && !is2d) {
+    const L = WF_LEVELS[wfLevel];
+    renderer.setPixelRatio(Math.min((window.devicePixelRatio || 1) * L.scale, L.max));
+  }
+  wfLastDraw = 0;
+  wfLoadSince = 0; wfWorkEma = 0; wfLagEma = 0;   // váltásnál a terhelésmérés újrakezdődik
+  stripLayoutDirty = true;
+  if (resize) { resizeAllViews(); wfWake(); }
 }
-function toggleWfView() {
-  if (!renderer) return;
-  wfView = wfView === "2d" ? "3d" : "2d";
-  try { localStorage.setItem("aqulify_wf_view", wfView); } catch (e) {}
-  applyWfView();
+function saveWfView() {
+  try {
+    localStorage.setItem("aqulify_wf_on", wfOn ? "1" : "0");
+    localStorage.setItem("aqulify_wf_level", String(wfLevel));
+  } catch (e) {}
+}
+function toggleWfOn() {
+  wfOn = !wfOn;
+  saveWfView();
+  applyWfView(true);
+}
+function setWfLevel(v) {
+  const lv = parseInt(v, 10);
+  if (!(lv >= 1 && lv <= 6) || (!renderer && lv !== 1)) return;
+  wfLevel = lv;
+  wfAutoEco = false;   // kézi választás: a gyenge gép miatti visszaváltás újra mérődik
+  saveWfView();
+  applyWfView(true);
 }
 const spec2dCanvas = document.getElementById("spec2dCanvas");
 const spec2dCtx = spec2dCanvas ? spec2dCanvas.getContext("2d") : null;
 applyWfView();
 
 // =========================================================================
-// TAKARÉKOS MÓD (gyenge gépen): a vízesés és a 2D-s nézet 30 Hz-en frissül 60 Hz helyett.
-// A gépet a rajzolás ideje és az ütemtartás alapján figyeli: ha tartósan nem bírja, magától átvált erre a futásra
-// (nem marad meg: a következő indításkor újra mér). Kézzel is be-ki kapcsolható a vezérlősorban, az megmarad.
+// GYENGE GÉP: a 60 kép/s-os fokozatokban (4–6) a rajzolás idejét és az ütemtartást figyeli: ha a gép tartósan nem
+// bírja, erre a futásra 30 kép/s-ra vált (nem marad meg: a következő indításkor újra mér). Kézi fokozatváltás után is.
 // =========================================================================
 /**
  * Egy kirajzolt képkocka terhelésének mérése: a munkaidő és az ütemtartás. A késést a kijelző saját ütemén mérjük
@@ -2704,30 +2755,61 @@ applyWfView();
  * ablakban mér: háttérben a böngésző lassíthatja a képfrissítést.
  */
 function wfNoteFrame(nowMs, workMs, dtMs) {
-  if (wfEco || dtMs > 200 || !document.hasFocus()) { wfLoadSince = 0; return; }
+  if (wfFrameMs() > WF_FRAME_FULL_MS || dtMs > 200 || !document.hasFocus()) { wfLoadSince = 0; return; }
   if (!wfLoadSince) wfLoadSince = nowMs;
   if (nowMs - wfLoadSince < 4000) return;                // indulás és visszatérés után rövid bemelegedés
   const expected = Math.ceil((WF_FRAME_FULL_MS - 2) / wfRafBase) * wfRafBase;
   wfWorkEma += 0.05 * (workMs - wfWorkEma);
   wfLagEma += 0.05 * (Math.max(0, dtMs - expected - 1) - wfLagEma);
   if (wfWorkEma > 12 || wfLagEma > 8) {
-    wfEco = true;
-    renderWfEcoBtn();
+    wfAutoEco = true;
     showToast(t("wf.ecoAuto"), 6000);
   }
 }
 
+// =========================================================================
+// ALVÁS: zene nélkül, lecsengett vízeséssel nincs rajzolás (a videokártya pihen; eddig csendben is 60 kép/s ment).
+// Új jel a motortól, vagy bármilyen kezelés (egér, billentyű, görgetés, átméretezés, beállítás) felébreszti.
+// Takart ablakban (a saját ablakos felület jelzi: aqSetOccluded) szintén nincs rajzolás.
+// =========================================================================
+const WF_IDLE_AFTER_MS = 11000;   // a jel elhallgatása után ennyivel (a min / max kijelzés 10 s-os ablaka is lecseng)
+let wfWakeUntil = 0, wfLastSignal = 0, wfFlat = false, wfOccluded = false;
+function wfWake(ms) { wfWakeUntil = Math.max(wfWakeUntil, performance.now() + (ms || 1500)); }
+["pointerdown", "wheel", "keydown", "resize", "input", "change", "focus"].forEach(ev =>
+  window.addEventListener(ev, () => wfWake(), { passive: true, capture: true }));
+window.addEventListener("pointermove", (e) => { if (e.buttons) wfWake(); }, { passive: true, capture: true });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) wfWake(); });
+/** A saját ablakos felület (Windows, macOS) jelzi, ha az ablakot más ablakok teljesen eltakarják. */
+window.aqSetOccluded = (occluded) => {
+  wfOccluded = !!occluded;
+  if (!wfOccluded) wfWake();
+};
+function wfAsleep(now) {
+  if (isPipewireConnected && liveSpectrumLevels && liveSpectrumLevels.length > 0 && now - liveSpectrumTime < 450) {
+    wfLastSignal = now;
+    return false;
+  }
+  if (now < wfWakeUntil || wfFlow.anim) return false;
+  return wfFlat && now - wfLastSignal > WF_IDLE_AFTER_MS;
+}
+
 function animate3D() {
   requestAnimationFrame(animate3D);
-  if (document.hidden) return;                // rejtett (pl. kis méretre tett) ablakban nincs mit rajzolni
+  if (document.hidden || wfOccluded) return;  // rejtett (kis méretre tett) vagy eltakart ablakban nincs mit rajzolni
+  if (!wfOn) {                                // kikapcsolt vizualizáció: csak a vezérlők elrendezése él
+    if (stripLayoutDirty) { stripLayoutDirty = false; layoutStripControls(); }
+    return;
+  }
   const now = performance.now();
+  if (wfAsleep(now)) return;                  // csend, lecsengett vízesés: az utolsó kép marad
   if (wfLastRaf) {
     const d = now - wfLastRaf;
     if (d >= 4 && d < 100) wfRafBase = Math.min(d, wfRafBase + 0.02);   // lassan felejtő minimum: a kijelző üteme
   }
   wfLastRaf = now;
-  const interval = wfEco ? WF_FRAME_ECO_MS : WF_FRAME_FULL_MS;
-  if (wfLastDraw && now - wfLastDraw < interval - 2) return;   // takarékos módban ebben a képkockában nincs rajzolás
+  // a fokozat üteme; ha az ablak látszik, de nincs fókuszban (máson dolgozik a felhasználó), legfeljebb 30 kép/s
+  const interval = document.hasFocus() ? wfFrameMs() : Math.max(wfFrameMs(), WF_FRAME_ECO_MS);
+  if (wfLastDraw && now - wfLastDraw < interval - 2) return;   // ebben a képkockában nincs rajzolás
   const dt = wfLastDraw ? now - wfLastDraw : 0;
   wfLastDraw = now;
   const work0 = performance.now();
@@ -2744,10 +2826,11 @@ function drawWfFrame(nowMs) {
     // A tartományjelek és a min / max 2D-ben is élnek (a 2D tengelyen); előbb ezek, mert a 2D felirat helyet hagy nekik
     drawFreqScaleFrame(fresh ? liveSpectrumLevels : null, spec2dCanvas.clientWidth);
     drawSpec2d(fresh ? liveSpectrumLevels : null);
+    wfFlat = !fresh;                          // a 2D nézet csak a pillanatnyi spektrumot mutatja
     return;
   }
   drawFreqScaleFrame(fresh ? liveSpectrumLevels : null, 0);
-  if (!renderer) return;
+  if (!renderer) { wfFlat = !fresh; return; }   // WebGL nélkül csak a skála él
 
   if (!wfLastStep) wfLastStep = nowMs - WF_STEP_MS;
   let wfSteps = Math.floor((nowMs - wfLastStep) / WF_STEP_MS);
@@ -2801,6 +2884,7 @@ function drawWfFrame(nowMs) {
   const col = geometry.attributes.color.array;
 
   wfFlowTick(nowMs);
+  let peak = 0;                               // a háló legmagasabb pontja: ha jel nélkül lecsengett, jöhet az alvás
   for (let z = 0; z < TIME_SLICES; z++) {
     const src = wfFlow.up ? TIME_SLICES - 1 - z : z;   // felfelé folyásnál a legújabb sor (0.) elöl
     const sData = waterfallData[src];
@@ -2809,6 +2893,7 @@ function drawWfFrame(nowMs) {
     for (let x = 0; x < FREQ_BINS; x++) {
       const idx = z * FREQ_BINS + x;
       const y = sData[x] * fz;
+      if (y > peak) peak = y;
       const isPre = (sMask[x] === 1);
 
       pos[idx * 3 + 1] = y * WF_MAX_H;
@@ -2823,6 +2908,7 @@ function drawWfFrame(nowMs) {
   geometry.attributes.color.needsUpdate = true;
   updateSkirt();
   renderer.render(scene, camera);
+  wfFlat = !isLiveFresh && peak < 0.003;      // szemmel már sík (a lecsengés 0,88-as szorzóval soha nem pontosan 0)
 }
 animate3D();
 

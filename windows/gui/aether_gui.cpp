@@ -189,6 +189,72 @@ std::string allowedExternalUrl(const std::string& req) {
     return {};
 }
 
+/** Az ablak látható kerete (árnyék nélkül), képernyő-koordinátában. */
+RECT visibleFrame(HWND h) {
+    RECT r{};
+    if (FAILED(DwmGetWindowAttribute(h, 9 /* DWMWA_EXTENDED_FRAME_BOUNDS */, &r, sizeof(r)))) GetWindowRect(h, &r);
+    return r;
+}
+
+BOOL CALLBACK addMonitor(HMONITOR, HDC, LPRECT r, LPARAM rgn) {
+    HRGN m = CreateRectRgnIndirect(r);
+    CombineRgn(reinterpret_cast<HRGN>(rgn), reinterpret_cast<HRGN>(rgn), m, RGN_OR);
+    DeleteObject(m);
+    return TRUE;
+}
+
+/**
+ * Teljesen eltakarja-e az ablakot a felette lévő ablakok (vagy a képernyőkön kívül van-e). A WebView2 ezt nem
+ * jelzi a lapnak (csak a kis méretre tételt), ezért a felület takart ablakban is rajzolna. Nem takar: a rejtett, a
+ * kis méretre tett, a más virtuális asztalon lévő (DWM „cloaked”), az átkattintható (WS_EX_TRANSPARENT, pl. a
+ * képernyőfedők) és az áttetsző réteges ablak.
+ */
+bool isOccluded(HWND self) {
+    if (!IsWindowVisible(self) || IsIconic(self)) return false;   // a kis méretre tételt a WebView2 maga jelzi
+    const RECT fr = visibleFrame(self);
+    HRGN left = CreateRectRgnIndirect(&fr);
+    HRGN screens = CreateRectRgn(0, 0, 0, 0);
+    EnumDisplayMonitors(nullptr, nullptr, addMonitor, reinterpret_cast<LPARAM>(screens));
+    CombineRgn(left, left, screens, RGN_AND);                        // csak a képernyőn lévő rész számít
+    DeleteObject(screens);
+    RECT box{};
+    int kind = GetRgnBox(left, &box);
+    for (HWND h = GetWindow(self, GW_HWNDPREV); h && kind != NULLREGION; h = GetWindow(h, GW_HWNDPREV)) {
+        if (!IsWindowVisible(h) || IsIconic(h)) continue;
+        DWORD cloaked = 0;
+        if (SUCCEEDED(DwmGetWindowAttribute(h, 14 /* DWMWA_CLOAKED */, &cloaked, sizeof(cloaked))) && cloaked) continue;
+        const LONG_PTR ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
+        if (ex & WS_EX_TRANSPARENT) continue;
+        if (ex & WS_EX_LAYERED) {
+            BYTE alpha = 255;
+            DWORD flags = 0;
+            if (GetLayeredWindowAttributes(h, nullptr, &alpha, &flags) && (flags & LWA_ALPHA) && alpha < 255) continue;
+        }
+        const RECT r = visibleFrame(h);
+        if (r.right <= r.left || r.bottom <= r.top) continue;
+        HRGN cover = CreateRectRgnIndirect(&r);
+        kind = CombineRgn(left, left, cover, RGN_DIFF);
+        DeleteObject(cover);
+    }
+    kind = GetRgnBox(left, &box);
+    DeleteObject(left);
+    return kind == NULLREGION;
+}
+
+webview::webview* g_view = nullptr;
+HWND g_viewHwnd = nullptr;
+bool g_occluded = false;
+
+/** Fél másodpercenként: ha a takarás változott, a lap leállítja / folytatja a vízesés rajzolását. */
+void CALLBACK occlusionTimer(HWND, UINT, UINT_PTR, DWORD) {
+    if (!g_view || !g_viewHwnd) return;
+    const bool occ = isOccluded(g_viewHwnd);
+    if (occ == g_occluded) return;
+    g_occluded = occ;
+    g_view->eval(occ ? "window.aqSetOccluded && window.aqSetOccluded(true)"
+                     : "window.aqSetOccluded && window.aqSetOccluded(false)");
+}
+
 } // namespace
 
 /** A felület WebView2 ablakban; kivételt dob, ha a WebView2 nem indítható. */
@@ -239,7 +305,14 @@ void runWindow(const std::wstring& guiFolder) {
         for (auto& c : url) if (c == L'\\') c = L'/';
         w.navigate(toUtf8(url));
     }
+    // Takarás figyelése (lásd isOccluded); az időzítő a webview üzenethurkában fut
+    g_view = &w;
+    g_viewHwnd = hwnd;
+    if (hwnd) SetTimer(hwnd, 0xA0C1, 500, occlusionTimer);
     w.run();
+    if (hwnd) KillTimer(hwnd, 0xA0C1);
+    g_view = nullptr;
+    g_viewHwnd = nullptr;
 }
 
 /**

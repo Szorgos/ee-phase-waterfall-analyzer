@@ -561,6 +561,15 @@ struct Core {
     return YES;
 }
 
+/** Takart ablakban a felület nem rajzolja a vízesést (aqSetOccluded); a rendszer jelzi a takarás változását. */
+- (void)windowDidChangeOcclusionState:(NSNotification*)note {
+    if (note.object != window_ || !web_) return;
+    const BOOL visible = (window_.occlusionState & NSWindowOcclusionStateVisible) != 0;
+    [web_ evaluateJavaScript:(visible ? @"window.aqSetOccluded && window.aqSetOccluded(false)"
+                                      : @"window.aqSetOccluded && window.aqSetOccluded(true)")
+           completionHandler:nil];
+}
+
 /** Bezáráskor a felület leáll (a motor fut tovább a menüsorban), és az alkalmazás eltűnik a Dockból. */
 - (void)windowWillClose:(NSNotification*)note {
     if (note.object != window_) return;
