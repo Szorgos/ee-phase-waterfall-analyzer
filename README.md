@@ -73,12 +73,13 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
 ## 🚀 Telepítés Linuxon (Egyetlen Parancsból)
 
 > ### 📦 **Gyors Telepítés Linuxra (Bármely disztribúció):**
-> Nyiss meg egy terminált, és másold be az alábbi parancsot:
+> Nyiss meg egy terminált, és másold be az alábbi parancsot (a legújabb kiadást a `~/Aqulify` mappába tölti le, és elindítja a telepítőt; a csomagokhoz sudo jelszót kér):
 > ```bash
-> curl -sSL https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz | tar -xz && cd Aqulify-Linux-* && ./install.sh
+> mkdir -p ~/Aqulify && cd ~/Aqulify && { curl -fsSL https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz 2>/dev/null || wget -qO- https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz; } | tar -xz --strip-components=1 && ./install.sh
 > ```
-> *(vagy `wget`-tel: `wget -qO- https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz | tar -xz && cd Aqulify-Linux-* && ./install.sh`)*  
-> 👉 Közvetlen csomagletöltés: **[Aqulify-Linux.tar.gz letöltése – mindig a legújabb kiadás](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)**
+> A `curl`-t használja, ha nincs a gépen, akkor a `wget`-et. **Frissítés:** ugyanez a parancs újra. **Eltávolítás:** `~/Aqulify/uninstall.sh`.
+>
+> 👉 Közvetlen csomagletöltés: **[Aqulify-Linux.tar.gz – mindig a legújabb kiadás](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)** ([ellenőrzőösszeg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz.sha256): a két fájl egy mappában, `sha256sum -c Aqulify-Linux.tar.gz.sha256`)
 
 ### Fedora: COPR-tárolóból (ajánlott, automatikus frissítéssel)
 
@@ -106,9 +107,9 @@ git clone https://github.com/Szorgos/ee-phase-waterfall-analyzer.git
 cd ee-phase-waterfall-analyzer
 ./install.sh
 ```
-*(Frissítéshez a mappában elegendő kiadni: `git pull && ./install.sh`)*
+*(Frissítéshez a mappában elegendő kiadni: `git pull && ./install.sh`.)* Ehhez a `git` kell, ami friss telepítésű rendszeren nem mindig van fent: `sudo apt install git` (Ubuntu / Debian / Mint), `sudo dnf install git` (Fedora). Ha nem akarsz gitet telepíteni, használd a fenti egyparancsos telepítést.
 
-### 2. Támogatott Linux Disztribúciók:
+### Támogatott Linux disztribúciók
 * **Ubuntu / Debian / Linux Mint / Pop!_OS:** `apt-get` csomagkezelővel
 * **Fedora / RHEL / CentOS:** `dnf` csomagkezelővel
 * **Arch Linux / Manjaro / EndeavourOS:** `pacman` csomagkezelővel

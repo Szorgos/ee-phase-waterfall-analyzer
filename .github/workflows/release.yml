@@ -62,9 +62,12 @@ jobs:
           NAME="Aqulify-Linux-${VER}"
           git archive --format=tar.gz --prefix="${NAME}/" -o "${NAME}.tar.gz" HEAD
           sha256sum "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256"
-          # Állandó nevű példány: a README "legújabb kiadás" és a terminálos egyparancsos telepítő linkje erre mutat
+          # Állandó nevű példány: a README "legújabb kiadás" és a terminálos egyparancsos telepítő linkje erre mutat.
+          # Az ellenőrzőösszeg a saját nevével készül (a verziós fájl másolatában a verziós név állna, és a
+          # `sha256sum -c Aqulify-Linux.tar.gz.sha256` nem találná a fájlt)
           cp "${NAME}.tar.gz" Aqulify-Linux.tar.gz
-          cp "${NAME}.tar.gz.sha256" Aqulify-Linux.tar.gz.sha256
+          sha256sum Aqulify-Linux.tar.gz > Aqulify-Linux.tar.gz.sha256
+          sha256sum -c Aqulify-Linux.tar.gz.sha256 "${NAME}.tar.gz.sha256"
           echo "file=${NAME}.tar.gz" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
