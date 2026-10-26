@@ -92,4 +92,67 @@ inline bool parseIrMessage(const std::string& msg, IrData& out, uint32_t maxFram
     return true;
 }
 
+// ---------------------------------------------------------------- IR-tár (IR-profilok)
+
+/** IR-tár azonosító: 1–32 karakter, csak 0-9 és a-z (fájlnévként is biztonságos). */
+inline bool isValidIrId(const std::string& id) {
+    return !id.empty() && id.size() <= 32 &&
+           std::all_of(id.begin(), id.end(), [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z'); });
+}
+
+constexpr uint32_t kIrFileMagicAirf = 0x46524941; // 'AIRF' – az ir.bin formátuma (Linux, macOS, Windows)
+
+/** Az ir.bin formátuma bájtokként: 'AIRF' | 1 | sr | csatornák | frame-ek | névhossz | név | bal | jobb. */
+inline std::string encodeIrFile(const IrData& ir) {
+    if (ir.empty()) return {};
+    const uint32_t hdr[6] = { kIrFileMagicAirf, 1u, ir.sampleRate, ir.channels(), static_cast<uint32_t>(ir.frames()),
+                              static_cast<uint32_t>(ir.name.size()) };
+    std::string b(sizeof(hdr) + ir.name.size() + ir.frames() * 4u * ir.channels(), '\0');
+    char* p = b.data();
+    std::memcpy(p, hdr, sizeof(hdr)); p += sizeof(hdr);
+    std::memcpy(p, ir.name.data(), ir.name.size()); p += ir.name.size();
+    std::memcpy(p, ir.left.data(), ir.frames() * 4u); p += ir.frames() * 4u;
+    if (!ir.right.empty()) std::memcpy(p, ir.right.data(), ir.frames() * 4u);
+    return b;
+}
+
+inline bool decodeIrFile(const std::string& b, IrData& out, uint32_t maxFrames) {
+    uint32_t hdr[6] = {};
+    if (b.size() < sizeof(hdr)) return false;
+    std::memcpy(hdr, b.data(), sizeof(hdr));
+    if (hdr[0] != kIrFileMagicAirf || hdr[1] != 1u || (hdr[3] != 1 && hdr[3] != 2) || hdr[4] == 0 ||
+        hdr[4] > maxFrames || hdr[5] >= 4096 || hdr[2] < 8000 || hdr[2] > 768000)
+        return false;
+    const size_t frames = hdr[4], need = sizeof(hdr) + hdr[5] + frames * 4u * hdr[3];
+    if (b.size() < need) return false;
+    IrData ir;
+    ir.sampleRate = hdr[2];
+    const char* p = b.data() + sizeof(hdr);
+    ir.name.assign(p, hdr[5]); p += hdr[5];
+    ir.left.resize(frames);
+    std::memcpy(ir.left.data(), p, frames * 4u); p += frames * 4u;
+    if (hdr[3] == 2) {
+        ir.right.resize(frames);
+        std::memcpy(ir.right.data(), p, frames * 4u);
+    }
+    for (auto* v : { &ir.left, &ir.right })
+        for (float& x : *v) if (!std::isfinite(x)) x = 0.0f;
+    out = std::move(ir);
+    return true;
+}
+
+/**
+ * IR mentése a tárba (bináris WebSocket üzenet a GUI-tól, kis-endián):
+ *   "AEIS" | u32 verzió(1) | u32 azonosítóhossz | azonosító | teljes "AEIR" üzenet
+ */
+inline bool parseIrStoreMessage(const std::string& msg, std::string& id, IrData& out, uint32_t maxFrames) {
+    if (msg.size() < 12 || std::memcmp(msg.data(), "AEIS", 4) != 0) return false;
+    uint32_t ver, idLen;
+    std::memcpy(&ver, msg.data() + 4, 4);
+    std::memcpy(&idLen, msg.data() + 8, 4);
+    if (ver != 1 || idLen == 0 || idLen > 32 || msg.size() < 12 + static_cast<size_t>(idLen)) return false;
+    id = msg.substr(12, idLen);
+    return isValidIrId(id) && parseIrMessage(msg.substr(12 + idLen), out, maxFrames);
+}
+
 } // namespace ee_analyzer

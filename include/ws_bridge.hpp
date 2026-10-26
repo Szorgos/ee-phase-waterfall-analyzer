@@ -55,6 +55,13 @@ struct BridgeCallbacks {
     std::function<void(IrData&&)> setIr;
     /** A betöltött IR adatai (név, mintavétel, előnézet) az állapotüzenethez. */
     std::function<IrData()> getIr;
+    /**
+     * IR-tár (az IR-profilok impulzusválaszai azonosítóval, az ir.bin formátumában) olvasása / mentése / törlése
+     * (opcionális). Az azonosítót a híd ellenőrzi (isValidIrId), így fájlnévként használható.
+     */
+    std::function<std::string(const std::string& id)> loadLibraryIr;
+    std::function<bool(const std::string& id, const std::string& bytes)> saveLibraryIr;
+    std::function<bool(const std::string& id)> removeLibraryIr;
     /** Kimeneti hangeszköz váltása (pl. Speaker / USB Audio). */
     std::function<void(const std::string&)> setOutputSink;
     /** EQ profilok (a felület által kezelt JSON dokumentum) olvasása / mentése (opcionális). */
@@ -527,14 +534,37 @@ private:
     // ------------------------------------------------------------------ protokoll
     void handleBinary(const std::string& data) {
         IrData ir;
+        if (data.size() >= 4 && std::memcmp(data.data(), "AEIS", 4) == 0) {
+            // IR-profil: csak a tárba kerül, a betöltés külön "ir_select" üzenettel történik
+            std::string id;
+            bool ok = parseIrStoreMessage(data, id, ir, kBridgeMaxIrFrames) && cb_.saveLibraryIr &&
+                      cb_.saveLibraryIr(id, encodeIrFile(ir));
+            if (!ok) std::cout << "[WS Bridge] Az IR nem menthető a tárba (" << data.size() << " bájt).\n";
+            sendText("{\"type\":\"ir_stored\",\"id\":\"" + jsonEscape(isValidIrId(id) ? id : "") + "\",\"ok\":" +
+                     (ok ? "true" : "false") + "}");
+            return;
+        }
         if (!parseIrMessage(data, ir, kBridgeMaxIrFrames)) {
             std::cout << "[WS Bridge] Érvénytelen IR üzenet (" << data.size() << " bájt).\n";
             return;
         }
         std::cout << "[WS Bridge] Impulzusválasz érkezett: " << ir.name << " (" << ir.frames() << " minta, "
                   << ir.sampleRate << " Hz, " << ir.channels() << " csatorna)\n";
+        activeIrId_.clear();
         if (cb_.setIr) cb_.setIr(std::move(ir));
         broadcast(buildStateMessage("ir"));   // mindenki (a küldő is) az új IR-t látja
+    }
+
+    /** IR-profil megnyitása: a tárban lévő IR lesz a konvolveré. @return false, ha nincs ilyen (vagy hibás). */
+    bool selectLibraryIr(const std::string& id) {
+        if (!isValidIrId(id) || !cb_.loadLibraryIr || !cb_.setIr) return false;
+        IrData ir;
+        if (!decodeIrFile(cb_.loadLibraryIr(id), ir, kBridgeMaxIrFrames)) return false;
+        std::cout << "[WS Bridge] IR-profil: " << ir.name << " (" << id << ")\n";
+        activeIrId_ = id;
+        cb_.setIr(std::move(ir));
+        broadcast(buildStateMessage("ir"));
+        return true;
     }
 
     static double num(const json::Value& msg, const char* key, double def) {
@@ -563,6 +593,17 @@ private:
                 check.type == json::Value::Type::Object && cb_.setPresets) {
                 cb_.setPresets(doc);
                 markSync(true);
+            }
+            return;
+        }
+        if (type == "ir_select" || type == "ir_delete") {
+            const json::Value* idV = msg.get("id");
+            const std::string id = idV ? idV->stringOr("") : "";
+            if (type == "ir_delete") {
+                // A betöltött IR marad (a konvolver tovább szól vele), csak a tárból törlődik
+                if (isValidIrId(id) && cb_.removeLibraryIr) cb_.removeLibraryIr(id);
+            } else if (!selectLibraryIr(id)) {
+                sendText("{\"type\":\"ir_missing\",\"id\":\"" + jsonEscape(isValidIrId(id) ? id : "") + "\"}");
             }
             return;
         }
@@ -678,6 +719,7 @@ private:
             p.convInputGainDb = static_cast<float>(num(msg, "inputGain", p.convInputGainDb));
             p.convOutputGainDb = static_cast<float>(num(msg, "outputGain", p.convOutputGainDb));
         } else if (type == "clear_ir") {
+            activeIrId_.clear();
             if (cb_.setIr) cb_.setIr(IrData{});
             broadcast(buildStateMessage("ir"));
             return;
@@ -884,13 +926,15 @@ private:
         s += ",\"freqHz\":"; appendFloat(s, p.monoFreqHz, 0); s += '}';
         s += ",\"autogain\":{\"target\":"; appendFloat(s, p.agcTargetLufs, 1);
         s += ",\"maxGain\":"; appendFloat(s, p.agcMaxGainDb, 1); s += '}';
+        // Van-e IR-tár (régebbi motornál nincs: a felület ilyenkor nem készít IR-profilt)
+        if (cb_.loadLibraryIr && cb_.saveLibraryIr) s += ",\"irLibrary\":true";
         if (cb_.getIr) {
             IrData ir = cb_.getIr();
             s += ",\"ir\":";
             if (ir.empty()) {
                 s += "null";
             } else {
-                s += "{\"name\":\"" + jsonEscape(ir.name) + "\",\"sr\":" + std::to_string(ir.sampleRate) +
+                s += "{\"name\":\"" + jsonEscape(ir.name) + "\",\"id\":\"" + jsonEscape(activeIrId_) + "\",\"sr\":" + std::to_string(ir.sampleRate) +
                      ",\"channels\":" + std::to_string(ir.channels()) + ",\"frames\":" + std::to_string(ir.frames()) +
                      ",\"preview\":[";
                 const auto pv = ir.preview(400);
@@ -954,6 +998,7 @@ private:
     Client* cur_ = nullptr;             // akinek az üzenetét éppen feldolgozzuk
     bool syncPending_ = false, syncPresets_ = false;
     const Client* syncSource_ = nullptr;
+    std::string activeIrId_;            // a betöltött IR tárbeli azonosítója (üres: nem IR-profilból jött)
     clock::time_point lastChange_{};
 };
 

@@ -125,6 +125,29 @@ inline bool loadIr(IrData& out) {
     return true;
 }
 
+/** IR-tár: az IR-profilok impulzusválaszai (~/.config/aqulify/irs/<azonosító>.bin, az ir.bin formátumában). */
+inline std::string libraryIrPath(const std::string& id, bool create) {
+    std::string dir = configDir(create) + "/irs";
+    if (create) mkdir(dir.c_str(), 0755);
+    return dir + "/" + id + ".bin";
+}
+
+inline bool saveLibraryIr(const std::string& id, const std::string& bytes) {
+    if (!isValidIrId(id) || bytes.empty()) return false;
+    return writeAtomic(libraryIrPath(id, true), std::vector<char>(bytes.begin(), bytes.end()));
+}
+
+inline std::string loadLibraryIr(const std::string& id) {
+    if (!isValidIrId(id)) return "";
+    std::ifstream f(libraryIrPath(id, false), std::ios::binary);
+    if (!f) return "";
+    return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+}
+
+inline bool removeLibraryIr(const std::string& id) {
+    return isValidIrId(id) && std::remove(libraryIrPath(id, false).c_str()) == 0;
+}
+
 /** EQ profilok: a felület JSON dokumentuma (~/.config/aqulify/presets.json). */
 inline bool savePresets(const std::string& doc) {
     return writeAtomic(configDir(true) + "/presets.json", std::vector<char>(doc.begin(), doc.end()));

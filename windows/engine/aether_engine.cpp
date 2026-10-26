@@ -186,6 +186,25 @@ std::string loadPresetFile() {
 
 bool savePresetFile(const std::string& doc) { return writeFileAtomic(presetFilePath(true), doc); }
 
+// IR-tár: az IR-profilok impulzusválaszai (%APPDATA%\Aqulify\irs\<azonosító>.bin, az ir.bin formátumában)
+std::wstring libraryIrPath(const std::string& id, bool createDir) {
+    const std::wstring dir = userFilePath(L"irs", createDir);
+    if (createDir) CreateDirectoryW(dir.c_str(), nullptr);
+    return dir + L"\\" + std::wstring(id.begin(), id.end()) + L".bin";   // az azonosító csak 0-9 és a-z
+}
+
+std::string loadLibraryIr(const std::string& id) {
+    return isValidIrId(id) ? readSmallFile(libraryIrPath(id, false), 8u << 20) : std::string();
+}
+
+bool saveLibraryIr(const std::string& id, const std::string& bytes) {
+    return isValidIrId(id) && !bytes.empty() && writeFileAtomic(libraryIrPath(id, true), bytes);
+}
+
+bool removeLibraryIr(const std::string& id) {
+    return isValidIrId(id) && DeleteFileW(libraryIrPath(id, false).c_str()) != 0;
+}
+
 bool hasArg(int argc, char** argv, const char* a) {
     for (int i = 1; i < argc; ++i) if (std::strcmp(argv[i], a) == 0) return true;
     return false;
@@ -496,6 +515,9 @@ int main(int argc, char** argv) {
     cb.statusFields = [&]() { return sources.statusFields(); };
     cb.setIr = [&](IrData&& ir) { sources.setIr(std::move(ir)); };
     cb.getIr = [&]() { return sources.irCopy(); };
+    cb.loadLibraryIr = loadLibraryIr;
+    cb.saveLibraryIr = saveLibraryIr;
+    cb.removeLibraryIr = removeLibraryIr;
     std::mutex presetMutex;
     std::string presetDoc = loadPresetFile();
     cb.getPresets = [&]() { std::lock_guard<std::mutex> lk(presetMutex); return presetDoc; };

@@ -314,6 +314,9 @@ struct Core {
         c->engine.chain.submitIr(std::move(ir));
     };
     cb.getIr = [c]() { return c->engine.chain.irCopy(); };
+    cb.loadLibraryIr = linux_store::loadLibraryIr;
+    cb.saveLibraryIr = linux_store::saveLibraryIr;
+    cb.removeLibraryIr = linux_store::removeLibraryIr;
     cb.getPresets = [c]() {
         std::lock_guard<std::mutex> lk(c->presetMutex);
         return c->presetDoc;

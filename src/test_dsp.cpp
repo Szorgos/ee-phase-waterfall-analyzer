@@ -1521,6 +1521,55 @@ static void testAutogain() {
           loaded10.monoCompare == 0, "v10 paraméterfájl betöltése: célszint megmarad, mono határ 100 Hz, Bass / Mono A/B ki");
 }
 
+// IR-profilok: a tár fájlformátuma (ir.bin, 'AIRF') és a GUI "AEIS" üzenete
+static void testIrLibraryFormat() {
+    std::printf("\n[IR-tár] fájlformátum és mentési üzenet\n");
+    constexpr uint32_t kMaxFrames = 262144;   // ws_bridge.hpp: kBridgeMaxIrFrames
+    IrData ir;
+    ir.sampleRate = 48000;
+    ir.name = "Terem ő.wav";
+    ir.left = { 1.0f, 0.5f, -0.25f, 0.0f };
+    ir.right = { 0.9f, std::nanf(""), 0.1f, 0.0f };
+    IrData back;
+    const std::string bytes = encodeIrFile(ir);
+    CHECK(decodeIrFile(bytes, back, kMaxFrames) && back.name == ir.name && back.sampleRate == 48000 &&
+          back.channels() == 2 && back.frames() == 4 && back.left == ir.left && back.right[0] == 0.9f && back.right[1] == 0.0f,
+          "AIRF oda-vissza: név, mintavétel, 2 csatorna, minták (NaN -> 0)");
+    IrData mono = ir;
+    mono.right.clear();
+    CHECK(decodeIrFile(encodeIrFile(mono), back, kMaxFrames) && back.channels() == 1 && back.left == ir.left,
+          "AIRF oda-vissza: mono");
+    CHECK(!decodeIrFile(bytes.substr(0, bytes.size() - 1), back, kMaxFrames) && !decodeIrFile(bytes, back, 3) &&
+          !decodeIrFile("", back, kMaxFrames),
+          "csonka fájl, túl hosszú IR és üres fájl elutasítva");
+
+    CHECK(isValidIrId("0123456789abcdef") && !isValidIrId("") && !isValidIrId("../x") && !isValidIrId("ABC") &&
+          !isValidIrId(std::string(33, 'a')) && isValidIrId(std::string(32, 'a')),
+          "azonosító: csak 0-9 és a-z, 1-32 karakter (fájlnévként biztonságos)");
+
+    // "AEIS" | 1 | azonosítóhossz | azonosító | "AEIR" | 1 | sr | csatornák | frame-ek | névhossz | név | minták
+    auto u32 = [](std::string& s, uint32_t v) { s.append(reinterpret_cast<const char*>(&v), 4); };
+    auto storeMsg = [&](const std::string& id, uint32_t ver) {
+        std::string aeir = "AEIR";
+        u32(aeir, 1); u32(aeir, 44100); u32(aeir, 1); u32(aeir, 2); u32(aeir, 2);
+        aeir += "ab";
+        const float smp[2] = { 0.25f, -0.5f };
+        aeir.append(reinterpret_cast<const char*>(smp), sizeof(smp));
+        std::string m = "AEIS";
+        u32(m, ver); u32(m, static_cast<uint32_t>(id.size()));
+        return m + id + aeir;
+    };
+    std::string id;
+    IrData got;
+    CHECK(parseIrStoreMessage(storeMsg("a1b2", 1), id, got, kMaxFrames) && id == "a1b2" && got.name == "ab" &&
+          got.sampleRate == 44100 && got.frames() == 2 && got.left[1] == -0.5f,
+          "AEIS üzenet: azonosító és IR beolvasva");
+    CHECK(!parseIrStoreMessage(storeMsg("../a", 1), id, got, kMaxFrames) &&
+          !parseIrStoreMessage(storeMsg("a1b2", 2), id, got, kMaxFrames) &&
+          !parseIrStoreMessage(storeMsg("a1b2", 1).substr(0, 30), id, got, kMaxFrames),
+          "AEIS üzenet: rossz azonosító, ismeretlen verzió és csonka üzenet elutasítva");
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify DSP modulteszt (EasyEffects könyvtárak)\n");
@@ -1540,6 +1589,7 @@ int main() {
     testAbCompare();
     testAutogain();
     testEqLatency();
+    testIrLibraryFormat();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

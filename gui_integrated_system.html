@@ -4811,9 +4811,8 @@ function setConvIr(name, sr, channels) {
 }
 
 /** Bináris IR üzenet: "AEIR" | v1 | sr | csatornák | frame-ek | névhossz | név | float32 interleaved */
-function uploadIrToEngine() {
-  if (!convIrLocal || !pipewireWs || !isPipewireConnected || pipewireWs.readyState !== WebSocket.OPEN) return;
-  const ir = convIrLocal, ch = ir.channels.length, frames = ir.channels[0].length;
+function buildIrMessage(ir) {
+  const ch = ir.channels.length, frames = ir.channels[0].length;
   const nameBytes = new TextEncoder().encode(ir.name).slice(0, 1000);
   const buf = new ArrayBuffer(24 + nameBytes.length + frames * ch * 4);
   const dv = new DataView(buf);
@@ -4823,7 +4822,89 @@ function uploadIrToEngine() {
   new Uint8Array(buf, 24, nameBytes.length).set(nameBytes);
   let p = 24 + nameBytes.length;
   for (let i = 0; i < frames; i++) for (let c = 0; c < ch; c++) { dv.setFloat32(p, ir.channels[c][i], true); p += 4; }
-  pipewireWs.send(buf);
+  return buf;
+}
+
+function engineWsOpen() { return !!(pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN); }
+
+function uploadIrToEngine() {
+  if (!convIrLocal || !engineWsOpen()) return;
+  pipewireWs.send(buildIrMessage(convIrLocal));
+}
+
+// ---- IR-tár: az IR-profilok impulzusválaszait a motor tárolja (a telefonról és újraindítás után is elérhetők)
+var engineIrLibrary = false;          // a motor állapotüzenete szerint van-e IR-tár
+const irStoreWaiters = new Map();     // azonosító -> a motor "ir_stored" válaszára váró függvény
+
+function engineIrLibraryReady() { return engineIrLibrary && engineWsOpen(); }
+
+/** Tartalom szerinti azonosító (2 × 32 bites FNV-szerű hash, 16 hexa jegy): ugyanaz az IR ugyanazt kapja. */
+function irContentId(sr, channels) {
+  let h1 = (0x811c9dc5 ^ sr) >>> 0, h2 = (0x01000193 ^ channels.length) >>> 0;
+  for (const c of channels) {
+    const u = new Uint32Array(c.buffer, c.byteOffset, c.length);
+    for (let i = 0; i < u.length; i++) {
+      h1 = Math.imul(h1 ^ u[i], 0x01000193);
+      h2 = Math.imul(h2 ^ u[i], 0x5bd1e995) ^ (h2 >>> 15);
+    }
+  }
+  return (h1 >>> 0).toString(16).padStart(8, "0") + (h2 >>> 0).toString(16).padStart(8, "0");
+}
+
+/** A tárba kerülő IR: a motor határára vágva, tartalom szerinti azonosítóval. */
+function prepareIrForStore(sr, channels) {
+  if (channels[0].length > CONV_MAX_FRAMES) channels = channels.map(c => c.slice(0, CONV_MAX_FRAMES));
+  return { id: irContentId(sr, channels), sr, channels };
+}
+
+/**
+ * IR mentése a motor tárába ("AEIS" | v1 | azonosítóhossz | azonosító | AEIR üzenet). A motor válaszát megvárja.
+ * @param prep prepareIrForStore eredménye
+ * @return {Promise<{id, name, sr, ch, frames}>} az IR-profilba kerülő adatok
+ */
+function storeIrInEngine(name, prep) {
+  const { id, sr, channels } = prep;
+  const aeir = new Uint8Array(buildIrMessage({ name, sr, channels }));
+  const idBytes = new TextEncoder().encode(id);
+  const msg = new Uint8Array(12 + idBytes.length + aeir.length);
+  const dv = new DataView(msg.buffer);
+  [0x41, 0x45, 0x49, 0x53].forEach((b, i) => dv.setUint8(i, b));
+  dv.setUint32(4, 1, true); dv.setUint32(8, idBytes.length, true);
+  msg.set(idBytes, 12);
+  msg.set(aeir, 12 + idBytes.length);
+  return new Promise((resolve, reject) => {
+    if (!engineIrLibraryReady()) { reject(new Error("engine")); return; }
+    const timer = setTimeout(() => { irStoreWaiters.delete(id); reject(new Error("timeout")); }, 20000);
+    irStoreWaiters.set(id, (ok) => {
+      clearTimeout(timer);
+      irStoreWaiters.delete(id);
+      if (ok) resolve({ id, name, sr, ch: channels.length, frames: channels[0].length });
+      else reject(new Error("engine"));
+    });
+    pipewireWs.send(msg);
+  });
+}
+
+/** IR-profil megnyitása: a motor a tárából tölti be az IR-t; a Konvolver bekapcsol, az EQ kikapcsol. */
+var pendingIrSelect = null;   // kapcsolat nélkül választott IR-profil: csatlakozáskor töltődik be
+function selectIrProfile(p) {
+  // Előbb az IR, utána a modul: a Konvolver ne szóljon (akár egy pillanatig sem) a korábbi IR-rel
+  if (engineWsOpen()) {
+    pendingIrSelect = null;
+    pipewireWs.send(JSON.stringify({ type: "ir_select", id: p.ir.id }));
+  } else {
+    pendingIrSelect = p.ir.id;
+    showToast(t("preset.irOffline"), 4000);
+  }
+  setModuleActive('convolver', true);   // az EQ-t is kikapcsolja
+}
+
+/** A motor nem találja a profil IR-jét (pl. a tárat törölték): a Konvolver nem szólhat a korábbi IR-rel. */
+function onIrMissing(id) {
+  const cur = activePresetName ? presetsDoc.presets[activePresetName] : null;
+  if (!cur || cur.kind !== "ir" || !cur.ir || cur.ir.id !== id) return;
+  setModuleActive('convolver', false);
+  alert(t("preset.irMissing", { name: activePresetName }));
 }
 
 async function handleConvFileSelect(e) {
@@ -4937,50 +5018,44 @@ function renderFolderImportList(scanning) {
   // A tételek saját, görgethető listában: sok fájlnál is mind elérhető, a cím, az „összes” kapcsoló és az
   // Importálás gomb közben látszik
   const list = mk("div", "folder-import-list");
-  const eqBoxes = [];
-  folderImportItems.forEach((it, i) => {
-    if (it.kind !== "eq") return;
+  // EQ-fájlból EQ-profil, IR-fájlból IR-profil lesz: mindkettőből tetszőleges számú választható
+  const boxes = [];
+  const check = (i) => {
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = true;
     cb.dataset.idx = String(i);
-    eqBoxes.push(cb);
-    list.append(row(cb, it.name, `${t("imp.kindEq")} · ${t("imp.bands", { n: it.parsed.bands.length })}`));
+    boxes.push(cb);
+    return cb;
+  };
+  folderImportItems.forEach((it, i) => {
+    if (it.kind === "eq") list.append(row(check(i), it.name, `${t("imp.kindEq")} · ${t("imp.bands", { n: it.parsed.bands.length })}`));
   });
   const irItems = folderImportItems.map((it, i) => ({ it, i })).filter(x => x.it.kind === "ir");
   if (irItems.length > 0) {
-    list.append(mk("span", "folder-import-sub", t("imp.irPickTitle")));
-    const none = document.createElement("input");
-    none.type = "radio";
-    none.name = "irPick";
-    none.value = "-1";
-    none.checked = true;
-    list.append(row(none, t("imp.irNone"), ""));
+    list.append(mk("span", "folder-import-sub", t("imp.irListTitle")));
     irItems.forEach(({ it, i }) => {
-      const rb = document.createElement("input");
-      rb.type = "radio";
-      rb.name = "irPick";
-      rb.value = String(i);
-      list.append(row(rb, it.file.name, `${t("imp.kindIr")} · ${it.sr} Hz · ${(it.frames / it.sr).toFixed(2)} s`));
+      list.append(row(check(i), it.file.name, `${t("imp.kindIr")} · ${it.sr} Hz · ${(it.frames / it.sr).toFixed(2)} s`));
     });
   }
   const btn = mk("button", "adw-btn primary");
   btn.type = "button";
   btn.onclick = applyFolderImport;
-  // Az „összes” kapcsoló (több EQ-profilnál) és a gomb felirata a kijelölt profilok számával
+  // Az „összes” kapcsoló (több tételnél) és a gomb felirata a kijelölt profilok számával
   let all = null;
   const sync = () => {
-    const n = eqBoxes.filter(c => c.checked).length;
-    btn.textContent = eqBoxes.length ? t("imp.folderImportN", { n }) : t("imp.folderImport");
-    if (all) { all.checked = n === eqBoxes.length; all.indeterminate = n > 0 && n < eqBoxes.length; }
+    const n = boxes.filter(c => c.checked).length;
+    btn.textContent = t("imp.folderImportN", { n });
+    btn.disabled = n === 0;
+    if (all) { all.checked = n === boxes.length; all.indeterminate = n > 0 && n < boxes.length; }
   };
-  if (eqBoxes.length > 1) {
+  if (boxes.length > 1) {
     all = document.createElement("input");
     all.type = "checkbox";
-    all.onchange = () => { eqBoxes.forEach(c => { c.checked = all.checked; }); sync(); };
-    box.append(row(all, t("imp.selectAll", { n: eqBoxes.length }), ""));
+    all.onchange = () => { boxes.forEach(c => { c.checked = all.checked; }); sync(); };
+    box.append(row(all, t("imp.selectAll", { n: boxes.length }), ""));
   }
-  eqBoxes.forEach(c => { c.onchange = sync; });
+  boxes.forEach(c => { c.onchange = sync; });
   sync();
   box.append(list, btn);
 }
@@ -5014,38 +5089,61 @@ function savePresetFromFile(baseName, parsed) {
 
 async function applyFolderImport() {
   const box = document.getElementById("folderImportBox");
-  const eqPicks = [...box.querySelectorAll("input[data-idx]:checked")].map(i => folderImportItems[+i.dataset.idx]);
-  const irSel = box.querySelector("input[name=irPick]:checked");
-  const irItem = irSel && irSel.value !== "-1" ? folderImportItems[+irSel.value] : null;
+  const picks = [...box.querySelectorAll("input[data-idx]:checked")].map(i => folderImportItems[+i.dataset.idx]);
+  const eqPicks = picks.filter(it => it.kind === "eq"), irPicks = picks.filter(it => it.kind === "ir");
+  const btn = box.querySelector("button");
+  if (btn) btn.disabled = true;   // az IR-ek feltöltése eltarthat egy ideig: ne induljon kétszer
   // A profil-dokumentum a motor határán belül marad (különben a motor nem menti el, és a következő indításkor a
   // régi lista visszaáll): ami nem fér el, kimarad, és a felhasználó tudja, hány
   const enc = new TextEncoder();
   let docBytes = enc.encode(JSON.stringify(presetsDoc)).length;
-  let saved = 0;
-  for (const it of eqPicks) {
-    const name = savePresetFromFile(it.name, it.parsed);
+  const fits = (name) => {
     const add = enc.encode(JSON.stringify(name) + ":" + JSON.stringify(presetsDoc.presets[name]) + ",").length;
-    if (docBytes + add > PRESET_DOC_MAX_BYTES) { delete presetsDoc.presets[name]; break; }
+    if (docBytes + add > PRESET_DOC_MAX_BYTES) { delete presetsDoc.presets[name]; return false; }
     docBytes += add;
+    return true;
+  };
+  let saved = 0, full = false;
+  for (const it of eqPicks) {
+    if (!fits(savePresetFromFile(it.name, it.parsed))) { full = true; break; }
     saved++;
   }
-  const skipped = eqPicks.length - saved;
-  if (saved > 0) { persistPresets(); refreshPresetUi(); }
-  let irDone = false;
-  if (irItem) {
-    try {
-      const dec = await decodeIrFile(irItem.file);
-      setConvIr(irItem.file.name, dec.sr, dec.channels);
-      setModuleActive('convolver', true);
-      setModuleActive('eq', false);
-      irDone = true;
-    } catch (err) {
-      alert(t("cv.badFile") + "\n" + err);
+  // IR-profilok: az impulzusválasz a motor IR-tárába kerül, a profil csak az azonosítójára hivatkozik
+  let irSaved = 0, irSame = 0, irNoEngine = false, lastIrName = null;
+  const irFailed = [];
+  if (irPicks.length > 0 && !full && !engineIrLibraryReady()) irNoEngine = true;
+  else if (!full) {
+    for (const it of irPicks) {
+      try {
+        const dec = await decodeIrFile(it.file);
+        const prep = prepareIrForStore(dec.sr, dec.channels);
+        // Ugyanaz az IR (azonos tartalom) csak egyszer lesz profil, és a tárban sem íródik felül
+        if (Object.values(presetsDoc.presets).some(p => p.kind === "ir" && p.ir && p.ir.id === prep.id)) { irSame++; continue; }
+        const ir = await storeIrInEngine(it.file.name, prep);
+        const name = uniquePresetName(importBaseName(it.file.name));
+        const now = new Date().toISOString();
+        presetsDoc.presets[name] = { kind: "ir", ir, bands: [], preamp: 0, eqMode: currentEqMode, created: now, updated: now };
+        if (!fits(name)) { full = true; break; }
+        irSaved++;
+        lastIrName = name;
+      } catch (err) {
+        irFailed.push(it.file.name);
+      }
     }
   }
-  if (eqPicks.length > 0 || irDone) {
-    alert(t("imp.folderDone", { count: saved }) + (irDone ? " " + t("imp.folderDoneIr", { name: irItem.file.name }) : "") +
-          (skipped > 0 ? "\n" + t("imp.folderFull", { n: skipped }) : ""));
+  const skipped = picks.length - saved - irSaved - irSame - irFailed.length - (irNoEngine ? irPicks.length : 0);
+  if (saved > 0 || irSaved > 0) { persistPresets(); refreshPresetUi(); }
+  // Egyetlen IR importja: a régi viselkedés szerint rögtön szól is (Konvolver BE, EQ KI)
+  if (irSaved === 1 && irPicks.length === 1 && saved === 0) loadPreset(lastIrName);
+  if (picks.length > 0) {
+    const lines = [];
+    if (eqPicks.length > 0) lines.push(t("imp.folderDone", { count: saved }));
+    if (irSaved > 0) lines.push(t("imp.folderDoneIrN", { n: irSaved }));
+    if (irSame > 0) lines.push(t("imp.irSame", { n: irSame }));
+    if (irFailed.length > 0) lines.push(t("imp.irFailed", { names: irFailed.join(", ") }));
+    if (irNoEngine) lines.push(t("imp.irNeedsEngine"));
+    if (skipped > 0) lines.push(t("imp.folderFull", { n: skipped }));
+    alert(lines.join("\n"));
   }
   folderImportItems = [];
   box.replaceChildren();
@@ -5840,7 +5938,13 @@ function initPipewireBridge() {
           }
           updateLimiterMeters(data.peak, data.gr);
           if (typeof data.bh === "number") updateBassMeter(data.bh);
+        } else if (data.type === "ir_stored") {
+          const w = irStoreWaiters.get(data.id);
+          if (w) w(data.ok === true);
+        } else if (data.type === "ir_missing") {
+          onIrMissing(data.id);
         } else if (data.type === "state") {
+          engineIrLibrary = data.irLibrary === true;
           if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);
           syncLanguageWithEngine(data.language);
           // Teljes állapotot csak a munkamenet első csatlakozásakor veszünk át. Újracsatlakozáskor
@@ -5860,6 +5964,13 @@ function initPipewireBridge() {
               applyEngineState(data);
             }
             guiStateSynced = true;
+            if (pendingIrSelect) {
+              // Kapcsolat nélkül választott IR-profil: most töltődik be
+              const id = pendingIrSelect;
+              pendingIrSelect = null;
+              pipewireWs.send(JSON.stringify({ type: "ir_select", id }));
+              setModuleActive('convolver', true);
+            }
             sendCurveMsg({ type: "get_eq_response" });
           }
         } else if (data.type === "eq_response") {
@@ -6043,7 +6154,7 @@ function refreshPresetUi() {
     const o = document.createElement("option");
     o.value = n;
     const p = presetsDoc.presets[n];
-    o.textContent = (p && p.kind === "autoeq" ? "🎧 " : "🎚️ ") + n;
+    o.textContent = (p && p.kind === "autoeq" ? "🎧 " : p && p.kind === "ir" ? "🔊 " : "🎚️ ") + n;
     sel.appendChild(o);
   });
   sel.value = activePresetName || "";
@@ -6092,7 +6203,14 @@ function loadPreset(name) {
   applyPresetData(p);
   scheduleEqAutoFit();
   sendCurveMsg({ type: "set_eq_mode", val: currentEqMode });
-  setModuleActive('eq', nodes.length > 0);
+  // A profil fajtája dönt: IR-profilnál a Konvolver BE és az EQ KI; EQ-profilnál a Konvolver mindig KI
+  if (p.kind === "ir" && p.ir) {
+    selectIrProfile(p);
+  } else {
+    pendingIrSelect = null;
+    setModuleActive('convolver', false);
+    setModuleActive('eq', nodes.length > 0);
+  }
   armLimiterForProfile(currentPreamp, false);
   // A profil preampja a sávokkal együtt (egy set_eq üzenetben) megy a motornak: nincs rövid kiugrás
   updateEqUI();
@@ -6103,6 +6221,9 @@ function loadPreset(name) {
 
 function onPresetSelected(name) {
   if (!name) {
+    const prev = activePresetName ? presetsDoc.presets[activePresetName] : null;
+    if (prev && prev.kind === "ir") setModuleActive('convolver', false);   // az IR-profillal a Konvolver is kikapcsol
+    pendingIrSelect = null;
     activePresetName = null;
     nodes = [];
     selectedNodeId = null;
@@ -6147,7 +6268,13 @@ function renamePreset() {
 function deletePreset() {
   if (!activePresetName) return;
   if (!confirm(t("preset.confirmDelete", { name: activePresetName }))) return;
+  const cur = presetsDoc.presets[activePresetName];
   delete presetsDoc.presets[activePresetName];
+  // Az IR a motor tárából is törlődik, ha más profil nem használja (a betöltött IR közben tovább szól)
+  if (cur && cur.kind === "ir" && cur.ir && engineWsOpen() &&
+      !Object.values(presetsDoc.presets).some(p => p.kind === "ir" && p.ir && p.ir.id === cur.ir.id)) {
+    pipewireWs.send(JSON.stringify({ type: "ir_delete", id: cur.ir.id }));
+  }
   activePresetName = null;
   presetBaseSig = snapshotSig(eqSnapshot());
   persistPresets();
@@ -6169,7 +6296,7 @@ function schedulePresetAutosave() {
     const cur = presetsDoc.presets[activePresetName];
     if (!cur) return;
     if (snapshotSig(cur) === snapshotSig(sn)) return;
-    if (cur.kind === "autoeq" || cur.kind === "import") {
+    if (cur.kind === "autoeq" || cur.kind === "import" || cur.kind === "ir") {
       // Csak akkor hozunk létre módosított profilt, ha valóban módosultak a sávok
       const bandsEqual = bandsSig(cur.bands) === bandsSig(sn.bands);
       if (bandsEqual) return;

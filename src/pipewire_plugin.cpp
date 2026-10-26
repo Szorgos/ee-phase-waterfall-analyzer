@@ -316,6 +316,9 @@ int main(int argc, char* argv[]) {
         node.chain.submitIr(std::move(ir));
     };
     cb.getIr = [&]() { return node.chain.irCopy(); };
+    cb.loadLibraryIr = linux_store::loadLibraryIr;
+    cb.saveLibraryIr = linux_store::saveLibraryIr;
+    cb.removeLibraryIr = linux_store::removeLibraryIr;
     std::mutex presetMutex;
     std::string presetDoc = linux_store::loadPresets();
     cb.getPresets = [&]() { std::lock_guard<std::mutex> lk(presetMutex); return presetDoc; };
