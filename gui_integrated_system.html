@@ -500,7 +500,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   /* ======================================================= */
   /* FELSŐ 3D VÍZESÉS SÁV                                   */
   /* ======================================================= */
-  .top-spectrum-strip { position: relative; width: 100%; background: #070B10; border-bottom: 1px solid var(--aq-line); overflow: hidden; }
+  .top-spectrum-strip { position: relative; width: 100%; background: var(--aq-bg); border-bottom: 1px solid var(--aq-line); overflow: hidden; }
   .wf-stage { position: relative; width: 100%; height: clamp(230px, 32vh, 420px); overflow: hidden; }
   /* Eszközsáv a vízesés fölött (tartalék, ha a vezérlők nem férnek el a háló két oldalán) */
   .strip-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; row-gap: 6px; padding: 8px 16px; background: var(--aq-bg-2); border-bottom: 1px solid var(--aq-line); }
@@ -510,15 +510,15 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .top-spectrum-strip.docked .strip-col { flex-direction: column; flex-wrap: nowrap; gap: 4px; }
   .top-spectrum-strip.docked .strip-col-left { align-items: flex-start; }
   .top-spectrum-strip.docked .strip-col-right { align-items: flex-end; }
-  .top-spectrum-strip.docked .strip-controls .ctrl-group { padding: 1px 3px 1px 5px; }   /* tömörebb sorok: több fér a háló mellé */
+  .top-spectrum-strip.docked .strip-controls .ctrl-group { padding: 2px 4px 2px 6px; }   /* tömörebb sorok: több fér a háló mellé */
   /* Ha így sem fér a háló mellé: alacsonyabb sorok, kisebb betű (layoutStripControls), csak utána kerül a háló fölé */
-  .top-spectrum-strip.docked.compact .strip-col { gap: 2px; }
-  .top-spectrum-strip.docked.compact .strip-controls .ctrl-group { padding: 0 2px 0 4px; gap: 4px; }
-  .top-spectrum-strip.docked.compact .mini-btn { min-height: 22px; padding: 2px 7px; font-size: 0.7rem; }
-  .top-spectrum-strip.docked.compact select.mini-select { min-height: 22px; padding-top: 1px; padding-bottom: 1px; font-size: 0.7rem; }
-  .top-spectrum-strip.docked.compact .ctrl-label, .top-spectrum-strip.docked.compact .ctrl-value { font-size: 0.68rem; }
-  .top-spectrum-strip.docked.compact .strip-badge { padding: 2px 9px; font-size: 0.68rem; }
-  .top-spectrum-strip.docked.compact #sliderWfFade { width: 54px !important; }
+  .top-spectrum-strip.docked.compact .strip-col { gap: 3px; }
+  .top-spectrum-strip.docked.compact .strip-controls .ctrl-group { padding: 1px 3px 1px 5px; gap: 4px; }
+  .top-spectrum-strip.docked.compact .mini-btn { min-height: 26px; height: 26px; padding: 2px 8px; font-size: var(--aq-fs-sub); }
+  .top-spectrum-strip.docked.compact select.mini-select { min-height: 26px; height: 26px; padding-top: 2px; padding-bottom: 2px; font-size: var(--aq-fs-sub); }
+  .top-spectrum-strip.docked.compact .ctrl-label, .top-spectrum-strip.docked.compact .ctrl-value { font-size: var(--aq-fs-micro); }
+  .top-spectrum-strip.docked.compact .strip-badge { padding: 3px 10px; font-size: var(--aq-fs-micro); }
+  .top-spectrum-strip.docked.compact #sliderWfFade { width: 64px !important; }
   canvas#waterfallCanvas { width: 100%; height: 100%; display: block; }
   canvas#spec2dCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; color: var(--aq-text-2); pointer-events: none; }
   canvas#spec2dCanvas[hidden] { display: none; }
@@ -533,18 +533,18 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   /* A skála élő jelei (tartománysáv, ottragadó jelek, min/max) DOM-elemek: képkockánként nem kerül művelet a vászonra */
   .freq-scale-live { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; pointer-events: none; display: none; }
   .freq-scale-live > * { position: absolute; left: 0; top: 0; display: none; }
-  .freq-scale-live .fs-band { top: 7px; width: 1px; height: 5px; transform-origin: 0 0; background: rgba(79, 209, 197, 0.12); will-change: transform; }
-  .freq-scale-live .fs-mark { top: 3.5px; left: -0.25px; width: 1.5px; height: 12px; background: rgba(79, 209, 197, 0.95); will-change: transform; }
+  .freq-scale-live .fs-band { top: 7px; width: 1px; height: 5px; transform-origin: 0 0; background: var(--aq-accent-soft); will-change: transform; }
+  .freq-scale-live .fs-mark { top: 3.5px; left: -0.25px; width: 1.5px; height: 12px; background: var(--aq-accent); will-change: transform; }
   .freq-scale-live .fs-stat { top: 1.5px; font: 500 9px var(--aq-mono); line-height: 9px; color: var(--aq-accent); white-space: nowrap; }
-  .freq-scale-live.stale .fs-band { background: rgba(79, 209, 197, 0.05); }
+  .freq-scale-live.stale .fs-band { background: var(--aq-accent-soft); opacity: 0.35; }
   /* 2D nézet: az alapvonal (9,5 px) a 2D tengely vonalára esik (a vászon aljától 24 px), a min / max a feliratsorba */
   .freq-scale-live.in2d { bottom: 3px; }
   .freq-scale-live.in2d .fs-stat { top: 19px; }
-  .freq-scale-live.stale .fs-mark { background: rgba(79, 209, 197, 0.45); }
-  .freq-scale-live.stale .fs-stat { color: rgba(79, 209, 197, 0.45); }
+  .freq-scale-live.stale .fs-mark { background: var(--aq-accent); opacity: 0.45; }
+  .freq-scale-live.stale .fs-stat { color: var(--aq-text-3); }
 
-  .strip-badge { background: rgba(13, 20, 28, 0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--aq-line); border-radius: 999px; padding: 5px 12px; font-size: 0.74rem; color: var(--aq-text-2); }
-  .strip-badge strong { color: var(--aq-accent); font-weight: 600; }
+  .strip-badge { background: var(--aq-surface-2); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid var(--aq-line); border-radius: 999px; padding: 4px 12px; font-size: var(--aq-fs-sub); color: var(--aq-text-2); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); }
+  .strip-badge strong { color: var(--aq-accent); font-weight: 600; font-family: var(--aq-mono); }
   @keyframes donateSubtlePulse {
     0%, 25%, 100% {
       color: var(--aq-text-3);
@@ -588,9 +588,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
   .strip-controls { display: flex; flex-wrap: wrap; gap: 8px; row-gap: 6px; align-items: center; pointer-events: none; }
   .strip-controls > * { pointer-events: auto; }
-  .strip-controls .ctrl-group { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; background: rgba(13, 20, 28, 0.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--aq-line); border-radius: 10px; padding: 3px 4px 3px 6px; }
+  .strip-controls .ctrl-group { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; background: var(--aq-surface-2); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid var(--aq-line-2); border-radius: var(--aq-radius-m); padding: 3px 6px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); }
   .strip-controls select.mini-select { max-width: 290px; text-overflow: ellipsis; }
-  .mini-btn { background: var(--aq-surface); border: 1px solid var(--aq-line); color: var(--aq-text); padding: 4px 10px; border-radius: 7px; font-size: var(--aq-fs-body); cursor: pointer; font-weight: 500; transition: background .15s, border-color .15s, color .15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 28px; height: 28px; }
+  .mini-btn { background: var(--aq-surface); border: 1px solid var(--aq-line); color: var(--aq-text); padding: 4px 10px; border-radius: 7px; font-size: var(--aq-fs-body); cursor: pointer; font-weight: 500; transition: background .15s, border-color .15s, color .15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 28px; height: 28px; white-space: nowrap !important; flex-shrink: 0; box-sizing: border-box; line-height: 1; }
   .mini-btn:hover { background: var(--aq-surface-2); border-color: var(--aq-line-2); }
   .mini-btn.active { background: var(--aq-accent-soft); border-color: var(--aq-accent); color: var(--aq-accent-2); }
   .strip-controls .ctrl-group .mini-btn { border-color: transparent; background: transparent; }
@@ -598,14 +598,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .strip-controls .mini-btn[hidden] { display: none; }
   .strip-controls .mini-btn:disabled { opacity: 0.35; cursor: default; }
   .strip-controls .ctrl-value { font: 500 var(--aq-fs-sub) var(--aq-mono); color: var(--aq-text); min-width: 20px; text-align: center; }
-  .strip-controls .ctrl-group .mini-btn:hover { background: var(--aq-surface-2); }
+  .strip-controls .ctrl-group .mini-btn:hover { background: var(--aq-surface); border-color: var(--aq-line); }
   .strip-controls .ctrl-group .mini-btn.active { background: var(--aq-accent-soft); }
 
   .ctrl-label { font-size: var(--aq-fs-sub); color: var(--aq-text-2); margin-left: 4px; }
 
   /* SÖTÉT SELECT ÉS DROPDOWN STÍLUSOK (WebKitGTK Natív Fehér Hátterének Megszüntetése) */
   select, input, textarea, button {
-    color-scheme: dark !important;
     font-family: var(--aq-font);
   }
   select.mini-select, select.ee-select {
@@ -621,7 +620,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     outline: none !important;
     appearance: none !important;
     -webkit-appearance: none !important;
-    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%234FD1C5' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238E95A5' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
     background-repeat: no-repeat !important;
     background-position: right 8px center !important;
     cursor: pointer !important;
@@ -837,20 +836,22 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     gap: 6px;
     pointer-events: auto;
   }
-  .eq-zoom-overlay .zoom-lbl { font-size: 0.74rem; color: var(--aq-text-2); font-weight: 500; }
-  .eq-zoom-overlay .zoom-val { font: 500 0.74rem var(--aq-mono); color: var(--aq-text); min-width: 30px; text-align: center; }
-  .eq-zoom-overlay .zoom-divider { width: 1px; height: 16px; background: var(--aq-line); margin: 0 2px; }
-  .eq-zoom-overlay .zoom-btn { padding: 0 6px; font-size: 0.74rem; height: 26px; line-height: 24px; border-radius: 7px; background: var(--aq-surface); border-color: var(--aq-line); color: var(--aq-text); cursor: pointer; }
+  .eq-zoom-overlay .zoom-lbl { font-size: 0.74rem; color: var(--aq-text-2); font-weight: 500; white-space: nowrap !important; }
+  .eq-zoom-overlay .zoom-val { font: 500 0.74rem var(--aq-mono); color: var(--aq-text); min-width: 30px; text-align: center; white-space: nowrap !important; }
+  .eq-zoom-overlay .zoom-divider { width: 1px; height: 16px; background: var(--aq-line); margin: 0 2px; flex-shrink: 0; }
+  .eq-zoom-overlay .zoom-btn { padding: 0 6px; font-size: 0.74rem; height: 26px; line-height: 24px; border-radius: 7px; background: var(--aq-surface); border-color: var(--aq-line); color: var(--aq-text); cursor: pointer; white-space: nowrap !important; flex-shrink: 0; }
   .eq-zoom-overlay .zoom-btn:hover { background: var(--aq-surface-2); border-color: var(--aq-line-2); }
-  .eq-zoom-overlay select.ee-select { padding-top: 2px !important; padding-bottom: 2px !important; font-size: 0.74rem !important; min-height: 26px; }
-  .eq-zoom-overlay input.zoom-slider { width: 44px; }
+  .eq-zoom-overlay select.ee-select { padding-top: 2px !important; padding-bottom: 2px !important; font-size: 0.74rem !important; min-height: 26px; white-space: nowrap !important; flex-shrink: 0; }
+  .eq-zoom-overlay input.zoom-slider { width: 44px; flex-shrink: 0; }
 
   .eq-bottom-bar { background: var(--aq-surface); border: 1px solid var(--aq-line); border-radius: var(--aq-radius-l); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
   /* Két sor: fent a gombsor (balra a gombok, jobbra a zoom-eszköztár) egyetlen sorban, lent a sáv-szerkesztő.
      Ha a gombsor nem fér el, fokozatosan tömörödik (fitEqActionRow): .tight, .tighter, .tightest; csak végső esetben tördel. */
-  .node-readout { display: flex; align-items: center; gap: 12px; font-size: var(--aq-fs-body); flex-wrap: wrap; order: 2; flex: 1 1 100%; padding: 4px 0; }
+  .node-readout { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--aq-fs-body); flex-wrap: wrap; row-gap: 8px; order: 2; flex: 1 1 100%; padding: 6px 0 2px 0; }
+  .node-fields-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; row-gap: 6px; }
+  .node-actions-group { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-shrink: 0; }
   .actions-group { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; min-width: 0; max-width: 100%; order: 1; flex: 1 1 100%; }
-  .actions-group > .adw-btn { flex-shrink: 0; }
+  .actions-group > .adw-btn { flex-shrink: 0; white-space: nowrap !important; }
   .actions-group.tight { gap: 6px; }
   .actions-group.tight .zoom-lbl, .actions-group.tight .zoom-divider { display: none; }
   .actions-group.tight .zoom-btn > span { display: none; }            /* Igazít, Reset: csak ikon (a súgó marad) */
@@ -860,10 +861,22 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .actions-group.tighter .zoom-val { display: none; }
   .actions-group.tightest #btnImportAutoEq > span, .actions-group.tightest #sliderEqZoom { display: none; }   /* ikon marad, a súgó is */
   .actions-group.wrap { flex-wrap: wrap; row-gap: 6px; }
-  .stat-group { display: inline-flex; gap: 6px; align-items: center; }
-  .stat-group span.lbl { color: var(--aq-text-2); font-size: var(--aq-fs-body); font-weight: 500; }
-  .stat-group small { color: var(--aq-text-3); font-size: var(--aq-fs-unit); font-family: var(--aq-mono); font-weight: 500; }
-  .stat-group.preamp-divider { border-left: 1px solid var(--aq-line-2); padding-left: 12px; margin-left: 6px; }
+  .stat-group { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap !important; flex-shrink: 0; }
+  .stat-group span.lbl { color: var(--aq-text-2); font-size: var(--aq-fs-body); font-weight: 500; white-space: nowrap !important; }
+  .stat-group small { color: var(--aq-text-3); font-size: var(--aq-fs-unit); font-family: var(--aq-mono); font-weight: 500; white-space: nowrap !important; }
+  .stat-group.preamp-divider { border-left: 1px solid var(--aq-line-2); padding-left: 12px; margin-left: 0; }
+  /* Elavult böngészős natív léptetőnyilak (spin buttons) elrejtése a tiszta hifi felületért */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none !important;
+    margin: 0 !important;
+    display: none !important;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield !important;
+    appearance: textfield !important;
+  }
+
   .band-input-freq { width: 76px !important; text-align: center !important; }
   .band-input-num { width: 64px !important; text-align: center !important; }
   .ee-input, input[type="number"], input[type="text"] {
@@ -877,7 +890,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     font-weight: 500 !important;
     text-align: left;
     outline: none !important;
-    color-scheme: dark !important;
+    color-scheme: inherit !important;
     min-height: 28px;
     height: 28px;
     transition: border-color .15s, box-shadow .15s;
@@ -890,7 +903,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
   textarea { font-family: var(--aq-mono); }
 
-  .adw-btn { background: var(--aq-surface-2); border: 1px solid var(--aq-line-2); color: var(--aq-text); padding: 4px 12px; min-height: 28px; height: 28px; border-radius: 7px; font-size: var(--aq-fs-body); cursor: pointer; font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: background .15s, border-color .15s, color .15s; }
+  .adw-btn { background: var(--aq-surface-2); border: 1px solid var(--aq-line-2); color: var(--aq-text); padding: 4px 12px; min-height: 28px; height: 28px; border-radius: 7px; font-size: var(--aq-fs-body); cursor: pointer; font-weight: 500; white-space: nowrap !important; flex-shrink: 0; box-sizing: border-box; line-height: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: background .15s, border-color .15s, color .15s; }
   .adw-btn:hover { background: var(--aq-line-2); border-color: var(--aq-text-3); }
   .adw-btn.primary { background: var(--aq-accent); border-color: var(--aq-accent); color: var(--aq-accent-ink); font-weight: 600; }
   .adw-btn:disabled, .adw-btn:disabled:hover { opacity: 0.4; cursor: default; background: var(--aq-surface-2); border-color: var(--aq-line-2); }
@@ -1157,8 +1170,9 @@ if (!window.THREE) window.THREE = (function () {
           <option value="2">x3</option>
           <option value="3">x4</option>
         </select></span>
-        <span class="ctrl-group"><button class="mini-btn" id="btnEqBypass">EQ: KI (Bypass)</button></span>
-        <span class="ctrl-group"><button class="mini-btn" id="btnConvBypass">Konvolver: KI (Bypass)</button></span>
+        <!-- EQ és Konvolver bypass: az EQ és Modul sávokon érhető el tisztán, itt rejtve a tágas 3D látványért -->
+        <span class="ctrl-group" style="display:none;"><button class="mini-btn" id="btnEqBypass">EQ: KI (Bypass)</button></span>
+        <span class="ctrl-group" style="display:none;"><button class="mini-btn" id="btnConvBypass">Konvolver: KI (Bypass)</button></span>
       </div>
     </div>
     <div class="wf-stage">
@@ -1199,8 +1213,9 @@ if (!window.THREE) window.THREE = (function () {
 
       <div class="eq-bottom-bar">
         <div class="node-readout">
-          <div style="font-weight:700;" id="selectedNodeTitle">Sáv #1</div>
-          <span id="noBandHint" style="display:none; font-size:0.78rem; color:var(--ee-text-secondary);" data-i18n="band.none">Nincs EQ sáv – „+ Új Sáv” gomb, vagy dupla kattintás a görbén</span>
+          <div class="node-fields-group">
+            <div style="font-weight:700; white-space:nowrap;" id="selectedNodeTitle">Sáv #1</div>
+            <span id="noBandHint" style="display:none; font-size:0.78rem; color:var(--ee-text-secondary); white-space:nowrap;" data-i18n="band.none">Nincs EQ sáv – „+ Új Sáv” gomb, vagy dupla kattintás a görbén</span>
 
           <div class="stat-group band-field">
             <span class="lbl" data-i18n="band.type">Típus:</span>
@@ -1265,18 +1280,21 @@ if (!window.THREE) window.THREE = (function () {
             <input type="number" id="inputWidth" min="0" max="12" step="0.01" class="ee-input band-input-num">
             <small data-i18n="unit.oct">okt</small>
           </div>
+        </div>
 
-          <!-- DEDIKÁLT PREAMP VEZÉRLÉS (DUPLA LEVONÁS KIVÉDÉSÉVEL) -->
+        <!-- DEDIKÁLT PREAMP ÉS TÖRLÉS CSOPORT (PINNED TO RIGHT) -->
+        <div class="node-actions-group">
           <div class="stat-group preamp-divider">
             <span class="lbl" style="font-weight:700; color:var(--aq-amber);">Preamp:</span>
             <input type="number" id="inputPreamp" min="-36" max="12" step="0.1" value="0.0" class="ee-input band-input-num" style="color:var(--aq-amber);" oninput="setPreamp(this.value)" onchange="this.value = currentPreamp.toFixed(1)">
             <small>dB</small>
-            <span id="badgePreampOrigin" class="status-badge optimal" style="font-size:var(--aq-fs-micro); padding:2px 8px;" title="Preamp forrása és állapota" data-i18n-title="preamp.badgeTitle">0.0 dB (Tiszta)</span>
-            <button id="btnAutoPreamp" class="adw-btn danger-solid" style="display:none; padding:2px 8px; font-size:var(--aq-fs-micro);" onclick="applyAutoPreamp()" title="Klippelés elleni automatikus előerősítés" data-i18n-title="preamp.autoBtnTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-warning"/></svg><span>Auto Preamp</span></button>
+            <span id="badgePreampOrigin" class="status-badge optimal" style="font-size:var(--aq-fs-micro); padding:2px 8px; white-space:nowrap;" title="Preamp forrása és állapota" data-i18n-title="preamp.badgeTitle">0.0 dB (Tiszta)</span>
+            <button id="btnAutoPreamp" class="adw-btn danger-solid" style="display:none; padding:2px 8px; font-size:var(--aq-fs-micro); white-space:nowrap;" onclick="applyAutoPreamp()" title="Klippelés elleni automatikus előerősítés" data-i18n-title="preamp.autoBtnTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-warning"/></svg><span>Auto Preamp</span></button>
           </div>
 
           <button class="adw-btn danger" id="btnDeleteNode"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg><span data-i18n="band.delete">Törlés</span></button>
         </div>
+      </div>
 
     <div class="actions-group">
       <!-- AUTOEQ IMPORT GOMB -->
@@ -1484,10 +1502,10 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
         <p class="module-desc" data-i18n="cf.desc">Megszünteti a fejhallgatók „fej közepében szóló”, természetellenes sztereó izolációját. Kiszámolja a fej akusztikai árnyékolását és késleltetését (ITD/ILD), így a zene nem a füleidben, hanem előtted, mint egy igazi stúdió hangfalpár szólal meg.</p>
 
         <div style="display:flex; gap:10px; align-items:center; margin-top:4px;">
-          <span style="font-size:0.8rem; color:var(--ee-text-secondary); font-weight:600;" data-i18n="cf.presets">Iparági Mester-Beállítások:</span>
-          <button class="adw-btn selected" id="cfPreset-bauer" onclick="applyCrossfeedPreset('bauer')" style="font-size:0.75rem;" data-i18n="cf.bauer">Bauer bs2b (700 Hz / 4,5 dB)</button>
-          <button class="adw-btn" id="cfPreset-meier" onclick="applyCrossfeedPreset('meier')" style="font-size:0.75rem;" data-i18n="cf.meier">Jan Meier (650 Hz / 9,5 dB)</button>
-          <button class="adw-btn" id="cfPreset-studio" onclick="applyCrossfeedPreset('studio')" style="font-size:0.75rem;" data-i18n="cf.studio">Közeltéri stúdió (600 Hz / 3,5 dB)</button>
+          <span style="font-size:var(--aq-fs-sub); color:var(--aq-text-2); font-weight:600;" data-i18n="cf.presets">Iparági Mester-Beállítások:</span>
+          <button class="adw-btn selected" id="cfPreset-bauer" onclick="applyCrossfeedPreset('bauer')" data-i18n="cf.bauer">Bauer bs2b (700 Hz / 4,5 dB)</button>
+          <button class="adw-btn" id="cfPreset-meier" onclick="applyCrossfeedPreset('meier')" data-i18n="cf.meier">Jan Meier (650 Hz / 9,5 dB)</button>
+          <button class="adw-btn" id="cfPreset-studio" onclick="applyCrossfeedPreset('studio')" data-i18n="cf.studio">Közeltéri stúdió (600 Hz / 3,5 dB)</button>
         </div>
 
         <div class="param-grid" id="cfControls" style="margin-top:10px;"></div>
