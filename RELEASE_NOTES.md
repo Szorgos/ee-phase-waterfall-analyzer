@@ -1,6 +1,12 @@
 ### Fejlesztési irány
 - A következő kiadások az 1.x változat csiszolására összpontosítanak: hibajavítások, pontosság és kezelhetőség.
 
+### Változások (1.8.5)
+- **8 audiofil színtéma a felületen:** a fejléc Téma gombjával (vagy a Beállításokban) 8 választható prémium téma érhető el: Stúdió Konzol, Braun / Dieter Rams, Japán Prémium Hifi és Brit Mastering, mindegyik Sötét és Világos változatban.
+- **Dinamikus témaszínek a modulokon:** az EQ görbe, a Konvolver IR grafikon és a kivezérlésmérők követik a kiválasztott téma akcentusszínét.
+- **Ergonómiai letisztítás:** az EQ szimmetrikus sávjai, a tördelés-mentes zoom- és gombsorok, valamint a 3D vízesés oldalsó vezérlői letisztultabb elrendezést kaptak; a fel-le nyilak eltűntek a számmezőkről a véletlen elgörgetés elkerülésére.
+- **Vizualizáció:** első induláskor mindig megbízhatóan a 3. minőségi fokozat az alapértelmezett.
+
 ### Változások (1.8.4)
 - **Kisebb videokártya-terhelés:** zene nélkül, a vízesés lecsengése után a felület nem rajzol (eddig csendben is folyamatosan, 60 kép/s-mal rajzolt). Új hang vagy bármilyen kezelés (kattintás, görgetés, billentyű) azonnal felébreszti.
 - **Eltakart ablak:** ha az Aqulify ablakát más ablakok teljesen eltakarják, a vízesés nem rajzolódik (Windows és macOS). Ha az ablak látszik, de másik ablak az aktív, legfeljebb 30 kép/s.
