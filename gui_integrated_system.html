@@ -2624,7 +2624,9 @@ try {
   wfOn = localStorage.getItem("aqulify_wf_on") !== "0";
   const lv = parseInt(localStorage.getItem("aqulify_wf_level"), 10);
   if (lv >= 1 && lv <= 6) wfLevel = lv;
-  else if (localStorage.getItem("aqulify_wf_view") === "2d") wfLevel = 1;   // a korábbi 2D-s nézet választása
+  // Az 1.8.4 előtti 2D/3D és takarékos választás nem számít: első induláskor mindig a 3. fokozat
+  localStorage.removeItem("aqulify_wf_view");
+  localStorage.removeItem("aqulify_wf_eco");
 } catch (e) {}
 if (!renderer) wfLevel = 1;   // WebGL nélkül csak a 2D nézet érhető el
 let wfView = WF_LEVELS[wfLevel].view;
