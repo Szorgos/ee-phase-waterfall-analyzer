@@ -1061,7 +1061,7 @@ if (!window.THREE) window.THREE = (function () {
   <!-- FEJLÉC -->
   <header>
     <div class="title-group">
-      <svg class="app-mark" viewBox="0 0 28 28" aria-hidden="true"><path d="M3 13c3-4 5-4 8 0s5 4 8 0 5-4 6-2" fill="none" stroke="#4FD1C5" stroke-width="2.2" stroke-linecap="round"/><path d="M3 19.5c3-3 5-3 8 0s5 3 8 0 5-3 6-1.5" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round"/></svg>
+      <svg class="app-mark" viewBox="0 0 28 28" aria-hidden="true"><path d="M3 13c3-4 5-4 8 0s5 4 8 0 5-4 6-2" fill="none" stroke="var(--aq-accent)" stroke-width="2.2" stroke-linecap="round"/><path d="M3 19.5c3-3 5-3 8 0s5 3 8 0 5-3 6-1.5" fill="none" stroke="var(--aq-accent-2)" stroke-width="2" stroke-linecap="round"/></svg>
       <span class="app-brand" title="Aqulify • Audiofil DSP Rendszer" data-i18n-title="app.title">Aqulify</span>
       <span class="app-title" title="Aqulify • Audiofil DSP Rendszer" data-i18n-title="app.title"><span data-i18n="app.subtitle">Audiofil DSP Rendszer</span></span>
       <span class="app-version" id="lblAppVersion" data-gui-version="1.8.4" title="Verziószám" data-i18n-title="ver.title">v1.8.4</span>
@@ -1427,9 +1427,9 @@ if (!window.THREE) window.THREE = (function () {
           </select>
         </div>
 
-        <div style="font-size:0.73rem; color:var(--ee-text-secondary); display:flex; justify-content:space-between; align-items:center;">
+        <div style="font-size:0.73rem; color:var(--aq-text-2); display:flex; justify-content:space-between; align-items:center;">
           <span data-i18n="imp.filterNote">Találatok valós idejű szűrése a beépített indexből és közösségi repókból:</span>
-          <span id="lblResultCount" style="color:var(--ee-curve-cyan); font-weight:600;"></span>
+          <span id="lblResultCount" style="color:var(--aq-accent-2); font-weight:600;"></span>
         </div>
 
         <!-- Találati lista doboz -->
@@ -1441,7 +1441,7 @@ if (!window.THREE) window.THREE = (function () {
         <div class="aq-note" style="padding:10px 12px; font-size:0.74rem; display:flex; align-items:center; gap:10px;">
           <svg class="aq-icon aq-icon-lg aq-icon-ok" aria-hidden="true"><use href="#i-shield"/></svg>
           <div>
-            <strong style="color:var(--ee-green);" data-i18n="imp.zeroDouble">Zéró Dupla-Preamp Védelem:</strong>
+            <strong style="color:var(--aq-success);" data-i18n="imp.zeroDouble">Zéró Dupla-Preamp Védelem:</strong>
             <span data-i18n="imp.zeroDoubleText">Az adatbázisból beemelt gyári Preamp értéket közvetlenül állítjuk be. A rendszer NEM von le mégegyszer kiemelési kompenzációt!</span>
           </div>
         </div>
@@ -1450,7 +1450,7 @@ if (!window.THREE) window.THREE = (function () {
       <!-- 2. BELSŐ TAB: SZÖVEG / FÁJL IMPORT -->
       <div id="modalTabManual" style="display:none; flex-direction:column; gap:10px; flex:1; min-height:0; overflow-y:auto; padding-right:4px;">
         <div class="aq-note" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px;">
-          <span style="font-size:0.75rem; color:var(--ee-text-secondary);" data-i18n="imp.loadFile">Fájl betöltése számítógépről (.txt / .csv):</span>
+          <span style="font-size:0.75rem; color:var(--aq-text-2);" data-i18n="imp.loadFile">Fájl betöltése számítógépről (.txt / .csv):</span>
           <label class="adw-btn" style="cursor:pointer; font-size:0.75rem; padding:4px 10px;">
             <svg class="aq-icon" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="imp.browse">Fájl / Mappa Tallózása...</span>
             <input type="file" id="fileEqUpload" accept=".txt,.csv,.wav,.irs" multiple style="display:none;" onchange="handleFileSelect(event)">
@@ -1463,7 +1463,7 @@ if (!window.THREE) window.THREE = (function () {
 
         <div id="folderImportBox" class="aq-note" style="display:none; flex-direction:column; gap:6px; padding:10px 12px; font-size:0.75rem;"></div>
 
-        <div id="lblDetectedFormat" style="font-size:0.72rem; color:var(--ee-curve-cyan); font-weight:600; display:none;">
+        <div id="lblDetectedFormat" style="font-size:0.72rem; color:var(--aq-accent-2); font-weight:600; display:none;">
           <span data-i18n="imp.detected">Észlelt formátum:</span> <span id="detectedFormatName"></span>
         </div>
 
@@ -1537,8 +1537,8 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
         <!-- Impulzusválasz grafikon mini előnézet -->
         <div style="background:var(--aq-bg-2); border:1px solid var(--aq-line); border-radius:var(--aq-radius-m); padding:12px; display:flex; flex-direction:column; gap:8px;">
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem;">
-            <span style="color:var(--ee-text-secondary); font-weight:600;" data-i18n="cv.preview">Valós idejű Impulzusválasz & Lecsengés előnézet:</span>
-            <span id="convIrInfo" style="color:var(--ee-curve-cyan); font-family:monospace; font-size:0.75rem;">Nincs betöltött impulzusválasz – tallózz egy WAV/IRS fájlt</span>
+            <span style="color:var(--aq-text-2); font-weight:600;" data-i18n="cv.preview">Valós idejű Impulzusválasz & Lecsengés előnézet:</span>
+            <span id="convIrInfo" style="color:var(--aq-accent-2); font-family:var(--aq-mono); font-size:0.75rem;">Nincs betöltött impulzusválasz – tallózz egy WAV/IRS fájlt</span>
           </div>
           <canvas id="convCanvas" height="85" style="width:100%; height:85px; background:var(--aq-input); border-radius:8px; display:block;"></canvas>
         </div>
@@ -1556,8 +1556,8 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <span class="status-badge off" id="badgeStatus-limiter" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
           </div>
           <div style="display:flex; align-items:center; gap:12px;">
-            <span style="font-size:0.75rem; color:var(--ee-text-secondary);" title="A túlmintavételezés a Túlmintavételezés választóban állítható" data-i18n-title="lim.ovsTitle">
-              <span data-i18n="lim.ovsLabel">Túlmintavételezés:</span> <strong id="lblLimOvsTop" style="color:var(--ee-green);">True Peak/24 bit</strong>
+            <span style="font-size:0.75rem; color:var(--aq-text-2);" title="A túlmintavételezés a Túlmintavételezés választóban állítható" data-i18n-title="lim.ovsTitle">
+              <span data-i18n="lim.ovsLabel">Túlmintavételezés:</span> <strong id="lblLimOvsTop" style="color:var(--aq-success);">True Peak/24 bit</strong>
             </span>
             <button type="button" class="aq-switch" id="btnToggle-limiter" onclick="toggleModule('limiter')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
           </div>
@@ -1571,7 +1571,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
           <div class="param-box" style="grid-column: span 2;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
               <span class="title" data-i18n="lim.meterTitle">Valós Idejű Dinamika & Csillapítás (Gain Reduction)</span>
-              <span id="lblLimiterGr" style="font-family:monospace; font-size:0.82rem; color:var(--ee-curve-cyan);">GR: 0.0 dB (Tiszta áteresztés)</span>
+              <span id="lblLimiterGr" style="font-family:var(--aq-mono); font-size:0.82rem; color:var(--aq-accent-2);">GR: 0.0 dB (Tiszta áteresztés)</span>
             </div>
             <!-- Dinamikus kivezérlésmérő sáv -->
             <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
@@ -1605,8 +1605,8 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <span class="status-badge off" id="badgeStatus-bass" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
           </div>
           <div style="display:flex; align-items:center; gap:12px;">
-            <span style="font-size:0.75rem; color:var(--ee-text-secondary);">
-              <span data-i18n="bass.principle">Elv:</span> <strong style="color:var(--ee-curve-cyan);">Missing Fundamental</strong>
+            <span style="font-size:0.75rem; color:var(--aq-text-2);">
+              <span data-i18n="bass.principle">Elv:</span> <strong style="color:var(--aq-accent-2);">Missing Fundamental</strong>
             </span>
             <button class="adw-btn" id="btnBassAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
             <button type="button" class="aq-switch" id="btnToggle-bass" onclick="toggleModule('bass')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
@@ -1622,7 +1622,7 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <span class="title" data-i18n="bass.meterTitle">Felharmonikusok szintje (Harmonics)</span>
             <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
               <div style="flex:1; height:12px; background:var(--aq-input); border:1px solid var(--aq-line); border-radius:6px; overflow:hidden;">
-                <div id="meterBassBar" style="width:0%; height:100%; background:linear-gradient(90deg, #4FD1C5, #E3B66B); transition:width 0.05s ease-out;"></div>
+                <div id="meterBassBar" style="width:0%; height:100%; background:linear-gradient(90deg, var(--aq-accent), var(--aq-amber)); transition:width 0.05s ease-out;"></div>
               </div>
               <span id="lblBassHarm" style="font-size:0.72rem; font-family:var(--aq-mono); color:var(--aq-text-2); width:85px; text-align:right;">-inf dB</span>
             </div>
@@ -1847,6 +1847,7 @@ function applyTheme() {
   }
 
   // 2D Canvasok újrarajzolása az új színekkel
+  spec2dColorTheme = null;
   if (typeof drawEq === "function") drawEq();
   if (typeof drawFreqScale === "function") drawFreqScale();
   if (typeof drawConvWaveform === "function") drawConvWaveform();
@@ -3017,7 +3018,7 @@ let wfView = WF_LEVELS[wfLevel].view;
 function wfFrameMs() { return wfAutoEco ? Math.max(WF_FRAME_ECO_MS, WF_LEVELS[wfLevel].ms) : WF_LEVELS[wfLevel].ms; }
 
 const SPEC2D_TICKS = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
-let spec2dColorTheme = null, spec2dTextColor = "#888";
+let spec2dColorTheme = null, spec2dTextColor = "#888", spec2dAccentColor = "#4FD1C5", spec2dFillColor = "rgba(79,209,197,0.28)";
 
 function drawSpec2d(levels) {
   if (!spec2dCtx) return;
@@ -3031,9 +3032,15 @@ function drawSpec2d(levels) {
   c.clearRect(0, 0, w, h);
   const top = 8, bottom = h - 24, plotH = bottom - top;
   const xOf = (f) => freqToAxis(f) * w;
-  // A felirat színe a témától függ: csak témaváltáskor kérdezzük le (a stílus-lekérdezés képkockánként drága)
+  // A felirat és görbe színe a témától függ: csak témaváltáskor kérdezzük le (a stílus-lekérdezés képkockánként drága)
   const theme = document.documentElement.getAttribute("data-theme") || "";
-  if (spec2dColorTheme !== theme) { spec2dColorTheme = theme; spec2dTextColor = getComputedStyle(spec2dCanvas).color; }
+  if (spec2dColorTheme !== theme) {
+    spec2dColorTheme = theme;
+    const cs = getComputedStyle(document.documentElement);
+    spec2dTextColor = getComputedStyle(spec2dCanvas).color;
+    spec2dAccentColor = cs.getPropertyValue("--aq-accent").trim() || "#4FD1C5";
+    spec2dFillColor = cs.getPropertyValue("--aq-accent-soft").trim() || "rgba(79,209,197,0.28)";
+  }
   const textColor = spec2dTextColor;
   c.lineWidth = 1;
   c.strokeStyle = "rgba(128,128,128,0.22)";
@@ -3065,11 +3072,13 @@ function drawSpec2d(levels) {
   pts.forEach(([x, y]) => c.lineTo(x, y));
   c.lineTo(pts[FREQ_BINS - 1][0], bottom);
   c.closePath();
-  c.fillStyle = "rgba(79,209,197,0.28)";
+  c.fillStyle = spec2dFillColor;
   c.fill();
   c.beginPath();
   pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-  c.strokeStyle = "#4FD1C5";
+  c.strokeStyle = spec2dAccentColor;
+  c.lineWidth = 1.5;
+  c.stroke();
   c.lineWidth = 1.5;
   c.stroke();
 }
@@ -3782,6 +3791,8 @@ function paintEq() {
   const cs = getComputedStyle(document.documentElement);
   const gridColor = cs.getPropertyValue("--aq-line").trim() || (isLight ? "#E2E8F0" : "#1A2633");
   const textColor = cs.getPropertyValue("--aq-text-2").trim() || (isLight ? "#64748B" : "#7F92A6");
+  const eqCurveColor = cs.getPropertyValue("--aq-accent").trim() || "#6FB7FF";
+  const eqCurveMuted = cs.getPropertyValue("--aq-accent-soft").trim() || "rgba(111, 183, 255, 0.45)";
 
   // Rács
   eqCtx.strokeStyle = gridColor;
@@ -3913,7 +3924,7 @@ function paintEq() {
   const hasProfile = nodes.length > 0;
   if (showEqCurve) {
     if (hasProfile) {
-      eqCtx.strokeStyle = "#6FB7FF";
+      eqCtx.strokeStyle = eqCurveColor;
       eqCtx.lineWidth = 2.4 * dpr;
       eqCtx.beginPath();
       for (let i = 0; i < points.length; i++) {
@@ -3924,7 +3935,7 @@ function paintEq() {
     } else {
       // Nincs sáv (nincs kiválasztott profil sem): diszkrét egyenes vonal a 0 dB szintnél
       const yZero = clampY(dbToY(0, G));
-      eqCtx.strokeStyle = "rgba(111, 183, 255, 0.45)";
+      eqCtx.strokeStyle = eqCurveMuted;
       eqCtx.lineWidth = 1.5 * dpr;
       eqCtx.beginPath();
       eqCtx.moveTo(padLeft, yZero);
@@ -3937,7 +3948,7 @@ function paintEq() {
   if (hasProfile && showEqCurve) {
     eqOutOfView = nodes.some(n => n.freq >= eqMinFreq && n.freq <= eqMaxFreq && nodeView(n, G, ovBox).off !== 0);
     const yTop = padTop + 1.5 * dpr, yBot = padTop + plotH - 1.5 * dpr;
-    eqCtx.strokeStyle = "rgba(111, 183, 255, 0.55)";
+    eqCtx.strokeStyle = eqCurveMuted;
     eqCtx.lineWidth = 1.6 * dpr;
     eqCtx.setLineDash([3 * dpr, 3 * dpr]);
     eqCtx.beginPath();
@@ -5665,9 +5676,17 @@ function drawRealIrWaveform(canvas) {
   const ctx = canvas.getContext("2d");
   const w = canvas.width = canvas.clientWidth;
   const h = canvas.height = canvas.clientHeight;
-  ctx.fillStyle = isLight ? "#F8FAFC" : "#0C131B";
+  const cs = getComputedStyle(document.documentElement);
+  const accent = cs.getPropertyValue("--aq-accent").trim() || "#4FD1C5";
+  const amber = cs.getPropertyValue("--aq-amber").trim() || "#E3B66B";
+  const accentSoft = cs.getPropertyValue("--aq-accent-soft").trim() || "rgba(79,209,197,0.35)";
+  const bg = cs.getPropertyValue("--aq-input").trim() || (isLight ? "#F8FAFC" : "#0C131B");
+  const lineCol = cs.getPropertyValue("--aq-line").trim() || (isLight ? "#E2E8F0" : "#16212D");
+  const textMuted = cs.getPropertyValue("--aq-text-2").trim() || (isLight ? "#475569" : "#A3B3C2");
+
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = isLight ? "#E2E8F0" : "#16212D";
+  ctx.strokeStyle = lineCol;
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (let x = 0; x < w; x += 40) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
@@ -5676,11 +5695,11 @@ function drawRealIrWaveform(canvas) {
   const cy = h / 2;
   ctx.font = "10px 'IBM Plex Mono', monospace";
   if (convIrLocal) {
-    const colors = ["#4FD1C5", "#E3B66B"];
+    const colors = [accent, amber];
     let peak = 1e-9;
     convIrLocal.channels.forEach(c => { for (let i = 0; i < c.length; i++) peak = Math.max(peak, Math.abs(c[i])); });
     convIrLocal.channels.forEach((c, ci) => {
-      ctx.strokeStyle = colors[ci];
+      ctx.strokeStyle = colors[ci % colors.length];
       ctx.globalAlpha = ci === 0 ? 1 : 0.7;
       ctx.beginPath();
       const per = c.length / w;
@@ -5694,20 +5713,20 @@ function drawRealIrWaveform(canvas) {
       ctx.stroke();
     });
     ctx.globalAlpha = 1;
-    ctx.fillStyle = isLight ? "#475569" : "#A3B3C2";
+    ctx.fillStyle = textMuted;
     ctx.fillText(`${(convIrLocal.channels[0].length / convIrLocal.sr * 1000).toFixed(0)} ms`, w - 60, h - 6);
   } else {
     // Motor előnézet: burkológörbe dB-ben (-60..0)
     const pv = convIrRemote.preview || [];
-    ctx.fillStyle = "rgba(79,209,197,0.35)";
-    ctx.strokeStyle = "#4FD1C5";
+    ctx.fillStyle = accentSoft;
+    ctx.strokeStyle = accent;
     ctx.beginPath();
     ctx.moveTo(0, h);
     pv.forEach((v, i) => ctx.lineTo(i / Math.max(1, pv.length - 1) * w, h - v * (h - 6)));
     ctx.lineTo(w, h);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = isLight ? "#475569" : "#A3B3C2";
+    ctx.fillStyle = textMuted;
     ctx.fillText(t("cv.envelope"), 8, 14);
   }
   return true;
@@ -5721,15 +5740,20 @@ function drawConvWaveform() {
   const ctx = canvas.getContext("2d");
   const w = canvas.width = canvas.clientWidth;
   const h = canvas.height = canvas.clientHeight;
-  ctx.fillStyle = isLight ? "#F8FAFC" : "#0C131B";
+  const cs = getComputedStyle(document.documentElement);
+  const bg = cs.getPropertyValue("--aq-input").trim() || (isLight ? "#F8FAFC" : "#0C131B");
+  const lineCol = cs.getPropertyValue("--aq-line").trim() || (isLight ? "#E2E8F0" : "#16212D");
+  const midCol = cs.getPropertyValue("--aq-line-2").trim() || (isLight ? "#CBD5E1" : "#1F2C3A");
+
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = isLight ? "#E2E8F0" : "#16212D";
+  ctx.strokeStyle = lineCol;
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (let x = 0; x < w; x += 40) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
   for (let y = 0; y < h; y += 20) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
   ctx.stroke();
-  ctx.strokeStyle = isLight ? "#CBD5E1" : "#1F2C3A";
+  ctx.strokeStyle = midCol;
   ctx.beginPath();
   ctx.moveTo(0, h / 2);
   ctx.lineTo(w, h / 2);
