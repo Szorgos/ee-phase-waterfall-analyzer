@@ -142,6 +142,28 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     --aq-font: "Inter Variable", Inter, "Segoe UI Variable Text", "Segoe UI", Cantarell, system-ui, sans-serif;
     --aq-mono: "IBM Plex Mono", ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
 
+    /* ======================================================================= */
+    /* 8PT TÉRBELI RÁCS & TIPOGRÁFIAI SKÁLA (ISO 9241-303, APCA Ergonómia)     */
+    /* ======================================================================= */
+    --aq-space-2: 2px;
+    --aq-space-4: 4px;
+    --aq-space-6: 6px;
+    --aq-space-8: 8px;
+    --aq-space-10: 10px;
+    --aq-space-12: 12px;
+    --aq-space-16: 16px;
+    --aq-space-20: 20px;
+    --aq-space-24: 24px;
+    --aq-space-32: 32px;
+
+    /* Egységes tipográfiai skála */
+    --aq-fs-title: 15px;         /* Alkalmazás-cím, brand, modul főcímek */
+    --aq-fs-head: 13px;          /* Szekció és kártya alcímek, tab feliratok */
+    --aq-fs-body: 12px;          /* Elsődleges vezérlők, gombok, beviteli mezők, címkék */
+    --aq-fs-sub: 11px;           /* Másodlagos magyarázatok, metaadatok, diagnosztika */
+    --aq-fs-micro: 10px;         /* Skálák, állapotjelző badge-ek, kompakt jelzések */
+    --aq-fs-unit: 10.5px;        /* Mértékegység feliratok: Hz, dB, okt, ms, % */
+
     /* a korábbi nevek (a beágyazott stílusok és a szkript ezeket használja) */
     --ee-window-bg: var(--aq-bg);
     --ee-view-bg: var(--aq-bg-2);
@@ -158,86 +180,255 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     --ee-text-secondary: var(--aq-text-2);
   }
 
-  /* ======================================================= */
-  /* VILÁGOS TÉMA TOKENEK (Light Theme)                      */
-  /* ======================================================= */
-  :root[data-theme="light"] {
-    --aq-bg: #F4F6F9;          /* ablak háttere */
-    --aq-bg-2: #E9EEF4;        /* fejléc, süllyesztett felületek, grafikonok */
-    --aq-surface: #FFFFFF;     /* kártyák, panelek */
-    --aq-surface-2: #EDF2F7;   /* kiemelt, rámutatás */
-    --aq-input: #FFFFFF;       /* beviteli mezők */
-    --aq-line: #D8E0E9;        /* elválasztók, keretek */
-    --aq-line-2: #B8C6D4;      /* rámutatás / aktív keret */
-    --aq-text: #0F172A;        /* fő szövegszín */
-    --aq-text-2: #475569;      /* másodlagos leírások */
-    --aq-text-3: #64748B;      /* halvány kísérőszöveg */
-    --aq-accent: #0D9488;      /* elegáns audiofil mélytürkiz */
-    --aq-accent-2: #0F766E;    /* kiemelt értékek, magas kontraszt */
-    --aq-accent-ink: #FFFFFF;  /* fehér szöveg akcentus gombokon */
-    --aq-accent-soft: rgba(13, 148, 136, 0.12);
-    --aq-amber: #D97706;       /* előerősítés, késleltetés görbe */
-    --aq-violet: #7C3AED;      /* fázis görbe */
-    --aq-success: #16A34A;     /* siker állapot */
-    --aq-warn: #EA580C;        /* figyelmeztetés */
-    --aq-danger: #DC2626;      /* hiba / veszély */
-    --aq-info: #0284C7;        /* információ */
-    color-scheme: light !important;
+  /* ========================================================================== */
+  /* 8 AUDIOFIL SZÍNTÉMA (4 koncepció × Sötét és Világos változat)              */
+  /* ========================================================================== */
+
+  /* 1. Stúdió Konzol (Studio Precision - Meleg antracit & Borostyán VU fény) */
+  :root, [data-theme="studio-dark"], [data-concept="studio"][data-mode="dark"] {
+    --aq-bg: #121316;
+    --aq-bg-2: #16181D;
+    --aq-surface: #181A1F;
+    --aq-surface-2: #21242C;
+    --aq-input: #141519;
+    --aq-line: #262932;
+    --aq-line-2: #363B48;
+    --aq-text: #EDEDEE;
+    --aq-text-2: #8E95A5;
+    --aq-text-3: #636A7A;
+    --aq-accent: #E5A93C;
+    --aq-accent-2: #F3C368;
+    --aq-accent-ink: #121316;
+    --aq-accent-soft: rgba(229, 169, 60, 0.15);
+    --aq-amber: #E5A93C;
+    --aq-violet: #A99CFF;
+    --aq-success: #5ED6A0;
+    --aq-warn: #F2A65A;
+    --aq-danger: #D9534F;
+    --aq-info: #6FB7FF;
+  }
+  [data-theme="studio-light"], [data-concept="studio"][data-mode="light"] {
+    --aq-bg: #F2F4F7;
+    --aq-bg-2: #E8ECF2;
+    --aq-surface: #FFFFFF;
+    --aq-surface-2: #DFE4ED;
+    --aq-input: #FFFFFF;
+    --aq-line: #D0D6E0;
+    --aq-line-2: #B4BECE;
+    --aq-text: #16191F;
+    --aq-text-2: #5E6678;
+    --aq-text-3: #7C869A;
+    --aq-accent: #C27D18;
+    --aq-accent-2: #9F620D;
+    --aq-accent-ink: #FFFFFF;
+    --aq-accent-soft: rgba(194, 125, 24, 0.15);
+    --aq-amber: #C27D18;
+    --aq-violet: #7C3AED;
+    --aq-success: #16A34A;
+    --aq-warn: #EA580C;
+    --aq-danger: #C9302C;
+    --aq-info: #0284C7;
   }
 
-  :root[data-theme="light"] body {
+  /* 2. Braun / Dieter Rams (High-End Monolith - Cinóber jelzőfény) */
+  [data-theme="rams-dark"], [data-concept="rams"][data-mode="dark"] {
+    --aq-bg: #0E0F11;
+    --aq-bg-2: #131417;
+    --aq-surface: #16171A;
+    --aq-surface-2: #1E2024;
+    --aq-input: #111214;
+    --aq-line: #25272D;
+    --aq-line-2: #353842;
+    --aq-text: #F0F1F3;
+    --aq-text-2: #888C96;
+    --aq-text-3: #60646D;
+    --aq-accent: #D9532F;
+    --aq-accent-2: #EA6D4B;
+    --aq-accent-ink: #FFFFFF;
+    --aq-accent-soft: rgba(217, 83, 47, 0.18);
+    --aq-amber: #D97706;
+    --aq-violet: #9061F9;
+    --aq-success: #31C48D;
+    --aq-warn: #E05228;
+    --aq-danger: #D9534F;
+    --aq-info: #6FB7FF;
+  }
+  [data-theme="rams-light"], [data-concept="rams"][data-mode="light"] {
+    --aq-bg: #F6F7F9;
+    --aq-bg-2: #ECEEF2;
+    --aq-surface: #FFFFFF;
+    --aq-surface-2: #E1E4EA;
+    --aq-input: #FFFFFF;
+    --aq-line: #DCDFE5;
+    --aq-line-2: #BEC3CE;
+    --aq-text: #121315;
+    --aq-text-2: #5A5D66;
+    --aq-text-3: #797E8B;
+    --aq-accent: #C4411F;
+    --aq-accent-2: #A33316;
+    --aq-accent-ink: #FFFFFF;
+    --aq-accent-soft: rgba(196, 65, 31, 0.14);
+    --aq-amber: #C4411F;
+    --aq-violet: #6C2BD9;
+    --aq-success: #0E9F6E;
+    --aq-warn: #C4411F;
+    --aq-danger: #C9302C;
+    --aq-info: #0284C7;
+  }
+
+  /* 3. Japán Prémium Hifi (Sapphire & Platinum - Pezsgő platinaarany) */
+  [data-theme="sapphire-dark"], [data-concept="sapphire"][data-mode="dark"] {
+    --aq-bg: #0E1117;
+    --aq-bg-2: #11151E;
+    --aq-surface: #141822;
+    --aq-surface-2: #1C2230;
+    --aq-input: #10131B;
+    --aq-line: #202636;
+    --aq-line-2: #303A50;
+    --aq-text: #E6EAF2;
+    --aq-text-2: #8894A8;
+    --aq-text-3: #5F6B80;
+    --aq-accent: #D4C8AE;
+    --aq-accent-2: #E5DCB6;
+    --aq-accent-ink: #0E1117;
+    --aq-accent-soft: rgba(212, 200, 174, 0.18);
+    --aq-amber: #D4C8AE;
+    --aq-violet: #A49BFF;
+    --aq-success: #4EBE89;
+    --aq-warn: #E08C4A;
+    --aq-danger: #E06666;
+    --aq-info: #6FB7FF;
+  }
+  [data-theme="sapphire-light"], [data-concept="sapphire"][data-mode="light"] {
+    --aq-bg: #F4F6F9;
+    --aq-bg-2: #E8ECF4;
+    --aq-surface: #FFFFFF;
+    --aq-surface-2: #DDE3EF;
+    --aq-input: #FFFFFF;
+    --aq-line: #D0D7E4;
+    --aq-line-2: #B3BFD4;
+    --aq-text: #151B26;
+    --aq-text-2: #576378;
+    --aq-text-3: #75839C;
+    --aq-accent: #2B4C7E;
+    --aq-accent-2: #1C355A;
+    --aq-accent-ink: #FFFFFF;
+    --aq-accent-soft: rgba(43, 76, 126, 0.15);
+    --aq-amber: #B45309;
+    --aq-violet: #5B21B6;
+    --aq-success: #047857;
+    --aq-warn: #C2410C;
+    --aq-danger: #B91C1C;
+    --aq-info: #0284C7;
+  }
+
+  /* 4. Brit Mastering (British Racing & Sage - Zsályazöld / fenyőzöld) */
+  [data-theme="british-dark"], [data-concept="british"][data-mode="dark"] {
+    --aq-bg: #101312;
+    --aq-bg-2: #131715;
+    --aq-surface: #171C1A;
+    --aq-surface-2: #202724;
+    --aq-input: #111413;
+    --aq-line: #242C28;
+    --aq-line-2: #35413B;
+    --aq-text: #E8ECE9;
+    --aq-text-2: #87968E;
+    --aq-text-3: #5F6E66;
+    --aq-accent: #7CA88B;
+    --aq-accent-2: #98BEA5;
+    --aq-accent-ink: #101312;
+    --aq-accent-soft: rgba(124, 168, 139, 0.18);
+    --aq-amber: #D9A05B;
+    --aq-violet: #9D84B7;
+    --aq-success: #7CA88B;
+    --aq-warn: #D97706;
+    --aq-danger: #D9534F;
+    --aq-info: #6FB7FF;
+  }
+  [data-theme="british-light"], [data-concept="british"][data-mode="light"] {
+    --aq-bg: #F2F5F3;
+    --aq-bg-2: #E6ECE8;
+    --aq-surface: #FFFFFF;
+    --aq-surface-2: #D9E2DC;
+    --aq-input: #FFFFFF;
+    --aq-line: #CAD5CF;
+    --aq-line-2: #ABC0B4;
+    --aq-text: #131A16;
+    --aq-text-2: #54665C;
+    --aq-text-3: #73877C;
+    --aq-accent: #2D5A42;
+    --aq-accent-2: #1D402E;
+    --aq-accent-ink: #FFFFFF;
+    --aq-accent-soft: rgba(45, 90, 66, 0.15);
+    --aq-amber: #B45309;
+    --aq-violet: #5B21B6;
+    --aq-success: #2D5A42;
+    --aq-warn: #C2410C;
+    --aq-danger: #B91C1C;
+    --aq-info: #0284C7;
+  }
+
+  /* Minden világos téma közös viselkedése */
+  :root[data-mode="light"], :root[data-theme$="-light"], :root[data-theme="light"] {
+    color-scheme: light !important;
+  }
+  :root[data-mode="light"] body, :root[data-theme$="-light"] body, :root[data-theme="light"] body {
     color-scheme: light !important;
     background: var(--aq-bg);
     color: var(--aq-text);
   }
-  :root[data-theme="light"] select,
-  :root[data-theme="light"] input,
-  :root[data-theme="light"] textarea,
-  :root[data-theme="light"] button,
-  :root[data-theme="light"] .ee-input {
+  :root[data-mode="light"] select, :root[data-mode="light"] input, :root[data-mode="light"] textarea,
+  :root[data-mode="light"] button, :root[data-mode="light"] .ee-input,
+  :root[data-theme$="-light"] select, :root[data-theme$="-light"] input, :root[data-theme$="-light"] textarea,
+  :root[data-theme$="-light"] button, :root[data-theme$="-light"] .ee-input,
+  :root[data-theme="light"] select, :root[data-theme="light"] input, :root[data-theme="light"] textarea,
+  :root[data-theme="light"] button, :root[data-theme="light"] .ee-input {
     color-scheme: light !important;
   }
-  :root[data-theme="light"] select.mini-select,
-  :root[data-theme="light"] select.ee-select {
-    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%230D9488' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  :root[data-mode="light"] select.mini-select, :root[data-mode="light"] select.ee-select,
+  :root[data-theme$="-light"] select.mini-select, :root[data-theme$="-light"] select.ee-select,
+  :root[data-theme="light"] select.mini-select, :root[data-theme="light"] select.ee-select {
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235E6678' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
   }
-  :root[data-theme="light"] select.mini-select option,
-  :root[data-theme="light"] select.ee-select option {
-    background-color: #FFFFFF !important;
-    color: #0F172A !important;
+  :root[data-mode="light"] select.mini-select option, :root[data-mode="light"] select.ee-select option,
+  :root[data-theme$="-light"] select.mini-select option, :root[data-theme$="-light"] select.ee-select option,
+  :root[data-theme="light"] select.mini-select option, :root[data-theme="light"] select.ee-select option {
+    background-color: var(--aq-surface) !important;
+    color: var(--aq-text) !important;
   }
-  :root[data-theme="light"] .top-spectrum-strip {
-    background: #E2E8F0;
+  :root[data-mode="light"] .top-spectrum-strip, :root[data-theme$="-light"] .top-spectrum-strip, :root[data-theme="light"] .top-spectrum-strip {
+    background: var(--aq-bg-2);
   }
-  :root[data-theme="light"] .freq-scale {
-    background: linear-gradient(to top, rgba(226,232,240,0.96) 0%, rgba(226,232,240,0.75) 55%, rgba(226,232,240,0) 100%);
+  :root[data-mode="light"] .freq-scale, :root[data-theme$="-light"] .freq-scale, :root[data-theme="light"] .freq-scale {
+    background: linear-gradient(to top, var(--aq-bg-2) 0%, rgba(226,232,240,0.75) 55%, transparent 100%);
   }
-  :root[data-theme="light"] .strip-badge,
-  :root[data-theme="light"] .strip-controls .ctrl-group {
-    background: rgba(255, 255, 255, 0.88);
+  :root[data-mode="light"] .strip-badge, :root[data-mode="light"] .strip-controls .ctrl-group,
+  :root[data-theme$="-light"] .strip-badge, :root[data-theme$="-light"] .strip-controls .ctrl-group,
+  :root[data-theme="light"] .strip-badge, :root[data-theme="light"] .strip-controls .ctrl-group {
+    background: rgba(255, 255, 255, 0.92);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   }
-  :root[data-theme="light"] .adw-btn:hover {
-    background: #E2E8F0;
+  :root[data-mode="light"] .adw-btn:hover, :root[data-theme$="-light"] .adw-btn:hover, :root[data-theme="light"] .adw-btn:hover {
+    background: var(--aq-surface-2);
   }
-  :root[data-theme="light"] .status-badge.off {
+  :root[data-mode="light"] .status-badge.off, :root[data-theme$="-light"] .status-badge.off, :root[data-theme="light"] .status-badge.off {
     background: rgba(0, 0, 0, 0.04);
     color: var(--aq-text-2);
     border-color: var(--aq-line-2);
   }
-  :root[data-theme="light"] .support-pop {
+  :root[data-mode="light"] .support-pop, :root[data-theme$="-light"] .support-pop, :root[data-theme="light"] .support-pop {
     box-shadow: 0 18px 40px rgba(0, 0, 0, 0.12);
   }
-  :root[data-theme="light"] .aether-toast {
+  :root[data-mode="light"] .aether-toast, :root[data-theme$="-light"] .aether-toast, :root[data-theme="light"] .aether-toast {
     box-shadow: 0 14px 36px rgba(0, 0, 0, 0.12);
   }
-  :root[data-theme="light"] .aq-modal {
+  :root[data-mode="light"] .aq-modal, :root[data-theme$="-light"] .aq-modal, :root[data-theme="light"] .aq-modal {
     box-shadow: 0 30px 70px rgba(0, 0, 0, 0.15) !important;
   }
-  :root[data-theme="light"] .tab-glider {
+  :root[data-mode="light"] .tab-glider, :root[data-theme$="-light"] .tab-glider, :root[data-theme="light"] .tab-glider {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
   }
-  select.theme-select { min-width: 104px; max-width: 130px; text-overflow: ellipsis; }
+  select.theme-select { min-width: 140px; max-width: 220px; text-overflow: ellipsis; }
 
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--aq-font); }
   html, body {
@@ -289,8 +480,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .dsp-warn-btn { margin-left: 12px; padding: 3px 10px; border-radius: 6px; border: 1px solid rgba(26, 18, 6, 0.45); background: rgba(255, 255, 255, 0.35); color: #1A1206; font: inherit; font-size: 0.8rem; cursor: pointer; }
   .dsp-warn-btn:hover { background: rgba(255, 255, 255, 0.6); }
   .dsp-warn-btn[hidden] { display: none; }
-  header { background: var(--aq-bg-2); border-bottom: 1px solid var(--aq-line); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-  .title-group { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 1rem; flex: 0 1 auto; }
+  header { background: var(--aq-bg-2); border-bottom: 1px solid var(--aq-line); padding: 10px 24px; min-height: 52px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .title-group { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: var(--aq-fs-title); flex: 0 1 auto; }
   /* Keskeny ablakban (1000–1200 px) csak az alcím rövidül, majd eltűnik: az ikon, a név és a verzió mindig
      teljesen látszik, semmi nem csúszik egymásra és nem törik két sorba. Az alcím rácsa (minmax(0, auto)) nem
      számít bele a csoport legkisebb szélességébe, így a csoport sosem lesz keskenyebb az ikonnál, névnél, verziónál. */
@@ -299,9 +490,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .app-title > span { overflow: hidden; white-space: nowrap; }
   .app-title.clipped > span { visibility: hidden; }   /* csonka alcím helyett semmi (a helye megmarad: nem ugrál) */
   .app-mark { width: 30px; height: 30px; display: block; }
-  .app-brand { font-size: 1.05rem; font-weight: 700; letter-spacing: 0.01em; color: var(--aq-text); white-space: nowrap; }
-  .app-title { font-size: 0.9rem; font-weight: 500; color: var(--aq-text-2); }
-  .app-version { font: 500 0.72rem var(--aq-mono); color: var(--aq-text-3); background: var(--aq-surface); border: 1px solid var(--aq-line); border-radius: 6px; padding: 2px 7px; }
+  .app-brand { font-size: var(--aq-fs-title); font-weight: 700; letter-spacing: 0.01em; color: var(--aq-text); white-space: nowrap; }
+  .app-title { font-size: var(--aq-fs-head); font-weight: 500; color: var(--aq-text-2); }
+  .app-version { font: 500 var(--aq-fs-micro) var(--aq-mono); color: var(--aq-text-3); background: var(--aq-surface); border: 1px solid var(--aq-line); border-radius: 6px; padding: 2px 7px; }
   .header-right { flex-shrink: 1; min-width: 0; }
   .header-right > * { flex-shrink: 0; }   /* csak a Kimenet választó rövidül (lent) */
   .header-right .status-badge, .header-right .support-link { white-space: nowrap; }
@@ -373,9 +564,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .support-pop { position: fixed; top: 60px; right: 24px; z-index: 9998; width: 280px; background: var(--aq-surface); border: 1px solid var(--aq-line-2); border-radius: var(--aq-radius-l); padding: 18px; box-shadow: 0 18px 40px rgba(0,0,0,0.55); font-size: 0.85rem; color: var(--aq-text-2); display: none; text-align: center; line-height: 1.45; }
   .support-pop img { width: 190px; border-radius: 10px; margin: 10px auto; display: block; }
   .support-pop .tag { font-weight: 600; color: var(--aq-text); font-size: 0.95rem; }
-  .preset-bar { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 0 auto; }   /* nem nyomódik össze: helyette a cím rövidül */
-  .preset-lbl { font-size: 0.82rem; color: var(--aq-text-2); }
-  .preset-select { min-width: 140px; max-width: 340px; }
+  .preset-bar { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 0 0 auto; }   /* nem nyomódik össze: helyette a cím rövidül */
+  .preset-lbl { font-size: var(--aq-fs-body); color: var(--aq-text-2); font-weight: 500; }
+  .preset-select { min-width: 140px; max-width: 320px; }
   /* Keskeny ablakban (a legkisebb ablak 1000 px) a fejléc tömörebb: a Támogatás gombból csak a szív marad (a felirat
      a buborékban), a jobb oldal pedig a Kimenet választónál rövidül, nem csúszik a név és a profil fölé */
   #physicalSinkWrap { flex: 0 1 auto; }
@@ -399,18 +590,18 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .strip-controls > * { pointer-events: auto; }
   .strip-controls .ctrl-group { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; background: rgba(13, 20, 28, 0.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--aq-line); border-radius: 10px; padding: 3px 4px 3px 6px; }
   .strip-controls select.mini-select { max-width: 290px; text-overflow: ellipsis; }
-  .mini-btn { background: var(--aq-surface); border: 1px solid var(--aq-line); color: var(--aq-text); padding: 5px 10px; border-radius: 8px; font-size: 0.76rem; cursor: pointer; font-weight: 500; transition: background .15s, border-color .15s, color .15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 28px; }
+  .mini-btn { background: var(--aq-surface); border: 1px solid var(--aq-line); color: var(--aq-text); padding: 4px 10px; border-radius: 7px; font-size: var(--aq-fs-body); cursor: pointer; font-weight: 500; transition: background .15s, border-color .15s, color .15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 28px; height: 28px; }
   .mini-btn:hover { background: var(--aq-surface-2); border-color: var(--aq-line-2); }
-  .mini-btn.active { background: var(--aq-accent-soft); border-color: rgba(79, 209, 197, 0.55); color: var(--aq-accent-2); }
+  .mini-btn.active { background: var(--aq-accent-soft); border-color: var(--aq-accent); color: var(--aq-accent-2); }
   .strip-controls .ctrl-group .mini-btn { border-color: transparent; background: transparent; }
   .strip-controls .mini-btn.icon-only { padding: 4px 6px; }
   .strip-controls .mini-btn[hidden] { display: none; }
   .strip-controls .mini-btn:disabled { opacity: 0.35; cursor: default; }
-  .strip-controls .ctrl-value { font: 500 0.74rem var(--aq-mono); color: var(--aq-text); min-width: 20px; text-align: center; }
+  .strip-controls .ctrl-value { font: 500 var(--aq-fs-sub) var(--aq-mono); color: var(--aq-text); min-width: 20px; text-align: center; }
   .strip-controls .ctrl-group .mini-btn:hover { background: var(--aq-surface-2); }
   .strip-controls .ctrl-group .mini-btn.active { background: var(--aq-accent-soft); }
 
-  .ctrl-label { font-size: 0.74rem; color: var(--aq-text-2); margin-left: 4px; }
+  .ctrl-label { font-size: var(--aq-fs-sub); color: var(--aq-text-2); margin-left: 4px; }
 
   /* SÖTÉT SELECT ÉS DROPDOWN STÍLUSOK (WebKitGTK Natív Fehér Hátterének Megszüntetése) */
   select, input, textarea, button {
@@ -421,11 +612,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     background-color: var(--aq-input) !important;
     color: var(--aq-text) !important;
     border: 1px solid var(--aq-line-2) !important;
-    border-radius: 8px !important;
+    border-radius: 7px !important;
     padding: 4px 26px 4px 10px !important;
-    font-size: 0.78rem !important;
+    font-size: var(--aq-fs-body) !important;
     font-weight: 500 !important;
     min-height: 28px;
+    height: 28px;
     outline: none !important;
     appearance: none !important;
     -webkit-appearance: none !important;
@@ -448,23 +640,102 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   /* Nagyon keskeny ablakban (böngészőben, 900 px alatt) a Támogatás gomb csak a szívet mutatja (a felirat a tooltipben) */
   @media (max-width: 900px) { #btnSupport span { display: none; } }
   /* Kiválasztott előbeállítás (nem a modul be/ki állapota), és a kikapcsolt modul be/ki gombjának felvillanása */
-  .adw-btn.selected { background: var(--aq-accent-soft); border-color: rgba(79, 209, 197, 0.55); color: var(--aq-accent-2); }
-  @keyframes aqNudge { 0%, 100% { box-shadow: 0 0 0 0 rgba(79, 209, 197, 0); border-color: var(--aq-line-2); } 50% { box-shadow: 0 0 0 4px rgba(79, 209, 197, 0.35); border-color: var(--aq-accent); } }
+  .adw-btn.selected { background: var(--aq-accent-soft); border-color: var(--aq-accent); color: var(--aq-accent-2); }
+  @keyframes aqNudge { 0%, 100% { box-shadow: 0 0 0 0 transparent; border-color: var(--aq-line-2); } 50% { box-shadow: 0 0 0 4px var(--aq-accent-soft); border-color: var(--aq-accent); } }
   .adw-btn.nudge { animation: aqNudge 0.6s ease-in-out 3; }
+
   /* Kétállású KI/BE váltó a modulok fejlécében: a kiemelés oldalra csúszik, mint a fülek közötti váltásnál */
-  .aq-switch { position: relative; display: inline-flex; align-items: stretch; width: 92px; height: 30px; padding: 0; flex-shrink: 0;
+  .aq-switch { position: relative; display: inline-flex; align-items: stretch; width: 96px; height: 32px; padding: 0; flex-shrink: 0;
                border-radius: 8px; border: 1px solid var(--aq-line-2); background: var(--aq-surface-2); cursor: pointer; overflow: hidden;
                font: inherit; color: var(--aq-text-3); transition: border-color .15s; }
-  .aq-switch:hover { border-color: var(--aq-text-3); }
+  .aq-switch:hover { border-color: var(--aq-text-2); }
   .aq-switch:focus-visible { outline: 2px solid var(--aq-accent); outline-offset: 2px; }
   .aq-switch-knob { position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc(50% - 2px); border-radius: 6px;
-                    background: var(--aq-accent-soft); border: 1px solid rgba(79, 209, 197, 0.55);
+                    background: var(--aq-accent-soft); border: 1px solid var(--aq-accent);
                     transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1); }
   .aq-switch.on .aq-switch-knob { transform: translateX(100%); }
   .aq-switch-lbl { position: relative; z-index: 1; flex: 1 1 50%; display: flex; align-items: center; justify-content: center;
-                   font-size: 0.78rem; font-weight: 600; letter-spacing: 0.02em; transition: color .2s ease; }
+                   font-size: var(--aq-fs-body); font-weight: 600; letter-spacing: 0.02em; transition: color .2s ease; }
   .aq-switch:not(.on) .aq-lbl-off, .aq-switch.on .aq-lbl-on { color: var(--aq-text); }
   .aq-switch.nudge { animation: aqNudge 0.6s ease-in-out 3; }
+
+  /* ======================================================= */
+  /* EGYEDI AUDIOFIL CHECKBOX (ISO 9241-303 & Fitts törvénye)*/
+  /* ======================================================= */
+  .aq-checkbox-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    min-height: 28px;
+    padding: 2px 4px;
+    user-select: none;
+    font-size: var(--aq-fs-body);
+    color: var(--aq-text);
+  }
+  .aq-checkbox-wrap:hover .aq-checkbox {
+    border-color: var(--aq-accent);
+  }
+  .aq-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    border: 1.5px solid var(--aq-line-2);
+    background-color: var(--aq-input);
+    cursor: pointer;
+    position: relative;
+    outline: none;
+    transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+    margin: 0;
+    display: inline-grid;
+    place-content: center;
+    vertical-align: middle;
+  }
+  .aq-checkbox:hover {
+    border-color: var(--aq-accent);
+  }
+  .aq-checkbox:focus-visible {
+    outline: 2px solid var(--aq-accent);
+    outline-offset: 2px;
+  }
+  .aq-checkbox:checked {
+    background-color: var(--aq-accent);
+    border-color: var(--aq-accent);
+  }
+  .aq-checkbox:checked::after {
+    content: "";
+    width: 5px;
+    height: 9px;
+    border: solid var(--aq-accent-ink);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+    margin-bottom: 2px;
+  }
+  .aq-checkbox:indeterminate {
+    background-color: var(--aq-accent);
+    border-color: var(--aq-accent);
+  }
+  .aq-checkbox:indeterminate::after {
+    content: "";
+    width: 8px;
+    height: 2px;
+    background-color: var(--aq-accent-ink);
+    border-radius: 1px;
+  }
+  .aq-checkbox-label {
+    font-size: var(--aq-fs-body);
+    font-weight: 500;
+    color: var(--aq-text);
+  }
+  .aq-checkbox-meta {
+    font-size: var(--aq-fs-micro);
+    font-family: var(--aq-mono);
+    color: var(--aq-text-3);
+    margin-left: 4px;
+  }
   /* A görbe vagy egy sáv kilóg a látható dB tartományból: az Igazít gomb kiemelve */
   .eq-zoom-overlay .zoom-btn.attn { border-color: var(--aq-amber); color: var(--aq-amber); box-shadow: 0 0 0 1px rgba(227, 182, 107, 0.35); }
   select.mini-select option, select.ee-select option {
@@ -485,20 +756,20 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     padding: 4px;
     background: var(--aq-bg-2);
     border: 1px solid var(--aq-line);
-    border-radius: 14px;
+    border-radius: var(--aq-radius-m);
     width: fit-content;
     max-width: 100%;
-    font-size: 0.88rem;
+    font-size: var(--aq-fs-head);
     isolation: isolate;
   }
   .tab-glider {
     position: absolute;
     top: 0;               /* a helyét a JS adja (translate3d), a gomb pontos helyére */
     left: 0;
-    height: 38px;
+    height: 34px;
     background: var(--aq-surface-2);
     border: 1px solid var(--aq-line-2);
-    border-radius: 10px;
+    border-radius: 8px;
     pointer-events: none;
     z-index: 1;
     transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
@@ -511,11 +782,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .tab-btn {
     position: relative;
     z-index: 2;
-    padding: 8px 16px;
-    min-height: 38px;
-    border-radius: 10px;
+    padding: 6px 14px;
+    min-height: 34px;
+    border-radius: 8px;
     cursor: pointer;
     color: var(--aq-text-2);
+    font-size: var(--aq-fs-body);
     font-weight: 500;
     background: transparent;
     border: 1px solid transparent;
@@ -527,7 +799,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
   .tab-btn:hover { color: var(--aq-text); }
   .tab-btn.active { color: var(--aq-text); }
-  .module-dot { width: 8px; height: 8px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid #5A6E82; display: inline-block; flex: 0 0 auto; font-size: 0; transition: background .15s, border-color .15s, box-shadow .15s; }
+  .module-dot { width: 8px; height: 8px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid var(--aq-line-2); display: inline-block; flex: 0 0 auto; font-size: 0; transition: background .15s, border-color .15s, box-shadow .15s; }
   .module-dot.active { background: var(--aq-accent); border-color: var(--aq-accent); box-shadow: 0 0 0 3px var(--aq-accent-soft); }
 
   /* MODUL TARTALMAK ÉS OLDALRA CSÚSZÓ NÉZET */
@@ -576,46 +848,50 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .eq-bottom-bar { background: var(--aq-surface); border: 1px solid var(--aq-line); border-radius: var(--aq-radius-l); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
   /* Két sor: fent a gombsor (balra a gombok, jobbra a zoom-eszköztár) egyetlen sorban, lent a sáv-szerkesztő.
      Ha a gombsor nem fér el, fokozatosan tömörödik (fitEqActionRow): .tight, .tighter, .tightest; csak végső esetben tördel. */
-  .node-readout { display: flex; align-items: center; gap: 10px; font-size: 0.84rem; flex-wrap: wrap; order: 2; flex: 1 1 100%; }
+  .node-readout { display: flex; align-items: center; gap: 12px; font-size: var(--aq-fs-body); flex-wrap: wrap; order: 2; flex: 1 1 100%; padding: 4px 0; }
   .actions-group { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; min-width: 0; max-width: 100%; order: 1; flex: 1 1 100%; }
   .actions-group > .adw-btn { flex-shrink: 0; }
   .actions-group.tight { gap: 6px; }
   .actions-group.tight .zoom-lbl, .actions-group.tight .zoom-divider { display: none; }
   .actions-group.tight .zoom-btn > span { display: none; }            /* Igazít, Reset: csak ikon (a súgó marad) */
-  .actions-group.tight .adw-btn { padding: 4px 9px; font-size: 0.76rem; }
+  .actions-group.tight .adw-btn { padding: 4px 9px; font-size: var(--aq-fs-sub); }
   .actions-group.tighter { gap: 4px; }
-  .actions-group.tighter .adw-btn { padding: 3px 7px; font-size: 0.72rem; min-height: 26px; gap: 4px; }
+  .actions-group.tighter .adw-btn { padding: 3px 7px; font-size: var(--aq-fs-micro); min-height: 26px; height: 26px; gap: 4px; }
   .actions-group.tighter .zoom-val { display: none; }
   .actions-group.tightest #btnImportAutoEq > span, .actions-group.tightest #sliderEqZoom { display: none; }   /* ikon marad, a súgó is */
   .actions-group.wrap { flex-wrap: wrap; row-gap: 6px; }
-  .stat-group { display: flex; gap: 6px; align-items: center; }
-  .stat-group span.lbl { color: var(--aq-text-2); font-size: 0.76rem; }
-  .stat-group small { color: var(--aq-text-3); font-size: 0.74rem; }
+  .stat-group { display: inline-flex; gap: 6px; align-items: center; }
+  .stat-group span.lbl { color: var(--aq-text-2); font-size: var(--aq-fs-body); font-weight: 500; }
+  .stat-group small { color: var(--aq-text-3); font-size: var(--aq-fs-unit); font-family: var(--aq-mono); font-weight: 500; }
+  .stat-group.preamp-divider { border-left: 1px solid var(--aq-line-2); padding-left: 12px; margin-left: 6px; }
+  .band-input-freq { width: 76px !important; text-align: center !important; }
+  .band-input-num { width: 64px !important; text-align: center !important; }
   .ee-input, input[type="number"], input[type="text"] {
     background-color: var(--aq-input) !important;
     border: 1px solid var(--aq-line-2) !important;
     color: var(--aq-text) !important;
     padding: 4px 8px !important;
-    border-radius: 8px !important;
-    font-size: 0.82rem !important;
+    border-radius: 7px !important;
+    font-size: var(--aq-fs-body) !important;
     font-family: var(--aq-mono) !important;
     font-weight: 500 !important;
-    text-align: left !important;
+    text-align: left;
     outline: none !important;
     color-scheme: dark !important;
     min-height: 28px;
+    height: 28px;
     transition: border-color .15s, box-shadow .15s;
   }
-  .ee-input.search-input { padding: 8px 12px 8px 34px !important; font-family: var(--aq-font) !important; font-size: 0.86rem !important; min-height: 36px; }
-  textarea.ee-input { padding: 10px 12px !important; line-height: 1.5; }
+  .ee-input.search-input { padding: 8px 12px 8px 34px !important; font-family: var(--aq-font) !important; font-size: var(--aq-fs-body) !important; min-height: 36px; height: 36px; }
+  textarea.ee-input { padding: 10px 12px !important; line-height: 1.5; height: auto !important; }
   .ee-input:focus, input[type="number"]:focus, input[type="text"]:focus {
     border-color: var(--aq-accent) !important;
     box-shadow: 0 0 0 3px var(--aq-accent-soft) !important;
   }
   textarea { font-family: var(--aq-mono); }
 
-  .adw-btn { background: var(--aq-surface-2); border: 1px solid var(--aq-line-2); color: var(--aq-text); padding: 5px 12px; min-height: 30px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: background .15s, border-color .15s, color .15s; }
-  .adw-btn:hover { background: #1C2938; border-color: var(--aq-text-3); }
+  .adw-btn { background: var(--aq-surface-2); border: 1px solid var(--aq-line-2); color: var(--aq-text); padding: 4px 12px; min-height: 28px; height: 28px; border-radius: 7px; font-size: var(--aq-fs-body); cursor: pointer; font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: background .15s, border-color .15s, color .15s; }
+  .adw-btn:hover { background: var(--aq-line-2); border-color: var(--aq-text-3); }
   .adw-btn.primary { background: var(--aq-accent); border-color: var(--aq-accent); color: var(--aq-accent-ink); font-weight: 600; }
   .adw-btn:disabled, .adw-btn:disabled:hover { opacity: 0.4; cursor: default; background: var(--aq-surface-2); border-color: var(--aq-line-2); }
   .adw-btn.primary:hover { background: var(--aq-accent-2); border-color: var(--aq-accent-2); }
@@ -631,24 +907,24 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .adw-btn[data-curve].active-opt::before { background: var(--curve, var(--aq-accent)); }
 
   /* KÁRTYÁK A TÖBBI MODULHOZ */
-  .module-card { background: var(--aq-surface); border: 1px solid var(--aq-line); border-radius: 18px; padding: 24px; display: flex; flex-direction: column; gap: 14px; }
-  .module-card h3 { font-size: 1.12rem; font-weight: 600; color: var(--aq-text); display: flex; align-items: center; gap: 10px; letter-spacing: -0.005em; }
-  .module-desc { font-size: 0.88rem; color: var(--aq-text-2); line-height: 1.55; max-width: 980px; }
+  .module-card { background: var(--aq-surface); border: 1px solid var(--aq-line); border-radius: var(--aq-radius-m); padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+  .module-card h3 { font-size: var(--aq-fs-title); font-weight: 600; color: var(--aq-text); display: flex; align-items: center; gap: 10px; letter-spacing: -0.005em; }
+  .module-desc { font-size: var(--aq-fs-sub); color: var(--aq-text-2); line-height: 1.55; max-width: 980px; }
   .module-desc strong, .module-desc b { color: var(--aq-text); font-weight: 600; }
   /* Magic Touch: diagnosztika */
   .magic-diag { margin-top: 8px; border: 1px solid var(--aq-line); border-radius: var(--aq-radius-m); background: var(--aq-bg-2); padding: 12px 16px; }
-  .magic-diag summary { cursor: pointer; font-size: 0.86rem; font-weight: 600; color: var(--aq-text-2); }
+  .magic-diag summary { cursor: pointer; font-size: var(--aq-fs-head); font-weight: 600; color: var(--aq-text-2); }
   .magic-diag.magic-diag-off table, .magic-diag.magic-diag-off .magic-diag-state { opacity: 0.45; transition: opacity .2s ease; }
-  .magic-diag-state { font-size: 0.82rem; color: var(--aq-accent); margin: 10px 0 6px; }
-  .magic-diag table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-  .magic-diag td { padding: 5px 8px 5px 0; vertical-align: top; border-top: 1px solid rgba(31, 44, 58, 0.6); }
+  .magic-diag-state { font-size: var(--aq-fs-sub); color: var(--aq-accent); margin: 10px 0 6px; }
+  .magic-diag table { width: 100%; border-collapse: collapse; font-size: var(--aq-fs-sub); }
+  .magic-diag td { padding: 5px 8px 5px 0; vertical-align: top; border-top: 1px solid var(--aq-line); }
   .magic-diag td:first-child { color: var(--aq-text-2); white-space: nowrap; width: 1%; padding-right: 18px; }
   .magic-diag td:last-child { font-family: var(--aq-mono); color: var(--aq-text); }
   .param-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 6px; }
-  .param-box { background: var(--aq-bg-2); border: 1px solid var(--aq-line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; transition: border-color .15s; }
+  .param-box { background: var(--aq-bg-2); border: 1px solid var(--aq-line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; transition: border-color .15s; }
   .param-box:hover { border-color: var(--aq-line-2); }
-  .param-box .title { font-size: 0.72rem; color: var(--aq-text-3); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
-  .param-box .val { font: 500 1.1rem var(--aq-mono); }
+  .param-box .title { font-size: var(--aq-fs-micro); color: var(--aq-text-3); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+  .param-box .val { font: 500 1.05rem var(--aq-mono); }
   .param-box [id^="lbl-"] { font-family: var(--aq-mono) !important; font-weight: 500 !important; color: var(--aq-accent-2) !important; }
   .param-box [id^="lbl-"].ctl-bold { color: var(--aq-amber) !important; }   /* Magic Touch 100 % fölött („Bátor”) */
   @media (max-width: 1100px) { .param-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -678,11 +954,11 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   /* Import Modal Kereső & Kártya stílusok */
   .aq-modal { background: var(--aq-surface) !important; border: 1px solid var(--aq-line-2) !important; border-radius: 20px !important; padding: 24px !important; box-shadow: 0 30px 70px rgba(0,0,0,0.65) !important; }
   .aq-note { background: var(--aq-bg-2) !important; border: 1px solid var(--aq-line) !important; border-radius: var(--aq-radius-m) !important; color: var(--aq-text-2) !important; line-height: 1.5; }
-  .modal-tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--aq-text-2); padding: 8px 14px; font-size: 0.86rem; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; text-align: left; }
+  .modal-tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--aq-text-2); padding: 8px 14px; font-size: var(--aq-fs-body); font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; text-align: left; }
   .modal-tab-btn:hover { color: var(--aq-text); }
   .modal-tab-btn.active { color: var(--aq-text); border-bottom-color: var(--aq-accent); }
   .hp-card { background: var(--aq-bg-2); border: 1px solid var(--aq-line); border-radius: var(--aq-radius-m); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; transition: background .15s, border-color .15s, transform .15s; }
-  .hp-card:hover { background: var(--aq-surface-2); border-color: rgba(79, 209, 197, 0.55); transform: translateY(-1px); }
+  .hp-card:hover { background: var(--aq-surface-2); border-color: var(--aq-accent); transform: translateY(-1px); }
 </style>
 <!-- three.js: helyi példány (Windows csomag, offline), különben CDN -->
 <script src="three.min.js"></script>
@@ -707,16 +983,26 @@ if (!window.THREE) window.THREE = (function () {
 <script src="autoeq_index.js"></script>
 <script src="gui_i18n.js"></script>
 <script>
-// Korai témainicializálás a villanásmentes (FOUC) megjelenítéshez
+// Korai témainicializálás a villanásmentes (FOUC) megjelenítéshez (8 audiofil téma támogatással)
 (function initThemeEarly() {
   let saved = null;
   try { saved = localStorage.getItem("aqulify_theme"); } catch (e) {}
   var setting = saved || "system";
-  var eff = setting === "system" ?
-    ((window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark") : setting;
+  var eff = setting;
+  if (setting === "system") {
+    eff = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "studio-light" : "studio-dark";
+  } else if (setting === "dark") {
+    eff = "studio-dark";
+  } else if (setting === "light") {
+    eff = "studio-light";
+  }
+  var mode = eff.endsWith("-light") ? "light" : "dark";
+  var concept = eff.replace(/-(dark|light)$/, "");
   document.documentElement.setAttribute("data-theme", eff);
+  document.documentElement.setAttribute("data-concept", concept);
+  document.documentElement.setAttribute("data-mode", mode);
   document.documentElement.setAttribute("data-theme-setting", setting);
-  document.documentElement.style.colorScheme = eff;
+  document.documentElement.style.colorScheme = mode;
 })();
 </script>
 </head>
@@ -778,11 +1064,22 @@ if (!window.THREE) window.THREE = (function () {
     <div class="header-right" style="display:flex; align-items:center; gap:12px;">
       <select id="selectTheme" class="mini-select theme-select" title="Téma megjelenése (Rendszer / Sötét / Világos)" data-i18n-title="theme.title" onchange="setTheme(this.value, true)">
         <option value="system" data-i18n="theme.system">💻 Rendszer</option>
-        <option value="dark" data-i18n="theme.dark">🌙 Sötét</option>
-        <option value="light" data-i18n="theme.light">☀️ Világos</option>
+        <optgroup label="🌙 Sötét témák" data-i18n-label="theme.groupDark">
+          <option value="studio-dark" data-i18n="theme.studioDark">🎛️ Stúdió Konzol (Sötét)</option>
+          <option value="rams-dark" data-i18n="theme.ramsDark">📐 Dieter Rams (Sötét)</option>
+          <option value="sapphire-dark" data-i18n="theme.sapphireDark">🎌 Japán Hi-Fi (Sötét)</option>
+          <option value="british-dark" data-i18n="theme.britishDark">🌿 Brit Mastering (Sötét)</option>
+        </optgroup>
+        <optgroup label="☀️ Világos témák" data-i18n-label="theme.groupLight">
+          <option value="studio-light" data-i18n="theme.studioLight">🎛️ Stúdió Konzol (Világos)</option>
+          <option value="rams-light" data-i18n="theme.ramsLight">📐 Dieter Rams (Világos)</option>
+          <option value="sapphire-light" data-i18n="theme.sapphireLight">🎌 Japán Hi-Fi (Világos)</option>
+          <option value="british-light" data-i18n="theme.britishLight">🌿 Brit Mastering (Világos)</option>
+        </optgroup>
       </select>
       <select id="selectLang" class="mini-select lang-select" title="Nyelv" data-i18n-title="lang.title" onchange="setLanguage(this.value, true)"></select>
       <button class="mini-btn" id="btnBurnIn" onclick="openBurnIn()" data-i18n="burnin.btn">Burn-in</button>
+      <button class="mini-btn" id="btnLibraryRoots" onclick="openLibraryModal()" style="display:none;" title="Zenei mappák és zenetár beállítások (2.x)" data-i18n-title="library.btnTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="library.btn">Zenei mappák</span></button>
       <button id="btnSupport" class="support-link" onclick="toggleSupport(event)" title="Az Aqulify ingyenes (donateware). Ha hasznos, egy kis támogatással segítheted a fejlesztést." data-i18n-title="support.btnTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-heart"/></svg><span data-i18n="support.btn">Támogatás</span></button>
       <span id="pipewireLiveBadge" class="status-badge off">Motor Offline</span>
       <div id="physicalSinkWrap" style="font-size:0.8rem; color:var(--ee-text-secondary); display:none; align-items:center; gap:6px;">
@@ -948,34 +1245,34 @@ if (!window.THREE) window.THREE = (function () {
 
           <div class="stat-group band-field">
             <span class="lbl" data-i18n="band.freq">Freq:</span>
-            <input type="number" id="inputFreq" min="10" max="24000" step="1" class="ee-input" style="width:78px;">
-            <small style="color:var(--ee-text-secondary);">Hz</small>
+            <input type="number" id="inputFreq" min="10" max="24000" step="1" class="ee-input band-input-freq">
+            <small>Hz</small>
           </div>
 
           <div class="stat-group band-field" id="grpGain">
             <span class="lbl" data-i18n="band.gain">Gain:</span>
-            <input type="number" id="inputGain" min="-36" max="36" step="0.1" class="ee-input" style="width:72px; color:var(--ee-curve-cyan);">
-            <small style="color:var(--ee-text-secondary);">dB</small>
+            <input type="number" id="inputGain" min="-36" max="36" step="0.1" class="ee-input band-input-num" style="color:var(--aq-accent-2);">
+            <small>dB</small>
           </div>
 
           <div class="stat-group band-field">
             <span class="lbl">Q:</span>
-            <input type="number" id="inputQ" min="0" max="100" step="0.01" class="ee-input" style="width:72px;">
+            <input type="number" id="inputQ" min="0" max="100" step="0.01" class="ee-input band-input-num">
           </div>
 
           <div class="stat-group band-field" id="grpWidth">
             <span class="lbl" data-i18n="band.width">Szélesség:</span>
-            <input type="number" id="inputWidth" min="0" max="12" step="0.01" class="ee-input" style="width:72px;">
-            <small style="color:var(--ee-text-secondary);" data-i18n="unit.oct">okt</small>
+            <input type="number" id="inputWidth" min="0" max="12" step="0.01" class="ee-input band-input-num">
+            <small data-i18n="unit.oct">okt</small>
           </div>
 
           <!-- DEDIKÁLT PREAMP VEZÉRLÉS (DUPLA LEVONÁS KIVÉDÉSÉVEL) -->
-          <div class="stat-group" style="border-left: 1px solid var(--ee-border); padding-left: 10px; margin-left: 4px;">
-            <span class="lbl" style="font-weight:700; color:var(--ee-orange);">Preamp:</span>
-            <input type="number" id="inputPreamp" min="-36" max="12" step="0.1" value="0.0" class="ee-input" style="width:72px; color:var(--ee-orange);" oninput="setPreamp(this.value)" onchange="this.value = currentPreamp.toFixed(1)">
-            <small style="color:var(--ee-text-secondary);">dB</small>
-            <span id="badgePreampOrigin" class="status-badge optimal" style="font-size:0.65rem; padding:1px 5px;" title="Preamp forrása és állapota" data-i18n-title="preamp.badgeTitle">0.0 dB (Tiszta)</span>
-            <button id="btnAutoPreamp" class="adw-btn danger-solid" style="display:none; padding:2px 8px; font-size:0.7rem;" onclick="applyAutoPreamp()" title="Klippelés elleni automatikus előerősítés" data-i18n-title="preamp.autoBtnTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-warning"/></svg><span>Auto Preamp</span></button>
+          <div class="stat-group preamp-divider">
+            <span class="lbl" style="font-weight:700; color:var(--aq-amber);">Preamp:</span>
+            <input type="number" id="inputPreamp" min="-36" max="12" step="0.1" value="0.0" class="ee-input band-input-num" style="color:var(--aq-amber);" oninput="setPreamp(this.value)" onchange="this.value = currentPreamp.toFixed(1)">
+            <small>dB</small>
+            <span id="badgePreampOrigin" class="status-badge optimal" style="font-size:var(--aq-fs-micro); padding:2px 8px;" title="Preamp forrása és állapota" data-i18n-title="preamp.badgeTitle">0.0 dB (Tiszta)</span>
+            <button id="btnAutoPreamp" class="adw-btn danger-solid" style="display:none; padding:2px 8px; font-size:var(--aq-fs-micro);" onclick="applyAutoPreamp()" title="Klippelés elleni automatikus előerősítés" data-i18n-title="preamp.autoBtnTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-warning"/></svg><span>Auto Preamp</span></button>
           </div>
 
           <button class="adw-btn danger" id="btnDeleteNode"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg><span data-i18n="band.delete">Törlés</span></button>
@@ -1020,6 +1317,50 @@ if (!window.THREE) window.THREE = (function () {
     </div>
   </div>
 </div>
+
+  <!-- ZENETÁR MAPPÁK MODAL (2.X) -->
+  <div id="modalLibrary" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;" onclick="if(event.target===this)closeLibraryModal()">
+    <div class="aq-modal" style="width:580px; max-width:calc(100vw - 32px); max-height:90vh; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <svg class="aq-icon" aria-hidden="true" style="color:var(--aq-accent);"><use href="#i-folder"/></svg>
+          <span style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="library.modalTitle">Zenei mappák</span>
+        </div>
+        <button class="icon-btn" onclick="closeLibraryModal()" title="Bezárás" data-i18n-title="common.close" data-i18n-aria-label="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+      <p class="module-desc" style="margin:0; font-size:var(--aq-fs-sub); color:var(--aq-text-2);" data-i18n="library.desc">Itt adhatod meg a zenetár gyökérmappáit. A motor ezeket a mappákat járja be zeneszámokért.</p>
+
+      <!-- Állapot / Statisztika sáv -->
+      <div id="libraryStatusBanner" style="display:flex; align-items:center; justify-content:space-between; background:var(--aq-input); border:1px solid var(--aq-line); border-radius:8px; padding:8px 12px; font-size:var(--aq-fs-body);">
+        <span id="libraryStatText" style="color:var(--aq-text-2);">0 szám, 0 album</span>
+        <span id="libraryScanIndicator" style="display:none; color:var(--aq-accent); font-weight:500;">
+          <span class="module-dot active" style="margin-right:6px;"></span><span data-i18n="library.scanningText">Bejárás...</span>
+        </span>
+      </div>
+
+      <!-- Mappák listája -->
+      <div style="display:flex; flex-direction:column; gap:6px; flex:1; min-height:100px; max-height:220px; overflow-y:auto; padding-right:4px;">
+        <div id="libraryRootsEmpty" style="display:none; font-size:var(--aq-fs-body); color:var(--aq-text-2); font-style:italic; padding:12px 0; text-align:center;" data-i18n="library.emptyList">Nincs egyéni mappa megadva (alapértelmezett Zene mappa).</div>
+        <div id="libraryRootsList" style="display:flex; flex-direction:column; gap:6px;"></div>
+      </div>
+
+      <!-- Új mappa hozzáadása -->
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input type="text" id="inputNewLibraryRoot" class="ee-input" style="flex:1;" data-i18n-placeholder="library.addPathPlaceholder" placeholder="Mappa útvonala (pl. D:\Zene vagy /home/felhasznalo/Music)" onkeydown="if(event.key==='Enter')addLibraryRoot();">
+        <button class="mini-btn" onclick="addLibraryRoot()" data-i18n="library.btnAdd">Hozzáadás</button>
+      </div>
+      <div class="aq-note" style="font-size:var(--aq-fs-micro); color:var(--aq-text-2); padding:8px 12px;" data-i18n="library.defaultNote">Ha a lista üres, a rendszer alapértelmezett Zene mappa van érvényben.</div>
+
+      <!-- Alsó gombok -->
+      <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--aq-line); padding-top:12px; margin-top:4px;">
+        <button class="mini-btn" id="btnLibraryRescan" onclick="requestLibraryRescan()" title="Kézi újrabejárás indítása" data-i18n-title="library.btnRescan" data-i18n="library.btnRescan">Újrabejárás</button>
+        <div style="display:flex; gap:8px;">
+          <button class="adw-btn primary" id="btnLibrarySave" onclick="saveLibraryRoots()" data-i18n="library.btnSave">Mentés</button>
+          <button class="adw-btn" onclick="closeLibraryModal()" data-i18n="common.close">Bezárás</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- AUTOEQ ÉS SQUIGLINK PROFIL IMPORTÁLÓ ÉS ONLINE KERESŐ MODAL -->
   <div id="modalBurnIn" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;">
@@ -1217,19 +1558,19 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
             <!-- Dinamikus kivezérlésmérő sáv -->
             <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
               <div style="display:flex; align-items:center; gap:8px;">
-                <span style="font-size:0.7rem; width:45px; color:var(--aq-text-3);">In/Out:</span>
+                <span style="font-size:var(--aq-fs-micro); width:45px; color:var(--aq-text-3);">In/Out:</span>
                 <div style="flex:1; height:12px; background:var(--aq-input); border:1px solid var(--aq-line); border-radius:6px; overflow:hidden; position:relative;">
-                  <div id="meterLevelBar" style="width:0%; height:100%; background:linear-gradient(90deg, #4FD1C5 70%, #E3B66B 88%, #F07178 100%); transition:width 0.05s ease-out;"></div>
+                  <div id="meterLevelBar" style="width:0%; height:100%; background:linear-gradient(90deg, var(--aq-accent) 70%, var(--aq-amber) 88%, var(--aq-danger) 100%); transition:width 0.05s ease-out;"></div>
                   <div id="meterThresholdMark" style="position:absolute; top:0; bottom:0; left:93.4%; width:2px; background:var(--aq-text); opacity:0.8;" title="Küszöb" data-i18n-title="lim.thresholdMark"></div>
                 </div>
-                <span id="lblLimiterLevel" style="font-size:0.72rem; font-family:var(--aq-mono); color:var(--aq-text-2); width:85px; text-align:right;">-inf dBFS</span>
+                <span id="lblLimiterLevel" style="font-size:var(--aq-fs-micro); font-family:var(--aq-mono); color:var(--aq-text-2); width:85px; text-align:right;">-inf dBFS</span>
               </div>
               <div style="display:flex; align-items:center; gap:8px;">
-                <span style="font-size:0.7rem; width:45px; color:var(--aq-text-3);">GR:</span>
+                <span style="font-size:var(--aq-fs-micro); width:45px; color:var(--aq-text-3);">GR:</span>
                 <div style="flex:1; height:8px; background:var(--aq-input); border:1px solid var(--aq-line); border-radius:5px; overflow:hidden;">
-                  <div id="meterGrBar" style="width:0%; height:100%; background:linear-gradient(90deg, #E3B66B, #F07178); transition:width 0.05s ease-out;"></div>
+                  <div id="meterGrBar" style="width:0%; height:100%; background:linear-gradient(90deg, var(--aq-amber), var(--aq-danger)); transition:width 0.05s ease-out;"></div>
                 </div>
-                <span id="lblLimiterGrVal" style="font-size:0.72rem; font-family:var(--aq-mono); color:var(--aq-text-2); width:85px; text-align:right;">0.0 dB</span>
+                <span id="lblLimiterGrVal" style="font-size:var(--aq-fs-micro); font-family:var(--aq-mono); color:var(--aq-text-2); width:85px; text-align:right;">0.0 dB</span>
               </div>
             </div>
           </div>
@@ -1380,6 +1721,7 @@ function applyI18nDom(root) {
   r.querySelectorAll("[data-i18n-title]").forEach(el => { el.title = t(el.getAttribute("data-i18n-title")); });
   r.querySelectorAll("[data-i18n-placeholder]").forEach(el => { el.placeholder = t(el.getAttribute("data-i18n-placeholder")); });
   r.querySelectorAll("[data-i18n-alt]").forEach(el => { el.alt = t(el.getAttribute("data-i18n-alt")); });
+  r.querySelectorAll("[data-i18n-label]").forEach(el => { el.label = t(el.getAttribute("data-i18n-label")); });
   r.querySelectorAll("[data-i18n-aria-label]").forEach(el => { el.setAttribute("aria-label", t(el.getAttribute("data-i18n-aria-label"))); });
 }
 /** A csúszka sávja az értékig kiszínezve (a CSS --fill változója); kódból állított értéknél is hívni kell. */
@@ -1421,20 +1763,30 @@ function setLanguage(code, persist) {
 })();
 
 // =========================================================================
-// TÉMA KEZELÉS (Világos / Sötét / Rendszer alapértelmezett)
+// TÉMA KEZELÉS (8 Audiofil Színtéma & Rendszer alapértelmezett)
 // =========================================================================
 var currentThemeSetting = "system";
 
 function getSystemTheme() {
-  return (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+  return (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "studio-light" : "studio-dark";
 }
 
 function getEffectiveTheme(setting) {
-  return setting === "system" ? getSystemTheme() : setting;
+  if (setting === "system") return getSystemTheme();
+  if (setting === "dark") return "studio-dark";
+  if (setting === "light") return "studio-light";
+  return setting;
 }
 
 function setTheme(mode, persist) {
-  if (mode !== "light" && mode !== "dark" && mode !== "system") mode = "system";
+  const valid = [
+    "system", "dark", "light",
+    "studio-dark", "studio-light",
+    "rams-dark", "rams-light",
+    "sapphire-dark", "sapphire-light",
+    "british-dark", "british-light"
+  ];
+  if (!valid.includes(mode)) mode = "system";
   currentThemeSetting = mode;
   if (persist) {
     try { localStorage.setItem("aqulify_theme", mode); } catch (e) {}
@@ -1446,23 +1798,32 @@ function setTheme(mode, persist) {
 
 function applyTheme() {
   const effective = getEffectiveTheme(currentThemeSetting);
+  const isLight = effective.endsWith("-light");
+  const mode = isLight ? "light" : "dark";
+  const concept = effective.replace(/-(dark|light)$/, "");
+
   document.documentElement.setAttribute("data-theme", effective);
+  document.documentElement.setAttribute("data-concept", concept);
+  document.documentElement.setAttribute("data-mode", mode);
   document.documentElement.setAttribute("data-theme-setting", currentThemeSetting);
-  document.documentElement.style.colorScheme = effective;
-  const isLight = effective === "light";
+  document.documentElement.style.colorScheme = mode;
+
   // Saját ablakban a címsor is a témát követi (Windows / Linux: aetherSetTheme, macOS: aetherTheme üzenet)
   try {
-    if (typeof window.aetherSetTheme === "function") window.aetherSetTheme(effective);
+    if (typeof window.aetherSetTheme === "function") window.aetherSetTheme(mode);
     else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.aetherTheme)
-      window.webkit.messageHandlers.aetherTheme.postMessage(effective);
+      window.webkit.messageHandlers.aetherTheme.postMessage(mode);
   } catch (e) {}
 
-  // 3D Three.js vászon és rács frissítése
+  // 3D Three.js vászon és rács frissítése a témaspecifikus CSS változókkal
   if (typeof scene !== "undefined" && scene) {
-    scene.background = isLight ? new THREE.Color(0xe2e8f0) : new THREE.Color(0x0a0f15);
+    const cs = getComputedStyle(document.documentElement);
+    const bg2 = cs.getPropertyValue("--aq-bg-2").trim() || (isLight ? "#e8ecf2" : "#16181D");
+    const line2 = cs.getPropertyValue("--aq-line-2").trim() || (isLight ? "#b4bece" : "#363B48");
+    scene.background = new THREE.Color(bg2);
     if (typeof buildGrid === "function") buildGrid();
     if (typeof wireMesh !== "undefined" && wireMesh && wireMesh.material) {
-      wireMesh.material.color.setHex(isLight ? 0x94a3b8 : 0x1f2c3a);
+      wireMesh.material.color.set(line2);
       wireMesh.material.opacity = isLight ? 0.35 : 0.22;
     }
   }
@@ -1832,8 +2193,9 @@ function switchTab(tabId, el) {
 // =========================================================================
 const wfCanvas = document.getElementById("waterfallCanvas");
 const scene = new THREE.Scene();
-const isLightInit = document.documentElement.getAttribute("data-theme") === "light";
-scene.background = new THREE.Color(isLightInit ? 0xe2e8f0 : 0x0a0f15);
+const isLightInit = document.documentElement.getAttribute("data-mode") === "light" || (document.documentElement.getAttribute("data-theme") || "").endsWith("-light");
+const initBg = getComputedStyle(document.documentElement).getPropertyValue("--aq-bg-2").trim() || (isLightInit ? "#e2e8f0" : "#0a0f15");
+scene.background = new THREE.Color(initBg);
 
 const camera = new THREE.PerspectiveCamera(38, wfCanvas.clientWidth / wfCanvas.clientHeight, 0.1, 1000);
 const cameraViews = [
@@ -1900,9 +2262,12 @@ let grid = null;
 function buildGrid() {
   if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
   const pts = [], cols = [];
-  const isLight = document.documentElement.getAttribute("data-theme") === "light";
-  const cMain = isLight ? new THREE.Color(0x94a3b8) : new THREE.Color(0x2b3d50);
-  const cSub = isLight ? new THREE.Color(0xcbd5e1) : new THREE.Color(0x16212d);
+  const isLight = document.documentElement.getAttribute("data-mode") === "light" || (document.documentElement.getAttribute("data-theme") || "").endsWith("-light");
+  const cs = getComputedStyle(document.documentElement);
+  const lineCol = cs.getPropertyValue("--aq-line-2").trim();
+  const subCol = cs.getPropertyValue("--aq-line").trim();
+  const cMain = lineCol ? new THREE.Color(lineCol) : (isLight ? new THREE.Color(0x94a3b8) : new THREE.Color(0x2b3d50));
+  const cSub = subCol ? new THREE.Color(subCol) : (isLight ? new THREE.Color(0xcbd5e1) : new THREE.Color(0x16212d));
   const add = (x1, z1, x2, z2, c) => {
     pts.push(x1 * keystoneAt(z1), -0.05, z1, x2 * keystoneAt(z2), -0.05, z2);
     cols.push(c.r, c.g, c.b, c.r, c.g, c.b);
@@ -2025,10 +2390,11 @@ function rebuildMesh() {
   const colors = new Float32Array(count * 3);
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-  const isLightMesh = document.documentElement.getAttribute("data-theme") === "light";
+  const isLightMesh = document.documentElement.getAttribute("data-mode") === "light" || (document.documentElement.getAttribute("data-theme") || "").endsWith("-light");
+  const wireLineCol = getComputedStyle(document.documentElement).getPropertyValue("--aq-line-2").trim();
   const material = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
   const wireMaterial = new THREE.MeshBasicMaterial({
-    color: isLightMesh ? 0x94a3b8 : 0x1f2c3a,
+    color: wireLineCol ? new THREE.Color(wireLineCol) : (isLightMesh ? 0x94a3b8 : 0x1f2c3a),
     wireframe: true,
     transparent: true,
     opacity: isLightMesh ? 0.35 : 0.22
@@ -2298,7 +2664,7 @@ function drawFreqScale(force) {
   c.beginPath(); c.moveTo(x0, baseY); c.lineTo(x1, baseY); c.stroke();
   c.globalAlpha = 1;
 
-  const isLight = theme === "light";
+  const isLight = theme === "light" || theme.endsWith("-light") || document.documentElement.getAttribute("data-mode") === "light";
   // Kis osztások
   c.strokeStyle = isLight ? "rgba(100, 116, 139, 0.45)" : "rgba(127, 146, 166, 0.40)";
   c.lineWidth = 1;
@@ -3394,13 +3760,16 @@ function paintEq() {
   const G = eqGeom();
   const { padLeft, padTop, plotW, plotH, midY } = G;
 
-  const isLight = document.documentElement.getAttribute("data-theme") === "light";
+  const isLight = document.documentElement.getAttribute("data-mode") === "light" || (document.documentElement.getAttribute("data-theme") || "").endsWith("-light");
+  const cs = getComputedStyle(document.documentElement);
+  const gridColor = cs.getPropertyValue("--aq-line").trim() || (isLight ? "#E2E8F0" : "#1A2633");
+  const textColor = cs.getPropertyValue("--aq-text-2").trim() || (isLight ? "#64748B" : "#7F92A6");
 
   // Rács
-  eqCtx.strokeStyle = isLight ? "#E2E8F0" : "#1A2633";
+  eqCtx.strokeStyle = gridColor;
   eqCtx.lineWidth = 1 * dpr;
   const candidateFreqs = [20, 30, 40, 50, 70, 100, 150, 200, 300, 500, 700, 1000, 1500, 2000, 3000, 5000, 7000, 10000, 15000, 20000];
-  eqCtx.fillStyle = isLight ? "#64748B" : "#7F92A6";
+  eqCtx.fillStyle = textColor;
   eqCtx.font = (9.5 * dpr) + "px 'Inter Variable', Inter, sans-serif";
   eqCtx.textAlign = "center";
 
@@ -3990,7 +4359,7 @@ function renderHeadphones(items) {
 
   if (items.length === 0) {
     container.innerHTML = `
-      <div style="background:#1e232b; border:1px dashed #3c4858; border-radius:8px; padding:20px; text-align:center; color:#aaa; font-size:0.8rem;">
+      <div style="background:var(--aq-bg-2); border:1px dashed var(--aq-line-2); border-radius:var(--aq-radius-m); padding:20px; text-align:center; color:var(--aq-text-3); font-size:var(--aq-fs-body);">
         ${t("imp.noResult", { n: fmtNum(fullAutoEqIndex.length) })}
       </div>`;
     return;
@@ -4013,15 +4382,15 @@ function renderHeadphones(items) {
     card.innerHTML = `
       <div style="display:flex; flex-direction:column; gap:4px; max-width:78%;">
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <strong style="color:var(--aq-text); font-size:0.86rem; font-weight:600;">${hp.name}</strong>
-          <span class="status-badge ${sourceClass}" style="font-size:0.66rem;">${hp.source}</span>
+          <strong style="color:var(--aq-text); font-size:var(--aq-fs-body); font-weight:600;">${hp.name}</strong>
+          <span class="status-badge ${sourceClass}" style="font-size:var(--aq-fs-micro);">${hp.source}</span>
         </div>
-        <div style="font-size:0.72rem; color:var(--ee-text-secondary); display:flex; gap:10px; flex-wrap:wrap;">
+        <div style="font-size:var(--aq-fs-sub); color:var(--aq-text-2); display:flex; gap:10px; flex-wrap:wrap;">
           <span style="display:inline-flex; align-items:center; gap:5px;"><svg class="aq-icon aq-icon-sm" aria-hidden="true"><use href="#i-folder"/></svg>${t("imp.folder")} <span style="font-family:var(--aq-mono); color:var(--aq-text-2);">${hp.path.split('/')[0]}</span></span>
-          <span style="color:var(--ee-green); font-weight:600;">• ${t("imp.zeroDoubleShort")}</span>
+          <span style="color:var(--aq-success); font-weight:600;">• ${t("imp.zeroDoubleShort")}</span>
         </div>
       </div>
-      <button class="adw-btn primary" id="btnLoad_${idx}" style="font-size:0.75rem; padding:5px 12px; white-space:nowrap;" onclick="loadRealAutoEqProfile(${idx})">
+      <button class="adw-btn primary" id="btnLoad_${idx}" style="font-size:var(--aq-fs-body); padding:4px 12px; white-space:nowrap;" onclick="loadRealAutoEqProfile(${idx})">
         ${t("imp.load")}
       </button>
     `;
@@ -5098,9 +5467,8 @@ function renderFolderImportList(scanning) {
   if (folderImportItems.length === 0) { box.append(mk("span", "", t("imp.folderEmpty"))); return; }
   box.append(mk("span", "", t("imp.folderTitle")));
   const row = (input, label, meta) => {
-    const r = mk("label", "");
-    r.style.cssText = "display:flex; align-items:center; gap:8px; cursor:pointer;";
-    r.append(input, mk("span", "", label), mk("small", "", meta));
+    const r = mk("label", "aq-checkbox-wrap");
+    r.append(input, mk("span", "aq-checkbox-label", label), mk("small", "aq-checkbox-meta", meta));
     return r;
   };
   // A tételek saját, görgethető listában: sok fájlnál is mind elérhető, a cím, az „összes” kapcsoló és az
@@ -5111,6 +5479,7 @@ function renderFolderImportList(scanning) {
   const check = (i) => {
     const cb = document.createElement("input");
     cb.type = "checkbox";
+    cb.className = "aq-checkbox";
     cb.checked = true;
     cb.dataset.idx = String(i);
     boxes.push(cb);
@@ -5140,6 +5509,7 @@ function renderFolderImportList(scanning) {
   if (boxes.length > 1) {
     all = document.createElement("input");
     all.type = "checkbox";
+    all.className = "aq-checkbox";
     all.onchange = () => { boxes.forEach(c => { c.checked = all.checked; }); sync(); };
     box.append(row(all, t("imp.selectAll", { n: boxes.length }), ""));
   }
@@ -5273,7 +5643,7 @@ function loadSampleIr(type) {
 /** Valódi IR rajzolása (helyi minták vagy a motor előnézete). true, ha rajzolt. */
 function drawRealIrWaveform(canvas) {
   if (!convIrLocal && !convIrRemote) return false;
-  const isLight = document.documentElement.getAttribute("data-theme") === "light";
+  const isLight = document.documentElement.getAttribute("data-mode") === "light" || (document.documentElement.getAttribute("data-theme") || "").endsWith("-light");
   const ctx = canvas.getContext("2d");
   const w = canvas.width = canvas.clientWidth;
   const h = canvas.height = canvas.clientHeight;
@@ -5329,7 +5699,7 @@ function drawConvWaveform() {
   const canvas = document.getElementById("convCanvas");
   if (!canvas) return;
   if (drawRealIrWaveform(canvas)) return;
-  const isLight = document.documentElement.getAttribute("data-theme") === "light";
+  const isLight = document.documentElement.getAttribute("data-mode") === "light" || (document.documentElement.getAttribute("data-theme") || "").endsWith("-light");
   const ctx = canvas.getContext("2d");
   const w = canvas.width = canvas.clientWidth;
   const h = canvas.height = canvas.clientHeight;
@@ -5379,12 +5749,12 @@ function buildControls(containerId, specs, onChange) {
     // A felirat fordítási kulcs („ctl.…”); a szakkifejezések (Dry, Wet, Dither…) szó szerint maradnak
     const lblAttr = /^ctl\./.test(sp.label) ? ` data-i18n="${sp.label}"` : "";
     let html = `<div style="display:flex; justify-content:space-between; align-items:center;"><span class="title"${lblAttr}>${t(sp.label)}</span>` +
-               `<span id="lbl-${sp.id}" style="font-size:0.85rem; font-family:monospace; font-weight:700; color:var(--ee-curve-cyan);"></span></div>`;
+               `<span id="lbl-${sp.id}" style="font-size:var(--aq-fs-sub); font-family:var(--aq-mono); font-weight:600; color:var(--aq-accent-2);"></span></div>`;
     if (sp.kind === "num") {
       const smin = sp.smin !== undefined ? sp.smin : sp.min, smax = sp.smax !== undefined ? sp.smax : sp.max;
       html += `<div style="display:flex; align-items:center; gap:8px; margin-top:4px;">` +
               `<input type="range" id="sl-${sp.id}" class="param-slider" min="${smin}" max="${smax}" step="${sp.step}">` +
-              `<input type="number" id="in-${sp.id}" class="ee-input" style="width:82px;" min="${sp.min}" max="${sp.max}" step="${sp.step}"></div>`;
+              `<input type="number" id="in-${sp.id}" class="ee-input" style="width:72px; text-align:center;" min="${sp.min}" max="${sp.max}" step="${sp.step}"></div>`;
     } else if (sp.kind === "select") {
       // optKeys: az opciók fordítási kulcsok (nyelvváltáskor a setCtl frissíti a feliratukat)
       html += `<select id="in-${sp.id}" class="ee-select" style="margin-top:4px;">` +
@@ -5392,7 +5762,7 @@ function buildControls(containerId, specs, onChange) {
     } else {
       html += `<button class="adw-btn" id="in-${sp.id}" style="margin-top:4px; width:fit-content;">${t("mod.btnOff")}</button>`;
     }
-    if (sp.hint) html += `<small style="color:var(--ee-text-secondary); font-size:0.7rem;" data-i18n="${sp.hint}">${t(sp.hint)}</small>`;
+    if (sp.hint) html += `<small style="color:var(--aq-text-3); font-size:var(--aq-fs-micro); line-height:1.4;" data-i18n="${sp.hint}">${t(sp.hint)}</small>`;
     box.innerHTML = html;
     host.appendChild(box);
     const inp = document.getElementById("in-" + sp.id);
@@ -6032,6 +6402,7 @@ function initPipewireBridge() {
         } else if (data.type === "ir_missing") {
           onIrMissing(data.id);
         } else if (data.type === "state") {
+          updateLibraryCaps(!!(data.caps && Array.isArray(data.caps) && data.caps.includes("library")));
           engineIrLibrary = data.irLibrary === true;
           if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);
           syncLanguageWithEngine(data.language);
@@ -6080,12 +6451,17 @@ function initPipewireBridge() {
           updateMagicDiag(data.magic || null);
         } else if (data.type === "audio_levels" && data.samples) {
           livePipewireSamples = data.samples; // régi motorverzió kompatibilitás
+        } else if (data.type === "library") {
+          onLibraryDataReceived(data);
+        } else if (data.type === "library_error") {
+          onLibraryErrorReceived(data);
         }
       } catch (err) {}
     };
 
     pipewireWs.onclose = () => {
       isPipewireConnected = false;
+      updateLibraryCaps(false);
       liveSpectrumLevels = null;
       engineStatus = null;
       updateEngineBadge();
@@ -6449,6 +6825,152 @@ function refreshDynamicTexts() {
     if (fmt && fmt.style.display === "block" && txtAutoEqInput.value.trim()) detectEqFormat(txtAutoEqInput.value);
   }
 }
+var libraryRoots = [];
+var libraryScanning = false;
+var libraryPollTimer = null;
+var lastLibraryData = null;
+
+function updateLibraryCaps(hasLib) {
+  const btn = document.getElementById("btnLibraryRoots");
+  if (btn) btn.style.display = hasLib ? "inline-flex" : "none";
+  if (!hasLib) {
+    const modal = document.getElementById("modalLibrary");
+    if (modal && modal.style.display === "flex") closeLibraryModal();
+  }
+}
+
+function openLibraryModal() {
+  const modal = document.getElementById("modalLibrary");
+  if (!modal) return;
+  modal.style.display = "flex";
+  requestLibraryInfo();
+}
+
+function closeLibraryModal() {
+  const modal = document.getElementById("modalLibrary");
+  if (modal) modal.style.display = "none";
+  if (libraryPollTimer) {
+    clearTimeout(libraryPollTimer);
+    libraryPollTimer = null;
+  }
+}
+
+function requestLibraryInfo() {
+  if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) {
+    pipewireWs.send(JSON.stringify({ type: "library_info" }));
+  }
+}
+
+function onLibraryDataReceived(data) {
+  if (!data) return;
+  lastLibraryData = data;
+  if (Array.isArray(data.roots)) {
+    libraryRoots = data.roots.slice();
+  }
+  libraryScanning = !!data.scanning;
+  renderLibraryRootsList();
+  renderLibraryStats(data);
+
+  if (libraryScanning) {
+    if (!libraryPollTimer) {
+      libraryPollTimer = setTimeout(() => {
+        libraryPollTimer = null;
+        const modal = document.getElementById("modalLibrary");
+        if (modal && modal.style.display === "flex") requestLibraryInfo();
+      }, 1000);
+    }
+  } else if (libraryPollTimer) {
+    clearTimeout(libraryPollTimer);
+    libraryPollTimer = null;
+  }
+}
+
+function onLibraryErrorReceived(data) {
+  const err = (data && data.error) ? data.error : "unknown";
+  console.warn("[Zenetár hiba]", err);
+}
+
+function renderLibraryStats(data) {
+  const statEl = document.getElementById("libraryStatText");
+  const scanEl = document.getElementById("libraryScanIndicator");
+  if (!statEl) return;
+  if (data && data.scanning) {
+    if (scanEl) scanEl.style.display = "inline-flex";
+    statEl.textContent = t("library.scanning", { scanned: data.scanned || 0 });
+  } else {
+    if (scanEl) scanEl.style.display = "none";
+    const tracks = (data && typeof data.tracks === "number") ? data.tracks : 0;
+    const albums = (data && typeof data.albums === "number") ? data.albums : 0;
+    const folders = (data && typeof data.folders === "number") ? data.folders : 0;
+    statEl.textContent = t("library.stat", { tracks, albums, folders });
+  }
+}
+
+function renderLibraryRootsList() {
+  const listEl = document.getElementById("libraryRootsList");
+  const emptyEl = document.getElementById("libraryRootsEmpty");
+  if (!listEl) return;
+  listEl.innerHTML = "";
+  if (!libraryRoots || libraryRoots.length === 0) {
+    if (emptyEl) emptyEl.style.display = "block";
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = "none";
+  libraryRoots.forEach((root, idx) => {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex; align-items:center; justify-content:space-between; background:var(--aq-input); border:1px solid var(--aq-line); border-radius:6px; padding:6px 10px; font-size:var(--aq-fs-body);";
+
+    const pathSpan = document.createElement("span");
+    pathSpan.style.cssText = "font-family:var(--aq-mono); word-break:break-all; margin-right:8px; color:var(--aq-text);";
+    pathSpan.textContent = root;
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "icon-btn";
+    delBtn.title = t("library.remove");
+    delBtn.style.cssText = "color:var(--aq-danger); flex-shrink:0; cursor:pointer;";
+    delBtn.innerHTML = '<svg class="aq-icon" aria-hidden="true"><use href="#i-trash"/></svg>';
+    delBtn.onclick = () => removeLibraryRoot(idx);
+
+    row.appendChild(pathSpan);
+    row.appendChild(delBtn);
+    listEl.appendChild(row);
+  });
+}
+
+function addLibraryRoot() {
+  const input = document.getElementById("inputNewLibraryRoot");
+  if (!input) return;
+  const val = input.value.trim();
+  if (!val) return;
+  if (!libraryRoots.includes(val)) {
+    libraryRoots.push(val);
+    renderLibraryRootsList();
+  }
+  input.value = "";
+}
+
+function removeLibraryRoot(idx) {
+  if (idx >= 0 && idx < libraryRoots.length) {
+    libraryRoots.splice(idx, 1);
+    renderLibraryRootsList();
+  }
+}
+
+function saveLibraryRoots() {
+  if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) {
+    pipewireWs.send(JSON.stringify({
+      type: "library_set_roots",
+      roots: libraryRoots
+    }));
+  }
+}
+
+function requestLibraryRescan() {
+  if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) {
+    pipewireWs.send(JSON.stringify({ type: "library_rescan" }));
+  }
+}
+
 setLanguage(aqLang, false);
 setTheme(currentThemeSetting, false);
 setTimeout(() => { updateTabGlider(null, true); }, 60);
