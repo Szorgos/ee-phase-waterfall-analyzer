@@ -118,7 +118,7 @@ jobs:
       - name: Függőségek
         run: |
           sudo apt-get update
-          sudo apt-get install -y dpkg-dev fakeroot cmake ninja-build pkg-config g++ xz-utils libpipewire-0.3-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y build-essential dpkg-dev fakeroot cmake ninja-build pkg-config g++ xz-utils libpipewire-0.3-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
       - name: RNNoise modell (az Ubuntu forráscsomagjából)
         run: |
           for i in 1 2 3; do curl -fsSL -o debian/rnnoise_0.2+ds.orig.tar.xz http://archive.ubuntu.com/ubuntu/pool/universe/r/rnnoise/rnnoise_0.2+ds.orig.tar.xz && break; sleep 15; done
@@ -161,7 +161,7 @@ jobs:
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           VER=$(sed -n '1,10s/^ *VERSION \([0-9][0-9.]*\)$/\1/p' CMakeLists.txt | head -1)
-          mkdir -p /tmp/arch && chown nobody /tmp/arch
+          mkdir -p /tmp/arch
           git archive --format=tar.gz --prefix="ee-phase-waterfall-analyzer-${VER}/" -o "/tmp/arch/aqulify-${VER}.tar.gz" HEAD
           cp packaging/arch/PKGBUILD packaging/arch/aqulify.install /tmp/arch/
           cd /tmp/arch
@@ -171,8 +171,11 @@ jobs:
                  -e "s#^source=(\"\$pkgname-\$pkgver.tar.gz::[^\"]*\"#source=(\"\$pkgname-\$pkgver.tar.gz\"#" \
                  -e "s/^sha256sums=('SKIP'/sha256sums=('${SUM}'/" PKGBUILD
           grep -nE '^(pkgver|source|sha256sums)' PKGBUILD
-          chown -R nobody /tmp/arch
-          su nobody -s /bin/bash -c 'cd /tmp/arch && makepkg -f --noconfirm' 2>&1 | tail -30
+          # a makepkg nem fut rootként: külön építő felhasználó (a „nobody” fiókja lejárt)
+          useradd -m builder
+          chown -R builder /tmp/arch
+          su builder -s /bin/bash -c 'cd /tmp/arch && makepkg -f --noconfirm' > /tmp/makepkg.log 2>&1 || { tail -n 60 /tmp/makepkg.log; exit 1; }
+          tail -n 15 /tmp/makepkg.log
           f=$(ls /tmp/arch/aqulify-*.pkg.tar.zst | head -1)
           cp "$f" "$GITHUB_WORKSPACE/" && cd "$GITHUB_WORKSPACE" && sha256sum "$(basename "$f")" > "$(basename "$f").sha256"
           echo "file=$(basename "$f")" >> "$GITHUB_OUTPUT"

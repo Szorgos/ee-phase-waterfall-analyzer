@@ -8,4 +8,8 @@
 | opus/* | https://gitlab.xiph.org/xiph (opus, ogg, opusfile) | master | BSD-3-Clause (opus/opus-LICENSE) |
 | wavpack/* | https://github.com/dbry/WavPack | 5.9.0 (2026) | BSD-3-Clause (wavpack/wavpack-LICENSE) |
 
-Változtatás nélkül; a megvalósítást a src/decoders_impl.c és a CMake fordítja (egyszer).
+Változtatás nélkül, egy kivétellel; a megvalósítást a src/decoders_impl.c és a CMake fordítja (egyszer).
+
+Kivétel: `opus/opus/CMakeLists.txt`, az ARM-os futásidejű CPU-felismerés ága (`dnn_sources_arm_rtcd`) az `OPUS_DNN` feltétel mögé
+került, ahogy az x86-os ág és az ARM NEON ág is. A beágyazott fában nincs `dnn/` mappa, ezért ARM-on (aarch64) a fordítás
+a hiányzó `dnn/arm/arm_dnn_map.c` miatt leállt (COPR, Fedora aarch64).
