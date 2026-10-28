@@ -111,6 +111,7 @@ jobs:
   # Debian / Ubuntu csomag (debian/, debhelper nélkül): fordítás, tesztek, telepítési és indítási próba, majd a kiadáshoz csatolás
   debian-deb:
     runs-on: ubuntu-24.04
+    continue-on-error: true   # a disztribúciós csomag hibája ne akadályozza a kiadást
     outputs:
       file: ${{ steps.deb.outputs.file }}
     steps:
@@ -126,6 +127,10 @@ jobs:
       - name: DEB építése
         id: deb
         run: |
+          # a debian/changelog verzióját a CMakeLists.txt-ből állítjuk (a kiadásnál így nem kell kézzel emelni)
+          VER=$(sed -n '1,10s/^ *VERSION \([0-9][0-9.]*\)$/\1/p' CMakeLists.txt | head -1)
+          sed -i "1s/^aqulify ([^)]*)/aqulify (${VER}-1)/" debian/changelog
+          head -1 debian/changelog
           dpkg-buildpackage -us -uc -b
           f=$(ls ../aqulify_*_*.deb | head -1)
           cp "$f" . && sha256sum "$(basename "$f")" > "$(basename "$f").sha256"
@@ -149,6 +154,7 @@ jobs:
   # Arch Linux csomag (packaging/arch/PKGBUILD): a kiadott forrásból, tiszta Arch-tárolóban
   arch-pkg:
     runs-on: ubuntu-24.04
+    continue-on-error: true   # a disztribúciós csomag hibája ne akadályozza a kiadást
     container: archlinux:latest
     outputs:
       file: ${{ steps.arch.outputs.file }}
@@ -340,11 +346,13 @@ jobs:
 
       - name: Debian csomag átvétele a kiadáshoz
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: Aqulify-Debian
 
       - name: Arch csomag átvétele a kiadáshoz
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: Aqulify-Arch
 
