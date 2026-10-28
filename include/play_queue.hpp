@@ -56,6 +56,8 @@ public:
 
     /** Új sor és lejátszás a start indexű tételtől (nem nyitható tételnél a következőtől). Keverésnél a start az első. */
     bool play(std::vector<QueueItem> items, size_t start, std::string* error = nullptr);
+    /** Új sor beállítása a start indexű tételtől, azonnali lejátszás nélkül. */
+    bool load(std::vector<QueueItem> items, size_t start, std::string* error = nullptr);
     /** Ugrás a sor egy tételére. */
     bool jump(size_t index, std::string* error = nullptr);
     /** Következő tétel (az utolsó után az egész sor ismétlésénél az első). */

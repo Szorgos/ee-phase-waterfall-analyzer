@@ -451,5 +451,7 @@
   "library.btnBrowseFiles": "Browse file…",
   "library.btnBrowseFilesTitle": "Browse audio file (automatically adds parent folder)",
   "library.promptFolderPath": "Enter music folder path:",
-  "library.promptFilePath": "Enter audio file path:"
+  "library.promptFilePath": "Enter audio file path:",
+  "sink.systemDefault": "System default",
+  "sink.systemHint": "Audio is played through the system default output device (managed by Equalizer APO)."
 }

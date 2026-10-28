@@ -954,7 +954,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
   /* Csúszkák: vékony sín, akcentus kitöltés, kerek fogantyú */
   input[type="range"] { -webkit-appearance: none; appearance: none; height: 20px; background: transparent; cursor: pointer; accent-color: var(--aq-accent); }
-  input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--aq-accent) 0%, var(--aq-accent) var(--fill, 50%), var(--aq-line-2) var(--fill, 50%), var(--aq-line-2) 100%); }
+  input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--aq-accent) 0%, var(--aq-accent) var(--fill, 0%), var(--aq-line-2) var(--fill, 0%), var(--aq-line-2) 100%); }
   input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--aq-text); border: 3px solid var(--aq-accent); box-shadow: 0 1px 4px rgba(0,0,0,0.5); }
   input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--aq-accent-soft); }
   input[type="range"]::-moz-range-track { height: 4px; border-radius: 2px; background: var(--aq-line-2); }
@@ -1773,7 +1773,7 @@ if (!window.THREE) window.THREE = (function () {
       <svg class="app-mark" viewBox="0 0 28 28" aria-hidden="true"><path d="M3 13c3-4 5-4 8 0s5 4 8 0 5-4 6-2" fill="none" stroke="var(--aq-accent)" stroke-width="2.2" stroke-linecap="round"/><path d="M3 19.5c3-3 5-3 8 0s5 3 8 0 5-3 6-1.5" fill="none" stroke="var(--aq-accent-2)" stroke-width="2" stroke-linecap="round"/></svg>
       <span class="app-brand" title="Aqulify • Audiofil DSP Rendszer" data-i18n-title="app.title">Aqulify</span>
       <span class="app-title" title="Aqulify • Audiofil DSP Rendszer" data-i18n-title="app.title"><span data-i18n="app.subtitle">Audiofil DSP Rendszer</span></span>
-      <span class="app-version" id="lblAppVersion" data-gui-version="2.0.2" title="Verziószám" data-i18n-title="ver.title">v2.0.2</span>
+      <span class="app-version" id="lblAppVersion" data-gui-version="2.0.3" title="Verziószám" data-i18n-title="ver.title">v2.0.3</span>
     </div>
 
     <!-- KÖZÉPSŐ ZÓNA: FŐ NÉZETVÁLTÓ CSÚSZÓ KAPSZULÁVAL -->
@@ -1800,8 +1800,17 @@ if (!window.THREE) window.THREE = (function () {
         </button>
         <div class="sink-popover" id="sinkPopover" hidden>
           <div class="sink-sec-title" data-i18n="sink.label">Kimenet:</div>
-          <div id="physicalSinkWrap" style="display:flex; align-items:center; gap:8px;">
+          <div id="physicalSinkWrap" style="display:none; align-items:center; gap:8px;">
             <select id="selectPhysicalSink" class="mini-select" onchange="onPhysicalSinkChanged(this.value)" style="width:100%; max-width:none;" title="Válassz kimeneti hangeszközt" data-i18n-title="sink.title"></select>
+          </div>
+          <div id="sinkDefaultInfo" class="sink-default-info" style="font-size:0.82rem; color:var(--aq-text); line-height:1.4;">
+            <div style="display:flex; align-items:center; gap:6px; font-weight:600; margin-bottom:4px;">
+              <svg class="aq-icon aq-icon-sm" aria-hidden="true" style="color:var(--aq-accent);"><use href="#i-speaker"/></svg>
+              <span data-i18n="sink.systemDefault">Rendszer alapértelmezett</span>
+            </div>
+            <div style="font-size:0.75rem; color:var(--aq-text-3);" data-i18n="sink.systemHint">
+              A hang a rendszer (Equalizer APO) által vezérelt alapértelmezett kimeneten szólal meg.
+            </div>
           </div>
           <button type="button" id="btnLibraryRoots" hidden onclick="openLibraryModal()"></button>
         </div>
@@ -7235,10 +7244,12 @@ function updateLimiterMeters(peakDb, grDb) {
 function updatePhysicalSinkSelector(sinks, currentSink) {
   const sel = document.getElementById("selectPhysicalSink");
   const wrap = document.getElementById("physicalSinkWrap");
+  const info = document.getElementById("sinkDefaultInfo");
   if (!sel) return;
-  // Csak a Linux motor küld eszközlistát; nélküle (pl. Windows) a választó rejtve marad
-  if (wrap) wrap.style.display = (Array.isArray(sinks) && sinks.length > 0) ? "flex" : "none";
-  if (Array.isArray(sinks) && sinks.length > 0) {
+  const hasSinks = Array.isArray(sinks) && sinks.length > 0;
+  if (wrap) wrap.style.display = hasSinks ? "flex" : "none";
+  if (info) info.style.display = hasSinks ? "none" : "block";
+  if (hasSinks) {
     const key = JSON.stringify(sinks) + (currentSink || "");
     if (sel.getAttribute("data-cache") !== key) {
       sel.setAttribute("data-cache", key);
@@ -8048,8 +8059,14 @@ function buildPlaylistPillsHtml() {
     const act = activePlSourceId === pl.id ? " primary" : "";
     const safeId = escHtml(pl.id);
     const safeName = escHtml(pl.name || "");
-    return `<button type="button" class="adw-btn${act}" style="height:26px; min-height:26px; padding:0 10px; font-size:0.76rem; white-space:nowrap;" onclick="playDesktopPlaylist('${safeId}')">${safeName}</button>`;
+    return `<button type="button" class="adw-btn${act}" style="height:26px; min-height:26px; padding:0 10px; font-size:0.76rem; white-space:nowrap;" onclick="loadDesktopPlaylist('${safeId}')">${safeName}</button>`;
   }).join("");
+}
+
+function loadDesktopPlaylist(plId) {
+  if (!plId) return;
+  activePlSourceId = plId;
+  sendPlayer({ type: "queue_load", source: "playlist", id: plId });
 }
 
 function playDesktopPlaylist(plId) {
@@ -8124,7 +8141,7 @@ function renderInlineQueue() {
       </div>
     </div>
     <div class="cover-pl-pills">${buildPlaylistPillsHtml()}</div>
-    <div class="iq-list">${buildDesktopQueueRowsHtml(items, typeof q.index === "number" ? q.index : -1)}</div>
+    <div class="iq-list">${buildDesktopQueueRowsHtml(items, (snap.media && snap.media.available && snap.media.app === "Aqulify" && snap.media.playing && typeof q.index === "number") ? q.index : -1)}</div>
   `;
   const newList = pane.querySelector(".iq-list");
   const newPills = pane.querySelector(".cover-pl-pills");
@@ -8222,7 +8239,7 @@ function renderCoverView() {
           </div>
         </div>
         <div class="cover-pl-pills">${buildPlaylistPillsHtml()}</div>
-        <div class="iq-list" id="coverQueueList">${buildDesktopQueueRowsHtml(items, typeof q.index === "number" ? q.index : -1)}</div>
+        <div class="iq-list" id="coverQueueList">${buildDesktopQueueRowsHtml(items, (snap.media && snap.media.available && snap.media.app === "Aqulify" && snap.media.playing && typeof q.index === "number") ? q.index : -1)}</div>
       </div>
     </div>
   `;

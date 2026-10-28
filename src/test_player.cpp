@@ -548,6 +548,11 @@ static void testLibrary() {
               badR.find("\"ok\":false") != std::string::npos,
               "híd: queue_play az album második számától (4 tétel, index 1), ismeretlen albumnál hiba");
         fp.stop();
+        json::Value qLoad;
+        json::parse("{\"type\":\"queue_load\",\"source\":\"album\",\"id\":\"" + tagged->id + "\"}", qLoad);
+        const std::string qLoadRes = cb.queueRequest("queue_load", qLoad, true);
+        CHECK(qLoadRes.find("\"type\":\"queue\"") != std::string::npos && !fp.hasTrack() && pq.size() == 4,
+              "híd: queue_load beállítja a sort, de nem indít lejátszást");
 
         // listák a hídon: létrehozás az albumból, hozzáadás az elejére, hiányzó szám jelzése, lejátszás listából
         auto req = [&](const std::string& j) {

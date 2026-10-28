@@ -230,6 +230,31 @@ bool PlayQueue::play(std::vector<QueueItem> items, size_t start, std::string* er
     return openIndex(start, +1, error);
 }
 
+bool PlayQueue::load(std::vector<QueueItem> items, size_t start, std::string* error) {
+    if (items.empty()) {
+        if (error) *error = "empty";
+        return false;
+    }
+    if (items.size() > kMaxItems) items.resize(kMaxItems);
+    {
+        std::lock_guard<std::mutex> lk(m_);
+        items_ = makeEntriesLocked(std::move(items));
+        start = std::min(start, items_.size() - 1);
+        original_.clear();
+        if (shuffle_) {
+            for (const auto& e : items_) original_.push_back(e.uid);
+            std::rotate(items_.begin(), items_.begin() + static_cast<std::ptrdiff_t>(start),
+                        items_.begin() + static_cast<std::ptrdiff_t>(start) + 1);
+            shuffleAfterLocked(0);
+            start = 0;
+        }
+        reindexLocked();
+        currentUid_ = items_[start].uid;
+        changedLocked();
+    }
+    return true;
+}
+
 bool PlayQueue::jump(size_t index, std::string* error) {
     {
         std::lock_guard<std::mutex> lk(m_);

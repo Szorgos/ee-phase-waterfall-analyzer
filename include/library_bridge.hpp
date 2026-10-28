@@ -352,7 +352,8 @@ inline void attachLibrary(BridgeCallbacks& cb, MusicLibrary& lib, player::PlayQu
             return fail("playlist", "unsupported");
         }
         if (type == "queue_get") return queue.json();
-        if (type == "queue_play") {
+        if (type == "queue_play" || type == "queue_load" || type == "queue_set") {
+            const bool doPlay = (type == "queue_play");
             size_t start = 0;
             auto items = messageItems(msg, lib, queue, lists, stats, start);
             if (items.empty()) return fail("queue", "empty");
@@ -366,7 +367,9 @@ inline void attachLibrary(BridgeCallbacks& cb, MusicLibrary& lib, player::PlayQu
                 }
             }
             std::string e;
-            if (!queue.play(std::move(items), start, &e)) return fail("queue", e);
+            const bool ok = doPlay ? queue.play(std::move(items), start, &e)
+                                   : queue.load(std::move(items), start, &e);
+            if (!ok) return fail("queue", e);
             return queue.json();
         }
         if (type == "queue_jump") {

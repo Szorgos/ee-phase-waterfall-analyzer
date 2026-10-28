@@ -84,6 +84,7 @@
 .aqnp-time { font-family: var(--aq-mono, ui-monospace, monospace); font-size: var(--aq-fs-sub, 11px);
   color: var(--aq-text-2, #93a1b0); min-width: 38px; text-align: center; font-variant-numeric: tabular-nums; }
 .aqnp-seek { flex: 1; accent-color: var(--aq-accent, #4fd1c5); cursor: pointer; height: 16px; }
+  .aqnp-seek::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--aq-accent, #4fd1c5) 0%, var(--aq-accent, #4fd1c5) var(--fill, 0%), var(--aq-line-2, #374251) var(--fill, 0%), var(--aq-line-2, #374251) 100%) !important; }
 .aqnp-seek[disabled] { cursor: default; opacity: 0.4; }
 .aqnp-right { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
 .aqnp-empty { color: var(--aq-text-2, #93a1b0); }
@@ -193,6 +194,15 @@ body.aqnp-on { padding-bottom: 72px; }
     let media = null, mediaAt = 0, queue = null, queueItems = null, queueRev = -1;
     let artShown = null, dragging = false;
 
+    const updateSeekFill = () => {
+      const min = ui.seek.min === "" ? 0 : +ui.seek.min;
+      const max = ui.seek.max === "" ? 1000 : +ui.seek.max;
+      const val = +ui.seek.value;
+      const pct = max > min ? Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100)) : 0;
+      ui.seek.style.setProperty("--fill", pct + "%");
+    };
+    updateSeekFill();
+
     const curPos = () => (media ? media.position + (media.playing ? (Date.now() - mediaAt) / 1000 : 0) : 0);
     const fromQueue = () => !!(media && media.available && media.app === "Aqulify" && queue && queue.index >= 0);
 
@@ -250,6 +260,12 @@ body.aqnp-on { padding-bottom: 72px; }
       ui.prev.disabled = !(has && can.previous);
       ui.next.disabled = !(has && can.next);
       ui.seek.disabled = !(has && can.seek && m.duration > 0);
+      if (!has || !m.duration || m.duration <= 0) {
+        if (!dragging) {
+          ui.seek.value = "0";
+          updateSeekFill();
+        }
+      }
 
       // keverés és ismétlés: a beépített lejátszó sorára vonatkozik
       const qOn = hasQueueCap && qCount > 0;
@@ -274,12 +290,23 @@ body.aqnp-on { padding-bottom: 72px; }
     ui.artImg.onerror = () => { ui.artImg.hidden = true; ui.artEmpty.hidden = false; };
 
     function tick() {
-      if (!media || !media.available) return;
+      if (!media || !media.available) {
+        if (!dragging) {
+          ui.seek.value = "0";
+          updateSeekFill();
+        }
+        return;
+      }
       const d = media.duration || 0;
       const p = d > 0 ? Math.min(curPos(), d) : curPos();
       if (!dragging) {
         ui.pos.textContent = fmt(p);
-        if (d > 0) ui.seek.value = String(Math.round((p / d) * 1000));
+        if (d > 0) {
+          ui.seek.value = String(Math.round((p / d) * 1000));
+        } else {
+          ui.seek.value = "0";
+        }
+        updateSeekFill();
       }
       ui.dur.textContent = d > 0 ? fmt(d) : "";
     }
@@ -312,14 +339,19 @@ body.aqnp-on { padding-bottom: 72px; }
     ui.seek.addEventListener("input", () => {
       dragging = true;
       if (media && media.duration > 0) ui.pos.textContent = fmt((ui.seek.value / 1000) * media.duration);
+      updateSeekFill();
     });
     ui.seek.addEventListener("change", () => {
       dragging = false;
-      if (!media || !(media.duration > 0)) return;
+      if (!media || !(media.duration > 0)) {
+        updateSeekFill();
+        return;
+      }
       const pos = (ui.seek.value / 1000) * media.duration;
       send({ type: "media", action: "seek", position: pos });
       media.position = pos;
       mediaAt = Date.now();
+      updateSeekFill();
       tick();
     });
 
@@ -379,7 +411,8 @@ body.aqnp-on { padding-bottom: 72px; }
         popList.innerHTML = `<div class="aqnp-pop-msg">${t("queueEmpty")}</div>`;
         return;
       }
-      const curIdx = queue ? queue.index : -1;
+      const isCurPlaying = !!(media && media.available && media.app === "Aqulify" && media.playing);
+      const curIdx = isCurPlaying && queue ? queue.index : -1;
       queueItems.forEach((it, i) => {
         const b = document.createElement("button");
         b.type = "button";

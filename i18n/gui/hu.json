@@ -451,5 +451,7 @@
   "library.btnBrowseFiles": "Fájl tallózása…",
   "library.btnBrowseFilesTitle": "Zenefájl tallózása (a szülőmappát automatikusan felveszi)",
   "library.promptFolderPath": "Add meg a zenei mappa útvonalát:",
-  "library.promptFilePath": "Add meg a zenefájl útvonalát:"
+  "library.promptFilePath": "Add meg a zenefájl útvonalát:",
+  "sink.systemDefault": "Rendszer alapértelmezett",
+  "sink.systemHint": "A hang a rendszer (Equalizer APO) által vezérelt alapértelmezett kimeneten szólal meg."
 }
