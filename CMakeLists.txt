@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(aqulify 
-    VERSION 1.8.5
+    VERSION 2.0.2
     DESCRIPTION "Aqulify - Real-time Phase, Group Delay & Acoustic Waterfall DSP Suite"
     LANGUAGES C CXX
 )
@@ -55,6 +55,9 @@ target_link_libraries(test_ringbuffer PRIVATE ee_dsp_core Threads::Threads)
 # 5. Tesztalkalmazás: közös mag (FFT spektrum, paraméterblokk, tap körpuffer, JSON)
 add_executable(test_core src/test_core.cpp)
 target_link_libraries(test_core PRIVATE ee_dsp_core Threads::Threads)
+if(WIN32)
+    target_link_libraries(test_core PRIVATE ws2_32 iphlpapi)
+endif()
 
 # 6. Tesztalkalmazás: DSP modulok (partícionált konvolver, FIR EQ, Bass Enhancer, teljes lánc)
 add_executable(test_dsp src/test_dsp.cpp)
@@ -67,6 +70,75 @@ target_link_libraries(test_matrix PRIVATE ee_dsp_core Threads::Threads)
 # 8. Tesztalkalmazás: ébren tartás (burn-in) a Windows-os hídon; nem Windows-on kihagyva
 add_executable(test_keepawake src/test_keepawake.cpp)
 target_link_libraries(test_keepawake PRIVATE ee_dsp_core)
+
+# 2.x: beépített zenelejátszó (dekóderek: third_party/decoders, megengedő licencek; a hangkimenet platformonként)
+set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/decoders/opus/opus EXCLUDE_FROM_ALL)
+set_target_properties(opus PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+add_library(aq_decoders STATIC
+    src/decoders_impl.c
+    third_party/decoders/alac/ALACDecoder.cpp
+    third_party/decoders/opus/ogg/bitwise.c
+    third_party/decoders/opus/ogg/framing.c
+    third_party/decoders/opus/opusfile/opusfile.c
+    third_party/decoders/opus/opusfile/info.c
+    third_party/decoders/opus/opusfile/internal.c
+    third_party/decoders/opus/opusfile/stream.c
+    third_party/decoders/wavpack/src/common_utils.c
+    third_party/decoders/wavpack/src/decorr_utils.c
+    third_party/decoders/wavpack/src/entropy_utils.c
+    third_party/decoders/wavpack/src/extra1.c
+    third_party/decoders/wavpack/src/extra2.c
+    third_party/decoders/wavpack/src/open_filename.c
+    third_party/decoders/wavpack/src/open_legacy.c
+    third_party/decoders/wavpack/src/open_raw.c
+    third_party/decoders/wavpack/src/open_utils.c
+    third_party/decoders/wavpack/src/read_words.c
+    third_party/decoders/wavpack/src/tag_utils.c
+    third_party/decoders/wavpack/src/tags.c
+    third_party/decoders/wavpack/src/unpack.c
+    third_party/decoders/wavpack/src/unpack_floats.c
+    third_party/decoders/wavpack/src/unpack_seek.c
+    third_party/decoders/wavpack/src/unpack_utils.c
+    third_party/decoders/wavpack/src/unpack3.c
+    third_party/decoders/wavpack/src/unpack3_open.c
+    third_party/decoders/wavpack/src/unpack3_seek.c
+)
+target_include_directories(aq_decoders SYSTEM PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/decoders
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/decoders/alac
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/decoders/opus/ogg
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/decoders/opus/opusfile
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/decoders/opus/opus/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/decoders/wavpack/include
+)
+target_compile_definitions(aq_decoders PRIVATE OP_DISABLE_HTTP=1 ENABLE_LEGACY=1 HAVE___BUILTIN_CLZ=1)
+set_target_properties(aq_decoders PROPERTIES C_STANDARD 99 POSITION_INDEPENDENT_CODE ON)
+target_compile_options(aq_decoders PRIVATE $<IF:$<C_COMPILER_ID:MSVC>,/w,-w>)
+target_link_libraries(aq_decoders PUBLIC opus)
+if(NOT WIN32)
+    target_link_libraries(aq_decoders PUBLIC m)
+endif()
+add_library(aq_player STATIC src/audio_decoder.cpp src/file_player.cpp src/play_queue.cpp src/playlists.cpp src/play_stats.cpp src/smart_lists.cpp src/music_library.cpp)
+target_include_directories(aq_player PUBLIC ${EE_INCLUDE_DIR})
+target_link_libraries(aq_player PUBLIC aq_decoders Threads::Threads)
+if(WIN32)
+    target_link_libraries(aq_player PUBLIC shell32 ole32)   # a Zene ismert mappa (SHGetKnownFolderPath)
+endif()
+set_target_properties(aq_player PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# 9. Tesztalkalmazás: a beépített lejátszó (dekóderek, címkék, tekerés, a lejátszás vége)
+add_executable(test_player src/test_player.cpp)
+target_link_libraries(test_player PRIVATE aq_player ee_dsp_core Threads::Threads)   # ee_dsp_core: a híd fejlécei (zenetár-üzenetek)
+if(WIN32)
+    target_link_libraries(test_player PRIVATE ws2_32 iphlpapi)
+endif()
+target_compile_definitions(test_player PRIVATE AQ_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
 
 if(WIN32)
     # ------------------------------------------------------------------
@@ -102,7 +174,18 @@ if(WIN32)
     if(BUILD_WINDOWS_ENGINE)
         add_executable(Aqulify WIN32 windows/engine/aether_engine.cpp ${EE_RES_DIR}/engine.rc)
         target_include_directories(Aqulify PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR})
-        target_link_libraries(Aqulify PRIVATE ee_dsp_core ws2_32 iphlpapi ole32 oleaut32 shell32 advapi32 user32 uuid)
+        target_link_libraries(Aqulify PRIVATE ee_dsp_core aq_player ws2_32 iphlpapi ole32 oleaut32 shell32 advapi32 user32 uuid avrt)
+        # 2.x: a beépített lejátszó parancssori indítója (konzolos program)
+        add_executable(aqulify-play src/aqulify_play.cpp)
+        target_link_libraries(aqulify-play PRIVATE ws2_32)
+        target_compile_definitions(aqulify-play PRIVATE UNICODE _UNICODE)
+        if(MINGW)
+            target_link_options(aqulify-play PRIVATE -municode)   # wmain: Unicode parancssor
+        endif()
+        # A lejátszó WASAPI-kimenetének próbája néma fájllal (hangeszköz nélkül kihagyja)
+        add_executable(player_out_check windows/tools/player_out_check.cpp)
+        target_include_directories(player_out_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/windows/engine)
+        target_link_libraries(player_out_check PRIVATE aq_player ee_dsp_core ole32 uuid avrt)
         target_compile_definitions(Aqulify PRIVATE UNICODE _UNICODE AQULIFY_VERSION="${PROJECT_VERSION}")
         if(MSVC)
             target_link_options(Aqulify PRIVATE /ENTRY:mainCRTStartup /MANIFEST:NO)
@@ -160,6 +243,7 @@ if(WIN32)
             ${CMAKE_CURRENT_SOURCE_DIR}/gui_integrated_system.html
             ${CMAKE_CURRENT_SOURCE_DIR}/autoeq_index.js
             ${CMAKE_CURRENT_SOURCE_DIR}/gui_i18n.js
+            ${CMAKE_CURRENT_SOURCE_DIR}/gui_player.js
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/README_WINDOWS.md)
@@ -172,6 +256,7 @@ if(WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/gui_integrated_system.html ${EE_PAYLOAD_DIR}/gui.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/autoeq_index.js ${EE_PAYLOAD_DIR}/autoeq.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/gui_i18n.js ${EE_PAYLOAD_DIR}/i18n.bin
+            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/gui_player.js ${EE_PAYLOAD_DIR}/player.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js ${EE_PAYLOAD_DIR}/three.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE ${EE_PAYLOAD_DIR}/threelic.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/README_WINDOWS.md ${EE_PAYLOAD_DIR}/readme.bin
@@ -185,6 +270,7 @@ if(WIN32)
             "FILE_GUI|gui\\gui_integrated_system.html\n"
             "FILE_AUTOEQ|gui\\autoeq_index.js\n"
             "FILE_I18N|gui\\gui_i18n.js\n"
+            "FILE_PLAYERJS|gui\\gui_player.js\n"
             "FILE_THREE|gui\\three.min.js\n"
             "FILE_THREELIC|gui\\three.js-LICENSE.txt\n"
             "FILE_README|OLVASS_EL.md\n")
@@ -196,6 +282,7 @@ if(WIN32)
             "FILE_GUI RCDATA \"${EE_PAYLOAD_DIR}/gui.bin\"\n"
             "FILE_AUTOEQ RCDATA \"${EE_PAYLOAD_DIR}/autoeq.bin\"\n"
             "FILE_I18N RCDATA \"${EE_PAYLOAD_DIR}/i18n.bin\"\n"
+            "FILE_PLAYERJS RCDATA \"${EE_PAYLOAD_DIR}/player.bin\"\n"
             "FILE_THREE RCDATA \"${EE_PAYLOAD_DIR}/three.bin\"\n"
             "FILE_THREELIC RCDATA \"${EE_PAYLOAD_DIR}/threelic.bin\"\n"
             "FILE_README RCDATA \"${EE_PAYLOAD_DIR}/readme.bin\"\n")
@@ -235,8 +322,9 @@ if(APPLE)
         ${CMAKE_CURRENT_SOURCE_DIR}/gui_integrated_system.html
         ${CMAKE_CURRENT_SOURCE_DIR}/autoeq_index.js
         ${CMAKE_CURRENT_SOURCE_DIR}/gui_i18n.js
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui_player.js
         ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js)
-    add_executable(Aqulify MACOSX_BUNDLE macos/app/main.mm macos/engine/mac_engine.mm ${AQ_MAC_GUI}
+    add_executable(Aqulify MACOSX_BUNDLE macos/app/main.mm macos/engine/mac_engine.mm macos/engine/mac_media.mm ${AQ_MAC_GUI}
         ${AQ_MAC_RES}/Aqulify.icns ${AQ_MAC_RES}/en.lproj/InfoPlist.strings ${AQ_MAC_RES}/hu.lproj/InfoPlist.strings)
     set_source_files_properties(${AQ_MAC_GUI} PROPERTIES MACOSX_PACKAGE_LOCATION Resources/gui)
     set_source_files_properties(${AQ_MAC_RES}/Aqulify.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
@@ -250,12 +338,23 @@ if(APPLE)
     target_include_directories(Aqulify PRIVATE macos/engine)
     target_compile_options(Aqulify PRIVATE -fobjc-arc)
     target_compile_definitions(Aqulify PRIVATE AQULIFY_VERSION="${PROJECT_VERSION}")
-    target_link_libraries(Aqulify PRIVATE ee_dsp_core Threads::Threads
+    target_link_libraries(Aqulify PRIVATE ee_dsp_core aq_player Threads::Threads
         "-framework AppKit" "-framework AudioToolbox" "-framework CoreAudio" "-framework CoreFoundation"
         "-framework Foundation" "-framework ServiceManagement" "-framework WebKit")
     add_custom_command(TARGET Aqulify POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE
                 $<TARGET_BUNDLE_CONTENT_DIR:Aqulify>/Resources/gui/three.js-LICENSE.txt)
+
+    # 2.x: a beépített lejátszó parancssori indítója macOS-en is
+    add_executable(aqulify-play src/aqulify_play.cpp)
+    target_link_libraries(aqulify-play PRIVATE Threads::Threads)
+
+    # A lejátszó CoreAudio-kimenetének próbája néma fájllal (hangeszköz nélkül kihagyja)
+    add_executable(player_out_check macos/tools/player_out_check.mm)
+    target_include_directories(player_out_check PRIVATE macos/engine ${EE_INCLUDE_DIR})
+    target_compile_options(player_out_check PRIVATE -fobjc-arc)
+    target_link_libraries(player_out_check PRIVATE aq_player ee_dsp_core Threads::Threads
+        "-framework AudioToolbox" "-framework CoreAudio" "-framework Foundation")
 endif()
 
 # Linux: PipeWire motor (virtuális "Aqulify" kimeneti eszköz) és saját ablakos felület
@@ -268,8 +367,11 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
     add_executable(aqulify-engine src/pipewire_plugin.cpp)
     target_include_directories(aqulify-engine PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
     target_link_directories(aqulify-engine PRIVATE ${PIPEWIRE_LIBRARY_DIRS})
-    target_link_libraries(aqulify-engine PRIVATE ee_dsp_core ${PIPEWIRE_LIBRARIES} Threads::Threads)
+    target_link_libraries(aqulify-engine PRIVATE ee_dsp_core aq_player ${PIPEWIRE_LIBRARIES} Threads::Threads)
     target_compile_definitions(aqulify-engine PRIVATE AQULIFY_VERSION="${PROJECT_VERSION}")
+
+    # Parancssori indító a beépített lejátszóhoz: aqulify-play <fájl> | play | pause | stop
+    add_executable(aqulify-play src/aqulify_play.cpp)
 
     if(BUILD_LINUX_GUI)
         pkg_check_modules(WEBKITGTK IMPORTED_TARGET webkit2gtk-4.1)
@@ -295,21 +397,22 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
     string(TIMESTAMP AQ_RELEASE_DATE "%Y-%m-%d" UTC)
     set(BINDIR "${CMAKE_INSTALL_FULL_BINDIR}")
     configure_file(linux/aqulify.service.in ${CMAKE_CURRENT_BINARY_DIR}/aqulify.service @ONLY)
+    configure_file(linux/aqulify-headless.service.in ${CMAKE_CURRENT_BINARY_DIR}/aqulify-headless.service @ONLY)
     set(VERSION "${PROJECT_VERSION}")
     set(DATE "${AQ_RELEASE_DATE}")
     configure_file(linux/io.github.szorgos.Aqulify.metainfo.xml ${CMAKE_CURRENT_BINARY_DIR}/io.github.szorgos.Aqulify.metainfo.xml @ONLY)
 
-    install(TARGETS aqulify-engine RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS aqulify-engine aqulify-play RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     if(TARGET aqulify-gui)
         install(TARGETS aqulify-gui RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     endif()
-    install(FILES gui_integrated_system.html autoeq_index.js gui_i18n.js windows/third_party/three/three.min.js
+    install(FILES gui_integrated_system.html autoeq_index.js gui_i18n.js gui_player.js windows/third_party/three/three.min.js
             DESTINATION ${CMAKE_INSTALL_DATADIR}/aqulify/gui)
     install(FILES windows/third_party/three/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/aqulify/gui RENAME three.js-LICENSE.txt)
     install(FILES linux/io.github.szorgos.Aqulify.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.szorgos.Aqulify.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
     install(FILES linux/aqulify.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps)
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/aqulify.service DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/systemd/user)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/aqulify.service ${CMAKE_CURRENT_BINARY_DIR}/aqulify-headless.service DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/systemd/user)
     install(FILES linux/80-aqulify.preset DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/systemd/user-preset)
 endif()
 

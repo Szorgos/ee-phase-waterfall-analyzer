@@ -159,6 +159,75 @@ inline std::string loadPresets() {
     return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
 }
 
+/** A zenetár mappái (2.x): {"roots":[…]} a library.json-ban. */
+inline bool saveLibrary(const std::string& doc) {
+    return writeAtomic(configDir(true) + "/library.json", std::vector<char>(doc.begin(), doc.end()));
+}
+
+inline std::string loadLibrary() {
+    std::ifstream f(configDir(false) + "/library.json", std::ios::binary);
+    if (!f) return "";
+    return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+}
+
+/** A zenetár gyorsítótára (2.x): a lemezbejárás eredménye a library-cache.json-ban. */
+inline std::string loadLibraryCache() {
+    std::ifstream f(configDir(false) + "/library-cache.json", std::ios::binary);
+    if (!f) return "";
+    return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+}
+
+inline bool saveLibraryCache(const std::string& doc) {
+    return writeAtomic(configDir(true) + "/library-cache.json", std::vector<char>(doc.begin(), doc.end()));
+}
+
+/** A lejátszási sor (2.x): a tételek és a sorszám a queue.json-ban. */
+inline bool saveQueue(const std::string& doc) {
+    return writeAtomic(configDir(true) + "/queue.json", std::vector<char>(doc.begin(), doc.end()));
+}
+
+inline std::string loadQueue() {
+    std::ifstream f(configDir(false) + "/queue.json", std::ios::binary);
+    if (!f) return "";
+    return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+}
+
+/** A lejátszási listák (2.x): a playlists.json-ban. */
+inline bool savePlaylists(const std::string& doc) {
+    return writeAtomic(configDir(true) + "/playlists.json", std::vector<char>(doc.begin(), doc.end()));
+}
+
+inline std::string loadPlaylists() {
+    std::ifstream f(configDir(false) + "/playlists.json", std::ios::binary);
+    if (!f) return "";
+    return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+}
+
+/** A lejátszási napló (2.x, okos listák): a stats.json-ban. */
+inline bool saveStats(const std::string& doc) {
+    return writeAtomic(configDir(true) + "/stats.json", std::vector<char>(doc.begin(), doc.end()));
+}
+
+inline std::string loadStats() {
+    std::ifstream f(configDir(false) + "/stats.json", std::ios::binary);
+    if (!f) return "";
+    return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+}
+
+/** A hálózati elérés beállításai és a párosított eszközök (remote.json, csak a felhasználó olvashatja). */
+inline bool saveRemote(const std::string& doc) {
+    const std::string path = configDir(true) + "/remote.json";
+    if (!writeAtomic(path, std::vector<char>(doc.begin(), doc.end()))) return false;
+    chmod(path.c_str(), 0600);
+    return true;
+}
+
+inline std::string loadRemote() {
+    std::ifstream f(configDir(false) + "/remote.json", std::ios::binary);
+    if (!f) return "";
+    return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+}
+
 inline bool saveOutputSink(const std::string& sinkName) {
     const std::string path = configDir(true) + "/output_sink.txt";
     std::ofstream f(path, std::ios::trunc);
@@ -175,6 +244,51 @@ inline std::string loadOutputSink() {
     std::getline(f, s);
     while (!s.empty() && (s.back() == '\r' || s.back() == '\n' || s.back() == ' ')) s.pop_back();
     return s;
+}
+
+/** Headless mód (Raspberry Pi): az aktuális 6-jegyű párosító PIN kód (pair.pin). */
+inline bool savePairPin(const std::string& pin) {
+    const std::string path = configDir(true) + "/pair.pin";
+    std::ofstream f(path, std::ios::trunc);
+    if (!f) return false;
+    f << pin << "\n";
+#ifndef _WIN32
+    chmod(path.c_str(), 0600);
+#endif
+    return true;
+}
+
+inline std::string loadPairPin() {
+    const std::string path = configDir(false) + "/pair.pin";
+    std::ifstream f(path);
+    if (!f) return "";
+    std::string s;
+    std::getline(f, s);
+    while (!s.empty() && (s.back() == '\r' || s.back() == '\n' || s.back() == ' ')) s.pop_back();
+    return s;
+}
+
+/** A grafikus felület fájljainak alapértelmezett mappája (HTML, JS, CSS). */
+inline std::string defaultGuiDir() {
+    std::vector<std::string> candidates;
+#ifndef _WIN32
+    if (const char* x = std::getenv("XDG_DATA_HOME"); x && *x)
+        candidates.push_back(std::string(x) + "/aqulify");
+    else if (const char* h = std::getenv("HOME"); h && *h)
+        candidates.push_back(std::string(h) + "/.local/share/aqulify");
+    candidates.push_back("/usr/share/aqulify");
+    candidates.push_back("/usr/local/share/aqulify");
+#endif
+    candidates.push_back(".");
+    candidates.push_back("..");
+
+    for (const auto& c : candidates) {
+        struct stat st{};
+        const std::string testFile = c + "/gui_integrated_system.html";
+        if (stat(testFile.c_str(), &st) == 0 && S_ISREG(st.st_mode))
+            return c;
+    }
+    return "";
 }
 
 } // namespace ee_analyzer::linux_store

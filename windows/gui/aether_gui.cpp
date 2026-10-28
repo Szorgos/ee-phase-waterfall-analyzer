@@ -98,8 +98,8 @@ int openInBrowser(const std::wstring& guiFolder) {
     const std::wstring html = guiFolder + L"\\gui_integrated_system.html";
     std::wstring url = L"file:///" + html;
     for (auto& c : url) if (c == L'\\') c = L'/';
-    const std::wstring args = L"--app=\"" + url + L"\" --window-size=1480,940";
-    if (reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", L"msedge.exe", args.c_str(), nullptr, SW_SHOWNORMAL)) > 32)
+    const std::wstring args = L"--app=\"" + url + L"\" --start-maximized --window-size=1480,940";
+    if (reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", L"msedge.exe", args.c_str(), nullptr, SW_SHOWMAXIMIZED)) > 32)
         return 0;
     ShellExecuteW(nullptr, L"open", html.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     return 0;
@@ -258,6 +258,54 @@ void CALLBACK occlusionTimer(HWND, UINT, UINT_PTR, DWORD) {
 } // namespace
 
 /** A felület WebView2 ablakban; kivételt dob, ha a WebView2 nem indítható. */
+/** JSON sztringgé alakítás (idézőjelek és visszaperjelek védelmével). */
+std::string jsonQuoteUtf8(const std::wstring& w) {
+    if (w.empty()) return "null";
+    const std::string s = toUtf8(w);
+    std::string out = "\"";
+    for (char c : s) {
+        if (c == '\\' || c == '"') out.push_back('\\');
+        out.push_back(c);
+    }
+    out.push_back('"');
+    return out;
+}
+
+/** Natív Windows mappa- vagy zenefájl-választó párbeszédablak (IFileOpenDialog). */
+std::wstring pickPathDialog(HWND owner, bool pickFolder) {
+    std::wstring result;
+    IFileOpenDialog* dlg = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg))) || !dlg)
+        return result;
+    DWORD opts = 0;
+    if (SUCCEEDED(dlg->GetOptions(&opts))) {
+        opts |= FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST;
+        if (pickFolder) opts |= FOS_PICKFOLDERS;
+        else opts |= FOS_FILEMUSTEXIST;
+        dlg->SetOptions(opts);
+    }
+    if (!pickFolder) {
+        const COMDLG_FILTERSPEC spec[] = {
+            { L"Audio (*.flac;*.wav;*.wv;*.mp3;*.ogg;*.opus;*.m4a;*.aac;*.alac;*.aiff)", L"*.flac;*.wav;*.wv;*.mp3;*.ogg;*.opus;*.m4a;*.aac;*.alac;*.aiff;*.aif;*.ape;*.dsf;*.dff" },
+            { L"*.*", L"*.*" }
+        };
+        dlg->SetFileTypes(2, spec);
+    }
+    if (SUCCEEDED(dlg->Show(owner))) {
+        IShellItem* item = nullptr;
+        if (SUCCEEDED(dlg->GetResult(&item)) && item) {
+            PWSTR psz = nullptr;
+            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &psz)) && psz) {
+                result = psz;
+                CoTaskMemFree(psz);
+            }
+            item->Release();
+        }
+    }
+    dlg->Release();
+    return result;
+}
+
 void runWindow(const std::wstring& guiFolder) {
     webview::webview w(false, nullptr);
     w.set_title(kTitleUtf8);
@@ -265,11 +313,21 @@ void runWindow(const std::wstring& guiFolder) {
     w.set_size(1000, 640, WEBVIEW_HINT_MIN);
 
     auto win = w.window();
-    if (win.ok()) styleWindow(static_cast<HWND>(win.value()));
+    const HWND hwnd = win.ok() ? static_cast<HWND>(win.value()) : nullptr;
+    if (hwnd) {
+        styleWindow(hwnd);
+        ShowWindow(hwnd, SW_SHOWMAXIMIZED);
+    }
     setWebViewBackground(w);
 
+    w.bind("aetherPickFolder", [hwnd](const std::string&) -> std::string {
+        return jsonQuoteUtf8(pickPathDialog(hwnd, true));
+    });
+    w.bind("aetherPickAudioFile", [hwnd](const std::string&) -> std::string {
+        return jsonQuoteUtf8(pickPathDialog(hwnd, false));
+    });
+
     // A felület témája (req: ["light"] vagy ["dark"]): a címsor ugyanazt a színt kapja
-    const HWND hwnd = win.ok() ? static_cast<HWND>(win.value()) : nullptr;
     w.bind("aetherSetTheme", [hwnd](const std::string& req) -> std::string {
         if (hwnd) setTitlebarTheme(hwnd, req.find("\"light\"") != std::string::npos);
         return "null";

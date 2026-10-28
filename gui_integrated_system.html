@@ -565,6 +565,16 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .support-pop img { width: 190px; border-radius: 10px; margin: 10px auto; display: block; }
   .support-pop .tag { font-weight: 600; color: var(--aq-text); font-size: 0.95rem; }
   .preset-bar { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 0 0 auto; }   /* nem nyomódik össze: helyette a cím rövidül */
+  /* 2.x: Hangzás / Zenetár nézetváltó (a zenetár a modulfülek és panelek helyén jelenik meg) */
+  .view-switch { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; border: 1px solid var(--aq-line); background: var(--aq-input); flex: 0 0 auto; }
+  .view-switch[hidden] { display: none; }
+  .view-switch-btn { border: none; background: transparent; color: var(--aq-text-2); font: inherit; font-size: var(--aq-fs-body); font-weight: 600;
+                     padding: 5px 14px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+  .view-switch-btn:hover { color: var(--aq-text); }
+  .view-switch-btn.active { background: var(--aq-accent); color: var(--aq-accent-ink); }
+  .view-switch-btn:focus-visible { outline: 2px solid var(--aq-accent); outline-offset: 2px; }
+  .library-view { flex: 1; padding: 20px 24px 32px 24px; background: var(--aq-bg); }
+  .library-view[hidden], .main-content[hidden] { display: none; }
   .preset-lbl { font-size: var(--aq-fs-body); color: var(--aq-text-2); font-weight: 500; }
   .preset-select { min-width: 140px; max-width: 320px; }
   /* Keskeny ablakban (a legkisebb ablak 1000 px) a fejléc tömörebb: a Támogatás gombból csak a szív marad (a felirat
@@ -995,6 +1005,7 @@ if (!window.THREE) window.THREE = (function () {
 </script>
 <script src="autoeq_index.js"></script>
 <script src="gui_i18n.js"></script>
+<script src="gui_player.js"></script>
 <script>
 // Korai témainicializálás a villanásmentes (FOUC) megjelenítéshez (8 audiofil téma támogatással)
 (function initThemeEarly() {
@@ -1018,6 +1029,703 @@ if (!window.THREE) window.THREE = (function () {
   document.documentElement.style.colorScheme = mode;
 })();
 </script>
+
+<style id="aq-layout-separation-css">
+  /* 2b: Rögzített felső fejléc, rögzített alsó lejátszósáv, belső görgetés a középső munkatérben */
+  html, body {
+    height: 100vh;
+    overflow: hidden !important;
+  }
+  body.aqnp-on {
+    padding-bottom: 0 !important;
+  }
+  .ee-window {
+    height: 100vh;
+    min-height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  header.app-header {
+    position: sticky;
+    top: 0;
+    z-index: 850;
+    flex: 0 0 54px;
+    min-height: 54px;
+    padding: 8px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    background: var(--aq-bg-2);
+    border-bottom: 1px solid var(--aq-line);
+  }
+  header.app-header .title-group {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  header.app-header .header-center {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+  }
+  header.app-header .header-right {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  /* Csúszó kapszulás fő nézetváltó (Hangzás / Zenetár) */
+  .view-switch {
+    position: relative;
+    display: inline-grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 10px;
+    border: 1px solid var(--aq-line-2);
+    background: var(--aq-input);
+    isolation: isolate;
+  }
+  .view-switch-glider {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc(50% - 3px);
+    border-radius: 7px;
+    background: var(--aq-accent);
+    transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 1;
+    pointer-events: none;
+  }
+  .view-switch[data-active="library"] .view-switch-glider {
+    transform: translate3d(100%, 0, 0);
+  }
+  .view-switch-btn {
+    position: relative;
+    z-index: 2;
+    min-width: 104px;
+    padding: 5px 16px;
+    border-radius: 7px;
+    border: none;
+    background: transparent !important;
+    color: var(--aq-text-2);
+    font: 600 var(--aq-fs-body) var(--aq-font);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: color 180ms ease;
+    white-space: nowrap;
+  }
+  .view-switch-btn:hover {
+    color: var(--aq-text);
+  }
+  .view-switch-btn.active {
+    color: var(--aq-accent-ink) !important;
+  }
+
+  /* Kimenet gomb felugró menüje a fejlécben */
+  .sink-menu-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+  .sink-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 280px;
+    background: var(--aq-surface);
+    border: 1px solid var(--aq-line-2);
+    border-radius: var(--aq-radius-m);
+    padding: 12px 14px;
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 960;
+  }
+  :root[data-mode="light"] .sink-popover, :root[data-theme$="-light"] .sink-popover {
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.14);
+  }
+  .sink-popover[hidden] {
+    display: none !important;
+  }
+  .sink-sec-title {
+    font-size: var(--aq-fs-micro);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--aq-text-3);
+  }
+  #btnSupport.support-btn {
+    animation: donateSubtlePulse 6s ease-in-out infinite;
+  }
+  #btnSupport.support-btn:hover {
+    animation: none;
+    color: #FF9EB3;
+    border-color: rgba(255, 158, 179, 0.45);
+    box-shadow: 0 0 8px rgba(255, 158, 179, 0.25);
+    transform: scale(1.03);
+  }
+
+  /* Alsó Most szól sáv: bal alsó kis borítókép kattintható, jobb alsó sor gomb az alsó grafikon helyére nyit */
+  .aqnp .aqnp-art {
+    cursor: pointer;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+  .aqnp .aqnp-art:hover {
+    transform: scale(1.05);
+    border-color: var(--aq-accent);
+    box-shadow: 0 0 0 2px var(--aq-accent-soft);
+  }
+  .aqnp.cover-active .aqnp-art {
+    border-color: var(--aq-accent);
+    box-shadow: 0 0 0 2px var(--aq-accent);
+  }
+  .aqnp-pop {
+    display: none !important;
+  }
+
+  /* Jobb alsó lejátszási lista gombra kattintva: az alsó EQ/fázis grafikon helyén megjelenő lejátszási sor */
+  .inline-queue-pane {
+    background: var(--aq-surface);
+    border: 1px solid var(--aq-line);
+    border-radius: var(--aq-radius-l);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 340px;
+    max-height: 520px;
+    animation: aqLibFadeIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .inline-queue-pane[hidden] {
+    display: none !important;
+  }
+  .iq-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 18px;
+    background: var(--aq-bg-2);
+    border-bottom: 1px solid var(--aq-line);
+  }
+  .iq-title-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .iq-title {
+    font-size: var(--aq-fs-title);
+    font-weight: 700;
+    color: var(--aq-text);
+  }
+  .iq-count {
+    font-size: var(--aq-fs-sub);
+    font-family: var(--aq-mono);
+    color: var(--aq-text-2);
+  }
+  .iq-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .iq-list {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 6px 0;
+  }
+  .iq-empty {
+    padding: 28px 18px;
+    color: var(--aq-text-2);
+    font-size: var(--aq-fs-body);
+    text-align: center;
+  }
+  .iq-row {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1.4fr) minmax(0, 1fr) 64px;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 9px 18px;
+    border: none;
+    border-bottom: 1px solid var(--aq-line);
+    background: transparent;
+    color: var(--aq-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 140ms ease;
+  }
+  .iq-row:last-child {
+    border-bottom: none;
+  }
+  .iq-row:hover {
+    background: var(--aq-surface-2);
+  }
+  .iq-row.cur {
+    background: var(--aq-accent-soft);
+    color: var(--aq-accent);
+    font-weight: 600;
+  }
+  .iq-num {
+    font-family: var(--aq-mono);
+    font-size: var(--aq-fs-sub);
+    color: var(--aq-text-3);
+    text-align: right;
+  }
+  .iq-row.cur .iq-num {
+    color: var(--aq-accent);
+    font-weight: 700;
+  }
+  .iq-main {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .iq-meta {
+    min-width: 0;
+    color: var(--aq-text-2);
+    font-size: var(--aq-fs-sub);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .iq-dur {
+    font-family: var(--aq-mono);
+    font-size: var(--aq-fs-sub);
+    color: var(--aq-text-2);
+    text-align: right;
+  }
+
+  /* Bal alsó kis borítóképre kattintva: tiszta, konfigurációmentes nagy borítókép + lejátszási lista nézet */
+  .cover-listening-view {
+    flex: 1 1 auto;
+    padding: 24px 32px;
+    background: var(--aq-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cover-stage-grid {
+    width: 100%;
+    max-width: 1400px;
+    height: 100%;
+    max-height: 780px;
+    display: grid;
+    grid-template-columns: minmax(440px, 1.4fr) minmax(320px, 460px);
+    gap: 32px;
+    align-items: stretch;
+  }
+  .cover-hero-col {
+    background: #181b22;
+    border: 1px solid var(--aq-line);
+    border-radius: var(--aq-radius-l);
+    padding: 0;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+  }
+  .cover-hero-art-wrap {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at center, #242a35 0%, #151820 100%);
+    color: rgba(255, 255, 255, 0.38);
+  }
+  .cover-hero-art-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .cover-hero-meta {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 50px 24px 22px;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.45) 60%, transparent 100%);
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .cover-hero-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
+  }
+  .cover-hero-sub {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.82);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
+  }
+  .cover-queue-col {
+    background: var(--aq-surface);
+    border: 1px solid var(--aq-line);
+    border-radius: var(--aq-radius-l);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .cover-pl-pills {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--aq-bg-2);
+    border-bottom: 1px solid var(--aq-line);
+    overflow: visible;
+  }
+  .cover-pl-pills:empty {
+    display: none;
+  }
+  .cover-pl-pills .adw-btn {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    padding: 0 10px !important;
+    font-size: 0.77rem !important;
+    font-weight: 500 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    margin: 0 !important;
+    background: var(--aq-surface) !important;
+    border: 1px solid var(--aq-line-2) !important;
+    color: var(--aq-text) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+  .cover-pl-pills .adw-btn:hover {
+    background: var(--aq-surface-2) !important;
+    border-color: var(--aq-accent) !important;
+  }
+  .cover-pl-pills .adw-btn.primary {
+    background: var(--aq-accent) !important;
+    border-color: var(--aq-accent) !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+  }
+
+  /* Középső munkatér: animált nézetváltás (Hangzás <-> Zenetár <-> Borítónézet) */
+  .workspace-stage {
+    flex: 1 1 auto;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .workspace-pane {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 240ms cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform, opacity;
+  }
+  .workspace-pane[hidden] {
+    display: none !important;
+  }
+  .workspace-pane.anim-out-left {
+    position: absolute;
+    inset: 0;
+    transform: translate3d(-44px, 0, 0);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .workspace-pane.anim-out-right {
+    position: absolute;
+    inset: 0;
+    transform: translate3d(44px, 0, 0);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .workspace-pane.anim-in-from-right {
+    transform: translate3d(44px, 0, 0);
+    opacity: 0;
+  }
+  .workspace-pane.anim-in-from-left {
+    transform: translate3d(-44px, 0, 0);
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .workspace-pane, .view-switch-glider, .tab-glider {
+      transition: none !important;
+    }
+  }
+
+  /* Hangzás nézet belső elrendezés: Vízesés összecsukható + Modulok és Profil egy sávban */
+  .top-spectrum-strip {
+    flex: 0 0 auto;
+    transition: height 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .top-spectrum-strip.wf-collapsed .wf-stage {
+    display: none !important;
+  }
+  .top-spectrum-strip.wf-collapsed .strip-toolbar {
+    position: static !important;
+    padding: 6px 20px !important;
+    background: var(--aq-bg-2) !important;
+    border-bottom: 1px solid var(--aq-line) !important;
+    pointer-events: auto !important;
+  }
+  .top-spectrum-strip.wf-collapsed [data-wf3d] {
+    display: none !important;
+  }
+
+  /* DSP fejléc sor: Balra a 8 modulfül, Jobbra a Profilválasztó (#presetBar) */
+  .dsp-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .dsp-header-row .preset-bar {
+    background: var(--aq-bg-2);
+    border: 1px solid var(--aq-line);
+    border-radius: var(--aq-radius-m);
+    padding: 4px 10px;
+    min-height: 42px;
+  }
+
+  /* 2D EQ GRAFIKON FEJLÉCSÁV: Balra a görbekapcsolók, Jobbra a dB-skála és Zoom */
+  .eq-canvas-wrapper {
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+  .eq-canvas-wrapper.canvas-focused {
+    border-color: var(--aq-accent) !important;
+    box-shadow: 0 0 0 2px var(--aq-accent-soft) !important;
+  }
+  .eq-canvas-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 14px;
+    background: var(--aq-surface);
+    border-bottom: 1px solid var(--aq-line);
+    flex-wrap: nowrap;
+  }
+  .eq-curves-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .eq-curves-group .adw-btn {
+    height: 26px;
+    min-height: 26px;
+    padding: 0 10px;
+    font-size: 0.76rem;
+  }
+  .eq-canvas-toolbar .eq-zoom-overlay {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  /* EQ ALATTI KÁRTYA: KÉT EGYÉRTELMŰEN ELVÁLASZTOTT SÁV (1. Globális EQ-lánc, 2. Kijelölt Sáv szerkesztő) */
+  .eq-bottom-bar {
+    padding: 0 !important;
+    gap: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    overflow: hidden;
+  }
+  .actions-group.eq-global-row {
+    order: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-wrap: nowrap !important;
+    gap: 10px !important;
+    padding: 10px 14px !important;
+    width: 100% !important;
+    background: var(--aq-surface);
+  }
+  .eq-global-left {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+  .eq-global-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  .eq-bar-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--aq-line-2);
+    margin: 0 2px;
+    flex-shrink: 0;
+  }
+  /* A3: Soha ne tűnjön el az AutoEq gomb szövege vagy az EQ Mód / Decramp címkéje! */
+  .actions-group #btnImportAutoEq > span {
+    display: inline !important;
+  }
+  .actions-group .stat-group .lbl {
+    display: inline !important;
+  }
+
+  /* 2. SÁV: KIJELÖLT SÁV SZERKESZTŐ + ÚJ SÁV / TÖRLÉS */
+  .node-readout {
+    order: 2 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-wrap: nowrap !important;
+    gap: 10px !important;
+    padding: 10px 14px !important;
+    width: 100% !important;
+    border-top: 1px solid var(--aq-line) !important;
+    background: var(--aq-bg-2);
+  }
+  .node-fields-group {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    flex-wrap: nowrap !important;
+    min-width: 0;
+  }
+  .node-actions-group {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    margin-left: auto !important;
+    flex-shrink: 0 !important;
+    padding-left: 10px;
+    border-left: 1px solid var(--aq-line-2);
+  }
+  #selectedNodeTitle {
+    padding: 3px 9px;
+    border-radius: 6px;
+    background: var(--aq-surface);
+    border: 1px solid var(--aq-line-2);
+    font-size: var(--aq-fs-sub);
+    font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  @media (max-width: 1220px) {
+    .node-fields-group {
+      gap: 6px !important;
+    }
+    .node-fields-group .stat-group {
+      gap: 4px !important;
+    }
+    .band-input-freq {
+      width: 64px !important;
+    }
+    .band-input-num {
+      width: 54px !important;
+    }
+    .node-fields-group select.ee-select {
+      padding-left: 6px !important;
+      padding-right: 22px !important;
+    }
+  }
+
+  /* Zenetár nézet kitölti a középső munkateret */
+  .library-view {
+    flex: 1 1 auto;
+    padding: 20px 24px 28px 24px;
+    background: var(--aq-bg);
+  }
+  .aqlib .lib-body {
+    animation: aqLibFadeIn 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes aqLibFadeIn {
+    from { opacity: 0; transform: translate3d(0, 6px, 0); }
+    to { opacity: 1; transform: translate3d(0, 0, 0); }
+  }
+
+  /* Rögzített alsó Most szól sáv a flex keret alján */
+  .aqnp {
+    position: relative !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    flex: 0 0 auto;
+    z-index: 860;
+    background: var(--aq-bg-2) !important;
+    border-top: 1px solid var(--aq-line) !important;
+  }
+  :root[data-mode="light"] .aqnp, :root[data-theme$="-light"] .aqnp {
+    background: var(--aq-bg-2) !important;
+    border-top: 1px solid var(--aq-line) !important;
+  }
+  :root[data-mode="light"] .aqnp-art-empty, :root[data-theme$="-light"] .aqnp-art-empty {
+    background: var(--aq-surface) !important;
+    border-color: var(--aq-line-2) !important;
+  }
+  :root[data-mode="light"] .aqnp-btn:hover, :root[data-theme$="-light"] .aqnp-btn:hover {
+    background: var(--aq-surface) !important;
+  }
+
+  @media (max-width: 1420px) {
+    header.app-header .app-title {
+      display: none;
+    }
+  }
+  @media (max-width: 1180px) {
+    header.app-header {
+      padding: 8px 14px;
+      gap: 8px;
+    }
+    select.theme-select {
+      min-width: 120px;
+      max-width: 165px;
+    }
+    select.lang-select {
+      width: 92px;
+    }
+  }
+</style>
+
 </head>
 <body>
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
@@ -1043,6 +1751,7 @@ if (!window.THREE) window.THREE = (function () {
   <symbol id="i-trap-narrow" viewBox="0 0 24 24"><path d="M8.5 6h7L20 18H4z"/></symbol>
   <symbol id="i-trap-wide" viewBox="0 0 24 24"><path d="M4 6h16l-4.5 12h-7z"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18h3M11 5.5h2"/></symbol>
 </svg>
 
 
@@ -1058,23 +1767,55 @@ if (!window.THREE) window.THREE = (function () {
   </div>
 </div>
 <div class="ee-window">
-  <!-- FEJLÉC -->
-  <header>
+  <!-- FEJLÉC: RAGADÓS FELSŐ SÁV 3 EGYÉRTELMŰ ZÓNÁVAL (1. Márka, 2. Fő nézetváltó, 3. Kimenet / Burn-in / Támogatás / Téma / Nyelv / Állapot) -->
+  <header class="app-header">
     <div class="title-group">
       <svg class="app-mark" viewBox="0 0 28 28" aria-hidden="true"><path d="M3 13c3-4 5-4 8 0s5 4 8 0 5-4 6-2" fill="none" stroke="var(--aq-accent)" stroke-width="2.2" stroke-linecap="round"/><path d="M3 19.5c3-3 5-3 8 0s5 3 8 0 5-3 6-1.5" fill="none" stroke="var(--aq-accent-2)" stroke-width="2" stroke-linecap="round"/></svg>
       <span class="app-brand" title="Aqulify • Audiofil DSP Rendszer" data-i18n-title="app.title">Aqulify</span>
       <span class="app-title" title="Aqulify • Audiofil DSP Rendszer" data-i18n-title="app.title"><span data-i18n="app.subtitle">Audiofil DSP Rendszer</span></span>
-      <span class="app-version" id="lblAppVersion" data-gui-version="1.8.5" title="Verziószám" data-i18n-title="ver.title">v1.8.5</span>
+      <span class="app-version" id="lblAppVersion" data-gui-version="2.0.2" title="Verziószám" data-i18n-title="ver.title">v2.0.2</span>
     </div>
-    <!-- EQ PROFILOK: aktív profil neve, választás, mentés, átnevezés, törlés -->
-    <div id="presetBar" class="preset-bar" title="EQ profilok: AutoEq importkor és kézi beállításkor automatikusan mentődnek, újraindítás után is választhatók" data-i18n-title="preset.barTitle">
-      <span class="preset-lbl" data-i18n="preset.label">Profil:</span>
-      <select id="selectPreset" class="mini-select preset-select" onchange="onPresetSelected(this.value)"></select>
-      <button class="mini-btn" onclick="savePresetAs()" title="Mentés új profilként" data-i18n-title="preset.saveAs" data-i18n-aria-label="preset.saveAs"><svg class="aq-icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
-      <button class="mini-btn" id="btnPresetRename" onclick="renamePreset()" title="Aktív profil átnevezése" data-i18n-title="preset.rename" data-i18n-aria-label="preset.rename"><svg class="aq-icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>
-      <button class="mini-btn" id="btnPresetDelete" onclick="deletePreset()" title="Aktív profil törlése" data-i18n-title="preset.delete" data-i18n-aria-label="preset.delete"><svg class="aq-icon" aria-hidden="true"><use href="#i-trash"/></svg></button>
+
+    <!-- KÖZÉPSŐ ZÓNA: FŐ NÉZETVÁLTÓ CSÚSZÓ KAPSZULÁVAL -->
+    <div class="header-center">
+      <div id="viewSwitch" class="view-switch" data-active="sound" role="group">
+        <div class="view-switch-glider" aria-hidden="true"></div>
+        <button type="button" class="view-switch-btn active" id="btnViewSound" onclick="setMainView('sound', true)" aria-pressed="true">
+          <svg class="aq-icon aq-icon-sm" aria-hidden="true"><use href="#i-impulse"/></svg>
+          <span data-i18n="view.sound">Hangzás</span>
+        </button>
+        <button type="button" class="view-switch-btn" id="btnViewLibrary" onclick="setMainView('library', true)" aria-pressed="false">
+          <svg class="aq-icon aq-icon-sm" aria-hidden="true"><use href="#i-folder"/></svg>
+          <span data-i18n="view.library">Zenetár</span>
+        </button>
+      </div>
     </div>
-    <div class="header-right" style="display:flex; align-items:center; gap:12px;">
+
+    <!-- JOBB ZÓNA: KIMENET GOMB, BURN-IN, TÁMOGATÁS, 8 AUDIOFIL TÉMA, NYELV ÉS MOTOR ÁLLAPOT -->
+    <div class="header-right">
+      <div class="sink-menu-wrap" id="sinkMenuWrap">
+        <button type="button" class="mini-btn" id="btnSinkMenu" onclick="toggleSinkMenu(event)" title="Válassz kimeneti hangeszközt" data-i18n-title="sink.title">
+          <svg class="aq-icon" aria-hidden="true"><use href="#i-speaker"/></svg>
+          <span data-i18n="sink.btn">Kimenet</span>
+        </button>
+        <div class="sink-popover" id="sinkPopover" hidden>
+          <div class="sink-sec-title" data-i18n="sink.label">Kimenet:</div>
+          <div id="physicalSinkWrap" style="display:flex; align-items:center; gap:8px;">
+            <select id="selectPhysicalSink" class="mini-select" onchange="onPhysicalSinkChanged(this.value)" style="width:100%; max-width:none;" title="Válassz kimeneti hangeszközt" data-i18n-title="sink.title"></select>
+          </div>
+          <button type="button" id="btnLibraryRoots" hidden onclick="openLibraryModal()"></button>
+        </div>
+      </div>
+
+      <button type="button" class="mini-btn" id="btnBurnIn" onclick="openBurnIn()">
+        <svg class="aq-icon" aria-hidden="true"><use href="#i-headphones"/></svg>
+        <span data-i18n="burnin.btn">Burn-in</span>
+      </button>
+      <button type="button" id="btnSupport" class="mini-btn support-btn support-link" onclick="toggleSupport(event)" title="Az Aqulify ingyenes (donateware)." data-i18n-title="support.btnTitle">
+        <svg class="aq-icon" aria-hidden="true" style="color:#FF9EB3;"><use href="#i-heart"/></svg>
+        <span data-i18n="support.btn">Támogatás</span>
+      </button>
+
       <select id="selectTheme" class="mini-select theme-select" title="Téma megjelenése (Rendszer / Sötét / Világos)" data-i18n-title="theme.title" onchange="setTheme(this.value, true)">
         <option value="system" data-i18n="theme.system">💻 Rendszer</option>
         <optgroup label="🌙 Sötét témák" data-i18n-label="theme.groupDark">
@@ -1091,21 +1832,14 @@ if (!window.THREE) window.THREE = (function () {
         </optgroup>
       </select>
       <select id="selectLang" class="mini-select lang-select" title="Nyelv" data-i18n-title="lang.title" onchange="setLanguage(this.value, true)"></select>
-      <button class="mini-btn" id="btnBurnIn" onclick="openBurnIn()" data-i18n="burnin.btn">Burn-in</button>
-      <button class="mini-btn" id="btnLibraryRoots" onclick="openLibraryModal()" style="display:none;" title="Zenei mappák és zenetár beállítások (2.x)" data-i18n-title="library.btnTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="library.btn">Zenei mappák</span></button>
-      <button id="btnSupport" class="support-link" onclick="toggleSupport(event)" title="Az Aqulify ingyenes (donateware). Ha hasznos, egy kis támogatással segítheted a fejlesztést." data-i18n-title="support.btnTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-heart"/></svg><span data-i18n="support.btn">Támogatás</span></button>
-      <span id="pipewireLiveBadge" class="status-badge off">Motor Offline</span>
-      <div id="physicalSinkWrap" style="font-size:0.8rem; color:var(--ee-text-secondary); display:none; align-items:center; gap:6px;">
-        <label for="selectPhysicalSink" style="margin:0; font-size:0.8rem; color:var(--ee-text-secondary);" data-i18n="sink.label">Kimenet:</label>
-        <select id="selectPhysicalSink" class="mini-select" onchange="onPhysicalSinkChanged(this.value)" style="max-width:230px;" title="Válassz kimeneti hangeszközt (Laptop Hangszóró, USB Audio vagy HDMI)" data-i18n-title="sink.title">
-        </select>
-      </div>
+      <span id="pipewireLiveBadge" class="status-badge optimal">Élő • 48.0 kHz</span>
     </div>
   </header>
-  <!-- Windows: a telepített plugin nem fut (pl. frissítés után a hangszolgáltatás a régit tartja betöltve) -->
-  <!-- Windows: a hang olyan eszközön szól, ahol az Aqulify plugin nem fut (a szöveget az updateEngineBadge írja) -->
-  <div id="dspWarn" class="dsp-warn" hidden><span id="dspWarnText"></span><button type="button" id="btnApoConfigurator" class="dsp-warn-btn" hidden data-i18n="engine.apoConfigurator" title="Jelöld be a listában ezt a hangeszközt, majd indítsd újra a gépet, amikor az Equalizer APO kéri." data-i18n-title="engine.apoConfiguratorTitle">Equalizer APO Configurator megnyitása</button></div>
+  <div id="dspWarn" class="dsp-warn" hidden><span id="dspWarnText"></span><button type="button" id="btnApoConfigurator" class="dsp-warn-btn" hidden data-i18n="engine.apoConfigurator">Equalizer APO Configurator megnyitása</button></div>
 
+  <!-- KÖZÉPSŐ MUNKATÉR: HANGZÁS / ZENETÁR / BORÍTÓ+LISTA NÉZET -->
+  <div class="workspace-stage" id="workspaceStage">
+    <div class="workspace-pane" id="soundWorkspace">
   <!-- ======================================================= -->
   <!-- 1. KESKENY FELSŐ 3D VÍZESÉS SÁV                         -->
   <!-- ======================================================= -->
@@ -1154,22 +1888,8 @@ if (!window.THREE) window.THREE = (function () {
         <div class="strip-badge" data-wf3d>
           Top-Strip 3D: <strong id="lblResolution">160 sáv × 120 lépcső</strong>
         </div>
-        <!-- EQ MÓDVÁLASZTÓ (EasyEffects / LSP: IIR, FIR, FFT, SPM) -->
-        <span class="ctrl-group"><span class="ctrl-label" data-i18n="strip.eqMode">EQ Mód:</span>
-        <select id="selectEqMode" class="mini-select">
-          <option value="0" selected>IIR</option>
-          <option value="1">FIR</option>
-          <option value="2">FFT</option>
-          <option value="3">SPM</option>
-        </select></span>
-        <!-- DECRAMPING (EasyEffects / LSP: 44,1 kHz-hez viszonyított túlmintavételezés) -->
-        <span class="ctrl-group"><span class="ctrl-label">Decramp:</span>
-        <select id="selectDecramp" class="mini-select" title="Decramping: túlmintavételezés IIR és FIR módban (44,1 kHz-hez viszonyítva)" data-i18n-title="strip.decrampTitle">
-          <option value="0" selected>Off</option>
-          <option value="1">x2</option>
-          <option value="2">x3</option>
-          <option value="3">x4</option>
-        </select></span>
+        <!-- Vízesés sáv összecsukása, ha csak az EQ görbén dolgozunk -->
+        <span class="ctrl-group"><button type="button" class="mini-btn" id="btnToggleWfCollapse" onclick="toggleWfStripCollapse()"><svg class="aq-icon aq-icon-sm" aria-hidden="true"><use href="#i-collapse"/></svg><span id="lblToggleWfCollapse" data-i18n="wf.toggleHide">Vízesés elrejtése</span></button></span>
         <!-- EQ és Konvolver bypass: az EQ és Modul sávokon érhető el tisztán, itt rejtve a tágas 3D látványért -->
         <span class="ctrl-group" style="display:none;"><button class="mini-btn" id="btnEqBypass">EQ: KI (Bypass)</button></span>
         <span class="ctrl-group" style="display:none;"><button class="mini-btn" id="btnConvBypass">Konvolver: KI (Bypass)</button></span>
@@ -1192,302 +1912,184 @@ if (!window.THREE) window.THREE = (function () {
   <!-- 2. ALSÓ RÉSZ: TELJES EASYFFECTS MODULKEZELŐ            -->
   <!-- ======================================================= -->
   <div class="main-content">
-    <div class="plugin-tabs">
-      <div class="tab-glider" id="tabGlider"></div>
-      <button class="tab-btn active" id="tabBtn-eq" onclick="switchTab('eq', this)"><span class="module-dot" id="dot-eq"></span>Equalizer</button>
-      <button class="tab-btn" id="tabBtn-crossfeed" onclick="switchTab('crossfeed', this)"><span class="module-dot" id="dot-crossfeed"></span>Crossfeed</button>
-      <button class="tab-btn" id="tabBtn-convolver" onclick="switchTab('convolver', this)"><span class="module-dot" id="dot-convolver"></span>Convolver</button>
-      <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter', this)"><span class="module-dot" id="dot-limiter"></span>Limiter</button>
-      <button class="tab-btn" id="tabBtn-bass" onclick="switchTab('bass', this)"><span class="module-dot" id="dot-bass"></span>Bass Enhancer</button>
-      <button class="tab-btn" id="tabBtn-mono" onclick="switchTab('mono', this)"><span class="module-dot" id="dot-mono"></span>Mono</button>
-      <button class="tab-btn" id="tabBtn-autogain" onclick="switchTab('autogain', this)"><span class="module-dot" id="dot-autogain"></span>Autogain</button>
-      <button class="tab-btn" id="tabBtn-magic" onclick="switchTab('magic', this)"><span class="module-dot" id="dot-magic"></span>Magic Touch</button>
+    <div class="dsp-header-row">
+      <div class="plugin-tabs">
+        <div class="tab-glider" id="tabGlider"></div>
+        <button class="tab-btn active" id="tabBtn-eq" onclick="switchTab('eq', this)"><span class="module-dot" id="dot-eq"></span>Equalizer</button>
+        <button class="tab-btn" id="tabBtn-crossfeed" onclick="switchTab('crossfeed', this)"><span class="module-dot" id="dot-crossfeed"></span>Crossfeed</button>
+        <button class="tab-btn" id="tabBtn-convolver" onclick="switchTab('convolver', this)"><span class="module-dot" id="dot-convolver"></span>Convolver</button>
+        <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter', this)"><span class="module-dot" id="dot-limiter"></span>Limiter</button>
+        <button class="tab-btn" id="tabBtn-bass" onclick="switchTab('bass', this)"><span class="module-dot" id="dot-bass"></span>Bass Enhancer</button>
+        <button class="tab-btn" id="tabBtn-mono" onclick="switchTab('mono', this)"><span class="module-dot" id="dot-mono"></span>Mono</button>
+        <button class="tab-btn" id="tabBtn-autogain" onclick="switchTab('autogain', this)"><span class="module-dot" id="dot-autogain"></span>Autogain</button>
+        <button class="tab-btn" id="tabBtn-magic" onclick="switchTab('magic', this)"><span class="module-dot" id="dot-magic"></span>Magic Touch</button>
+      </div>
+      <!-- DSP PROFILOK: közvetlenül a Hangzás modulfülei mellett, nem a Zenetár felett -->
+      <div id="presetBar" class="preset-bar" title="EQ profilok: AutoEq importkor és kézi beállításkor automatikusan mentődnek, újraindítás után is választhatók" data-i18n-title="preset.barTitle">
+        <span class="preset-lbl" data-i18n="preset.label">Profil:</span>
+        <select id="selectPreset" class="mini-select preset-select" onchange="onPresetSelected(this.value)"></select>
+        <button class="mini-btn" onclick="savePresetAs()" title="Mentés új profilként" data-i18n-title="preset.saveAs" data-i18n-aria-label="preset.saveAs"><svg class="aq-icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+        <button class="mini-btn" id="btnPresetRename" onclick="renamePreset()" title="Aktív profil átnevezése" data-i18n-title="preset.rename" data-i18n-aria-label="preset.rename"><svg class="aq-icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>
+        <button class="mini-btn" id="btnPresetDelete" onclick="deletePreset()" title="Aktív profil törlése" data-i18n-title="preset.delete" data-i18n-aria-label="preset.delete"><svg class="aq-icon" aria-hidden="true"><use href="#i-trash"/></svg></button>
+      </div>
     </div>
 
     <div class="tab-panes-viewport" id="tabPanesViewport">
-      <!-- 1. TAB: EQUALIZER (A MÁR KÉSZ 2D FÁZIS- ÉS GÖRBERAJZOLÓVAL) -->
+      <!-- 1. TAB: EQUALIZER (TISZTÁN SZÉTVÁLASZTOTT GRAFIKON FEJLÉC + GLOBÁLIS EQ SÁV + SÁVSZERKESZTŐ SÁV) -->
       <div class="tab-pane active" id="pane-eq">
       <div class="eq-canvas-wrapper">
+        <!-- GRAFIKON FEJLÉCSÁV (A2): Balra a görbekapcsolók, Jobbra a dB-skála és Zoom -->
+        <div class="eq-canvas-toolbar" id="eqCanvasToolbar">
+          <div class="eq-curves-group">
+            <button class="adw-btn active-opt" id="btnToggleEqCurve" data-curve style="--curve:#6FB7FF;" title="Kék EQ átviteli görbe megjelenítése / elrejtése (hangra nincs hatással)" data-i18n-title="eq.curveTitle" data-i18n="eq.curveBtn">EQ Görbe (dB)</button>
+            <button class="adw-btn active-opt" id="btnToggleDelay" data-curve style="--curve:#F2A65A;" title="Narancs csoportkésleltetés görbe megjelenítése / elrejtése (hangra nincs hatással)" data-i18n-title="eq.delayTitle" data-i18n="eq.delayBtn">Késleltetés (ms)</button>
+            <button class="adw-btn active-opt" id="btnTogglePhase" data-curve style="--curve:#5ED6A0;" title="Zöld szaggatott fázisgörbe megjelenítése / elrejtése (hangra nincs hatással)" data-i18n-title="eq.phaseTitle" data-i18n="eq.phaseBtn">Fázis (°)</button>
+          </div>
+          <div class="eq-zoom-overlay">
+            <span class="zoom-lbl" data-i18n="zoom.dbScale">dB skála:</span>
+            <select id="selectEqDbRange" class="ee-select" title="Függőleges (dB) nagyítás. Folyamatosan: Ctrl+Shift+görgő a kurzor magasságánál; fel-le eltolás: húzás (jobb gombbal mindig) vagy Alt+görgő" data-i18n-title="zoom.dbTitle">
+              <option value="1">±1 dB</option>
+              <option value="3">±3 dB</option>
+              <option value="6">±6 dB</option>
+              <option value="12">±12 dB</option>
+              <option value="24" selected>±24 dB</option>
+              <option value="36">±36 dB</option>
+              <option value="48">±48 dB</option>
+              <option value="custom" id="optEqDbCustom" hidden>±24 dB</option>
+            </select>
+            <button id="btnEqFitY" class="adw-btn zoom-btn" title="Görbére igazítás: a dB skála és a függőleges eltolás úgy áll be, hogy a teljes görbe és minden sáv látsszon" data-i18n-title="zoom.fitTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-fit"/></svg><span data-i18n="zoom.fit">Igazít</span></button>
+            <button id="btnEqAutoFit" class="adw-btn zoom-btn primary active" aria-pressed="true" title="Automatikus illesztés: importáláskor és profilbetöltéskor a függőleges nézet a görbéhez igazodik. Kézi nagyítás vagy eltolás kikapcsolja." data-i18n-title="zoom.autoTitle" data-i18n="zoom.auto">Auto</button>
+            <span class="zoom-divider"></span>
+            <span class="zoom-lbl">Zoom:</span>
+            <button id="btnEqZoomOut" class="adw-btn zoom-btn" title="Kicsinyítés" data-i18n-title="zoom.out" data-i18n-aria-label="zoom.out"><svg class="aq-icon" aria-hidden="true"><use href="#i-zoom-out"/></svg></button>
+            <input type="range" id="sliderEqZoom" min="100" max="500" value="100" step="10" class="ee-slider zoom-slider" title="Frekvencia zoom (1.0x - 5.0x)" data-i18n-title="zoom.sliderTitle">
+            <span id="lblEqZoom" class="zoom-val">1,0x</span>
+            <button id="btnEqZoomIn" class="adw-btn zoom-btn" title="Nagyítás" data-i18n-title="zoom.in" data-i18n-aria-label="zoom.in"><svg class="aq-icon" aria-hidden="true"><use href="#i-zoom-in"/></svg></button>
+            <button id="btnEqZoomReset" class="adw-btn zoom-btn" title="Nagyítás, eltolás és skála alaphelyzetbe (1.0x, ±24 dB, 0 dB középen)" data-i18n-title="zoom.resetTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-reset"/></svg><span data-i18n="zoom.reset">Reset</span></button>
+            <button id="btnEqExpandHeight" class="adw-btn zoom-btn" title="Grafikon megnövelése (nagy nézet)"><svg class="aq-icon" aria-hidden="true"><use href="#i-expand"/></svg></button>
+          </div>
+        </div>
         <canvas id="eqCanvas"></canvas>
       </div>
 
+      <!-- KÉT TISZTA, VÍZSZINTESEN ELVÁLASZTOTT SÁV AZ EQ ALATT (A1 & A3) -->
       <div class="eq-bottom-bar">
-        <div class="node-readout">
+        <!-- 1. SÁV: GLOBÁLIS EQ-LÁNC VEZÉRLŐK (Balra: AutoEq, EQ BE/KI, A/B, EQ Mód, Decramp; Jobbra: Preamp) -->
+        <div class="actions-group eq-global-row" id="eqGlobalRow">
+          <div class="eq-global-left">
+            <button class="adw-btn primary" id="btnImportAutoEq" title="AutoEq kereső és fájl / szöveges profil importáló" data-i18n-title="eq.importTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-headphones"/></svg><span data-i18n="eq.importBtn">AutoEq Kereső & Import</span></button>
+            <button class="adw-btn" id="btnEqBypassTab">EQ: KI (Bypass)</button>
+            <button class="adw-btn" id="btnEqAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
+            <span class="eq-bar-sep" aria-hidden="true"></span>
+            <div class="stat-group">
+              <span class="lbl" data-i18n="strip.eqMode">EQ Mód:</span>
+              <select id="selectEqMode" class="ee-select">
+                <option value="0" selected>IIR</option>
+                <option value="1">FIR</option>
+                <option value="2">FFT</option>
+                <option value="3">SPM</option>
+              </select>
+            </div>
+            <div class="stat-group">
+              <span class="lbl" data-i18n="eq.decramp">Decramp:</span>
+              <select id="selectDecramp" class="ee-select" title="Decramping: túlmintavételezés IIR és FIR módban (44,1 kHz-hez viszonyítva)" data-i18n-title="strip.decrampTitle">
+                <option value="0" selected>Off</option>
+                <option value="1">x2</option>
+                <option value="2">x3</option>
+                <option value="3">x4</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="eq-global-right">
+            <div class="stat-group">
+              <span class="lbl" style="font-weight:700; color:var(--aq-amber);">Preamp:</span>
+              <input type="number" id="inputPreamp" min="-36" max="12" step="0.1" value="0.0" class="ee-input band-input-num" style="color:var(--aq-amber);" oninput="setPreamp(this.value)" onchange="this.value = currentPreamp.toFixed(1)">
+              <small>dB</small>
+              <span id="badgePreampOrigin" class="status-badge optimal" style="font-size:var(--aq-fs-micro); padding:2px 8px; white-space:nowrap;" title="Preamp forrása és állapota" data-i18n-title="preamp.badgeTitle">0,0 dB (Tiszta)</span>
+              <button id="btnAutoPreamp" class="adw-btn danger-solid" style="display:none; padding:2px 8px; font-size:var(--aq-fs-micro); white-space:nowrap;" onclick="applyAutoPreamp()" title="Klippelés elleni automatikus előerősítés" data-i18n-title="preamp.autoBtnTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-warning"/></svg><span>Auto Preamp</span></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. SÁV: KIJELÖLT SÁV SZERKESZTŐ (Balra: Sáv #1 mezők; Jobbra: + Új Sáv és ✕ Törlés) -->
+        <div class="node-readout" id="eqBandRow">
           <div class="node-fields-group">
-            <div style="font-weight:700; white-space:nowrap;" id="selectedNodeTitle">Sáv #1</div>
+            <div id="selectedNodeTitle">Sáv #1</div>
             <span id="noBandHint" style="display:none; font-size:0.78rem; color:var(--ee-text-secondary); white-space:nowrap;" data-i18n="band.none">Nincs EQ sáv – „+ Új Sáv” gomb, vagy dupla kattintás a görbén</span>
 
-          <div class="stat-group band-field">
-            <span class="lbl" data-i18n="band.type">Típus:</span>
-            <select id="selectType" class="ee-select">
-              <option value="0">Off</option>
-              <option value="1">Bell</option>
-              <option value="2">Hi-pass</option>
-              <option value="3">Hi-shelf</option>
-              <option value="4">Lo-pass</option>
-              <option value="5">Lo-shelf</option>
-              <option value="6">Notch</option>
-              <option value="7">Resonance</option>
-              <option value="8">Allpass</option>
-              <option value="9">Bandpass</option>
-              <option value="10">Ladder-pass</option>
-              <option value="11">Ladder-rej</option>
-            </select>
+            <div class="stat-group band-field">
+              <span class="lbl" data-i18n="band.type">Típus:</span>
+              <select id="selectType" class="ee-select">
+                <option value="0">Off</option>
+                <option value="1">Bell</option>
+                <option value="2">Hi-pass</option>
+                <option value="3">Hi-shelf</option>
+                <option value="4">Lo-pass</option>
+                <option value="5">Lo-shelf</option>
+                <option value="6">Notch</option>
+                <option value="7">Resonance</option>
+                <option value="8">Allpass</option>
+                <option value="9">Bandpass</option>
+                <option value="10">Ladder-pass</option>
+                <option value="11">Ladder-rej</option>
+              </select>
+            </div>
+
+            <div class="stat-group band-field">
+              <span class="lbl" data-i18n="band.mode">Szűrő:</span>
+              <select id="selectBandMode" class="ee-select">
+                <option value="0">RLC (BT)</option>
+                <option value="1">RLC (MT)</option>
+                <option value="2">BWC (BT)</option>
+                <option value="3">BWC (MT)</option>
+                <option value="4">LRX (BT)</option>
+                <option value="5">LRX (MT)</option>
+                <option value="6">APO (DR)</option>
+              </select>
+            </div>
+
+            <div class="stat-group band-field">
+              <span class="lbl" data-i18n="band.slope">Meredekség:</span>
+              <select id="selectSlope" class="ee-select">
+                <option value="0">x1</option>
+                <option value="1">x2</option>
+                <option value="2">x3</option>
+                <option value="3">x4</option>
+              </select>
+            </div>
+
+            <div class="stat-group band-field">
+              <span class="lbl" data-i18n="band.freq">Frekv.:</span>
+              <input type="number" id="inputFreq" min="10" max="24000" step="1" class="ee-input band-input-freq">
+              <small>Hz</small>
+            </div>
+
+            <div class="stat-group band-field" id="grpGain">
+              <span class="lbl" data-i18n="band.gain">Erősítés:</span>
+              <input type="number" id="inputGain" min="-36" max="36" step="0.1" class="ee-input band-input-num" style="color:var(--aq-accent-2);">
+              <small>dB</small>
+            </div>
+
+            <div class="stat-group band-field">
+              <span class="lbl">Q:</span>
+              <input type="number" id="inputQ" min="0" max="100" step="0.01" class="ee-input band-input-num">
+            </div>
+
+            <div class="stat-group band-field" id="grpWidth">
+              <span class="lbl" data-i18n="band.width">Szélesség:</span>
+              <input type="number" id="inputWidth" min="0" max="12" step="0.01" class="ee-input band-input-num">
+              <small data-i18n="unit.oct">okt</small>
+            </div>
           </div>
 
-          <div class="stat-group band-field">
-            <span class="lbl" data-i18n="band.mode">Mód:</span>
-            <select id="selectBandMode" class="ee-select">
-              <option value="0">RLC (BT)</option>
-              <option value="1">RLC (MT)</option>
-              <option value="2">BWC (BT)</option>
-              <option value="3">BWC (MT)</option>
-              <option value="4">LRX (BT)</option>
-              <option value="5">LRX (MT)</option>
-              <option value="6">APO (DR)</option>
-            </select>
+          <div class="node-actions-group">
+            <button class="adw-btn" id="btnAddNode" title="Új EQ sáv (0 dB) a legnagyobb üres frekvenciasávba. Dupla kattintás a görbén: új sáv a kattintás helyén." data-i18n-title="eq.addBandTitle" data-i18n="eq.addBand">+ Új Sáv</button>
+            <button class="adw-btn danger" id="btnDeleteNode"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg><span data-i18n="band.delete">Törlés</span></button>
           </div>
-
-          <div class="stat-group band-field">
-            <span class="lbl" data-i18n="band.slope">Meredekség:</span>
-            <select id="selectSlope" class="ee-select">
-              <option value="0">x1</option>
-              <option value="1">x2</option>
-              <option value="2">x3</option>
-              <option value="3">x4</option>
-            </select>
-          </div>
-
-          <div class="stat-group band-field">
-            <span class="lbl" data-i18n="band.freq">Freq:</span>
-            <input type="number" id="inputFreq" min="10" max="24000" step="1" class="ee-input band-input-freq">
-            <small>Hz</small>
-          </div>
-
-          <div class="stat-group band-field" id="grpGain">
-            <span class="lbl" data-i18n="band.gain">Gain:</span>
-            <input type="number" id="inputGain" min="-36" max="36" step="0.1" class="ee-input band-input-num" style="color:var(--aq-accent-2);">
-            <small>dB</small>
-          </div>
-
-          <div class="stat-group band-field">
-            <span class="lbl">Q:</span>
-            <input type="number" id="inputQ" min="0" max="100" step="0.01" class="ee-input band-input-num">
-          </div>
-
-          <div class="stat-group band-field" id="grpWidth">
-            <span class="lbl" data-i18n="band.width">Szélesség:</span>
-            <input type="number" id="inputWidth" min="0" max="12" step="0.01" class="ee-input band-input-num">
-            <small data-i18n="unit.oct">okt</small>
-          </div>
-        </div>
-
-        <!-- DEDIKÁLT PREAMP ÉS TÖRLÉS CSOPORT (PINNED TO RIGHT) -->
-        <div class="node-actions-group">
-          <div class="stat-group preamp-divider">
-            <span class="lbl" style="font-weight:700; color:var(--aq-amber);">Preamp:</span>
-            <input type="number" id="inputPreamp" min="-36" max="12" step="0.1" value="0.0" class="ee-input band-input-num" style="color:var(--aq-amber);" oninput="setPreamp(this.value)" onchange="this.value = currentPreamp.toFixed(1)">
-            <small>dB</small>
-            <span id="badgePreampOrigin" class="status-badge optimal" style="font-size:var(--aq-fs-micro); padding:2px 8px; white-space:nowrap;" title="Preamp forrása és állapota" data-i18n-title="preamp.badgeTitle">0.0 dB (Tiszta)</span>
-            <button id="btnAutoPreamp" class="adw-btn danger-solid" style="display:none; padding:2px 8px; font-size:var(--aq-fs-micro); white-space:nowrap;" onclick="applyAutoPreamp()" title="Klippelés elleni automatikus előerősítés" data-i18n-title="preamp.autoBtnTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-warning"/></svg><span>Auto Preamp</span></button>
-          </div>
-
-          <button class="adw-btn danger" id="btnDeleteNode"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg><span data-i18n="band.delete">Törlés</span></button>
-        </div>
-      </div>
-
-    <div class="actions-group">
-      <!-- AUTOEQ IMPORT GOMB -->
-      <button class="adw-btn primary" id="btnImportAutoEq" title="AutoEq kereső és fájl / szöveges profil importáló" data-i18n-title="eq.importTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-headphones"/></svg><span data-i18n="eq.importBtn">AutoEq Kereső & Import</span></button>
-
-      <!-- ÚJ PONT HOZZÁADÁSA GOMB -->
-      <button class="adw-btn" id="btnAddNode" title="Új EQ sáv (0 dB) a legnagyobb üres frekvenciasávba. Dupla kattintás a görbén: új sáv a kattintás helyén." data-i18n-title="eq.addBandTitle" data-i18n="eq.addBand">+ Új Sáv</button>
-      <button class="adw-btn active-opt" id="btnToggleEqCurve" data-curve style="--curve:#6FB7FF;" title="Kék EQ átviteli görbe megjelenítése / elrejtése (hangra nincs hatással)" data-i18n-title="eq.curveTitle" data-i18n="eq.curveBtn">EQ Görbe (dB)</button>
-      <button class="adw-btn active-opt" id="btnToggleDelay" data-curve style="--curve:#F2A65A;" title="Narancs csoportkésleltetés görbe megjelenítése / elrejtése (hangra nincs hatással)" data-i18n-title="eq.delayTitle" data-i18n="eq.delayBtn">Késleltetés (ms)</button>
-      <button class="adw-btn active-opt" id="btnTogglePhase" data-curve style="--curve:#5ED6A0;" title="Zöld szaggatott fázisgörbe megjelenítése / elrejtése (hangra nincs hatással)" data-i18n-title="eq.phaseTitle" data-i18n="eq.phaseBtn">Fázis (°)</button>
-      <!-- EQ be/ki: ugyanaz, mint a vízesés melletti gomb (btnEqBypass); a két példány állapota mindig egyezik -->
-      <button class="adw-btn" id="btnEqBypassTab">EQ: KI (Bypass)</button>
-      <button class="adw-btn" id="btnEqAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
-      <!-- 2D ZOOM ESZKÖZSÁV: a grafikon alatti gombsorban, jobbra zárva -->
-      <div class="eq-zoom-overlay">
-        <span class="zoom-lbl" data-i18n="zoom.dbScale">dB skála:</span>
-        <select id="selectEqDbRange" class="ee-select" title="Függőleges (dB) nagyítás. Folyamatosan: Ctrl+Shift+görgő a kurzor magasságánál; fel-le eltolás: húzás (jobb gombbal mindig) vagy Alt+görgő" data-i18n-title="zoom.dbTitle">
-          <option value="1">±1 dB</option>
-          <option value="3">±3 dB</option>
-          <option value="6">±6 dB</option>
-          <option value="12">±12 dB</option>
-          <option value="24" selected>±24 dB</option>
-          <option value="36">±36 dB</option>
-          <option value="48">±48 dB</option>
-          <option value="custom" id="optEqDbCustom" hidden>±24 dB</option>
-        </select>
-        <button id="btnEqFitY" class="adw-btn zoom-btn" title="Görbére igazítás: a dB skála és a függőleges eltolás úgy áll be, hogy a teljes görbe és minden sáv látsszon" data-i18n-title="zoom.fitTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-fit"/></svg><span data-i18n="zoom.fit">Igazít</span></button>
-        <button id="btnEqAutoFit" class="adw-btn zoom-btn primary active" aria-pressed="true" title="Automatikus illesztés: importáláskor és profilbetöltéskor a függőleges nézet a görbéhez igazodik. Kézi nagyítás vagy eltolás kikapcsolja." data-i18n-title="zoom.autoTitle" data-i18n="zoom.auto">Auto</button>
-        <span class="zoom-divider"></span>
-        <span class="zoom-lbl">Zoom:</span>
-        <button id="btnEqZoomOut" class="adw-btn zoom-btn" title="Kicsinyítés" data-i18n-title="zoom.out" data-i18n-aria-label="zoom.out"><svg class="aq-icon" aria-hidden="true"><use href="#i-zoom-out"/></svg></button>
-        <input type="range" id="sliderEqZoom" min="100" max="500" value="100" step="10" class="ee-slider zoom-slider" title="Frekvencia zoom (1.0x - 5.0x)" data-i18n-title="zoom.sliderTitle">
-        <span id="lblEqZoom" class="zoom-val">1.0x</span>
-        <button id="btnEqZoomIn" class="adw-btn zoom-btn" title="Nagyítás" data-i18n-title="zoom.in" data-i18n-aria-label="zoom.in"><svg class="aq-icon" aria-hidden="true"><use href="#i-zoom-in"/></svg></button>
-        <button id="btnEqZoomReset" class="adw-btn zoom-btn" title="Nagyítás, eltolás és skála alaphelyzetbe (1.0x, ±24 dB, 0 dB középen)" data-i18n-title="zoom.resetTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-reset"/></svg><span data-i18n="zoom.reset">Reset</span></button>
-        <button id="btnEqExpandHeight" class="adw-btn zoom-btn" title="Grafikon megnövelése (nagy nézet)"><svg class="aq-icon" aria-hidden="true"><use href="#i-expand"/></svg></button>
-      </div>
-    </div>
-  </div>
-</div>
-
-  <!-- ZENETÁR MAPPÁK MODAL (2.X) -->
-  <div id="modalLibrary" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;" onclick="if(event.target===this)closeLibraryModal()">
-    <div class="aq-modal" style="width:580px; max-width:calc(100vw - 32px); max-height:90vh; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
-      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <svg class="aq-icon" aria-hidden="true" style="color:var(--aq-accent);"><use href="#i-folder"/></svg>
-          <span style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="library.modalTitle">Zenei mappák</span>
-        </div>
-        <button class="icon-btn" onclick="closeLibraryModal()" title="Bezárás" data-i18n-title="common.close" data-i18n-aria-label="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
-      </div>
-      <p class="module-desc" style="margin:0; font-size:var(--aq-fs-sub); color:var(--aq-text-2);" data-i18n="library.desc">Itt adhatod meg a zenetár gyökérmappáit. A motor ezeket a mappákat járja be zeneszámokért.</p>
-
-      <!-- Állapot / Statisztika sáv -->
-      <div id="libraryStatusBanner" style="display:flex; align-items:center; justify-content:space-between; background:var(--aq-input); border:1px solid var(--aq-line); border-radius:8px; padding:8px 12px; font-size:var(--aq-fs-body);">
-        <span id="libraryStatText" style="color:var(--aq-text-2);">0 szám, 0 album</span>
-        <span id="libraryScanIndicator" style="display:none; color:var(--aq-accent); font-weight:500;">
-          <span class="module-dot active" style="margin-right:6px;"></span><span data-i18n="library.scanningText">Bejárás...</span>
-        </span>
-      </div>
-
-      <!-- Mappák listája -->
-      <div style="display:flex; flex-direction:column; gap:6px; flex:1; min-height:100px; max-height:220px; overflow-y:auto; padding-right:4px;">
-        <div id="libraryRootsEmpty" style="display:none; font-size:var(--aq-fs-body); color:var(--aq-text-2); font-style:italic; padding:12px 0; text-align:center;" data-i18n="library.emptyList">Nincs egyéni mappa megadva (alapértelmezett Zene mappa).</div>
-        <div id="libraryRootsList" style="display:flex; flex-direction:column; gap:6px;"></div>
-      </div>
-
-      <!-- Új mappa hozzáadása -->
-      <div style="display:flex; gap:8px; align-items:center;">
-        <input type="text" id="inputNewLibraryRoot" class="ee-input" style="flex:1;" data-i18n-placeholder="library.addPathPlaceholder" placeholder="Mappa útvonala (pl. D:\Zene vagy /home/felhasznalo/Music)" onkeydown="if(event.key==='Enter')addLibraryRoot();">
-        <button class="mini-btn" onclick="addLibraryRoot()" data-i18n="library.btnAdd">Hozzáadás</button>
-      </div>
-      <div class="aq-note" style="font-size:var(--aq-fs-micro); color:var(--aq-text-2); padding:8px 12px;" data-i18n="library.defaultNote">Ha a lista üres, a rendszer alapértelmezett Zene mappa van érvényben.</div>
-
-      <!-- Alsó gombok -->
-      <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--aq-line); padding-top:12px; margin-top:4px;">
-        <button class="mini-btn" id="btnLibraryRescan" onclick="requestLibraryRescan()" title="Kézi újrabejárás indítása" data-i18n-title="library.btnRescan" data-i18n="library.btnRescan">Újrabejárás</button>
-        <div style="display:flex; gap:8px;">
-          <button class="adw-btn primary" id="btnLibrarySave" onclick="saveLibraryRoots()" data-i18n="library.btnSave">Mentés</button>
-          <button class="adw-btn" onclick="closeLibraryModal()" data-i18n="common.close">Bezárás</button>
         </div>
       </div>
     </div>
-  </div>
-
-  <!-- AUTOEQ ÉS SQUIGLINK PROFIL IMPORTÁLÓ ÉS ONLINE KERESŐ MODAL -->
-  <div id="modalBurnIn" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;">
-  <div class="aq-modal" style="width:560px; max-width:calc(100vw - 32px); display:flex; flex-direction:column; gap:14px;">
-    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
-      <span style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="burnin.title">Burn-in (fejhallgató-bejárató)</span>
-      <button class="icon-btn" onclick="closeBurnIn()" title="Bezárás" data-i18n-title="common.close" data-i18n-aria-label="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
-    </div>
-    <p class="module-desc" data-i18n="burnin.desc">Rózsaszín, barna és fehér zaj váltakozva, 20 Hz-es felüláteresztővel és 10 másodperces be- és kifutással. Négyszögjel nincs benne.</p>
-    <div class="aq-note" style="font-size:0.78rem; color:var(--aq-text-2);" data-i18n="burnin.warning">Az EQ, a Konvolver és minden további modul burn-in alatt kikapcsol, a futás után visszaáll. A hangerőt az eszközön állítsd alacsonyra. Nem vállalunk garanciát az esetleges károkért.</div>
-    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-      <span style="font-size:0.85rem;" data-i18n="burnin.duration">Időtartam:</span>
-      <select id="selBurnIn" class="mini-select"></select>
-      <button class="adw-btn primary" id="btnBurnInStart" onclick="burnInToggle()" data-i18n="burnin.start">Indítás</button>
-    </div>
-    <div id="burnInStatus" style="font-size:0.85rem; color:var(--aq-text-2); min-height:1.2em;"></div>
-  </div>
-</div>
-<div id="modalImport" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;">
-    <div class="aq-modal" style="width:650px; max-width:calc(100vw - 32px); max-height:90vh; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
-      
-      <!-- Modál Fejléc -->
-      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <svg class="aq-icon aq-icon-lg" aria-hidden="true"><use href="#i-headphones"/></svg><span style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="imp.title">AutoEq & Profil Importáló</span>
-          <span class="status-badge optimal" style="font-size:0.68rem;" data-i18n="imp.badge">Hivatalos AutoEq GitHub & Manuális Profilok</span>
-        </div>
-        <button class="icon-btn" onclick="closeImportModal()" title="Bezárás" data-i18n-title="common.close" data-i18n-aria-label="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
-      </div>
-
-      <!-- Modál Fülválasztó -->
-      <div style="display:flex; gap:10px; border-bottom:1px solid var(--aq-line); padding-bottom:2px;">
-        <button class="modal-tab-btn active" id="tabBtnOnline" onclick="switchModalTab('online')"><svg class="aq-icon" aria-hidden="true"><use href="#i-globe"/></svg><span data-i18n="imp.tabOnline">AutoEq Fejhallgató Kereső (8 850+ modell)</span></button>
-        <button class="modal-tab-btn" id="tabBtnManual" onclick="switchModalTab('manual')"><svg class="aq-icon" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="imp.tabManual">Kézi Fájl / Szöveg Import (Squiglink, REW, APO)</span></button>
-      </div>
-
-      <!-- 1. BELSŐ TAB: ONLINE FEJHALLGATÓ KERESŐ -->
-      <div id="modalTabOnline" style="display:flex; flex-direction:column; gap:10px; flex:1; overflow:hidden;">
-        <!-- Keresősáv és Forrás Szűrő -->
-        <div style="display:flex; gap:8px;">
-          <input type="text" id="headphoneSearchInput" placeholder="Írd be a típust (pl. HD 600, Sundara, Chu, XM4, DT 770, Zero:RED)..." data-i18n-placeholder="imp.searchPh" class="ee-input search-input" style="flex:1;" oninput="filterHeadphones(this.value)">
-          <select id="headphoneSourceFilter" class="ee-select" style="font-size:0.75rem;" onchange="filterHeadphones(document.getElementById('headphoneSearchInput').value)">
-            <option value="all" data-i18n="imp.srcAll">Minden forrás</option>
-            <option value="autoeq">AutoEq (oratory1990 / Harman)</option>
-            <option value="squig" data-i18n="imp.srcSquig">Squiglink (Crinacle / Reviewerek)</option>
-          </select>
-        </div>
-
-        <div style="font-size:0.73rem; color:var(--aq-text-2); display:flex; justify-content:space-between; align-items:center;">
-          <span data-i18n="imp.filterNote">Találatok valós idejű szűrése a beépített indexből és közösségi repókból:</span>
-          <span id="lblResultCount" style="color:var(--aq-accent-2); font-weight:600;"></span>
-        </div>
-
-        <!-- Találati lista doboz -->
-        <div id="headphoneSearchResults" style="display:flex; flex-direction:column; gap:8px; max-height:270px; overflow-y:auto; padding-right:4px;">
-          <!-- Dinamikus kártyák JavaScriptből -->
-        </div>
-
-        <!-- Intelligens Preamp Garancia Info -->
-        <div class="aq-note" style="padding:10px 12px; font-size:0.74rem; display:flex; align-items:center; gap:10px;">
-          <svg class="aq-icon aq-icon-lg aq-icon-ok" aria-hidden="true"><use href="#i-shield"/></svg>
-          <div>
-            <strong style="color:var(--aq-success);" data-i18n="imp.zeroDouble">Zéró Dupla-Preamp Védelem:</strong>
-            <span data-i18n="imp.zeroDoubleText">Az adatbázisból beemelt gyári Preamp értéket közvetlenül állítjuk be. A rendszer NEM von le mégegyszer kiemelési kompenzációt!</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 2. BELSŐ TAB: SZÖVEG / FÁJL IMPORT -->
-      <div id="modalTabManual" style="display:none; flex-direction:column; gap:10px; flex:1; min-height:0; overflow-y:auto; padding-right:4px;">
-        <div class="aq-note" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px;">
-          <span style="font-size:0.75rem; color:var(--aq-text-2);" data-i18n="imp.loadFile">Fájl betöltése számítógépről (.txt / .csv):</span>
-          <label class="adw-btn" style="cursor:pointer; font-size:0.75rem; padding:4px 10px;">
-            <svg class="aq-icon" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="imp.browse">Fájl / Mappa Tallózása...</span>
-            <input type="file" id="fileEqUpload" accept=".txt,.csv,.wav,.irs" multiple style="display:none;" onchange="handleFileSelect(event)">
-          </label>
-          <label class="adw-btn" style="cursor:pointer; font-size:0.75rem; padding:4px 10px;">
-            <svg class="aq-icon" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="imp.addFolder">Mappa hozzáadása</span>
-            <input type="file" id="folderImportInput" webkitdirectory multiple style="display:none;" onchange="handleImportFiles([...this.files]); this.value='';">
-          </label>
-        </div>
-
-        <div id="folderImportBox" class="aq-note" style="display:none; flex-direction:column; gap:6px; padding:10px 12px; font-size:0.75rem;"></div>
-
-        <div id="lblDetectedFormat" style="font-size:0.72rem; color:var(--aq-accent-2); font-weight:600; display:none;">
-          <span data-i18n="imp.detected">Észlelt formátum:</span> <span id="detectedFormatName"></span>
-        </div>
-
-        <textarea id="txtAutoEqInput" class="ee-input" style="font-family:var(--aq-mono); font-size:0.78rem; padding:10px 12px; height:120px; resize:none;" data-i18n-placeholder="imp.textPh" placeholder="Vagy illeszd be ide közvetlenül a szöveget...
-Preamp: -6.2 dB
-Filter 1: ON PK Fc 65 Hz Gain 5.8 dB Q 1.41
-Filter 2: ON PK Fc 120 Hz Gain -8.5 dB Q 4.20
-Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
-
-        <div class="aq-note" style="padding:10px 12px; font-size:0.74rem; display:flex; flex-direction:column; gap:3px;">
-          <div style="color:var(--aq-success); font-weight:600; display:flex; align-items:center; gap:6px;"><svg class="aq-icon" aria-hidden="true"><use href="#i-check"/></svg><span data-i18n="imp.smartTitle">Intelligens előerősítés (Preamp):</span></div>
-          <div data-i18n-html="imp.smart1">• <strong>Ha a fájlban van Preamp:</strong> Pontosan azt használja, nincs dupla levonás!</div>
-          <div data-i18n-html="imp.smart2">• <strong>Ha a fájlban nincs Preamp:</strong> A <em>teljes eredő EQ-görbe</em> csúcsából számolja (az átfedő sávok összegét is figyelembe véve), kis tartalékkal.</div>
-          <div data-i18n-html="imp.smart3">• <strong>Limiter:</strong> negatív preamp esetén automatikusan bekapcsol (-1,0 dB küszöb, True Peak túlmintavétel), és elkapja a mintaközi csúcsokat.</div>
-        </div>
-
-        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:2px;">
-          <button class="adw-btn" onclick="closeImportModal()" data-i18n="common.cancel">Mégse</button>
-          <button class="adw-btn primary" onclick="processAutoEqImport()" data-i18n="imp.create">Profil Létrehozása & Alkalmazás</button>
-        </div>
-      </div>
-
-    </div>
-  </div>
 
     <!-- 1.5. TAB: CROSSFEED (FEJHALLGATÓ TÉRHATÁS SZIMULÁTOR) -->
     <div class="tab-pane" id="pane-crossfeed">
@@ -1695,9 +2297,234 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
       </div>
     </div>
     </div> <!-- /tab-panes-viewport -->
+    <!-- Jobb alsó lejátszási lista gombra kattintva: az alsó fázis/EQ grafikon helyén megjelenő lejátszási lista -->
+    <div id="aqInlineQueuePane" class="inline-queue-pane" hidden></div>
 
+  </div> <!-- /main-content -->
+  </div> <!-- /soundWorkspace -->
+  <!-- Bal alsó kis borítóképre kattintva: konfigurációmentes nagy borítókép + lejátszási lista nézet -->
+  <div id="aqCoverView" class="workspace-pane cover-listening-view" hidden></div>
+  </div> <!-- /workspaceStage -->
+
+  <!-- ZENETÁR MAPPÁK MODAL (2.X) -->
+  <div id="modalLibrary" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;" onclick="if(event.target===this)closeLibraryModal()">
+    <div class="aq-modal" style="width:580px; max-width:calc(100vw - 32px); max-height:90vh; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <svg class="aq-icon" aria-hidden="true" style="color:var(--aq-accent);"><use href="#i-folder"/></svg>
+          <span style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="library.modalTitle">Zenei mappák</span>
+        </div>
+        <button class="icon-btn" onclick="closeLibraryModal()" title="Bezárás" data-i18n-title="common.close" data-i18n-aria-label="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+      <p class="module-desc" style="margin:0; font-size:var(--aq-fs-sub); color:var(--aq-text-2);" data-i18n="library.desc">Itt adhatod meg a zenetár gyökérmappáit. A motor ezeket a mappákat járja be zeneszámokért.</p>
+
+      <!-- Állapot / Statisztika sáv -->
+      <div id="libraryStatusBanner" style="display:flex; align-items:center; justify-content:space-between; background:var(--aq-input); border:1px solid var(--aq-line); border-radius:8px; padding:8px 12px; font-size:var(--aq-fs-body);">
+        <span id="libraryStatText" style="color:var(--aq-text-2);">0 szám, 0 album</span>
+        <span id="libraryScanIndicator" style="display:none; color:var(--aq-accent); font-weight:500;">
+          <span class="module-dot active" style="margin-right:6px;"></span><span data-i18n="library.scanningText">Bejárás...</span>
+        </span>
+      </div>
+
+      <!-- Mappák listája -->
+      <div style="display:flex; flex-direction:column; gap:6px; flex:1; min-height:100px; max-height:220px; overflow-y:auto; padding-right:4px;">
+        <div id="libraryRootsEmpty" style="display:none; font-size:var(--aq-fs-body); color:var(--aq-text-2); font-style:italic; padding:12px 0; text-align:center;" data-i18n="library.emptyList">Nincs egyéni mappa megadva (alapértelmezett Zene mappa).</div>
+        <div id="libraryRootsList" style="display:flex; flex-direction:column; gap:6px;"></div>
+      </div>
+
+      <!-- Új mappa hozzáadása (Tallózás, Fájlok, Beillesztés vágólapról, Kézi útvonal) -->
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <input type="text" id="inputNewLibraryRoot" class="ee-input" style="flex:1; min-width:220px;" data-i18n-placeholder="library.addPathPlaceholder" placeholder="Mappa útvonala (pl. D:\Zene vagy /home/felhasznalo/Music)" onkeydown="if(event.key==='Enter')addLibraryRoot();">
+          <button type="button" class="mini-btn" onclick="pasteLibraryRootPath()" title="Mappa- vagy fájlútvonal beillesztése a vágólapról" data-i18n-title="library.btnPasteTitle">
+            <svg class="aq-icon aq-icon-sm" aria-hidden="true"><use href="#i-plus"/></svg>
+            <span data-i18n="library.btnPaste">Beillesztés</span>
+          </button>
+          <button type="button" class="mini-btn" onclick="addLibraryRoot()" data-i18n="library.btnAdd">Hozzáadás</button>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button type="button" class="adw-btn primary" onclick="browseLibraryFolder()" title="Zenei mappa tallózása a gépen" data-i18n-title="library.btnBrowseFolderTitle">
+            <svg class="aq-icon aq-icon-sm" aria-hidden="true"><use href="#i-folder"/></svg>
+            <span data-i18n="library.btnBrowseFolder">Mappa tallózása…</span>
+          </button>
+          <button type="button" class="adw-btn" onclick="browseLibraryAudioFiles()" title="Zenefájl tallózása (a szülőmappát automatikusan felveszi)" data-i18n-title="library.btnBrowseFilesTitle">
+            <svg class="aq-icon aq-icon-sm" aria-hidden="true"><use href="#i-file"/></svg>
+            <span data-i18n="library.btnBrowseFiles">Fájl tallózása…</span>
+          </button>
+        </div>
+      </div>
+      <div class="aq-note" style="font-size:var(--aq-fs-micro); color:var(--aq-text-2); padding:8px 12px;" data-i18n="library.defaultNote">Ha a lista üres, a rendszer alapértelmezett Zene mappa van érvényben.</div>
+
+      <!-- Alsó gombok -->
+      <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--aq-line); padding-top:12px; margin-top:4px;">
+        <button class="mini-btn" id="btnLibraryRescan" onclick="requestLibraryRescan()" title="Kézi újrabejárás indítása" data-i18n-title="library.btnRescan" data-i18n="library.btnRescan">Újrabejárás</button>
+        <div style="display:flex; gap:8px;">
+          <button class="adw-btn primary" id="btnLibrarySave" onclick="saveLibraryRoots()" data-i18n="library.btnSave">Mentés</button>
+          <button class="adw-btn" onclick="closeLibraryModal()" data-i18n="common.close">Bezárás</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ESZKÖZPÁROSÍTÁSI JÓVÁHAGYÁS MODAL (2.X - 8c) -->
+  <div id="modalPairRequest" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:1000; align-items:center; justify-content:center;" onclick="if(event.target===this)rejectCurrentPairRequest()">
+    <div class="aq-modal" style="width:480px; max-width:calc(100vw - 32px); display:flex; flex-direction:column; gap:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <svg class="aq-icon" aria-hidden="true" style="color:var(--aq-accent);"><use href="#i-phone"/></svg>
+          <span style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="pair.modalTitle">Új eszköz párosítási kérelme</span>
+        </div>
+        <button class="icon-btn" onclick="rejectCurrentPairRequest()" title="Bezárás" data-i18n-title="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+
+      <p class="module-desc" style="margin:0; font-size:var(--aq-fs-sub); color:var(--aq-text-2);" data-i18n="pair.desc">Egy távoli eszköz csatlakozni szeretne az Aqulify motorhoz vezérlés és zenelejátszás céljából.</p>
+
+      <!-- Készülék kártya -->
+      <div style="display:flex; flex-direction:column; gap:10px; background:var(--aq-input); border:1px solid var(--aq-line); border-radius:8px; padding:12px 14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:var(--aq-fs-body); color:var(--aq-text-2);" data-i18n="pair.device">Eszköz:</span>
+          <span id="pairReqDeviceName" style="font-size:var(--aq-fs-body); font-weight:600; color:var(--aq-text);">–</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:var(--aq-fs-body); color:var(--aq-text-2);" data-i18n="pair.ip">Hálózati cím:</span>
+          <span id="pairReqDeviceIp" style="font-size:var(--aq-fs-body); font-family:monospace; color:var(--aq-text-2);">–</span>
+        </div>
+        <div id="pairReqClientRow" style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:var(--aq-fs-body); color:var(--aq-text-2);" data-i18n="pair.clientLabel">Alkalmazás:</span>
+          <span id="pairReqClientBadge" style="font-size:var(--aq-fs-sub); font-weight:600; padding:2px 8px; border-radius:4px; background:var(--aq-accent-soft); color:var(--aq-accent); border:1px solid var(--aq-line);" data-i18n="pair.clientVerified">📱 Aqulify Remote (Hitelesített mobil app)</span>
+        </div>
+      </div>
+
+      <!-- Visszaszámláló sáv és szöveg -->
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:var(--aq-fs-sub); color:var(--aq-text-2);">
+          <span data-i18n="pair.expiresIn">A kérelem lejár:</span>
+          <span id="pairReqTimer" style="font-weight:600; font-family:monospace; color:var(--aq-accent);">45 s</span>
+        </div>
+        <div style="width:100%; height:4px; background:var(--aq-line); border-radius:2px; overflow:hidden;">
+          <div id="pairReqProgress" style="width:100%; height:100%; background:var(--aq-accent); transition:width 1s linear;"></div>
+        </div>
+      </div>
+
+      <!-- Gombok -->
+      <div style="display:flex; justify-content:flex-end; gap:10px; border-top:1px solid var(--aq-line); padding-top:14px; margin-top:2px;">
+        <button class="adw-btn" id="btnPairReject" onclick="rejectCurrentPairRequest()" data-i18n="pair.btnReject">Elutasítás</button>
+        <button class="adw-btn primary" id="btnPairApprove" onclick="approveCurrentPairRequest()" data-i18n="pair.btnApprove">Engedélyezés</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUTOEQ ÉS SQUIGLINK PROFIL IMPORTÁLÓ ÉS ONLINE KERESŐ MODAL -->
+  <div id="modalBurnIn" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;">
+  <div class="aq-modal" style="width:560px; max-width:calc(100vw - 32px); display:flex; flex-direction:column; gap:14px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
+      <span style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="burnin.title">Burn-in (fejhallgató-bejárató)</span>
+      <button class="icon-btn" onclick="closeBurnIn()" title="Bezárás" data-i18n-title="common.close" data-i18n-aria-label="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+    <p class="module-desc" data-i18n="burnin.desc">Rózsaszín, barna és fehér zaj váltakozva, 20 Hz-es felüláteresztővel és 10 másodperces be- és kifutással. Négyszögjel nincs benne.</p>
+    <div class="aq-note" style="font-size:0.78rem; color:var(--aq-text-2);" data-i18n="burnin.warning">Az EQ, a Konvolver és minden további modul burn-in alatt kikapcsol, a futás után visszaáll. A hangerőt az eszközön állítsd alacsonyra. Nem vállalunk garanciát az esetleges károkért.</div>
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span style="font-size:0.85rem;" data-i18n="burnin.duration">Időtartam:</span>
+      <select id="selBurnIn" class="mini-select"></select>
+      <button class="adw-btn primary" id="btnBurnInStart" onclick="burnInToggle()" data-i18n="burnin.start">Indítás</button>
+    </div>
+    <div id="burnInStatus" style="font-size:0.85rem; color:var(--aq-text-2); min-height:1.2em;"></div>
   </div>
 </div>
+<div id="modalImport" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;">
+    <div class="aq-modal" style="width:650px; max-width:calc(100vw - 32px); max-height:90vh; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+      
+      <!-- Modál Fejléc -->
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <svg class="aq-icon aq-icon-lg" aria-hidden="true"><use href="#i-headphones"/></svg><span style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="imp.title">AutoEq & Profil Importáló</span>
+          <span class="status-badge optimal" style="font-size:0.68rem;" data-i18n="imp.badge">Hivatalos AutoEq GitHub & Manuális Profilok</span>
+        </div>
+        <button class="icon-btn" onclick="closeImportModal()" title="Bezárás" data-i18n-title="common.close" data-i18n-aria-label="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+
+      <!-- Modál Fülválasztó -->
+      <div style="display:flex; gap:10px; border-bottom:1px solid var(--aq-line); padding-bottom:2px;">
+        <button class="modal-tab-btn active" id="tabBtnOnline" onclick="switchModalTab('online')"><svg class="aq-icon" aria-hidden="true"><use href="#i-globe"/></svg><span data-i18n="imp.tabOnline">AutoEq Fejhallgató Kereső (8 850+ modell)</span></button>
+        <button class="modal-tab-btn" id="tabBtnManual" onclick="switchModalTab('manual')"><svg class="aq-icon" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="imp.tabManual">Kézi Fájl / Szöveg Import (Squiglink, REW, APO)</span></button>
+      </div>
+
+      <!-- 1. BELSŐ TAB: ONLINE FEJHALLGATÓ KERESŐ -->
+      <div id="modalTabOnline" style="display:flex; flex-direction:column; gap:10px; flex:1; overflow:hidden;">
+        <!-- Keresősáv és Forrás Szűrő -->
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="headphoneSearchInput" placeholder="Írd be a típust (pl. HD 600, Sundara, Chu, XM4, DT 770, Zero:RED)..." data-i18n-placeholder="imp.searchPh" class="ee-input search-input" style="flex:1;" oninput="filterHeadphones(this.value)">
+          <select id="headphoneSourceFilter" class="ee-select" style="font-size:0.75rem;" onchange="filterHeadphones(document.getElementById('headphoneSearchInput').value)">
+            <option value="all" data-i18n="imp.srcAll">Minden forrás</option>
+            <option value="autoeq">AutoEq (oratory1990 / Harman)</option>
+            <option value="squig" data-i18n="imp.srcSquig">Squiglink (Crinacle / Reviewerek)</option>
+          </select>
+        </div>
+
+        <div style="font-size:0.73rem; color:var(--aq-text-2); display:flex; justify-content:space-between; align-items:center;">
+          <span data-i18n="imp.filterNote">Találatok valós idejű szűrése a beépített indexből és közösségi repókból:</span>
+          <span id="lblResultCount" style="color:var(--aq-accent-2); font-weight:600;"></span>
+        </div>
+
+        <!-- Találati lista doboz -->
+        <div id="headphoneSearchResults" style="display:flex; flex-direction:column; gap:8px; max-height:270px; overflow-y:auto; padding-right:4px;">
+          <!-- Dinamikus kártyák JavaScriptből -->
+        </div>
+
+        <!-- Intelligens Preamp Garancia Info -->
+        <div class="aq-note" style="padding:10px 12px; font-size:0.74rem; display:flex; align-items:center; gap:10px;">
+          <svg class="aq-icon aq-icon-lg aq-icon-ok" aria-hidden="true"><use href="#i-shield"/></svg>
+          <div>
+            <strong style="color:var(--aq-success);" data-i18n="imp.zeroDouble">Zéró Dupla-Preamp Védelem:</strong>
+            <span data-i18n="imp.zeroDoubleText">Az adatbázisból beemelt gyári Preamp értéket közvetlenül állítjuk be. A rendszer NEM von le mégegyszer kiemelési kompenzációt!</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. BELSŐ TAB: SZÖVEG / FÁJL IMPORT -->
+      <div id="modalTabManual" style="display:none; flex-direction:column; gap:10px; flex:1; min-height:0; overflow-y:auto; padding-right:4px;">
+        <div class="aq-note" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px;">
+          <span style="font-size:0.75rem; color:var(--aq-text-2);" data-i18n="imp.loadFile">Fájl betöltése számítógépről (.txt / .csv):</span>
+          <label class="adw-btn" style="cursor:pointer; font-size:0.75rem; padding:4px 10px;">
+            <svg class="aq-icon" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="imp.browse">Fájl / Mappa Tallózása...</span>
+            <input type="file" id="fileEqUpload" accept=".txt,.csv,.wav,.irs" multiple style="display:none;" onchange="handleFileSelect(event)">
+          </label>
+          <label class="adw-btn" style="cursor:pointer; font-size:0.75rem; padding:4px 10px;">
+            <svg class="aq-icon" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="imp.addFolder">Mappa hozzáadása</span>
+            <input type="file" id="folderImportInput" webkitdirectory multiple style="display:none;" onchange="handleImportFiles([...this.files]); this.value='';">
+          </label>
+        </div>
+
+        <div id="folderImportBox" class="aq-note" style="display:none; flex-direction:column; gap:6px; padding:10px 12px; font-size:0.75rem;"></div>
+
+        <div id="lblDetectedFormat" style="font-size:0.72rem; color:var(--aq-accent-2); font-weight:600; display:none;">
+          <span data-i18n="imp.detected">Észlelt formátum:</span> <span id="detectedFormatName"></span>
+        </div>
+
+        <textarea id="txtAutoEqInput" class="ee-input" style="font-family:var(--aq-mono); font-size:0.78rem; padding:10px 12px; height:120px; resize:none;" data-i18n-placeholder="imp.textPh" placeholder="Vagy illeszd be ide közvetlenül a szöveget...
+Preamp: -6.2 dB
+Filter 1: ON PK Fc 65 Hz Gain 5.8 dB Q 1.41
+Filter 2: ON PK Fc 120 Hz Gain -8.5 dB Q 4.20
+Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
+
+        <div class="aq-note" style="padding:10px 12px; font-size:0.74rem; display:flex; flex-direction:column; gap:3px;">
+          <div style="color:var(--aq-success); font-weight:600; display:flex; align-items:center; gap:6px;"><svg class="aq-icon" aria-hidden="true"><use href="#i-check"/></svg><span data-i18n="imp.smartTitle">Intelligens előerősítés (Preamp):</span></div>
+          <div data-i18n-html="imp.smart1">• <strong>Ha a fájlban van Preamp:</strong> Pontosan azt használja, nincs dupla levonás!</div>
+          <div data-i18n-html="imp.smart2">• <strong>Ha a fájlban nincs Preamp:</strong> A <em>teljes eredő EQ-görbe</em> csúcsából számolja (az átfedő sávok összegét is figyelembe véve), kis tartalékkal.</div>
+          <div data-i18n-html="imp.smart3">• <strong>Limiter:</strong> negatív preamp esetén automatikusan bekapcsol (-1,0 dB küszöb, True Peak túlmintavétel), és elkapja a mintaközi csúcsokat.</div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:2px;">
+          <button class="adw-btn" onclick="closeImportModal()" data-i18n="common.cancel">Mégse</button>
+          <button class="adw-btn primary" onclick="processAutoEqImport()" data-i18n="imp.create">Profil Létrehozása & Alkalmazás</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+</div> <!-- /ee-window -->
 
 <script>
 // =========================================================================
@@ -1755,6 +2582,9 @@ var aqLangUserSet = false;   // a felhasználó maga választotta-e (különben 
  * Nyelvváltás: a statikus szövegek, majd minden dinamikus felirat újrarajzolása.
  * persist: a felhasználó választotta (megjegyezzük, és a motor is megkapja a tálcamenühöz).
  */
+var aqNowPlaying = null;   // 2.x „most szól” sáv (gui_player.js); a betöltés végén jön létre
+var aqLibrary = null;      // 2.x zenetár nézet (gui_player.js, közös a telefonnal)
+var aqMainView = "sound";  // "sound": DSP-modulok, "library": zenetár
 function setLanguage(code, persist) {
   if (!AQ_LANGS.some(x => x[0] === code)) code = "en";
   aqLang = code;
@@ -1771,6 +2601,8 @@ function setLanguage(code, persist) {
   }
   applyI18nDom();
   if (typeof refreshDynamicTexts === "function") refreshDynamicTexts();
+  if (aqNowPlaying) aqNowPlaying.setLang(code);
+  if (aqLibrary) aqLibrary.setLang(code);
 }
 (function initLanguage() {
   let saved = null;
@@ -3370,7 +4202,7 @@ function eqOverlayBox() {
   const ov = document.querySelector(".eq-canvas-wrapper .eq-zoom-overlay");   // csak ha a grafikon fölött lebeg
   if (!ov) return null;
   const cr = eqCanvas.getBoundingClientRect(), o = ov.getBoundingClientRect();
-  if (!cr.width || !o.width) return null;
+  if (!cr.width || !o.width || o.bottom <= cr.top + 2) return null;
   const k = eqCanvas.width / cr.width;
   return { left: (o.left - cr.left) * k, right: (o.right - cr.left) * k, bottom: (o.bottom - cr.top) * k };
 }
@@ -3966,7 +4798,11 @@ function paintEq() {
   }
   // Ha valami nem fér a nézetbe, az „Igazít” gomb kiemelve jelzi, hogy egy kattintással minden látható lesz
   const fitBtn = document.getElementById("btnEqFitY");
-  if (fitBtn) fitBtn.classList.toggle("attn", eqOutOfView);
+  if (eqOutOfView && eqAutoFit && !window._inAutoFitPass) {
+    window._inAutoFitPass = true;
+    requestAnimationFrame(() => { try { if (eqAutoFit) fitEqDbView(); } finally { window._inAutoFitPass = false; } });
+  }
+  if (fitBtn) fitBtn.classList.toggle("attn", eqOutOfView && !eqAutoFit);
 
   // Zoom állapot jelzése a bal alsó sarokban ha nagyítva / eltolva van
   if (eqViewZoomed()) {
@@ -4105,7 +4941,47 @@ window.addEventListener("mouseup", () => {
 });
 eqCanvas.oncontextmenu = (e) => e.preventDefault();
 
+// Okos fókusz az EQ grafikonhoz: csak akkor nyeli el az egérgörgőt és állítja a Q-t / zoomot,
+// ha a felhasználó aktívan belekattintott a grafikonba. Sima átgörgetéskor a lap zavartalanul gördül tovább!
+let isEqCanvasFocused = false;
+const eqCanvasWrapper = document.querySelector(".eq-canvas-wrapper");
+
+eqCanvas.addEventListener("pointerdown", () => {
+  isEqCanvasFocused = true;
+  if (eqCanvasWrapper) eqCanvasWrapper.classList.add("canvas-focused");
+});
+
+if (eqCanvasWrapper) {
+  eqCanvasWrapper.addEventListener("mouseleave", () => {
+    if (!draggedNode && !isCanvasPanning) {
+      isEqCanvasFocused = false;
+      eqCanvasWrapper.classList.remove("canvas-focused");
+    }
+  });
+}
+
+document.addEventListener("pointerdown", (e) => {
+  if (eqCanvasWrapper && !eqCanvasWrapper.contains(e.target) && !isCanvasPanning && !draggedNode) {
+    isEqCanvasFocused = false;
+    eqCanvasWrapper.classList.remove("canvas-focused");
+  }
+});
+
+// Számbeviteli mezők védelme görgetés közben (átgörgetéskor ne ugorjanak el az értékek):
+document.addEventListener("wheel", (e) => {
+  const el = e.target;
+  if (el instanceof HTMLInputElement && el.type === "number") {
+    if (document.activeElement !== el) {
+      el.blur();
+    }
+  }
+}, { passive: true });
+
 eqCanvas.onwheel = (e) => {
+  const hasModifier = e.ctrlKey || e.altKey || e.shiftKey;
+  if (!hasModifier && !isEqCanvasFocused) {
+    return; // Szabad lapgörgetés engedélyezve, ha a grafikon nincs aktív fókuszban!
+  }
   e.preventDefault();
   const dir = wheelDir(e);
   if (!dir) return;
@@ -4282,13 +5158,17 @@ var preampBadgeState = { key: "preamp.clean", v: 0, kind: "optimal" };
 function setPreampBadge(key, v, kind) {
   preampBadgeState = { key, v, kind };
   renderPreampBadge();
+  if (typeof updateDbRangeSelect === "function") updateDbRangeSelect();
+  const zLbl = document.getElementById("lblEqZoom"); if (zLbl) zLbl.innerText = fmtNum(eqZoomX, 1) + "x";
+  if (typeof renderInlineQueue === "function") renderInlineQueue();
+  if (typeof renderCoverView === "function") renderCoverView();
 }
 function renderPreampBadge() {
   const badge = document.getElementById("badgePreampOrigin");
   if (!badge) return;
   const st = preampBadgeState;
   badge.className = "status-badge " + st.kind;
-  badge.innerText = t(st.key, { v: (st.key === "preamp.manual" && st.v >= 0 ? "+" : "") + Number(st.v).toFixed(1) });
+  badge.innerText = t(st.key, { v: (st.key === "preamp.manual" && st.v >= 0 ? "+" : "") + fmtNum(st.v, 1) });
 }
 function setPreamp(val) {
   autoPreampMode = false;   // kézi érték: amíg az EQ nem klippel, ez marad
@@ -5056,7 +5936,7 @@ function setEqZoom(val) {
   const sl = document.getElementById("sliderEqZoom");
   if (sl) { sl.value = Math.round(eqZoomX * 100); aqRangeFill(sl); }
   const lbl = document.getElementById("lblEqZoom");
-  if (lbl) lbl.innerText = eqZoomX.toFixed(1) + "x";
+  if (lbl) lbl.innerText = fmtNum(eqZoomX, 1) + "x";
   if (!isCanvasPanning) {
     eqCanvas.style.cursor = eqViewZoomed() ? 'grab' : 'crosshair';
   }
@@ -5081,7 +5961,7 @@ function updateDbRangeSelect() {
   if (preset) { custom.hidden = true; sel.value = preset.value; }
   else {
     custom.hidden = false;
-    custom.text = `±${eqDbRange < 10 ? eqDbRange.toFixed(1) : Math.round(eqDbRange)} dB`;
+    custom.text = `±${fmtNum(eqDbRange, eqDbRange < 10 ? 1 : 0)} dB`;
     sel.value = "custom";
   }
 }
@@ -5128,15 +6008,7 @@ updateEqAutoFitBtn();
 
 /** Az EQ gombsora egy sorban marad: ha nem fér el, fokozatosan tömörödik (.tight, .tighter); csak végső esetben tördel. */
 // (függvénydeklaráció: a renderAbButtons már a betöltés elején is hívhatja, ezért nem használ később létrejövő változót)
-function fitEqActionRow() {
-  const row = document.querySelector(".eq-bottom-bar .actions-group");
-  if (!row || !row.clientWidth) return;
-  row.classList.remove("tight", "tighter", "tightest", "wrap");
-  for (const cls of ["tight", "tighter", "tightest", "wrap"]) {
-    if (row.scrollWidth <= row.clientWidth + 1) return;
-    row.classList.add(cls);
-  }
-}
+function fitEqActionRow() { /* A1-A3: a két külön sáv és a grafikon fejlécsáv miatt soha nem rejtjük el a feliratokat */ }
 {
   // Csak a szélesség változása számít: a tördelés a magasságot változtatja, az nem indíthat újabb illesztést
   const bar = document.querySelector(".eq-bottom-bar");
@@ -5153,7 +6025,7 @@ function fitEqActionRow() {
   const sub = document.querySelector(".app-title"), span = sub && sub.firstElementChild;
   const fitSub = () => sub.classList.toggle("clipped", span.scrollWidth > span.clientWidth + 1);
   if (span && window.ResizeObserver) {
-    new ResizeObserver(fitSub).observe(sub);
+    new ResizeObserver(() => requestAnimationFrame(fitSub)).observe(sub);
     new MutationObserver(fitSub).observe(span, { childList: true, characterData: true, subtree: true });
     fitSub();
   }
@@ -6268,6 +7140,7 @@ function applyEngineState(st, fromSync) {
     if (st.initialized && Array.isArray(st.bands) && st.bands.length === nodes.length) lastSentEqSig = JSON.stringify(eqBandsPayload());
     updateEqUI();
     drawEq();
+    scheduleEqAutoFit();
     presetBaseSig = snapshotSig(eqSnapshot());   // a motor mentett sávjai nem „új” beállítás
   } finally {
     suppressEngineSync = false;
@@ -6431,6 +7304,27 @@ function initPipewireBridge() {
       try {
         const data = JSON.parse(evt.data);
         if (data && (data.type === "state" || data.type === "status" || data.type === "spectrum")) engineVerified = true;
+        if (aqNowPlaying && data) {
+          // a "state" részüzenetei (ir, sync) nem hordoznak képességeket: csak a caps-os állapot számít
+          if (data.type === "state" && Array.isArray(data.caps)) aqNowPlaying.onState(data);
+          else if (data.type === "status") aqNowPlaying.onStatus(data);
+          else if (data.type === "media_art" || data.type === "queue") aqNowPlaying.onMessage(data);
+        }
+        if (aqLibrary && data) {
+          if (data.type === "status") aqLibrary.onStatus(data);
+          else aqLibrary.onMessage(data);   // library_*, queue, playlist(s); a többit figyelmen kívül hagyja
+        }
+        if (data && data.type === "playlists" && Array.isArray(data.items)) {
+          playerPlaylists = data.items;
+          if (typeof renderInlineQueue === "function") renderInlineQueue();
+          if (typeof renderCoverView === "function") renderCoverView();
+        } else if (data && data.type === "library_art" && data.id && data.id === coverFallbackArtId) {
+          coverFallbackArtSrc = data.data ? `data:${data.mime || "image/jpeg"};base64,${data.data}` : "";
+          if (typeof renderCoverView === "function") renderCoverView();
+        } else if (data && data.type === "status" && data.playlists && data.playlists.rev !== playerPlaylistsRev) {
+          playerPlaylistsRev = data.playlists.rev;
+          if (isDesktopQueueOrCoverOpen()) sendPlayer({ type: "playlist_list" });
+        }
         if (data.type === "spectrum") {
           if (data.levels) {
             liveSpectrumLevels = data.f0 === undefined ? spectrumFromLogAxis(data.levels) : data.levels;
@@ -6484,6 +7378,7 @@ function initPipewireBridge() {
               engineEqResponseSig = null;   // sorszám nélküli (régebbi motor): a legutóbbi állapotnak vesszük
             }
             drawEq();   // csak rajzolás: változatlan sávoknál nem megy új kérés a motornak
+            scheduleEqAutoFit();
           }
         } else if (data.type === "status") {
           engineStatus = data;
@@ -6497,12 +7392,18 @@ function initPipewireBridge() {
           onLibraryDataReceived(data);
         } else if (data.type === "library_error") {
           onLibraryErrorReceived(data);
+        } else if (data.type === "pair_request") {
+          handlePairRequestReceived(data);
+        } else if (data.type === "pair_cancel") {
+          handlePairCancelReceived(data);
         }
       } catch (err) {}
     };
 
     pipewireWs.onclose = () => {
       isPipewireConnected = false;
+      if (aqNowPlaying) aqNowPlaying.onDisconnect();
+      closePairRequestModal();
       updateLibraryCaps(false);
       liveSpectrumLevels = null;
       engineStatus = null;
@@ -6851,6 +7752,10 @@ function refreshDynamicTexts() {
   if (res) res.innerText = t("strip.resolution", { bins: FREQ_BINS, steps: TIME_SLICES });
   if (btnEqExpandHeight) btnEqExpandHeight.title = isEqExpanded ? t("zoom.expandNormal") : t("zoom.expandBig");
   renderPreampBadge();
+  if (typeof updateDbRangeSelect === "function") updateDbRangeSelect();
+  const zLbl = document.getElementById("lblEqZoom"); if (zLbl) zLbl.innerText = fmtNum(eqZoomX, 1) + "x";
+  if (typeof renderInlineQueue === "function") renderInlineQueue();
+  if (typeof renderCoverView === "function") renderCoverView();
   Object.keys(CTL).forEach(id => setCtl(id, CTL[id].value));
   renderConvIrInfo();
   updateEngineBadge();
@@ -6875,6 +7780,10 @@ var lastLibraryData = null;
 function updateLibraryCaps(hasLib) {
   const btn = document.getElementById("btnLibraryRoots");
   if (btn) btn.style.display = hasLib ? "inline-flex" : "none";
+  const sw = document.getElementById("viewSwitch");
+  if (sw) sw.hidden = !hasLib;
+  if (hasLib && aqLibrary && aqMainView === "library") setMainView("library", false);   // (újra)csatlakozás után a zenetár frissül
+  if (!hasLib && aqMainView === "library") setMainView("sound", false);
   if (!hasLib) {
     const modal = document.getElementById("modalLibrary");
     if (modal && modal.style.display === "flex") closeLibraryModal();
@@ -7013,9 +7922,548 @@ function requestLibraryRescan() {
   }
 }
 
+// =========================================================================
+// ESZKÖZPÁROSÍTÁS (PUSH PROMPT JÓVÁHAGYÁS - 8c)
+// =========================================================================
+var currentPairRequest = null;
+var pairTimerInterval = null;
+
+function handlePairRequestReceived(data) {
+  if (!data || !data.requestId) return;
+  currentPairRequest = data;
+
+  const modal = document.getElementById("modalPairRequest");
+  if (!modal) return;
+
+  const nameEl = document.getElementById("pairReqDeviceName");
+  const ipEl = document.getElementById("pairReqDeviceIp");
+  const clientBadge = document.getElementById("pairReqClientBadge");
+  const timerEl = document.getElementById("pairReqTimer");
+  const progressEl = document.getElementById("pairReqProgress");
+
+  if (nameEl) nameEl.textContent = data.name || t("pair.defaultName");
+  if (ipEl) ipEl.textContent = data.ip || "–";
+
+  const isVerified = (data.client === "aqulify_remote" || data.tier === "paid");
+  if (clientBadge) {
+    clientBadge.textContent = isVerified ? t("pair.clientVerified") : t("pair.clientGeneric");
+    clientBadge.style.color = isVerified ? "var(--aq-accent)" : "var(--aq-text-2)";
+    clientBadge.style.background = isVerified ? "var(--aq-accent-soft)" : "var(--aq-input)";
+    clientBadge.style.borderColor = isVerified ? "var(--aq-line)" : "transparent";
+  }
+
+  let remaining = 45;
+  if (timerEl) timerEl.textContent = remaining + " s";
+  if (progressEl) progressEl.style.width = "100%";
+
+  if (pairTimerInterval) clearInterval(pairTimerInterval);
+  pairTimerInterval = setInterval(() => {
+    remaining--;
+    if (timerEl) timerEl.textContent = remaining + " s";
+    if (progressEl) progressEl.style.width = Math.max(0, (remaining / 45) * 100) + "%";
+    if (remaining <= 0) {
+      clearInterval(pairTimerInterval);
+      pairTimerInterval = null;
+      closePairRequestModal();
+      showToast(t("pair.timeoutToast"), 4000);
+      currentPairRequest = null;
+    }
+  }, 1000);
+
+  modal.style.display = "flex";
+}
+
+function closePairRequestModal() {
+  const modal = document.getElementById("modalPairRequest");
+  if (modal) modal.style.display = "none";
+  if (pairTimerInterval) {
+    clearInterval(pairTimerInterval);
+    pairTimerInterval = null;
+  }
+}
+
+function handlePairCancelReceived(data) {
+  if (currentPairRequest && (!data || !data.requestId || data.requestId === currentPairRequest.requestId)) {
+    closePairRequestModal();
+    showToast(t("pair.timeoutToast"), 4000);
+    currentPairRequest = null;
+  }
+}
+
+function approveCurrentPairRequest() {
+  if (!currentPairRequest) return;
+  const req = currentPairRequest;
+  currentPairRequest = null;
+  closePairRequestModal();
+  sendEngine({ type: "pair_approve", requestId: req.requestId, approve: true });
+  showToast(t("pair.approvedToast", { name: req.name || "" }), 5000);
+}
+
+function rejectCurrentPairRequest() {
+  if (!currentPairRequest) return;
+  const req = currentPairRequest;
+  currentPairRequest = null;
+  closePairRequestModal();
+  sendEngine({ type: "pair_approve", requestId: req.requestId, approve: false });
+  showToast(t("pair.rejectedToast"), 4000);
+}
+
+// =========================================================================
+// 2.x „MOST SZÓL” SÁV (gui_player.js, közös a telefonnal): a beépített lejátszó és a gépen szóló más lejátszó
+// vezérlése. A lejátszóparancsok a DSP-szinkron tiltásától (suppressEngineSync) függetlenül mennek.
+// =========================================================================
+function sendPlayer(obj) {
+  if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) pipewireWs.send(JSON.stringify(obj));
+}
+let playerPlaylists = [];
+let playerPlaylistsRev = -1;
+let activePlSourceId = "";
+let coverFallbackArtId = "";
+let coverFallbackArtSrc = "";
+
+function isDesktopQueueOrCoverOpen() {
+  const iq = document.getElementById("aqInlineQueuePane");
+  const cv = document.getElementById("aqCoverView");
+  return !!((iq && !iq.hidden) || (cv && !cv.hidden));
+}
+
+function fmtQueueDur(sec) {
+  const s = Math.max(0, Math.round(Number(sec) || 0));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return m + ":" + (r < 10 ? "0" + r : r);
+}
+
+function escHtml(str) {
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function buildPlaylistPillsHtml() {
+  if (!Array.isArray(playerPlaylists) || playerPlaylists.length === 0) return "";
+  return playerPlaylists.map(pl => {
+    const act = activePlSourceId === pl.id ? " primary" : "";
+    const safeId = escHtml(pl.id);
+    const safeName = escHtml(pl.name || "");
+    return `<button type="button" class="adw-btn${act}" style="height:26px; min-height:26px; padding:0 10px; font-size:0.76rem; white-space:nowrap;" onclick="playDesktopPlaylist('${safeId}')">${safeName}</button>`;
+  }).join("");
+}
+
+function playDesktopPlaylist(plId) {
+  if (!plId) return;
+  activePlSourceId = plId;
+  sendPlayer({ type: "queue_play", source: "playlist", id: plId });
+}
+
+function jumpDesktopQueueIndex(idx) {
+  sendPlayer({ type: "queue_jump", index: idx });
+}
+
+function toggleDesktopQueueShuffle() {
+  const snap = aqNowPlaying ? aqNowPlaying.getSnapshot() : null;
+  const cur = !!(snap && snap.queue && snap.queue.shuffle);
+  sendPlayer({ type: "queue_shuffle", on: !cur });
+}
+
+function cycleDesktopQueueRepeat() {
+  const snap = aqNowPlaying ? aqNowPlaying.getSnapshot() : null;
+  const cur = (snap && snap.queue && snap.queue.repeat) || "off";
+  const next = cur === "off" ? "all" : (cur === "all" ? "one" : "off");
+  sendPlayer({ type: "queue_repeat", mode: next });
+}
+
+function buildDesktopQueueRowsHtml(items, curIdx) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return `<div class="iq-empty">${escHtml(t("queue.empty"))}</div>`;
+  }
+  return items.map((tr, idx) => {
+    const isCur = idx === curIdx;
+    const title = escHtml(tr.title || "");
+    const meta = escHtml([tr.artist, tr.album].filter(Boolean).join(" • "));
+    const dur = tr.duration > 0 ? fmtQueueDur(tr.duration) : "";
+    return `<button type="button" class="iq-row${isCur ? " cur" : ""}" onclick="jumpDesktopQueueIndex(${idx})">
+      <span class="iq-num">${isCur ? "▶" : (idx + 1)}</span>
+      <span class="iq-main">${title}</span>
+      <span class="iq-meta">${meta}</span>
+      <span class="iq-dur">${dur}</span>
+    </button>`;
+  }).join("");
+}
+
+function renderInlineQueue() {
+  const pane = document.getElementById("aqInlineQueuePane");
+  if (!pane || pane.hidden) return;
+  const oldList = pane.querySelector(".iq-list");
+  const oldPills = pane.querySelector(".cover-pl-pills");
+  const savedScrollTop = oldList ? oldList.scrollTop : 0;
+  const savedPillsLeft = oldPills ? oldPills.scrollLeft : 0;
+  const snap = aqNowPlaying ? aqNowPlaying.getSnapshot() : { queue: null, queueItems: [] };
+  const q = snap.queue || {};
+  const items = Array.isArray(snap.queueItems) ? snap.queueItems : [];
+  const count = items.length || q.count || 0;
+  const shufCls = q.shuffle ? " primary" : "";
+  const rep = q.repeat || "off";
+  const repTxt = rep === "one" ? t("queue.repeatOne") : (rep === "all" ? t("queue.repeatAll") : t("queue.repeatOff"));
+  pane.innerHTML = `
+    <div class="iq-header">
+      <div class="iq-title-wrap">
+        <svg class="aq-icon" aria-hidden="true"><use href="#i-list"/></svg>
+        <span class="iq-title">${escHtml(t("queue.title"))}</span>
+        <span class="iq-count">(${escHtml(t("queue.tracksCount", { n: count }))})</span>
+      </div>
+      <div class="iq-actions">
+        <button type="button" class="adw-btn${shufCls}" onclick="toggleDesktopQueueShuffle()" style="height:28px; min-height:28px; padding:0 10px;">${escHtml(t("queue.shuffle"))}</button>
+        <button type="button" class="adw-btn${rep !== "off" ? " primary" : ""}" onclick="cycleDesktopQueueRepeat()" style="height:28px; min-height:28px; padding:0 10px;">${escHtml(repTxt)}</button>
+        <button type="button" class="adw-btn" id="btnBackToEqGraph" onclick="closeInlineQueue()" style="height:28px; min-height:28px; padding:0 12px;">
+          <svg class="aq-icon aq-icon-sm" aria-hidden="true"><use href="#i-impulse"/></svg>
+          <span>${escHtml(t("queue.backToEq"))}</span>
+        </button>
+      </div>
+    </div>
+    <div class="cover-pl-pills">${buildPlaylistPillsHtml()}</div>
+    <div class="iq-list">${buildDesktopQueueRowsHtml(items, typeof q.index === "number" ? q.index : -1)}</div>
+  `;
+  const newList = pane.querySelector(".iq-list");
+  const newPills = pane.querySelector(".cover-pl-pills");
+  if (newList && savedScrollTop > 0) newList.scrollTop = savedScrollTop;
+  if (newPills && savedPillsLeft > 0) newPills.scrollLeft = savedPillsLeft;
+}
+
+function closeInlineQueue() {
+  const iq = document.getElementById("aqInlineQueuePane");
+  const vp = document.getElementById("tabPanesViewport");
+  const qBtn = document.querySelector('.aqnp [data-k="queue"]');
+  if (iq && !iq.hidden) {
+    iq.hidden = true;
+    if (vp) vp.hidden = false;
+    if (qBtn) qBtn.classList.remove("on");
+    setTimeout(resizeAllViews, 20);
+  }
+}
+
+function toggleInlineQueue() {
+  const iq = document.getElementById("aqInlineQueuePane");
+  const vp = document.getElementById("tabPanesViewport");
+  const qBtn = document.querySelector('.aqnp [data-k="queue"]');
+  if (!iq || !vp) return;
+  if (aqMainView !== "sound") {
+    setMainView("sound", false);
+    iq.hidden = false;
+    vp.hidden = true;
+    sendPlayer({ type: "queue_get" });
+    sendPlayer({ type: "playlist_list" });
+    renderInlineQueue();
+    if (qBtn) qBtn.classList.add("on");
+    return;
+  }
+  const showQueue = iq.hidden;
+  iq.hidden = !showQueue;
+  vp.hidden = showQueue;
+  if (showQueue) {
+    sendPlayer({ type: "queue_get" });
+    sendPlayer({ type: "playlist_list" });
+    renderInlineQueue();
+  } else {
+    setTimeout(resizeAllViews, 20);
+  }
+  if (qBtn) qBtn.classList.toggle("on", showQueue);
+}
+
+function renderCoverView() {
+  const pane = document.getElementById("aqCoverView");
+  if (!pane || pane.hidden) return;
+  const oldList = pane.querySelector("#coverQueueList");
+  const oldPills = pane.querySelector(".cover-pl-pills");
+  const savedScrollTop = oldList ? oldList.scrollTop : 0;
+  const savedPillsLeft = oldPills ? oldPills.scrollLeft : 0;
+  const snap = aqNowPlaying ? aqNowPlaying.getSnapshot() : { media: null, artSrc: "", queue: null, queueItems: [] };
+  const m = (snap.media && snap.media.available) ? snap.media : null;
+  const q = snap.queue || {};
+  const items = Array.isArray(snap.queueItems) ? snap.queueItems : [];
+  const count = items.length || q.count || 0;
+  const curTrack = (!m && items.length > 0) ? (items[q.index >= 0 ? q.index : 0] || items[0]) : null;
+  if (!snap.artSrc && curTrack && curTrack.id && curTrack.id !== coverFallbackArtId) {
+    coverFallbackArtId = curTrack.id;
+    coverFallbackArtSrc = "";
+    sendPlayer({ type: "library_art", id: curTrack.id });
+  }
+  const title = m ? (m.title || m.app || t("queue.nothing")) : (curTrack ? (curTrack.title || t("queue.nothing")) : t("queue.nothing"));
+  const sub = m ? [m.artist, m.album].filter(Boolean).join(" — ") : (curTrack ? [curTrack.artist, curTrack.album].filter(Boolean).join(" — ") : "");
+  const shufCls = q.shuffle ? " primary" : "";
+  const rep = q.repeat || "off";
+  const repTxt = rep === "one" ? t("queue.repeatOne") : (rep === "all" ? t("queue.repeatAll") : t("queue.repeatOff"));
+  const effectiveArtSrc = snap.artSrc || coverFallbackArtSrc;
+  const artHtml = effectiveArtSrc
+    ? `<img id="coverHeroArt" src="${escHtml(effectiveArtSrc)}" alt="">`
+    : `<svg id="coverHeroArt" viewBox="0 0 24 24" width="128" height="128" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M10 17.5a2.5 2.5 0 1 1-2.5-2.5c.9 0 1.7.3 2.5.8V5l9-2v11.5a2.5 2.5 0 1 1-2.5-2.5c.9 0 1.7.3 2.5.8V7l-9 2"/></svg>`;
+
+  pane.innerHTML = `
+    <div class="cover-stage-grid">
+      <div class="cover-hero-col">
+        <div class="cover-hero-art-wrap">${artHtml}</div>
+        <div class="cover-hero-meta">
+          <div class="cover-hero-title" id="coverHeroTitle">${escHtml(title)}</div>
+          <div class="cover-hero-sub" id="coverHeroSub">${escHtml(sub)}</div>
+        </div>
+      </div>
+      <div class="cover-queue-col">
+        <div class="iq-header">
+          <div class="iq-title-wrap">
+            <svg class="aq-icon" aria-hidden="true"><use href="#i-list"/></svg>
+            <span class="iq-title">${escHtml(t("queue.title"))}</span>
+            <span class="iq-count">(${escHtml(t("queue.tracksCount", { n: count }))})</span>
+          </div>
+          <div class="iq-actions">
+            <button type="button" class="adw-btn${shufCls}" onclick="toggleDesktopQueueShuffle()" style="height:28px; min-height:28px; padding:0 10px;">${escHtml(t("queue.shuffle"))}</button>
+            <button type="button" class="adw-btn${rep !== "off" ? " primary" : ""}" onclick="cycleDesktopQueueRepeat()" style="height:28px; min-height:28px; padding:0 10px;">${escHtml(repTxt)}</button>
+          </div>
+        </div>
+        <div class="cover-pl-pills">${buildPlaylistPillsHtml()}</div>
+        <div class="iq-list" id="coverQueueList">${buildDesktopQueueRowsHtml(items, typeof q.index === "number" ? q.index : -1)}</div>
+      </div>
+    </div>
+  `;
+  const newList = pane.querySelector("#coverQueueList");
+  const newPills = pane.querySelector(".cover-pl-pills");
+  if (newList && savedScrollTop > 0) newList.scrollTop = savedScrollTop;
+  if (newPills && savedPillsLeft > 0) newPills.scrollLeft = savedPillsLeft;
+}
+
+function normalizePastedOrPickedPath(rawPath, treatAsFile) {
+  let s = String(rawPath || "").trim().replace(/^["']+|["']+$/g, "").trim();
+  if (!s) return "";
+  if (s.startsWith("file:///")) {
+    try { s = decodeURIComponent(s.slice(8)); } catch (e) { s = s.slice(8); }
+    if (!/^[A-Za-z]:/.test(s) && !s.startsWith("/")) s = "/" + s;
+    if (/^[A-Za-z]:\//.test(s)) s = s.replace(/\//g, "\\");
+  }
+  const hasAudioExt = /\.(flac|wav|wv|mp3|ogg|opus|m4a|aac|alac|aiff|aif|ape|dsf|dff)$/i.test(s);
+  if (treatAsFile || hasAudioExt) {
+    const lastSlash = Math.max(s.lastIndexOf("\\"), s.lastIndexOf("/"));
+    if (lastSlash > 0) {
+      s = s.slice(0, lastSlash);
+      if (/^[A-Za-z]:$/.test(s)) s += "\\";
+    }
+  }
+  return s;
+}
+
+function addAndSaveLibraryRootPath(rawPath, treatAsFile) {
+  const dir = normalizePastedOrPickedPath(rawPath, treatAsFile);
+  if (!dir) return false;
+  if (!libraryRoots.includes(dir)) {
+    libraryRoots.push(dir);
+    renderLibraryRootsList();
+  }
+  const input = document.getElementById("inputNewLibraryRoot");
+  if (input && input.value.trim()) input.value = "";
+  saveLibraryRoots();
+  return true;
+}
+
+async function pasteLibraryRootPath() {
+  const input = document.getElementById("inputNewLibraryRoot");
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.readText === "function") {
+      const txt = await navigator.clipboard.readText();
+      if (txt && txt.trim()) {
+        const lines = txt.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+        let added = false;
+        lines.forEach(line => { if (addAndSaveLibraryRootPath(line, false)) added = true; });
+        if (added) return;
+      }
+    }
+  } catch (e) {}
+  if (input) {
+    input.focus();
+    if (input.value.trim()) addAndSaveLibraryRootPath(input.value, false);
+  }
+}
+
+async function browseLibraryFolder() {
+  try {
+    if (typeof window.aetherPickFolder === "function") {
+      const picked = await window.aetherPickFolder();
+      if (picked && typeof picked === "string" && picked.trim()) {
+        addAndSaveLibraryRootPath(picked, false);
+      }
+      return;
+    }
+  } catch (e) {}
+  const p = prompt(t("library.promptFolderPath"), "");
+  if (p && p.trim()) addAndSaveLibraryRootPath(p, false);
+}
+
+async function browseLibraryAudioFiles() {
+  try {
+    if (typeof window.aetherPickAudioFile === "function") {
+      const picked = await window.aetherPickAudioFile();
+      if (picked && typeof picked === "string" && picked.trim()) {
+        addAndSaveLibraryRootPath(picked, true);
+      }
+      return;
+    }
+  } catch (e) {}
+  const p = prompt(t("library.promptFilePath"), "");
+  if (p && p.trim()) addAndSaveLibraryRootPath(p, true);
+}
+
+function toggleCoverView() {
+  if (aqMainView === "cover") {
+    setMainView(prevNonCoverView || "sound", false);
+  } else {
+    sendPlayer({ type: "queue_get" });
+    sendPlayer({ type: "playlist_list" });
+    setMainView("cover", false);
+  }
+}
+
+const eeWin = document.querySelector(".ee-window") || document.body;
+aqNowPlaying = window.AqNowPlaying ? window.AqNowPlaying({
+  send: sendPlayer,
+  root: eeWin.appendChild(Object.assign(document.createElement("div"), { id: "aqNowPlaying" })),
+  lang: aqLang,
+  onToggleQueue: toggleInlineQueue,
+  onToggleCover: toggleCoverView,
+  isQueueVisible: isDesktopQueueOrCoverOpen,
+  onUpdate: () => {
+    renderInlineQueue();
+    renderCoverView();
+  },
+  isBlocked: () => [...document.querySelectorAll('[id^="modal"]')]
+    .some(m => m.getClientRects().length > 0 && getComputedStyle(m).position === "fixed")
+}) : null;
+if (aqNowPlaying) {
+  document.querySelectorAll(".aqnp .aqnp-art").forEach(el => { el.title = t("cover.artTitle"); });
+}
+
+// 2.x ZENETÁR NÉZET: önálló munkatér (#aqLibraryView) a #workspaceStage-ben, a #soundWorkspace mellett
+(function initLibraryView() {
+  const stage = document.getElementById("workspaceStage");
+  if (!stage || !window.AqLibrary) return;
+  const view = document.createElement("div");
+  view.id = "aqLibraryView";
+  view.className = "workspace-pane library-view";
+  view.hidden = true;
+  stage.appendChild(view);
+  aqLibrary = window.AqLibrary({ send: sendPlayer, root: view, lang: aqLang, layout: "desktop", onOpenRoots: openLibraryModal });
+})();
+
+let mainViewAnimTimer = null;
+let prevNonCoverView = "sound";
+/** Hangzás (DSP), Zenetár vagy Nagy borítókép + lejátszási lista nézet: animált nézetváltás. */
+function setMainView(v, persist) {
+  if (!aqLibrary && v === "library") v = "sound";
+  const nextView = (v === "library" || v === "cover") ? v : "sound";
+  const prevView = aqMainView;
+  if (nextView === "sound" && (persist || prevView === "cover")) {
+    closeInlineQueue();
+  }
+  if (nextView !== "cover") prevNonCoverView = nextView;
+  aqMainView = nextView;
+
+  const soundPane = document.getElementById("soundWorkspace");
+  const libPane = document.getElementById("aqLibraryView");
+  const coverPane = document.getElementById("aqCoverView");
+  const panes = { sound: soundPane, library: libPane, cover: coverPane };
+
+  const sw = document.getElementById("viewSwitch");
+  if (sw) sw.setAttribute("data-active", nextView === "library" ? "library" : "sound");
+
+  [["btnViewSound", nextView === "sound"], ["btnViewLibrary", nextView === "library"]].forEach(([id, on]) => {
+    const b = document.getElementById(id);
+    if (b) { b.classList.toggle("active", on); b.setAttribute("aria-pressed", on ? "true" : "false"); }
+  });
+  const npBar = document.querySelector(".aqnp");
+  if (npBar) npBar.classList.toggle("cover-active", nextView === "cover");
+
+  if (persist && nextView !== "cover") {
+    try { localStorage.setItem("aqulify_main_view", nextView); } catch (e) {}
+  }
+
+  if (mainViewAnimTimer) { clearTimeout(mainViewAnimTimer); mainViewAnimTimer = null; }
+  const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const outPane = panes[prevView];
+  const inPane = panes[nextView];
+
+  if (!outPane || !inPane || prevView === nextView || !persist || reduceMotion) {
+    Object.entries(panes).forEach(([k, p]) => {
+      if (!p) return;
+      p.classList.remove("anim-out-left", "anim-out-right", "anim-in-from-left", "anim-in-from-right");
+      p.hidden = (k !== nextView);
+    });
+    if (nextView === "library" && aqLibrary) aqLibrary.show();
+    else if (nextView === "cover") renderCoverView();
+    else if (nextView === "sound") setTimeout(() => { resizeAllViews(); updateTabGlider(null, true); }, 20);
+    return;
+  }
+
+  const order = { sound: 0, library: 1, cover: 2 };
+  const goRight = (order[nextView] || 0) >= (order[prevView] || 0);
+  const outClass = goRight ? "anim-out-left" : "anim-out-right";
+  const inStartClass = goRight ? "anim-in-from-right" : "anim-in-from-left";
+
+  Object.entries(panes).forEach(([k, p]) => {
+    if (!p) return;
+    p.classList.remove("anim-out-left", "anim-out-right", "anim-in-from-left", "anim-in-from-right");
+    if (k !== prevView && k !== nextView) p.hidden = true;
+  });
+
+  inPane.hidden = false;
+  if (nextView === "library" && aqLibrary) aqLibrary.show();
+  if (nextView === "cover") renderCoverView();
+  inPane.classList.add(inStartClass);
+  void inPane.offsetWidth;
+
+  requestAnimationFrame(() => {
+    outPane.classList.add(outClass);
+    inPane.classList.remove(inStartClass);
+    if (nextView === "sound") { resizeAllViews(); updateTabGlider(null, true); }
+  });
+
+  mainViewAnimTimer = setTimeout(() => {
+    outPane.hidden = true;
+    outPane.classList.remove(outClass);
+    mainViewAnimTimer = null;
+    if (nextView === "sound") { resizeAllViews(); updateTabGlider(null, true); }
+  }, 250);
+}
+
+function toggleSinkMenu(ev) {
+  if (ev) ev.stopPropagation();
+  const pop = document.getElementById("sinkPopover");
+  if (pop) pop.hidden = !pop.hidden;
+}
+function closeSinkMenu() {
+  const pop = document.getElementById("sinkPopover");
+  if (pop) pop.hidden = true;
+}
+document.addEventListener("pointerdown", (e) => {
+  const wrap = document.getElementById("sinkMenuWrap");
+  const pop = document.getElementById("sinkPopover");
+  if (pop && !pop.hidden && wrap && !wrap.contains(e.target)) pop.hidden = true;
+}, true);
+
+function toggleWfStripCollapse() {
+  const strip = document.querySelector(".top-spectrum-strip");
+  const lbl = document.getElementById("lblToggleWfCollapse");
+  if (!strip) return;
+  const collapsed = strip.classList.toggle("wf-collapsed");
+  if (lbl) {
+    lbl.setAttribute("data-i18n", collapsed ? "wf.toggleShow" : "wf.toggleHide");
+    lbl.textContent = t(collapsed ? "wf.toggleShow" : "wf.toggleHide");
+  }
+  setTimeout(resizeAllViews, 30);
+}
+try { if (localStorage.getItem("aqulify_main_view") === "library") aqMainView = "library"; } catch (e) {}
+
 setLanguage(aqLang, false);
 setTheme(currentThemeSetting, false);
-setTimeout(() => { updateTabGlider(null, true); }, 60);
+setTimeout(() => { updateTabGlider(null, true); if (eqAutoFit) fitEqDbView(); }, 60);
 // a betűtípus betöltése után (más szélességű feliratok) is a gomb pontos méretét veszi fel
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => updateTabGlider(null, true));
 

@@ -43,6 +43,9 @@
   "inst.sumState": "Motor állapota: systemctl --user status aqulify",
   "inst.sumLog": "Napló:          journalctl --user -u aqulify -f",
   "inst.sumUninstall": "Eltávolítás:    ./uninstall.sh",
+  "inst.sumHeadlessWeb": "Web felület:     http://%s:47820  (vagy Aqulify Remote mobilapp)",
+  "inst.sumHeadlessPin": "Párosítási PIN:   %s/aqulify-engine --pair-pin",
+  "inst.sumHeadlessLinger": "Linger (folyamatos futás kijelentkezéskor is): bekapcsolva (loginctl).",
   "uninst.purged": "Az Aqulify és a mentett beállításai eltávolítva.",
   "uninst.removed": "Az Aqulify eltávolítva. (A beállítások megmaradtak: ~/.config/aqulify — törlés: ./uninstall.sh --purge)"
 }

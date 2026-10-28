@@ -26,7 +26,17 @@
 #include "aq_i18n.hpp"
 #include "linux_store.hpp"
 #include "mac_engine.hpp"
+#include "mac_media.hpp"
 #include "ws_bridge.hpp"
+#include "file_player.hpp"
+#include "player_output_coreaudio.hpp"
+#include "music_library.hpp"
+#include "library_bridge.hpp"
+#include "play_queue.hpp"
+#include "playlists.hpp"
+#include "play_stats.hpp"
+#include "smart_lists.hpp"
+#include "phone_cache.hpp"
 
 using namespace ee_analyzer;
 using aq_i18n::Msg;
@@ -108,7 +118,33 @@ struct Core {
     std::chrono::steady_clock::time_point lastSinkQuery{};
 
     uint64_t readPos = 0;
+    media::MacMediaSession media;   // a gépen szóló lejátszó („most szól”, vezérlés)
     std::unique_ptr<WebSocketBridge> bridge;
+    std::function<void(const std::string&)> broadcast;
+
+    // Beépített lejátszó és zenetár (2.x)
+    player::FilePlayer filePlayer{std::make_unique<player::CoreAudioPlayerOutput>()};
+    library::MusicLibrary musicLibrary;
+    player::PlayStats playStats{[](const std::string& doc) {
+        if (!linux_store::saveStats(doc)) std::cerr << "[Lejátszó] Figyelem: a stats.json nem írható.\n";
+    }};
+    player::PhoneCache phoneCache{linux_store::configDir(true) + "/phone-cache"};
+    player::PlayQueue playQueue{
+        filePlayer, [this](const std::string& id, std::string& path) -> bool {
+            if (id.rfind("p_", 0) == 0) {
+                if (phoneCache.resolve(id, path)) return true;
+                if (broadcast) broadcast("{\"type\":\"phone_track_demand\",\"id\":\"" + media::jsonEscape(id) + "\"}");
+                return phoneCache.waitForTrack(id, std::chrono::milliseconds(2500), path);
+            }
+            return musicLibrary.trackPath(id, path);
+        },
+        [](const std::string& doc) {
+            if (!linux_store::saveQueue(doc)) std::cerr << "[Lejátszó] Figyelem: a queue.json nem írható.\n";
+        }
+    };
+    player::PlaylistStore playlists{[](const std::string& doc) {
+        if (!linux_store::savePlaylists(doc)) std::cerr << "[Lejátszó] Figyelem: a playlists.json nem írható.\n";
+    }};
 
     /** A felület kimenetválasztója: első a rendszer alapértelmezettje, utána az eszközök. */
     void refreshSinks() {
@@ -239,6 +275,7 @@ struct Core {
     c->selectedOutput = linux_store::loadOutputSink();
     if (!c->selectedOutput.empty()) c->engine.setOutput(c->selectedOutput);
     c->engine.start();
+    c->media.start();
 
     if (![self startBridge]) {
         NSAlert* a = [NSAlert new];
@@ -334,6 +371,47 @@ struct Core {
         magic::MagicDiag d;
         return c->engine.chain.magicDiag(d) ? magic::diagToJson(d) : std::string();
     };
+    c->playStats.load(linux_store::loadStats());
+    c->playQueue.restore(linux_store::loadQueue());
+    c->playlists.load(linux_store::loadPlaylists());
+    c->playQueue.setPlayedCallback([c](const std::string& id) { c->playStats.record(id); });
+    c->playlists.seedOnce(library::defaultSmartLists(aq_i18n::savedLanguage() == "hu"));
+
+    c->musicLibrary.setCacheStorage([] { return linux_store::loadLibraryCache(); },
+                                    [](const std::string& doc) {
+                                        if (!linux_store::saveLibraryCache(doc))
+                                            std::cerr << "[Zenetár] Figyelem: a library-cache.json nem írható.\n";
+                                    });
+    std::vector<std::string> roots = library::parseRootsDoc(linux_store::loadLibrary());
+    if (roots.empty()) roots.push_back(library::MusicLibrary::defaultMusicDir());
+    c->musicLibrary.setRoots(roots);
+
+    cb.mediaJson = [c]() {
+        return c->filePlayer.hasTrack() ? media::toJson(c->playQueue.mediaInfo()) : c->media.json();
+    };
+    cb.mediaCommand = [c](const std::string& action, double value) {
+        if (c->filePlayer.hasTrack()) c->playQueue.command(action, value);
+        else c->media.command(action, value);
+    };
+    cb.mediaArt = [c](const std::string& id, std::string& mime, std::string& bytes, std::string& url) {
+        if (c->filePlayer.art(id, mime, bytes)) return true;
+        return c->media.art(id, mime, bytes, url);
+    };
+    cb.playerOpen = [c](const std::string& path, std::string& error) {
+        if (!c->filePlayer.open(path, &error)) {
+            std::cerr << "[Lejátszó] " << path << ": " << error << "\n";
+            return false;
+        }
+        std::cout << "[Lejátszó] Szól: " << path << "\n";
+        return true;
+    };
+    cb.playerStop = [c] { c->filePlayer.stop(); };
+
+    library::attachLibrary(cb, c->musicLibrary, c->playQueue, c->playlists, c->playStats, [](const std::string& doc) {
+        if (!linux_store::saveLibrary(doc)) std::cerr << "[Zenetár] Figyelem: a library.json nem írható.\n";
+    }, &c->phoneCache);
+    cb.loadRemote = [] { return linux_store::loadRemote(); };
+    cb.saveRemote = [](const std::string& doc) { return linux_store::saveRemote(doc); };
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     __weak AppDelegate* weakSelf = self;
     cb.setLanguage = [weakSelf](const std::string& l) {
@@ -345,6 +423,7 @@ struct Core {
         auto b = std::make_unique<WebSocketBridge>(p);
         if (b->start(cb)) {
             c->bridge = std::move(b);
+            c->broadcast = cb.broadcast;
             return YES;
         }
         std::cout << "[Info] A " << p << " port foglalt, a következőt próbálom.\n";
@@ -364,8 +443,11 @@ struct Core {
 - (void)applicationWillTerminate:(NSNotification*)note {
     if (!core_) return;
     [saveTimer_ invalidate];
+    core_->broadcast = nullptr;
     if (core_->bridge) core_->bridge->stop();
+    core_->media.stop();
     core_->engine.stop();
+    core_->filePlayer.stop();
     {
         std::lock_guard<std::mutex> lk(core_->paramMutex);
         if (core_->dirty) linux_store::saveParams(core_->current);

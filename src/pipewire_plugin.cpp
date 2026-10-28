@@ -20,8 +20,12 @@
 #include <thread>
 #include <vector>
 
+#include "file_player.hpp"
+#include "library_bridge.hpp"
 #include "linux_store.hpp"
+#include "media_mpris.hpp"
 #include "pipewire_sink_node.hpp"
+#include "player_output_pw.hpp"
 #include "ws_bridge.hpp"
 
 using namespace ee_analyzer;
@@ -213,8 +217,11 @@ int main(int argc, char* argv[]) {
     std::cout << "========================================================\n";
 
     if (hasArg(argc, argv, "--help") || hasArg(argc, argv, "-h")) {
-        std::cout << "Használat: aqulify-engine [--port N]\n"
-                     "  --port N   csak ezt a WebSocket portot próbálja (alapból: 47810-47814, majd 8080)\n"
+        std::cout << "Használat: aqulify-engine [opciók]\n"
+                     "  --port N         csak ezt a WebSocket portot próbálja (alapból: 47810-47814, majd 8080)\n"
+                     "  --listen lan     hálózati távvezérlés bekapcsolása (47820-as port és mDNS hirdető)\n"
+                     "  --headless       kijelző nélküli szerver üzemmód (auto-LAN, PIN és setup párosítás)\n"
+                     "  --web-root DIR   a beépített HTTP szerver felületi mappája\n"
                      "A motor egy \"Aqulify\" nevű kimeneti hangeszközt hoz létre. Válaszd ki a hangbeállításokban\n"
                      "(vagy: pactl set-default-sink aqulify_sink), és minden hang a DSP láncon át szól.\n";
         return 0;
@@ -224,6 +231,23 @@ int main(int argc, char* argv[]) {
     std::vector<int> ports(std::begin(kEnginePorts), std::end(kEnginePorts));
     for (int i = 1; i + 1 < argc; ++i)
         if (std::strcmp(argv[i], "--port") == 0) ports = { std::atoi(argv[i + 1]) };
+
+    const bool headless = hasArg(argc, argv, "--headless");
+    bool listenLan = hasArg(argc, argv, "--remote");
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--listen") == 0 && i + 1 < argc && std::strcmp(argv[i + 1], "lan") == 0) {
+            listenLan = true;
+        }
+    }
+    std::string webRoot;
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::strcmp(argv[i], "--web-root") == 0) {
+            webRoot = argv[i + 1];
+        }
+    }
+    if (webRoot.empty()) {
+        webRoot = linux_store::defaultGuiDir();
+    }
 
     // Utolsó beállítások; első indításkor átlátszó (minden modul kikapcsolva), a felület adja át a sajátját
     std::mutex paramMutex;
@@ -335,6 +359,79 @@ int main(int argc, char* argv[]) {
         magic::MagicDiag d;
         return node.chain.magicDiag(d) ? magic::diagToJson(d) : std::string();
     };
+    // A gépen szóló lejátszó (MPRIS): „most szól” és vezérlés a felületről és a távirányítóról
+    media::MprisSession mediaSession;
+    mediaSession.start();
+    // A beépített lejátszó (2.x): az „Aqulify” eszközre játszik, így a hang a DSP-láncon át szól. Amíg van betöltött
+    // szám, a „most szól” és a vezérlés ezt mutatja; utána ismét a gépen futó lejátszót (MPRIS).
+    player::FilePlayer filePlayer(std::make_unique<player::PwPlayerOutput>("aqulify_sink"));
+    // Zenetár (2.x): a mentett zenei mappák, különben a Zene mappa; a bejárás a háttérben indul
+    library::MusicLibrary musicLibrary;
+    // A lejátszási napló (3c2, stats.json): a sor előtt, mert a sor mérőszála a megszűnéséig hívhatja
+    player::PlayStats playStats([](const std::string& doc) {
+        if (!linux_store::saveStats(doc)) std::cerr << "[Lejátszó] Figyelem: a stats.json nem írható.\n";
+    });
+    playStats.load(linux_store::loadStats());
+    // Telefonos zeneátvitel gyorsítótára (4b)
+    player::PhoneCache phoneCache(linux_store::configDir(true) + "/phone-cache");
+    // Lejátszási sor (3b): a zenetár azonosítóival; a queue.json-ból visszaáll, de magától nem indul el
+    player::PlayQueue playQueue(
+        filePlayer, [&](const std::string& id, std::string& path) -> bool {
+            if (id.rfind("p_", 0) == 0) {
+                if (phoneCache.resolve(id, path)) return true;
+                if (cb.broadcast) {
+                    cb.broadcast("{\"type\":\"phone_track_demand\",\"id\":\"" + media::jsonEscape(id) + "\"}");
+                }
+                return phoneCache.waitForTrack(id, std::chrono::milliseconds(2500), path);
+            }
+            return musicLibrary.trackPath(id, path);
+        },
+        [](const std::string& doc) {
+            if (!linux_store::saveQueue(doc)) std::cerr << "[Lejátszó] Figyelem: a queue.json nem írható.\n";
+        });
+    playQueue.restore(linux_store::loadQueue());
+    // Lejátszási listák (3c): a motor tárolja (playlists.json)
+    player::PlaylistStore playlists([](const std::string& doc) {
+        if (!linux_store::savePlaylists(doc)) std::cerr << "[Lejátszó] Figyelem: a playlists.json nem írható.\n";
+    });
+    playlists.load(linux_store::loadPlaylists());
+    // Okos listák (3c2): az alaplisták az első induláskor, a felület nyelvén; a napló a sor mérőjéből
+    playQueue.setPlayedCallback([&](const std::string& id) { playStats.record(id); });
+    playlists.seedOnce(library::defaultSmartLists(aq_i18n::code() == "hu"));
+    cb.mediaJson = [&]() { return filePlayer.hasTrack() ? media::toJson(playQueue.mediaInfo()) : mediaSession.json(); };
+    cb.mediaCommand = [&](const std::string& action, double value) {
+        if (filePlayer.hasTrack()) playQueue.command(action, value);
+        else mediaSession.command(action, value);
+    };
+    cb.mediaArt = [&](const std::string& id, std::string& mime, std::string& bytes, std::string& url) {
+        if (filePlayer.art(id, mime, bytes)) return true;
+        return mediaSession.art(id, mime, bytes, url);
+    };
+    cb.playerOpen = [&](const std::string& path, std::string& error) {
+        if (!filePlayer.open(path, &error)) {
+            std::cerr << "[Lejátszó] " << path << ": " << error << "\n";
+            return false;
+        }
+        std::cout << "[Lejátszó] Szól: " << path << "\n";
+        return true;
+    };
+    cb.playerStop = [&] { filePlayer.stop(); };
+    {
+        musicLibrary.setCacheStorage([] { return linux_store::loadLibraryCache(); },
+                                     [](const std::string& doc) {
+                                         if (!linux_store::saveLibraryCache(doc))
+                                             std::cerr << "[Zenetár] Figyelem: a library-cache.json nem írható.\n";
+                                     });
+        std::vector<std::string> roots = library::parseRootsDoc(linux_store::loadLibrary());
+        if (roots.empty()) roots.push_back(library::MusicLibrary::defaultMusicDir());
+        musicLibrary.setRoots(roots);
+    }
+    library::attachLibrary(cb, musicLibrary, playQueue, playlists, playStats, [](const std::string& doc) {
+        if (!linux_store::saveLibrary(doc)) std::cerr << "[Zenetár] Figyelem: a library.json nem írható.\n";
+    }, &phoneCache);
+    cb.loadRemote = [] { return linux_store::loadRemote(); };
+    cb.saveRemote = [](const std::string& doc) { return linux_store::saveRemote(doc); };
+    cb.savePairPin = linux_store::savePairPin;
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     cb.setLanguage = [](const std::string& l) {
         if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cerr << "[Nyelv] Figyelem: a language.txt nem írható.\n";
@@ -353,6 +450,18 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    if (!webRoot.empty()) {
+        bridge->setWebRootDir(webRoot);
+        std::cout << "[HTTP] Beépített felület mappája: " << webRoot << "\n";
+    }
+    if (headless) {
+        bridge->setHeadless(true);
+        std::cout << "[Headless] Kijelző nélküli szerver üzemmód aktív (Pi / headless).\n";
+    } else if (listenLan) {
+        bridge->setRemoteEnabled(true);
+        std::cout << "[Hálózat] Távvezérlés parancssorból bekapcsolva (--listen lan).\n";
+    }
+
     Saver saver{ &paramMutex, &current, &dirty, &lastChange };
     node.addTimer(saveTick, &saver, 1000);
 
@@ -361,6 +470,8 @@ int main(int argc, char* argv[]) {
 
     std::cout << "[Info] Leállítás...\n";
     bridge->stop();
+    filePlayer.stop();
+    mediaSession.stop();
     {
         std::lock_guard<std::mutex> lk(paramMutex);
         if (dirty) linux_store::saveParams(current);

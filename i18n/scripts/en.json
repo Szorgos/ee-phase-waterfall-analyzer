@@ -43,6 +43,9 @@
   "inst.sumState": "Engine status:  systemctl --user status aqulify",
   "inst.sumLog": "Log:            journalctl --user -u aqulify -f",
   "inst.sumUninstall": "Uninstall:      ./uninstall.sh",
+  "inst.sumHeadlessWeb": "Web interface:   http://%s:47820  (or Aqulify Remote mobile app)",
+  "inst.sumHeadlessPin": "Pairing PIN:     %s/aqulify-engine --pair-pin",
+  "inst.sumHeadlessLinger": "Linger (background service without login): enabled (loginctl).",
   "uninst.purged": "Aqulify and its saved settings have been removed.",
   "uninst.removed": "Aqulify has been removed. (The settings were kept: ~/.config/aqulify — to delete them: ./uninstall.sh --purge)"
 }

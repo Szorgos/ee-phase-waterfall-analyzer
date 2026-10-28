@@ -86,12 +86,14 @@ fi
 %license LICENSE
 %doc README.md RELEASE_NOTES.md
 %{_bindir}/aqulify-engine
+%{_bindir}/aqulify-play
 %{_bindir}/aqulify-gui
 %{_datadir}/aqulify/
 %{_datadir}/applications/io.github.szorgos.Aqulify.desktop
 %{_metainfodir}/io.github.szorgos.Aqulify.metainfo.xml
 %{_datadir}/icons/hicolor/256x256/apps/aqulify.png
 %{_userunitdir}/aqulify.service
+%{_userunitdir}/aqulify-headless.service
 %{_userpresetdir}/80-aqulify.preset
 
 %changelog

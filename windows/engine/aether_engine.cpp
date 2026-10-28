@@ -43,6 +43,10 @@
 #include "dsp_state.hpp"
 #include "wasapi_loopback.hpp"
 #include "tray.hpp"
+#include "media_smtc.hpp"
+#include "file_player.hpp"
+#include "library_bridge.hpp"
+#include "player_output_wasapi.hpp"
 
 using namespace ee_analyzer;
 
@@ -128,8 +132,9 @@ std::wstring portOwner(int port) {
     return {};
 }
 
-// ---------------------------------------------------------------- EQ profilok
-// A felület JSON dokumentuma: %APPDATA%\Aqulify\presets.json (felhasználónként, újraindítás után is megmarad)
+// ---------------------------------------------------------------- EQ profilok, hálózati elérés
+// A felület JSON dokumentuma: %APPDATA%\Aqulify\presets.json (felhasználónként, újraindítás után is megmarad);
+// a hálózati elérés beállításai és a párosított eszközök: %APPDATA%\Aqulify\remote.json
 std::wstring userFilePath(const wchar_t* name, bool createDir) {
     wchar_t buf[MAX_PATH];
     const DWORD n = GetEnvironmentVariableW(L"APPDATA", buf, MAX_PATH);
@@ -533,6 +538,79 @@ int main(int argc, char** argv) {
         }
         return sources.magicDiagJson();
     };
+    // A gépen szóló lejátszó (a Windows médiavezérlése): „most szól” és vezérlés a felületről és a távirányítóról
+    media::SmtcSession mediaSession;
+    mediaSession.start();
+    // A beépített lejátszó (2.x): az alapértelmezett lejátszóeszközre játszik (WASAPI), így a hang az Equalizer APO-ban
+    // futó Aqulify DSP-láncon át szól. Amíg van betöltött szám, a „most szól” és a vezérlés ezt mutatja; utána ismét
+    // a gépen futó lejátszót (SMTC).
+    player::FilePlayer filePlayer(std::make_unique<player::WasapiPlayerOutput>());
+    // Zenetár (2.x): a mentett zenei mappák (%APPDATA%\Aqulify\library.json), különben a Zene mappa
+    library::MusicLibrary musicLibrary;
+    // A lejátszási napló (3c2, %APPDATA%\Aqulify\stats.json): a sor előtt, mert a sor mérőszála a megszűnéséig hívhatja
+    player::PlayStats playStats([](const std::string& doc) {
+        if (!writeFileAtomic(userFilePath(L"stats.json", true), doc)) std::cout << "[Lejátszó] Figyelem: a stats.json nem írható.\n";
+    });
+    playStats.load(readSmallFile(userFilePath(L"stats.json", false), 64u << 20));
+    // Telefonos zeneátvitel gyorsítótára (4b)
+    player::PhoneCache phoneCache(player::toUtf8Path(std::filesystem::path(userFilePath(L"phone-cache", true))));
+    // Lejátszási sor (3b): a zenetár azonosítóival; a queue.json-ból visszaáll, de magától nem indul el
+    player::PlayQueue playQueue(
+        filePlayer, [&](const std::string& id, std::string& path) -> bool {
+            if (id.rfind("p_", 0) == 0) {
+                if (phoneCache.resolve(id, path)) return true;
+                if (cb.broadcast) {
+                    cb.broadcast("{\"type\":\"phone_track_demand\",\"id\":\"" + media::jsonEscape(id) + "\"}");
+                }
+                return phoneCache.waitForTrack(id, std::chrono::milliseconds(2500), path);
+            }
+            return musicLibrary.trackPath(id, path);
+        },
+        [](const std::string& doc) {
+            if (!writeFileAtomic(userFilePath(L"queue.json", true), doc)) std::cout << "[Lejátszó] Figyelem: a queue.json nem írható.\n";
+        });
+    playQueue.restore(readSmallFile(userFilePath(L"queue.json", false), 16u << 20));
+    // Lejátszási listák (3c): a motor tárolja (%APPDATA%\Aqulify\playlists.json)
+    player::PlaylistStore playlists([](const std::string& doc) {
+        if (!writeFileAtomic(userFilePath(L"playlists.json", true), doc)) std::cout << "[Lejátszó] Figyelem: a playlists.json nem írható.\n";
+    });
+    playlists.load(readSmallFile(userFilePath(L"playlists.json", false), 64u << 20));
+    // Okos listák (3c2): az alaplisták az első induláskor, a felület nyelvén; a napló a sor mérőjéből
+    playQueue.setPlayedCallback([&](const std::string& id) { playStats.record(id); });
+    playlists.seedOnce(library::defaultSmartLists(aq_i18n::code() == "hu"));
+    cb.mediaJson = [&]() { return filePlayer.hasTrack() ? media::toJson(playQueue.mediaInfo()) : mediaSession.json(); };
+    cb.mediaCommand = [&](const std::string& action, double value) {
+        if (filePlayer.hasTrack()) playQueue.command(action, value);
+        else mediaSession.command(action, value);
+    };
+    cb.mediaArt = [&](const std::string& id, std::string& mime, std::string& bytes, std::string& url) {
+        if (filePlayer.art(id, mime, bytes)) return true;
+        return mediaSession.art(id, mime, bytes, url);
+    };
+    cb.playerOpen = [&](const std::string& path, std::string& error) {
+        if (!filePlayer.open(path, &error)) {
+            std::cout << "[Lejátszó] " << path << ": " << error << "\n";
+            return false;
+        }
+        std::cout << "[Lejátszó] Szól: " << path << "\n";
+        return true;
+    };
+    cb.playerStop = [&] { filePlayer.stop(); };
+    {
+        musicLibrary.setCacheStorage([] { return readSmallFile(userFilePath(L"library-cache.json", false), 64 * 1024 * 1024); },
+                                     [](const std::string& doc) {
+                                         if (!writeFileAtomic(userFilePath(L"library-cache.json", true), doc))
+                                             std::cout << "[Zenetár] Figyelem: a library-cache.json nem írható.\n";
+                                     });
+        std::vector<std::string> roots = library::parseRootsDoc(readSmallFile(userFilePath(L"library.json", false), 256 * 1024));
+        if (roots.empty()) roots.push_back(library::MusicLibrary::defaultMusicDir());
+        musicLibrary.setRoots(roots);
+    }
+    library::attachLibrary(cb, musicLibrary, playQueue, playlists, playStats, [](const std::string& doc) {
+        if (!writeFileAtomic(userFilePath(L"library.json", true), doc)) std::cout << "[Zenetár] Figyelem: a library.json nem írható.\n";
+    }, &phoneCache);
+    cb.loadRemote = [] { return readSmallFile(userFilePath(L"remote.json", false), 256 * 1024); };
+    cb.saveRemote = [](const std::string& doc) { return writeFileAtomic(userFilePath(L"remote.json", true), doc); };
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     cb.setLanguage = [](const std::string& l) {
         if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cout << "[Nyelv] Figyelem: a language.txt nem írható.\n";
@@ -596,6 +674,8 @@ int main(int argc, char** argv) {
 
     std::cout << "[Info] Leállítás...\n";
     bridge->stop();
+    filePlayer.stop();
+    mediaSession.stop();
     loopback->stop();
     saveIfDue(true);
     if (single) { ReleaseMutex(single); CloseHandle(single); }

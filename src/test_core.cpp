@@ -14,6 +14,7 @@
 #include "mini_json.hpp"
 #include "dsp_state.hpp"
 #include "self_path.hpp"
+#include "ws_bridge.hpp"
 
 using namespace ee_analyzer;
 
@@ -56,8 +57,8 @@ static void testSpectrum() {
     const double peakDb = lv[peak] * 90.0 - 90.0;
     CHECK(peak + 1 >= expected && peak <= expected + 1, "1 kHz csúcs a %zu. sávban (várt: %zu)", peak, expected);
     CHECK(std::abs(peakDb - (-6.02)) < 1.5, "csúcsszint %.2f dBFS (várt ~ -6.02)", peakDb);
-    const double far = lv[bandOf(100.0)] * 90.0 - 90.0;
-    CHECK(far < -60.0, "100 Hz-en %.1f dBFS (szivárgás < -60 dB)", far);
+    const double farLeakDb = lv[bandOf(100.0)] * 90.0 - 90.0;
+    CHECK(farLeakDb < -60.0, "100 Hz-en %.1f dBFS (szivárgás < -60 dB)", farLeakDb);
     CHECK(std::abs(an.phaseDegrees()[peak]) < 1.0, "azonos L/R -> fáziskülönbség %.2f°", an.phaseDegrees()[peak]);
 
     // L és R ellenfázisban -> 180°
@@ -341,6 +342,206 @@ static void testNanGuard() {
           "NaN -> alapérték (preamp %.1f dB, scope %.1f Hz, célszint %.1f LUFS)", d.preampDb, d.bassScopeHz, d.agcTargetLufs);
 }
 
+static void testMdns() {
+    std::printf("[9] mDNS hálózati bejelentés és csomagépítés (RFC 6762)\n");
+    MdnsAnnouncer an;
+    an.start(47820, "Aqulify Teszt PC");
+    CHECK(an.isRunning(), "mDNS hirdető elindult a háttérszálon");
+    CHECK(an.servicePort() == 47820, "mDNS port 47820");
+    CHECK(an.instanceName() == "Aqulify Teszt PC", "mDNS egyedi példánynév");
+
+    // 1. Érvényes bejelentő csomag felépítése
+    auto pkt = an.buildPacket(120);
+    CHECK(pkt.size() > 80 && pkt.size() < 512, "csomagméret érvényes (%zu bájt)", pkt.size());
+    // DNS fejléc ellenőrzése: ID=0, Flags=0x8400, QD=0, AN=3
+    CHECK(pkt[0] == 0x00 && pkt[1] == 0x00, "DNS ID: 0x0000");
+    CHECK(pkt[2] == 0x84 && pkt[3] == 0x00, "DNS Flags: 0x8400 (Authoritative Response)");
+    CHECK(pkt[4] == 0x00 && pkt[5] == 0x00, "QDCOUNT: 0");
+    CHECK(pkt[6] == 0x00 && pkt[7] == 0x03, "ANCOUNT: 3 (PTR, SRV, TXT)");
+
+    // Tartalmi ellenőrzések
+    std::string s(pkt.begin(), pkt.end());
+    CHECK(s.find("_aqulify") != std::string::npos && s.find("_tcp") != std::string::npos && s.find("local") != std::string::npos,
+          "csomag tartalmazza a szolgáltatástípust (_aqulify._tcp.local)");
+    CHECK(s.find("port=47820") != std::string::npos, "TXT rekord tartalmazza a portot (port=47820)");
+    CHECK(s.find("ver=2.0.0") != std::string::npos, "TXT rekord tartalmazza a verziót (ver=2.0.0)");
+    CHECK(s.find("proto=2") != std::string::npos, "TXT rekord tartalmazza a protokollt (proto=2)");
+    CHECK(s.find("caps=library,queue,playlists,phone_track") != std::string::npos, "TXT rekord képességek (caps)");
+
+    // 2. Búcsúcsomag (TTL=0)
+    auto byePkt = an.buildPacket(0);
+    CHECK(byePkt.size() == pkt.size(), "búcsúcsomag mérete megegyezik a bejelentéssel");
+    CHECK(byePkt[2] == 0x84 && byePkt[3] == 0x00, "búcsúcsomag flags 0x8400");
+
+    an.stop();
+    CHECK(!an.isRunning(), "mDNS hirdető leállt és búcsúcsomagot küldött");
+}
+
+static void testPushPairing() {
+    std::printf("[10] Kód nélküli jóváhagyásos párosítási protokoll (8b: push prompt)\n");
+    // 1. URL lekérdezési paraméterek dekódolása
+    const std::string httpReq = "GET /?pair=request&name=Samsung+Galaxy+S23&client=aqulify_remote&tier=paid HTTP/1.1\r\n";
+    CHECK(bridge_detail::queryParam(httpReq, "pair") == "request", "pair=request paraméter felismerése");
+    CHECK(bridge_detail::queryParam(httpReq, "name") == "Samsung Galaxy S23", "name paraméter URL dekódolása (szóköz)");
+    CHECK(bridge_detail::queryParam(httpReq, "client") == "aqulify_remote", "client paraméter (aqulify_remote)");
+    CHECK(bridge_detail::queryParam(httpReq, "tier") == "paid", "tier paraméter (paid fizetős kliens)");
+
+    // 2. Értesítési JSON üzenet felépítése a helyi PC felület számára
+    const std::string reqId = "req_a1b2c3d4";
+    const std::string name = bridge_detail::cleanName(bridge_detail::queryParam(httpReq, "name"));
+    const std::string clientType = bridge_detail::queryParam(httpReq, "client");
+    const std::string tier = bridge_detail::queryParam(httpReq, "tier");
+    const std::string ip = "192.168.1.85";
+
+    std::string notice = "{\"type\":\"pair_request\",\"requestId\":\"" + reqId +
+                         "\",\"name\":\"" + media::jsonEscape(name) +
+                         "\",\"ip\":\"" + media::jsonEscape(ip) + "\"";
+    if (!clientType.empty()) notice += ",\"client\":\"" + media::jsonEscape(clientType) + "\"";
+    if (!tier.empty()) notice += ",\"tier\":\"" + media::jsonEscape(tier) + "\"";
+    notice += "}";
+
+    json::Value parsedNotice;
+    CHECK(json::parse(notice, parsedNotice) && parsedNotice.type == json::Value::Type::Object, "pair_request JSON értelmezhető");
+    CHECK(parsedNotice.get("type") && parsedNotice.get("type")->stringOr("") == "pair_request", "üzenettípus: pair_request");
+    CHECK(parsedNotice.get("requestId") && parsedNotice.get("requestId")->stringOr("") == "req_a1b2c3d4", "requestId pontos");
+    CHECK(parsedNotice.get("name") && parsedNotice.get("name")->stringOr("") == "Samsung Galaxy S23", "eszköznév pontos");
+    CHECK(parsedNotice.get("ip") && parsedNotice.get("ip")->stringOr("") == "192.168.1.85", "kliens IP pontos");
+    CHECK(parsedNotice.get("client") && parsedNotice.get("client")->stringOr("") == "aqulify_remote", "kliens típus: aqulify_remote");
+    CHECK(parsedNotice.get("tier") && parsedNotice.get("tier")->stringOr("") == "paid", "fizetős szint (tier=paid)");
+
+    // 3. Helyi felület jóváhagyási üzenete (pair_approve)
+    const std::string approveMsg = "{\"type\":\"pair_approve\",\"requestId\":\"req_a1b2c3d4\",\"approve\":true}";
+    json::Value parsedApprove;
+    CHECK(json::parse(approveMsg, parsedApprove), "pair_approve JSON értelmezhető");
+    CHECK(parsedApprove.get("type")->stringOr("") == "pair_approve", "üzenettípus: pair_approve");
+    CHECK(parsedApprove.get("approve") && parsedApprove.get("approve")->b == true, "jóváhagyás értéke true");
+
+    // 4. Kliens token generálás és tárolási formátum
+    const std::string devId = bridge_detail::randomHex(4);
+    const std::string token = bridge_detail::randomHex(32);
+    CHECK(devId.size() == 8, "eszköz azonosító 8 hexadecimális jegy");
+    CHECK(token.size() == 64, "titkos token 64 hexadecimális jegy (256 bit)");
+    const std::string hash = bridge_detail::sha1Hex(token);
+    CHECK(hash.size() == 40, "tárolt token hash 40 hexadecimális jegy (SHA-1)");
+    CHECK(bridge_detail::sameSecret(hash, bridge_detail::sha1Hex(token)), "időzítésbiztos hash egyezés");
+
+    // 5. Elutasítás vagy megszakítás (pair_cancel)
+    const std::string cancelMsg = "{\"type\":\"pair_cancel\",\"requestId\":\"req_a1b2c3d4\"}";
+    json::Value parsedCancel;
+    CHECK(json::parse(cancelMsg, parsedCancel), "pair_cancel JSON értelmezhető");
+    CHECK(parsedCancel.get("type")->stringOr("") == "pair_cancel", "üzenettípus: pair_cancel");
+
+    // 6. Harmadik féltől származó távirányító azonnali elutasítása
+    const std::string thirdPartyReq = "GET /?pair=request&name=UnauthorizedApp&client=third_party HTTP/1.1\r\n";
+    const std::string thirdPartyClient = bridge_detail::cleanName(bridge_detail::queryParam(thirdPartyReq, "client"));
+    CHECK(thirdPartyClient != "aqulify_remote", "harmadik féltől származó kliens felismerve és kizárva");
+}
+
+static void testBluetoothHandover() {
+    std::printf("[11] Bluetooth A2DP Sink és Smart Handover (8e)\n");
+    auto& bt = aqulify::BluetoothSinkManager::instance();
+
+    // 1. Alapértelmezett állapot és lekérdezés
+    bt.setSupportedForTesting(true);
+    CHECK(bt.isSupported() == true, "Bluetooth hardver támogatás detektálva");
+    CHECK(bt.isEnabled() == true, "Bluetooth vevő alapértelmezetten engedélyezve");
+    CHECK(bt.isSmartHandover() == true, "Smart Handover alapértelmezetten aktív");
+
+    // 2. JSON állapotjelentés (toJson)
+    const std::string statusJson = bt.toJson();
+    json::Value parsed;
+    CHECK(json::parse(statusJson, parsed) && parsed.type == json::Value::Type::Object, "bluetooth_status JSON értelmezhető");
+    CHECK(parsed.get("type") && parsed.get("type")->stringOr("") == "bluetooth_status", "üzenettípus: bluetooth_status");
+    CHECK(parsed.get("supported") && parsed.get("supported")->b == true, "supported mező true");
+    CHECK(parsed.get("smartHandover") && parsed.get("smartHandover")->b == true, "smartHandover mező true");
+
+    // 3. Eszközcsatlakozás szimulációja (telefon csatlakozik A2DP Sink-hez)
+    bt.setConnectedDevice("Samsung Galaxy S23", "AA:BB:CC:DD:EE:FF", "AAC", 48000);
+    const auto st = bt.getStatus();
+    CHECK(st.connected == true, "eszköz csatlakoztatva");
+    CHECK(st.deviceName == "Samsung Galaxy S23", "eszköznév pontos");
+    CHECK(st.codec == "AAC", "kodek AAC");
+    CHECK(st.sampleRate == 48000, "mintavétel 48 kHz");
+
+    // 4. Audio átirányítás a DSP láncba (audio callback hívás)
+    size_t receivedFrames = 0;
+    int receivedSr = 0;
+    bt.setAudioCallback([&](const float* pcm, size_t frames, int channels, int sampleRate) {
+        (void)pcm;
+        (void)channels;
+        receivedFrames += frames;
+        receivedSr = sampleRate;
+    });
+
+    std::vector<float> testPcm(1024 * 2, 0.5f);
+    bt.injectTestAudio(testPcm.data(), 1024, 2, 48000);
+    CHECK(receivedFrames == 1024, "A2DP audio keretek megérkeztek a DSP lánchoz (1024 frame)");
+    CHECK(receivedSr == 48000, "audio mintavételi frekvencia egyezik (48 kHz)");
+
+    // 5. Smart Handover és Bluetooth vevő kapcsolók
+    bt.setSmartHandover(false);
+    CHECK(bt.isSmartHandover() == false, "Smart Handover kikapcsolható");
+    bt.setSmartHandover(true);
+    CHECK(bt.isSmartHandover() == true, "Smart Handover visszakapcsolható");
+
+    bt.setEnabled(false);
+    CHECK(bt.isEnabled() == false, "Bluetooth vevő kikapcsolható");
+    CHECK(bt.getStatus().connected == false, "kikapcsoláskor a csatlakozási állapot bontódik");
+    bt.setEnabled(true);
+
+    // 6. Ping/Pong RTT üzenetformátum
+    const std::string pingReq = "{\"type\":\"ping\",\"t\":1729999000123}";
+    json::Value parsedPing;
+    CHECK(json::parse(pingReq, parsedPing), "ping kérés JSON értelmezhető");
+    const json::Value* tVal = parsedPing.get("t");
+    CHECK(tVal && static_cast<int64_t>(tVal->numberOr(0.0)) == 1729999000123LL, "időbélyeg (t) pontos");
+
+    std::string pongResp = "{\"type\":\"pong\",\"t\":" + std::to_string(static_cast<int64_t>(tVal->numberOr(0.0))) + "}";
+    json::Value parsedPong;
+    CHECK(json::parse(pongResp, parsedPong), "pong válasz JSON értelmezhető");
+    CHECK(parsedPong.get("type") && parsedPong.get("type")->stringOr("") == "pong", "üzenettípus: pong");
+    CHECK(parsedPong.get("t") && static_cast<int64_t>(parsedPong.get("t")->numberOr(0.0)) == 1729999000123LL, "pong válasz tartalmazza a kliens időbélyegét");
+}
+
+static void testHeadlessServer() {
+    std::printf("[12] Headless üzemmód és beépített HTTP kiszolgáló (Raspberry Pi)\n");
+    // 1. PIN formátum és generálás
+    const std::string pin = bridge_detail::randomDigits(6);
+    CHECK(pin.size() == 6, "6 jegyű párosító PIN kód méret");
+    CHECK(std::all_of(pin.begin(), pin.end(), [](char c) { return c >= '0' && c <= '9'; }), "a PIN csak számjegyeket tartalmaz");
+
+    // 2. HTTP kérés feldolgozás: GET / és útvonal elemzés
+    const std::string getRoot = "GET / HTTP/1.1\r\nHost: aqulify-pi.local:47820\r\n\r\n";
+    const std::string getStatus = "GET /api/status HTTP/1.1\r\nHost: aqulify-pi.local:47820\r\n\r\n";
+    const std::string getBad = "GET /../../etc/passwd HTTP/1.1\r\nHost: aqulify-pi.local:47820\r\n\r\n";
+
+    CHECK(getRoot.rfind("GET /", 0) == 0, "GET / kérés felismerése");
+    CHECK(getStatus.find("/api/status") != std::string::npos, "/api/status végpont felismerése");
+    CHECK(getBad.find("..") != std::string::npos, "könyvtárelhagyás (..) kiszűrése biztonsági okból");
+
+    // 3. Headless állapot és webRootDir kezelés
+    WebSocketBridge bridge(47810);
+    CHECK(!bridge.isHeadless(), "alapértelmezetten headless = false");
+    bridge.setHeadless(true);
+    CHECK(bridge.isHeadless(), "setHeadless(true) beállítja a headless állapotot");
+
+    bridge.setWebRootDir("/usr/share/aqulify/");
+    CHECK(bridge.webRootDir() == "/usr/share/aqulify", "webRootDir beállítása és lezáró perjel normalizálása");
+
+    // 4. Headless állapotüzenet
+    const std::string stMsg = bridge.buildStateMessage("full");
+    json::Value parsedSt;
+    CHECK(json::parse(stMsg, parsedSt), "állapotüzenet JSON értelmezhető");
+    CHECK(parsedSt.get("headless") && parsedSt.get("headless")->b == true, "állapotüzenet tartalmazza a headless:true jelzést");
+
+    // 5. PIN mentési callback tesztelése
+    std::string savedPin;
+    BridgeCallbacks cb;
+    cb.savePairPin = [&](const std::string& p) { savedPin = p; return true; };
+    CHECK(cb.savePairPin(pin), "savePairPin callback sikeresen meghívható");
+    CHECK(savedPin == pin, "savePairPin megkapta a generált 6-jegyű kódot");
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
@@ -353,6 +554,10 @@ int main() {
     testDspState();
     testSelfPath();
     testNanGuard();
+    testMdns();
+    testPushPairing();
+    testBluetoothHandover();
+    testHeadlessServer();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

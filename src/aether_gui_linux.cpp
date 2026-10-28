@@ -219,6 +219,36 @@ gboolean onQuitSignal(gpointer window) {
 
 } // namespace
 
+std::string jsonQuoteLinux(const std::string& s) {
+    if (s.empty()) return "null";
+    std::string out = "\"";
+    for (char c : s) {
+        if (c == '\\' || c == '"') out.push_back('\\');
+        out.push_back(c);
+    }
+    out.push_back('"');
+    return out;
+}
+
+std::string pickPathDialogLinux(GtkWindow* parent, bool pickFolder) {
+    std::string res;
+    GtkFileChooserNative* dlg = gtk_file_chooser_native_new(
+        pickFolder ? "Mappa tallózása" : "Fájl tallózása",
+        parent,
+        pickFolder ? GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER : GTK_FILE_CHOOSER_ACTION_OPEN,
+        "_Kiválasztás", "_Mégse");
+    if (!dlg) return res;
+    if (gtk_native_dialog_run(GTK_NATIVE_DIALOG(dlg)) == GTK_RESPONSE_ACCEPT) {
+        char* fn = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dlg));
+        if (fn) {
+            res = fn;
+            g_free(fn);
+        }
+    }
+    g_object_unref(dlg);
+    return res;
+}
+
 int main() {
     const std::string folder = findGuiFolder();
     if (folder.empty()) {
@@ -244,6 +274,7 @@ int main() {
             }
             applyTitlebar(false);   // a felület betöltése után a saját témája szerint (aetherSetTheme)
             gtk_window_set_icon_name(GTK_WINDOW(win.value()), "aqulify");
+            gtk_window_maximize(GTK_WINDOW(win.value()));
             std::string iconFile = folder + "/../../icons/hicolor/256x256/apps/aqulify.png";
             if (fileExists(iconFile)) {
                 gtk_window_set_icon_from_file(GTK_WINDOW(win.value()), iconFile.c_str(), nullptr);
@@ -263,6 +294,14 @@ int main() {
             g_unix_signal_add(SIGINT, onQuitSignal, win.value());
         }
         // A felület témája (req: ["light"] vagy ["dark"]): a címsor ugyanazt a színt kapja
+        auto winRes = w.window();
+        GtkWindow* gtkWin = winRes.ok() ? GTK_WINDOW(winRes.value()) : nullptr;
+        w.bind("aetherPickFolder", [gtkWin](const std::string&) -> std::string {
+            return jsonQuoteLinux(pickPathDialogLinux(gtkWin, true));
+        });
+        w.bind("aetherPickAudioFile", [gtkWin](const std::string&) -> std::string {
+            return jsonQuoteLinux(pickPathDialogLinux(gtkWin, false));
+        });
         w.bind("aetherSetTheme", [](const std::string& req) -> std::string {
             applyTitlebar(req.find("\"light\"") != std::string::npos);
             return "null";

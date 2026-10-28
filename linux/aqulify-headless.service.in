@@ -1,0 +1,12 @@
+[Unit]
+Description=Aqulify Headless DSP engine (virtual "Aqulify" audio output)
+After=pipewire.service wireplumber.service
+Wants=pipewire.service
+
+[Service]
+ExecStart=@BINDIR@/aqulify-engine --headless --listen lan
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
