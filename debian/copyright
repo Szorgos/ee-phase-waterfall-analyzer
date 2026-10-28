@@ -1,0 +1,24 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Aqulify
+Upstream-Contact: Szorgos <noreply@anthropic.com>
+Source: https://github.com/Szorgos/ee-phase-waterfall-analyzer
+
+Files: *
+Copyright: 2026 Szorgos
+License: GPL-3+
+
+Files: third_party/*
+Copyright: the respective authors (see the license files next to each library)
+License: GPL-3+ and MIT and LGPL-3+ and LGPL-2.1+ and BSD-3-clause and Apache-2.0
+Comment: A 2.x beépített lejátszó dekóderei (third_party/decoders/README.md): dr_libs és stb_vorbis
+ (public domain / MIT-0 / MIT), Apple ALAC (Apache-2.0), libopus, libogg, opusfile és WavPack (BSD-3-Clause).
+ A felület betűtípusai (Inter, IBM Plex Mono) az SIL Open Font License 1.1 alatt állnak, a three.js MIT.
+ A pontos licencszövegek a forrásfában a megfelelő könyvtár mellett vannak.
+
+License: GPL-3+
+ This program is free software: you can redistribute it and/or modify it under the terms of
+ the GNU General Public License as published by the Free Software Foundation, either version 3
+ of the License, or (at your option) any later version.
+ .
+ On Debian systems, the full text of the GNU General Public License version 3 can be found
+ in /usr/share/common-licenses/GPL-3.

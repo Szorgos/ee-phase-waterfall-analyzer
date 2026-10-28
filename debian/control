@@ -1,0 +1,18 @@
+Source: aqulify
+Section: sound
+Priority: optional
+Maintainer: Szorgos <noreply@anthropic.com>
+Build-Depends: cmake, ninja-build, pkg-config, g++, xz-utils, libpipewire-0.3-dev, libfftw3-dev, libgtk-3-dev, libwebkit2gtk-4.1-dev
+Standards-Version: 4.7.0
+Homepage: https://github.com/Szorgos/ee-phase-waterfall-analyzer
+Rules-Requires-Root: no
+
+Package: aqulify
+Architecture: amd64 arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}, pipewire, hicolor-icon-theme
+Description: Headphone EQ, convolver and limiter for PipeWire with a live 3D waterfall
+ Aqulify creates a virtual "Aqulify" audio output on PipeWire. Everything played
+ through it passes a low-latency DSP chain (parametric EQ with AutoEq import,
+ crossfeed, convolver, bass enhancer, true peak limiter), and a live 3D acoustic
+ waterfall, phase and group delay view shows what the processing does.
+ The program also has a built-in player and music library.

@@ -1,0 +1,46 @@
+# Maintainer: Szorgos <noreply@anthropic.com>
+# Arch Linux csomag az Aqulify-hoz. A verziót és az ellenőrzőösszeget a Release munkafolyamat ellenőrzi:
+# a forrás sha256-ját `makepkg -g` állítja elő (a GitHub címke-archívuma), az RNNoise-modellé rögzített.
+pkgname=aqulify
+pkgver=2.0.2
+pkgrel=1
+pkgdesc='Headphone EQ, convolver and limiter for PipeWire with a live 3D waterfall and a built-in player'
+arch=('x86_64' 'aarch64')
+url='https://github.com/Szorgos/ee-phase-waterfall-analyzer'
+license=('GPL-3.0-or-later')
+depends=('pipewire' 'fftw' 'gtk3' 'webkit2gtk-4.1' 'hicolor-icon-theme')
+makedepends=('cmake' 'ninja')
+install=aqulify.install
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+        "rnnoise_0.2+ds.orig.tar.xz::http://archive.ubuntu.com/ubuntu/pool/universe/r/rnnoise/rnnoise_0.2+ds.orig.tar.xz")
+sha256sums=('SKIP'
+            'db2718ee4a0b294bfbbe198fe94aabfdc8cd0d77cb9cd95d76c7a818ad805f0b')
+
+prepare() {
+  # Az RNNoise betanított modellje (a kód a third_party/rnnoise mappában van)
+  mkdir -p "$srcdir/rnnoise-model"
+  tar -xJf "$srcdir/rnnoise_0.2+ds.orig.tar.xz" -C "$srcdir/rnnoise-model" --strip-components=2 \
+      rnnoise-0.2/src/rnnoise_data.c rnnoise-0.2/src/rnnoise_data.h
+}
+
+build() {
+  cmake -S "ee-phase-waterfall-analyzer-$pkgver" -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
+        -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON \
+        -DAQULIFY_RNNOISE_MODEL_DIR="$srcdir/rnnoise-model"
+  cmake --build build
+}
+
+check() {
+  for t in test_ringbuffer test_core test_dsp test_matrix test_player; do
+    (cd build && ./$t)
+  done
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  rm -f "$pkgdir"/usr/bin/test_*
+  cd "ee-phase-waterfall-analyzer-$pkgver"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

@@ -1,0 +1,13 @@
+post_install() {
+  systemctl --global preset aqulify.service >/dev/null 2>&1 || true
+  gtk-update-icon-cache -q -t -f usr/share/icons/hicolor >/dev/null 2>&1 || true
+}
+
+post_upgrade() {
+  post_install
+}
+
+post_remove() {
+  systemctl --global disable aqulify.service >/dev/null 2>&1 || true
+  gtk-update-icon-cache -q -t -f usr/share/icons/hicolor >/dev/null 2>&1 || true
+}

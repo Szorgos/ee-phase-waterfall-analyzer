@@ -1,0 +1,52 @@
+#!/usr/bin/make -f
+# Debian/Ubuntu csomag debhelper nélkül: csak a dpkg-dev, a cmake és a fakeroot (vagy --root-owner-group) kell hozzá.
+# Használat:  dpkg-buildpackage -us -uc -b
+# Az RNNoise betanított modellje (nincs a tárolóban): ha a debian/ mellé kerül a rnnoise_0.2+ds.orig.tar.xz
+# (a Release munkafolyamat letölti és ellenőrzi), a csomag azzal épül; ha nincs, a modell nélküli változat készül.
+PKG      := aqulify
+D        := $(CURDIR)/debian/$(PKG)
+B        := $(CURDIR)/debian/build
+RNN_TAR  := $(wildcard $(CURDIR)/debian/rnnoise_0.2+ds.orig.tar.xz)
+RNN_DIR  := $(CURDIR)/debian/rnnoise-model
+CMAKE_VER := $(shell sed -n '1,10s/^ *VERSION \([0-9][0-9.]*\)$$/\1/p' CMakeLists.txt | head -1)
+DEB_VER  := $(shell dpkg-parsechangelog -S Version | sed 's/-[^-]*$$//')
+
+.PHONY: clean build build-arch build-indep binary binary-arch binary-indep check-version
+
+check-version:
+	@[ "$(CMAKE_VER)" = "$(DEB_VER)" ] || { echo "A debian/changelog verziója ($(DEB_VER)) nem egyezik a CMakeLists.txt-ével ($(CMAKE_VER))" >&2; exit 1; }
+
+clean:
+	rm -rf $(B) $(D) $(RNN_DIR) debian/files debian/substvars debian/*.substvars debian/*.debhelper.log
+
+build: build-arch
+build-indep:
+build-arch: check-version
+	if [ -n "$(RNN_TAR)" ]; then mkdir -p $(RNN_DIR) && tar -xJf $(RNN_TAR) -C $(RNN_DIR) --strip-components=2 rnnoise-0.2/src/rnnoise_data.c rnnoise-0.2/src/rnnoise_data.h; else echo "FIGYELEM: nincs RNNoise-modell, a beszéd-zajcsökkentés nélküli változat épül" >&2; fi
+	cmake -B $(B) -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON \
+	  $(if $(RNN_TAR),-DAQULIFY_RNNOISE_MODEL_DIR=$(RNN_DIR),)
+	cmake --build $(B) -j$$(nproc)
+	for t in test_ringbuffer test_core test_dsp test_matrix test_player; do (cd $(B) && ./$$t) || exit 1; done
+
+binary-indep:
+binary: binary-arch
+binary-arch: build-arch
+	rm -rf $(D)
+	DESTDIR=$(D) cmake --install $(B) --prefix /usr
+	rm -f $(D)/usr/bin/test_*
+	strip --strip-unneeded $(D)/usr/bin/aqulify-engine $(D)/usr/bin/aqulify-play $(D)/usr/bin/aqulify-gui
+	install -d $(D)/usr/share/doc/$(PKG) $(D)/DEBIAN
+	install -m 644 README.md $(D)/usr/share/doc/$(PKG)/README.md
+	gzip -9n -c RELEASE_NOTES.md > $(D)/usr/share/doc/$(PKG)/RELEASE_NOTES.md.gz
+	gzip -9n -c debian/changelog > $(D)/usr/share/doc/$(PKG)/changelog.Debian.gz
+	install -m 644 debian/copyright $(D)/usr/share/doc/$(PKG)/copyright
+	install -m 644 LICENSE $(D)/usr/share/doc/$(PKG)/LICENSE
+	install -m 755 debian/postinst $(D)/DEBIAN/postinst
+	install -m 755 debian/postrm $(D)/DEBIAN/postrm
+	dpkg-shlibdeps -O -e$(D)/usr/bin/aqulify-engine -e$(D)/usr/bin/aqulify-play -e$(D)/usr/bin/aqulify-gui > debian/substvars.tmp
+	sed -i 's/^shlibs:Depends=/shlibs:Depends=/' debian/substvars.tmp
+	cp debian/substvars.tmp debian/aqulify.substvars; echo "misc:Depends=" >> debian/aqulify.substvars
+	dpkg-gencontrol -p$(PKG) -P$(D) -Tdebian/aqulify.substvars
+	cd $(D) && find . -type f ! -path './DEBIAN/*' -print0 | sort -z | xargs -0 md5sum | sed 's# \./# #' > DEBIAN/md5sums
+	chmod 644 $(D)/DEBIAN/md5sums
+	dpkg-deb --root-owner-group --build $(D) ..

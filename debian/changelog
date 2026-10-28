@@ -1,0 +1,5 @@
+aqulify (2.0.2-1) unstable; urgency=medium
+
+  * Első Debian/Ubuntu csomag (a Fedora RPM-mel azonos forrásból és CMake-telepítéssel).
+
+ -- Szorgos <noreply@anthropic.com>  Wed, 28 Oct 2026 09:00:00 +0000

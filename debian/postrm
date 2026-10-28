@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+case "$1" in
+    remove|purge)
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl --global disable aqulify.service >/dev/null 2>&1 || true
+        fi
+        if command -v gtk-update-icon-cache >/dev/null 2>&1 && [ -d /usr/share/icons/hicolor ]; then
+            gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor >/dev/null 2>&1 || true
+        fi
+        ;;
+esac
+exit 0

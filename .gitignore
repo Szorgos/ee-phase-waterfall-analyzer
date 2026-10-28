@@ -5,3 +5,12 @@ build*/
 .cache/
 compile_commands.json
 __pycache__/
+
+# Debian csomag build-fájljai
+/debian/build/
+/debian/aqulify/
+/debian/rnnoise-model/
+/debian/rnnoise_*.tar.xz
+/debian/*.substvars
+/debian/substvars.tmp
+/debian/files
