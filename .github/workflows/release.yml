@@ -53,6 +53,12 @@ jobs:
           test -x build/aqulify-gui
           for t in test_ringbuffer test_core test_dsp test_matrix; do ./build/$t; done
 
+      - name: A telepítő szkriptek futtathatók (a csomagban megmaradó fájlmód)
+        run: |
+          git ls-files -s install.sh uninstall.sh
+          test "$(git ls-files -s install.sh | cut -c1-6)" = 100755
+          test "$(git ls-files -s uninstall.sh | cut -c1-6)" = 100755
+
       - name: Linux telepítő csomag
         id: pkg
         run: |

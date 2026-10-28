@@ -75,7 +75,7 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
 > ### 📦 **Gyors Telepítés Linuxra (Bármely disztribúció):**
 > Nyiss meg egy terminált, és másold be az alábbi parancsot (a legújabb kiadást a `~/Aqulify` mappába tölti le, és elindítja a telepítőt; a csomagokhoz sudo jelszót kér):
 > ```bash
-> mkdir -p ~/Aqulify && cd ~/Aqulify && { curl -fsSL https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz 2>/dev/null || wget -qO- https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz; } | tar -xz --strip-components=1 && ./install.sh
+> mkdir -p ~/Aqulify && cd ~/Aqulify && { curl -fsSL https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz 2>/dev/null || wget -qO- https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz; } | tar -xz --strip-components=1 && bash install.sh
 > ```
 > A `curl`-t használja, ha nincs a gépen, akkor a `wget`-et. **Frissítés:** ugyanez a parancs újra. **Eltávolítás:** `~/Aqulify/uninstall.sh`.
 >
@@ -105,9 +105,9 @@ A telepítő szkript automatikusan felismeri a disztribúciót, felrakja a szük
 ```bash
 git clone https://github.com/Szorgos/ee-phase-waterfall-analyzer.git
 cd ee-phase-waterfall-analyzer
-./install.sh
+bash install.sh
 ```
-*(Frissítéshez a mappában elegendő kiadni: `git pull && ./install.sh`.)* Ehhez a `git` kell, ami friss telepítésű rendszeren nem mindig van fent: `sudo apt install git` (Ubuntu / Debian / Mint), `sudo dnf install git` (Fedora). Ha nem akarsz gitet telepíteni, használd a fenti egyparancsos telepítést.
+*(Frissítéshez a mappában elegendő kiadni: `git pull && bash install.sh`.)* Ehhez a `git` kell, ami friss telepítésű rendszeren nem mindig van fent: `sudo apt install git` (Ubuntu / Debian / Mint), `sudo dnf install git` (Fedora). Ha nem akarsz gitet telepíteni, használd a fenti egyparancsos telepítést.
 
 ### Támogatott Linux disztribúciók
 * **Ubuntu / Debian / Linux Mint / Pop!_OS:** `apt-get` csomagkezelővel
