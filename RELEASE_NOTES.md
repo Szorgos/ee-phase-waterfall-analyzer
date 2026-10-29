@@ -1,3 +1,8 @@
+### Újdonságok és fejlesztések (2.0.5)
+
+- **Frekvenciaskála:** a vízesés alatti alsó és felső határjelölő mostantól azonos, a látható színekhez igazodó küszöböt használ, így mély hangoknál nem nyílik szét.
+- **Telepítő (Linux):** az `install.sh` ismét futtatható a kiadott csomagban, és a parancsok `bash install.sh` formát használnak.
+
 ### Fejlesztési irány
 - A következő kiadások az 1.x változat csiszolására összpontosítanak: hibajavítások, pontosság és kezelhetőség.
 

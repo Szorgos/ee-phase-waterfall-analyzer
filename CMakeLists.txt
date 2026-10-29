@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(aqulify 
-    VERSION 2.0.4
+    VERSION 2.0.5
     DESCRIPTION "Aqulify - Real-time Phase, Group Delay & Acoustic Waterfall DSP Suite"
     LANGUAGES C CXX
 )
