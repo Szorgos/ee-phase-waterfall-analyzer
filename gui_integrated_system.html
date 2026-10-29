@@ -3708,7 +3708,8 @@ function updateFreqRange(levels, now) {
     // jelen lévőnek számít: -66 dBFS fölött, a felső határnál a pillanatnyi csúcstól legfeljebb 48 dB-re, az
     // alsónál legfeljebb 24 dB-re (0..1 = -90..0 dBFS). Lent szigorúbb a küszöb: a hangos basszus hangindításai
     // a csúcs alatt 25–40 dB-lel egészen 0 Hz-ig szétterülnek, ez nem a zene legmélyebb hangja.
-    const thrHi = Math.max(24 / 90, mx - 48 / 90), thrLo = Math.max(24 / 90, mx - 24 / 90);
+    // mindkét határnál ugyanaz a küszöb (a csúcstól 30 dB-re, de legalább −57 dBFS-en): a jelölők a látható színekhez igazodnak, a két oldalon egyformán
+    const thrHi = Math.max(33 / 90, mx - 30 / 90), thrLo = thrHi;
     if (mx > 24 / 90) {
       for (let i = 0; i < levels.length; i++) { if (levels[i] >= thrLo && lo < 0) lo = i; if (levels[i] >= thrHi) hi = i; }
       const scale = FREQ_BINS / levels.length;
