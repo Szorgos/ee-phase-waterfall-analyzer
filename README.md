@@ -56,6 +56,7 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
    * **Convolver (zita-convolver):** IR (WAV/IRS) betöltés és előnézet, IR szélesség, autogain, dry / wet, bemeneti és kimeneti erősítés; az IR a lejátszás mintavételére konvertálódik (SpeexDSP). A feldolgozási késleltetés nem nő az IR hosszával; kettőhatvány blokkméretnél (pl. 256, 512, 1024) nincs többletkésleltetés, más blokkméretnél legfeljebb egy blokknyi (az IR saját késleltetése megmarad). Szobakorrekcióhoz mérésből tervezett korrekciós szűrőt tölts be (pl. REW), ne a szoba nyers impulzusválaszát.
    * **Limiter (LSP Limiter):** 12 mód, túlmintavételezés (True Peak is), dither, lookahead / attack / release, stereo link, gain boost, ALR, bemeneti és kimeneti erősítés; alapértelmezés: -1,0 dB küszöb, True Peak / 24 bit. Kikapcsolt limiternél csak a 0 dBFS feletti minták vágódnak le. A túlvezérlés ellen elsősorban a teljes EQ-görbéhez igazított előerősítés véd; a limiter biztonsági háló (negatív preampú profil importjakor vagy betöltésekor automatikusan bekapcsol), nem hallásvédelem.
    * **Bass Enhancer (Calf):** pszichoakusztikai hiányzó alaphang szintézis (amount, harmonics, scope, floor, blend, listen, bemeneti és kimeneti erősítés).
+   * **Mono és mélyvágás:** mélyvágás 10, 15, 20, 25, 30 vagy 35 Hz alatt (24 dB/oktáv, Linkwitz–Riley), és a mély hangok mono keverése egy állítható határfrekvencia (40–250 Hz) alatt.
 
 5. **Magic Touch – automatikus, visszafogott hangszépítő:**
    * Elemzi a lejátszott felvételt, és csak azt igazítja, ami hiányzik vagy zavaró. A kimenet hangossága megegyezik a bemenetével; rendben lévő felvételen a jel bitre érintetlen.
@@ -67,6 +68,8 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
    * Linuxon PipeWire virtuális kimenet („Aqulify”), Windowson Equalizer APO plugin. A hangszál zárak nélkül veszi át a beállításokat; a modulok be- és kikapcsolása, valamint az EQ-mód és a decramp váltása rövid le- és felúsztatással, kattanás nélkül történik (lineáris fázisú módra váltáskor a kimenet a módhoz tartozó késleltetés kitöltéséig, kb. 0,1 s-ig néma). A felület és a grafika külön folyamatban fut, nem tartja fel a lejátszást.
    * WebSocket híd a `127.0.0.1` címen (az első szabad port: 47810–47814, végső tartalékként 8080): a motor a spektrumot, az EQ-görbét, a limiter erősítéscsökkentését és a mentett állapotot küldi; a felület az összes modulbeállítást, az IR-t és az EQ profilokat (a protokoll leírása: [docs/remote-api.md](docs/remote-api.md)).
    * **Felület:** magyarul és angolul (alapból a rendszer nyelvén, váltás a fejlécben); Linuxon saját ablakban (WebKitGTK, ennek hiányában böngészőben), Windowson saját ablakban (WebView2).
+   * **Ablak bezárása:** a program megkérdezi, hogy a tálcára (macOS: menüsorra, Linux: háttérbe) kerüljön, és a hangfeldolgozás fusson tovább, vagy teljesen bezáródjon. Bezáráskor a motor leáll, és a hang visszaáll eredetire. A „Mindig ezt válaszd” jelölővel a kérdés elmarad; a választás a *Kimenet* menüben módosítható.
+   * **Alap állapot:** a motor indításkor és leálláskor minden modult kikapcsol, így a program bezárása és a gép újraindítása után sem változik a hangzás. A mentett profilok megmaradnak.
 
 ---
 
@@ -141,7 +144,7 @@ A Linuxos és a Windowsos ág ugyanazt a C++ DSP láncot futtatja (`include/aeth
 
 Letöltés (az 1.7.1 kiadástól): **[Aqulify-macOS.dmg – mindig a legújabb kiadás](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg)** (egy alkalmazás Apple Silicon és Intel Macre, macOS 12 vagy újabb). Nyisd meg, és húzd az **Aqulify**-t az *Alkalmazások* mappába.
 
-Az Aqulify itt egyetlen alkalmazás: a motor a menüsorban fut (hullámforma ikon), az ablakban a megszokott felület látszik. Az ablak bezárása után a hangfeldolgozás folytatódik; a felület a menüsor-ikonból nyitható újra, és ott kapcsolható be az *Indítás bejelentkezéskor* is (macOS 13-tól).
+Az Aqulify itt egyetlen alkalmazás: a motor a menüsorban fut (hullámforma ikon), az ablakban a megszokott felület látszik. Az ablak bezárásakor választható: *Menüsorra* (a hangfeldolgozás folytatódik) vagy *Bezárás* (az alkalmazás kilép, a hang visszaáll eredetire). A felület a menüsor-ikonból nyitható újra, és ott kapcsolható be az *Indítás bejelentkezéskor* is (macOS 13-tól).
 
 * **macOS 14.2 vagy újabb:** a rendszerhangot a Core Audio adja át, illesztőprogram nélkül. Első indításkor a macOS engedélyt kér a rendszerhang rögzítésére: ezt engedélyezd. Amíg az Aqulify feldolgozza, az eredeti (feldolgozatlan) hang néma; kilépéskor visszaáll.
 * **Régebbi macOS (12 – 14.1), vagy ha nem adsz engedélyt:** telepítsd az ingyenes [BlackHole 2ch](https://existential.audio/blackhole/) virtuális hangeszközt. Az Aqulify magától felismeri, a rendszer kimenetét a BlackHole-ra állítja, a feldolgozott hangot pedig a valódi eszközre küldi; kilépéskor az eredeti kimenet visszaáll.
@@ -170,7 +173,8 @@ Az `install.sh` mindent beállít:
 * **Motor:** `aqulify-engine` systemd felhasználói szolgáltatásként fut, és bejelentkezéskor magától indul. Létrehoz egy **„Aqulify”** nevű kimeneti hangeszközt; ami ide szól, az a DSP láncon át a valódi hangkártyára / DAC-ra megy (a WirePlumber köti be automatikusan).
 * **Használat:** a *Hangbeállításokban* válaszd kimenetnek az **Aqulify**-t (vagy a telepítő végén kérd, hogy ez legyen az alapértelmezett).
 * **Felület:** menü → **Aqulify**. Saját ablakban nyílik (WebKitGTK); ha a WebKitGTK fejlesztői csomag nem telepíthető, böngészőben.
-* **Beállítások:** a `~/.config/aqulify/` mappába mentődnek (EQ, modulok, betöltött impulzusválasz), újraindítás után is megmaradnak.
+* **Beállítások:** a `~/.config/aqulify/` mappába mentődnek (EQ-profilok, impulzusválaszok), újraindítás után is megmaradnak. A motor indításkor minden modult kikapcsolva indít, így a hang a felület megnyitásáig érintetlen.
+* **Bezárás:** az ablak bezárásakor választható: *Háttérbe* (a motor fut tovább) vagy *Bezárás* (a motor leáll, az „Aqulify” kimenet eltűnik, a hang közvetlenül a hangkártyára megy).
 * **Állapot / napló:** `systemctl --user status aqulify`, `journalctl --user -u aqulify -f`
 * **Eltávolítás:** `./uninstall.sh` (a `--purge` a beállításokat is törli)
 
