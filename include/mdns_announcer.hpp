@@ -22,6 +22,10 @@
 
 #include "net_compat.hpp"
 
+#ifndef AQULIFY_VERSION
+#define AQULIFY_VERSION "0.0.0"   // a CMake adja; enélkül a fejléc önmagában is fordul
+#endif
+
 namespace ee_analyzer {
 
 class MdnsAnnouncer {
@@ -120,7 +124,7 @@ public:
             "name=" + instanceName_,
             "port=" + std::to_string(servicePort_),
             "proto=2",
-            "ver=2.0.0",
+            "ver=" AQULIFY_VERSION,
             "caps=library,queue,playlists,phone_track",
 #ifdef _WIN32
             "platform=windows"

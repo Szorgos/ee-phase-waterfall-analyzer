@@ -54,6 +54,7 @@ target_link_libraries(test_ringbuffer PRIVATE ee_dsp_core Threads::Threads)
 
 # 5. Tesztalkalmazás: közös mag (FFT spektrum, paraméterblokk, tap körpuffer, JSON)
 add_executable(test_core src/test_core.cpp)
+target_compile_definitions(test_core PRIVATE AQULIFY_VERSION="${PROJECT_VERSION}")
 target_link_libraries(test_core PRIVATE ee_dsp_core Threads::Threads)
 if(WIN32)
     target_link_libraries(test_core PRIVATE ws2_32 iphlpapi)

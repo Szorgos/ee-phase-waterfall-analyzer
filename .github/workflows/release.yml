@@ -27,6 +27,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verzió-ellenőrzés (CMake, felület, mDNS egyezik-e a kiadási verzióval)
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then VER="${GITHUB_REF_NAME#v}"
+          elif [ -n "${{ inputs.version }}" ]; then VER="${{ inputs.version }}"
+          else exit 0; fi
+          cmk=$(sed -n '1,10s/^ *VERSION \([0-9][0-9.]*\)$/\1/p' CMakeLists.txt | head -1)
+          gui=$(grep -o 'data-gui-version="[^"]*"' gui_integrated_system.html | head -1 | cut -d'"' -f2)
+          mdns=$(grep -o '"ver=" AQULIFY_VERSION\|"ver=[0-9.]*"' include/mdns_announcer.hpp | head -1)
+          echo "kiadás=$VER  CMake=$cmk  felület=$gui  mDNS=$mdns"
+          if [ "$cmk" != "$VER" ] || [ "$gui" != "$VER" ]; then
+            echo "::error title=Verzió::a CMake ($cmk) vagy a felület ($gui) nem egyezik a kiadási verzióval ($VER)"; exit 1; fi
+          if [ "$mdns" != '"ver=" AQULIFY_VERSION' ]; then
+            echo "::error title=Verzió::az mDNS verzió nincs a CMake-hez kötve"; exit 1; fi
+
       - name: Függőségek
         run: |
           sudo apt-get update

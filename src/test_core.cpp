@@ -364,7 +364,7 @@ static void testMdns() {
     CHECK(s.find("_aqulify") != std::string::npos && s.find("_tcp") != std::string::npos && s.find("local") != std::string::npos,
           "csomag tartalmazza a szolgáltatástípust (_aqulify._tcp.local)");
     CHECK(s.find("port=47820") != std::string::npos, "TXT rekord tartalmazza a portot (port=47820)");
-    CHECK(s.find("ver=2.0.0") != std::string::npos, "TXT rekord tartalmazza a verziót (ver=2.0.0)");
+    CHECK(s.find("ver=" AQULIFY_VERSION) != std::string::npos, "TXT rekord tartalmazza a verziót (ver=" AQULIFY_VERSION ")");
     CHECK(s.find("proto=2") != std::string::npos, "TXT rekord tartalmazza a protokollt (proto=2)");
     CHECK(s.find("caps=library,queue,playlists,phone_track") != std::string::npos, "TXT rekord képességek (caps)");
 
