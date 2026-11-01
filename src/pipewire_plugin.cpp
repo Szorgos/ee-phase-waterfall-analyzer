@@ -423,10 +423,29 @@ int main(int argc, char* argv[]) {
 
     // Több kimenet (2–4 hangkártya). Induláskor ki van kapcsolva (alap állapot: csak a fő kimenet szól, a hangzás
     // nem változik); a felület a csatlakozáskor adja át. A 2–4. kimenet céleszköze csak létező fizikai nyelő lehet.
+    // A beállítás és a zónák lánca / IR-je megmarad (multiout.bin, zoneN_ir.bin), de induláskor ki van kapcsolva.
     std::mutex multiMutex;
     multiout::MultiConfig multiState;
     std::array<std::string, 3> multiTargets{};
-    auto pushMulti = [&] { node.setMultiOutput(multiState, multiTargets); };
+    if (linux_store::loadMultiOut(multiState, multiTargets)) {
+        multiState.enabled = false;
+        std::cout << "[Több kimenet] Mentett beállítás betöltve (" << multiState.numOutputs << " kimenet, kikapcsolva).\n";
+    }
+    for (int k = 1; k < multiout::kMaxOutputs; ++k) {
+        IrData ir;
+        if (linux_store::loadIrFile("zone" + std::to_string(k + 1) + "_ir.bin", ir)) node.zoneChain(k).submitIr(std::move(ir));
+    }
+    static std::atomic<bool> s_multiDirty{ false };
+    auto pushMulti = [&] { node.setMultiOutput(multiState, multiTargets); s_multiDirty = true; };
+    pushMulti();
+    struct MultiSaver { std::mutex* m; multiout::MultiConfig* c; std::array<std::string, 3>* t; };
+    static MultiSaver s_multiSaver{ &multiMutex, &multiState, &multiTargets };
+    node.addTimer([](void* data, uint64_t) {
+        if (!s_multiDirty.exchange(false)) return;
+        auto* ms = static_cast<MultiSaver*>(data);
+        std::lock_guard<std::mutex> lk(*ms->m);
+        if (!linux_store::saveMultiOut(*ms->c, *ms->t)) std::cerr << "[Több kimenet] Figyelem: a multiout.bin nem írható.\n";
+    }, &s_multiSaver, 1000);
     cb.setMultiOut = [&](const multiout::MultiConfig& in, const std::array<std::string, 3>& sinks) {
         const std::vector<SinkInfo> phys = listPhysicalSinks();
         std::lock_guard<std::mutex> lk(multiMutex);
@@ -466,6 +485,16 @@ int main(int argc, char* argv[]) {
     cb.getZoneParams = [&](int zone) -> ParamData {
         std::lock_guard<std::mutex> lk(multiMutex);
         return multiState.outputs[std::clamp(zone, 0, multiout::kMaxOutputs - 1)].chain;
+    };
+    cb.setZoneIr = [&](int zone, IrData&& ir) {
+        if (zone < 1 || zone >= multiout::kMaxOutputs) return;
+        std::cout << "[Több kimenet] " << (zone + 1) << ". kimenet impulzusválasza: " << (ir.empty() ? "nincs" : ir.name) << "\n";
+        if (!linux_store::saveIrFile("zone" + std::to_string(zone + 1) + "_ir.bin", ir))
+            std::cerr << "[Több kimenet] Figyelem: a zóna IR-je nem menthető.\n";
+        node.zoneChain(zone).submitIr(std::move(ir));
+    };
+    cb.getZoneIr = [&](int zone) -> IrData {
+        return (zone < 1 || zone >= multiout::kMaxOutputs) ? IrData{} : node.zoneChain(zone).irCopy();
     };
     cb.setZoneParams = [&](int zone, const ParamData& p) {
         std::lock_guard<std::mutex> lk(multiMutex);

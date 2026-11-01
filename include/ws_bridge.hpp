@@ -136,6 +136,9 @@ struct BridgeCallbacks {
     std::function<std::string()> multiOutStatus;
     std::function<ParamData(int zone)> getZoneParams;
     std::function<void(int zone, const ParamData&)> setZoneParams;
+    /** A 2–4. kimenet impulzusválasza (konvolver; pl. szobakorrekció a második hangkártyához). */
+    std::function<void(int zone, IrData&&)> setZoneIr;
+    std::function<IrData(int zone)> getZoneIr;
 };
 
 /**
@@ -375,6 +378,7 @@ private:
         uint8_t fragOpcode = 0;
         std::string out;                // küldésre váró bájtok (nem blokkoló küldés)
         size_t outPos = 0;
+        int editZone = 0;               // több kimenetnél: ezt a kimenetet szerkeszti (0 = a fő lánc)
         bool spectrum = true;           // kér-e spektrumot, és milyen gyakran
         int spectrumMs = 16;
         clock::time_point lastSpectrum{};
@@ -1212,17 +1216,38 @@ private:
         }
         std::cout << "[WS Bridge] Impulzusválasz érkezett: " << ir.name << " (" << ir.frames() << " minta, "
                   << ir.sampleRate << " Hz, " << ir.channels() << " csatorna)\n";
+        const int zone = editZone();
+        if (zone > 0) {
+            if (!cb_.setZoneIr) return;
+            activeIrIds_[zone].clear();
+            cb_.setZoneIr(zone, std::move(ir));
+            sendText(buildStateMessage("ir", false, zone));
+            return;
+        }
         activeIrId_.clear();
         if (cb_.setIr) cb_.setIr(std::move(ir));
         broadcast(buildStateMessage("ir"));   // mindenki (a küldő is) az új IR-t látja
     }
 
+    /** A küldő kliens éppen szerkesztett kimenete (0: a fő lánc; zónák nélküli motornál mindig 0). */
+    int editZone() const {
+        if (!cur_ || !cb_.getZoneParams || !cb_.setZoneParams) return 0;
+        return std::clamp(cur_->editZone, 0, multiout::kMaxOutputs - 1);
+    }
+
     /** IR-profil megnyitása: a tárban lévő IR lesz a konvolveré. @return false, ha nincs ilyen (vagy hibás). */
-    bool selectLibraryIr(const std::string& id) {
+    bool selectLibraryIr(const std::string& id, int zone = 0) {
         if (!isValidIrId(id) || !cb_.loadLibraryIr || !cb_.setIr) return false;
         IrData ir;
         if (!decodeIrFile(cb_.loadLibraryIr(id), ir, kBridgeMaxIrFrames)) return false;
-        std::cout << "[WS Bridge] IR-profil: " << ir.name << " (" << id << ")\n";
+        std::cout << "[WS Bridge] IR-profil: " << ir.name << " (" << id << ")" << (zone > 0 ? " – " + std::to_string(zone + 1) + ". kimenet" : "") << "\n";
+        if (zone > 0) {
+            if (!cb_.setZoneIr) return false;
+            activeIrIds_[zone] = id;
+            cb_.setZoneIr(zone, std::move(ir));
+            sendText(buildStateMessage("ir", false, zone));
+            return true;
+        }
         activeIrId_ = id;
         cb_.setIr(std::move(ir));
         broadcast(buildStateMessage("ir"));
@@ -1279,6 +1304,13 @@ private:
         }
         if (type == "pair_approve") {
             if (!remote) handlePairApprove(msg);
+            return;
+        }
+        if (type == "set_edit_zone") {
+            // Ettől kezdve a kliens beállításai és IR-jei erre a kimenetre mennek; válaszként a kimenet állapota
+            if (!cur_ || !cb_.getZoneParams || !cb_.setZoneParams) return;
+            cur_->editZone = std::clamp(static_cast<int>(num(msg, "zone", 0.0)), 0, multiout::kMaxOutputs - 1);
+            sendText(buildStateMessage("zone", false, cur_->editZone));
             return;
         }
         if (type == "set_multiout" || type == "get_multiout") {
@@ -1391,7 +1423,7 @@ private:
             if (type == "ir_delete") {
                 // A betöltött IR marad (a konvolver tovább szól vele), csak a tárból törlődik
                 if (isValidIrId(id) && cb_.removeLibraryIr) cb_.removeLibraryIr(id);
-            } else if (!selectLibraryIr(id)) {
+            } else if (!selectLibraryIr(id, msg.get("zone") ? std::clamp(static_cast<int>(num(msg, "zone", 0.0)), 0, multiout::kMaxOutputs - 1) : editZone())) {
                 sendText("{\"type\":\"ir_missing\",\"id\":\"" + jsonEscape(isValidIrId(id) ? id : "") + "\"}");
             }
             return;
@@ -1413,7 +1445,8 @@ private:
         if (!cb_.getParams || !cb_.setParams) return;
 
         // "zone": a 2–4. kimenet saját lánca (több kimenetnél); 0 vagy hiányzik: a fő lánc
-        const int zone = std::clamp(static_cast<int>(num(msg, "zone", 0.0)), 0, multiout::kMaxOutputs - 1);
+        const int zone = msg.get("zone") ? std::clamp(static_cast<int>(num(msg, "zone", 0.0)), 0, multiout::kMaxOutputs - 1)
+                                         : editZone();
         if (zone > 0 && (!cb_.getZoneParams || !cb_.setZoneParams)) return;
         ParamData p = zone > 0 ? cb_.getZoneParams(zone) : cb_.getParams();
         const ParamData before = p;
@@ -1512,6 +1545,12 @@ private:
             p.convInputGainDb = static_cast<float>(num(msg, "inputGain", p.convInputGainDb));
             p.convOutputGainDb = static_cast<float>(num(msg, "outputGain", p.convOutputGainDb));
         } else if (type == "clear_ir") {
+            if (zone > 0) {
+                activeIrIds_[zone].clear();
+                if (cb_.setZoneIr) cb_.setZoneIr(zone, IrData{});
+                sendText(buildStateMessage("ir", false, zone));
+                return;
+            }
             activeIrId_.clear();
             if (cb_.setIr) cb_.setIr(IrData{});
             broadcast(buildStateMessage("ir"));
@@ -1684,11 +1723,13 @@ public:
      *               "sync" = egy másik kliens módosított (a felület átveszi, nem küldi vissza)
      * @param presets a profil-dokumentum is (teljes állapotnál mindig)
      */
-    std::string buildStateMessage(const char* reason = "full", bool presets = false) const {
-        ParamData p = cb_.getParams ? cb_.getParams() : ParamData{};
+    std::string buildStateMessage(const char* reason = "full", bool presets = false, int zone = 0) const {
+        const bool zoned = zone > 0 && cb_.getZoneParams;
+        ParamData p = zoned ? cb_.getZoneParams(zone) : (cb_.getParams ? cb_.getParams() : ParamData{});
         std::string s = "{\"type\":\"state\",\"reason\":\"";
         s += reason;
         s += "\",\"protocol\":" + std::to_string(kBridgeProtocol);
+        if (zoned) s += ",\"zone\":" + std::to_string(zone);   // a 2–4. kimenet lánca (a fő állapotot nem írja felül)
         // 2.x: zenetár (a telefon Zenetár füle), lejátszási sor, telefonos zeneátvitel
         std::string caps = "[";
         bool hasCap = false;
@@ -1769,13 +1810,13 @@ public:
         s += ",\"maxGain\":"; appendFloat(s, p.agcMaxGainDb, 1); s += '}';
         // Van-e IR-tár (régebbi motornál nincs: a felület ilyenkor nem készít IR-profilt)
         if (cb_.loadLibraryIr && cb_.saveLibraryIr) s += ",\"irLibrary\":true";
-        if (cb_.getIr) {
-            IrData ir = cb_.getIr();
+        if (zoned ? static_cast<bool>(cb_.getZoneIr) : static_cast<bool>(cb_.getIr)) {
+            IrData ir = zoned ? cb_.getZoneIr(zone) : cb_.getIr();
             s += ",\"ir\":";
             if (ir.empty()) {
                 s += "null";
             } else {
-                s += "{\"name\":\"" + jsonEscape(ir.name) + "\",\"id\":\"" + jsonEscape(activeIrId_) + "\",\"sr\":" + std::to_string(ir.sampleRate) +
+                s += "{\"name\":\"" + jsonEscape(ir.name) + "\",\"id\":\"" + jsonEscape(zoned ? activeIrIds_[zone] : activeIrId_) + "\",\"sr\":" + std::to_string(ir.sampleRate) +
                      ",\"channels\":" + std::to_string(ir.channels()) + ",\"frames\":" + std::to_string(ir.frames()) +
                      ",\"preview\":[";
                 const auto pv = ir.preview(400);
@@ -1849,6 +1890,7 @@ private:
     bool syncPending_ = false, syncPresets_ = false;
     const Client* syncSource_ = nullptr;
     std::string activeIrId_;            // a betöltött IR tárbeli azonosítója (üres: nem IR-profilból jött)
+    std::array<std::string, multiout::kMaxOutputs> activeIrIds_{};   // a 2–4. kimenet IR-profiljai
     clock::time_point lastChange_{};
     // hálózati elérés
     bool remoteEnabled_ = false;

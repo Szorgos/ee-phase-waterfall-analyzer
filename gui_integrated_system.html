@@ -808,6 +808,29 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
   .tab-btn:hover { color: var(--aq-text); }
   .tab-btn.active { color: var(--aq-text); }
+  .zone-bar { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+  /* a hidden attribútum mindig rejtsen (a display: flex stílus ne írja felül) */
+  .zone-bar[hidden], .tab-btn[hidden], .mo-field[hidden], .zone-note[hidden] { display: none !important; }
+  .zone-btns { display: inline-flex; border: 1px solid var(--aq-line-2); border-radius: 999px; overflow: hidden; }
+  .zone-btns button { background: transparent; border: 0; color: var(--aq-text-2); font: inherit; font-weight: 600; min-width: 32px; height: 28px; padding: 0 10px; cursor: pointer; }
+  .zone-btns button + button { border-left: 1px solid var(--aq-line-2); }
+  .zone-btns button.active { background: var(--aq-accent); color: #fff; }
+  .zone-btns button:focus-visible { outline: 2px solid var(--aq-accent); outline-offset: -2px; }
+  .zone-note { margin: 6px 0 0; padding: 8px 12px; border-radius: var(--aq-radius-s, 8px); background: var(--aq-accent-soft); color: var(--aq-text); font-size: var(--aq-fs-sub); border: 1px solid var(--aq-accent); }
+  body.zone-editing .tab-panes-viewport { box-shadow: 0 0 0 2px var(--aq-accent); border-radius: var(--aq-radius-l); }
+  .mo-row { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0; align-items: flex-end; }
+  .mo-field { display: flex; flex-direction: column; gap: 4px; font-size: var(--aq-fs-sub); color: var(--aq-text-2); }
+  .mo-xo-freqs { display: flex; gap: 6px; }
+  .mo-xo-freqs input { width: 84px; }
+  .mo-table-wrap { overflow-x: auto; }
+  .mo-table { width: 100%; border-collapse: collapse; font-size: var(--aq-fs-sub); }
+  .mo-table th { text-align: left; color: var(--aq-text-3); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--aq-line); white-space: nowrap; }
+  .mo-table td { padding: 6px 8px; border-bottom: 1px solid var(--aq-line); vertical-align: middle; }
+  .mo-table input[type=number] { width: 76px; }
+  .mo-table select { max-width: 240px; }
+  .mo-status { font-size: var(--aq-fs-micro); color: var(--aq-text-3); white-space: nowrap; }
+  .mo-status.ok { color: var(--aq-accent-2); }
+  .mo-note { display: block; margin-top: 10px; color: var(--aq-text-3); font-size: var(--aq-fs-micro); line-height: 1.4; }
   .module-dot { width: 8px; height: 8px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid var(--aq-line-2); display: inline-block; flex: 0 0 auto; font-size: 0; transition: background .15s, border-color .15s, box-shadow .15s; }
   .module-dot.active { background: var(--aq-accent); border-color: var(--aq-accent); box-shadow: 0 0 0 3px var(--aq-accent-soft); }
 
@@ -1955,6 +1978,7 @@ if (!window.THREE) window.THREE = (function () {
         <button class="tab-btn" id="tabBtn-mono" onclick="switchTab('mono', this)"><span class="module-dot" id="dot-mono"></span>Mono</button>
         <button class="tab-btn" id="tabBtn-autogain" onclick="switchTab('autogain', this)"><span class="module-dot" id="dot-autogain"></span>Autogain</button>
         <button class="tab-btn" id="tabBtn-magic" onclick="switchTab('magic', this)"><span class="module-dot" id="dot-magic"></span>Magic Touch</button>
+        <button class="tab-btn" id="tabBtn-outputs" hidden onclick="switchTab('outputs', this)"><span class="module-dot" id="dot-outputs"></span><span data-i18n="mo.tab">Kimenetek</span></button>
       </div>
       <!-- DSP PROFILOK: közvetlenül a Hangzás modulfülei mellett, nem a Zenetár felett -->
       <div id="presetBar" class="preset-bar" title="EQ profilok: AutoEq importkor és kézi beállításkor automatikusan mentődnek, újraindítás után is választhatók" data-i18n-title="preset.barTitle">
@@ -1964,7 +1988,13 @@ if (!window.THREE) window.THREE = (function () {
         <button class="mini-btn" id="btnPresetRename" onclick="renamePreset()" title="Aktív profil átnevezése" data-i18n-title="preset.rename" data-i18n-aria-label="preset.rename"><svg class="aq-icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>
         <button class="mini-btn" id="btnPresetDelete" onclick="deletePreset()" title="Aktív profil törlése" data-i18n-title="preset.delete" data-i18n-aria-label="preset.delete"><svg class="aq-icon" aria-hidden="true"><use href="#i-trash"/></svg></button>
       </div>
+      <!-- Több kimenet (független zónák): melyik kimenet beállításait szerkeszti a felület -->
+      <div id="zoneBar" class="zone-bar" hidden>
+        <span class="preset-lbl" data-i18n="mo.editing">Szerkesztett kimenet:</span>
+        <div id="zoneBtns" class="zone-btns" role="group"></div>
+      </div>
     </div>
+    <div id="zoneNote" class="zone-note" hidden></div>
 
     <div class="tab-panes-viewport" id="tabPanesViewport">
       <!-- 1. TAB: EQUALIZER (TISZTÁN SZÉTVÁLASZTOTT GRAFIKON FEJLÉC + GLOBÁLIS EQ SÁV + SÁVSZERKESZTŐ SÁV) -->
@@ -2326,6 +2356,36 @@ if (!window.THREE) window.THREE = (function () {
           <div class="magic-diag-state" id="magicDiagState"></div>
           <table id="magicDiagTable"></table>
         </details>
+      </div>
+    </div>
+
+    <!-- KIMENETEK: több hangkártya (független zónák vagy aktív keresztváltó; multi_output.hpp) -->
+    <div class="tab-pane" id="pane-outputs">
+      <div class="module-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <h3 style="margin:0;"><svg class="aq-icon" aria-hidden="true"><use href="#i-speaker"/></svg><span data-i18n="mo.title">Több kimenet</span></h3>
+            <span class="status-badge off" id="badgeStatus-outputs" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
+          </div>
+          <button type="button" class="adw-btn" id="btnMoToggle" onclick="moToggle()" data-i18n="mod.btnOff">KI</button>
+        </div>
+        <p class="module-desc" id="moDesc" data-i18n="mo.zonesHint">Független zónák: minden kimenet saját, teljes DSP-lánccal szól.</p>
+        <div class="mo-row">
+          <label class="mo-field"><span data-i18n="mo.mode">Üzemmód</span>
+            <select id="moMode" class="ee-select" onchange="moEdit()">
+              <option value="zones" data-i18n="mo.modeZones">Független zónák</option>
+              <option value="crossover" data-i18n="mo.modeXover">Aktív keresztváltó</option>
+            </select></label>
+          <label class="mo-field"><span data-i18n="mo.count">Kimenetek száma</span>
+            <select id="moCount" class="ee-select" onchange="moEdit()"><option>2</option><option>3</option><option>4</option></select></label>
+          <label class="mo-field mo-xo"><span data-i18n="mo.slope">Meredekség</span>
+            <select id="moSlope" class="ee-select" onchange="moEdit()">
+              <option value="12" data-i18n="mo.slope12">12 dB/okt (LR2)</option><option value="24" data-i18n="mo.slope24">24 dB/okt (LR4)</option><option value="48" data-i18n="mo.slope48">48 dB/okt (LR8)</option>
+            </select></label>
+          <div class="mo-field mo-xo"><span data-i18n="mo.xover">Vágási pontok (Hz)</span><div id="moXoFreqs" class="mo-xo-freqs"></div></div>
+        </div>
+        <div class="mo-table-wrap"><table class="mo-table" id="moTable"></table></div>
+        <small class="mo-note" data-i18n="mo.note">A kimenetek induláskor kikapcsolva indulnak (a hangzás nem változik); a beállítás megmarad. Ha egy hangkártyát kihúzol, a hozzá tartozó kimenet elnémul, és nem szól máshol.</small>
       </div>
     </div>
     </div> <!-- /tab-panes-viewport -->
@@ -5724,6 +5784,7 @@ function initBurnInOptions() {
   sel.value = String(10 * 60);
 }
 function openBurnIn() {
+  if (aqEditZone) setEditZone(0);   // a burn-in a fő kimenet láncát kapcsolja
   initBurnInOptions();
   document.getElementById('modalBurnIn').style.display = 'flex';
   renderBurnInState();
@@ -5826,6 +5887,178 @@ document.addEventListener("keydown", (e) => {
 });
 document.addEventListener("DOMContentLoaded", syncClosePrefSelect);
 setTimeout(syncClosePrefSelect, 1000);   // a natív híd függvényei a betöltés után is megjelenhetnek
+
+// ---------------------------------------------------------------- Több kimenet (2–4 hangkártya)
+// A motor "multiout" képességgel jelzi (Linux, macOS). Független zónák: minden kimenetnek saját, teljes lánca van;
+// a felület a „Szerkesztett kimenet” választóval dönti el, melyik kimenetre mennek a modulok, a profilok és az
+// importok (set_edit_zone). Keresztváltó: a közös lánc (1. kimenet) után Linkwitz–Riley sávokra bomlik a jel.
+// (var: a profilmentés már a betöltés elején is olvashatja)
+var moCaps = false;
+var moStatus = null;
+var aqEditZone = 0;
+var aqZoneActive = [null, null, null, null];   // kimenetenként az aktív profil neve
+try {
+  const z = JSON.parse(localStorage.getItem("aqulify_zone_active") || "null");
+  if (Array.isArray(z)) for (let i = 1; i < 4; i++) aqZoneActive[i] = typeof z[i] === "string" ? z[i] : null;
+} catch (e) {}
+const MO_DEFAULT_XO = { 2: [2500], 3: [300, 3000], 4: [80, 500, 4000] };
+
+function moSend(obj) {
+  if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) pipewireWs.send(JSON.stringify(obj));
+}
+function saveZoneActive() {
+  try { localStorage.setItem("aqulify_zone_active", JSON.stringify(aqZoneActive)); } catch (e) {}
+}
+function moOnCaps(caps) {
+  if (!Array.isArray(caps)) return;
+  const has = caps.includes("multiout");
+  if (has === moCaps) return;
+  moCaps = has;
+  const b = document.getElementById("tabBtn-outputs");
+  if (b) b.hidden = !has;
+  if (has) moSend({ type: "get_multiout" });
+  else { moStatus = null; if (aqEditZone) setEditZone(0); }
+  renderZoneBar();
+  if (typeof updateTabGlider === "function") updateTabGlider(null, true);
+}
+function moOnStatus(st) {
+  if (!st || typeof st !== "object") return;
+  moStatus = st;
+  renderMultiOut();
+  renderZoneBar();
+}
+function moCfgFromStatus() {
+  const st = moStatus || {};
+  const outs = Array.isArray(st.outputs) && st.outputs.length >= 2 ? st.outputs.map(o => Object.assign({}, o))
+                                                                   : [{ band: -1 }, { band: -1, sink: "" }];
+  return { enabled: !!st.enabled, mode: st.mode === "crossover" ? "crossover" : "zones", slope: st.slope || 24,
+           crossovers: Array.isArray(st.crossovers) ? st.crossovers.slice() : [2500], outputs: outs };
+}
+function moToggle() {
+  const c = moCfgFromStatus();
+  c.enabled = !c.enabled;
+  if (c.enabled && c.mode === "crossover" && c.outputs.every(o => o.band === -1)) c.outputs.forEach((o, k) => { o.band = k; });
+  moSend(Object.assign({ type: "set_multiout" }, c));
+}
+/** A fül mezőiből új beállítás (bármely mező változásakor). */
+function moEdit() {
+  const c = moCfgFromStatus();
+  const prevMode = c.mode, prevN = c.outputs.length;
+  c.mode = document.getElementById("moMode").value === "crossover" ? "crossover" : "zones";
+  const n = Math.max(2, Math.min(4, parseInt(document.getElementById("moCount").value, 10) || 2));
+  c.slope = parseInt(document.getElementById("moSlope").value, 10) || 24;
+  c.outputs.forEach((o, k) => {
+    const row = document.querySelector(`#moTable tr[data-k="${k}"]`);
+    if (!row) return;
+    const q = sel => row.querySelector(sel);
+    if (q(".mo-sink")) o.sink = q(".mo-sink").value;
+    if (q(".mo-en")) o.enabled = q(".mo-en").checked;
+    if (q(".mo-gain")) o.gain = Math.max(-24, Math.min(12, parseFloat(q(".mo-gain").value) || 0));
+    if (q(".mo-delay")) o.delay = Math.max(0, Math.min(50, parseFloat(q(".mo-delay").value) || 0));
+    if (q(".mo-inv")) o.invert = q(".mo-inv").checked;
+    if (q(".mo-band")) o.band = parseInt(q(".mo-band").value, 10);
+  });
+  while (c.outputs.length < n) c.outputs.push({ sink: "", band: -1, gain: 0, delay: 0, invert: false, enabled: true });
+  c.outputs.length = n;
+  const freqs = [...document.querySelectorAll("#moXoFreqs input")].map(i => parseFloat(i.value)).filter(v => v >= 20 && v <= 20000);
+  c.crossovers = (n === prevN && freqs.length === n - 1) ? freqs : MO_DEFAULT_XO[n].slice();
+  // keresztváltóra váltáskor (vagy új darabszámnál) minden kimenet a saját sávját kapja
+  if (c.mode === "crossover" && (prevMode !== "crossover" || n !== prevN)) c.outputs.forEach((o, k) => { o.band = k; });
+  moSend(Object.assign({ type: "set_multiout" }, c));
+}
+function moBandLabel(n, b, xo) {
+  const f = v => v >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + " kHz" : Math.round(v) + " Hz";
+  if (b < 0) return t("mo.bandFull");
+  if (b === 0) return t("mo.bandLow") + ` (< ${f(xo[0])})`;
+  if (b === n - 1) return t("mo.bandHigh") + ` (> ${f(xo[n - 2])})`;
+  return t("mo.bandMid", { n: n > 3 ? b : "" }).trim() + ` (${f(xo[b - 1])} – ${f(xo[b])})`;
+}
+function renderMultiOut() {
+  if (!moStatus) return;
+  const c = moCfgFromStatus(), n = c.outputs.length, xo = c.mode === "crossover", on = c.enabled;
+  const badge = document.getElementById("badgeStatus-outputs");
+  if (badge) { badge.className = "status-badge " + (on ? "optimal" : "off"); badge.textContent = t(on ? "mod.on" : "mod.off"); }
+  const tb = document.getElementById("btnMoToggle");
+  if (tb) { tb.textContent = t(on ? "mod.btnOn" : "mod.btnOff"); tb.classList.toggle("primary", on); tb.setAttribute("aria-pressed", String(on)); }
+  const dot = document.getElementById("dot-outputs");
+  if (dot) dot.classList.toggle("active", on);
+  const setSel = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
+  setSel("moMode", c.mode);
+  setSel("moCount", String(n));
+  setSel("moSlope", String(c.slope));
+  const desc = document.getElementById("moDesc");
+  if (desc) { desc.setAttribute("data-i18n", xo ? "mo.xoverHint" : "mo.zonesHint"); desc.textContent = t(xo ? "mo.xoverHint" : "mo.zonesHint"); }
+  document.querySelectorAll(".mo-xo").forEach(e => { e.hidden = !xo; });
+  const fx = document.getElementById("moXoFreqs");
+  const xoF = c.crossovers.length >= n - 1 ? c.crossovers.slice(0, n - 1) : MO_DEFAULT_XO[n].slice();
+  if (fx && !fx.contains(document.activeElement))
+    fx.innerHTML = xoF.map((f, j) => `<input type="number" class="ee-input" min="20" max="20000" step="1" value="${Math.round(f)}" aria-label="${escHtml(t("mo.xover"))} ${j + 1}" onchange="moEdit()">`).join("");
+  const tbl = document.getElementById("moTable");
+  if (!tbl || tbl.contains(document.activeElement) && document.activeElement.tagName === "INPUT" && document.activeElement.type === "number") return;
+  const sinks = Array.isArray(moStatus.sinks) ? moStatus.sinks : [];
+  const zones = Array.isArray(moStatus.zones) ? moStatus.zones : [];
+  let h = `<tr><th>#</th><th>${escHtml(t("mo.device"))}</th><th>${escHtml(t("mo.enabled"))}</th>` + (xo ? `<th>${escHtml(t("mo.band"))}</th>` : "") +
+          `<th>${escHtml(t("mo.gain"))}</th><th>${escHtml(t("mo.delay"))}</th><th>${escHtml(t("mo.invert"))}</th><th></th></tr>`;
+  c.outputs.forEach((o, k) => {
+    let dev;
+    if (k === 0) {
+      dev = `<span class="mo-status">${escHtml(t("mo.mainDevice"))}</span>`;
+    } else {
+      const known = sinks.some(si => si.name === o.sink);
+      dev = `<select class="ee-select mo-sink" onchange="moEdit()" aria-label="${escHtml(t("mo.out", { n: k + 1 }))}"><option value="">${escHtml(t("mo.noDevice"))}</option>` +
+            sinks.map(si => `<option value="${escHtml(si.name)}"${si.name === o.sink ? " selected" : ""}>${escHtml(si.label || si.name)}</option>`).join("") +
+            (o.sink && !known ? `<option value="${escHtml(o.sink)}" selected>${escHtml(o.sink)} (${escHtml(t("mo.missing"))})</option>` : "") + `</select>`;
+      const z = zones[k - 1];
+      if (on && o.sink && z) {
+        dev += z.streaming ? ` <span class="mo-status ok">● ${escHtml(t("mo.statusOk"))}</span>` : ` <span class="mo-status">○ ${escHtml(t("mo.statusIdle"))}</span>`;
+        if (z.underruns) dev += ` <span class="mo-status">${escHtml(t("mo.statusUnder", { n: z.underruns }))}</span>`;
+      }
+    }
+    const band = xo ? `<td><select class="ee-select mo-band" onchange="moEdit()">` +
+                      [-1, ...Array.from({ length: n }, (_, i) => i)].map(b => `<option value="${b}"${b === o.band ? " selected" : ""}>${escHtml(moBandLabel(n, b, xoF))}</option>`).join("") +
+                      `</select></td>` : "";
+    const edit = !xo && on ? `<button type="button" class="adw-btn${aqEditZone === k ? " primary" : ""}" onclick="setEditZone(${k})">${escHtml(t("mo.edit"))}</button>` : "";
+    const dl = +o.delay || 0;
+    h += `<tr data-k="${k}"><td>${k + 1}.</td><td>${dev}</td>` +
+         `<td><input type="checkbox" class="mo-en"${o.enabled !== false ? " checked" : ""} onchange="moEdit()" aria-label="${escHtml(t("mo.enabled"))}"></td>${band}` +
+         `<td><input type="number" class="ee-input mo-gain" min="-24" max="12" step="0.5" value="${+o.gain || 0}" onchange="moEdit()" aria-label="${escHtml(t("mo.gain"))}"> dB</td>` +
+         `<td><input type="number" class="ee-input mo-delay" min="0" max="50" step="0.1" value="${dl}" onchange="moEdit()" aria-label="${escHtml(t("mo.delay"))}"> ms <span class="mo-status">${escHtml(t("mo.cm", { cm: Math.round(dl * 34.3) }))}</span></td>` +
+         `<td><input type="checkbox" class="mo-inv"${o.invert ? " checked" : ""} onchange="moEdit()" aria-label="${escHtml(t("mo.invert"))}"></td><td>${edit}</td></tr>`;
+  });
+  tbl.innerHTML = h;
+}
+function renderZoneBar() {
+  const bar = document.getElementById("zoneBar"), btns = document.getElementById("zoneBtns"), note = document.getElementById("zoneNote");
+  if (!bar || !btns || !note) return;
+  const c = moStatus ? moCfgFromStatus() : null;
+  const show = !!(moCaps && c && c.enabled && c.mode === "zones" && c.outputs.length > 1);
+  if (!show && aqEditZone !== 0) { setEditZone(0); return; }
+  if (show && aqEditZone >= c.outputs.length) { setEditZone(0); return; }
+  bar.hidden = !show;
+  if (show) {
+    btns.innerHTML = c.outputs.map((o, k) => `<button type="button" class="${k === aqEditZone ? "active" : ""}" aria-pressed="${k === aqEditZone}" ` +
+      `title="${escHtml(t("mo.out", { n: k + 1 }))}" onclick="setEditZone(${k})">${k + 1}</button>`).join("");
+  }
+  note.hidden = !(show && aqEditZone > 0);
+  if (!note.hidden) note.textContent = t("mo.editingNote", { n: aqEditZone + 1 });
+  document.body.classList.toggle("zone-editing", show && aqEditZone > 0);
+}
+/** A szerkesztett kimenet váltása: a motor a kimenet állapotát küldi vissza (state, reason "zone"). */
+function setEditZone(k) {
+  k = Math.max(0, Math.min(3, k | 0));
+  if (k === aqEditZone) { renderZoneBar(); return; }
+  aqZoneActive[aqEditZone] = activePresetName;
+  aqEditZone = k;
+  activePresetName = aqZoneActive[k] || null;
+  saveZoneActive();
+  moSend({ type: "set_edit_zone", zone: k });
+  if (typeof refreshPresetUi === "function") refreshPresetUi();
+  renderZoneBar();
+  renderMultiOut();
+}
+setInterval(() => {
+  if (moCaps && currentActiveTab === "outputs" && !document.hidden && moStatus && moStatus.enabled) moSend({ type: "get_multiout" });
+}, 2000);
 
 /**
  * Ébren tartás: a natív híd (Windows, Linux) csak az alvást tiltja, a kijelző elalhat (akár 48 órás futásnál is).
@@ -7446,7 +7679,17 @@ function initPipewireBridge() {
       isPipewireConnected = true;
       lastSentEqSig = null;
       updateEngineBadge();
+      // Új kapcsolaton a motor a fő láncot tekinti szerkesztettnek: a felület is visszaáll rá, és a motor
+      // állapotát veszi át (a zóna nézetét nem tolja rá a fő láncra)
+      if (aqEditZone !== 0) {
+        aqZoneActive[aqEditZone] = activePresetName;
+        aqEditZone = 0;
+        activePresetName = aqZoneActive[0];
+        guiStateSynced = false;
+        renderZoneBar();
+      }
       pipewireWs.send(JSON.stringify({ type: "hello", client: "gui_integrated_system" }));
+      pipewireWs.send(JSON.stringify({ type: "get_multiout" }));
       // A választott kimenetet a motor maga jegyzi meg (~/.config/aqulify/output_sink.txt)
       console.log("[Motor Bridge] Élő C++ hangmotorhoz csatlakozva!");
     };
@@ -7488,14 +7731,33 @@ function initPipewireBridge() {
           if (w) w(data.ok === true);
         } else if (data.type === "ir_missing") {
           onIrMissing(data.id);
+        } else if (data.type === "multiout") {
+          moOnStatus(data.status);
         } else if (data.type === "state") {
           updateLibraryCaps(!!(data.caps && Array.isArray(data.caps) && data.caps.includes("library")));
           engineIrLibrary = data.irLibrary === true;
           if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);
           syncLanguageWithEngine(data.language);
+          moOnCaps(data.caps);
+          const stZone = typeof data.zone === "number" ? data.zone : 0;
           // Teljes állapotot csak a munkamenet első csatlakozásakor veszünk át. Újracsatlakozáskor
           // (pl. a motor rövid ideig nem volt elérhető) a felület a forrás: a közben tett változtatások nem vesznek el.
-          if (data.reason === "ir") applyEngineIr(data);
+          if (data.reason === "zone" || stZone > 0 || aqEditZone > 0) {
+            // Több kimenet: csak a szerkesztett kimenet állapota jelenik meg (más kimenetéé nem írja felül)
+            if (data.presets) receivePresetsFromEngine(data.presets);
+            if (stZone === aqEditZone) {
+              if (data.reason === "ir") {
+                applyEngineIr(data);
+              } else {
+                data.initialized = true;   // az alap (üres) lánc is érvényes állapot
+                applyEngineState(data, true);
+                applyEngineIr(data);
+                presetBaseSig = snapshotSig(eqSnapshot());
+                refreshPresetUi();
+                sendCurveMsg({ type: "get_eq_response" });
+              }
+            }
+          } else if (data.reason === "ir") applyEngineIr(data);
           else if (data.reason === "sync") {
             // Egy másik kliens (pl. egy másik felületablak) módosított: átvesszük, és nem küldjük vissza
             if (data.presets) receivePresetsFromEngine(data.presets);
@@ -7662,7 +7924,15 @@ function storePresetsLocal(text) {
 }
 
 function persistPresets() {
-  presetsDoc.active = activePresetName;
+  // Zónaszerkesztéskor az aktív profil a zónáé; a fő kimenet aktív profilja nem változik
+  if (typeof aqEditZone !== "undefined" && aqEditZone > 0) {
+    aqZoneActive[aqEditZone] = activePresetName;
+    saveZoneActive();
+    presetsDoc.active = aqZoneActive[0];
+  } else {
+    presetsDoc.active = activePresetName;
+    if (typeof aqZoneActive !== "undefined") aqZoneActive[0] = activePresetName;
+  }
   const text = JSON.stringify(presetsDoc);
   storePresetsLocal(text);
   if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) {

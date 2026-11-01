@@ -112,6 +112,9 @@ public:
         if (loop && zoneEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), zoneEvent_);
     }
 
+    /** A k-adik kimenet (1–3) saját lánca, pl. impulzusválasz egy zónának (submitIr szálbiztos). */
+    AetherChain& zoneChain(int k) { return multi_.chain(k); }
+
     /** A további kimenetek állapota JSON-ként (a felületnek): céleszköz, szól-e, alulcsordulások. */
     std::string multiStatusJson() {
         std::lock_guard<std::mutex> lk(zoneMutex_);

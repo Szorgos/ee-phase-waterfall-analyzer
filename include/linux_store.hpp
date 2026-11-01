@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
+#include <array>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -20,6 +21,7 @@
 #include <sys/stat.h>
 
 #include "ir_data.hpp"
+#include "multi_output_config.hpp"
 #include "param_block.hpp"
 #include "shared_state.hpp"
 
@@ -89,8 +91,8 @@ inline bool loadParams(ParamData& out) {
     return loadParamBytes(b.data() + 12, b.size() - 12, hdr[1], hdr[2], out);
 }
 
-inline bool saveIr(const IrData& ir) {
-    const std::string path = configDir(true) + "/ir.bin";
+inline bool saveIrFile(const std::string& file, const IrData& ir) {
+    const std::string path = configDir(true) + "/" + file;
     if (ir.empty()) { std::remove(path.c_str()); return true; }
     const uint32_t frames = static_cast<uint32_t>(std::min<size_t>(ir.frames(), kMaxIrFrames));
     const uint32_t hdr[6] = { kIrMagic, 1u, ir.sampleRate, ir.channels(), frames, static_cast<uint32_t>(ir.name.size()) };
@@ -103,8 +105,8 @@ inline bool saveIr(const IrData& ir) {
     return writeAtomic(path, b);
 }
 
-inline bool loadIr(IrData& out) {
-    std::ifstream f(configDir(false) + "/ir.bin", std::ios::binary);
+inline bool loadIrFile(const std::string& file, IrData& out) {
+    std::ifstream f(configDir(false) + "/" + file, std::ios::binary);
     if (!f) return false;
     uint32_t hdr[6] = {};
     if (!f.read(reinterpret_cast<char*>(hdr), sizeof(hdr))) return false;
@@ -122,6 +124,54 @@ inline bool loadIr(IrData& out) {
         if (!f.read(reinterpret_cast<char*>(ir.right.data()), hdr[4] * 4u)) return false;
     }
     out = std::move(ir);
+    return true;
+}
+
+inline bool saveIr(const IrData& ir) { return saveIrFile("ir.bin", ir); }
+inline bool loadIr(IrData& out) { return loadIrFile("ir.bin", out); }
+
+/**
+ * Több kimenet: a beállítás és a 2–4. kimenet lánca (multiout.bin). A ParamData szerkezetének változásakor a régi
+ * fájl nem töltődik be (a fejléc a változatot és a méretet is tartalmazza). A céleszközök nevei a végén.
+ */
+constexpr uint32_t kMultiMagic = 0x4F4D5141;   // "AQMO"
+inline bool saveMultiOut(const multiout::MultiConfig& c, const std::array<std::string, 3>& targets) {
+    const uint32_t hdr[4] = { kMultiMagic, 1u, kParamLayoutVersion, static_cast<uint32_t>(sizeof(multiout::MultiConfig)) };
+    std::vector<char> b(sizeof(hdr) + sizeof(multiout::MultiConfig));
+    std::memcpy(b.data(), hdr, sizeof(hdr));
+    std::memcpy(b.data() + sizeof(hdr), &c, sizeof(multiout::MultiConfig));
+    for (const auto& t : targets) {
+        const uint32_t n = static_cast<uint32_t>(std::min<size_t>(t.size(), 200));
+        const char* np = reinterpret_cast<const char*>(&n);
+        b.insert(b.end(), np, np + 4);
+        b.insert(b.end(), t.data(), t.data() + n);
+    }
+    return writeAtomic(configDir(true) + "/multiout.bin", b);
+}
+inline bool loadMultiOut(multiout::MultiConfig& c, std::array<std::string, 3>& targets) {
+    std::ifstream f(configDir(false) + "/multiout.bin", std::ios::binary);
+    if (!f) return false;
+    std::vector<char> b((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    uint32_t hdr[4] = {};
+    if (b.size() < sizeof(hdr) + sizeof(multiout::MultiConfig)) return false;
+    std::memcpy(hdr, b.data(), sizeof(hdr));
+    if (hdr[0] != kMultiMagic || hdr[1] != 1u || hdr[2] != kParamLayoutVersion || hdr[3] != sizeof(multiout::MultiConfig)) return false;
+    multiout::MultiConfig tmp;
+    std::memcpy(static_cast<void*>(&tmp), b.data() + sizeof(hdr), sizeof(multiout::MultiConfig));
+    size_t pos = sizeof(hdr) + sizeof(multiout::MultiConfig);
+    std::array<std::string, 3> t{};
+    for (auto& s : t) {
+        uint32_t n = 0;
+        if (pos + 4 > b.size()) break;
+        std::memcpy(&n, b.data() + pos, 4);
+        pos += 4;
+        if (n > 200 || pos + n > b.size()) return false;
+        s.assign(b.data() + pos, n);
+        pos += n;
+    }
+    multiout::sanitize(tmp);
+    c = tmp;
+    targets = t;
     return true;
 }
 

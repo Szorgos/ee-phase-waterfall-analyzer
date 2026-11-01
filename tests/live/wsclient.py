@@ -23,6 +23,15 @@ class WS:
         mask = os.urandom(4)
         self.s.sendall(bytes(hdr) + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
 
+    def send_binary(self, data):
+        hdr = bytearray([0x82])
+        n = len(data)
+        if n < 126: hdr.append(0x80 | n)
+        elif n < 65536: hdr += bytes([0x80 | 126]) + struct.pack(">H", n)
+        else: hdr += bytes([0x80 | 127]) + struct.pack(">Q", n)
+        mask = os.urandom(4)
+        self.s.sendall(bytes(hdr) + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
+
     def _read(self, n):
         while len(self.buf) < n:
             c = self.s.recv(65536)

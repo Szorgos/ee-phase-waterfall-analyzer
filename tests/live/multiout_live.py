@@ -13,8 +13,11 @@ sys.path.insert(0, HERE)
 from wsclient import WS          # noqa: E402
 from analyze import levels       # noqa: E402
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 47890
-WORK = sys.argv[2] if len(sys.argv) > 2 else HERE
+PORT = int(os.environ.get("AQ_PORT", "47810"))
+WORK = os.environ.get("AQ_WORK", HERE)
+if __name__ == "__main__":
+    PORT = int(sys.argv[1]) if len(sys.argv) > 1 else PORT
+    WORK = sys.argv[2] if len(sys.argv) > 2 else WORK
 fails = 0
 
 
@@ -123,6 +126,32 @@ def main():
     time.sleep(0.5)
     st = fresh_status(ws)
     check(((st.get("outputs") or [{}, {}])[1]).get("sink", "x") == "", "az ismeretlen nyelő nem lesz céleszköz")
+    ws.send({"type": "set_multiout", "enabled": False})
+
+    print("[8] Szerkesztett kimenet: a felület minden üzenete a 2. kimenetre megy (Mono mélyvágás és IR)")
+    ws.send({"type": "set_multiout", "enabled": True, "mode": "zones", "outputs": [{}, {"sink": "dac_b"}]})
+    ws.send({"type": "set_edit_zone", "zone": 1})
+    zs = None
+    for _ in range(50):   # a korábbi állapotüzenetek átugrása: a zone = 1 választ várjuk
+        m = ws.wait_type("state", limit=5000)
+        if m is None or m.get("zone") == 1:
+            zs = m
+            break
+    check(zs is not None and zs.get("zone") == 1, "set_edit_zone: a válasz a 2. kimenet állapota (zone = 1)")
+    # zóna nélküli üzenetek: a szerkesztett (2.) kimenetre hatnak; 0,5-ös impulzus = −6 dB IR, autogain nélkül
+    import struct as st
+    name = b"teszt"
+    ir = b"AEIR" + st.pack("<5I", 1, 48000, 1, 256, len(name)) + name + st.pack("<f", 0.5) + b"\0" * (255 * 4)
+    ws.send({"type": "set_convolver", "autogain": 0})
+    ws.send({"type": "set_module_convolver", "val": 1})
+    ws.send_binary(ir)
+    ws.send({"type": "set_module_mono", "val": 1})
+    ws.send({"type": "set_mono", "subsonic": 35})
+    time.sleep(1.0)
+    a, b = record("edit", t)
+    check(abs(a[100] + 12) < 0.3 and abs(a[4000] + 12) < 0.3, "a fő kimenet érintetlen: " + fmt(a, b))
+    check(abs(b[4000] + 18) < 0.5 and abs(b[100] + 18.4) < 0.6, "a 2. kimeneten az IR (−6 dB) és a 35 Hz-es mélyvágás él: " + fmt(a, b))
+    ws.send({"type": "set_edit_zone", "zone": 0})
     ws.send({"type": "set_multiout", "enabled": False})
 
     print("[7] Időzítés: a kimenetek egyszerre szólnak (zajjel, kereszt-korreláció)")
