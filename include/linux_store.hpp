@@ -246,49 +246,4 @@ inline std::string loadOutputSink() {
     return s;
 }
 
-/** Headless mód (Raspberry Pi): az aktuális 6-jegyű párosító PIN kód (pair.pin). */
-inline bool savePairPin(const std::string& pin) {
-    const std::string path = configDir(true) + "/pair.pin";
-    std::ofstream f(path, std::ios::trunc);
-    if (!f) return false;
-    f << pin << "\n";
-#ifndef _WIN32
-    chmod(path.c_str(), 0600);
-#endif
-    return true;
-}
-
-inline std::string loadPairPin() {
-    const std::string path = configDir(false) + "/pair.pin";
-    std::ifstream f(path);
-    if (!f) return "";
-    std::string s;
-    std::getline(f, s);
-    while (!s.empty() && (s.back() == '\r' || s.back() == '\n' || s.back() == ' ')) s.pop_back();
-    return s;
-}
-
-/** A grafikus felület fájljainak alapértelmezett mappája (HTML, JS, CSS). */
-inline std::string defaultGuiDir() {
-    std::vector<std::string> candidates;
-#ifndef _WIN32
-    if (const char* x = std::getenv("XDG_DATA_HOME"); x && *x)
-        candidates.push_back(std::string(x) + "/aqulify");
-    else if (const char* h = std::getenv("HOME"); h && *h)
-        candidates.push_back(std::string(h) + "/.local/share/aqulify");
-    candidates.push_back("/usr/share/aqulify");
-    candidates.push_back("/usr/local/share/aqulify");
-#endif
-    candidates.push_back(".");
-    candidates.push_back("..");
-
-    for (const auto& c : candidates) {
-        struct stat st{};
-        const std::string testFile = c + "/gui_integrated_system.html";
-        if (stat(testFile.c_str(), &st) == 0 && S_ISREG(st.st_mode))
-            return c;
-    }
-    return "";
-}
-
 } // namespace ee_analyzer::linux_store

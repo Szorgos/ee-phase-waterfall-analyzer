@@ -44,7 +44,6 @@
 #include "self_path.hpp"
 #include "media_session.hpp"
 #include "mdns_announcer.hpp"
-#include "bluetooth_sink.hpp"
 #include <fstream>
 
 namespace ee_analyzer {
@@ -121,8 +120,6 @@ struct BridgeCallbacks {
     std::function<void(const std::string& text)> broadcast;
     /** Van-e csatlakozott távoli (telefonos) kliens (4d). */
     std::function<bool()> hasRemoteClient;
-    /** Headless üzemmód (Raspberry Pi / szerver) PIN mentése (opcionális). */
-    std::function<bool(const std::string& pin)> savePairPin;
 };
 
 /**
@@ -336,22 +333,6 @@ public:
     bool hasClient() const { return clientCount_.load() > 0; }
     bool hasRemoteClient() const { return remoteClientCount_.load() > 0; }
 
-    void setHeadless(bool h) {
-        headless_ = h;
-        if (headless_) {
-            setRemoteEnabled(true);
-        }
-    }
-    bool isHeadless() const { return headless_; }
-
-    void setWebRootDir(const std::string& dir) {
-        webRootDir_ = dir;
-        while (!webRootDir_.empty() && (webRootDir_.back() == '/' || webRootDir_.back() == '\\')) {
-            webRootDir_.pop_back();
-        }
-    }
-    const std::string& webRootDir() const { return webRootDir_; }
-
     void setRemoteEnabled(bool on) {
         if (remoteEnabled_ == on && (remoteListener_ != net::kInvalidSocket) == on) return;
         remoteEnabled_ = on;
@@ -555,130 +536,6 @@ private:
         net::sendSome(s, r.data(), r.size());
     }
 
-    static void replyHttp(net::socket_t s, int code, const char* status, const std::string& mime, const std::string& body) {
-        std::string r = "HTTP/1.1 " + std::to_string(code) + " " + status + "\r\n";
-        r += "Content-Type: " + mime + "\r\n";
-        r += "Content-Length: " + std::to_string(body.size()) + "\r\n";
-        r += "Connection: close\r\n";
-        r += "Access-Control-Allow-Origin: *\r\n\r\n";
-        r += body;
-        net::sendSome(s, r.data(), r.size());
-    }
-
-    bool handleHttpRequest(Pending& p) {
-        const std::string& req = p.buf;
-        if (req.rfind("GET ", 0) != 0 && req.rfind("HEAD ", 0) != 0) return false;
-
-        const size_t endLine = req.find("\r\n");
-        if (endLine == std::string::npos) return false;
-        const std::string line = req.substr(0, endLine);
-        const size_t sp1 = line.find(' ');
-        const size_t sp2 = line.find(' ', sp1 + 1);
-        if (sp1 == std::string::npos || sp2 == std::string::npos) return false;
-
-        const std::string rawPath = line.substr(sp1 + 1, sp2 - (sp1 + 1));
-        const size_t q = rawPath.find('?');
-        std::string path = (q != std::string::npos) ? rawPath.substr(0, q) : rawPath;
-
-        if (path == "/" || path.empty()) path = "/gui_integrated_system.html";
-
-        // Biztonsági ellenőrzés: könyvtárelhagyás (directory traversal) kizárása
-        if (path.find("..") != std::string::npos || path.find('\\') != std::string::npos) {
-            replyHttp(p.sock, 403, "Forbidden", "text/plain", "Forbidden");
-            return true;
-        }
-
-        if (path == "/api/status") {
-            std::string st = "{\"status\":\"ok\",\"headless\":";
-            st += headless_ ? "true" : "false";
-            st += ",\"pairingOpen\":";
-            st += pairingOpen() ? "true" : "false";
-            st += ",\"clients\":" + std::to_string(clients_.size()) + "}";
-            replyHttp(p.sock, 200, "OK", "application/json; charset=utf-8", st);
-            return true;
-        }
-
-        if (webRootDir_.empty()) {
-            replyHttp(p.sock, 404, "Not Found", "text/plain", "Web root not configured");
-            return true;
-        }
-
-        std::string ext;
-        const size_t dot = path.rfind('.');
-        if (dot != std::string::npos) ext = path.substr(dot);
-        std::string mime = "application/octet-stream";
-        if (ext == ".html" || ext == ".htm") mime = "text/html; charset=utf-8";
-        else if (ext == ".js") mime = "application/javascript; charset=utf-8";
-        else if (ext == ".css") mime = "text/css; charset=utf-8";
-        else if (ext == ".json") mime = "application/json; charset=utf-8";
-        else if (ext == ".png") mime = "image/png";
-        else if (ext == ".svg") mime = "image/svg+xml";
-        else if (ext == ".txt") mime = "text/plain; charset=utf-8";
-        else {
-            replyHttp(p.sock, 403, "Forbidden", "text/plain", "File type not supported");
-            return true;
-        }
-
-        const std::string fullPath = webRootDir_ + path;
-        std::ifstream f(fullPath, std::ios::binary);
-        if (!f.is_open()) {
-            replyHttp(p.sock, 404, "Not Found", "text/plain", "File not found: " + path);
-            return true;
-        }
-        const std::string body((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-        replyHttp(p.sock, 200, "OK", mime, body);
-        return true;
-    }
-
-    bool approveDirectHeadless(Pending& p, const std::string& key, const std::string& request) {
-        if (clock::now() < pairLockUntil_) {
-            reply(p.sock, "429 Too Many Requests");
-            return false;
-        }
-        if (clients_.size() >= kBridgeMaxClients) {
-            reply(p.sock, "503 Service Unavailable");
-            return false;
-        }
-
-        const std::string rawName = bridge_detail::queryParam(request, "name");
-        std::string name = bridge_detail::cleanName(rawName);
-        if (name.empty()) name = "Távoli eszköz";
-
-        const std::string devId = bridge_detail::randomHex(4);
-        const std::string token = bridge_detail::randomHex(32);
-        RemoteDevice d;
-        d.id = devId;
-        d.name = name;
-        d.hash = bridge_detail::sha1Hex(token);
-        d.created = d.last = static_cast<long long>(std::time(nullptr));
-        devices_.push_back(d);
-        if (devices_.size() > 32) devices_.erase(devices_.begin());
-        saveRemoteConfig();
-
-        const std::string magicGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-        const std::string acceptKey = Base64::encode(Sha1::hash(key + magicGuid));
-        auto c = std::make_unique<Client>();
-        c->sock = p.sock;
-        c->remote = true;
-        c->deviceId = devId;
-        c->deviceName = d.name;
-        c->out = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
-                 "Sec-WebSocket-Accept: " + acceptKey + "\r\n\r\n";
-        net::setNoDelay(c->sock);
-        p.sock = net::kInvalidSocket;
-        Client& cl = *c;
-        clients_.push_back(std::move(c));
-        updateClientCountsLocked();
-        std::cout << "[WS Bridge] Headless közvetlen párosítás jóváhagyva: " << cl.deviceName << " (" << devId << ")\n";
-
-        cur_ = &cl;
-        sendText("{\"type\":\"paired\",\"id\":\"" + cl.deviceId + "\",\"token\":\"" + token + "\"}");
-        sendText(buildStateMessage());
-        cur_ = nullptr;
-        broadcastRemoteState();
-        return true;
-    }
-
     bool handlePushPairRequest(Pending& p, const std::string& key, const std::string& request) {
         // Harmadik féltől származó távirányítók kizárása: csak a hitelesített Aqulify Remote kliens párosítható
         const std::string clientType = bridge_detail::cleanName(bridge_detail::queryParam(request, "client"));
@@ -689,9 +546,6 @@ private:
 
         const bool hasLocal = std::any_of(clients_.begin(), clients_.end(), [](const auto& c) { return !c->remote && !c->dead; });
         if (!hasLocal) {
-            if (headless_ && pairingOpen()) {
-                return approveDirectHeadless(p, key, request);
-            }
             reply(p.sock, "503 Service Unavailable");
             return false;
         }
@@ -765,7 +619,6 @@ private:
         const std::string& request = p.buf;
         const std::string key = headerValue(request, "sec-websocket-key");
         if (key.empty()) {
-            if (handleHttpRequest(p)) return false;
             reply(p.sock, "426 Upgrade Required");
             return false;
         }
@@ -1107,14 +960,8 @@ private:
     /** Új párosító kód, amely a következő néhány percben használható. */
     void newPairCode() {
         pairCode_ = bridge_detail::randomDigits(6);
-        const int winSec = headless_ ? 600 : kPairWindowSeconds;
-        pairUntil_ = clock::now() + std::chrono::seconds(winSec);
-        if (headless_) {
-            std::cout << "[WS Bridge] Headless párosító PIN kód: " << pairCode_ << " (" << winSec / 60 << " percig érvényes)\n";
-            if (cb_.savePairPin) cb_.savePairPin(pairCode_);
-        } else {
-            std::cout << "[WS Bridge] Párosító kód: " << pairCode_ << " (" << winSec / 60 << " percig érvényes)\n";
-        }
+        pairUntil_ = clock::now() + std::chrono::seconds(kPairWindowSeconds);
+        std::cout << "[WS Bridge] Párosító kód: " << pairCode_ << " (" << kPairWindowSeconds / 60 << " percig érvényes)\n";
     }
 
     bool pairingOpen() const { return remoteListener_ != net::kInvalidSocket && !pairCode_.empty() && clock::now() < pairUntil_; }
@@ -1623,19 +1470,6 @@ private:
             pong += "}";
             sendText(pong);
             return;
-        } else if (type == "get_bluetooth_status") {
-            sendText(aqulify::BluetoothSinkManager::instance().toJson());
-            return;
-        } else if (type == "set_bluetooth_sink") {
-            bool en = num(msg, "enabled", 1.0) != 0.0;
-            aqulify::BluetoothSinkManager::instance().setEnabled(en);
-            sendText(aqulify::BluetoothSinkManager::instance().toJson());
-            return;
-        } else if (type == "set_smart_handover") {
-            bool en = num(msg, "enabled", 1.0) != 0.0;
-            aqulify::BluetoothSinkManager::instance().setSmartHandover(en);
-            sendText(aqulify::BluetoothSinkManager::instance().toJson());
-            return;
         } else if (type == "set_eq") {
             const json::Value* bands = msg.get("bands");
             if (!bands || bands->type != json::Value::Type::Array) return;
@@ -1789,7 +1623,7 @@ public:
         std::string s = "{\"type\":\"state\",\"reason\":\"";
         s += reason;
         s += "\",\"protocol\":" + std::to_string(kBridgeProtocol);
-        // 2.x: zenetár (a telefon Zenetár füle), lejátszási sor, telefonos zeneátvitel és Bluetooth Smart Connect
+        // 2.x: zenetár (a telefon Zenetár füle), lejátszási sor, telefonos zeneátvitel
         std::string caps = "[";
         bool hasCap = false;
         if (cb_.libraryRequest) {
@@ -1798,17 +1632,9 @@ public:
             if (cb_.queueRequest) caps += ",\"queue\",\"playlists\"";
             if (cb_.phoneTrackRequest) caps += ",\"phone_track\"";
         }
-        if (aqulify::BluetoothSinkManager::instance().isSupported()) {
-            if (hasCap) caps += ",";
-            caps += "\"bluetooth\"";
-            hasCap = true;
-        }
         caps += "]";
         if (hasCap) {
             s += ",\"caps\":" + caps;
-        }
-        if (headless_) {
-            s += ",\"headless\":true";
         }
         s += ",\"initialized\":";
         s += p.has(kFlagInitialized) ? "true" : "false";
@@ -1953,9 +1779,6 @@ private:
     const Client* syncSource_ = nullptr;
     std::string activeIrId_;            // a betöltött IR tárbeli azonosítója (üres: nem IR-profilból jött)
     clock::time_point lastChange_{};
-    // headless üzemmód (Raspberry Pi / szerver) és beépített HTTP szerver
-    bool headless_ = false;
-    std::string webRootDir_;
     // hálózati elérés
     bool remoteEnabled_ = false;
     int remotePort_ = kRemotePortFirst;

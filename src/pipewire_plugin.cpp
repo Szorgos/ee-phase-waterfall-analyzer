@@ -220,8 +220,6 @@ int main(int argc, char* argv[]) {
         std::cout << "Használat: aqulify-engine [opciók]\n"
                      "  --port N         csak ezt a WebSocket portot próbálja (alapból: 47810-47814, majd 8080)\n"
                      "  --listen lan     hálózati távvezérlés bekapcsolása (47820-as port és mDNS hirdető)\n"
-                     "  --headless       kijelző nélküli szerver üzemmód (auto-LAN, PIN és setup párosítás)\n"
-                     "  --web-root DIR   a beépített HTTP szerver felületi mappája\n"
                      "A motor egy \"Aqulify\" nevű kimeneti hangeszközt hoz létre. Válaszd ki a hangbeállításokban\n"
                      "(vagy: pactl set-default-sink aqulify_sink), és minden hang a DSP láncon át szól.\n";
         return 0;
@@ -232,21 +230,11 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i + 1 < argc; ++i)
         if (std::strcmp(argv[i], "--port") == 0) ports = { std::atoi(argv[i + 1]) };
 
-    const bool headless = hasArg(argc, argv, "--headless");
     bool listenLan = hasArg(argc, argv, "--remote");
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--listen") == 0 && i + 1 < argc && std::strcmp(argv[i + 1], "lan") == 0) {
             listenLan = true;
         }
-    }
-    std::string webRoot;
-    for (int i = 1; i + 1 < argc; ++i) {
-        if (std::strcmp(argv[i], "--web-root") == 0) {
-            webRoot = argv[i + 1];
-        }
-    }
-    if (webRoot.empty()) {
-        webRoot = linux_store::defaultGuiDir();
     }
 
     // Indításkor mindig alap (minden modul ki): az utolsó lánc nem áll vissza automatikusan,
@@ -430,7 +418,6 @@ int main(int argc, char* argv[]) {
     }, &phoneCache);
     cb.loadRemote = [] { return linux_store::loadRemote(); };
     cb.saveRemote = [](const std::string& doc) { return linux_store::saveRemote(doc); };
-    cb.savePairPin = linux_store::savePairPin;
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     cb.setLanguage = [](const std::string& l) {
         if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cerr << "[Nyelv] Figyelem: a language.txt nem írható.\n";
@@ -449,14 +436,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    if (!webRoot.empty()) {
-        bridge->setWebRootDir(webRoot);
-        std::cout << "[HTTP] Beépített felület mappája: " << webRoot << "\n";
-    }
-    if (headless) {
-        bridge->setHeadless(true);
-        std::cout << "[Headless] Kijelző nélküli szerver üzemmód aktív (Pi / headless).\n";
-    } else if (listenLan) {
+    if (listenLan) {
         bridge->setRemoteEnabled(true);
         std::cout << "[Hálózat] Távvezérlés parancssorból bekapcsolva (--listen lan).\n";
     }

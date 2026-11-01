@@ -77,9 +77,6 @@ msg_text() {
         inst.sumState) f='Motor állapota: systemctl --user status aqulify' ;;
         inst.sumLog) f='Napló:          journalctl --user -u aqulify -f' ;;
         inst.sumUninstall) f='Eltávolítás:    ./uninstall.sh' ;;
-        inst.sumHeadlessWeb) f='Web felület:     http://%s:47820  (vagy Aqulify Remote mobilapp)' ;;
-        inst.sumHeadlessPin) f='Párosítási PIN:   %s/aqulify-engine --pair-pin' ;;
-        inst.sumHeadlessLinger) f='Linger (folyamatos futás kijelentkezéskor is): bekapcsolva (loginctl).' ;;
         esac ;;
     esac
     if [ -z "$f" ]; then
@@ -128,9 +125,6 @@ msg_text() {
         inst.sumState) f='Engine status:  systemctl --user status aqulify' ;;
         inst.sumLog) f='Log:            journalctl --user -u aqulify -f' ;;
         inst.sumUninstall) f='Uninstall:      ./uninstall.sh' ;;
-        inst.sumHeadlessWeb) f='Web interface:   http://%s:47820  (or Aqulify Remote mobile app)' ;;
-        inst.sumHeadlessPin) f='Pairing PIN:     %s/aqulify-engine --pair-pin' ;;
-        inst.sumHeadlessLinger) f='Linger (background service without login): enabled (loginctl).' ;;
         esac
     fi
     printf "%s" "$f"
@@ -174,13 +168,6 @@ echo -e "${BLUE}================================================================
 
 [ "$(id -u)" -eq 0 ] && [ -z "${AQULIFY_ALLOW_ROOT:-}" ] && die "$(msg inst.noRoot)"
 
-HEADLESS=0
-for arg in "$@"; do
-    case "$arg" in
-        --headless) HEADLESS=1 ;;
-    esac
-done
-
 # ------------------------------------------------------------------ 1. csomagok
 say "\n$(msg inst.step1)"
 . /etc/os-release 2>/dev/null || die "$(msg inst.noOsRelease)"
@@ -192,43 +179,27 @@ case "$ID_ALL" in
         sudo apt-get install -y build-essential cmake pkg-config libpipewire-0.3-dev libfftw3-dev pipewire
         # RNNoise (a Magic Touch beszéd zajcsökkentése): újabb kiadásokban csomagként is van
         sudo apt-get install -y librnnoise-dev 2>/dev/null || true
-        if [ "$HEADLESS" -eq 0 ]; then
-            sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev \
-                || sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev || GUI_PKGS_OK=0
-        else
-            GUI_PKGS_OK=0
-        fi
+        sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev \
+            || sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev || GUI_PKGS_OK=0
         ;;
     *fedora*|*rhel*|*centos*)
         sudo dnf install -y gcc gcc-c++ cmake pkgconf pipewire-devel fftw-devel pipewire
-        if [ "$HEADLESS" -eq 0 ]; then
-            sudo dnf install -y gtk3-devel webkit2gtk4.1-devel || GUI_PKGS_OK=0
-        else
-            GUI_PKGS_OK=0
-        fi
+        sudo dnf install -y gtk3-devel webkit2gtk4.1-devel || GUI_PKGS_OK=0
         ;;
     *arch*|*manjaro*|*endeavouros*)
         sudo pacman -S --needed --noconfirm base-devel cmake pkgconf pipewire fftw
-        if [ "$HEADLESS" -eq 0 ]; then
-            sudo pacman -S --needed --noconfirm gtk3 webkit2gtk-4.1 || GUI_PKGS_OK=0
-        else
-            GUI_PKGS_OK=0
-        fi
+        sudo pacman -S --needed --noconfirm gtk3 webkit2gtk-4.1 || GUI_PKGS_OK=0
         ;;
     *suse*)
         sudo zypper install -y gcc gcc-c++ cmake pkg-config pipewire-devel fftw3-devel pipewire
-        if [ "$HEADLESS" -eq 0 ]; then
-            sudo zypper install -y gtk3-devel webkit2gtk3-devel || GUI_PKGS_OK=0
-        else
-            GUI_PKGS_OK=0
-        fi
+        sudo zypper install -y gtk3-devel webkit2gtk3-devel || GUI_PKGS_OK=0
         ;;
     *)
         warn "$(msg inst.unknownDistro1 "${ID:-?}")"
-        [ "$HEADLESS" -eq 0 ] && warn "$(msg inst.unknownDistro2)"
+        warn "$(msg inst.unknownDistro2)"
         ;;
 esac
-[ "$GUI_PKGS_OK" = 1 ] || [ "$HEADLESS" -eq 1 ] || warn "$(msg inst.noWebkit)"
+[ "$GUI_PKGS_OK" = 1 ] || warn "$(msg inst.noWebkit)"
 
 command -v pw-cli >/dev/null 2>&1 || warn "$(msg inst.noPwCli)"
 # Két telepítés egyszerre (T28): a ~/.config/systemd/user szolgáltatás felülírja a csomagét, így a ~/.local motor indul
@@ -260,23 +231,19 @@ else
         warn "$(msg inst.rnnFail)"
     fi
 fi
-GUI_CMAKE_OPT="-DBUILD_LINUX_GUI=ON"
-[ "$HEADLESS" -eq 1 ] && GUI_CMAKE_OPT="-DBUILD_LINUX_GUI=OFF"
-cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON $GUI_CMAKE_OPT $RNN_OPT
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON $RNN_OPT
 cmake --build build -j"$(nproc)" --target aqulify-engine aqulify-play
 [ -x build/aqulify-engine ] || die "$(msg inst.engineFail)"
 ok "$(msg inst.engineOk)"
 HAVE_GUI=0
-if [ "$HEADLESS" -eq 0 ]; then
-    if cmake --build build -j"$(nproc)" --target aqulify-gui > build/gui-build.log 2>&1 && [ -x build/aqulify-gui ]; then
-        HAVE_GUI=1
-        ok "$(msg inst.guiOk)"
-    else
-        tail -n 15 build/gui-build.log 2>/dev/null || true
-        warn "$(msg inst.guiFail1)"
-        warn "$(msg inst.guiFail2)"
-        warn "$(msg inst.guiFail3)"
-    fi
+if cmake --build build -j"$(nproc)" --target aqulify-gui > build/gui-build.log 2>&1 && [ -x build/aqulify-gui ]; then
+    HAVE_GUI=1
+    ok "$(msg inst.guiOk)"
+else
+    tail -n 15 build/gui-build.log 2>/dev/null || true
+    warn "$(msg inst.guiFail1)"
+    warn "$(msg inst.guiFail2)"
+    warn "$(msg inst.guiFail3)"
 fi
 
 # ------------------------------------------------------------------ 3. fájlok
@@ -309,15 +276,6 @@ install -m 644 linux/aqulify.png "$ICON_DIR/aqulify.png"
 install -m 644 linux/aqulify.png "$PIXMAP_DIR/aqulify.png"
 if [ "$HAVE_GUI" = 1 ]; then
     install -m 755 build/aqulify-gui "$BIN_DIR/aqulify-gui"
-elif [ "$HEADLESS" -eq 1 ]; then
-    cat > "$BIN_DIR/aqulify-gui" <<EOF
-#!/usr/bin/env bash
-# Aqulify Headless környezet
-echo "Az Aqulify Headless üzemmódban fut."
-echo "Nyisd meg böngészőben: http://localhost:47820 (vagy a gép IP-címén: http://\$(hostname -I 2>/dev/null | awk '{print \$1}'):47820)"
-echo "Vagy csatlakozz az Aqulify Remote mobilalkalmazással!"
-EOF
-    chmod 755 "$BIN_DIR/aqulify-gui"
 else
     cat > "$BIN_DIR/aqulify-gui" <<EOF
 #!/usr/bin/env bash
@@ -337,11 +295,6 @@ ok "$(msg inst.filesOk)"
 
 # ------------------------------------------------------------------ 4. automatikus indítás
 say "\n$(msg inst.step4)"
-if [ "$HEADLESS" -eq 1 ]; then
-    EXEC_CMD="${BIN_DIR}/aqulify-engine --headless --listen lan"
-else
-    EXEC_CMD="${BIN_DIR}/aqulify-engine"
-fi
 cat > "$UNIT_DIR/aqulify.service" <<EOF
 [Unit]
 Description=$(msg inst.unitDesc)
@@ -349,7 +302,7 @@ After=pipewire.service wireplumber.service
 Wants=pipewire.service
 
 [Service]
-ExecStart=${EXEC_CMD}
+ExecStart=${BIN_DIR}/aqulify-engine
 Restart=on-failure
 RestartSec=2
 
@@ -358,17 +311,13 @@ WantedBy=default.target
 EOF
 if systemctl --user daemon-reload 2>/dev/null && systemctl --user enable --now aqulify.service; then
     ok "$(msg inst.serviceOk)"
-    if [ "$HEADLESS" -eq 1 ] && command -v loginctl >/dev/null 2>&1; then
-        loginctl enable-linger "$USER" 2>/dev/null && ok "$(msg inst.sumHeadlessLinger)" || true
-    fi
 else
-    warn "$(msg inst.serviceFail "${EXEC_CMD}")"
+    warn "$(msg inst.serviceFail "${BIN_DIR}/aqulify-engine")"
 fi
 
 # ------------------------------------------------------------------ 5. menübejegyzés
-if [ "$HEADLESS" -eq 0 ]; then
-    say "\n$(msg inst.step5)"
-    cat > "$APP_DIR/aqulify.desktop" <<EOF
+say "\n$(msg inst.step5)"
+cat > "$APP_DIR/aqulify.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Aqulify
@@ -382,31 +331,29 @@ Terminal=false
 Categories=AudioVideo;Audio;
 StartupWMClass=Aqulify
 EOF
-    chmod +x "$APP_DIR/aqulify.desktop"
+chmod +x "$APP_DIR/aqulify.desktop"
 
-    # Asztali ikon létrehozása (ha létezik Asztal vagy Desktop mappa)
-    for d in "$HOME/Asztal" "$HOME/Desktop"; do
-        if [ -d "$d" ]; then
-            cp "$APP_DIR/aqulify.desktop" "$d/aqulify.desktop"
-            chmod +x "$d/aqulify.desktop"
-            gio set "$d/aqulify.desktop" metadata::trusted true >/dev/null 2>&1 || true
-        fi
-    done
+# Asztali ikon létrehozása (ha létezik Asztal vagy Desktop mappa)
+for d in "$HOME/Asztal" "$HOME/Desktop"; do
+    if [ -d "$d" ]; then
+        cp "$APP_DIR/aqulify.desktop" "$d/aqulify.desktop"
+        chmod +x "$d/aqulify.desktop"
+        gio set "$d/aqulify.desktop" metadata::trusted true >/dev/null 2>&1 || true
+    fi
+done
 
-    update-desktop-database "$APP_DIR" >/dev/null 2>&1 || true
-    gtk-update-icon-cache -q "${PREFIX}/share/icons/hicolor" >/dev/null 2>&1 || true
-    kbuildsycoca6 >/dev/null 2>&1 || kbuildsycoca5 >/dev/null 2>&1 || true
-    # régi (0.x) telepítés maradványa
-    rm -f "$PROJECT_DIR/run.sh" 2>/dev/null || true
-    ok "$(msg inst.menuOk)"
-fi
+update-desktop-database "$APP_DIR" >/dev/null 2>&1 || true
+gtk-update-icon-cache -q "${PREFIX}/share/icons/hicolor" >/dev/null 2>&1 || true
+kbuildsycoca6 >/dev/null 2>&1 || kbuildsycoca5 >/dev/null 2>&1 || true
+# régi (0.x) telepítés maradványa
+rm -f "$PROJECT_DIR/run.sh" 2>/dev/null || true
+ok "$(msg inst.menuOk)"
 
 # ------------------------------------------------------------------ 6. alapértelmezett kimenet
 say "\n$(msg inst.step6)"
 msg inst.defaultExplain; echo
-if [ "${WAS_DEFAULT:-0}" = 1 ] || [ "$HEADLESS" -eq 1 ]; then
-    ans="y"
-    [ "${WAS_DEFAULT:-0}" = 1 ] && { msg inst.legacyDefault; echo; }
+if [ "${WAS_DEFAULT:-0}" = 1 ]; then
+    ans="y"; msg inst.legacyDefault; echo
 else
     read -r -p "$(msg inst.askDefault)" ans || ans=""
 fi
@@ -429,14 +376,4 @@ fi
 echo -e "\n${BLUE}====================================================================${NC}"
 echo -e "${GREEN}  $(msg inst.done)${NC}"
 echo -e "${BLUE}====================================================================${NC}"
-if [ "$HEADLESS" -eq 1 ]; then
-    LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
-    [ -z "$LOCAL_IP" ] && LOCAL_IP="<IP-cím>"
-    echo "  $(msg inst.sumHeadlessWeb "$LOCAL_IP")"
-    echo "  $(msg inst.sumHeadlessPin "$BIN_DIR")"
-    echo "  $(msg inst.sumState)"
-    echo "  $(msg inst.sumLog)"
-    echo "  $(msg inst.sumUninstall)"
-else
-    for k in inst.sumGui inst.sumState inst.sumLog inst.sumUninstall; do echo "  $(msg "$k")"; done
-fi
+for k in inst.sumGui inst.sumState inst.sumLog inst.sumUninstall; do echo "  $(msg "$k")"; done

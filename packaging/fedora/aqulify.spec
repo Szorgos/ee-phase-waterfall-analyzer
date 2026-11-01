@@ -93,7 +93,6 @@ fi
 %{_metainfodir}/io.github.szorgos.Aqulify.metainfo.xml
 %{_datadir}/icons/hicolor/256x256/apps/aqulify.png
 %{_userunitdir}/aqulify.service
-%{_userunitdir}/aqulify-headless.service
 %{_userpresetdir}/80-aqulify.preset
 
 %changelog

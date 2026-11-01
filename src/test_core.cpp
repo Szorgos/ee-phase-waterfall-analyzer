@@ -437,111 +437,6 @@ static void testPushPairing() {
     CHECK(thirdPartyClient != "aqulify_remote", "harmadik féltől származó kliens felismerve és kizárva");
 }
 
-static void testBluetoothHandover() {
-    std::printf("[11] Bluetooth A2DP Sink és Smart Handover (8e)\n");
-    auto& bt = aqulify::BluetoothSinkManager::instance();
-
-    // 1. Alapértelmezett állapot és lekérdezés
-    bt.setSupportedForTesting(true);
-    CHECK(bt.isSupported() == true, "Bluetooth hardver támogatás detektálva");
-    CHECK(bt.isEnabled() == true, "Bluetooth vevő alapértelmezetten engedélyezve");
-    CHECK(bt.isSmartHandover() == true, "Smart Handover alapértelmezetten aktív");
-
-    // 2. JSON állapotjelentés (toJson)
-    const std::string statusJson = bt.toJson();
-    json::Value parsed;
-    CHECK(json::parse(statusJson, parsed) && parsed.type == json::Value::Type::Object, "bluetooth_status JSON értelmezhető");
-    CHECK(parsed.get("type") && parsed.get("type")->stringOr("") == "bluetooth_status", "üzenettípus: bluetooth_status");
-    CHECK(parsed.get("supported") && parsed.get("supported")->b == true, "supported mező true");
-    CHECK(parsed.get("smartHandover") && parsed.get("smartHandover")->b == true, "smartHandover mező true");
-
-    // 3. Eszközcsatlakozás szimulációja (telefon csatlakozik A2DP Sink-hez)
-    bt.setConnectedDevice("Samsung Galaxy S23", "AA:BB:CC:DD:EE:FF", "AAC", 48000);
-    const auto st = bt.getStatus();
-    CHECK(st.connected == true, "eszköz csatlakoztatva");
-    CHECK(st.deviceName == "Samsung Galaxy S23", "eszköznév pontos");
-    CHECK(st.codec == "AAC", "kodek AAC");
-    CHECK(st.sampleRate == 48000, "mintavétel 48 kHz");
-
-    // 4. Audio átirányítás a DSP láncba (audio callback hívás)
-    size_t receivedFrames = 0;
-    int receivedSr = 0;
-    bt.setAudioCallback([&](const float* pcm, size_t frames, int channels, int sampleRate) {
-        (void)pcm;
-        (void)channels;
-        receivedFrames += frames;
-        receivedSr = sampleRate;
-    });
-
-    std::vector<float> testPcm(1024 * 2, 0.5f);
-    bt.injectTestAudio(testPcm.data(), 1024, 2, 48000);
-    CHECK(receivedFrames == 1024, "A2DP audio keretek megérkeztek a DSP lánchoz (1024 frame)");
-    CHECK(receivedSr == 48000, "audio mintavételi frekvencia egyezik (48 kHz)");
-
-    // 5. Smart Handover és Bluetooth vevő kapcsolók
-    bt.setSmartHandover(false);
-    CHECK(bt.isSmartHandover() == false, "Smart Handover kikapcsolható");
-    bt.setSmartHandover(true);
-    CHECK(bt.isSmartHandover() == true, "Smart Handover visszakapcsolható");
-
-    bt.setEnabled(false);
-    CHECK(bt.isEnabled() == false, "Bluetooth vevő kikapcsolható");
-    CHECK(bt.getStatus().connected == false, "kikapcsoláskor a csatlakozási állapot bontódik");
-    bt.setEnabled(true);
-
-    // 6. Ping/Pong RTT üzenetformátum
-    const std::string pingReq = "{\"type\":\"ping\",\"t\":1729999000123}";
-    json::Value parsedPing;
-    CHECK(json::parse(pingReq, parsedPing), "ping kérés JSON értelmezhető");
-    const json::Value* tVal = parsedPing.get("t");
-    CHECK(tVal && static_cast<int64_t>(tVal->numberOr(0.0)) == 1729999000123LL, "időbélyeg (t) pontos");
-
-    std::string pongResp = "{\"type\":\"pong\",\"t\":" + std::to_string(static_cast<int64_t>(tVal->numberOr(0.0))) + "}";
-    json::Value parsedPong;
-    CHECK(json::parse(pongResp, parsedPong), "pong válasz JSON értelmezhető");
-    CHECK(parsedPong.get("type") && parsedPong.get("type")->stringOr("") == "pong", "üzenettípus: pong");
-    CHECK(parsedPong.get("t") && static_cast<int64_t>(parsedPong.get("t")->numberOr(0.0)) == 1729999000123LL, "pong válasz tartalmazza a kliens időbélyegét");
-}
-
-static void testHeadlessServer() {
-    std::printf("[12] Headless üzemmód és beépített HTTP kiszolgáló (Raspberry Pi)\n");
-    // 1. PIN formátum és generálás
-    const std::string pin = bridge_detail::randomDigits(6);
-    CHECK(pin.size() == 6, "6 jegyű párosító PIN kód méret");
-    CHECK(std::all_of(pin.begin(), pin.end(), [](char c) { return c >= '0' && c <= '9'; }), "a PIN csak számjegyeket tartalmaz");
-
-    // 2. HTTP kérés feldolgozás: GET / és útvonal elemzés
-    const std::string getRoot = "GET / HTTP/1.1\r\nHost: aqulify-pi.local:47820\r\n\r\n";
-    const std::string getStatus = "GET /api/status HTTP/1.1\r\nHost: aqulify-pi.local:47820\r\n\r\n";
-    const std::string getBad = "GET /../../etc/passwd HTTP/1.1\r\nHost: aqulify-pi.local:47820\r\n\r\n";
-
-    CHECK(getRoot.rfind("GET /", 0) == 0, "GET / kérés felismerése");
-    CHECK(getStatus.find("/api/status") != std::string::npos, "/api/status végpont felismerése");
-    CHECK(getBad.find("..") != std::string::npos, "könyvtárelhagyás (..) kiszűrése biztonsági okból");
-
-    // 3. Headless állapot és webRootDir kezelés
-    WebSocketBridge bridge(47810);
-    CHECK(!bridge.isHeadless(), "alapértelmezetten headless = false");
-    bridge.setHeadless(true);
-    CHECK(bridge.isHeadless(), "setHeadless(true) beállítja a headless állapotot");
-
-    bridge.setWebRootDir("/usr/share/aqulify/");
-    CHECK(bridge.webRootDir() == "/usr/share/aqulify", "webRootDir beállítása és lezáró perjel normalizálása");
-
-    // 4. Headless állapotüzenet
-    const std::string stMsg = bridge.buildStateMessage("full");
-    json::Value parsedSt;
-    CHECK(json::parse(stMsg, parsedSt), "állapotüzenet JSON értelmezhető");
-    CHECK(parsedSt.get("headless") && parsedSt.get("headless")->b == true, "állapotüzenet tartalmazza a headless:true jelzést");
-
-    // 5. PIN mentési callback tesztelése
-    std::string savedPin;
-    BridgeCallbacks cb;
-    cb.savePairPin = [&](const std::string& p) { savedPin = p; return true; };
-    CHECK(cb.savePairPin(pin), "savePairPin callback sikeresen meghívható");
-    CHECK(savedPin == pin, "savePairPin megkapta a generált 6-jegyű kódot");
-}
-
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
@@ -556,8 +451,6 @@ int main() {
     testNanGuard();
     testMdns();
     testPushPairing();
-    testBluetoothHandover();
-    testHeadlessServer();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }
