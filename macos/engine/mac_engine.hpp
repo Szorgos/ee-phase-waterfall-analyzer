@@ -11,7 +11,12 @@
  * Mindkét esetben egy privát aggregált eszköz készül (fő eszköz: a valódi kimenet, mellette a forrás
  * sodródás-kiegyenlítéssel), így egyetlen IOProc olvas és ír, közös órajellel. A feldolgozás a közös
  * AetherChain (ugyanaz, mint Linuxon és Windowson).
+ *
+ * Több kimenet (2–4 hangkártya): a további kimeneti eszközök is az aggregált eszközbe kerülnek (sodródás-
+ * kiegyenlítéssel, a Core Audio saját újramintavételezésével), így ugyanaz az IOProc írja őket, közös órán.
+ * A DSP a MultiOutputEngine (független zónák vagy aktív keresztváltó), az 1. kimenet a fő lánc.
  */
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -19,6 +24,7 @@
 #include <vector>
 
 #include "aether_chain.hpp"
+#include "multi_output_config.hpp"
 #include "param_block.hpp"
 #include "tap_ring.hpp"
 
@@ -59,6 +65,16 @@ public:
     std::string activeOutputName() const;
     /** Kimenet választása (UID, vagy "" = a rendszer alapértelmezettje); az aggregált eszköz újraépül. */
     void setOutput(const std::string& uid);
+
+    /**
+     * Több kimenet: a beállítás és a 2–4. kimenet eszközének UID-je (üres: nincs). Eszközváltozásnál az aggregált
+     * eszköz újraépül; DSP-változásnál csak a hangszál kapja meg az új beállítást.
+     */
+    void setMultiOutput(const multiout::MultiConfig& cfg, const std::array<std::string, 3>& targetUids);
+    /** A 2–4. kimenet állapota JSON-ként: [{"output","target","streaming","underruns"}…]. */
+    std::string multiStatusJson() const;
+    /** A k-adik kimenet (1–3) saját lánca (pl. impulzusválasz egy zónának). */
+    AetherChain& zoneChain(int k);
 
     Source source() const { return source_.load(); }
     /** A forrás neve a felületnek ("Core Audio Tap", "BlackHole 2ch", vagy üres). */

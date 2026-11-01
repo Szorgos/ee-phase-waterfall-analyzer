@@ -14,6 +14,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <array>
+#include <atomic>
 #include <chrono>
 #include <csignal>
 #include <cstdio>
@@ -111,6 +113,12 @@ struct Core {
 
     std::mutex presetMutex;
     std::string presetDoc;
+
+    // Több kimenet: a beállítás, a 2–4. kimenet eszközének UID-je és lánca (multiout.bin, zoneN_ir.bin)
+    std::mutex multiMutex;
+    multiout::MultiConfig multiState;
+    std::array<std::string, 3> multiTargets{};
+    std::atomic<bool> multiDirty{false};
 
     std::mutex outputMutex;
     std::string selectedOutput;   // UID, vagy üres: a rendszer alapértelmezettje
@@ -232,6 +240,12 @@ struct Core {
         if (!linux_store::saveParams(snapshot))
             std::cerr << "[Beállítások] Figyelem: a " << linux_store::configDir(false) << "/params.bin nem írható.\n";
     }
+
+    void saveMultiTick() {
+        if (!multiDirty.exchange(false)) return;
+        std::lock_guard<std::mutex> lk(multiMutex);
+        if (!linux_store::saveMultiOut(multiState, multiTargets)) std::cerr << "[Több kimenet] Figyelem: a multiout.bin nem írható.\n";
+    }
 };
 
 } // namespace
@@ -306,7 +320,7 @@ struct Core {
     menu.autoenablesItems = NO;
     statusItem_.menu = menu;
 
-    saveTimer_ = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer*) { c->saveTick(); }];
+    saveTimer_ = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer*) { c->saveTick(); c->saveMultiTick(); }];
 
     // killall / kijelentkezés: rendes leállítás (BlackHole módban a rendszer kimenete visszaáll)
     signal(SIGTERM, SIG_IGN);
@@ -417,6 +431,75 @@ struct Core {
     cb.saveRemote = [](const std::string& doc) { return linux_store::saveRemote(doc); };
     // Ablak bezárása „Bezárás” választással: az alkalmazás kilép (a motor vele áll le, a hang nem változik)
     cb.quitEngine = [] { dispatch_async(dispatch_get_main_queue(), ^{ [NSApp terminate:nil]; }); };
+
+    // Több kimenet: a beállítás és a zónák lánca / IR-je megmarad, de induláskor ki van kapcsolva (a hangzás nem
+    // változik). A 2–4. kimenet céleszköze csak a rendszer egy használható kimeneti eszköze lehet (UID).
+    if (linux_store::loadMultiOut(c->multiState, c->multiTargets)) c->multiState.enabled = false;
+    for (int k = 1; k < multiout::kMaxOutputs; ++k) {
+        IrData ir;
+        if (linux_store::loadIrFile("zone" + std::to_string(k + 1) + "_ir.bin", ir)) c->engine.zoneChain(k).submitIr(std::move(ir));
+    }
+    c->engine.setMultiOutput(c->multiState, c->multiTargets);
+    cb.setMultiOut = [c](const multiout::MultiConfig& in, const std::array<std::string, 3>& sinks) {
+        const auto devices = c->engine.outputDevices();
+        std::lock_guard<std::mutex> lk(c->multiMutex);
+        multiout::MultiConfig cfg = in;
+        for (int k = 1; k < multiout::kMaxOutputs; ++k) cfg.outputs[k].chain = c->multiState.outputs[k].chain;
+        multiout::sanitize(cfg);
+        for (int k = 0; k < 3; ++k) {
+            bool known = false;
+            for (const auto& d : devices) known = known || (!sinks[k].empty() && d.uid == sinks[k]);
+            if (!sinks[k].empty() && !known) std::cerr << "[Több kimenet] Ismeretlen eszköz, kihagyva: " << sinks[k] << "\n";
+            c->multiTargets[k] = known ? sinks[k] : std::string();
+        }
+        c->multiState = cfg;
+        c->engine.setMultiOutput(cfg, c->multiTargets);
+        c->multiDirty = true;
+    };
+    cb.multiOutStatus = [c]() -> std::string {
+        std::string sinks = "[";
+        bool first = true;
+        for (const auto& d : c->engine.outputDevices()) {
+            if (!first) sinks += ",";
+            first = false;
+            sinks += "{\"id\":\"" + jsonEscape(d.uid) + "\",\"name\":\"" + jsonEscape(d.uid) + "\",\"label\":\"" + jsonEscape(d.name) + "\"}";
+        }
+        sinks += "]";
+        std::lock_guard<std::mutex> lk(c->multiMutex);
+        const auto& m = c->multiState;
+        std::string s = "{\"enabled\":" + std::string(m.enabled ? "true" : "false") + ",\"mode\":\"" +
+                        (m.mode == multiout::Mode::Crossover ? "crossover" : "zones") + "\",\"slope\":" + std::to_string(m.slopeDbPerOct) +
+                        ",\"crossovers\":[";
+        for (int j = 0; j < m.numCrossovers; ++j) s += (j ? "," : "") + std::to_string(m.crossoverHz[j]);
+        s += "],\"outputs\":[";
+        for (int k = 0; k < m.numOutputs; ++k) {
+            const auto& o = m.outputs[k];
+            if (k) s += ",";
+            s += "{\"sink\":\"" + jsonEscape(k == 0 ? std::string() : c->multiTargets[k - 1]) + "\",\"band\":" + std::to_string(o.band) +
+                 ",\"gain\":" + std::to_string(o.gainDb) + ",\"delay\":" + std::to_string(o.delayMs) + ",\"invert\":" +
+                 (o.invert ? "true" : "false") + ",\"enabled\":" + (o.enabled ? "true" : "false") + "}";
+        }
+        return s + "],\"zones\":" + c->engine.multiStatusJson() + ",\"sinks\":" + sinks + "}";
+    };
+    cb.getZoneParams = [c](int zone) -> ParamData {
+        std::lock_guard<std::mutex> lk(c->multiMutex);
+        return c->multiState.outputs[std::clamp(zone, 0, multiout::kMaxOutputs - 1)].chain;
+    };
+    cb.setZoneParams = [c](int zone, const ParamData& p) {
+        std::lock_guard<std::mutex> lk(c->multiMutex);
+        c->multiState.outputs[std::clamp(zone, 1, multiout::kMaxOutputs - 1)].chain = p;
+        c->engine.setMultiOutput(c->multiState, c->multiTargets);
+        c->multiDirty = true;
+    };
+    cb.setZoneIr = [c](int zone, IrData&& ir) {
+        if (zone < 1 || zone >= multiout::kMaxOutputs) return;
+        if (!linux_store::saveIrFile("zone" + std::to_string(zone + 1) + "_ir.bin", ir))
+            std::cerr << "[Több kimenet] Figyelem: a zóna IR-je nem menthető.\n";
+        c->engine.zoneChain(zone).submitIr(std::move(ir));
+    };
+    cb.getZoneIr = [c](int zone) -> IrData {
+        return (zone < 1 || zone >= multiout::kMaxOutputs) ? IrData{} : c->engine.zoneChain(zone).irCopy();
+    };
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     __weak AppDelegate* weakSelf = self;
     cb.setLanguage = [weakSelf](const std::string& l) {

@@ -25,6 +25,7 @@
 #include <mutex>
 
 #include "mac_engine.hpp"
+#include "multi_output.hpp"
 
 namespace ee_analyzer::mac {
 
@@ -209,6 +210,18 @@ struct Engine::Impl {
     uint32_t appliedSeq = 0;
     std::vector<float> L, R;
 
+    // Több kimenet: a DSP (az 1. kimenet a fő lánc), a beállítás átadása, és a 2–4. kimenet eszközei az aggregált
+    // eszközben (kimeneti csatornájuk az aggregált eszköz kimenetei között; ~0u: nincs az eszközben)
+    multiout::MultiOutputEngine multi;
+    multiout::SeqBox<multiout::MultiConfig> multiCfg;
+    uint32_t appliedMultiSeq = 0;
+    bool multiOn = false;                                      // csak az IOProc
+    std::array<std::string, 3> zoneUids{};                     // a sorban
+    std::array<std::atomic<UInt32>, 3> zoneLeft{}, zoneRight{};  // az IOProc olvassa
+    std::array<std::atomic<bool>, 3> zoneActive{};
+    std::vector<float> inL, inR;
+    std::array<std::vector<float>, 3> zL, zR;
+
     AudioObjectPropertyListenerBlock systemListener = nil;
     std::string lastSignature;
     AudioObjectPropertyListenerBlock rateListener = nil;
@@ -247,12 +260,60 @@ struct Engine::Impl {
             }
         }
 
+        const uint32_t mseq = multiCfg.currentSeq();
+        if (mseq != appliedMultiSeq) {
+            multiout::MultiConfig mc;
+            uint32_t readSeq = 0;
+            if (multiCfg.tryRead(mc, readSeq)) {
+                multi.applyConfigRT(mc);
+                multiOn = mc.enabled;
+                appliedMultiSeq = readSeq;
+            }
+        }
+
         for (UInt32 off = 0; off < frames; off += kMaxFrames) {
             const UInt32 n = std::min(kMaxFrames, frames - off);
             readSource(in, off, n);
-            owner->chain.process(L.data(), R.data(), n);
+            if (multiOn) {
+                std::memcpy(inL.data(), L.data(), n * sizeof(float));
+                std::memcpy(inR.data(), R.data(), n * sizeof(float));
+                float* oL[multiout::kMaxOutputs] = { L.data(), zL[0].data(), zL[1].data(), zL[2].data() };
+                float* oR[multiout::kMaxOutputs] = { R.data(), zR[0].data(), zR[1].data(), zR[2].data() };
+                multi.process(inL.data(), inR.data(), oL, oR, n);
+            } else {
+                owner->chain.process(L.data(), R.data(), n);
+            }
             owner->visualizerTap.write(L.data(), R.data(), n);
             writeOutput(out, off, n);
+            if (multiOn) {
+                const int nOut = multi.config().numOutputs;
+                for (int k = 1; k < nOut; ++k)
+                    if (zoneActive[k - 1].load(std::memory_order_relaxed))
+                        writeChannels(out, off, n, zoneLeft[k - 1].load(std::memory_order_relaxed),
+                                      zoneRight[k - 1].load(std::memory_order_relaxed), zL[k - 1].data(), zR[k - 1].data());
+            }
+        }
+    }
+
+    /** Sztereó jel az aggregált eszköz két kimeneti csatornájára (a 2–4. kimenet eszközéé). */
+    static void writeChannels(AudioBufferList* out, UInt32 off, UInt32 n, UInt32 left, UInt32 right, const float* l, const float* r) {
+        UInt32 base = 0;
+        for (UInt32 b = 0; b < out->mNumberBuffers; ++b) {
+            AudioBuffer& buf = out->mBuffers[b];
+            const UInt32 nch = std::max<UInt32>(1, buf.mNumberChannels);
+            float* data = static_cast<float*>(buf.mData);
+            const UInt32 avail = buf.mDataByteSize / (sizeof(float) * nch);
+            for (UInt32 c = 0; c < nch && data; ++c) {
+                const UInt32 g = base + c;
+                const float* src = g == left ? l : g == right ? r : nullptr;
+                if (!src) continue;
+                if (left == right) {
+                    for (UInt32 i = 0; i < n && off + i < avail; ++i) data[(off + i) * nch + c] = 0.5f * (l[i] + r[i]);
+                } else {
+                    for (UInt32 i = 0; i < n && off + i < avail; ++i) data[(off + i) * nch + c] = src[i];
+                }
+            }
+            base += nch;
         }
     }
 
@@ -372,12 +433,32 @@ struct Engine::Impl {
         return false;
     }
 
-    bool createAggregate(AudioObjectID output, const std::string& tapUid, AudioObjectID blackHole) {
+    /** A 2–4. kimenet eszközei, amelyek az aggregált eszközbe kerülnek (létező, használható, nem a fő kimenet). */
+    std::vector<std::pair<int, AudioObjectID>> zoneDevices(AudioObjectID output) const {
+        std::vector<std::pair<int, AudioObjectID>> v;
+        for (int k = 0; k < 3; ++k) {
+            const AudioObjectID d = deviceForUid(zoneUids[k]);
+            if (d == kAudioObjectUnknown || d == output || !isUsableOutput(d)) continue;
+            bool dup = false;
+            for (const auto& e : v) dup = dup || e.second == d;
+            if (!dup) v.push_back({ k, d });
+        }
+        return v;
+    }
+
+    bool createAggregate(AudioObjectID output, const std::string& tapUid, AudioObjectID blackHole,
+                         const std::vector<std::pair<int, AudioObjectID>>& zones) {
         NSString* outUid = [NSString stringWithUTF8String:deviceUid(output).c_str()];
         NSMutableArray* subs = [NSMutableArray arrayWithObject:@{ @kAudioSubDeviceUIDKey: outUid }];
         if (blackHole != kAudioObjectUnknown) {
             NSString* bhUid = [NSString stringWithUTF8String:deviceUid(blackHole).c_str()];
             [subs addObject:@{ @kAudioSubDeviceUIDKey: bhUid, @kAudioSubDeviceDriftCompensationKey: @YES }];
+        }
+        // A 2–4. kimenet eszközei a végén (a forrás bemeneti csatornáinak sorszáma így nem változik), sodródás-
+        // kiegyenlítéssel: a Core Audio a fő eszköz órájához igazítja őket
+        for (const auto& z : zones) {
+            NSString* zUid = [NSString stringWithUTF8String:deviceUid(z.second).c_str()];
+            [subs addObject:@{ @kAudioSubDeviceUIDKey: zUid, @kAudioSubDeviceDriftCompensationKey: @YES }];
         }
         NSMutableDictionary* desc = [@{
             @kAudioAggregateDeviceNameKey: @"Aqulify",
@@ -444,11 +525,32 @@ struct Engine::Impl {
 
         std::string tapUid;
         if (tapOk && !createTap(tapUid)) { fail(Problem::Device); return; }
-        if (!createAggregate(output, tapUid, tapOk ? kAudioObjectUnknown : blackHole)) { fail(Problem::Device); return; }
+        const auto zones = zoneDevices(output);
+        if (!createAggregate(output, tapUid, tapOk ? kAudioObjectUnknown : blackHole, zones)) { fail(Problem::Device); return; }
 
         outputDev = output;
         sourceDev = blackHole;
-        inputSkip = channelCount(output, kAudioObjectPropertyScopeInput);   // a kimeneti eszköz saját bemenetei elöl
+        // A forrás bemenetei előtt: a kimeneti eszköz saját bemenetei; Tap módban a zónaeszközök bemenetei is
+        // (a Tap csatornái az összes alárendelt eszköz után jönnek), BlackHole módban a zónák a BlackHole után vannak
+        inputSkip = channelCount(output, kAudioObjectPropertyScopeInput);
+        if (tapOk) for (const auto& z : zones) inputSkip += channelCount(z.second, kAudioObjectPropertyScopeInput);
+        // A 2–4. kimenet csatornái az aggregált eszköz kimenetei között (az alárendelt eszközök sorrendjében)
+        for (int k = 0; k < 3; ++k) zoneActive[k] = false;
+        {
+            UInt32 base = channelCount(output, kAudioObjectPropertyScopeOutput);
+            if (!tapOk && blackHole != kAudioObjectUnknown) base += channelCount(blackHole, kAudioObjectPropertyScopeOutput);
+            for (const auto& z : zones) {
+                const UInt32 nch = channelCount(z.second, kAudioObjectPropertyScopeOutput);
+                UInt32 l = 0, r = 1;
+                preferredStereo(z.second, l, r);
+                if (nch < 2) l = r = 0;
+                zoneLeft[z.first] = base + std::min(l, nch ? nch - 1 : 0);
+                zoneRight[z.first] = base + std::min(r, nch ? nch - 1 : 0);
+                zoneActive[z.first] = nch > 0;
+                std::cout << "[Core Audio] " << (z.first + 2) << ". kimenet: " << deviceName(z.second) << "\n";
+                base += nch;
+            }
+        }
         preferredStereo(output, outLeft, outRight);
         if (channelCount(output, kAudioObjectPropertyScopeOutput) < 2) outLeft = outRight = 0;
 
@@ -457,6 +559,7 @@ struct Engine::Impl {
         if (!(sr >= 8000.0)) sr = 48000.0;
         owner->sampleRate_ = static_cast<uint32_t>(std::lround(sr));
         owner->chain.setSampleRate(sr);   // az IO még nem fut
+        multi.setSampleRate(sr);
 
         // Mintavétel-váltás (pl. Audio MIDI Setupban): újraindítás az új értékkel
         Impl* impl = this;
@@ -474,6 +577,7 @@ struct Engine::Impl {
 
         if (AudioDeviceCreateIOProcID(aggId, &Impl::ioProc, this, &procId) != noErr || !procId) { fail(Problem::Device); return; }
         disableUnusedInputs(output);
+        for (const auto& z : zones) disableDeviceInputs(z.second, output, tapOk ? kAudioObjectUnknown : blackHole);
         if (AudioDeviceStart(aggId, procId) != noErr) { fail(Problem::Device); return; }
 
         owner->problem_ = Problem::None;
@@ -497,6 +601,36 @@ struct Engine::Impl {
         usage->mIOProc = reinterpret_cast<void*>(procId);
         if (AudioObjectGetPropertyData(aggId, &ua, 0, nullptr, &size, usage) != noErr) return;
         for (UInt32 i = 0; i < usage->mNumberStreams && i < ownStreams; ++i) usage->mStreamIsOn[i] = 0;
+        AudioObjectSetPropertyData(aggId, &ua, 0, nullptr, size, usage);
+    }
+
+    /**
+     * A zónaeszköz bemeneteit sem olvassuk. Az aggregált eszköz bemeneti streamjei az alárendelt eszközök sorrendjében
+     * jönnek: a fő kimenet, (BlackHole), majd a zónák; a zónaeszköz streamjeinek helye ebből számolható.
+     */
+    void disableDeviceInputs(AudioObjectID dev, AudioObjectID output, AudioObjectID blackHole) {
+        auto streams = [](AudioObjectID d) {
+            const auto sa = addr(kAudioDevicePropertyStreams, kAudioObjectPropertyScopeInput);
+            UInt32 size = 0;
+            if (AudioObjectGetPropertyDataSize(d, &sa, 0, nullptr, &size) != noErr) return UInt32(0);
+            return UInt32(size / sizeof(AudioStreamID));
+        };
+        const UInt32 own = streams(dev);
+        if (own == 0) return;
+        UInt32 first = streams(output) + (blackHole != kAudioObjectUnknown ? streams(blackHole) : 0);
+        for (int k = 0; k < 3; ++k) {
+            const AudioObjectID d = deviceForUid(zoneUids[k]);
+            if (d == dev) break;
+            if (d != kAudioObjectUnknown && d != output) first += streams(d);
+        }
+        const auto ua = addr(kAudioDevicePropertyIOProcStreamUsage, kAudioObjectPropertyScopeInput);
+        UInt32 size = 0;
+        if (AudioObjectGetPropertyDataSize(aggId, &ua, 0, nullptr, &size) != noErr || size < sizeof(AudioHardwareIOProcStreamUsage)) return;
+        std::vector<uint8_t> buf(size);
+        auto* usage = reinterpret_cast<AudioHardwareIOProcStreamUsage*>(buf.data());
+        usage->mIOProc = reinterpret_cast<void*>(procId);
+        if (AudioObjectGetPropertyData(aggId, &ua, 0, nullptr, &size, usage) != noErr) return;
+        for (UInt32 i = first; i < usage->mNumberStreams && i < first + own; ++i) usage->mStreamIsOn[i] = 0;
         AudioObjectSetPropertyData(aggId, &ua, 0, nullptr, size, usage);
     }
 
@@ -596,14 +730,49 @@ Engine::Engine() : p_(std::make_unique<Impl>()) {
     p_->queue = dispatch_queue_create("io.github.szorgos.aqulify.engine", DISPATCH_QUEUE_SERIAL);
     p_->L.assign(kMaxFrames, 0.0f);
     p_->R.assign(kMaxFrames, 0.0f);
+    p_->inL.assign(kMaxFrames, 0.0f);
+    p_->inR.assign(kMaxFrames, 0.0f);
+    for (int k = 0; k < 3; ++k) {
+        p_->zL[k].assign(kMaxFrames, 0.0f);
+        p_->zR[k].assign(kMaxFrames, 0.0f);
+        p_->zoneActive[k] = false;
+    }
     chain.setSampleRate(48000);
     chain.startWorker();
+    p_->multi.setExternalMainChain(&chain);
+    p_->multi.setSampleRate(48000);
+    p_->multi.startWorkers();
 }
 
 Engine::~Engine() {
     stop();
     chain.stopWorker();
+    p_->multi.stopWorkers();
 }
+
+void Engine::setMultiOutput(const multiout::MultiConfig& cfg, const std::array<std::string, 3>& targetUids) {
+    Impl* p = p_.get();
+    p->multiCfg.write(cfg);
+    std::array<std::string, 3> want{};
+    for (int k = 0; k < 3; ++k) want[k] = (cfg.enabled && k + 1 < cfg.numOutputs) ? targetUids[k] : std::string();
+    dispatch_async(p->queue, ^{
+        if (want == p->zoneUids) return;   // csak DSP-változás: az aggregált eszköz marad
+        p->zoneUids = want;
+        if (p->started) p->rebuild();
+    });
+}
+
+std::string Engine::multiStatusJson() const {
+    std::string s = "[";
+    for (int k = 0; k < 3; ++k) {
+        if (k) s += ",";
+        s += "{\"output\":" + std::to_string(k + 2) + ",\"streaming\":" +
+             ((processing_.load() && p_->zoneActive[k].load()) ? "true" : "false") + ",\"underruns\":0}";
+    }
+    return s + "]";
+}
+
+AetherChain& Engine::zoneChain(int k) { return p_->multi.chain(k); }
 
 void Engine::start() {
     Impl* p = p_.get();
