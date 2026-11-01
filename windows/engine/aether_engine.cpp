@@ -228,7 +228,7 @@ public:
                 std::cout << "[Plugin] Aqulify EQ APO plugin közös memória megtalálva ("
                           << (mapping_.isGlobal() ? "Global" : "Local") << ").\n";
                 // A GUI-ban beállított, mentett lánc átadása a pluginnak
-                if (currentParams.has(kFlagInitialized)) mapping_.state()->params.write(currentParams);
+                mapping_.state()->params.write(currentParams);   // a régi, leállás előtti lánc nem maradhat élesen
                 {
                     std::lock_guard<std::mutex> ik(irMutex_);
                     if (!ir_.empty()) win::writeIrBlock(mapping_.state()->ir, ir_);
@@ -487,12 +487,10 @@ int main(int argc, char** argv) {
     // Nyelv (tálcamenü, üzenetek): a felületen választott, különben a Windows nyelve
     aq_i18n::init();
 
-    // Mentett beállítások (a GUI utolsó állapota)
+    // Indításkor mindig alap (minden modul ki): az utolsó lánc nem áll vissza automatikusan,
+    // a felület a saját állapotát a csatlakozáskor adja át
     std::mutex paramMutex;
     ParamData current = transparentParams();
-    if (win::loadParamFile(current)) {
-        std::cout << "[Beállítások] Utolsó DSP lánc betöltve (" << current.numBands << " EQ sáv).\n";
-    }
     bool dirty = false;
     auto lastChange = std::chrono::steady_clock::now();
 
@@ -677,6 +675,13 @@ int main(int argc, char** argv) {
     filePlayer.stop();
     mediaSession.stop();
     loopback->stop();
+    // Leálláskor alap: minden modul ki, így a program bezárása után nem változik a hangzás
+    {
+        std::lock_guard<std::mutex> lk(paramMutex);
+        current = transparentParams();
+        dirty = true;
+    }
+    sources.pushParams(current);
     saveIfDue(true);
     if (single) { ReleaseMutex(single); CloseHandle(single); }
     CoUninitialize();

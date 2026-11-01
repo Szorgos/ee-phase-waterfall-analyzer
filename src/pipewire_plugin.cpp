@@ -249,11 +249,10 @@ int main(int argc, char* argv[]) {
         webRoot = linux_store::defaultGuiDir();
     }
 
-    // Utolsó beállítások; első indításkor átlátszó (minden modul kikapcsolva), a felület adja át a sajátját
+    // Indításkor mindig alap (minden modul ki): az utolsó lánc nem áll vissza automatikusan,
+    // a felület a saját állapotát a csatlakozáskor adja át
     std::mutex paramMutex;
     ParamData current = transparentParams();
-    if (linux_store::loadParams(current))
-        std::cout << "[Beállítások] Utolsó DSP lánc betöltve (" << current.numBands << " EQ sáv).\n";
     bool dirty = false;
     auto lastChange = std::chrono::steady_clock::now();
 
@@ -473,8 +472,11 @@ int main(int argc, char* argv[]) {
     filePlayer.stop();
     mediaSession.stop();
     {
+        // Leálláskor alap: minden modul ki, így a program bezárása után nem változik a hangzás
         std::lock_guard<std::mutex> lk(paramMutex);
-        if (dirty) linux_store::saveParams(current);
+        current = transparentParams();
+        node.params.write(current);
+        linux_store::saveParams(current);
     }
     const bool crashedDaemon = node.coreError.load();
     node.shutdown();
