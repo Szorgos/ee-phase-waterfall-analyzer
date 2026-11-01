@@ -64,7 +64,15 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
    * **Helyreállítás:** 50/60 Hz-es zümmögés eltávolítása, kattanásjavítás, zajcsökkentés.
    * Intenzitás csúszka, hangerőre kiegyenlített A/B összehasonlítás, részletes diagnosztika.
 
-6. **Motor és felület:**
+6. **Több kimenet – 2–4 hangkártya egyszerre (Linux és macOS):**
+   * **Független zónák:** minden kimenet saját, teljes DSP-lánccal szól. Például az egyik DAC-on fejhallgató a saját AutoEq-profiljával, a másikon hangfal szobakorrekcióval (EQ vagy impulzusválasz). A fejlécben a **„Szerkesztett kimenet: 1 | 2 | …”** választóval döntöd el, melyik kimenetet állítod: minden modul (EQ, Konvolver, Crossfeed, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch), minden profil és import arra a kimenetre vonatkozik.
+   * **Aktív keresztváltó:** a közös lánc után a jel Linkwitz–Riley szűrőkkel (12 / 24 / 48 dB/oktáv) 2–4 sávra bomlik, és minden kimenet egy sávot kap (pl. mélynyomó és szatelitek). A sávok összege amplitúdóban egyenes.
+   * Kimenetenként erősítés, késleltetés (a hangszórók távolságához, cm-ben is kijelezve) és polaritás.
+   * **Beállítás:** *Kimenetek* fül → bekapcsolás → a 2–4. kimenet hangkártyája a listából. Induláskor a több kimenet kikapcsolva indul (a hangzás nem változik), a beállítás és a kimenetek profiljai megmaradnak. Ha egy hangkártyát kihúzol, a hozzá tartozó kimenet elnémul, és nem szól máshol.
+   * **Linuxon** a PipeWire egy ütemezőhöz rendeli a kimeneteket (a többi hangkártya adaptív újramintavételezéssel követi), **macOS-en** a hangkártyák egy privát aggregált eszközbe kerülnek a Core Audio sodródás-kiegyenlítésével. **Windowson** a több kimenet még nem érhető el.
+   * Két különböző hangkártya saját késleltetése eltérhet (néhány ms); ezt a kimenet késleltetésével lehet kiegyenlíteni.
+
+7. **Motor és felület:**
    * Linuxon PipeWire virtuális kimenet („Aqulify”), Windowson Equalizer APO plugin. A hangszál zárak nélkül veszi át a beállításokat; a modulok be- és kikapcsolása, valamint az EQ-mód és a decramp váltása rövid le- és felúsztatással, kattanás nélkül történik (lineáris fázisú módra váltáskor a kimenet a módhoz tartozó késleltetés kitöltéséig, kb. 0,1 s-ig néma). A felület és a grafika külön folyamatban fut, nem tartja fel a lejátszást.
    * WebSocket híd a `127.0.0.1` címen (az első szabad port: 47810–47814, végső tartalékként 8080): a motor a spektrumot, az EQ-görbét, a limiter erősítéscsökkentését és a mentett állapotot küldi; a felület az összes modulbeállítást, az IR-t és az EQ profilokat (a protokoll leírása: [docs/remote-api.md](docs/remote-api.md)).
    * **Felület:** magyarul és angolul (alapból a rendszer nyelvén, váltás a fejlécben); Linuxon saját ablakban (WebKitGTK, ennek hiányában böngészőben), Windowson saját ablakban (WebView2).

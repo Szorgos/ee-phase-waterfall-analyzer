@@ -1,3 +1,11 @@
+### Újdonságok (következő kiadás)
+
+- **Több kimenet – 2–4 hangkártya egyszerre (Linux és macOS):**
+  - *Független zónák:* minden kimenet saját, teljes DSP-lánccal szól, így a két DAC-hoz eltérő fejhallgató- vagy szobaprofil importálható (AutoEq, REW, impulzusválasz). A fejléc „Szerkesztett kimenet” választójával minden modul külön állítható kimenetenként.
+  - *Aktív keresztváltó:* Linkwitz–Riley 12 / 24 / 48 dB/oktáv, 2–4 sáv; a sávok összege amplitúdóban egyenes.
+  - Kimenetenként erősítés, késleltetés és polaritás. Induláskor kikapcsolva (a hangzás nem változik), a beállítás és a profilok megmaradnak; kihúzott hangkártya hangja nem kerül át máshová.
+  - Linuxon PipeWire (egy ütemező, adaptív újramintavételezés), macOS-en Core Audio aggregált eszköz (sodródás-kiegyenlítés). Windowson még nem érhető el.
+
 ### Újdonságok és javítások (2.0.6)
 
 **Letöltés (2.0.6):**
