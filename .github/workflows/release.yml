@@ -65,7 +65,7 @@ jobs:
           cmake --build build -j"$(nproc)"
           test -x build/aqulify-engine
           test -x build/aqulify-gui
-          for t in test_ringbuffer test_core test_dsp test_matrix; do ./build/$t; done
+          for t in test_ringbuffer test_core test_dsp test_matrix test_multiout; do ./build/$t; done
 
       - name: A telepítő szkriptek futtathatók (a csomagban megmaradó fájlmód)
         run: |
@@ -268,7 +268,7 @@ jobs:
             -DAQULIFY_RNNOISE_MODEL_DIR="$RUNNER_TEMP/rnnoise-model"
           cmake --build build-test -j"$(nproc)"
           fail=0
-          for t in test_ringbuffer test_core test_dsp test_matrix; do
+          for t in test_ringbuffer test_core test_dsp test_matrix test_multiout; do
             echo "::group::$t"
             if ./build-test/$t; then echo "$t: OK"; else echo "::error::$t sikertelen"; fail=1; fi
             echo "::endgroup::"

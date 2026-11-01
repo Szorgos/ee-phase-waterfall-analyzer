@@ -67,6 +67,8 @@ target_link_libraries(test_dsp PRIVATE ee_dsp_core Threads::Threads)
 # 7. Tesztalkalmazás: mintavételi frekvencia × blokkméret mátrix (átlátszóság, blokkfüggetlenség, szintek)
 add_executable(test_matrix src/test_matrix.cpp)
 target_link_libraries(test_matrix PRIVATE ee_dsp_core Threads::Threads)
+add_executable(test_multiout src/test_multiout.cpp)
+target_link_libraries(test_multiout PRIVATE ee_dsp_core Threads::Threads)
 
 # 8. Tesztalkalmazás: ébren tartás (burn-in) a Windows-os hídon; nem Windows-on kihagyva
 add_executable(test_keepawake src/test_keepawake.cpp)
