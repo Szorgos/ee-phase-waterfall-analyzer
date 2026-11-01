@@ -32,7 +32,7 @@ permissions:
 
 jobs:
   macos-app:
-    runs-on: macos-14
+    runs-on: macos-15
     outputs:
       file: ${{ steps.dmg.outputs.file }}
     steps:
@@ -183,7 +183,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-14, macos-15, macos-26, macos-26-intel ]
+        os: [ macos-15, macos-26, macos-26-intel ]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
