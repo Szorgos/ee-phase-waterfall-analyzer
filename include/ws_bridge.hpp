@@ -120,6 +120,11 @@ struct BridgeCallbacks {
     std::function<void(const std::string& text)> broadcast;
     /** Van-e csatlakozott távoli (telefonos) kliens (4d). */
     std::function<bool()> hasRemoteClient;
+    /**
+     * A motor leállítása a felület kérésére (ablak bezárása „Bezárás” választással). Csak a saját gépről érkező
+     * kérésre hívódik; a motor a szokásos leállási úton áll le (a lánc alapra áll, a hang nem változik).
+     */
+    std::function<void()> quitEngine;
 };
 
 /**
@@ -1234,6 +1239,14 @@ private:
         }
         if (type == "pair_approve") {
             if (!remote) handlePairApprove(msg);
+            return;
+        }
+        if (type == "engine_quit") {
+            // Csak a saját gépen futó felület állíthatja le a motort (a távirányító nem)
+            if (!remote && cb_.quitEngine) {
+                std::cout << "[WS Bridge] Leállítás a felület kérésére (ablak bezárása).\n";
+                cb_.quitEngine();
+            }
             return;
         }
         if (type == "subscribe" && cur_) {

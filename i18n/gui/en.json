@@ -453,5 +453,19 @@
   "library.promptFolderPath": "Enter music folder path:",
   "library.promptFilePath": "Enter audio file path:",
   "sink.systemDefault": "System default",
-  "sink.systemHint": "Audio is played through the system default output device (managed by Equalizer APO)."
+  "sink.systemHint": "Audio is played through the system default output device (managed by Equalizer APO).",
+  "close.title": "Close the Aqulify window?",
+  "close.desc": "Aqulify can keep running in the background, or shut down completely.",
+  "close.trayWin": "To tray",
+  "close.trayMac": "To menu bar",
+  "close.trayLinux": "To background",
+  "close.trayHint": "The window closes, audio processing keeps running.",
+  "close.quit": "Quit",
+  "close.quitHint": "Aqulify shuts down, the sound returns to original.",
+  "close.always": "Always do this (don't ask again)",
+  "close.alwaysNote": "You can change this later in the Output menu.",
+  "close.setting": "When closing the window:",
+  "close.optAsk": "Ask",
+  "close.optTray": "To tray / background",
+  "close.optQuit": "Quit (shut down)"
 }

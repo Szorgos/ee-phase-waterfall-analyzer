@@ -1,5 +1,6 @@
 // Platformfüggetlen magteszt: FFT spektrum, paraméter-alkalmazás, seqlock, tap körpuffer.
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -437,6 +438,85 @@ static void testPushPairing() {
     CHECK(thirdPartyClient != "aqulify_remote", "harmadik féltől származó kliens felismerve és kizárva");
 }
 
+/** Élő WebSocket-kapcsolat a hídhoz (valódi socket, kézfogás); kInvalidSocket, ha nem sikerült. */
+static net::socket_t wsConnectLive(int port, const std::string& path) {
+    net::socket_t s = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (s == net::kInvalidSocket) return s;
+    sockaddr_in a{};
+    a.sin_family = AF_INET;
+    a.sin_port = htons(static_cast<uint16_t>(port));
+    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)) != 0) { net::closeSocket(s); return net::kInvalidSocket; }
+    const std::string req = "GET " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n";
+    ::send(s, req.data(), static_cast<int>(req.size()), 0);
+    std::string resp;
+    char buf[512];
+    for (int i = 0; i < 40 && resp.find("\r\n\r\n") == std::string::npos; ++i) {
+        const int n = static_cast<int>(::recv(s, buf, sizeof(buf), 0));
+        if (n <= 0) break;
+        resp.append(buf, static_cast<size_t>(n));
+    }
+    if (resp.rfind("HTTP/1.1 101", 0) != 0) { net::closeSocket(s); return net::kInvalidSocket; }
+    return s;
+}
+
+/** Maszkolt szöveges keret (a kliens minden keretét maszkolja, RFC 6455). */
+static void wsSendText(net::socket_t s, const std::string& text) {
+    std::string f;
+    f.push_back(static_cast<char>(0x81));
+    f.push_back(static_cast<char>(0x80 | text.size()));   // rövid üzenet (< 126 bájt)
+    const unsigned char mask[4] = { 0x12, 0x34, 0x56, 0x78 };
+    for (unsigned char m : mask) f.push_back(static_cast<char>(m));
+    for (size_t i = 0; i < text.size(); ++i) f.push_back(static_cast<char>(text[i] ^ mask[i % 4]));
+    ::send(s, f.data(), static_cast<int>(f.size()), 0);
+}
+
+static void testEngineQuit() {
+    std::printf("[11] Motor leállítása az ablak bezárásakor (engine_quit): a saját gép igen, a távirányító nem\n");
+    std::atomic<int> quits{ 0 };
+    const std::string token = bridge_detail::randomHex(32);
+    const std::string remoteDoc = "{\"enabled\":true,\"port\":47870,\"devices\":[{\"id\":\"0a0b0c0d\",\"name\":\"Teszt\",\"hash\":\"" +
+                                  bridge_detail::sha1Hex(token) + "\",\"created\":0,\"last\":0}]}";
+    BridgeCallbacks cb;
+    cb.pullAudio = [](float*, size_t) -> size_t { return 0; };
+    cb.sampleRate = [] { return 48000.0; };
+    cb.getParams = [] { return transparentParams(); };
+    cb.setParams = [](const ParamData&) {};
+    cb.loadRemote = [&] { return remoteDoc; };
+    cb.saveRemote = [](const std::string&) { return true; };
+    cb.quitEngine = [&] { ++quits; };
+    WebSocketBridge bridge(47869);
+    const bool started = bridge.start(cb);
+    CHECK(started, "a híd elindul (127.0.0.1:47869)");
+    if (!started) return;
+    auto waitQuit = [&](int want, int ms) {
+        for (int i = 0; i < ms / 20 && quits.load() < want; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        return quits.load();
+    };
+
+    // Távirányító (párosított eszköz, hálózati port): a kérést a híd figyelmen kívül hagyja
+    net::socket_t r = net::kInvalidSocket;
+    for (int port = 47870; port < 47875 && r == net::kInvalidSocket; ++port)
+        r = wsConnectLive(port, "/?token=" + token + "&client=aqulify_remote&name=Teszt");
+    CHECK(r != net::kInvalidSocket, "párosított távoli eszköz csatlakozik (token)");
+    if (r != net::kInvalidSocket) {
+        wsSendText(r, "{\"type\":\"engine_quit\"}");
+        CHECK(waitQuit(1, 500) == 0, "távirányítóról érkező engine_quit: a motor NEM áll le");
+        net::closeSocket(r);
+    }
+
+    // A saját gépen futó felület (127.0.0.1): a motor leállítását kéri
+    net::socket_t l = wsConnectLive(47869, "/");
+    CHECK(l != net::kInvalidSocket, "helyi felület csatlakozik (127.0.0.1)");
+    if (l != net::kInvalidSocket) {
+        wsSendText(l, "{\"type\":\"engine_quit\"}");
+        CHECK(waitQuit(1, 2000) == 1, "helyi engine_quit: a motor leállítása pontosan egyszer hívódik");
+        net::closeSocket(l);
+    }
+    bridge.stop();
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
@@ -451,6 +531,7 @@ int main() {
     testNanGuard();
     testMdns();
     testPushPairing();
+    testEngineQuit();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

@@ -418,6 +418,8 @@ int main(int argc, char* argv[]) {
     }, &phoneCache);
     cb.loadRemote = [] { return linux_store::loadRemote(); };
     cb.saveRemote = [](const std::string& doc) { return linux_store::saveRemote(doc); };
+    // Ablak bezárása „Bezárás” választással: rendes leállás (0-s kilépési kód, a systemd nem indítja újra)
+    cb.quitEngine = [] { if (g_node) g_node->quit(); };
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     cb.setLanguage = [](const std::string& l) {
         if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cerr << "[Nyelv] Figyelem: a language.txt nem írható.\n";

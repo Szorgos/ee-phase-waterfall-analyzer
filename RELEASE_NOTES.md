@@ -1,3 +1,10 @@
+### Újdonságok és javítások (következő kiadás)
+
+- **Ablak bezárása:** a bezárás gombra az Aqulify megkérdezi, hogy a tálcára (macOS: menüsorra, Linux: háttérbe) kerüljön, vagy teljesen bezáródjon. Bezáráskor a motor leáll, és a hang visszaáll eredetire. A „Mindig ezt válaszd” jelölővel a kérdés elmarad; a választás a Kimenet menüben módosítható.
+- **Alap állapot:** a program leállásakor és indulásakor minden modul ki van kapcsolva, így a bezárás és a gép újraindítása után sem változik a hangzás.
+- **Verzió a hálózaton:** a telefonos távirányító a valódi verziót látja (eddig 2.0.0-t).
+- **Eltávolítva:** a kijelző nélküli (headless) mód, a Raspberry Pi telepítő és a Bluetooth-vevő.
+
 ### Újdonságok és fejlesztések (2.0.5)
 
 - **Frekvenciaskála:** a vízesés alatti alsó és felső határjelölő mostantól azonos, a látható színekhez igazodó küszöböt használ, így mély hangoknál nem nyílik szét.

@@ -609,6 +609,9 @@ int main(int argc, char** argv) {
     }, &phoneCache);
     cb.loadRemote = [] { return readSmallFile(userFilePath(L"remote.json", false), 256 * 1024); };
     cb.saveRemote = [](const std::string& doc) { return writeFileAtomic(userFilePath(L"remote.json", true), doc); };
+    // Ablak bezárása „Bezárás” választással: ugyanaz, mint a tálcamenü „Kilépés” pontja (rendes leállás)
+    static std::atomic<win::TrayApp*> s_tray{ nullptr };
+    cb.quitEngine = [] { if (win::TrayApp* t = s_tray.load()) t->quit(); };
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     cb.setLanguage = [](const std::string& l) {
         if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cout << "[Nyelv] Figyelem: a language.txt nem írható.\n";
@@ -661,6 +664,7 @@ int main(int argc, char** argv) {
     tcb.onTimer = [&] { saveIfDue(false); };
     tcb.statusText = [&] { return sources.label(); };
     win::TrayApp tray(tcb);
+    s_tray.store(&tray);
     if (!tray.create(GetModuleHandleW(nullptr))) {
         std::cout << "[Hiba] A tálcaikon nem hozható létre.\n";
     }
@@ -669,6 +673,7 @@ int main(int argc, char** argv) {
     std::cout << "Fut a háttérben (tálcaikon).\n";
 
     tray.run();
+    s_tray.store(nullptr);
 
     std::cout << "[Info] Leállítás...\n";
     bridge->stop();

@@ -453,5 +453,19 @@
   "library.promptFolderPath": "Add meg a zenei mappa útvonalát:",
   "library.promptFilePath": "Add meg a zenefájl útvonalát:",
   "sink.systemDefault": "Rendszer alapértelmezett",
-  "sink.systemHint": "A hang a rendszer (Equalizer APO) által vezérelt alapértelmezett kimeneten szólal meg."
+  "sink.systemHint": "A hang a rendszer (Equalizer APO) által vezérelt alapértelmezett kimeneten szólal meg.",
+  "close.title": "Bezárod az Aqulify ablakát?",
+  "close.desc": "Az Aqulify futhat tovább a háttérben, vagy teljesen leállhat.",
+  "close.trayWin": "Tálcára",
+  "close.trayMac": "Menüsorra",
+  "close.trayLinux": "Háttérbe",
+  "close.trayHint": "Az ablak eltűnik, a hangfeldolgozás fut tovább.",
+  "close.quit": "Bezárás",
+  "close.quitHint": "Az Aqulify leáll, a hang visszaáll eredetire.",
+  "close.always": "Mindig ezt válaszd (ne kérdezze újra)",
+  "close.alwaysNote": "Később a Kimenet menüben módosíthatod.",
+  "close.setting": "Ablak bezárásakor:",
+  "close.optAsk": "Kérdezzen",
+  "close.optTray": "Tálcára / háttérbe",
+  "close.optQuit": "Bezárás (leállás)"
 }

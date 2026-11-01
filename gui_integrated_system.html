@@ -1813,6 +1813,14 @@ if (!window.THREE) window.THREE = (function () {
             </div>
           </div>
           <button type="button" id="btnLibraryRoots" hidden onclick="openLibraryModal()"></button>
+          <div id="closePrefWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:10px;">
+            <div class="sink-sec-title" data-i18n="close.setting">Ablak bezárásakor:</div>
+            <select id="selectClosePref" class="mini-select" style="width:100%; max-width:none;" onchange="setClosePref(this.value)">
+              <option value="ask" data-i18n="close.optAsk">Kérdezzen</option>
+              <option value="tray" data-i18n="close.optTray">Tálcára / háttérbe</option>
+              <option value="quit" data-i18n="close.optQuit">Bezárás (leállás)</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -2438,6 +2446,34 @@ if (!window.THREE) window.THREE = (function () {
       <button class="adw-btn primary" id="btnBurnInStart" onclick="burnInToggle()" data-i18n="burnin.start">Indítás</button>
     </div>
     <div id="burnInStatus" style="font-size:0.85rem; color:var(--aq-text-2); min-height:1.2em;"></div>
+  </div>
+</div>
+<!-- ABLAK BEZÁRÁSA: tálcára / háttérbe vagy bezárás (a natív ablak kérdezi a felülettől) -->
+<div id="modalClose" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:200; align-items:center; justify-content:center;">
+  <div class="aq-modal" role="dialog" aria-modal="true" aria-labelledby="closeTitle" style="width:520px; max-width:calc(100vw - 32px); display:flex; flex-direction:column; gap:14px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
+      <span id="closeTitle" style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="close.title">Bezárod az Aqulify ablakát?</span>
+      <button class="icon-btn" onclick="closeDialogCancel()" title="Mégse" data-i18n-title="common.cancel" data-i18n-aria-label="common.cancel"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+    <p class="module-desc" style="margin:0;" data-i18n="close.desc">Az Aqulify futhat tovább a háttérben, vagy teljesen leállhat.</p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button class="adw-btn primary" id="btnCloseTray" onclick="closeDialogChoose('tray')" style="display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:3px; text-align:left; padding:10px 14px; height:auto; min-height:56px; line-height:1.35; white-space:normal;">
+        <span id="closeTrayLabel" style="font-weight:600;" data-i18n="close.trayWin">Tálcára</span>
+        <span style="font-size:0.8rem; opacity:0.85;" data-i18n="close.trayHint">Az ablak eltűnik, a hangfeldolgozás fut tovább.</span>
+      </button>
+      <button class="adw-btn" id="btnCloseQuit" onclick="closeDialogChoose('quit')" style="display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:3px; text-align:left; padding:10px 14px; height:auto; min-height:56px; line-height:1.35; white-space:normal;">
+        <span style="font-weight:600;" data-i18n="close.quit">Bezárás</span>
+        <span style="font-size:0.8rem; opacity:0.85;" data-i18n="close.quitHint">Az Aqulify leáll, a hang visszaáll eredetire.</span>
+      </button>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; color:var(--aq-text); cursor:pointer;">
+      <input type="checkbox" id="chkCloseAlways">
+      <span data-i18n="close.always">Mindig ezt válaszd (ne kérdezze újra)</span>
+    </label>
+    <div style="font-size:0.75rem; color:var(--aq-text-3); margin-top:-8px;" data-i18n="close.alwaysNote">Később a Kimenet menüben módosíthatod.</div>
+    <div style="display:flex; justify-content:flex-end; border-top:1px solid var(--aq-line); padding-top:12px;">
+      <button class="adw-btn" onclick="closeDialogCancel()" data-i18n="common.cancel">Mégse</button>
+    </div>
   </div>
 </div>
 <div id="modalImport" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;">
@@ -5687,6 +5723,94 @@ function renderBurnInState() {
   if (btn) btn.innerText = t(running ? 'burnin.stop' : 'burnin.start');
   if (sel) sel.disabled = running;
 }
+
+// ---------------------------------------------------------------- Ablak bezárása: tálcára / háttérbe vagy bezárás
+// A natív ablak (Windows, Linux, macOS) a bezárás gombra a window.aqRequestClose()-t hívja, és csak a felület
+// válasza (aetherCloseWindow) után zár. Ha a felület 1,5 s alatt nem jelez (aetherCloseAck), az ablak magától
+// bezárul, és a motor fut tovább (a korábbi viselkedés). Böngészőben (natív híd nélkül) ez a rész nem működik.
+const CLOSE_PREF_KEY = "aqulify_close_action";
+let aqClosing = false;
+
+function closePref() {
+  try {
+    const v = localStorage.getItem(CLOSE_PREF_KEY);
+    return v === "tray" || v === "quit" ? v : "ask";
+  } catch (e) { return "ask"; }
+}
+function setClosePref(v) {
+  try {
+    if (v === "tray" || v === "quit") localStorage.setItem(CLOSE_PREF_KEY, v);
+    else localStorage.removeItem(CLOSE_PREF_KEY);
+  } catch (e) {}
+  syncClosePrefSelect();
+}
+function syncClosePrefSelect() {
+  const wrap = document.getElementById("closePrefWrap");
+  if (wrap) wrap.hidden = typeof window.aetherCloseWindow !== "function";
+  const sel = document.getElementById("selectClosePref");
+  if (sel) sel.value = closePref();
+}
+/** A „tálcára” gomb felirata rendszerenként: Windows tálca, macOS menüsor, Linux háttér. */
+function closeTrayKey() {
+  const ua = navigator.userAgent;
+  if (/Windows/.test(ua)) return "close.trayWin";
+  if (/Macintosh|Mac OS X/.test(ua)) return "close.trayMac";
+  return "close.trayLinux";
+}
+window.aqRequestClose = function () {
+  try { if (typeof window.aetherCloseAck === "function") window.aetherCloseAck(); } catch (e) {}
+  if (aqClosing) return;
+  const pref = closePref();
+  if (pref !== "ask") { doCloseAction(pref); return; }
+  openCloseDialog();
+};
+function openCloseDialog() {
+  const lbl = document.getElementById("closeTrayLabel");
+  if (lbl) { lbl.setAttribute("data-i18n", closeTrayKey()); lbl.textContent = t(closeTrayKey()); }
+  const chk = document.getElementById("chkCloseAlways");
+  if (chk) chk.checked = false;
+  document.getElementById("modalClose").style.display = "flex";
+  const btn = document.getElementById("btnCloseTray");
+  if (btn) btn.focus();
+}
+function hideCloseDialog() {
+  const m = document.getElementById("modalClose");
+  if (m) m.style.display = "none";
+}
+function closeDialogChoose(action) {
+  const chk = document.getElementById("chkCloseAlways");
+  if (chk && chk.checked) setClosePref(action);
+  hideCloseDialog();
+  doCloseAction(action);
+}
+function closeDialogCancel() {
+  hideCloseDialog();
+  try { if (typeof window.aetherCloseWindow === "function") window.aetherCloseWindow("cancel"); } catch (e) {}
+}
+/**
+ * "tray": csak az ablak zárul. "quit": a motor leáll (engine_quit; a lánc alapra áll, a hang nem változik),
+ * utána zárul az ablak. A motor bontja a kapcsolatot; ha 1,5 s alatt nem, az ablak akkor is zárul.
+ */
+function doCloseAction(action) {
+  if (aqClosing) return;
+  aqClosing = true;
+  const finish = () => {
+    try { window.aetherCloseWindow(action === "quit" ? "quit" : "tray"); } catch (e) { aqClosing = false; }
+  };
+  const ws = pipewireWs;
+  if (action !== "quit" || !ws || ws.readyState !== WebSocket.OPEN) { finish(); return; }
+  let done = false;
+  const fin = () => { if (done) return; done = true; finish(); };
+  ws.addEventListener("close", fin, { once: true });
+  setTimeout(fin, 1500);
+  try { ws.send(JSON.stringify({ type: "engine_quit" })); } catch (e) { fin(); }
+}
+document.addEventListener("keydown", (e) => {
+  const m = document.getElementById("modalClose");
+  if (e.key === "Escape" && m && m.style.display === "flex") closeDialogCancel();
+});
+document.addEventListener("DOMContentLoaded", syncClosePrefSelect);
+setTimeout(syncClosePrefSelect, 1000);   // a natív híd függvényei a betöltés után is megjelenhetnek
 
 /**
  * Ébren tartás: a natív híd (Windows, Linux) csak az alvást tiltja, a kijelző elalhat (akár 48 órás futásnál is).

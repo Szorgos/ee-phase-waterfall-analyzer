@@ -255,6 +255,41 @@ void CALLBACK occlusionTimer(HWND, UINT, UINT_PTR, DWORD) {
                      : "window.aqSetOccluded && window.aqSetOccluded(false)");
 }
 
+// ---------------------------------------------------------------- Ablak bezárása
+// A bezárás gombra a felület kérdez (tálcára / bezárás); az ablak csak a válasza után zár. Ha a felület
+// 1,5 s alatt nem jelez (nincs betöltve, lefagyott), az ablak magától zárul (a motor fut tovább a tálcán).
+constexpr UINT_PTR kCloseTimerId = 0xA0C2;
+WNDPROC g_origWndProc = nullptr;
+bool g_closeAllowed = false;
+bool g_closePending = false;
+bool g_closeAcked = false;
+
+void CALLBACK closeTimer(HWND hwnd, UINT, UINT_PTR id, DWORD) {
+    KillTimer(hwnd, id);
+    if (g_closePending && !g_closeAcked) {
+        g_closeAllowed = true;
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+    }
+}
+
+LRESULT CALLBACK closeWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_CLOSE && !g_closeAllowed) {
+        if (!g_closePending && g_view) {
+            g_closePending = true;
+            g_closeAcked = false;
+            g_view->eval("window.aqRequestClose ? window.aqRequestClose() : window.aetherCloseWindow('tray')");
+            SetTimer(hwnd, kCloseTimerId, 1500, closeTimer);
+        }
+        return 0;
+    }
+    return CallWindowProcW(g_origWndProc, hwnd, msg, wp, lp);
+}
+
+/** A motor leállítása a tálcaablakán át (ugyanaz, mint a tálcamenü „Kilépés” pontja), ha még fut. */
+void quitEngineWindow() {
+    if (HWND eng = FindWindowW(L"AqulifyEngineWnd", nullptr)) PostMessageW(eng, WM_CLOSE, 0, 0);
+}
+
 } // namespace
 
 /** A felület WebView2 ablakban; kivételt dob, ha a WebView2 nem indítható. */
@@ -355,6 +390,22 @@ void runWindow(const std::wstring& guiFolder) {
         const auto r = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"runas", exe.c_str(), nullptr, dir.c_str(), SW_SHOWNORMAL));
         return r > 32 ? "true" : "false";
     });
+    // Ablak bezárása (lásd closeWndProc): a felület jelzi, hogy kérdez; a válasza "tray", "quit" vagy "cancel"
+    w.bind("aetherCloseAck", [](const std::string&) -> std::string {
+        g_closeAcked = true;
+        return "null";
+    });
+    w.bind("aetherCloseWindow", [hwnd](const std::string& req) -> std::string {
+        if (req.find("\"cancel\"") != std::string::npos) {
+            g_closePending = false;
+            return "null";
+        }
+        // "quit": a felület már kérte a motortól a leállást (engine_quit); ha nem volt kapcsolat, a tálcaablakán át
+        if (req.find("\"quit\"") != std::string::npos) quitEngineWindow();
+        g_closeAllowed = true;
+        if (hwnd) PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        return "null";
+    });
     if (mapVirtualHost(w, guiFolder)) {
         w.navigate(kStartUrl);
     } else {
@@ -367,6 +418,7 @@ void runWindow(const std::wstring& guiFolder) {
     g_view = &w;
     g_viewHwnd = hwnd;
     if (hwnd) SetTimer(hwnd, 0xA0C1, 500, occlusionTimer);
+    if (hwnd) g_origWndProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(closeWndProc)));
     w.run();
     if (hwnd) KillTimer(hwnd, 0xA0C1);
     g_view = nullptr;

@@ -202,7 +202,34 @@ void applyTitlebar(bool light) {
  * egy hosszabb rajzolást végez, a WebKit 10 másodperc múlva szándékosan összeomlasztaná (g_error, core dump,
  * hibajelentés); így ehelyett azonnal és csendben leáll.
  */
-gboolean onWindowDelete(GtkWidget*, GdkEvent*, gpointer view) {
+// Ablak bezárása: a bezárás gombra a felület kérdez (háttérbe / bezárás), és csak a válasza után zár.
+// Ha a felület 1,5 s alatt nem jelez (nincs betöltve, lefagyott), az ablak magától zárul (a motor fut tovább).
+webview::webview* g_wv = nullptr;
+bool g_closeAllowed = false;
+bool g_closePending = false;
+bool g_closeAcked = false;
+
+gboolean closeWindowIdle(gpointer window) {
+    g_closeAllowed = true;
+    gtk_window_close(GTK_WINDOW(window));
+    return G_SOURCE_REMOVE;
+}
+
+gboolean closeTimeout(gpointer window) {
+    if (g_closePending && !g_closeAcked) closeWindowIdle(window);
+    return G_SOURCE_REMOVE;
+}
+
+gboolean onWindowDelete(GtkWidget* window, GdkEvent*, gpointer view) {
+    if (!g_closeAllowed) {
+        if (!g_closePending && g_wv) {
+            g_closePending = true;
+            g_closeAcked = false;
+            g_wv->eval("window.aqRequestClose ? window.aqRequestClose() : window.aetherCloseWindow('tray')");
+            g_timeout_add(1500, closeTimeout, window);
+        }
+        return TRUE;   // a felület válaszáig az ablak nyitva marad
+    }
 #if WEBKIT_CHECK_VERSION(2, 34, 0)
     if (view) webkit_web_view_terminate_web_process(WEBKIT_WEB_VIEW(view));
 #else
@@ -211,8 +238,9 @@ gboolean onWindowDelete(GtkWidget*, GdkEvent*, gpointer view) {
     return FALSE;   // a bezárás folytatódik (az ablak megszűnik, a program kilép)
 }
 
-/** SIGTERM / SIGINT: ugyanaz, mint az ablak bezárása. */
+/** SIGTERM / SIGINT: az ablak kérdés nélkül zárul (a motor fut tovább). */
 gboolean onQuitSignal(gpointer window) {
+    g_closeAllowed = true;
     gtk_window_close(GTK_WINDOW(window));
     return G_SOURCE_REMOVE;
 }
@@ -317,8 +345,26 @@ int main() {
             setKeepAwakeLinux(req.find("true") != std::string::npos);
             return "null";
         });
+        // Ablak bezárása (lásd onWindowDelete): a felület jelzi, hogy kérdez; a válasza "tray", "quit" vagy "cancel"
+        w.bind("aetherCloseAck", [](const std::string&) -> std::string {
+            g_closeAcked = true;
+            return "null";
+        });
+        w.bind("aetherCloseWindow", [gtkWin](const std::string& req) -> std::string {
+            if (req.find("\"cancel\"") != std::string::npos) {
+                g_closePending = false;
+                return "null";
+            }
+            // "quit": a felület már kérte a motortól a leállást (engine_quit); ha nem volt kapcsolat, a systemd-n át
+            if (req.find("\"quit\"") != std::string::npos)
+                if (std::system("systemctl --user stop aqulify.service >/dev/null 2>&1") != 0) { /* nem systemd alatt fut */ }
+            if (gtkWin) g_idle_add(closeWindowIdle, gtkWin);
+            return "null";
+        });
+        g_wv = &w;
         w.navigate(url);
         w.run();
+        g_wv = nullptr;
         return 0;
     } catch (const std::exception& e) {
         aq_i18n::init();

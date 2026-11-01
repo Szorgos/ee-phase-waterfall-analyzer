@@ -247,6 +247,9 @@ struct Core {
     NSStatusItem* statusItem_;
     NSWindow* window_;
     WKWebView* web_;
+    BOOL closeAllowed_;    // ablak bezárása: a felület válaszolt (vagy nem válaszolt időben)
+    BOOL closePending_;
+    BOOL closeAcked_;
     NSTimer* saveTimer_;
     dispatch_source_t termSource_;
     dispatch_source_t intSource_;
@@ -412,6 +415,8 @@ struct Core {
     }, &c->phoneCache);
     cb.loadRemote = [] { return linux_store::loadRemote(); };
     cb.saveRemote = [](const std::string& doc) { return linux_store::saveRemote(doc); };
+    // Ablak bezárása „Bezárás” választással: az alkalmazás kilép (a motor vele áll le, a hang nem változik)
+    cb.quitEngine = [] { dispatch_async(dispatch_get_main_queue(), ^{ [NSApp terminate:nil]; }); };
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     __weak AppDelegate* weakSelf = self;
     cb.setLanguage = [weakSelf](const std::string& l) {
@@ -616,6 +621,15 @@ struct Core {
                          forMainFrameOnly:YES]];
     // A felület témája: a címsor és az ablak háttere követi (aetherTheme: "light" / "dark")
     [ucc addScriptMessageHandler:self name:@"aetherTheme"];
+    // Ablak bezárása: a felület kérdez (menüsorra / bezárás), a válasza "tray", "quit" vagy "cancel"
+    [ucc addScriptMessageHandler:self name:@"aetherClose"];
+    [ucc addUserScript:[[WKUserScript alloc]
+                           initWithSource:@"window.aetherCloseAck = function () { window.webkit.messageHandlers.aetherClose.postMessage('ack'); };"
+                                           "window.aetherCloseWindow = function (a) { window.webkit.messageHandlers.aetherClose.postMessage(String(a)); };"
+                            injectionTime:WKUserScriptInjectionTimeAtDocumentStart
+                         forMainFrameOnly:YES]];
+    closeAllowed_ = NO;
+    closePending_ = NO;
     // A felület hibái a naplóba (az ablakban nincs fejlesztői konzol)
     [ucc addScriptMessageHandler:self name:@"aetherLog"];
     [ucc addUserScript:[[WKUserScript alloc]
@@ -652,6 +666,32 @@ struct Core {
            completionHandler:nil];
 }
 
+/**
+ * A bezárás gombra a felület kérdez (menüsorra / bezárás); az ablak csak a válasza után zár. Ha a felület 1,5 s
+ * alatt nem jelez (nincs betöltve, lefagyott), az ablak magától zárul (a motor fut tovább a menüsorban).
+ */
+- (BOOL)windowShouldClose:(NSWindow*)sender {
+    if (sender != window_ || closeAllowed_ || !web_) return YES;
+    if (!closePending_) {
+        closePending_ = YES;
+        closeAcked_ = NO;
+        [web_ evaluateJavaScript:@"window.aqRequestClose ? window.aqRequestClose() : window.aetherCloseWindow('tray')"
+               completionHandler:nil];
+        __weak AppDelegate* weakSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [weakSelf closeTimeout];
+        });
+    }
+    return NO;
+}
+
+- (void)closeTimeout {
+    if (closePending_ && !closeAcked_ && window_) {
+        closeAllowed_ = YES;
+        [window_ performClose:nil];
+    }
+}
+
 /** Bezáráskor a felület leáll (a motor fut tovább a menüsorban), és az alkalmazás eltűnik a Dockból. */
 - (void)windowWillClose:(NSNotification*)note {
     if (note.object != window_) return;
@@ -662,6 +702,9 @@ struct Core {
     [web.configuration.userContentController removeScriptMessageHandlerForName:@"aetherOpenUrl"];
     [web.configuration.userContentController removeScriptMessageHandlerForName:@"aetherLog"];
     [web.configuration.userContentController removeScriptMessageHandlerForName:@"aetherTheme"];
+    [web.configuration.userContentController removeScriptMessageHandlerForName:@"aetherClose"];
+    closeAllowed_ = NO;
+    closePending_ = NO;
     web.UIDelegate = nil;
     web.navigationDelegate = nil;
     win.delegate = nil;
@@ -677,6 +720,20 @@ struct Core {
 - (void)userContentController:(WKUserContentController*)ucc didReceiveScriptMessage:(WKScriptMessage*)message {
     if ([message.name isEqualToString:@"aetherLog"]) {
         logGuiError(message.body);
+        return;
+    }
+    if ([message.name isEqualToString:@"aetherClose"]) {
+        NSString* a = [message.body isKindOfClass:[NSString class]] ? (NSString*)message.body : @"";
+        if ([a isEqualToString:@"ack"]) {
+            closeAcked_ = YES;
+        } else if ([a isEqualToString:@"cancel"]) {
+            closePending_ = NO;
+        } else if ([a isEqualToString:@"quit"]) {
+            [NSApp terminate:nil];   // a motor az alkalmazással együtt áll le
+        } else {
+            closeAllowed_ = YES;
+            dispatch_async(dispatch_get_main_queue(), ^{ [self->window_ performClose:nil]; });
+        }
         return;
     }
     if ([message.name isEqualToString:@"aetherTheme"]) {
