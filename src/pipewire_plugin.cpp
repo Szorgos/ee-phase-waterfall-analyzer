@@ -420,6 +420,58 @@ int main(int argc, char* argv[]) {
     cb.saveRemote = [](const std::string& doc) { return linux_store::saveRemote(doc); };
     // Ablak bezárása „Bezárás” választással: rendes leállás (0-s kilépési kód, a systemd nem indítja újra)
     cb.quitEngine = [] { if (g_node) g_node->quit(); };
+
+    // Több kimenet (2–4 hangkártya). Induláskor ki van kapcsolva (alap állapot: csak a fő kimenet szól, a hangzás
+    // nem változik); a felület a csatlakozáskor adja át. A 2–4. kimenet céleszköze csak létező fizikai nyelő lehet.
+    std::mutex multiMutex;
+    multiout::MultiConfig multiState;
+    std::array<std::string, 3> multiTargets{};
+    auto pushMulti = [&] { node.setMultiOutput(multiState, multiTargets); };
+    cb.setMultiOut = [&](const multiout::MultiConfig& in, const std::array<std::string, 3>& sinks) {
+        const std::vector<SinkInfo> phys = listPhysicalSinks();
+        std::lock_guard<std::mutex> lk(multiMutex);
+        multiout::MultiConfig c = in;
+        for (int k = 1; k < multiout::kMaxOutputs; ++k) c.outputs[k].chain = multiState.outputs[k].chain;   // a zónák lánca marad
+        multiout::sanitize(c);
+        for (int k = 0; k < 3; ++k) {
+            const std::string& t = sinks[k];
+            const bool known = !t.empty() && isSafeSinkName(t) &&
+                               std::any_of(phys.begin(), phys.end(), [&](const SinkInfo& si) { return si.name == t; });
+            if (!t.empty() && !known) std::cerr << "[Több kimenet] Ismeretlen céleszköz, kihagyva: " << t << "\n";
+            multiTargets[k] = known ? t : std::string();
+        }
+        multiState = c;
+        pushMulti();
+        std::cout << "[Több kimenet] " << (c.enabled ? "bekapcsolva" : "kikapcsolva") << ", " << c.numOutputs << " kimenet, "
+                  << (c.mode == multiout::Mode::Crossover ? "keresztváltó" : "független zónák") << "\n";
+    };
+    cb.multiOutStatus = [&]() -> std::string {
+        std::lock_guard<std::mutex> lk(multiMutex);
+        const auto& c = multiState;
+        std::string s = "{\"enabled\":" + std::string(c.enabled ? "true" : "false") + ",\"mode\":\"" +
+                        (c.mode == multiout::Mode::Crossover ? "crossover" : "zones") + "\",\"slope\":" +
+                        std::to_string(c.slopeDbPerOct) + ",\"crossovers\":[";
+        for (int j = 0; j < c.numCrossovers; ++j) s += (j ? "," : "") + std::to_string(c.crossoverHz[j]);
+        s += "],\"outputs\":[";
+        for (int k = 0; k < c.numOutputs; ++k) {
+            const auto& o = c.outputs[k];
+            if (k) s += ",";
+            s += "{\"sink\":\"" + jsonEscape(k == 0 ? std::string() : multiTargets[k - 1]) + "\",\"band\":" + std::to_string(o.band) +
+                 ",\"gain\":" + std::to_string(o.gainDb) + ",\"delay\":" + std::to_string(o.delayMs) +
+                 ",\"invert\":" + (o.invert ? "true" : "false") + ",\"enabled\":" + (o.enabled ? "true" : "false") + "}";
+        }
+        s += "],\"zones\":" + node.multiStatusJson() + ",\"sinks\":" + cachedSinksJson + "}";
+        return s;
+    };
+    cb.getZoneParams = [&](int zone) -> ParamData {
+        std::lock_guard<std::mutex> lk(multiMutex);
+        return multiState.outputs[std::clamp(zone, 0, multiout::kMaxOutputs - 1)].chain;
+    };
+    cb.setZoneParams = [&](int zone, const ParamData& p) {
+        std::lock_guard<std::mutex> lk(multiMutex);
+        multiState.outputs[std::clamp(zone, 1, multiout::kMaxOutputs - 1)].chain = p;
+        pushMulti();
+    };
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     cb.setLanguage = [](const std::string& l) {
         if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cerr << "[Nyelv] Figyelem: a language.txt nem írható.\n";

@@ -11,19 +11,30 @@
  * A közös node.link-group miatt a WirePlumber a kettőt soha nem köti egymásba (nincs visszacsatolás).
  * A feldolgozás a lejátszó stream valós idejű szálán fut (a capture stream ezt indítja), egy
  * quantumnyi többletkésleltetés nélkül.
+ *
+ * Több kimenet (2–4 hangkártya): a további kimenetek külön lejátszó streamek, megadott céleszközzel
+ * (target.object). A közös node.group miatt a PipeWire egy ütemezőhöz (driverhez) rendeli őket, a többi
+ * hangkártya követőként, adaptív újramintavételezéssel fut, így az órajelek eltérése nem halmozódik.
+ * A fő hangszál a kimenetek jelét gyűrűpufferekbe írja; a további streamek egy quantumnyi előtöltéssel
+ * olvassák. A céleszköz eltűnésekor a stream nem kapcsolódik át máshová (node.dont-reconnect).
  */
 #include <pipewire/pipewire.h>
 #include <spa/param/audio/format-utils.h>
 #include <spa/pod/builder.h>
 #include <spa/utils/result.h>
 
+#include <array>
 #include <atomic>
 #include <cstring>
 #include <iostream>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <unistd.h>
+#include <vector>
 
 #include "aether_chain.hpp"
+#include "multi_output.hpp"
 #include "aq_i18n.hpp"
 #include "param_block.hpp"
 #include "tap_ring.hpp"
@@ -49,10 +60,68 @@ public:
     std::atomic<bool> playbackStreaming{false};
     std::atomic<bool> coreError{false};
 
+    static constexpr int kExtraZones = multiout::kMaxOutputs - 1;
+    static constexpr uint32_t kZoneRing = 32768;      // kb. 0,7 s 48 kHz-en
+    static constexpr uint32_t kScratch = 16384;       // a legnagyobb feldolgozott quantum
+
+    /** Egy további kimenet (2.–4.): lejátszó stream a céleszköz felé és a gyűrűpuffere. */
+    struct ZoneStream {
+        AetherSinkNode* owner = nullptr;
+        int index = 0;                                // 1–3 (a 0. a fő kimenet)
+        struct pw_stream* stream = nullptr;
+        struct spa_hook listener{};
+        multiout::StereoSpsc<kZoneRing> ring;
+        std::string target;                           // a céleszköz node.name-je (csak a fő hurok szála)
+        std::atomic<bool> fresh{false};               // új stream: az elavult puffertartalom eldobandó
+        std::atomic<bool> streaming{false};
+        std::atomic<uint32_t> underruns{0};
+        bool primed = false;                          // csak a stream saját szála
+    };
+
     explicit AetherSinkNode(uint32_t initialRate = 48000) {
         sampleRate.store(initialRate);
         chain.setSampleRate(initialRate);
         chain.startWorker();
+        multi_.setExternalMainChain(&chain);
+        multi_.setSampleRate(initialRate);
+        multi_.startWorkers();
+        inL_.assign(kScratch, 0.0f);
+        inR_.assign(kScratch, 0.0f);
+        for (int k = 0; k < kExtraZones; ++k) {
+            zones_[k] = std::make_unique<ZoneStream>();
+            zones_[k]->owner = this;
+            zones_[k]->index = k + 1;
+            zoneL_[k].assign(kScratch, 0.0f);
+            zoneR_[k].assign(kScratch, 0.0f);
+        }
+    }
+
+    /**
+     * Több kimenet beállítása (bármely szálról). targets[k]: a (k+1). kimenet céleszköze (node.name; üres: nincs).
+     * A streamek a fő hurok szálán jönnek létre vagy szűnnek meg; a DSP-beállítás a hangszálon lép életbe.
+     */
+    void setMultiOutput(const multiout::MultiConfig& cfg, const std::array<std::string, kExtraZones>& targets) {
+        multiCfg_.write(cfg);
+        {
+            std::lock_guard<std::mutex> lk(zoneMutex_);
+            for (int k = 0; k < kExtraZones; ++k) {
+                const bool used = cfg.enabled && k + 1 < cfg.numOutputs;
+                wantedTargets_[k] = used ? targets[k] : std::string();
+            }
+        }
+        if (loop && zoneEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), zoneEvent_);
+    }
+
+    /** A további kimenetek állapota JSON-ként (a felületnek): céleszköz, szól-e, alulcsordulások. */
+    std::string multiStatusJson() {
+        std::lock_guard<std::mutex> lk(zoneMutex_);
+        std::string s = "[";
+        for (int k = 0; k < kExtraZones; ++k) {
+            if (k) s += ",";
+            s += "{\"output\":" + std::to_string(k + 2) + ",\"target\":\"" + wantedTargets_[k] + "\",\"streaming\":" +
+                 (zones_[k]->streaming.load() ? "true" : "false") + ",\"underruns\":" + std::to_string(zones_[k]->underruns.load()) + "}";
+        }
+        return s + "]";
     }
 
     ~AetherSinkNode() { shutdown(); }
@@ -126,6 +195,10 @@ public:
         }();
         pw_stream_add_listener(capture, &captureListener, &captureEvents, this);
         pw_stream_add_listener(playback, &playbackListener, &playbackEvents, this);
+        group_ = group;
+        sinkName_ = sinkName;
+        description_ = description;
+        zoneEvent_ = pw_loop_add_event(pw_main_loop_get_loop(loop), onZoneEvent, this);
 
         // Formátum: 32 bites lebegőpontos, sztereó, nem-interleaved; a mintavételt a gráf adja (rate = 0)
         uint8_t buf[1024];
@@ -172,7 +245,9 @@ public:
     }
 
     void shutdown() {
+        for (auto& z : zones_) if (z && z->stream) { pw_stream_destroy(z->stream); z->stream = nullptr; }
         chain.stopWorker();
+        multi_.stopWorkers();
         if (capture) { pw_stream_destroy(capture); capture = nullptr; }
         if (playback) { pw_stream_destroy(playback); playback = nullptr; }
         if (core) { pw_core_disconnect(core); core = nullptr; }
@@ -182,6 +257,144 @@ public:
 
 private:
     uint32_t appliedParamSeq_ = 0;
+    uint32_t appliedMultiSeq_ = 0;
+    bool multiOn_ = false;                            // csak a hangszál
+    multiout::MultiOutputEngine multi_;
+    multiout::SeqBox<multiout::MultiConfig> multiCfg_;
+    std::array<std::unique_ptr<ZoneStream>, kExtraZones> zones_{};
+    std::array<std::string, kExtraZones> wantedTargets_{};
+    std::mutex zoneMutex_;
+    struct spa_source* zoneEvent_ = nullptr;
+    std::string group_, sinkName_, description_;
+    std::vector<float> inL_, inR_;
+    std::array<std::vector<float>, kExtraZones> zoneL_, zoneR_;
+
+    /** A fő hurok szálán: a kívánt céleszközöknek megfelelő streamek létrehozása / megszüntetése. */
+    static void onZoneEvent(void* data, uint64_t) {
+        auto* self = static_cast<AetherSinkNode*>(data);
+        std::array<std::string, kExtraZones> want;
+        {
+            std::lock_guard<std::mutex> lk(self->zoneMutex_);
+            want = self->wantedTargets_;
+        }
+        for (int k = 0; k < kExtraZones; ++k) {
+            ZoneStream& z = *self->zones_[k];
+            if (z.stream && z.target == want[k]) continue;
+            if (z.stream) {
+                pw_stream_destroy(z.stream);
+                z.stream = nullptr;
+                z.streaming = false;
+                std::cout << "[PipeWire] " << (k + 2) << ". kimenet leállítva (" << z.target << ")\n";
+            }
+            z.target = want[k];
+            if (!z.target.empty()) self->createZoneStream(z);
+        }
+    }
+
+    void createZoneStream(ZoneStream& z) {
+        const std::string name = sinkName_ + "_zone" + std::to_string(z.index + 1) + "_output";
+        const std::string desc = description_ + " – " + std::to_string(z.index + 1) + ". kimenet";
+        struct pw_properties* props = pw_properties_new(
+            PW_KEY_MEDIA_CLASS, "Stream/Output/Audio",
+            PW_KEY_NODE_NAME, name.c_str(),
+            PW_KEY_NODE_DESCRIPTION, desc.c_str(),
+            PW_KEY_NODE_GROUP, group_.c_str(),           // egy ütemező: az órajelek eltérését a PipeWire kezeli
+            PW_KEY_NODE_LINK_GROUP, group_.c_str(),      // soha nem kötődik a saját virtuális eszközünkre
+            PW_KEY_TARGET_OBJECT, z.target.c_str(),
+            PW_KEY_NODE_DONT_RECONNECT, "true",          // a céleszköz eltűnésekor nem szól máshol
+            PW_KEY_NODE_PASSIVE, "true",
+            PW_KEY_AUDIO_CHANNELS, "2",
+            SPA_KEY_AUDIO_POSITION, "FL,FR",
+            PW_KEY_MEDIA_ROLE, "DSP",
+            nullptr);
+        z.stream = pw_stream_new(core, name.c_str(), props);
+        if (!z.stream) {
+            std::cerr << "[PipeWire] a(z) " << (z.index + 1) << ". kimenet streamje nem hozható létre\n";
+            return;
+        }
+        static const struct pw_stream_events zoneEvents = [] {
+            pw_stream_events e{};
+            e.version = PW_VERSION_STREAM_EVENTS;
+            e.process = onZoneProcess;
+            e.state_changed = onZoneState;
+            return e;
+        }();
+        pw_stream_add_listener(z.stream, &z.listener, &zoneEvents, &z);
+        uint8_t buf[1024];
+        struct spa_audio_info_raw info{};
+        info.format = SPA_AUDIO_FORMAT_F32P;
+        info.channels = 2;
+        info.position[0] = SPA_AUDIO_CHANNEL_FL;
+        info.position[1] = SPA_AUDIO_CHANNEL_FR;
+        struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buf, sizeof(buf));
+        const struct spa_pod* params[1] = { spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &info) };
+        z.fresh = true;
+        z.underruns = 0;
+        if (pw_stream_connect(z.stream, PW_DIRECTION_OUTPUT, PW_ID_ANY,
+                              static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
+                                                           PW_STREAM_FLAG_RT_PROCESS),
+                              params, 1) < 0) {
+            std::cerr << "[PipeWire] a(z) " << (z.index + 1) << ". kimenet nem csatlakoztatható\n";
+            pw_stream_destroy(z.stream);
+            z.stream = nullptr;
+            return;
+        }
+        std::cout << "[PipeWire] " << (z.index + 1) << ". kimenet: " << z.target << "\n";
+    }
+
+    static void onZoneState(void* data, enum pw_stream_state, enum pw_stream_state state, const char* error) {
+        auto* z = static_cast<ZoneStream*>(data);
+        z->streaming = (state == PW_STREAM_STATE_STREAMING);
+        if (state == PW_STREAM_STATE_ERROR)
+            std::cerr << "[PipeWire] " << (z->index + 1) << ". kimenet hiba: " << (error ? error : "") << "\n";
+    }
+
+    /**
+     * A további kimenet saját valós idejű szála: a gyűrűpufferből olvas, két quantumnyi előtöltéssel. Hiánynál
+     * csend és újratöltés (alulcsordulás); túl sok tárolt adatnál a legrégebbit eldobja (a késleltetés korlátja).
+     */
+    static void onZoneProcess(void* data) {
+        auto* z = static_cast<ZoneStream*>(data);
+        struct pw_buffer* out = pw_stream_dequeue_buffer(z->stream);
+        if (!out) return;
+        struct spa_buffer* ob = out->buffer;
+        if (ob->n_datas < 2 || !ob->datas[0].data || !ob->datas[1].data) {
+            pw_stream_queue_buffer(z->stream, out);
+            return;
+        }
+        float* L = static_cast<float*>(ob->datas[0].data);
+        float* R = static_cast<float*>(ob->datas[1].data);
+        const uint32_t maxFrames = std::min(ob->datas[0].maxsize, ob->datas[1].maxsize) / sizeof(float);
+        uint32_t n = out->requested ? std::min<uint32_t>(static_cast<uint32_t>(out->requested), maxFrames) : 0;
+        if (n == 0) n = std::min<uint32_t>(1024, maxFrames);
+
+        if (z->fresh.exchange(false)) {
+            z->ring.skip(z->ring.available());
+            z->primed = false;
+        }
+        const uint32_t target = 2 * n;
+        uint32_t got = 0;
+        if (!z->primed && z->ring.available() >= target) z->primed = true;
+        if (z->primed) {
+            const uint32_t avail = z->ring.available();
+            if (avail > target + 4 * n) z->ring.skip(avail - target);
+            got = z->ring.read(L, R, n);
+            if (got < n) {
+                z->underruns.fetch_add(1, std::memory_order_relaxed);
+                z->primed = false;
+            }
+        }
+        if (got < n) {
+            std::memset(L + got, 0, (n - got) * sizeof(float));
+            std::memset(R + got, 0, (n - got) * sizeof(float));
+        }
+        for (uint32_t i = 0; i < 2; ++i) {
+            ob->datas[i].chunk->offset = 0;
+            ob->datas[i].chunk->size = n * sizeof(float);
+            ob->datas[i].chunk->stride = sizeof(float);
+        }
+        pw_stream_queue_buffer(z->stream, out);
+    }
 
     bool fail(const char* what) {
         std::cerr << "[Hiba] PipeWire: " << what << "\n";
@@ -268,7 +481,10 @@ private:
 
         // Mintavétel-váltás (allowed-rates): ritka esemény, a lánc újrahangolása itt történik
         const uint32_t sr = self->sampleRate.load(std::memory_order_relaxed);
-        if (sr > 0 && static_cast<uint32_t>(self->chain.sampleRate()) != sr) self->chain.setSampleRate(sr);
+        if (sr > 0 && static_cast<uint32_t>(self->chain.sampleRate()) != sr) {
+            self->chain.setSampleRate(sr);
+            self->multi_.setSampleRate(sr);
+        }
 
         // GUI-ból érkezett új beállítások (nem blokkoló seqlock olvasás)
         const uint32_t seq = self->params.currentSeq();
@@ -281,7 +497,31 @@ private:
             }
         }
 
-        self->chain.process(outL, outR, n);
+        // Több kimenet: új beállítás (nem blokkoló olvasás)
+        const uint32_t mseq = self->multiCfg_.currentSeq();
+        if (mseq != self->appliedMultiSeq_) {
+            multiout::MultiConfig mc;
+            uint32_t readSeq = 0;
+            if (self->multiCfg_.tryRead(mc, readSeq)) {
+                self->multi_.applyConfigRT(mc);
+                self->multiOn_ = mc.enabled;
+                self->appliedMultiSeq_ = readSeq;
+            }
+        }
+
+        if (self->multiOn_ && n <= kScratch) {
+            // Az 1. kimenet a fő lánc (a felület beállításai), a többi a saját láncán / sávján; a további
+            // kimenetek jele a gyűrűpufferekbe kerül
+            std::memcpy(self->inL_.data(), outL, n * sizeof(float));
+            std::memcpy(self->inR_.data(), outR, n * sizeof(float));
+            float* oL[multiout::kMaxOutputs] = { outL, self->zoneL_[0].data(), self->zoneL_[1].data(), self->zoneL_[2].data() };
+            float* oR[multiout::kMaxOutputs] = { outR, self->zoneR_[0].data(), self->zoneR_[1].data(), self->zoneR_[2].data() };
+            self->multi_.process(self->inL_.data(), self->inR_.data(), oL, oR, n);
+            const int nOut = self->multi_.config().numOutputs;
+            for (int k = 1; k < nOut; ++k) self->zones_[k - 1]->ring.write(oL[k], oR[k], n);
+        } else {
+            self->chain.process(outL, outR, n);
+        }
         self->visualizerTap.write(outL, outR, n);
 
         for (uint32_t i = 0; i < 2; ++i) {

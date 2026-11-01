@@ -23,63 +23,107 @@
  */
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #include "aether_chain.hpp"
+#include "multi_output_config.hpp"
 #include "param_block.hpp"
 
 namespace ee_analyzer {
 namespace multiout {
 
-constexpr int kMaxOutputs = 4;
-constexpr int kMaxCrossovers = kMaxOutputs - 1;
-constexpr double kMaxDelayMs = 50.0;          // legfeljebb ~17 m távolságkülönbség
 constexpr size_t kBlock = 1024;               // a belső feldolgozási darab (a hoszt bármekkora blokkot adhat)
 constexpr double kPi = 3.14159265358979323846;
 
-enum class Mode : int32_t { Zones = 0, Crossover = 1 };
+/**
+ * Szálak közti átadás seqlockkal (a ParamBlock mintájára): az író nem valós idejű szál, az olvasó a hangszál,
+ * amely sosem vár (ha éppen írás folyik, a következő körben olvas). T legyen egyszerűen másolható.
+ */
+template <class T>
+struct SeqBox {
+    static_assert(std::is_trivially_copyable<T>::value, "SeqBox: T legyen egyszerűen másolható");
+    std::atomic<uint32_t> seq{ 0 };
+    T data{};
 
-/** Egy kimenet beállításai. */
-struct OutputConfig {
-    bool enabled = true;
-    int32_t band = -1;          // keresztváltóban: 0 = legalsó sáv … (vágási pontok száma) = legfelső; -1 = teljes jel
-    float gainDb = 0.0f;        // -24 … +12 dB
-    float delayMs = 0.0f;       // 0 … 50 ms
-    bool invert = false;        // polaritásfordítás (pl. fordítva bekötött hangszóró)
-    ParamData chain = transparentParams();   // független zónában a kimenet saját lánca; keresztváltóban csak az 1.-é él
-};
-
-struct MultiConfig {
-    Mode mode = Mode::Zones;
-    int32_t numOutputs = 2;                          // 2–4
-    int32_t numCrossovers = 1;                       // keresztváltóban 1–3 vágási pont (2–4 sáv)
-    std::array<float, kMaxCrossovers> crossoverHz{ { 80.0f, 2500.0f, 8000.0f } };
-    int32_t slopeDbPerOct = 24;                      // 12 / 24 / 48
-    std::array<OutputConfig, kMaxOutputs> outputs{};
-};
-
-/** Érvényes tartományba igazítás (a felületről vagy fájlból érkező beállításra). */
-inline void sanitize(MultiConfig& c) {
-    c.mode = c.mode == Mode::Crossover ? Mode::Crossover : Mode::Zones;
-    c.numOutputs = std::clamp(c.numOutputs, 2, kMaxOutputs);
-    c.numCrossovers = std::clamp(c.numCrossovers, 1, kMaxCrossovers);
-    if (c.slopeDbPerOct != 12 && c.slopeDbPerOct != 48) c.slopeDbPerOct = 24;
-    for (auto& f : c.crossoverHz) if (!std::isfinite(f)) f = 1000.0f;
-    for (auto& f : c.crossoverHz) f = std::clamp(f, 20.0f, 20000.0f);
-    std::sort(c.crossoverHz.begin(), c.crossoverHz.begin() + c.numCrossovers);
-    for (auto& o : c.outputs) {
-        if (!std::isfinite(o.gainDb)) o.gainDb = 0.0f;
-        if (!std::isfinite(o.delayMs)) o.delayMs = 0.0f;
-        o.gainDb = std::clamp(o.gainDb, -24.0f, 12.0f);
-        o.delayMs = std::clamp(o.delayMs, 0.0f, static_cast<float>(kMaxDelayMs));
-        o.band = std::clamp(o.band, -1, c.numCrossovers);
-        sanitizeParams(o.chain);
+    void write(const T& d) {
+        const uint32_t s = seq.load(std::memory_order_relaxed);
+        seq.store(s + 1, std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_release);
+        std::memcpy(static_cast<void*>(&data), &d, sizeof(T));
+        std::atomic_thread_fence(std::memory_order_release);
+        seq.store(s + 2, std::memory_order_release);
     }
-}
+    bool tryRead(T& out, uint32_t& outSeq) const {
+        const uint32_t s1 = seq.load(std::memory_order_acquire);
+        if (s1 & 1u) return false;
+        std::memcpy(static_cast<void*>(&out), static_cast<const void*>(&data), sizeof(T));
+        std::atomic_thread_fence(std::memory_order_acquire);
+        if (seq.load(std::memory_order_relaxed) != s1) return false;
+        outSeq = s1;
+        return true;
+    }
+    uint32_t currentSeq() const { return seq.load(std::memory_order_acquire); }
+};
+
+/**
+ * Sztereó, egy író – egy olvasó gyűrűpuffer (zármentes) a fő hangszál és a további kimenetek streamjei között.
+ * Teli puffernél az író eldobja a többletet; az olvasó a hiányzó részt csenddel tölti (a hívó dönt).
+ */
+template <uint32_t kFramesPow2>
+class StereoSpsc {
+    static_assert((kFramesPow2 & (kFramesPow2 - 1)) == 0, "kettőhatvány méret kell");
+
+public:
+    uint32_t available() const {
+        return static_cast<uint32_t>(w_.load(std::memory_order_acquire) - r_.load(std::memory_order_relaxed));
+    }
+    uint32_t capacity() const { return kFramesPow2; }
+
+    /** @return a ténylegesen beírt keretek száma (teli puffernél kevesebb) */
+    uint32_t write(const float* l, const float* r, uint32_t n) {
+        const uint64_t w = w_.load(std::memory_order_relaxed);
+        const uint64_t rd = r_.load(std::memory_order_acquire);
+        const uint32_t space = kFramesPow2 - static_cast<uint32_t>(w - rd);
+        n = std::min(n, space);
+        for (uint32_t i = 0; i < n; ++i) {
+            const uint32_t k = static_cast<uint32_t>((w + i) & (kFramesPow2 - 1));
+            L_[k] = l[i];
+            R_[k] = r[i];
+        }
+        w_.store(w + n, std::memory_order_release);
+        return n;
+    }
+    /** @return a ténylegesen kiolvasott keretek száma */
+    uint32_t read(float* l, float* r, uint32_t n) {
+        const uint64_t rd = r_.load(std::memory_order_relaxed);
+        const uint64_t w = w_.load(std::memory_order_acquire);
+        n = std::min(n, static_cast<uint32_t>(w - rd));
+        for (uint32_t i = 0; i < n; ++i) {
+            const uint32_t k = static_cast<uint32_t>((rd + i) & (kFramesPow2 - 1));
+            l[i] = L_[k];
+            r[i] = R_[k];
+        }
+        r_.store(rd + n, std::memory_order_release);
+        return n;
+    }
+    /** Az olvasó oldalon: a legrégebbi keretek eldobása (a késleltetés korlátozására). */
+    void skip(uint32_t n) {
+        const uint64_t rd = r_.load(std::memory_order_relaxed);
+        const uint64_t w = w_.load(std::memory_order_acquire);
+        r_.store(rd + std::min<uint64_t>(n, w - rd), std::memory_order_release);
+    }
+
+private:
+    std::array<float, kFramesPow2> L_{}, R_{};
+    std::atomic<uint64_t> w_{ 0 }, r_{ 0 };
+};
 
 /** Kétszeres pontosságú biquad (DF2T); elsőrendű szakaszhoz b2 = a2 = 0. */
 struct Biquad {
@@ -193,6 +237,20 @@ public:
     }
     double sampleRate() const { return sr_; }
 
+    /**
+     * Külső fő lánc az 1. kimenetnek (a motor meglévő lánca: a felület, a konvolver, a mérők ezt kezelik).
+     * Független zónában az 1. kimenet ezen fut, keresztváltóban ez a közös lánc. A beállításait a hívó adja
+     * (applyConfigRT ilyenkor az 1. kimenet láncát nem állítja). nullptr: a saját belső lánc.
+     */
+    void setExternalMainChain(AetherChain* c) { external_ = c; }
+
+    /** A zónák láncának háttérszálai (FIR-módok, konvolver); a motor indítja és állítja le. */
+    void startWorkers() { for (auto& c : chains_) c->startWorker(); }
+    void stopWorkers() { for (auto& c : chains_) c->stopWorker(); }
+
+    /** A k-adik kimenet saját lánca (pl. impulzusválasz egy zónának). */
+    AetherChain& chain(int k) { return *chains_[std::clamp(k, 0, kMaxOutputs - 1)]; }
+
     /** A hangszálon hívandó, a beállítás pillanatképével (a hívó gondoskodik a szálak közti átadásról). */
     void applyConfigRT(const MultiConfig& in) {
         MultiConfig c = in;
@@ -201,7 +259,7 @@ public:
                                   c.slopeDbPerOct != cfg_.slopeDbPerOct || c.crossoverHz != cfg_.crossoverHz || !designed_;
         cfg_ = c;
         const int chainsUsed = cfg_.mode == Mode::Zones ? cfg_.numOutputs : 1;
-        for (int k = 0; k < chainsUsed; ++k) chains_[k]->applyParamsRT(cfg_.outputs[k].chain);
+        for (int k = external_ ? 1 : 0; k < chainsUsed; ++k) chains_[k]->applyParamsRT(cfg_.outputs[k].chain);
         for (int k = 0; k < kMaxOutputs; ++k) {
             const auto& o = cfg_.outputs[k];
             outs_[k].gain = static_cast<float>(std::pow(10.0, o.gainDb / 20.0)) * (o.invert ? -1.0f : 1.0f);
@@ -287,6 +345,8 @@ private:
         }
     }
 
+    AetherChain& mainOr(int k) { return (k == 0 && external_) ? *external_ : *chains_[k]; }
+
     double filterSample(OutFilters& f, int ch, double x) {
         for (int j = 0; j < f.stages; ++j) {
             switch (f.kind[j]) {
@@ -305,12 +365,12 @@ private:
             for (int k = 0; k < nOut; ++k) {
                 std::copy(inL, inL + m, oL[k]);
                 std::copy(inR, inR + m, oR[k]);
-                chains_[k]->process(oL[k], oR[k], m);
+                mainOr(k).process(oL[k], oR[k], m);
             }
         } else {
             std::copy(inL, inL + m, tmpL_.data());
             std::copy(inR, inR + m, tmpR_.data());
-            chains_[0]->process(tmpL_.data(), tmpR_.data(), m);
+            mainOr(0).process(tmpL_.data(), tmpR_.data(), m);
             for (int k = 0; k < nOut; ++k) {
                 OutFilters& f = filt_[k];
                 if (f.stages == 0) {
@@ -340,6 +400,7 @@ private:
     double sr_ = 48000.0;
     MultiConfig cfg_{};
     bool designed_ = false;
+    AetherChain* external_ = nullptr;
     double apSign_ = 1.0;
     std::array<std::unique_ptr<AetherChain>, kMaxOutputs> chains_{};
     std::array<OutFilters, kMaxOutputs> filt_{};

@@ -44,6 +44,7 @@
 #include "self_path.hpp"
 #include "media_session.hpp"
 #include "mdns_announcer.hpp"
+#include "multi_output_config.hpp"
 #include <fstream>
 
 namespace ee_analyzer {
@@ -125,6 +126,16 @@ struct BridgeCallbacks {
      * kérésre hívódik; a motor a szokásos leállási úton áll le (a lánc alapra áll, a hang nem változik).
      */
     std::function<void()> quitEngine;
+    /**
+     * Több kimenet (2–4 hangkártya; csak ahol a platform támogatja, most Linuxon). setMultiOut: üzemmód, sávok,
+     * kimenetenkénti erősítés / késleltetés / polaritás és a 2–4. kimenet céleszköze (sinks[k]: a (k+2). kimenet).
+     * multiOutStatus: a beállítás és az állapot JSON-objektumként. A 2–4. kimenet saját lánca a "zone" mezős
+     * beállító üzenetekkel állítható (getZoneParams / setZoneParams; a 0. zóna a fő lánc).
+     */
+    std::function<void(const multiout::MultiConfig& cfg, const std::array<std::string, 3>& sinks)> setMultiOut;
+    std::function<std::string()> multiOutStatus;
+    std::function<ParamData(int zone)> getZoneParams;
+    std::function<void(int zone, const ParamData&)> setZoneParams;
 };
 
 /**
@@ -1223,6 +1234,35 @@ private:
         return v ? v->numberOr(def) : def;
     }
 
+    /** set_multiout: {"enabled","mode":"zones"|"crossover","slope","crossovers":[Hz…],"outputs":[{"sink","band","gain","delay","invert","enabled"}…]} */
+    void handleSetMultiOut(const json::Value& msg) {
+        multiout::MultiConfig c;
+        c.enabled = num(msg, "enabled", 0.0) != 0.0;
+        const json::Value* mode = msg.get("mode");
+        c.mode = (mode && mode->stringOr("") == "crossover") ? multiout::Mode::Crossover : multiout::Mode::Zones;
+        c.slopeDbPerOct = static_cast<int32_t>(num(msg, "slope", 24.0));
+        if (const json::Value* xs = msg.get("crossovers"); xs && xs->type == json::Value::Type::Array) {
+            c.numCrossovers = static_cast<int32_t>(std::min<size_t>(xs->arr.size(), multiout::kMaxCrossovers));
+            for (int j = 0; j < c.numCrossovers; ++j) c.crossoverHz[j] = static_cast<float>(xs->arr[j].numberOr(1000.0));
+        }
+        std::array<std::string, 3> sinks{};
+        if (const json::Value* os = msg.get("outputs"); os && os->type == json::Value::Type::Array) {
+            c.numOutputs = static_cast<int32_t>(std::min<size_t>(os->arr.size(), multiout::kMaxOutputs));
+            for (int k = 0; k < c.numOutputs; ++k) {
+                const json::Value& o = os->arr[k];
+                auto& oc = c.outputs[k];
+                oc.band = static_cast<int32_t>(num(o, "band", -1.0));
+                oc.gainDb = static_cast<float>(num(o, "gain", 0.0));
+                oc.delayMs = static_cast<float>(num(o, "delay", 0.0));
+                oc.invert = num(o, "invert", 0.0) != 0.0;
+                oc.enabled = num(o, "enabled", 1.0) != 0.0;
+                if (k > 0) sinks[k - 1] = o.get("sink") ? o.get("sink")->stringOr("") : "";
+            }
+        }
+        multiout::sanitize(c);
+        cb_.setMultiOut(c, sinks);
+    }
+
     void handleMessage(const std::string& text) {
         json::Value msg;
         if (!json::parse(text, msg)) return;
@@ -1239,6 +1279,12 @@ private:
         }
         if (type == "pair_approve") {
             if (!remote) handlePairApprove(msg);
+            return;
+        }
+        if (type == "set_multiout" || type == "get_multiout") {
+            if (!cb_.setMultiOut || !cb_.multiOutStatus) return;
+            if (type == "set_multiout") handleSetMultiOut(msg);
+            sendText("{\"type\":\"multiout\",\"status\":" + cb_.multiOutStatus() + "}");
             return;
         }
         if (type == "engine_quit") {
@@ -1366,7 +1412,10 @@ private:
         }
         if (!cb_.getParams || !cb_.setParams) return;
 
-        ParamData p = cb_.getParams();
+        // "zone": a 2–4. kimenet saját lánca (több kimenetnél); 0 vagy hiányzik: a fő lánc
+        const int zone = std::clamp(static_cast<int>(num(msg, "zone", 0.0)), 0, multiout::kMaxOutputs - 1);
+        if (zone > 0 && (!cb_.getZoneParams || !cb_.setZoneParams)) return;
+        ParamData p = zone > 0 ? cb_.getZoneParams(zone) : cb_.getParams();
         const ParamData before = p;
         bool changed = true;
         // A felület a set_eq / get_eq_response üzenethez sorszámot ad; a válasz visszaküldi,
@@ -1511,8 +1560,12 @@ private:
             sanitizeParams(p);
             // Változatlan beállításnál nincs újraalkalmazás és nincs mentés (a mentés csak valódi változás után fut)
             if (std::memcmp(&p, &before, sizeof(ParamData)) != 0) {
-                cb_.setParams(p);
-                markSync();
+                if (zone > 0) {
+                    cb_.setZoneParams(zone, p);
+                } else {
+                    cb_.setParams(p);
+                    markSync();
+                }
             }
             if (eqChanged) sendText(buildEqResponseMessage(p, reqSeq));
         }
@@ -1644,6 +1697,11 @@ public:
             hasCap = true;
             if (cb_.queueRequest) caps += ",\"queue\",\"playlists\"";
             if (cb_.phoneTrackRequest) caps += ",\"phone_track\"";
+        }
+        if (cb_.setMultiOut) {
+            if (hasCap) caps += ",";
+            caps += "\"multiout\"";
+            hasCap = true;
         }
         caps += "]";
         if (hasCap) {

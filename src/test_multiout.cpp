@@ -248,6 +248,61 @@ static void testSanitize() {
     CHECK(c.outputs[0].gainDb == 12.0f && c.outputs[1].delayMs == 0.0f && c.outputs[2].band == 3, "erősítés, késleltetés és sáv a tartományban");
 }
 
+
+static void testPlumbing() {
+    std::printf("\n-- szálak közti átadás és külső lánc --\n");
+    // SeqBox: a teljes beállítás egyben megy át
+    SeqBox<MultiConfig> box;
+    MultiConfig c;
+    c.mode = Mode::Crossover;
+    c.numOutputs = 3;
+    c.outputs[2].delayMs = 7.5f;
+    c.outputs[1].chain.set(kFlagEq, true);
+    box.write(c);
+    MultiConfig got;
+    uint32_t seq = 0;
+    const bool ok = box.tryRead(got, seq);
+    CHECK(ok && seq == 2 && got.mode == Mode::Crossover && got.numOutputs == 3 && got.outputs[2].delayMs == 7.5f &&
+          got.outputs[1].chain.has(kFlagEq), "SeqBox: a beállítás sértetlenül átmegy (seq %u)", seq);
+
+    // Gyűrűpuffer: átfordulás, teli és üres eset
+    static StereoSpsc<1024> ring;
+    std::vector<float> l(700), r(700), ol(700), orr(700);
+    bool same = true;
+    for (int round = 0; round < 10; ++round) {
+        for (int i = 0; i < 700; ++i) { l[i] = float(round * 1000 + i); r[i] = -l[i]; }
+        const uint32_t w = ring.write(l.data(), r.data(), 700);
+        const uint32_t rd = ring.read(ol.data(), orr.data(), 700);
+        same = same && w == 700 && rd == 700 && ol == l && orr == r;
+    }
+    CHECK(same, "gyűrűpuffer: 10 kör átfordulással, minden keret sértetlen és sorrendhelyes");
+    const uint32_t w1 = ring.write(l.data(), r.data(), 700), w2 = ring.write(l.data(), r.data(), 700);
+    CHECK(w1 == 700 && w2 == 324 && ring.available() == 1024, "gyűrűpuffer: teli állapotban a többlet eldobódik (%u + %u)", w1, w2);
+    ring.skip(1000);
+    const uint32_t rd = ring.read(ol.data(), orr.data(), 700);
+    CHECK(rd == 24 && ring.available() == 0, "gyűrűpuffer: eldobás után csak a maradék olvasható (%u)", rd);
+
+    // Külső fő lánc: ugyanaz az eredmény, mint a belsővel
+    MultiConfig z;
+    z.numOutputs = 2;
+    z.outputs[0].chain.set(kFlagMono, true);
+    z.outputs[0].chain.subsonicHz = 30;
+    z.outputs[1].gainDb = -3.0f;
+    const auto L = noise(48000, 7), R = noise(48000, 8);
+    MultiOutputEngine a;
+    a.applyConfigRT(z);
+    warmup(a, 256);
+    const Outs oa = run(a, L, R, 256);
+    AetherChain ext;
+    ext.applyParamsRT(z.outputs[0].chain);
+    MultiOutputEngine b;
+    b.setExternalMainChain(&ext);
+    b.applyConfigRT(z);
+    warmup(b, 256);
+    const Outs ob = run(b, L, R, 256);
+    CHECK(oa.L[0] == ob.L[0] && oa.R[1] == ob.R[1], "külső fő lánc (a motor meglévő lánca): bit-azonos a belsővel");
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify több kimenet: független zónák és aktív keresztváltó\n");
@@ -264,6 +319,7 @@ int main() {
         testDelayGainPolarity(sr);
         testBlockIndependence(sr);
     }
+    testPlumbing();
     std::printf("\n-- beállítások ellenőrzése --\n");
     testSanitize();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
