@@ -6919,14 +6919,14 @@ buildControls("bassControls", [
 // A vezérlők létrehozása után (az „Alsó határ frekvencia” doboza csak most létezik): kikapcsolt alsó határnál rejtve
 setCtl("bassFloorActive", false);
 
-// --- Mono és mélyvágás (mono_bass.hpp): a 0 Hz (ki) és a 10 / 20 / 30 Hz közötti választás indexe
+// --- Mono és mélyvágás (mono_bass.hpp): a 0 Hz (ki) és a 10–35 Hz (5 Hz-es lépés) közötti választás indexe
 buildControls("monoControls", [
   { id: "monoSubsonic", kind: "select", label: "ctl.monoSubsonic", optKeys: true, def: 0,
-    options: ["mono.subOff", "mono.sub10", "mono.sub20", "mono.sub30"] },
+    options: ["mono.subOff", "mono.sub10", "mono.sub15", "mono.sub20", "mono.sub25", "mono.sub30", "mono.sub35"] },
   { id: "monoAmount", kind: "num", label: "ctl.monoAmount", min: 0, max: 100, step: 1, unit: "%", def: 0, hint: "ctl.monoAmountHint" },
   { id: "monoFreq", kind: "num", label: "ctl.monoFreq", min: 40, max: 250, step: 1, unit: "Hz", def: 100, hint: "ctl.monoFreqHint" },
 ], () => { sendMono(); nudgeIfOff('mono'); });
-const MONO_SUBSONIC_HZ = [0, 10, 20, 30];
+const MONO_SUBSONIC_HZ = [0, 10, 15, 20, 25, 30, 35];
 
 function sendMono() {
   sendEngine({ type: "set_mono", subsonic: MONO_SUBSONIC_HZ[getCtl("monoSubsonic")] || 0, amount: getCtl("monoAmount"),

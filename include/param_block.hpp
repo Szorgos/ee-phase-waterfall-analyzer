@@ -126,7 +126,7 @@ struct ParamData {
     int32_t magicContent = 0;      // Tartalom: 0 Automatikus, 1 Zene, 2 Beszéd, 3 Archív felvétel
 
     // --- Mono és mélyvágás (mono_bass.hpp, a v7-ben került a végére) ---
-    int32_t subsonicHz = 0;        // 0 = ki, 10 / 20 / 30 Hz: 24 dB/oktáves felüláteresztő a teljes jelen
+    int32_t subsonicHz = 0;        // 0 = ki, 10 / 15 / 20 / 25 / 30 / 35 Hz: 24 dB/oktáves felüláteresztő a teljes jelen
     float monoAmount = 0.0f;       // % (0 .. 100): az oldalsó jel monoFreqHz alatti részének mono-keverése (0 = ki)
 
     // --- A/B összehasonlítás (ab_compare.hpp): az eredeti jel szól, a feldolgozottal azonos hangerőn (0 / 1) ---
@@ -240,7 +240,10 @@ inline void sanitizeParams(ParamData& d) {
     ci(d.magicCompare, 0, 1);
     ci(d.magicCharacter, 0, 3);
     ci(d.magicContent, 0, 3);
-    if (d.subsonicHz != 10 && d.subsonicHz != 20 && d.subsonicHz != 30) d.subsonicHz = 0;
+    switch (d.subsonicHz) {
+        case 10: case 15: case 20: case 25: case 30: case 35: break;
+        default: d.subsonicHz = 0;
+    }
     cl(d.monoAmount, 0.0f, 100.0f, 0.0f);
     ci(d.eqCompare, 0, 1);
     ci(d.convCompare, 0, 1);

@@ -1097,9 +1097,9 @@ static bool passesUnchanged(const ParamData& d) {
 }
 
 static void testMonoBass() {
-    std::printf("[9] Mélyvágás (10 / 20 / 30 Hz, 24 dB/oktáves) és a kikapcsolt modul\n");
+    std::printf("[9] Mélyvágás (10 / 15 / 20 / 25 / 30 / 35 Hz, 24 dB/oktáves) és a kikapcsolt modul\n");
     const double sr = 48000.0;
-    for (int32_t hz : { 10, 20, 30 }) {
+    for (int32_t hz : { 10, 15, 20, 25, 30, 35 }) {
         const double gc = subsonicGainDb(hz, hz, sr), g2c = subsonicGainDb(2.0 * hz, hz, sr);
         const double g4c = subsonicGainDb(4.0 * hz, hz, sr);
         CHECK(std::abs(gc + 6.0) < 0.3 && g2c > -0.7 && g2c < 0.0 && std::abs(g4c) < 0.1,
@@ -1107,11 +1107,21 @@ static void testMonoBass() {
     }
     const double g = subsonicGainDb(100.0, 30, sr);
     CHECK(std::abs(g) < 0.1, "30 Hz-es vágás mellett 100 Hz szintje %.3f dB (a hangzás érintetlen)", g);
+    const double g35 = subsonicGainDb(140.0, 35, sr);
+    CHECK(std::abs(g35) < 0.1, "35 Hz-es vágás mellett 140 Hz szintje %.3f dB (a hangzás érintetlen)", g35);
 
-    ParamData bad = transparentParams();
-    bad.subsonicHz = 15;
-    sanitizeParams(bad);
-    CHECK(bad.subsonicHz == 0, "érvénytelen vágási frekvencia (15 Hz) kikapcsolva");
+    for (int32_t v : { 15, 25, 35 }) {
+        ParamData ok = transparentParams();
+        ok.subsonicHz = v;
+        sanitizeParams(ok);
+        CHECK(ok.subsonicHz == v, "a köztes %d Hz-es vágás érvényes (megmarad)", v);
+    }
+    for (int32_t v : { 5, 12, 40, -10 }) {
+        ParamData bad = transparentParams();
+        bad.subsonicHz = v;
+        sanitizeParams(bad);
+        CHECK(bad.subsonicHz == 0, "érvénytelen vágási frekvencia (%d Hz) kikapcsolva", v);
+    }
 
     ParamData on0 = transparentParams();
     on0.set(kFlagMono, true);
