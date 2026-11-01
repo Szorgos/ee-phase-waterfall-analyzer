@@ -4299,10 +4299,11 @@ try {
   if (savedDbRange > 0) eqDbRange = Math.max(EQ_DB_RANGE_MIN, Math.min(EQ_DB_RANGE_MAX, savedDbRange));
 } catch (e) {}
 
-// Automatikus függőleges illesztés: importáláskor és profilbetöltéskor a nézet a görbéhez igazodik.
-// A kézi függőleges nagyítás vagy eltolás kikapcsolja (a beállítás megmarad újraindítás után is).
+// Automatikus függőleges illesztés: induláskor, importáláskor és profilbetöltéskor a nézet a görbéhez igazodik.
+// A kézi függőleges nagyítás vagy eltolás csak az adott futásra kapcsolja ki: induláskor mindig bekapcsolt,
+// így a görbe magától az ablakhoz igazodik (a korábbi, tartósan megjegyzett kikapcsolás sem marad meg).
 let eqAutoFit = true;
-try { if (localStorage.getItem("aqulify_eq_autofit") === "0") eqAutoFit = false; } catch (e) {}
+try { localStorage.removeItem("aqulify_eq_autofit"); } catch (e) {}
 function updateEqAutoFitBtn() {
   const b = document.getElementById("btnEqAutoFit");
   if (!b) return;
@@ -4313,7 +4314,6 @@ function updateEqAutoFitBtn() {
 function setEqAutoFit(on) {
   if (eqAutoFit === on) return;
   eqAutoFit = on;
-  try { localStorage.setItem("aqulify_eq_autofit", on ? "1" : "0"); } catch (e) {}
   updateEqAutoFitBtn();
 }
 /** Illesztés egy felhasználói művelet (import, profilbetöltés) után: a rajzolás után fut, így a profil preampja már beállt. */

@@ -10,6 +10,7 @@
 - **Ablak bezárása:** a bezárás gombra az Aqulify megkérdezi, hogy a tálcára (macOS: menüsorra, Linux: háttérbe) kerüljön, vagy teljesen bezáródjon. Bezáráskor a motor leáll, és a hang visszaáll eredetire. A „Mindig ezt válaszd” jelölővel a kérdés elmarad; a választás a Kimenet menüben módosítható.
 - **Alap állapot:** a program leállásakor és indulásakor minden modul ki van kapcsolva, így a bezárás és a gép újraindítása után sem változik a hangzás.
 - **Mélyvágás:** a 10, 20 és 30 Hz mellett köztes 15, 25 és 35 Hz is választható.
+- **EQ-grafikon:** induláskor a nézet mindig magától a görbéhez igazodik (az „Auto” illesztés bekapcsol). A kézi nagyítás vagy eltolás csak az adott futásra kapcsolja ki.
 - **Borítónézet:** a bal alsó sarokból nyitott borítókép nem nagyul túl (legfeljebb a saját méretének másfélszerese, 440 px-ig), így a kis miniatűr sem mosódik el; a hátteret ugyanaz a kép tölti ki elmosva.
 - **Verzió a hálózaton:** a telefonos távirányító a valódi verziót látja (eddig 2.0.0-t).
 - **Eltávolítva:** a kijelző nélküli (headless) mód, a Raspberry Pi telepítő és a Bluetooth-vevő.
