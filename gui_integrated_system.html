@@ -974,6 +974,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .param-box [id^="lbl-"] { font-family: var(--aq-mono) !important; font-weight: 500 !important; color: var(--aq-accent-2) !important; }
   .param-box [id^="lbl-"].ctl-bold { color: var(--aq-amber) !important; }   /* Magic Touch 100 % fölött („Bátor”) */
   @media (max-width: 1100px) { .param-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  /* Csatornák és dither: a bal és a jobb csatorna egymás mellett, alatta a dither */
+  .os-channels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 6px; }
+  .os-ch, .os-dither { border: 1px solid var(--aq-line); border-radius: var(--aq-radius-m); padding: 12px; background: var(--aq-surface-2, transparent); }
+  .os-stack { display: grid; gap: 10px; }
+  .os-head { margin: 0 0 10px; font-size: var(--aq-fs-head); font-weight: 600; color: var(--aq-text); }
+  .os-dither { margin-top: 12px; }
+  .os-text { margin: 0 0 10px; font-size: var(--aq-fs-sub); line-height: 1.5; color: var(--aq-text-2); max-width: 900px; }
+  .os-dgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .os-modes { margin: 10px 0 0; padding-left: 18px; font-size: var(--aq-fs-sub); line-height: 1.5; color: var(--aq-text-2); display: grid; gap: 3px; }
+  .os-modes strong { color: var(--aq-text); font-weight: 600; }
+  @media (max-width: 760px) { .os-channels, .os-dgrid { grid-template-columns: minmax(0, 1fr); } }
 
   /* Csúszkák: vékony sín, akcentus kitöltés, kerek fogantyú */
   input[type="range"] { -webkit-appearance: none; appearance: none; height: 20px; background: transparent; cursor: pointer; accent-color: var(--aq-accent); }
@@ -2386,9 +2397,24 @@ if (!window.THREE) window.THREE = (function () {
           </div>
         </div>
 
-        <p class="module-desc" data-i18n="os.desc">Ha nem középen ülsz a hangfalak között: a közelebbi hangfal késleltetése és szintje kiegyenlíthető (1 ms ≈ 34,3 cm). A dither a hangkártya bitmélységére kerekít, halk, egyenletes zajjal; csak akkor fut, ha a lánc módosítja a jelet, érintetlen jelnél a kimenet bitpontos.</p>
+        <p class="module-desc" data-i18n="os.desc">Ha nem középen ülsz a hangfalak között, a közelebbi hangfal késleltetésével és szintjével a hangkép újra középre kerül. 1 ms késleltetés ≈ 34,3 cm távolság.</p>
 
-        <div class="param-grid" id="outstageControls"></div>
+        <div class="os-channels">
+          <section class="os-ch" aria-labelledby="osHeadL"><h4 class="os-head" id="osHeadL" data-i18n="os.left">Bal csatorna</h4><div class="os-stack" id="outstageLeft"></div></section>
+          <section class="os-ch" aria-labelledby="osHeadR"><h4 class="os-head" id="osHeadR" data-i18n="os.right">Jobb csatorna</h4><div class="os-stack" id="outstageRight"></div></section>
+        </div>
+
+        <section class="os-dither" aria-labelledby="osHeadD">
+          <h4 class="os-head" id="osHeadD" data-i18n="os.ditherTitle">Dither</h4>
+          <p class="os-text" data-i18n="os.ditherDesc">Ha a lánc módosítja a jelet (EQ, konvolver, szintállítás…), a számítás eredménye sokkal finomabb, mint amit a hangkártya fogad, ezért 16 vagy 24 bitre kell kerekíteni. A kerekítési hiba a zenével együtt mozog, és halk részeknél (lecsengés, elhalkulás) érdes, torz zajként hallatszhat. A dither egy nagyon halk, egyenletes zajt ad hozzá, így ez a hiba semleges, állandó alapzajjá válik. Csak akkor fut, ha a lánc módosítja a jelet; érintetlen jelnél a kimenet bitpontos marad.</p>
+          <div class="os-dgrid" id="outstageDither"></div>
+          <ul class="os-modes">
+            <li data-i18n-html="os.modeOff"><strong>Ki:</strong> nincs dither; a hangkártya bitmélységére a rendszer kerekít, dither nélkül.</li>
+            <li data-i18n-html="os.modeTpdf"><strong>TPDF:</strong> a szabványos, semleges dither: egyenletes, nagyon halk zaj a teljes hangsávban.</li>
+            <li data-i18n-html="os.modeShaped"><strong>Zajformált:</strong> a zaj nagyobb része a legmagasabb hangok felé tolódik, ahol a hallás kevésbé érzékeny, így még kevésbé hallható.</li>
+            <li data-i18n-html="os.modeTip"><strong>Melyiket?</strong> 24 bites hangkártyánál a különbség gyakorlatilag nem hallható, a TPDF elég. 16 bitnél (régebbi USB DAC, 16 bites S/PDIF) a zajformált a jobb.</li>
+          </ul>
+        </section>
       </div>
     </div>
 
@@ -7340,17 +7366,20 @@ function sendAutogain() {
 }
 
 // --- Csatornák és dither (out_stage.hpp): bal / jobb késleltetés, szint, polaritás; dither a hangkártya bitmélységére
-buildControls("outstageControls", [
-  { id: "osDelayL", kind: "num", label: "ctl.osDelayL", min: 0, max: 20, step: 0.01, unit: "ms", def: 0, hint: "ctl.osDelayHint" },
-  { id: "osDelayR", kind: "num", label: "ctl.osDelayR", min: 0, max: 20, step: 0.01, unit: "ms", def: 0 },
-  { id: "osGainL", kind: "num", label: "ctl.osGainL", min: -24, max: 6, step: 0.1, unit: "dB", def: 0, sign: true },
-  { id: "osGainR", kind: "num", label: "ctl.osGainR", min: -24, max: 6, step: 0.1, unit: "dB", def: 0, sign: true },
-  { id: "osInvertL", kind: "toggle", label: "ctl.osInvertL", def: false },
-  { id: "osInvertR", kind: "toggle", label: "ctl.osInvertR", def: false },
-  { id: "osDither", kind: "select", label: "ctl.osDither", optKeys: true, def: 0, options: ["os.ditherOff", "os.ditherTpdf", "os.ditherShaped"],
-    hint: "ctl.osDitherHint" },
-  { id: "osBits", kind: "select", label: "ctl.osBits", def: 1, options: ["16 bit", "24 bit"] },
-], () => { sendOutstage(); nudgeIfOff('outstage'); });
+{
+  const onOs = () => { sendOutstage(); nudgeIfOff('outstage'); };
+  const side = (S) => [
+    { id: "osDelay" + S, kind: "num", label: "ctl.osDelay", min: 0, max: 20, step: 0.01, unit: "ms", def: 0 },
+    { id: "osGain" + S, kind: "num", label: "ctl.osGain", min: -24, max: 6, step: 0.1, unit: "dB", def: 0, sign: true },
+    { id: "osInvert" + S, kind: "toggle", label: "ctl.osInvert", def: false },
+  ];
+  buildControls("outstageLeft", side("L"), onOs);
+  buildControls("outstageRight", side("R"), onOs);
+  buildControls("outstageDither", [
+    { id: "osDither", kind: "select", label: "ctl.osDither", optKeys: true, def: 0, options: ["os.ditherOff", "os.ditherTpdf", "os.ditherShaped"] },
+    { id: "osBits", kind: "select", label: "ctl.osBits", def: 1, options: ["16 bit", "24 bit"], hint: "ctl.osBitsHint" },
+  ], onOs);
+}
 
 function sendOutstage() {
   sendEngine({ type: "set_outstage", delayL: getCtl("osDelayL"), delayR: getCtl("osDelayR"), gainL: getCtl("osGainL"),
