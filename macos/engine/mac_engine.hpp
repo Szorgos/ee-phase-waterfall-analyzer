@@ -37,6 +37,8 @@ enum class Problem { None, Permission, NoSource, Device };
 struct OutputDevice {
     std::string uid, name;
     bool isDefault = false;
+    /** Nyelvfüggetlen fajta a felület feliratához: "usb", "hdmi", "bluetooth" vagy üres (beépített és egyéb). */
+    std::string kind;
 };
 
 class Engine {

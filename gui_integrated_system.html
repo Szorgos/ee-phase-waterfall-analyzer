@@ -6006,7 +6006,7 @@ function renderMultiOut() {
     } else {
       const known = sinks.some(si => si.name === o.sink);
       dev = `<select class="ee-select mo-sink" onchange="moEdit()" aria-label="${escHtml(t("mo.out", { n: k + 1 }))}"><option value="">${escHtml(t("mo.noDevice"))}</option>` +
-            sinks.map(si => `<option value="${escHtml(si.name)}"${si.name === o.sink ? " selected" : ""}>${escHtml(si.label || si.name)}</option>`).join("") +
+            sinks.map(si => `<option value="${escHtml(si.name)}"${si.name === o.sink ? " selected" : ""}${sinkTitleAttr(si)}>${escHtml(sinkDisplayLabel(si))}</option>`).join("") +
             (o.sink && !known ? `<option value="${escHtml(o.sink)}" selected>${escHtml(o.sink)} (${escHtml(t("mo.missing"))})</option>` : "") + `</select>`;
       const z = zones[k - 1];
       if (on && o.sink && z) {
@@ -7614,7 +7614,29 @@ function updateLimiterMeters(peakDb, grDb) {
   }
 }
 
+// A hangkártyák felirata: a motor nyelvfüggetlen "kind" (speaker / usb / hdmi / bluetooth / analog / default / üres)
+// és "desc" (a rendszer szerinti eszköznév, pl. PipeWire node.description) mezőiből, a választott nyelven.
+const SINK_KIND_ICON = { speaker: "🔊", usb: "🎧", hdmi: "🖥️", bluetooth: "📶", analog: "🔈" };
+function sinkDisplayLabel(s) {
+  if (!s) return "";
+  if (typeof s.kind !== "string") return s.label || s.name || "";   // régebbi motor: kész felirat
+  const name = s.desc || s.name || "";
+  if (s.kind === "default") return t("sink.kind.default", { name: name || "—" });
+  const icon = SINK_KIND_ICON[s.kind];
+  return icon ? icon + " " + t("sink.kind." + s.kind, { name }) : "🔈 " + name;
+}
+/** Ha a felirat a leírásból készül, a nyers eszköznév buboréksúgóban (title attribútum). */
+function sinkTitle(s) {
+  return s && s.desc && s.name && s.desc !== s.name && s.kind !== "default" ? s.name : "";
+}
+function sinkTitleAttr(s) {
+  const tt = sinkTitle(s);
+  return tt ? ` title="${escHtml(tt)}"` : "";
+}
+var lastPhysicalSinks = null, lastCurrentSink = "";
 function updatePhysicalSinkSelector(sinks, currentSink) {
+  lastPhysicalSinks = sinks;
+  lastCurrentSink = currentSink;
   const sel = document.getElementById("selectPhysicalSink");
   const wrap = document.getElementById("physicalSinkWrap");
   const info = document.getElementById("sinkDefaultInfo");
@@ -7623,14 +7645,16 @@ function updatePhysicalSinkSelector(sinks, currentSink) {
   if (wrap) wrap.style.display = hasSinks ? "flex" : "none";
   if (info) info.style.display = hasSinks ? "none" : "block";
   if (hasSinks) {
-    const key = JSON.stringify(sinks) + (currentSink || "");
+    const key = aqLang + "|" + JSON.stringify(sinks) + (currentSink || "");   // nyelvváltáskor újra
     if (sel.getAttribute("data-cache") !== key) {
       sel.setAttribute("data-cache", key);
       sel.innerHTML = "";
       sinks.forEach(s => {
         const o = document.createElement("option");
         o.value = s.name;
-        o.textContent = s.label || s.name;
+        o.textContent = sinkDisplayLabel(s);
+        const tt = sinkTitle(s);
+        if (tt) o.title = tt;
         if (s.active || s.name === currentSink) o.selected = true;
         sel.appendChild(o);
       });
@@ -8179,6 +8203,8 @@ function refreshDynamicTexts() {
   if (typeof renderCoverView === "function") renderCoverView();
   Object.keys(CTL).forEach(id => setCtl(id, CTL[id].value));
   renderConvIrInfo();
+  if (lastPhysicalSinks) updatePhysicalSinkSelector(lastPhysicalSinks, lastCurrentSink);   // hangkártyák felirata
+  if (typeof renderMultiOut === "function") renderMultiOut();
   updateEngineBadge();
   updateLimiterMeters(null, lastGrDb);
   refreshPresetUi();

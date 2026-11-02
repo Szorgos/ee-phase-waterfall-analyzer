@@ -6,6 +6,7 @@
   - Kimenetenként erősítés, késleltetés és polaritás. Induláskor kikapcsolva (a hangzás nem változik), a beállítás és a profilok megmaradnak; kihúzott hangkártya hangja nem kerül át máshová.
   - Linuxon PipeWire (egy ütemező, adaptív újramintavételezés), macOS-en Core Audio aggregált eszköz (sodródás-kiegyenlítés). Windowson még nem érhető el.
   - A kimenetek nincsenek mintapontosan összehangolva (Linuxon legfeljebb két quantum eltolódás); két hangkártyára osztott keresztváltónál az automatikus igazítás még fejlesztés alatt van.
+- **Hangkártyák neve:** a Kimenet menüben és a „Kimenetek” fülön a hangkártya a rendszer szerinti nevével jelenik meg (Linuxon a PipeWire leírása, pl. „Built-in Audio Analog Stereo”, a nyers azonosító a buboréksúgóban), a fajtája („Hangszóró”, „Analóg kimenet”, „Rendszer alapértelmezett”) pedig a felület választott nyelvén – eddig angol felületen is magyarul.
 
 ### Újdonságok és javítások (2.0.6)
 

@@ -112,6 +112,20 @@ bool isUsableOutput(AudioObjectID dev) {
            channelCount(dev, kAudioObjectPropertyScopeOutput) > 0 && !isBlackHole(dev);
 }
 
+/** A kimeneti eszköz fajtája a csatlakozás szerint (a Linux motor sinkKind kulcsaival egyezően). */
+std::string deviceKind(AudioObjectID dev) {
+    UInt32 transport = 0;
+    getProp(dev, kAudioDevicePropertyTransportType, transport);
+    switch (transport) {
+    case kAudioDeviceTransportTypeUSB: return "usb";
+    case kAudioDeviceTransportTypeHDMI:
+    case kAudioDeviceTransportTypeDisplayPort: return "hdmi";
+    case kAudioDeviceTransportTypeBluetooth:
+    case kAudioDeviceTransportTypeBluetoothLE: return "bluetooth";
+    default: return ""; // beépített (hangszóró vagy fejhallgató-kimenet: a név mondja meg), Thunderbolt, PCI…
+    }
+}
+
 AudioObjectID findBlackHole() {
     // A 2 csatornás BlackHole az elsődleges (a rendszer kimenete erre áll); más változat is jó
     AudioObjectID any = kAudioObjectUnknown;
@@ -807,7 +821,7 @@ std::vector<OutputDevice> Engine::outputDevices() const {
     const AudioObjectID def = defaultOutputDevice();
     for (AudioObjectID d : allDevices()) {
         if (!isUsableOutput(d)) continue;
-        v.push_back({ deviceUid(d), deviceName(d), d == def });
+        v.push_back({ deviceUid(d), deviceName(d), d == def, deviceKind(d) });
     }
     return v;
 }
