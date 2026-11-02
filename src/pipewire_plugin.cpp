@@ -18,6 +18,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "audio_options.hpp"
@@ -61,6 +62,11 @@ std::string jsonEscape(const std::string& in) {
         else if (c == '\\') out += "\\\\";
         else if (c == '\n') out += "\\n";
         else if (c == '\r') out += "\\r";
+        else if (static_cast<unsigned char>(c) < 0x20) {
+            char buf[8];
+            std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned>(static_cast<unsigned char>(c)));
+            out += buf;
+        }
         else out += c;
     }
     return out;
@@ -136,15 +142,48 @@ bool findOwnSinkInput(std::string& sinkInputId, std::string& sinkId) {
     return false;
 }
 
-std::string sinkLabel(const std::string& name) {
+/**
+ * A nyelők felhasználónak szóló neve (PipeWire node.description, pl. „Built-in Audio Analog Stereo”) név szerint.
+ * Csak megjelenítésre: parancsba soha nem kerül (oda a listPhysicalSinks ellenőrzött neve megy).
+ */
+std::vector<std::pair<std::string, std::string>> sinkDescriptions() {
+    std::vector<std::pair<std::string, std::string>> v;
+    const std::string txt = runCapture("pactl list sinks");
+    std::string curName;
+    size_t pos = 0;
+    while (pos < txt.size()) {
+        size_t eol = txt.find('\n', pos);
+        if (eol == std::string::npos) eol = txt.size();
+        std::string line = txt.substr(pos, eol - pos);
+        pos = eol + 1;
+        const size_t f = line.find_first_not_of(" \t");
+        if (f == std::string::npos) continue;
+        line = line.substr(f);
+        if (line.rfind("Sink #", 0) == 0) curName.clear();
+        else if (line.rfind("Name: ", 0) == 0) curName = line.substr(6);
+        else if (line.rfind("Description: ", 0) == 0 && !curName.empty()) {
+            std::string d = line.substr(13);
+            while (!d.empty() && (d.back() == ' ' || d.back() == '\t' || d.back() == '\r')) d.pop_back();
+            if (!d.empty() && d.size() <= 200) v.emplace_back(curName, d);
+            curName.clear();
+        }
+    }
+    return v;
+}
+
+/**
+ * A hangkártya fajtája nyelvfüggetlen kulcsként ("speaker", "usb", "hdmi", "bluetooth", "analog" vagy üres);
+ * a feliratot a felület állítja össze a választott nyelven (gui_i18n.js: sink.kind.*).
+ */
+std::string sinkKind(const std::string& name) {
     std::string lower = name;
     std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    if (lower.find("speaker") != std::string::npos) return "🔊 Hangszóró (" + name + ")";
-    if (lower.find("usb") != std::string::npos) return "🎧 USB (" + name + ")";
-    if (lower.find("hdmi") != std::string::npos) return "🖥️ HDMI (" + name + ")";
-    if (lower.find("bluez") != std::string::npos) return "📶 Bluetooth (" + name + ")";
-    if (lower.find("analog") != std::string::npos) return "🔈 Analóg kimenet (" + name + ")";
-    return "🔈 " + name;
+    if (lower.find("speaker") != std::string::npos) return "speaker";
+    if (lower.find("usb") != std::string::npos) return "usb";
+    if (lower.find("hdmi") != std::string::npos) return "hdmi";
+    if (lower.find("bluez") != std::string::npos) return "bluetooth";
+    if (lower.find("analog") != std::string::npos) return "analog";
+    return "";
 }
 
 std::string getOutputSinksJson(std::string* outCurrentSink = nullptr) {
@@ -153,13 +192,19 @@ std::string getOutputSinksJson(std::string* outCurrentSink = nullptr) {
     std::string currentSinkName;
     std::string json = "[";
     bool first = true;
+    const auto descs = sinkDescriptions();
     for (const auto& s : listPhysicalSinks()) {
         const bool active = !curSinkId.empty() && curSinkId == s.id;
         if (active) currentSinkName = s.name;
+        std::string desc;
+        for (const auto& d : descs)
+            if (d.first == s.name) { desc = d.second; break; }
         if (!first) json += ",";
         first = false;
-        json += "{\"id\":\"" + jsonEscape(s.id) + "\",\"name\":\"" + jsonEscape(s.name) + "\",\"label\":\"" +
-                jsonEscape(sinkLabel(s.name)) + "\",\"active\":" + (active ? "true" : "false") + "}";
+        // kind + desc: a felület ezekből építi a feliratot a választott nyelven; a label nyelvfüggetlen tartalék
+        json += "{\"id\":\"" + jsonEscape(s.id) + "\",\"name\":\"" + jsonEscape(s.name) + "\",\"kind\":\"" +
+                sinkKind(s.name) + "\",\"desc\":\"" + jsonEscape(desc) + "\",\"label\":\"" +
+                jsonEscape(desc.empty() ? s.name : desc) + "\",\"active\":" + (active ? "true" : "false") + "}";
     }
     json += "]";
     if (outCurrentSink) *outCurrentSink = currentSinkName;

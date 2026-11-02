@@ -24,6 +24,9 @@ context.objects = [
   { factory = adapter args = { factory.name = support.null-audio-sink node.name = "dac_b" node.description = "DAC B"
       media.class = Audio/Sink audio.position = [ FL FR ] object.linger = true node.driver = true
       priority.driver = 1000 priority.session = 1000 } }
+  { factory = adapter args = { factory.name = support.null-audio-sink node.name = "aq_test_speaker" node.description = "Test Speaker"
+      media.class = Audio/Sink audio.position = [ FL FR ] object.linger = true node.driver = true
+      priority.driver = 500 priority.session = 500 } }
 ]
 CONF
 eval "$(dbus-daemon --session --fork --print-address=1 --print-pid=1 | { read a; read p; echo "export DBUS_SESSION_BUS_ADDRESS=$a; DBUS_PID=$p"; })"

@@ -227,11 +227,14 @@ struct Core {
         const bool useDefault = selected.empty() || !selectedPresent;
         // Alapértelmezett módban az az eszköz, amin a motor szól (BlackHole módban a rendszer kimenete maga a BlackHole)
         if (const std::string active = engine.activeOutputName(); useDefault && !active.empty()) defaultName = active;
-        std::string json = "[{\"id\":\"default\",\"name\":\"default\",\"label\":\"" +
+        // kind + desc: a felület ezekből építi a feliratot a választott nyelven (a label tartalék)
+        std::string json = "[{\"id\":\"default\",\"name\":\"default\",\"kind\":\"default\",\"desc\":\"" +
+                           jsonEscape(defaultName) + "\",\"label\":\"" +
                            jsonEscape(aq_i18n::fmt(Msg::mac_defaultOutput, { { "name", defaultName.empty() ? "—" : defaultName } })) +
                            "\",\"active\":" + (useDefault ? "true" : "false") + "}";
         for (const auto& d : devices) {
-            json += ",{\"id\":\"" + jsonEscape(d.uid) + "\",\"name\":\"" + jsonEscape(d.uid) + "\",\"label\":\"" + jsonEscape(d.name) +
+            json += ",{\"id\":\"" + jsonEscape(d.uid) + "\",\"name\":\"" + jsonEscape(d.uid) + "\",\"kind\":\"" + d.kind +
+                    "\",\"desc\":\"" + jsonEscape(d.name) + "\",\"label\":\"" + jsonEscape(d.name) +
                     "\",\"active\":" + (!useDefault && d.uid == selected ? "true" : "false") + "}";
         }
         json += "]";
@@ -597,7 +600,8 @@ struct Core {
         for (const auto& d : c->engine.outputDevices()) {
             if (!first) sinks += ",";
             first = false;
-            sinks += "{\"id\":\"" + jsonEscape(d.uid) + "\",\"name\":\"" + jsonEscape(d.uid) + "\",\"label\":\"" + jsonEscape(d.name) + "\"}";
+            sinks += "{\"id\":\"" + jsonEscape(d.uid) + "\",\"name\":\"" + jsonEscape(d.uid) + "\",\"kind\":\"" + d.kind +
+                     "\",\"desc\":\"" + jsonEscape(d.name) + "\",\"label\":\"" + jsonEscape(d.name) + "\"}";
         }
         sinks += "]";
         std::lock_guard<std::mutex> lk(c->multiMutex);

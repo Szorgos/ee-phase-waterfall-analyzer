@@ -26,6 +26,33 @@ const fmt = l => `A 100 Hz ${l.a["100"].toFixed(1)} / 4 kHz ${l.a["4000"].toFixe
   check(true, "bekapcsolás a fülön");
   // A zárt <select> opcióit a Playwright mindig rejtettnek látja: a jelenlétre várunk, nem a láthatóságra
   await page.waitForSelector('#moTable tr[data-k="1"] .mo-sink option[value="dac_b"]', { state: "attached", timeout: 15000 });
+
+  // hangkártyák felirata: a motor nyelvfüggetlen fajtát (kind) és leírást (desc) küld, a felirat a választott nyelven
+  // készül a Kimenet menüben és a „Kimenetek” fülön is („aq_test_speaker”: a tesztkörnyezet harmadik hangkártyája)
+  const startLang = await page.evaluate(() => aqLang);
+  const sinkTexts = () => page.evaluate(() => {
+    const opt = sel => { const o = document.querySelector(sel); return o ? { text: o.textContent, title: o.title } : null; };
+    return {
+      menuSpk: opt('#selectPhysicalSink option[value="aq_test_speaker"]'),
+      menuB: opt('#selectPhysicalSink option[value="dac_b"]'),
+      tabSpk: opt('#moTable tr[data-k="1"] .mo-sink option[value="aq_test_speaker"]'),
+      tabB: opt('#moTable tr[data-k="1"] .mo-sink option[value="dac_b"]'),
+    };
+  });
+  await page.waitForFunction(() => !!document.querySelector('#selectPhysicalSink option[value="aq_test_speaker"]'), null, { timeout: 8000 });
+  for (const [lang, word] of [["hu", "Hangszóró (Test Speaker)"], ["en", "Speaker (Test Speaker)"]]) {
+    await page.selectOption("#selectLang", lang);
+    await page.waitForTimeout(300);
+    const s = await sinkTexts();
+    check(!!s.menuSpk && s.menuSpk.text.includes(word) && !!s.tabSpk && s.tabSpk.text.includes(word),
+          `hangkártya felirata (${lang}): menü „${s.menuSpk && s.menuSpk.text}”, fül „${s.tabSpk && s.tabSpk.text}”`);
+    check(!!s.menuB && s.menuB.text.includes("DAC B") && s.menuB.title === "dac_b" && !!s.tabB && s.tabB.text.includes("DAC B") && s.tabB.title === "dac_b",
+          `a rendszer szerinti eszköznév (node.description) a felirat, a nyers név a súgóban (${lang})`);
+  }
+  check(!(await page.evaluate(() => /Hangszóró|Analóg/.test(document.getElementById("selectPhysicalSink").textContent))),
+        "angol felületen nincs magyar hangkártya-felirat");
+  await page.selectOption("#selectLang", startLang);
+  await page.waitForTimeout(300);
   await page.selectOption('#moTable tr[data-k="1"] .mo-sink', "dac_b");
   await page.waitForFunction(() => moStatus && moStatus.outputs && moStatus.outputs[1] && moStatus.outputs[1].sink === "dac_b", null, { timeout: 15000 });
   check(true, "a 2. kimenet hangkártyája a listából: DAC B");
