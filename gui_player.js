@@ -29,14 +29,14 @@
       shuffle: "Keverés", repeatOff: "Ismétlés: ki", repeatAll: "Ismétlés: az egész sor", repeatOne: "Ismétlés: ez a szám",
       queue: "Lejátszási sor", queueEmpty: "A sor üres.", nothing: "Nincs lejátszás",
       resume: "Folytatás a sorból ({n} szám)", from: "{app}", seek: "Pozíció", close: "Bezárás",
-      loading: "Betöltés…", nowItem: "Most szól"
+      loading: "Betöltés…", nowItem: "Most szól", volume: "Hangerő", mute: "Némítás", unmute: "Némítás ki"
     },
     en: {
       play: "Play", pause: "Pause", prev: "Previous", next: "Next",
       shuffle: "Shuffle", repeatOff: "Repeat: off", repeatAll: "Repeat: whole queue", repeatOne: "Repeat: this track",
       queue: "Play queue", queueEmpty: "The queue is empty.", nothing: "Nothing playing",
       resume: "Resume from the queue ({n} tracks)", from: "{app}", seek: "Position", close: "Close",
-      loading: "Loading…", nowItem: "Now playing"
+      loading: "Loading…", nowItem: "Now playing", volume: "Volume", mute: "Mute", unmute: "Unmute"
     }
   };
 
@@ -48,6 +48,9 @@
     shuffle: '<path d="M4 7h3.5c1.6 0 2.6.7 3.5 2l3 4.5c.9 1.3 1.9 2 3.5 2H19M4 17h3.5c1.6 0 2.6-.7 3.5-2M14 9c.9-1.3 1.9-2 3.5-2H19M17 4.5 19.5 7 17 9.5M17 13l2.5 2.5L17 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
     repeat: '<path d="M5 11V9.5A2.5 2.5 0 0 1 7.5 7H18M15.5 4.5 18 7l-2.5 2.5M19 13v1.5a2.5 2.5 0 0 1-2.5 2.5H6M8.5 19.5 6 17l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
     queue: '<path d="M4 6.5h12M4 11h12M4 15.5h7M15 14v6l5-3z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+    vol: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
+    volLow: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
+    volMute: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
     note: '<path d="M10 17.5a2.5 2.5 0 1 1-2.5-2.5c.9 0 1.7.3 2.5.8V5l9-2v11.5a2.5 2.5 0 1 1-2.5-2.5c.9 0 1.7.3 2.5.8V7l-9 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>'
   };
   const svg = (name, size) =>
@@ -87,6 +90,12 @@
   .aqnp-seek::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--aq-accent, #4fd1c5) 0%, var(--aq-accent, #4fd1c5) var(--fill, 0%), var(--aq-line-2, #374251) var(--fill, 0%), var(--aq-line-2, #374251) 100%) !important; }
 .aqnp-seek[disabled] { cursor: default; opacity: 0.4; }
 .aqnp-right { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+.aqnp-vol { display: flex; align-items: center; gap: 4px; }
+.aqnp-volbar { width: 104px; accent-color: var(--aq-accent, #4fd1c5); cursor: pointer; height: 16px; }
+  .aqnp-volbar::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--aq-accent, #4fd1c5) 0%, var(--aq-accent, #4fd1c5) var(--fill, 0%), var(--aq-line-2, #374251) var(--fill, 0%), var(--aq-line-2, #374251) 100%) !important; }
+.aqnp-volpct { font-family: var(--aq-mono, ui-monospace, monospace); font-size: var(--aq-fs-sub, 11px); color: var(--aq-text-2, #93a1b0);
+  min-width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
+.aqnp-vol.muted .aqnp-volbar { opacity: 0.45; }
 .aqnp-empty { color: var(--aq-text-2, #93a1b0); }
 .aqnp-resume { border: 1px solid var(--aq-line, #2a3340); background: var(--aq-input, #0f141a); color: var(--aq-text, #e8edf2);
   border-radius: 6px; padding: 6px 10px; cursor: pointer; font: inherit; }
@@ -166,6 +175,11 @@ body.aqnp-on { padding-bottom: 72px; }
         <div class="aqnp-empty" hidden></div>
       </div>
       <div class="aqnp-right">
+        <div class="aqnp-vol" hidden>
+          <button type="button" class="aqnp-btn" data-k="mute">${svg("vol", 18)}</button>
+          <input type="range" class="aqnp-volbar" min="0" max="100" step="1" value="0">
+          <span class="aqnp-volpct"></span>
+        </div>
         <button type="button" class="aqnp-btn" data-k="queue">${svg("queue", 18)}</button>
       </div>`;
     const $ = sel => root.querySelector(sel);
@@ -175,7 +189,8 @@ body.aqnp-on { padding-bottom: 72px; }
       shuffle: $('[data-k="shuffle"]'), prev: $('[data-k="prev"]'), play: $('[data-k="play"]'),
       next: $('[data-k="next"]'), repeat: $('[data-k="repeat"]'), queue: $('[data-k="queue"]'),
       ctrls: $(".aqnp-ctrls"), seekRow: $(".aqnp-seekrow"), seek: $(".aqnp-seek"),
-      pos: $('[data-k="pos"]'), dur: $('[data-k="dur"]'), empty: $(".aqnp-empty")
+      pos: $('[data-k="pos"]'), dur: $('[data-k="dur"]'), empty: $(".aqnp-empty"),
+      vol: $(".aqnp-vol"), volBar: $(".aqnp-volbar"), volPct: $(".aqnp-volpct"), mute: $('[data-k="mute"]')
     };
 
     const pop = document.createElement("div");
@@ -279,6 +294,53 @@ body.aqnp-on { padding-bottom: 72px; }
       ui.queue.hidden = !hasQueueCap;
       tick();
     }
+
+    // ---- hangerő: a kimeneti hangkártyáé (a motor a status.volume mezőben küldi; a csúszka a rendszer százaléka)
+    let volume = null, volDragging = false, volSendTimer = 0, volLastSent = -1, volHoldUntil = 0;
+    function renderVolume() {
+      const v = volume;
+      ui.vol.hidden = !v;
+      if (!v) return;
+      const muted = !!v.muted;
+      if (!volDragging && Date.now() > volHoldUntil) ui.volBar.value = String(Math.round((v.level || 0) * 100));
+      const pct = +ui.volBar.value;
+      ui.volBar.style.setProperty("--fill", pct + "%");
+      ui.volPct.textContent = pct + "%";
+      ui.vol.classList.toggle("muted", muted);
+      ui.mute.innerHTML = svg(muted || pct === 0 ? "volMute" : pct < 50 ? "volLow" : "vol", 18);
+      label(ui.mute, t(muted ? "unmute" : "mute"));
+      ui.volBar.setAttribute("aria-label", t("volume"));
+    }
+    function sendVolume(force) {
+      const lv = +ui.volBar.value / 100;
+      if (!force && lv === volLastSent) return;
+      volLastSent = lv;
+      volHoldUntil = Date.now() + 1500;   // a következő állapotüzenetek még a régi értéket hozhatják
+      const msg = { type: "set_volume", level: lv };
+      if (volume && volume.muted && lv > 0) msg.muted = false;   // a csúszka mozgatása feloldja a némítást
+      send(msg);
+      if (volume) { volume.level = lv; if (msg.muted === false) volume.muted = false; }
+    }
+    ui.volBar.addEventListener("input", () => {
+      volDragging = true;
+      renderVolume();
+      if (!volSendTimer) volSendTimer = setTimeout(() => { volSendTimer = 0; sendVolume(false); }, 60);
+    });
+    ui.volBar.addEventListener("change", () => { volDragging = false; sendVolume(true); renderVolume(); });
+    ui.mute.onclick = () => {
+      if (!volume) return;
+      volume.muted = !volume.muted;
+      volHoldUntil = Date.now() + 1500;
+      send({ type: "set_volume", muted: volume.muted });
+      renderVolume();
+    };
+    ui.vol.addEventListener("wheel", e => {
+      if (!volume) return;
+      e.preventDefault();
+      ui.volBar.value = String(Math.max(0, Math.min(100, +ui.volBar.value + (e.deltaY < 0 ? 2 : -2))));
+      renderVolume();
+      sendVolume(false);
+    }, { passive: false });
 
     function setArt(id) {
       artShown = id;
@@ -451,6 +513,12 @@ body.aqnp-on { padding-bottom: 72px; }
         render();
       },
       onStatus(m) {
+        if (m && m.volume && typeof m.volume.level === "number") {
+          if (Date.now() > volHoldUntil) volume = { level: m.volume.level, muted: !!m.volume.muted };
+        } else {
+          volume = null;
+        }
+        renderVolume();
         media = (m && m.media) || { available: false };
         mediaAt = Date.now();
         queue = (m && m.queue) || null;

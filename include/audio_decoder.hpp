@@ -8,6 +8,7 @@
  * átalakítást (sztereóra, a kimenet frekvenciájára) a lejátszó és a rendszer végzi.
  */
 #include <cstddef>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -22,6 +23,9 @@ struct TrackTags {
     std::string genre;                    // műfaj (az ID3 számkódja szöveggé alakítva); üres: nincs megadva
     std::string artMime;   // a borító típusa (pl. "image/jpeg"); üres: nincs borító
     std::string art;       // a borító bájtjai
+    // ReplayGain (REPLAYGAIN_* Vorbis / APE / ID3 TXXX, Opusnál R128_* is): dB a -18 LUFS-os referenciához, csúcs
+    // lineárisan; NAN: nincs megadva
+    float rgTrackGain = NAN, rgTrackPeak = NAN, rgAlbumGain = NAN, rgAlbumPeak = NAN;
 };
 
 class AudioDecoder {
@@ -59,6 +63,8 @@ void parseId3v2(const uint8_t* data, size_t size, TrackTags& out);
 bool parseFlacPicture(const uint8_t* data, size_t size, std::string& mime, std::string& bytes, uint32_t& type);
 /** Vorbis-megjegyzés (pl. "TITLE=Valami") beírása a címkékbe; a METADATA_BLOCK_PICTURE base64 borítót is. */
 void applyVorbisComment(const char* comment, size_t len, TrackTags& out);
+/** ReplayGain-címke a kulcs szerint (REPLAYGAIN_TRACK_GAIN, …, R128_TRACK_GAIN, R128_ALBUM_GAIN); false: nem ilyen kulcs. */
+bool applyReplayGain(const std::string& key, const std::string& value, TrackTags& out);
 /** A címkék kiegészítése a feldolgozás végén: az előadó helyén az albumelőadó, ha az előadó hiányzik. */
 void finalizeTags(TrackTags& t);
 /** Szám az elején ("3/12" -> 3, "2009-05-01" -> 2009); 0, ha nincs. */

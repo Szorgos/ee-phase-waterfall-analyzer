@@ -135,6 +135,21 @@ inline bool loadIr(IrData& out) { return loadIrFile("ir.bin", out); }
  * fájl nem töltődik be (a fejléc a változatot és a méretet is tartalmazza). A céleszközök nevei a végén.
  */
 constexpr uint32_t kMultiMagic = 0x4F4D5141;   // "AQMO"
+namespace legacy {
+/** A multiout.bin a params v11-gyel (2.0.7): a ParamData a kimeneti fokozat mezői nélkül (azonos igazítás). */
+struct OutputConfigV11 {
+    bool enabled; int32_t band; float gainDb; float delayMs; bool invert;
+    alignas(alignof(ParamData)) unsigned char chain[kParamSizeV11];
+};
+struct MultiConfigV11 {
+    bool enabled; multiout::Mode mode; int32_t numOutputs; int32_t numCrossovers;
+    std::array<float, multiout::kMaxCrossovers> crossoverHz; int32_t slopeDbPerOct;
+    std::array<OutputConfigV11, multiout::kMaxOutputs> outputs;
+};
+} // namespace legacy
+static_assert(sizeof(legacy::MultiConfigV11) ==
+                  sizeof(multiout::MultiConfig) - multiout::kMaxOutputs * (sizeof(ParamData) - kParamSizeV11),
+              "a v11-es multiout.bin elrendezése nem egyezik");
 inline bool saveMultiOut(const multiout::MultiConfig& c, const std::array<std::string, 3>& targets) {
     const uint32_t hdr[4] = { kMultiMagic, 1u, kParamLayoutVersion, static_cast<uint32_t>(sizeof(multiout::MultiConfig)) };
     std::vector<char> b(sizeof(hdr) + sizeof(multiout::MultiConfig));
@@ -155,10 +170,29 @@ inline bool loadMultiOut(multiout::MultiConfig& c, std::array<std::string, 3>& t
     uint32_t hdr[4] = {};
     if (b.size() < sizeof(hdr) + sizeof(multiout::MultiConfig)) return false;
     std::memcpy(hdr, b.data(), sizeof(hdr));
-    if (hdr[0] != kMultiMagic || hdr[1] != 1u || hdr[2] != kParamLayoutVersion || hdr[3] != sizeof(multiout::MultiConfig)) return false;
+    if (hdr[0] != kMultiMagic || hdr[1] != 1u) return false;
     multiout::MultiConfig tmp;
-    std::memcpy(static_cast<void*>(&tmp), b.data() + sizeof(hdr), sizeof(multiout::MultiConfig));
-    size_t pos = sizeof(hdr) + sizeof(multiout::MultiConfig);
+    size_t pos = sizeof(hdr);
+    if (hdr[2] == kParamLayoutVersion && hdr[3] == sizeof(multiout::MultiConfig)) {
+        std::memcpy(static_cast<void*>(&tmp), b.data() + pos, sizeof(multiout::MultiConfig));
+        pos += sizeof(multiout::MultiConfig);
+    } else if (hdr[2] == 11 && hdr[3] == sizeof(legacy::MultiConfigV11)) {
+        // a 2.0.7 fájlja (params v11): a zónák lánca a kimeneti fokozat nélkül
+        legacy::MultiConfigV11 o;
+        std::memcpy(static_cast<void*>(&o), b.data() + pos, sizeof(o));
+        pos += sizeof(o);
+        tmp.enabled = o.enabled; tmp.mode = o.mode; tmp.numOutputs = o.numOutputs; tmp.numCrossovers = o.numCrossovers;
+        tmp.crossoverHz = o.crossoverHz; tmp.slopeDbPerOct = o.slopeDbPerOct;
+        for (int k = 0; k < multiout::kMaxOutputs; ++k) {
+            auto& n = tmp.outputs[k];
+            const auto& v = o.outputs[k];
+            n.enabled = v.enabled; n.band = v.band; n.gainDb = v.gainDb; n.delayMs = v.delayMs; n.invert = v.invert;
+            if (!loadParamBytes(reinterpret_cast<const char*>(v.chain), sizeof(v.chain), 11, sizeof(v.chain), n.chain))
+                n.chain = transparentParams();
+        }
+    } else {
+        return false;
+    }
     std::array<std::string, 3> t{};
     for (auto& s : t) {
         uint32_t n = 0;
@@ -173,6 +207,16 @@ inline bool loadMultiOut(multiout::MultiConfig& c, std::array<std::string, 3>& t
     c = tmp;
     targets = t;
     return true;
+}
+
+/** Haladó hangkimenet (audio.json): pufferméret, ébren tartás, mintavétel, újramintavételezés. */
+inline bool saveAudioOptions(const std::string& doc) {
+    return writeAtomic(configDir(true) + "/audio.json", std::vector<char>(doc.begin(), doc.end()));
+}
+inline std::string loadAudioOptions() {
+    std::ifstream f(configDir(false) + "/audio.json", std::ios::binary);
+    if (!f) return {};
+    return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 }
 
 /** IR-tár: az IR-profilok impulzusválaszai (~/.config/aqulify/irs/<azonosító>.bin, az ir.bin formátumában). */

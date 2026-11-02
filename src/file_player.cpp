@@ -8,7 +8,13 @@
 
 #include "music_library.hpp"
 #include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <system_error>
 
 namespace ee_analyzer::player {
 
@@ -39,10 +45,89 @@ FilePlayer::~FilePlayer() {
     if (thread_.joinable()) thread_.join();
 }
 
+FilePlayer::TempCopy::~TempCopy() {
+    if (path.empty()) return;
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+}
+
+namespace {
+/** UTF-8 szöveg <-> útvonal (Windowson is helyes; C++20-ban a u8string char8_t). */
+std::filesystem::path pathFromUtf8(const std::string& s) {
+#if defined(__cpp_char8_t)
+    return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(s.data()), s.size()));
+#else
+    return std::filesystem::u8path(s);
+#endif
+}
+std::string pathToUtf8(const std::filesystem::path& p) {
+    const auto u = p.u8string();
+    return std::string(reinterpret_cast<const char*>(u.data()), u.size());
+}
+
+/** Az előbetöltés helye: Linuxon a RAM-ban lévő futásidejű mappa (XDG_RUNTIME_DIR), máshol a rendszer ideiglenes mappája. */
+std::filesystem::path preloadDir() {
+    std::error_code ec;
+    if (const char* x = std::getenv("XDG_RUNTIME_DIR"); x && *x && std::filesystem::is_directory(x, ec)) return std::filesystem::path(x) / "aqulify-preload";
+    return std::filesystem::temp_directory_path(ec) / "aqulify-preload";
+}
+
+/** A fájl másolata az előbetöltés mappájába; üres: nem sikerült (vagy túl nagy). */
+std::string copyForPreload(const std::string& src, uint64_t maxBytes) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const uint64_t size = fs::file_size(pathFromUtf8(src), ec);
+    if (ec || size == 0 || size > maxBytes) return {};
+    const fs::path dir = preloadDir();
+    fs::create_directories(dir, ec);
+    static std::atomic<uint64_t> counter{0};
+    const fs::path dst = dir / ("p" + std::to_string(counter.fetch_add(1)) + pathFromUtf8(src).extension().string());
+    if (!fs::copy_file(pathFromUtf8(src), dst, fs::copy_options::overwrite_existing, ec) || ec) {
+        fs::remove(dst, ec);
+        return {};
+    }
+    return pathToUtf8(dst);
+}
+} // namespace
+
+float FilePlayer::gainFor(const TrackTags& t) const {
+    const int mode = rgMode_.load();
+    if (mode == 0) return 1.0f;
+    float g = mode == 2 && !std::isnan(t.rgAlbumGain) ? t.rgAlbumGain : t.rgTrackGain;
+    float peak = mode == 2 && !std::isnan(t.rgAlbumGain) ? t.rgAlbumPeak : t.rgTrackPeak;
+    if (std::isnan(g)) g = mode == 1 && !std::isnan(t.rgAlbumGain) ? t.rgAlbumGain : NAN;
+    if (std::isnan(g)) return 1.0f;   // címke nélkül a szám érintetlen
+    float lin = std::pow(10.0f, (g + rgPreampDb_.load()) / 20.0f);
+    if (rgPreventClip_.load() && !std::isnan(peak) && peak > 0.0f) lin = std::min(lin, 1.0f / peak);
+    return lin;
+}
+
+void FilePlayer::setReplayGain(int mode, float preampDb, bool preventClip) {
+    rgMode_ = std::clamp(mode, 0, 2);
+    rgPreampDb_ = std::clamp(preampDb, -15.0f, 15.0f);
+    rgPreventClip_ = preventClip;
+    std::lock_guard<std::mutex> lk(m_);
+    for (Segment& s : segs_) if (s.dec) s.gain = gainFor(s.dec->tags());
+    if (pending_ && pending_->dec) pending_->gain = gainFor(pending_->dec->tags());
+}
+
+float FilePlayer::currentGainDb() const {
+    std::lock_guard<std::mutex> lk(m_);
+    const Segment* a = audibleLocked();
+    return a && a->gain > 0.0f ? 20.0f * std::log10(a->gain) : 0.0f;
+}
+
 std::unique_ptr<FilePlayer::Segment> FilePlayer::makeSegment(const std::string& path, std::string* error, uint64_t token) {
-    auto dec = openDecoder(path, error);
+    std::unique_ptr<TempCopy> temp;
+    if (preload_.load()) {
+        std::string copy = copyForPreload(path, kPreloadMaxBytes);
+        if (!copy.empty()) temp = std::make_unique<TempCopy>(std::move(copy));
+    }
+    auto dec = openDecoder(temp ? temp->path : path, error);
     if (!dec) return nullptr;
     auto s = std::make_unique<Segment>();
+    s->temp = std::move(temp);
+    s->gain = gainFor(dec->tags());
     s->path = path;
     s->channels = dec->channels();
     s->total = dec->totalFrames();
@@ -228,6 +313,11 @@ double FilePlayer::position() const {
     return a->total ? std::min(p, static_cast<double>(a->total) / rate_) : p;
 }
 
+uint32_t FilePlayer::streamRate() const {
+    std::lock_guard<std::mutex> lk(m_);
+    return state_.load() == State::Idle ? 0 : rate_;
+}
+
 double FilePlayer::duration() const {
     std::lock_guard<std::mutex> lk(m_);
     const Segment* a = audibleLocked();
@@ -308,6 +398,8 @@ bool FilePlayer::fillLocked() {
             continue;
         }
         const uint32_t srcCh = s.channels;
+        const float gain = s.gain;
+        if (gain != 1.0f) for (size_t i = 0; i < got * srcCh; ++i) decodeBuf_[i] *= gain;
         const float* in = decodeBuf_.data();
         for (size_t i = 0; i < got; ++i, in += srcCh) {
             float l, rr;

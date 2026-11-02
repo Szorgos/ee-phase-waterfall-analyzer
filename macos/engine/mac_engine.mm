@@ -19,6 +19,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <ctime>
 #include <cmath>
 #include <cstring>
 #include <iostream>
@@ -225,6 +226,7 @@ struct Engine::Impl {
     AudioObjectPropertyListenerBlock systemListener = nil;
     std::string lastSignature;
     AudioObjectPropertyListenerBlock rateListener = nil;
+    UInt32 defaultFrames = 0;   // az aggregált eszköz saját IO-puffere létrehozáskor (az „automatikus” érték)
 
     void setInfo(const std::string& uid, const std::string& name, const std::string& src) {
         std::lock_guard<std::mutex> lk(infoMutex);
@@ -244,6 +246,8 @@ struct Engine::Impl {
 
     void process(const AudioBufferList* in, AudioBufferList* out) {
         if (!out || out->mNumberBuffers == 0) return;
+        struct timespec t0;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
         const UInt32 ch0 = std::max<UInt32>(1, out->mBuffers[0].mNumberChannels);
         UInt32 frames = out->mBuffers[0].mDataByteSize / (sizeof(float) * ch0);
         for (UInt32 b = 0; b < out->mNumberBuffers; ++b) std::memset(out->mBuffers[b].mData, 0, out->mBuffers[b].mDataByteSize);
@@ -293,6 +297,37 @@ struct Engine::Impl {
                                       zoneRight[k - 1].load(std::memory_order_relaxed), zL[k - 1].data(), zR[k - 1].data());
             }
         }
+        noteLoad(t0, frames);
+    }
+
+    /** A feldolgozás terhelése: az eltelt idő a puffer idejéhez képest (valós idejű szál, foglalás nélkül). */
+    void noteLoad(const struct timespec& t0, UInt32 frames) {
+        struct timespec t1;
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        const double dt = static_cast<double>(t1.tv_sec - t0.tv_sec) + 1e-9 * static_cast<double>(t1.tv_nsec - t0.tv_nsec);
+        const uint32_t sr = owner->sampleRate_.load(std::memory_order_relaxed);
+        if (frames == 0 || sr == 0) return;
+        const float load = static_cast<float>(dt * sr / frames);
+        const float avg = owner->loadAvg_.load(std::memory_order_relaxed);
+        owner->loadAvg_.store(avg + 0.05f * (load - avg), std::memory_order_relaxed);
+        if (load > owner->loadPeak_.load(std::memory_order_relaxed)) owner->loadPeak_.store(load, std::memory_order_relaxed);
+        if (load > 1.0f) owner->overruns_.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    /** Az aggregált eszköz IO-puffere a kért méretre (az eszköz tartományában); 0: marad a rendszer alapértéke. */
+    void applyBufferFrames() {
+        if (aggId == kAudioObjectUnknown) return;
+        UInt32 want = owner->wantFrames_.load();
+        if (want == 0) want = defaultFrames ? defaultFrames : 0;
+        if (want > 0) {
+            AudioValueRange range{ 0, 0 };
+            if (getProp(aggId, kAudioDevicePropertyBufferFrameSizeRange, range) && range.mMaximum >= range.mMinimum && range.mMaximum > 0)
+                want = static_cast<UInt32>(std::clamp<double>(want, range.mMinimum, range.mMaximum));
+            const auto a = addr(kAudioDevicePropertyBufferFrameSize);
+            AudioObjectSetPropertyData(aggId, &a, 0, nullptr, sizeof(want), &want);
+        }
+        UInt32 now = 0;
+        if (getProp(aggId, kAudioDevicePropertyBufferFrameSize, now)) owner->ioFrames_ = now;
     }
 
     /** Sztereó jel az aggregált eszköz két kimeneti csatornájára (a 2–4. kimenet eszközéé). */
@@ -575,6 +610,9 @@ struct Engine::Impl {
         const auto ra = addr(kAudioDevicePropertyNominalSampleRate);
         AudioObjectAddPropertyListenerBlock(aggId, &ra, queue, rateListener);
 
+        defaultFrames = 0;
+        getProp(aggId, kAudioDevicePropertyBufferFrameSize, defaultFrames);
+        applyBufferFrames();
         if (AudioDeviceCreateIOProcID(aggId, &Impl::ioProc, this, &procId) != noErr || !procId) { fail(Problem::Device); return; }
         disableUnusedInputs(output);
         for (const auto& z : zones) disableDeviceInputs(z.second, output, tapOk ? kAudioObjectUnknown : blackHole);
@@ -773,6 +811,67 @@ std::string Engine::multiStatusJson() const {
 }
 
 AetherChain& Engine::zoneChain(int k) { return p_->multi.chain(k); }
+
+namespace {
+AudioObjectPropertyAddress volAddr(AudioObjectPropertySelector sel, UInt32 element) {
+    return AudioObjectPropertyAddress{ sel, kAudioObjectPropertyScopeOutput, element };
+}
+/** Az állítható hangerejű elemek: a fő elem, vagy ha az nincs, az 1. és a 2. csatorna. */
+std::vector<UInt32> volumeElements(AudioObjectID dev) {
+    std::vector<UInt32> el;
+    auto settable = [&](UInt32 e) {
+        const auto a = volAddr(kAudioDevicePropertyVolumeScalar, e);
+        Boolean w = false;
+        return AudioObjectHasProperty(dev, &a) && AudioObjectIsPropertySettable(dev, &a, &w) == noErr && w;
+    };
+    if (settable(kAudioObjectPropertyElementMain)) el.push_back(kAudioObjectPropertyElementMain);
+    else for (UInt32 e : { 1u, 2u }) if (settable(e)) el.push_back(e);
+    return el;
+}
+} // namespace
+
+bool Engine::outputVolume(float& level, bool& muted) const {
+    const AudioObjectID dev = p_->outputDev;
+    if (dev == kAudioObjectUnknown) return false;
+    const auto el = volumeElements(dev);
+    if (el.empty()) return false;
+    float sum = 0.0f;
+    for (UInt32 e : el) {
+        Float32 v = 0.0f;
+        UInt32 size = sizeof(v);
+        const auto a = volAddr(kAudioDevicePropertyVolumeScalar, e);
+        if (AudioObjectGetPropertyData(dev, &a, 0, nullptr, &size, &v) != noErr) return false;
+        sum += v;
+    }
+    level = sum / static_cast<float>(el.size());
+    UInt32 m = 0, size = sizeof(m);
+    const auto ma = volAddr(kAudioDevicePropertyMute, kAudioObjectPropertyElementMain);
+    muted = AudioObjectHasProperty(dev, &ma) && AudioObjectGetPropertyData(dev, &ma, 0, nullptr, &size, &m) == noErr && m != 0;
+    return true;
+}
+
+void Engine::setOutputVolume(float level, int mute) {
+    const AudioObjectID dev = p_->outputDev;
+    if (dev == kAudioObjectUnknown) return;
+    if (level >= 0.0f) {
+        Float32 v = std::clamp(level, 0.0f, 1.0f);
+        for (UInt32 e : volumeElements(dev)) {
+            const auto a = volAddr(kAudioDevicePropertyVolumeScalar, e);
+            AudioObjectSetPropertyData(dev, &a, 0, nullptr, sizeof(v), &v);
+        }
+    }
+    if (mute >= 0) {
+        UInt32 m = mute ? 1 : 0;
+        const auto ma = volAddr(kAudioDevicePropertyMute, kAudioObjectPropertyElementMain);
+        if (AudioObjectHasProperty(dev, &ma)) AudioObjectSetPropertyData(dev, &ma, 0, nullptr, sizeof(m), &m);
+    }
+}
+
+void Engine::setBufferFrames(uint32_t frames) {
+    wantFrames_ = frames;
+    Impl* p = p_.get();
+    dispatch_async(p->queue, ^{ p->applyBufferFrames(); });
+}
 
 void Engine::start() {
     Impl* p = p_.get();

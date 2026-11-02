@@ -12,9 +12,12 @@ run() {
 }
 run "Motor: több kimenet"
 run "Motor: DSP-modulok" python3 -I "$HERE/modules_live.py"
+run "Motor: haladó hangkimenet" python3 -I "$HERE/audio_opts_live.py"
 if command -v node >/dev/null 2>&1 && node -e "require('playwright')" 2>/dev/null; then
     run "Felület: több kimenet" node "$HERE/gui_multiout_live.js"
     run "Felület: kezelőszervek" node "$HERE/gui_controls_live.js"
+    run "Felület: hangkimenet és csatornák" node "$HERE/gui_audio_live.js"
+    run "Felület: hangerő" node "$HERE/gui_volume_live.js"
 else
     echo "Playwright nincs telepítve: a felületi tesztek kimaradnak."
 fi

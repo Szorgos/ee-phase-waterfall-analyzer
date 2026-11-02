@@ -24,7 +24,7 @@ namespace ee_analyzer {
 constexpr uint32_t kMaxEqBands = 32;
 
 /** A params.bin fájl és a közös memória paraméter-formátumának verziója. */
-constexpr uint32_t kParamLayoutVersion = 11;
+constexpr uint32_t kParamLayoutVersion = 12;
 
 enum ParamFlags : uint32_t {
     kFlagEq        = 1u << 0,
@@ -35,6 +35,7 @@ enum ParamFlags : uint32_t {
     kFlagMagic     = 1u << 5,   // Magic Touch
     kFlagMono      = 1u << 6,   // Mono és mélyvágás (mono_bass.hpp)
     kFlagAutogain  = 1u << 7,   // Autogain (autogain.hpp)
+    kFlagOutStage  = 1u << 8,   // Kimeneti fokozat: csatornánkénti késleltetés / szint / polaritás és dither (out_stage.hpp)
     kFlagInitialized = 1u << 31, // a GUI legalább egyszer beállította
 };
 
@@ -141,6 +142,13 @@ struct ParamData {
     float monoFreqHz = 100.0f;     // 40 .. 250 Hz: a mono-keverés felső határa (a v10-ig fix 100 Hz)
     int32_t bassCompare = 0;
     int32_t monoCompare = 0;
+
+    // --- Kimeneti fokozat (a v12-ben kerültek a végére): [0] bal, [1] jobb csatorna ---
+    float chDelayMs[2] = { 0.0f, 0.0f };   // 0 .. 20 ms: a hangszórók távolságának kiegyenlítése (1 ms ≈ 34,3 cm)
+    float chGainDb[2] = { 0.0f, 0.0f };    // -24 .. +6 dB
+    int32_t chInvert[2] = { 0, 0 };        // polaritásfordítás csatornánként
+    int32_t ditherMode = 0;                // 0 = ki, 1 = TPDF, 2 = zajformált (TPDF + hibavisszacsatolás)
+    int32_t ditherBits = 24;               // 16 vagy 24: a hangkártya bitmélysége
 
     bool has(uint32_t f) const { return (flags & f) != 0; }
     void set(uint32_t f, bool on) { flags = on ? (flags | f) : (flags & ~f); }
@@ -252,6 +260,13 @@ inline void sanitizeParams(ParamData& d) {
     cl(d.monoFreqHz, 40.0f, 250.0f, 100.0f);
     ci(d.bassCompare, 0, 1);
     ci(d.monoCompare, 0, 1);
+    for (int c = 0; c < 2; ++c) {
+        cl(d.chDelayMs[c], 0.0f, 20.0f, 0.0f);
+        cl(d.chGainDb[c], -24.0f, 6.0f, 0.0f);
+        ci(d.chInvert[c], 0, 1);
+    }
+    ci(d.ditherMode, 0, 2);
+    d.ditherBits = d.ditherBits == 16 ? 16 : 24;
 }
 
 /** A params.bin v4 mérete: a Magic Touch mezői előtti rész (v5-ben ezek a végére kerültek). */
@@ -268,6 +283,8 @@ constexpr size_t kParamSizeV8 = offsetof(ParamData, eqCompare);
 constexpr size_t kParamSizeV9 = offsetof(ParamData, agcTargetLufs);
 /** A params.bin v10 mérete: a mono határfrekvencia és a Bass / Mono A/B (v11-ben) előtti rész. */
 constexpr size_t kParamSizeV10 = offsetof(ParamData, monoFreqHz);
+/** A params.bin v11 mérete: a kimeneti fokozat (v12-ben) mezői előtti rész. */
+constexpr size_t kParamSizeV11 = offsetof(ParamData, chDelayMs);
 
 // ------------------------------------------------------------------ régi (v2/v3) params.bin átvétele
 
@@ -284,7 +301,7 @@ struct ParamDataV3 {
 
 /**
  * Paraméterfájl tartalmának betöltése (a 12 bájtos fejléc után).
- * v11: közvetlen másolat. v10: a mono határfrekvencia (alap: 100 Hz, mint addig) és a Bass / Mono A/B nélkül, v9: az
+ * v12: közvetlen másolat. v11: a kimeneti fokozat nélkül (alap: ki). v10: a mono határfrekvencia (alap: 100 Hz, mint addig) és a Bass / Mono A/B nélkül, v9: az
  * Autogain nélkül, v8: az A/B összehasonlítás nélkül (alap: ki), v7: a mono-keverés nélkül (alap: 0 %), v6: a mélyvágás nélkül (alap: ki), v5: ugyanaz a Karakter
  * és a Tartalom nélkül, v4: a Magic Touch mezői nélkül (ezek alapértéket kapnak). v2/v3: a régi saját DSP beállításai a
  * megfelelő EasyEffects paraméterekre: a régi RBJ biquad sávok "APO (DR)" szűrőmódot kapnak (ugyanaz a hangolás), a többi
@@ -292,9 +309,10 @@ struct ParamDataV3 {
  */
 inline bool loadParamBytes(const char* bytes, size_t len, uint32_t version, uint32_t size, ParamData& out) {
     if (size > len) return false;
-    if (version == kParamLayoutVersion || version == 10 || version == 9 || version == 8 || version == 7 || version == 6 ||
+    if (version == kParamLayoutVersion || version == 11 || version == 10 || version == 9 || version == 8 || version == 7 || version == 6 ||
         version == 5 || version == 4) {
-        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : version == 10 ? kParamSizeV10
+        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : version == 11 ? kParamSizeV11
+                          : version == 10 ? kParamSizeV10
                           : version == 9 ? kParamSizeV9 : version == 8 ? kParamSizeV8
                           : version == 7 ? kParamSizeV7 : version == 6 ? kParamSizeV6 : version == 5 ? kParamSizeV5 : kParamSizeV4;
         if (size != want) return false;

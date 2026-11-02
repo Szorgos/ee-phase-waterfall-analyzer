@@ -20,6 +20,7 @@
 #include <thread>
 #include <vector>
 
+#include "audio_options.hpp"
 #include "file_player.hpp"
 #include "library_bridge.hpp"
 #include "linux_store.hpp"
@@ -209,6 +210,62 @@ void saveTick(void* data, uint64_t) {
         std::cerr << "[Beállítások] Figyelem: a " << linux_store::configDir(false) << "/params.bin nem írható.\n";
 }
 
+// ---------------------------------------------------------------- PipeWire-beállítások (settings metadata)
+// A mintavétel (clock.allowed-rates, clock.force-rate) futás közben állítható; a motor leálláskor visszaállítja az
+// eredetit. Csak számot és [ ]-t írunk be (nincs felhasználói szöveg a parancssorban).
+
+std::string pwSetting(const std::string& key) {
+    const std::string txt = runCapture("pw-metadata -n settings 0");
+    const std::string tag = "key:'" + key + "' value:'";
+    const size_t p = txt.find(tag);
+    if (p == std::string::npos) return {};
+    const size_t b = p + tag.size(), e = txt.find('\'', b);
+    return e == std::string::npos ? std::string() : txt.substr(b, e - b);
+}
+
+bool isSafeSettingValue(const std::string& v) {
+    return !v.empty() && std::all_of(v.begin(), v.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)) || c == ' ' || c == '[' || c == ']'; });
+}
+
+void pwSetSetting(const std::string& key, const std::string& value) {
+    if (!isSafeSettingValue(value)) return;
+    const std::string cmd = "pw-metadata -n settings 0 " + key + " '" + value + "' >/dev/null 2>&1";
+    if (std::system(cmd.c_str()) != 0) std::cerr << "[PipeWire] A beállítás nem írható: " << key << "\n";
+}
+
+// ---------------------------------------------------------------- hangerő (a kimeneti hangkártyáé)
+// A „most szól” sáv csúszkája annak a hangkártyának a hangerejét állítja, amelyre az Aqulify szól (ha van hardveres
+// hangereje, azt; a DSP-lánc ettől érintetlen marad). Az érték a pactl százaléka (mint a rendszer hangerő-szabályzójáé).
+
+bool sinkVolume(const std::string& sink, double& level, bool& muted) {
+    if (sink.empty() || !isSafeSinkName(sink)) return false;
+    const std::string v = runCapture("pactl get-sink-volume '" + sink + "'");   // "Volume: front-left: 65536 / 100% / ..."
+    const size_t pct = v.find('%');
+    if (pct == std::string::npos) return false;
+    size_t b = pct;
+    while (b > 0 && std::isdigit(static_cast<unsigned char>(v[b - 1]))) --b;
+    if (b == pct) return false;
+    level = std::atoi(v.substr(b, pct - b).c_str()) / 100.0;
+    muted = runCapture("pactl get-sink-mute '" + sink + "'").find("yes") != std::string::npos;
+    return true;
+}
+
+void setSinkVolume(const std::string& sink, double level, int mute) {
+    if (sink.empty() || !isSafeSinkName(sink)) return;
+    if (level >= 0.0) {
+        const int pct = static_cast<int>(std::lround(std::clamp(level, 0.0, 1.0) * 100.0));
+        const std::string cmd = "LC_ALL=C pactl set-sink-volume '" + sink + "' " + std::to_string(pct) + "% >/dev/null 2>&1";
+        if (std::system(cmd.c_str()) != 0) std::cerr << "[PipeWire] A hangerő nem állítható: " << sink << "\n";
+    }
+    if (mute >= 0) {
+        const std::string cmd = "LC_ALL=C pactl set-sink-mute '" + sink + "' " + (mute ? "1" : "0") + " >/dev/null 2>&1";
+        if (std::system(cmd.c_str()) != 0) std::cerr << "[PipeWire] A némítás nem állítható: " << sink << "\n";
+    }
+}
+
+/** A lánc érintetlenül engedi-e át a jelet (bitpontos): nincs bekapcsolt modul, a Magic Touch sem fut. */
+bool chainTransparent(const ParamData& d) { return !AetherChain::modifiesSignal(d); }
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -296,8 +353,14 @@ int main(int argc, char* argv[]) {
     std::string cachedCurrentSink = "";
     auto lastSinkQuery = std::chrono::steady_clock::time_point{};
 
+    std::string cachedVolumeJson;   // "level/muted" a kimeneti hangkártyáé (üres: nem ismert)
     auto updateSinksCache = [&]() {
         cachedSinksJson = getOutputSinksJson(&cachedCurrentSink);
+        double lv = 0.0;
+        bool mu = false;
+        cachedVolumeJson = sinkVolume(cachedCurrentSink, lv, mu)
+                               ? ",\"volume\":{\"level\":" + std::to_string(lv) + ",\"muted\":" + (mu ? "true" : "false") + "}"
+                               : std::string();
         lastSinkQuery = std::chrono::steady_clock::now();
     };
 
@@ -320,7 +383,12 @@ int main(int argc, char* argv[]) {
         std::string s = buf;
         s += ",\"currentSink\":\"" + jsonEscape(cachedCurrentSink) + "\"";
         s += ",\"outputSinks\":" + cachedSinksJson;
+        s += cachedVolumeJson;
         return s;
+    };
+    cb.setVolume = [&](double level, int mute) {
+        setSinkVolume(cachedCurrentSink, level, mute);
+        lastSinkQuery = std::chrono::steady_clock::time_point{};   // a következő állapotüzenet már az új értéket mutatja
     };
     cb.setIr = [&](IrData&& ir) {
         if (!linux_store::saveIr(ir)) std::cerr << "[Konvolver] Figyelem: az IR nem menthető.\n";
@@ -501,6 +569,83 @@ int main(int argc, char* argv[]) {
         multiState.outputs[std::clamp(zone, 1, multiout::kMaxOutputs - 1)].chain = p;
         pushMulti();
     };
+    // Haladó hangkimenet: pufferméret, ébren tartás, mintavétel, újramintavételezés (audio.json; megmarad).
+    // A PipeWire mintavételi beállítását a motor leálláskor visszaállítja az eredetire.
+    std::mutex audioMutex;
+    audioopt::AudioOptions audioOpts;
+    {
+        const std::string doc = linux_store::loadAudioOptions();
+        json::Value v;
+        if (!doc.empty() && json::parse(doc, v)) audioOpts = audioopt::fromJson(v);
+    }
+    const std::string origAllowedRates = pwSetting("clock.allowed-rates");
+    const std::string origForceRate = pwSetting("clock.force-rate");
+    bool ratesTouched = false;
+    auto applyAudio = [&](const audioopt::AudioOptions& o) {
+        audioopt::resampleQuality().store(o.resampleQuality);
+        filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
+        filePlayer.setPreload(o.preload);
+        const int autoQ = std::atoi(pwSetting("clock.quantum").c_str());
+        node.setAudioOptions(o.bufferFrames, o.keepAwake, autoQ > 0 ? autoQ : 1024);
+        if (o.rateMode == audioopt::RateMode::Follow) {
+            pwSetSetting("clock.force-rate", "0");
+            pwSetSetting("clock.allowed-rates", "[ 44100 48000 88200 96000 176400 192000 ]");
+            ratesTouched = true;
+        } else if (o.rateMode == audioopt::RateMode::Fixed) {
+            pwSetSetting("clock.force-rate", std::to_string(o.fixedRate));
+            ratesTouched = true;
+        } else if (ratesTouched) {
+            pwSetSetting("clock.force-rate", origForceRate.empty() ? "0" : origForceRate);
+            if (!origAllowedRates.empty()) pwSetSetting("clock.allowed-rates", origAllowedRates);
+            ratesTouched = false;
+        }
+    };
+    applyAudio(audioOpts);
+    cb.audioOptionsJson = [&]() -> std::string {
+        std::lock_guard<std::mutex> lk(audioMutex);
+        return "{\"opts\":" + audioopt::toJson(audioOpts) +
+               ",\"caps\":{\"buffer\":true,\"keepAwake\":true,\"rate\":true,\"resample\":true,\"player\":true}}";
+    };
+    cb.setAudioOptions = [&](const json::Value& v) {
+        std::lock_guard<std::mutex> lk(audioMutex);
+        const audioopt::AudioOptions o = audioopt::fromJson(v, audioOpts);
+        if (o == audioOpts) return;
+        audioOpts = o;
+        applyAudio(o);
+        if (!linux_store::saveAudioOptions(audioopt::toJson(o))) std::cerr << "[Hangkimenet] Figyelem: az audio.json nem írható.\n";
+        std::cout << "[Hangkimenet] " << audioopt::toJson(o) << "\n";
+    };
+    // Jelút és késleltetés a felület állapotsorába: quantum, a DSP saját késleltetése, terhelés, bitpontosság
+    {
+        auto base = cb.statusFields;
+        cb.statusFields = [&, base]() {
+            std::string s = base ? base() : std::string();
+            const double sr = std::max<uint32_t>(1, node.sampleRate.load());
+            const uint32_t q = node.actualQuantum();
+            ParamData p;
+            { std::lock_guard<std::mutex> lk(paramMutex); p = current; }
+            bool crossover = false;
+            { std::lock_guard<std::mutex> lk(multiMutex); crossover = multiState.enabled && multiState.mode == multiout::Mode::Crossover; }
+            const size_t eqLat = p.has(kFlagEq) ? node.chain.eqLatencySamples() : 0;
+            const size_t limLat = p.has(kFlagLimiter) ? node.chain.limiterLatencySamples() : 0;
+            const size_t convLat = p.has(kFlagConvolver) && node.chain.convolverActive() && q ? ee::ZitaInstance::latencyFor(q) : 0;
+            const double dspMs = 1000.0 * static_cast<double>(eqLat + limLat + convLat) / sr;
+            const double bufMs = 1000.0 * q / sr;
+            int reqBuf = 0;
+            bool keep = false;
+            { std::lock_guard<std::mutex> lk(audioMutex); reqBuf = audioOpts.bufferFrames; keep = audioOpts.keepAwake; }
+            char buf[512];
+            std::snprintf(buf, sizeof(buf),
+                          ",\"path\":{\"quantum\":%u,\"bufReq\":%d,\"bufMs\":%.2f,\"eqLat\":%zu,\"limLat\":%zu,\"convLat\":%zu,"
+                          "\"dspMs\":%.2f,\"totalMs\":%.1f,\"load\":%.1f,\"peak\":%.1f,\"overruns\":%u,\"transparent\":%s,"
+                          "\"keepAwake\":%s,\"playerRate\":%u,\"playerGain\":%.2f}",
+                          q, reqBuf, bufMs, eqLat, limLat, convLat, dspMs, 2.0 * bufMs + dspMs, 100.0 * node.dspLoad(),
+                          100.0 * node.takeDspPeak(), node.overruns(), chainTransparent(p) && !crossover ? "true" : "false",
+                          keep && node.keepAwakeActive() ? "true" : "false", filePlayer.streamRate(),
+                          filePlayer.hasTrack() ? filePlayer.currentGainDb() : 0.0f);
+            return s + buf;
+        };
+    }
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     cb.setLanguage = [](const std::string& l) {
         if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cerr << "[Nyelv] Figyelem: a language.txt nem írható.\n";
@@ -540,6 +685,12 @@ int main(int argc, char* argv[]) {
         current = transparentParams();
         node.params.write(current);
         linux_store::saveParams(current);
+    }
+    {
+        // A PipeWire mintavételi beállítása visszaáll (a program bezárása után a rendszer a régi)
+        audioopt::AudioOptions off = audioOpts;
+        off.rateMode = audioopt::RateMode::System;
+        applyAudio(off);
     }
     const bool crashedDaemon = node.coreError.load();
     node.shutdown();

@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
+#include <cmath>
 #include <cstring>
 #include <vector>
 
@@ -913,6 +915,11 @@ private:
         s.clear();
         getStr("Genre", s);
         if (!s.empty()) tags_.genre = detail::normalizeGenre(s);
+        for (const char* k : { "REPLAYGAIN_TRACK_GAIN", "REPLAYGAIN_TRACK_PEAK", "REPLAYGAIN_ALBUM_GAIN", "REPLAYGAIN_ALBUM_PEAK" }) {
+            s.clear();
+            getStr(k, s);
+            if (!s.empty()) detail::applyReplayGain(k, s, tags_);
+        }
 
         // Binary cover art (APEv2 "Cover Art (Front)")
         int binSize = WavpackGetBinaryTagItem(wpc_, "Cover Art (Front)", nullptr, 0);
@@ -955,6 +962,25 @@ private:
 
 namespace detail {
 
+bool applyReplayGain(const std::string& key, const std::string& value, TrackTags& t) {
+    std::string k = key;
+    for (char& ch : k) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    const char* v = value.c_str();
+    char* end = nullptr;
+    const double x = std::strtod(v, &end);   // "-6.54 dB" -> -6.54; „0.988” -> 0.988
+    if (end == v || !std::isfinite(x)) return k.rfind("REPLAYGAIN_", 0) == 0 || k.rfind("R128_", 0) == 0;
+    if (k == "REPLAYGAIN_TRACK_GAIN") t.rgTrackGain = static_cast<float>(x);
+    else if (k == "REPLAYGAIN_TRACK_PEAK") t.rgTrackPeak = static_cast<float>(x);
+    else if (k == "REPLAYGAIN_ALBUM_GAIN") t.rgAlbumGain = static_cast<float>(x);
+    else if (k == "REPLAYGAIN_ALBUM_PEAK") t.rgAlbumPeak = static_cast<float>(x);
+    // Opus (RFC 7845): Q7.8 egész, a -23 LUFS-hoz; a ReplayGain referenciája -18 LUFS, ezért +5 dB.
+    // A REPLAYGAIN_* címke elsőbbséget kap, ha mindkettő megvan.
+    else if (k == "R128_TRACK_GAIN") { if (std::isnan(t.rgTrackGain)) t.rgTrackGain = static_cast<float>(x / 256.0 + 5.0); }
+    else if (k == "R128_ALBUM_GAIN") { if (std::isnan(t.rgAlbumGain)) t.rgAlbumGain = static_cast<float>(x / 256.0 + 5.0); }
+    else return false;
+    return true;
+}
+
 void applyVorbisComment(const char* c, size_t len, TrackTags& t) {
     const char* eq = static_cast<const char*>(std::memchr(c, '=', len));
     if (!eq) return;
@@ -969,6 +995,7 @@ void applyVorbisComment(const char* c, size_t len, TrackTags& t) {
     else if (is("DISCNUMBER") && t.disc == 0) t.disc = leadingNumber(value);
     else if ((is("DATE") || is("YEAR")) && t.year == 0) t.year = leadingNumber(value);
     else if (is("GENRE") && t.genre.empty()) t.genre = normalizeGenre(value);
+    else if (applyReplayGain(std::string(c, keyLen), value, t)) {}
     else if (is("METADATA_BLOCK_PICTURE")) {
         const std::vector<uint8_t> raw = base64Decode(value.data(), value.size());
         std::string mime, bytes;
@@ -1102,6 +1129,13 @@ void parseId3v2(const uint8_t* data, size_t size, TrackTags& t) {
         else if (sid == "TPOS" || sid == "TPA") { if (!t.disc) t.disc = leadingNumber(id3Text(f[0], f + 1, fn - 1)); }
         else if (sid == "TYER" || sid == "TDRC" || sid == "TYE") { if (!t.year) t.year = leadingNumber(id3Text(f[0], f + 1, fn - 1)); }
         else if (sid == "TCON" || sid == "TCO") { if (t.genre.empty()) t.genre = normalizeGenre(id3Text(f[0], f + 1, fn - 1)); }
+        else if (sid == "TXXX" || sid == "TXX") {
+            // felhasználói szöveg: kódolás, leírás (pl. REPLAYGAIN_TRACK_GAIN), érték
+            const uint8_t enc = f[0];
+            const size_t dl = id3FieldLen(enc, f + 1, fn - 1);
+            if (1 + dl > fn) continue;
+            applyReplayGain(id3Text(enc, f + 1, dl), id3Text(enc, f + 1 + dl, fn - 1 - dl), t);
+        }
         else if (sid == "APIC" || sid == "PIC") {
             const uint8_t enc = f[0];
             size_t q = 1;

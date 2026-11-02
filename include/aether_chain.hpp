@@ -3,7 +3,8 @@
  * @file aether_chain.hpp
  * @brief A teljes Aqulify DSP lánc (Linux PipeWire csomópont és Windows EQ APO plugin közös magja).
  *
- *   Magic Touch -> Preamp -> Equalizer (LSP) -> Bass Enhancer (Calf) -> Crossfeed (bs2b) -> Convolver (zita) -> Autogain (libebur128) -> Limiter (LSP)
+ *   Magic Touch -> Preamp -> Equalizer (LSP) -> Bass Enhancer (Calf) -> Crossfeed (bs2b) -> Convolver (zita) -> Autogain (libebur128)
+ *   -> csatornák (késleltetés / szint / polaritás) -> Limiter (LSP) -> dither
  *
  * A Magic Touch (magic_touch.hpp) a felvételt javítja, ezért a lánc elején van; az elemzése a háttérszálon fut.
  * A modulok az EasyEffects-szel azonos könyvtárakat és beállítás-leképezést használnak (ee_dsp.hpp).
@@ -29,6 +30,7 @@
 #include "mono_bass.hpp"
 #include "autogain.hpp"
 #include "ab_compare.hpp"
+#include "out_stage.hpp"
 
 namespace ee_analyzer {
 
@@ -156,6 +158,12 @@ public:
     /** A Magic Touch fut-e (bekapcsolva, nem 0 % intenzitással). */
     static bool magicActive(const ParamData& d) { return d.has(kFlagMagic) && d.magicAmount > 0.0f; }
 
+    /** Módosítja-e a lánc a jelet (ha nem, a kimenet bitpontos, és a dither sem fut). */
+    static bool modifiesSignal(const ParamData& d) {
+        const uint32_t mods = kFlagEq | kFlagBass | kFlagMono | kFlagCrossfeed | kFlagConvolver | kFlagLimiter | kFlagAutogain;
+        return (d.flags & mods) != 0 || magicActive(d) || (d.has(kFlagOutStage) && !outstage::OutStage::neutral(d));
+    }
+
     void reset() {
         magic_.reset();
         eq_.reset();
@@ -168,6 +176,7 @@ public:
         abMono_.reset();
         crossfeed_.reset();
         limiter_.reset();
+        outStage_.reset();
         if (irStage_.active) irStage_.active->reset();
     }
 
@@ -194,6 +203,7 @@ private:
         abBass_.setSampleRate(sr, kChunk);
         abMono_.setSampleRate(sr, kChunk);
         crossfeed_.setSampleRate(sr);
+        outStage_.setSampleRate(sr);
         sampleRate_.store(sr);
         // Mintavétel-váltáskor a lánc úgyis újraindul: a függő váltás azonnal érvényes
         if (fade_ == Fade::Out) current_ = pending_;
@@ -210,8 +220,10 @@ private:
 
     /** Kell-e kattanásmentes (le-fel úsztatott) váltás a két beállítás között. */
     static bool needsDeclick(const ParamData& a, const ParamData& b) {
-        const uint32_t mods = kFlagEq | kFlagBass | kFlagMono | kFlagCrossfeed | kFlagConvolver | kFlagLimiter | kFlagAutogain;
+        const uint32_t mods = kFlagEq | kFlagBass | kFlagMono | kFlagCrossfeed | kFlagConvolver | kFlagLimiter | kFlagAutogain |
+                              kFlagOutStage;
         if ((a.flags & mods) != (b.flags & mods)) return true;
+        if (b.has(kFlagOutStage) && (a.chDelayMs[0] != b.chDelayMs[0] || a.chDelayMs[1] != b.chDelayMs[1])) return true;
         if (magicActive(a) != magicActive(b)) return true;
         if (b.has(kFlagMono) && a.subsonicHz != b.subsonicHz) return true;
         if (b.has(kFlagEq) && (a.eqMode != b.eqMode || a.eqDecramp != b.eqDecramp)) return true;
@@ -235,6 +247,9 @@ private:
         if (current_.has(kFlagMono) && !old.has(kFlagMono)) monoBass_.reset();
         if (current_.has(kFlagAutogain) && !old.has(kFlagAutogain)) autogain_.reset();
         if (current_.has(kFlagCrossfeed) && !old.has(kFlagCrossfeed)) crossfeed_.reset();
+        if (current_.has(kFlagOutStage) &&
+            (!old.has(kFlagOutStage) || old.chDelayMs[0] != current_.chDelayMs[0] || old.chDelayMs[1] != current_.chDelayMs[1]))
+            outStage_.reset();
         if (magicActive(current_) && !magicActive(old)) magic_.reset();
     }
 
@@ -296,6 +311,7 @@ private:
         autogain_.update(d);
         crossfeed_.update(d);
         limiter_.update(d);
+        outStage_.update(d);
         convIn_ = ee::dbToGain(d.convInputGainDb);
         convOut_ = ee::dbToGain(d.convOutputGainDb);
         convDry_ = d.convDryDb <= -100.0f ? 0.0f : ee::dbToGain(d.convDryDb);
@@ -398,6 +414,7 @@ private:
         }
 
         if (d.has(kFlagAutogain)) autogain_.process(L, R, m);
+        if (d.has(kFlagOutStage)) outStage_.processChannels(L, R, m);
 
         if (d.has(kFlagLimiter)) {
             limiter_.process(L, R, m);
@@ -411,6 +428,8 @@ private:
         }
 
         if (fade_ != Fade::None) applyFade(L, R, m);
+        // Dither a legvégén, csak ha a lánc módosítja a jelet (érintetlen jelnél bitpontos marad)
+        if (d.has(kFlagOutStage) && d.ditherMode != 0 && modifiesSignal(d)) outStage_.processDither(L, R, m);
     }
 
     // ------------------------------------------------------------ háttérszál
@@ -529,6 +548,7 @@ private:
     abcmp::AbCompare abEq_, abConv_, abBass_, abMono_;
     ee::Crossfeed crossfeed_;
     ee::Limiter limiter_;
+    outstage::OutStage outStage_;
     ParamData current_;
     ParamData pending_;                 // le-fel úsztatott váltásnál a leúsztatás végén lép életbe
     enum class Fade { None, Out, In };

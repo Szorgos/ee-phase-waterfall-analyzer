@@ -76,6 +76,25 @@ public:
     /** A k-adik kimenet (1–3) saját lánca (pl. impulzusválasz egy zónának). */
     AetherChain& zoneChain(int k);
 
+    /**
+     * Pufferméret (mintában, 0: a rendszer alapértéke): az aggregált eszköz IO-puffere (kAudioDevicePropertyBufferFrameSize,
+     * az eszköz által engedett tartományba igazítva). Az IOProc folyamatosan fut, így a hangkártya nem alszik el.
+     */
+    void setBufferFrames(uint32_t frames);
+    /** A ténylegesen beállított IO-puffer mintában (0: még nincs eszköz). */
+    uint32_t bufferFrames() const { return ioFrames_.load(); }
+    /** A feldolgozás átlagos terhelése a puffer idejéhez képest (0–1), a csúcs az előző lekérdezés óta, a túllépések. */
+    float dspLoad() const { return loadAvg_.load(std::memory_order_relaxed); }
+    float takeDspPeak() { return loadPeak_.exchange(0.0f, std::memory_order_relaxed); }
+    uint32_t overruns() const { return overruns_.load(std::memory_order_relaxed); }
+
+    /**
+     * A kimeneti eszköz hangereje (0–1, a Core Audio skálája, mint a menüsor hangerő-szabályzójáé) és némítása.
+     * false: az eszköznek nincs állítható hangereje. level < 0 / mute < 0: az adott érték nem változik.
+     */
+    bool outputVolume(float& level, bool& muted) const;
+    void setOutputVolume(float level, int mute);
+
     Source source() const { return source_.load(); }
     /** A forrás neve a felületnek ("Core Audio Tap", "BlackHole 2ch", vagy üres). */
     std::string sourceName() const;
@@ -90,6 +109,9 @@ private:
     std::atomic<Problem> problem_{Problem::None};
     std::atomic<bool> processing_{false};
     std::atomic<uint32_t> sampleRate_{48000};
+    std::atomic<uint32_t> wantFrames_{0}, ioFrames_{0};
+    std::atomic<float> loadAvg_{0.0f}, loadPeak_{0.0f};
+    std::atomic<uint32_t> overruns_{0};
     friend struct Impl;
 };
 

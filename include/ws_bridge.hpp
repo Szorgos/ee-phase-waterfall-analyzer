@@ -139,6 +139,18 @@ struct BridgeCallbacks {
     /** A 2–4. kimenet impulzusválasza (konvolver; pl. szobakorrekció a második hangkártyához). */
     std::function<void(int zone, IrData&&)> setZoneIr;
     std::function<IrData(int zone)> getZoneIr;
+    /**
+     * Haladó hangkimenet (audio_options.hpp; csak ahol a platform tudja: Linux, macOS). audioOptionsJson: a beállítás
+     * és a platform képességei ({"opts":{...},"caps":{...}}); setAudioOptions: a kliens által küldött mezők.
+     * Csak a saját gépről állítható (a távirányító olvashatja).
+     */
+    std::function<std::string()> audioOptionsJson;
+    std::function<void(const json::Value& opts)> setAudioOptions;
+    /**
+     * A kimeneti hangkártya hangereje (a „most szól” sáv csúszkája; a telefonról is): level 0–1 (< 0: nem változik),
+     * mute 0 / 1 (< 0: nem változik). A pillanatnyi értéket a platform az állapotüzenet "volume" mezőjében küldi.
+     */
+    std::function<void(double level, int mute)> setVolume;
 };
 
 /**
@@ -1313,6 +1325,21 @@ private:
             sendText(buildStateMessage("zone", false, cur_->editZone));
             return;
         }
+        if (type == "set_volume") {
+            if (!cb_.setVolume) return;
+            const json::Value* m = msg.get("muted");
+            cb_.setVolume(std::clamp(num(msg, "level", -1.0), -1.0, 1.0),
+                          m && m->type == json::Value::Type::Bool ? (m->b ? 1 : 0) : -1);
+            return;
+        }
+        if (type == "set_audio_opts" || type == "get_audio_opts") {
+            if (!cb_.audioOptionsJson) return;
+            if (type == "set_audio_opts" && !remote && cb_.setAudioOptions) {
+                if (const json::Value* o = msg.get("opts"); o && o->type == json::Value::Type::Object) cb_.setAudioOptions(*o);
+            }
+            sendText("{\"type\":\"audio_opts\"," + cb_.audioOptionsJson().substr(1));
+            return;
+        }
         if (type == "set_multiout" || type == "get_multiout") {
             if (!cb_.setMultiOut || !cb_.multiOutStatus) return;
             if (type == "set_multiout") handleSetMultiOut(msg);
@@ -1469,6 +1496,7 @@ private:
             else if (mod == "magic") p.set(kFlagMagic, on);
             else if (mod == "mono") p.set(kFlagMono, on);
             else if (mod == "autogain") p.set(kFlagAutogain, on);
+            else if (mod == "outstage") p.set(kFlagOutStage, on);
             else changed = false;
             // Az EQ és a Konvolver egymást kizárja: a másik kikapcsolódik
             if (on && mod == "eq") p.set(kFlagConvolver, false);
@@ -1489,6 +1517,15 @@ private:
             p.subsonicHz = static_cast<int32_t>(num(msg, "subsonic", p.subsonicHz));
             p.monoAmount = static_cast<float>(num(msg, "amount", p.monoAmount));
             p.monoFreqHz = static_cast<float>(num(msg, "freq", p.monoFreqHz));
+        } else if (type == "set_outstage") {
+            p.chDelayMs[0] = static_cast<float>(num(msg, "delayL", p.chDelayMs[0]));
+            p.chDelayMs[1] = static_cast<float>(num(msg, "delayR", p.chDelayMs[1]));
+            p.chGainDb[0] = static_cast<float>(num(msg, "gainL", p.chGainDb[0]));
+            p.chGainDb[1] = static_cast<float>(num(msg, "gainR", p.chGainDb[1]));
+            p.chInvert[0] = num(msg, "invertL", p.chInvert[0]) != 0.0 ? 1 : 0;
+            p.chInvert[1] = num(msg, "invertR", p.chInvert[1]) != 0.0 ? 1 : 0;
+            p.ditherMode = static_cast<int32_t>(num(msg, "dither", p.ditherMode));
+            p.ditherBits = static_cast<int32_t>(num(msg, "bits", p.ditherBits));
         } else if (type == "set_autogain") {
             p.agcTargetLufs = static_cast<float>(num(msg, "target", p.agcTargetLufs));
             p.agcMaxGainDb = static_cast<float>(num(msg, "maxGain", p.agcMaxGainDb));
@@ -1744,6 +1781,11 @@ public:
             caps += "\"multiout\"";
             hasCap = true;
         }
+        if (cb_.audioOptionsJson) {
+            if (hasCap) caps += ",";
+            caps += "\"audio_opts\"";
+            hasCap = true;
+        }
         caps += "]";
         if (hasCap) {
             s += ",\"caps\":" + caps;
@@ -1761,6 +1803,7 @@ public:
         s += ",\"magic\":"; s += p.has(kFlagMagic) ? "1" : "0";
         s += ",\"mono\":"; s += p.has(kFlagMono) ? "1" : "0";
         s += ",\"autogain\":"; s += p.has(kFlagAutogain) ? "1" : "0";
+        s += ",\"outstage\":"; s += p.has(kFlagOutStage) ? "1" : "0";
         s += "},\"crossfeedPreset\":" + std::to_string(p.crossfeedPreset);
         s += ",\"eqMode\":" + std::to_string(p.eqMode);
         s += ",\"decramp\":" + std::to_string(p.eqDecramp);
@@ -1808,6 +1851,12 @@ public:
         s += ",\"freqHz\":"; appendFloat(s, p.monoFreqHz, 0); s += '}';
         s += ",\"autogain\":{\"target\":"; appendFloat(s, p.agcTargetLufs, 1);
         s += ",\"maxGain\":"; appendFloat(s, p.agcMaxGainDb, 1); s += '}';
+        s += ",\"outstage\":{\"delayL\":"; appendFloat(s, p.chDelayMs[0], 2);
+        s += ",\"delayR\":"; appendFloat(s, p.chDelayMs[1], 2);
+        s += ",\"gainL\":"; appendFloat(s, p.chGainDb[0], 2);
+        s += ",\"gainR\":"; appendFloat(s, p.chGainDb[1], 2);
+        s += ",\"invertL\":" + std::to_string(p.chInvert[0]) + ",\"invertR\":" + std::to_string(p.chInvert[1]);
+        s += ",\"dither\":" + std::to_string(p.ditherMode) + ",\"bits\":" + std::to_string(p.ditherBits) + '}';
         // Van-e IR-tár (régebbi motornál nincs: a felület ilyenkor nem készít IR-profilt)
         if (cb_.loadLibraryIr && cb_.saveLibraryIr) s += ",\"irLibrary\":true";
         if (zoned ? static_cast<bool>(cb_.getZoneIr) : static_cast<bool>(cb_.getIr)) {

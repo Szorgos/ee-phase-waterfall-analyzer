@@ -18,6 +18,11 @@
  * a két szám mintapontosan egymás után szól. A számok egy közös idővonalon „szakaszok”; a „most szól” adatai és a
  * pozíció a hallott szakaszé, így a váltás a ténylegesen hallott ponton látszik. Eltérő mintavételnél a következő
  * szám a mostani vége után új hangfolyamon indul (rövid szünettel).
+ *
+ * ReplayGain (setReplayGain): a szám vagy az album hangosságcímkéje szerinti erősítés, előerősítéssel; a csúcs-címke
+ * alapján a túlvezérlés elleni korláttal. Kikapcsolva a minták érintetlenek (bitpontos lejátszás). Előbetöltés
+ * (setPreload): a fájl lejátszás előtt a memóriába (Linuxon a RAM-ban lévő futásidejű mappába) másolódik, így a
+ * lejátszás alatt nincs lemez- vagy hálózati olvasás (pl. elalvó külső lemez, NAS).
  */
 #include <atomic>
 #include <condition_variable>
@@ -98,6 +103,17 @@ public:
     State state() const { return state_.load(); }
     double position() const;
     double duration() const;
+    /** ReplayGain: mode 0 = ki, 1 = szám, 2 = album (ha nincs albumérték, a számé); az új beállítás a még nem
+     *  dekódolt részre hat. */
+    void setReplayGain(int mode, float preampDb, bool preventClip);
+    /** Előbetöltés a memóriába (a következő megnyitott számtól; legfeljebb kPreloadMaxBytes méretű fájlnál). */
+    void setPreload(bool on) { preload_ = on; }
+    static constexpr uint64_t kPreloadMaxBytes = 400ull << 20;
+    /** A hallott szám ReplayGain-erősítése dB-ben (0: nincs változtatás). */
+    float currentGainDb() const;
+
+    /** A hangfolyam mintavétele (a hallott fájlé); 0: nincs szám. */
+    uint32_t streamRate() const;
     /** A „most szól” adatai a meglévő protokoll szerint (media::toJson). */
     media::Info info() const;
     /** A borító, ha az azonosító a mostani száméval egyezik. */
@@ -112,8 +128,19 @@ public:
 
 private:
     /** Egy szám az idővonalon (az idővonal a tekerés / megnyitás óta folyamatos, az első szám kereteiben indul). */
+    /** Az előbetöltött fájl ideiglenes másolata (megszűnéskor törlődik). */
+    struct TempCopy {
+        std::string path;
+        TempCopy() = default;
+        explicit TempCopy(std::string p) : path(std::move(p)) {}
+        TempCopy(const TempCopy&) = delete;
+        TempCopy& operator=(const TempCopy&) = delete;
+        ~TempCopy();
+    };
     struct Segment {
         std::unique_ptr<AudioDecoder> dec;
+        std::unique_ptr<TempCopy> temp;     // előbetöltésnél a memóriába másolt fájl
+        float gain = 1.0f;                  // ReplayGain (lineáris)
         std::string path, title, artId;
         std::string coverMime, cover;       // a mappa képe, ha a fájlba nincs borító ágyazva
         uint32_t channels = 0;
@@ -123,7 +150,8 @@ private:
         uint64_t token = 0;
     };
 
-    static std::unique_ptr<Segment> makeSegment(const std::string& path, std::string* error, uint64_t token);
+    std::unique_ptr<Segment> makeSegment(const std::string& path, std::string* error, uint64_t token);
+    float gainFor(const TrackTags& t) const;
     void decodeLoop();
     void stopLocked();
     void seekLocked(uint64_t frame);
@@ -159,6 +187,10 @@ private:
     std::atomic<uint64_t> played_{0};   // a kimenetnek átadott keretek (a fájl elejétől számolva)
     std::atomic<uint64_t> base_{0};     // az utolsó tekerés (vagy a megnyitás) helye
     std::atomic<State> state_{State::Idle};
+    std::atomic<int> rgMode_{0};
+    std::atomic<float> rgPreampDb_{0.0f};
+    std::atomic<bool> rgPreventClip_{true};
+    std::atomic<bool> preload_{false};
 };
 
 } // namespace ee_analyzer::player

@@ -1,3 +1,16 @@
+### Újdonságok (következő kiadás)
+
+- **Hangkimenet (haladó)** a *Kimenet* menüben:
+  - *Pufferméret* (automatikus vagy 64–4096 minta, ms-ban kijelezve), terhelés- és túllépésjelzővel. Linuxon és macOS-en.
+  - *Mintavétel* (Linux): a rendszer beállítása, a forrást követő (44,1 kHz-es zene újramintavételezés nélkül, ha a hangkártya tudja) vagy rögzített; kilépéskor visszaáll.
+  - *Újramintavételezés minősége* (Linux) a lejátszóhoz és a 2–4. kimenethez.
+  - *Hangkártya ébren tartása* (Linux): nincs pattanás, a számok eleje nem vész el.
+  - *Jelút*: bitpontos-e a lánc, puffer, a DSP saját késleltetése, becsült teljes késleltetés, terhelés, a lejátszott fájl és a kimenet mintavétele.
+- **Csatornák és dither** (új modul): bal / jobb késleltetés (1 ms ≈ 34,3 cm), szint és polaritás a nem középen ülő hallgatónak; dither 16 vagy 24 bitre (TPDF vagy zajformált), csak ha a lánc módosítja a jelet. Több kimenetnél kimenetenként.
+- **Hangerő a „most szól” sávban:** csúszka és némítás gomb; a kimeneti hangkártya hangerejét állítja (mint a rendszer hangerő-szabályzója, ahol van, hardveresen), így a DSP-lánc érintetlen marad. A telefonos távirányítóról is állítható.
+- **Lejátszó:** ReplayGain szám vagy album szerint (előerősítés, túlvezérlés-védelem a csúcs-címkéből; FLAC, Ogg, Opus R128, MP3, WavPack), fájl betöltése memóriába lejátszás előtt.
+- A mentett beállítások (params.bin, multiout.bin) az új formátumba kerülnek; a 2.0.7 több kimenetes beállítása megmarad.
+
 ### Újdonságok (2.0.7)
 
 **Letöltés (2.0.7):**

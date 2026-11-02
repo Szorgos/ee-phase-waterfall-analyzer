@@ -1580,6 +1580,75 @@ static void testIrLibraryFormat() {
           "AEIS üzenet: rossz azonosító, ismeretlen verzió és csonka üzenet elutasítva");
 }
 
+/** Kimeneti fokozat: csatornánkénti késleltetés / szint / polaritás és dither; semleges beállításnál bitpontos. */
+static void testOutStage() {
+    std::printf("\n[Kimeneti fokozat]\n");
+    const size_t n = 48000;
+    auto run = [&](const ParamData& d, std::vector<float>& L, std::vector<float>& R) {
+        AetherChain chain;
+        chain.setSampleRate(48000);
+        chain.applyParamsRT(d);
+        std::vector<float> zl(4800, 0.0f), zr(4800, 0.0f);
+        for (int k = 0; k < 3; ++k) chain.process(zl.data(), zr.data(), zl.size());   // az úsztatott bekapcsolás lezajlik
+        for (size_t off = 0; off < L.size(); off += 512) chain.process(L.data() + off, R.data() + off, std::min<size_t>(512, L.size() - off));
+    };
+    // 1. semleges csatornák + dither, más modul nélkül: a jel érintetlen (bitpontos)
+    std::vector<float> L(n), R(n), L0, R0;
+    for (size_t i = 0; i < n; ++i) { L[i] = 0.3f * std::sin(0.013f * i) + 1e-7f * (i % 7); R[i] = 0.2f * std::cos(0.021f * i); }
+    L0 = L; R0 = R;
+    ParamData d = transparentParams();
+    d.set(kFlagOutStage, true);
+    d.ditherMode = 1;
+    d.ditherBits = 16;
+    run(d, L, R);
+    size_t firstDiff = n;
+    for (size_t i = 0; i < n && firstDiff == n; ++i) if (L[i] != L0[i] || R[i] != R0[i]) firstDiff = i;
+    CHECK(firstDiff == n, "semleges csatornák és dither: a kimenet bitpontosan azonos a bemenettel (első eltérés: %zu, %.9g / %.9g)",
+          firstDiff, firstDiff < n ? L[firstDiff] : 0.0f, firstDiff < n ? L0[firstDiff] : 0.0f);
+    // 2. késleltetés: 1 ms a bal csatornán -> az impulzus 48 mintával később
+    std::vector<float> iL(n, 0.0f), iR(n, 0.0f);
+    iL[1000] = 0.5f; iR[1000] = 0.5f;
+    d = transparentParams();
+    d.set(kFlagOutStage, true);
+    d.chDelayMs[0] = 1.0f;
+    d.chGainDb[1] = -6.0f;
+    d.chInvert[1] = 1;
+    run(d, iL, iR);
+    const size_t pl = static_cast<size_t>(std::max_element(iL.begin(), iL.end(), [](float a, float b) { return std::abs(a) < std::abs(b); }) - iL.begin());
+    const size_t pr = static_cast<size_t>(std::max_element(iR.begin(), iR.end(), [](float a, float b) { return std::abs(a) < std::abs(b); }) - iR.begin());
+    CHECK(pl == 1048 && std::abs(iL[pl] - 0.5f) < 1e-6f, "bal csatorna 1 ms késleltetés: az impulzus a %zu. mintán (várt 1048)", pl);
+    CHECK(pr == 1000 && std::abs(iR[pr] + 0.5f * 0.501187f) < 1e-4f, "jobb csatorna -6 dB, fordítva: %.4f (várt -0,2506)", iR[pr]);
+    // 3. dither 16 bitre: módosított jelnél a minták a 16 bites rácson vannak, a zaj kicsi
+    for (int mode = 1; mode <= 2; ++mode) {
+        std::vector<float> a(n), b(n);
+        for (size_t i = 0; i < n; ++i) { a[i] = 0.25f * std::sin(0.01f * i); b[i] = 0.0f; }
+        d = transparentParams();
+        d.set(kFlagOutStage, true);
+        d.chGainDb[0] = d.chGainDb[1] = -1.0f;
+        d.ditherMode = mode;
+        d.ditherBits = 16;
+        run(d, a, b);
+        bool grid = true;
+        double e2 = 0.0;
+        for (size_t i = 0; i < n; ++i) {
+            const double q = a[i] * 32768.0, qb = b[i] * 32768.0;
+            if (std::abs(q - std::round(q)) > 1e-3 || std::abs(qb - std::round(qb)) > 1e-3) grid = false;
+            e2 += qb * qb;
+        }
+        const double rmsLsb = std::sqrt(e2 / n);
+        CHECK(grid && rmsLsb > 0.2 && rmsLsb < (mode == 1 ? 1.0 : 2.0),
+              "%s dither 16 bit: a minták a 16 bites rácson, a csend zaja %.2f LSB (RMS)", mode == 1 ? "TPDF" : "zajformált", rmsLsb);
+    }
+    // 4. a régi (v11) paraméterfájl betöltése: a kimeneti fokozat alapértéken (ki)
+    ParamData v = transparentParams();
+    v.set(kFlagEq, true);
+    v.chDelayMs[0] = 5.0f;   // a v11-es méretben ez a mező nincs benne
+    ParamData out;
+    const bool ok = loadParamBytes(reinterpret_cast<const char*>(&v), sizeof(v), 11, kParamSizeV11, out);
+    CHECK(ok && out.has(kFlagEq) && !out.has(kFlagOutStage) && out.chDelayMs[0] == 0.0f && out.ditherBits == 24,
+          "v11-es params.bin: betöltve, a kimeneti fokozat alapértéken");
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify DSP modulteszt (EasyEffects könyvtárak)\n");
@@ -1600,6 +1669,7 @@ int main() {
     testAutogain();
     testEqLatency();
     testIrLibraryFormat();
+    testOutStage();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

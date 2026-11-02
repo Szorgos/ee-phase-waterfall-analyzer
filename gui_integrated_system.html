@@ -1154,6 +1154,17 @@ if (!window.THREE) window.THREE = (function () {
   }
 
   /* Kimenet gomb felugró menüje a fejlécben */
+  .ao-row { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:6px 0; font-size:0.82rem; color:var(--aq-text); }
+  .ao-row { flex-wrap:wrap; row-gap:4px; }
+  .ao-row[hidden], .ao-hint[hidden] { display:none !important; }
+  .ao-row > span { flex:1 0 auto; }
+  .ao-row select { flex:1 0 150px; max-width:100%; }
+  .ao-check { justify-content:flex-start; gap:6px; cursor:pointer; }
+  .ao-hint { font-size:0.72rem; color:var(--aq-text-3); line-height:1.35; margin:-2px 0 6px 22px; }
+  .ao-path { margin-top:8px; padding:8px 10px; border-radius:8px; background:var(--aq-surface-2, rgba(127,127,127,0.08));
+             font-family:var(--aq-mono); font-size:0.72rem; line-height:1.55; color:var(--aq-text-2); }
+  .ao-path b { color:var(--aq-text); font-weight:600; }
+  .ao-path .ok { color:var(--aq-ok, #3fb37f); } .ao-path .warn { color:var(--aq-warn, #e0a030); }
   .sink-menu-wrap {
     position: relative;
     display: inline-flex;
@@ -1851,6 +1862,32 @@ if (!window.THREE) window.THREE = (function () {
             </div>
           </div>
           <button type="button" id="btnLibraryRoots" hidden onclick="openLibraryModal()"></button>
+          <div id="audioOptsWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:10px;">
+            <div class="sink-sec-title" data-i18n="ao.title">Hangkimenet (haladó)</div>
+            <label class="ao-row" id="aoRowBuffer"><span data-i18n="ao.buffer">Pufferméret</span>
+              <select id="aoBuffer" class="mini-select" onchange="aoSend()"></select></label>
+            <label class="ao-row" id="aoRowRate"><span data-i18n="ao.rate">Mintavétel</span>
+              <select id="aoRate" class="mini-select" onchange="aoSend()"></select></label>
+            <label class="ao-row" id="aoRowResample"><span data-i18n="ao.resample">Újramintavételezés</span>
+              <select id="aoResample" class="mini-select" onchange="aoSend()"></select></label>
+            <label class="ao-row ao-check" id="aoRowKeep"><input type="checkbox" id="aoKeepAwake" onchange="aoSend()"> <span data-i18n="ao.keepAwake">Hangkártya ébren tartása</span></label>
+            <div class="ao-hint" id="aoKeepHint" data-i18n="ao.keepAwakeHint">Csendben sem alszik el: nincs pattanás, és a számok eleje sem vész el.</div>
+            <div id="aoPlayerWrap" hidden>
+              <div class="sink-sec-title" style="margin-top:10px;" data-i18n="ao.playerTitle">Beépített lejátszó</div>
+              <label class="ao-row"><span>ReplayGain</span>
+                <select id="aoRg" class="mini-select" onchange="aoSend()">
+                  <option value="off" data-i18n="ao.rgOff">Ki (bitpontos)</option>
+                  <option value="track" data-i18n="ao.rgTrack">Szám szerint</option>
+                  <option value="album" data-i18n="ao.rgAlbum">Album szerint</option>
+                </select></label>
+              <label class="ao-row" id="aoRowRgPreamp"><span data-i18n="ao.rgPreamp">Előerősítés</span>
+                <span><input type="number" id="aoRgPreamp" class="ee-input" style="width:64px; text-align:center;" min="-15" max="15" step="0.5" value="0" onchange="aoSend()"> dB</span></label>
+              <label class="ao-row ao-check" id="aoRowRgClip"><input type="checkbox" id="aoRgClip" checked onchange="aoSend()"> <span data-i18n="ao.rgClip">Túlvezérlés elleni védelem (csúcs-címke)</span></label>
+              <label class="ao-row ao-check"><input type="checkbox" id="aoPreload" onchange="aoSend()"> <span data-i18n="ao.preload">Fájl betöltése memóriába</span></label>
+              <div class="ao-hint" data-i18n="ao.preloadHint">Lejátszás közben nincs lemez- vagy hálózati olvasás (pl. elalvó külső lemez, NAS).</div>
+            </div>
+            <div class="ao-path" id="aoPath"></div>
+          </div>
           <div id="closePrefWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:10px;">
             <div class="sink-sec-title" data-i18n="close.setting">Ablak bezárásakor:</div>
             <select id="selectClosePref" class="mini-select" style="width:100%; max-width:none;" onchange="setClosePref(this.value)">
@@ -1977,6 +2014,7 @@ if (!window.THREE) window.THREE = (function () {
         <button class="tab-btn" id="tabBtn-bass" onclick="switchTab('bass', this)"><span class="module-dot" id="dot-bass"></span>Bass Enhancer</button>
         <button class="tab-btn" id="tabBtn-mono" onclick="switchTab('mono', this)"><span class="module-dot" id="dot-mono"></span>Mono</button>
         <button class="tab-btn" id="tabBtn-autogain" onclick="switchTab('autogain', this)"><span class="module-dot" id="dot-autogain"></span>Autogain</button>
+        <button class="tab-btn" id="tabBtn-outstage" onclick="switchTab('outstage', this)"><span class="module-dot" id="dot-outstage"></span><span data-i18n="os.tab">Csatornák</span></button>
         <button class="tab-btn" id="tabBtn-magic" onclick="switchTab('magic', this)"><span class="module-dot" id="dot-magic"></span>Magic Touch</button>
         <button class="tab-btn" id="tabBtn-outputs" hidden onclick="switchTab('outputs', this)"><span class="module-dot" id="dot-outputs"></span><span data-i18n="mo.tab">Kimenetek</span></button>
       </div>
@@ -2331,6 +2369,25 @@ if (!window.THREE) window.THREE = (function () {
         <p class="module-desc" data-i18n="agc.desc">Automatikus szintkiegyenlítés: a rövid távú (3 s) hangosságot a célszintre igazítja, legfeljebb a megadott mértékig. A változás lassú (kb. 1 dB/s), így nem pumpál.</p>
 
         <div class="param-grid" id="autogainControls"></div>
+      </div>
+    </div>
+
+    <!-- 7. TAB: CSATORNÁK ÉS DITHER (out_stage.hpp): a lánc végén -->
+    <div class="tab-pane" id="pane-outstage">
+      <div class="module-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <h3 style="margin:0;"><svg class="aq-icon" aria-hidden="true"><use href="#i-speaker"/></svg><span data-i18n="os.title">Csatornák és dither</span></h3>
+            <span class="status-badge off" id="badgeStatus-outstage" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button type="button" class="aq-switch" id="btnToggle-outstage" onclick="toggleModule('outstage')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
+          </div>
+        </div>
+
+        <p class="module-desc" data-i18n="os.desc">Ha nem középen ülsz a hangfalak között: a közelebbi hangfal késleltetése és szintje kiegyenlíthető (1 ms ≈ 34,3 cm). A dither a hangkártya bitmélységére kerekít, halk, egyenletes zajjal; csak akkor fut, ha a lánc módosítja a jelet, érintetlen jelnél a kimenet bitpontos.</p>
+
+        <div class="param-grid" id="outstageControls"></div>
       </div>
     </div>
 
@@ -2841,6 +2898,7 @@ var isBassEnabled = false;
 var isMagicEnabled = false;
 var isMonoEnabled = false;
 var isAutogainEnabled = false;
+var isOutstageEnabled = false;
 var magicCompare = false;     // A/B: true = az eredeti jel szól
 var currentPreamp = 0.0;
 // Automatikus preamp: indulásnál 0 dB; ha az EQ-görbe klippelne, a preamp a görbe csúcsához igazodik.
@@ -2856,6 +2914,7 @@ function setModuleActive(mod, active) {
   else if (mod === 'magic') isMagicEnabled = active;
   else if (mod === 'mono') isMonoEnabled = active;
   else if (mod === 'autogain') isAutogainEnabled = active;
+  else if (mod === 'outstage') isOutstageEnabled = active;
   // EQ és Konvolver: egyszerre csak az egyik. A másik kikapcsolódik (mint az IR-importnál).
   if (active && mod === 'eq' && isConvolverEnabled) setModuleActive('convolver', false);
   if (active && mod === 'convolver' && isEqEnabled) setModuleActive('eq', false);
@@ -2907,7 +2966,7 @@ function setModuleActive(mod, active) {
 function moduleIsActive(mod) {
   return mod === 'eq' ? isEqEnabled : mod === 'crossfeed' ? isCrossfeedEnabled : mod === 'convolver' ? isConvolverEnabled
        : mod === 'limiter' ? isLimiterEnabled : mod === 'bass' ? isBassEnabled : mod === 'magic' ? isMagicEnabled
-       : mod === 'mono' ? isMonoEnabled : mod === 'autogain' ? isAutogainEnabled : false;
+       : mod === 'mono' ? isMonoEnabled : mod === 'autogain' ? isAutogainEnabled : mod === 'outstage' ? isOutstageEnabled : false;
 }
 /** A modul BE/KI gombjának, állapotjelvényének (és az EQ felső gombjának) felirata a választott nyelven. */
 function renderModuleTexts(mod) {
@@ -2981,6 +3040,7 @@ function toggleModule(mod) {
   else if (mod === 'magic') curr = isMagicEnabled;
   else if (mod === 'mono') curr = isMonoEnabled;
   else if (mod === 'autogain') curr = isAutogainEnabled;
+  else if (mod === 'outstage') curr = isOutstageEnabled;
   setModuleActive(mod, !curr);
 }
 
@@ -3002,7 +3062,7 @@ function sendParamToPipewire(type, val) {
 // =========================================================================
 // TAB VÁLTÓ LOGIKA & OLDALRA CSÚSZÓ ANIMÁCIÓ (GLIDER & VIEWPORT SLIDE)
 // =========================================================================
-const TAB_ORDER = ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'magic'];
+const TAB_ORDER = ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'outstage', 'magic'];
 let currentActiveTab = 'eq';
 let tabSlideTimer = null;
 
@@ -5909,6 +5969,93 @@ function moSend(obj) {
 function saveZoneActive() {
   try { localStorage.setItem("aqulify_zone_active", JSON.stringify(aqZoneActive)); } catch (e) {}
 }
+// ---- Haladó hangkimenet (audio_options.hpp): pufferméret, mintavétel, újramintavételezés, ébren tartás, jelút
+var aoCaps = false, aoOpts = null, aoCapsDetail = null;
+const AO_BUFFERS = [0, 64, 128, 256, 512, 1024, 2048, 4096];
+const AO_RATES = [44100, 48000, 88200, 96000, 176400, 192000];
+const AO_RESAMPLE = [-1, 2, 6, 10, 14];
+function aoKhz(r) { return fmtNum(Math.round(r / 100) / 10) + " kHz"; }
+function aoFillSelects() {
+  const sr = (engineStatus && engineStatus.sr) || 48000;
+  const b = document.getElementById("aoBuffer"), r = document.getElementById("aoRate"), q = document.getElementById("aoResample");
+  if (!b || !r || !q) return;
+  b.innerHTML = AO_BUFFERS.map(n => `<option value="${n}">${n ? t("ao.frames", { n: n, ms: fmtNum(1000 * n / sr, 1) }) : t("ao.auto")}</option>`).join("");
+  r.innerHTML = `<option value="system">${t("ao.rateSystem")}</option><option value="follow">${t("ao.rateFollow")}</option>` +
+                AO_RATES.map(x => `<option value="fixed:${x}">${t("ao.rateFixed", { rate: aoKhz(x) })}</option>`).join("");
+  q.innerHTML = AO_RESAMPLE.map(x => `<option value="${x}">${t("ao.q" + (x < 0 ? "Def" : x))}</option>`).join("");
+}
+function aoOnCaps(caps) {
+  const has = Array.isArray(caps) && caps.includes("audio_opts");
+  const w = document.getElementById("audioOptsWrap");
+  if (w) w.hidden = !has;
+  if (has && !aoCaps) moSend({ type: "get_audio_opts" });
+  aoCaps = has;
+}
+function aoOnMessage(m) {
+  if (!m || !m.opts) return;
+  aoOpts = m.opts;
+  if (m.caps) aoCapsDetail = m.caps;
+  const cp = aoCapsDetail || {};
+  document.getElementById("aoRowBuffer").hidden = cp.buffer === false;
+  document.getElementById("aoRowRate").hidden = cp.rate === false;
+  document.getElementById("aoRowResample").hidden = cp.resample === false;
+  document.getElementById("aoRowKeep").hidden = cp.keepAwake === false;
+  document.getElementById("aoKeepHint").hidden = cp.keepAwake === false;
+  document.getElementById("aoPlayerWrap").hidden = cp.player !== true;
+  aoFillSelects();
+  const o = aoOpts;
+  document.getElementById("aoBuffer").value = String(o.buffer || 0);
+  document.getElementById("aoRate").value = o.rateMode === "fixed" ? "fixed:" + o.fixedRate : (o.rateMode || "system");
+  document.getElementById("aoResample").value = String(AO_RESAMPLE.includes(o.resampleQuality) ? o.resampleQuality : -1);
+  document.getElementById("aoKeepAwake").checked = !!o.keepAwake;
+  document.getElementById("aoRg").value = o.replayGain || "off";
+  document.getElementById("aoRgPreamp").value = typeof o.rgPreamp === "number" ? o.rgPreamp : 0;
+  document.getElementById("aoRgClip").checked = o.rgClip !== false;
+  document.getElementById("aoPreload").checked = !!o.preload;
+  const rgOn = (o.replayGain || "off") !== "off";
+  document.getElementById("aoRowRgPreamp").hidden = !rgOn;
+  document.getElementById("aoRowRgClip").hidden = !rgOn;
+  aoRenderPath();
+}
+function aoSend() {
+  const rv = document.getElementById("aoRate").value;
+  const opts = { buffer: parseInt(document.getElementById("aoBuffer").value, 10) || 0,
+                 rateMode: rv.startsWith("fixed:") ? "fixed" : rv, keepAwake: document.getElementById("aoKeepAwake").checked,
+                 resampleQuality: parseInt(document.getElementById("aoResample").value, 10) };
+  if (rv.startsWith("fixed:")) opts.fixedRate = parseInt(rv.slice(6), 10);
+  if (aoCapsDetail && aoCapsDetail.player) {
+    opts.replayGain = document.getElementById("aoRg").value;
+    const pre = parseFloat(document.getElementById("aoRgPreamp").value);
+    opts.rgPreamp = isNaN(pre) ? 0 : Math.max(-15, Math.min(15, pre));
+    opts.rgClip = document.getElementById("aoRgClip").checked;
+    opts.preload = document.getElementById("aoPreload").checked;
+  }
+  moSend({ type: "set_audio_opts", opts });
+}
+/** A jelút és a késleltetés (a motor állapotüzenetének "path" mezője). */
+function aoRenderPath() {
+  const el = document.getElementById("aoPath");
+  const p = engineStatus && engineStatus.path;
+  if (!el) return;
+  if (!p) { el.innerHTML = ""; return; }
+  const sr = engineStatus.sr || 48000;
+  const f1 = v => fmtNum(Math.round(+v * 10) / 10);
+  const lines = [];
+  lines.push(p.transparent ? `<span class="ok">● ${t("ao.bitperfect")}</span>` : `<span class="warn">● ${t("ao.modified")}</span>`);
+  if (p.playerRate) {
+    const same = p.playerRate === sr;
+    lines.push(t("ao.player", { src: aoKhz(p.playerRate), dst: aoKhz(sr) }) + " · " +
+               (same ? `<span class="ok">${t("ao.rateMatch")}</span>` : `<span class="warn">${t("ao.resampled")}</span>`));
+    if (p.playerGain) lines.push(`ReplayGain: <b>${p.playerGain > 0 ? "+" : ""}${fmtNum(p.playerGain, 1)} dB</b>`);
+  }
+  lines.push(`${t("ao.pathBuffer")}: <b>${p.quantum || "–"}</b> ${t("ao.samples")} · ${f1(p.bufMs)} ms · ${aoKhz(sr)}`);
+  if (p.dspMs > 0) lines.push(`${t("ao.pathDsp")}: <b>${f1(p.dspMs)} ms</b>`);
+  lines.push(`${t("ao.pathTotal")}: <b>≈ ${f1(p.totalMs)} ms</b>`);
+  lines.push(`${t("ao.pathLoad")}: ${f1(p.load)} % (${t("ao.peak")} ${f1(p.peak)} %) · ${t("ao.overruns")}: ${p.overruns}`);
+  if (p.keepAwake) lines.push(`<span class="ok">● ${t("ao.awake")}</span>`);
+  el.innerHTML = lines.join("<br>");
+}
+
 function moOnCaps(caps) {
   if (!Array.isArray(caps)) return;
   const has = caps.includes("multiout");
@@ -7191,6 +7338,25 @@ function sendAutogain() {
   sendEngine({ type: "set_autogain", target: getCtl("agcTarget"), maxGain: getCtl("agcMaxGain") });
 }
 
+// --- Csatornák és dither (out_stage.hpp): bal / jobb késleltetés, szint, polaritás; dither a hangkártya bitmélységére
+buildControls("outstageControls", [
+  { id: "osDelayL", kind: "num", label: "ctl.osDelayL", min: 0, max: 20, step: 0.01, unit: "ms", def: 0, hint: "ctl.osDelayHint" },
+  { id: "osDelayR", kind: "num", label: "ctl.osDelayR", min: 0, max: 20, step: 0.01, unit: "ms", def: 0 },
+  { id: "osGainL", kind: "num", label: "ctl.osGainL", min: -24, max: 6, step: 0.1, unit: "dB", def: 0, sign: true },
+  { id: "osGainR", kind: "num", label: "ctl.osGainR", min: -24, max: 6, step: 0.1, unit: "dB", def: 0, sign: true },
+  { id: "osInvertL", kind: "toggle", label: "ctl.osInvertL", def: false },
+  { id: "osInvertR", kind: "toggle", label: "ctl.osInvertR", def: false },
+  { id: "osDither", kind: "select", label: "ctl.osDither", optKeys: true, def: 0, options: ["os.ditherOff", "os.ditherTpdf", "os.ditherShaped"],
+    hint: "ctl.osDitherHint" },
+  { id: "osBits", kind: "select", label: "ctl.osBits", def: 1, options: ["16 bit", "24 bit"] },
+], () => { sendOutstage(); nudgeIfOff('outstage'); });
+
+function sendOutstage() {
+  sendEngine({ type: "set_outstage", delayL: getCtl("osDelayL"), delayR: getCtl("osDelayR"), gainL: getCtl("osGainL"),
+               gainR: getCtl("osGainR"), invertL: getCtl("osInvertL") ? 1 : 0, invertR: getCtl("osInvertR") ? 1 : 0,
+               dither: getCtl("osDither"), bits: getCtl("osBits") === 0 ? 16 : 24 });
+}
+
 // --- Magic Touch (automatikus hangszépítő; docs/plans/magic-touch.md)
 buildControls("magicControls", [
   // 100 % fölött „Bátor” tartomány (200 %-ig): a hangszépítő korlátok a kétszeresükig nőnek (magic_touch.hpp)
@@ -7312,12 +7478,12 @@ markCrossfeedPreset();
 
 /** A teljes felületi állapot elküldése a motornak. */
 function pushAllToEngine() {
-  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'magic'].forEach(m => {
+  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'outstage', 'magic'].forEach(m => {
     sendParamToPipewire('set_module_' + m, moduleIsActive(m) ? 1 : 0);
   });
   sendCurveMsg({ type: "set_eq_mode", val: currentEqMode });
   sendCurveMsg({ type: "set_decramp", val: currentDecramp });
-  sendBass(); sendLimiter(); sendCrossfeed(); sendConvolver(); sendMagic(); sendMono(); sendAutogain();
+  sendBass(); sendLimiter(); sendCrossfeed(); sendConvolver(); sendMagic(); sendMono(); sendAutogain(); sendOutstage();
   lastSentPreamp = currentPreamp;
   sendParamToPipewire("set_preamp", currentPreamp);
   lastSentEqSig = null;   // a sávokat mindenképp átadjuk
@@ -7469,7 +7635,13 @@ function applyEngineState(st, fromSync) {
         setCtl("agcTarget", st.autogain.target);
         setCtl("agcMaxGain", st.autogain.maxGain);
       }
-      ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'magic'].forEach(m => {
+      if (st.outstage) {
+        const o = st.outstage;
+        setCtl("osDelayL", o.delayL); setCtl("osDelayR", o.delayR); setCtl("osGainL", o.gainL); setCtl("osGainR", o.gainR);
+        setCtl("osInvertL", !!o.invertL); setCtl("osInvertR", !!o.invertR);
+        setCtl("osDither", o.dither); setCtl("osBits", o.bits === 16 ? 0 : 1);
+      }
+      ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'outstage', 'magic'].forEach(m => {
         if (m in mods) setModuleActive(m, !!mods[m]);
       });
       renderMagicCompare();
@@ -7509,7 +7681,7 @@ function applyEngineState(st, fromSync) {
     } else {
       // A motor még sosem kapott beállítást: teljesen tiszta, kikapcsolt (bypass) alapállapot
       nodes.forEach(n => { n.gain = 0.0; });
-      ['crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'eq', 'magic'].forEach(m => setModuleActive(m, false));
+      ['crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'outstage', 'eq', 'magic'].forEach(m => setModuleActive(m, false));
       currentPreamp = 0.0;
       autoPreampMode = false;
       setPreampBadge("preamp.clean", 0, "optimal");
@@ -7733,12 +7905,15 @@ function initPipewireBridge() {
           onIrMissing(data.id);
         } else if (data.type === "multiout") {
           moOnStatus(data.status);
+        } else if (data.type === "audio_opts") {
+          aoOnMessage(data);
         } else if (data.type === "state") {
           updateLibraryCaps(!!(data.caps && Array.isArray(data.caps) && data.caps.includes("library")));
           engineIrLibrary = data.irLibrary === true;
           if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);
           syncLanguageWithEngine(data.language);
           moOnCaps(data.caps);
+          aoOnCaps(data.caps);
           const stZone = typeof data.zone === "number" ? data.zone : 0;
           // Teljes állapotot csak a munkamenet első csatlakozásakor veszünk át. Újracsatlakozáskor
           // (pl. a motor rövid ideig nem volt elérhető) a felület a forrás: a közben tett változtatások nem vesznek el.
@@ -7796,6 +7971,7 @@ function initPipewireBridge() {
         } else if (data.type === "status") {
           engineStatus = data;
           updateEngineBadge();
+          if (aoCaps) aoRenderPath();
           if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);
           if (typeof data.gr === "number") updateLimiterMeters(null, data.gr);
           updateMagicDiag(data.magic || null);
@@ -8162,7 +8338,8 @@ document.addEventListener("click", (e) => {
 /** Nyelvváltáskor minden futás közben előállított felirat újra (a statikusakat az applyI18nDom intézi). */
 function refreshDynamicTexts() {
   applyWfView();
-  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'magic'].forEach(renderModuleTexts);
+  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'outstage', 'magic'].forEach(renderModuleTexts);
+  if (aoOpts) aoOnMessage({ opts: aoOpts });
   renderAbButtons();   // a végén a gombsor illesztése is (fitEqActionRow): a feliratok hossza nyelvenként más
   renderMagicCompare();
   updateMagicDiag(magicDiagLast);

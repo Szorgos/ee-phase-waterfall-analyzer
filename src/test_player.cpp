@@ -1433,6 +1433,79 @@ static void testErrors() {
     fs::remove(bad, ec);
 }
 
+/** TXXX keret (Latin-1): leírás + érték. */
+static std::vector<uint8_t> txxx(const std::string& desc, const std::string& value) {
+    std::vector<uint8_t> b = { 0 };
+    b.insert(b.end(), desc.begin(), desc.end()); b.push_back(0);
+    b.insert(b.end(), value.begin(), value.end());
+    return b;
+}
+
+static void testReplayGain() {
+    std::printf("[RG] ReplayGain: címkék (Vorbis, Opus R128, ID3 TXXX), erősítés a lejátszóban, előbetöltés\n");
+    TrackTags t;
+    const std::string c1 = "REPLAYGAIN_TRACK_GAIN=-6.50 dB", c2 = "replaygain_album_peak=0.988", c3 = "R128_ALBUM_GAIN=-2560";
+    detail::applyVorbisComment(c1.data(), c1.size(), t);
+    detail::applyVorbisComment(c2.data(), c2.size(), t);
+    detail::applyVorbisComment(c3.data(), c3.size(), t);
+    CHECK(std::abs(t.rgTrackGain + 6.5f) < 1e-4f && std::abs(t.rgAlbumPeak - 0.988f) < 1e-4f && std::abs(t.rgAlbumGain + 5.0f) < 1e-4f,
+          "Vorbis: szám %.2f dB, album csúcs %.3f, R128 album -2560 -> %.2f dB (a -18 LUFS-os referenciához)",
+          t.rgTrackGain, t.rgAlbumPeak, t.rgAlbumGain);
+    const std::vector<uint8_t> tag = id3Tag23({ id3Frame23("TXXX", txxx("REPLAYGAIN_TRACK_GAIN", "-6.02 dB")),
+                                                id3Frame23("TXXX", txxx("REPLAYGAIN_TRACK_PEAK", "0.400000")) });
+    TrackTags t2;
+    detail::parseId3v2(tag.data(), tag.size(), t2);
+    CHECK(std::abs(t2.rgTrackGain + 6.02f) < 1e-4f && std::abs(t2.rgTrackPeak - 0.4f) < 1e-4f, "ID3 TXXX: %.2f dB, csúcs %.3f",
+          t2.rgTrackGain, t2.rgTrackPeak);
+
+    // MP3 a fenti ID3 címkével: -6 dB szám szerint, a csúcs-korlát (1 / 0,4) nem szól bele
+    std::vector<uint8_t> mp3 = readFile(kData + "/player_stereo44.mp3");
+    std::vector<uint8_t> tagged = tag;
+    tagged.insert(tagged.end(), mp3.begin(), mp3.end());
+    const std::string path = tmpPath("aq_rg_test.mp3");
+    { std::ofstream f(path, std::ios::binary); f.write(reinterpret_cast<const char*>(tagged.data()), static_cast<std::streamsize>(tagged.size())); }
+    auto rms = [](const std::vector<float>& x) { double e = 0; for (float v : x) e += double(v) * v; return std::sqrt(e / std::max<size_t>(1, x.size())); };
+    double level[3] = {};
+    for (int mode = 0; mode < 3; ++mode) {
+        auto* out = new FakeOutput;
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        p.setReplayGain(mode == 0 ? 0 : 1, mode == 2 ? 3.0f : 0.0f, true);
+        std::string err;
+        if (!p.open(path, &err)) { CHECK(false, "a címkézett MP3 nem nyitható: %s", err.c_str()); return; }
+        level[mode] = rms(pullFrames(p, *out, 22050));
+    }
+    const double dB = 20 * std::log10(level[1] / level[0]), dBpre = 20 * std::log10(level[2] / level[0]);
+    CHECK(std::abs(dB + 6.02) < 0.05, "szám szerinti ReplayGain: %.2f dB (várt -6,02)", dB);
+    CHECK(std::abs(dBpre + 3.02) < 0.05, "+3 dB előerősítéssel: %.2f dB (várt -3,02)", dBpre);
+
+    // címke nélküli fájl ReplayGainnel: érintetlen; előbetöltéssel is bitpontos, és a másolat a végén törlődik
+    const uint32_t sr = 48000;
+    std::vector<float> src(sr * 2);
+    for (size_t i = 0; i < sr; ++i) { src[2 * i] = static_cast<float>(0.3 * std::sin(0.01 * i)); src[2 * i + 1] = -src[2 * i]; }
+    const std::string wav = tmpPath("aq_rg_plain.wav");
+    writeWavFloat(wav, sr, 2, src);
+    {
+        auto* out = new FakeOutput;
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        p.setReplayGain(2, 6.0f, true);
+        p.setPreload(true);
+        std::string err;
+        CHECK(p.open(wav, &err), "előbetöltéssel megnyitva");
+        size_t copies = 0;
+        std::error_code ec;
+        const char* x = std::getenv("XDG_RUNTIME_DIR");
+        const fs::path dir = (x && *x && fs::is_directory(x, ec)) ? fs::path(x) / "aqulify-preload" : fs::temp_directory_path() / "aqulify-preload";
+        for (auto it = fs::directory_iterator(dir, ec); !ec && it != fs::directory_iterator(); ++it) ++copies;
+        const std::vector<float> a = pullFrames(p, *out, sr / 2);
+        CHECK(a.size() == sr && std::equal(a.begin(), a.end(), src.begin()), "címke nélkül, előbetöltve: bitpontos (%zu másolat a memóriában)", copies);
+        CHECK(copies >= 1, "a fájl másolata a memóriában (%s)", dir.string().c_str());
+        p.stop();
+        size_t left = 0;
+        for (auto it = fs::directory_iterator(dir, ec); !ec && it != fs::directory_iterator(); ++it) ++left;
+        CHECK(left == 0, "leállítás után a másolat törlődött (%zu maradt)", left);
+    }
+}
+
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);   // hiba esetén se vesszen el a kimenet (pl. CI, átirányítás)
     std::printf("========================================================\n");
@@ -1441,6 +1514,7 @@ int main() {
     testDecoders();
     testSeek();
     testTags();
+    testReplayGain();
     testPlayer();
     testDownmix();
     testOutputLatency();

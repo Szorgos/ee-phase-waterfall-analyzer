@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "aq_i18n.hpp"
+#include "audio_options.hpp"
 #include "linux_store.hpp"
 #include "mac_engine.hpp"
 #include "mac_media.hpp"
@@ -120,6 +121,11 @@ struct Core {
     std::array<std::string, 3> multiTargets{};
     std::atomic<bool> multiDirty{false};
 
+    // Haladó hangkimenet (audio.json): macOS-en csak a pufferméret állítható (a mintavételt és az órajel-eltérést a
+    // Core Audio kezeli; az IOProc folyamatosan fut, így a hangkártya nem alszik el)
+    std::mutex audioMutex;
+    audioopt::AudioOptions audioOpts;
+
     std::mutex outputMutex;
     std::string selectedOutput;   // UID, vagy üres: a rendszer alapértelmezettje
     std::string sinksJson = "[]", currentSink = "default";
@@ -205,9 +211,38 @@ struct Core {
         case mac::Problem::Device: s += ",\"problem\":\"device\""; break;
         case mac::Problem::None: break;
         }
-        std::lock_guard<std::mutex> lk(outputMutex);
-        s += ",\"currentSink\":\"" + jsonEscape(currentSink) + "\",\"outputSinks\":" + sinksJson;
-        return s;
+        {
+            std::lock_guard<std::mutex> lk(outputMutex);
+            s += ",\"currentSink\":\"" + jsonEscape(currentSink) + "\",\"outputSinks\":" + sinksJson;
+        }
+        {
+            float lv = 0.0f;
+            bool mu = false;
+            if (engine.outputVolume(lv, mu))
+                s += ",\"volume\":{\"level\":" + std::to_string(lv) + ",\"muted\":" + (mu ? "true" : "false") + "}";
+        }
+        // Jelút és késleltetés: az IO-puffer, a DSP saját késleltetése, terhelés, bitpontosság
+        ParamData p;
+        { std::lock_guard<std::mutex> lk(paramMutex); p = current; }
+        bool crossover = false;
+        { std::lock_guard<std::mutex> lk(multiMutex); crossover = multiState.enabled && multiState.mode == multiout::Mode::Crossover; }
+        const double sr = std::max<uint32_t>(1, engine.sampleRate());
+        const uint32_t q = engine.bufferFrames();
+        const size_t eqLat = p.has(kFlagEq) ? engine.chain.eqLatencySamples() : 0;
+        const size_t limLat = p.has(kFlagLimiter) ? engine.chain.limiterLatencySamples() : 0;
+        const size_t convLat = p.has(kFlagConvolver) && engine.chain.convolverActive() && q ? ee::ZitaInstance::latencyFor(q) : 0;
+        const double dspMs = 1000.0 * static_cast<double>(eqLat + limLat + convLat) / sr, bufMs = 1000.0 * q / sr;
+        int reqBuf = 0;
+        { std::lock_guard<std::mutex> lk(audioMutex); reqBuf = audioOpts.bufferFrames; }
+        char pb[512];
+        std::snprintf(pb, sizeof(pb),
+                      ",\"path\":{\"quantum\":%u,\"bufReq\":%d,\"bufMs\":%.2f,\"eqLat\":%zu,\"limLat\":%zu,\"convLat\":%zu,"
+                      "\"dspMs\":%.2f,\"totalMs\":%.1f,\"load\":%.1f,\"peak\":%.1f,\"overruns\":%u,\"transparent\":%s,"
+                      "\"keepAwake\":false,\"playerRate\":%u,\"playerGain\":%.2f}",
+                      q, reqBuf, bufMs, eqLat, limLat, convLat, dspMs, 2.0 * bufMs + dspMs, 100.0 * engine.dspLoad(),
+                      100.0 * engine.takeDspPeak(), engine.overruns(), !AetherChain::modifiesSignal(p) && !crossover ? "true" : "false",
+                      filePlayer.streamRate(), filePlayer.hasTrack() ? filePlayer.currentGainDb() : 0.0f);
+        return s + pb;
     }
 
     void setOutput(const std::string& target) {
@@ -431,6 +466,35 @@ struct Core {
     cb.saveRemote = [](const std::string& doc) { return linux_store::saveRemote(doc); };
     // Ablak bezárása „Bezárás” választással: az alkalmazás kilép (a motor vele áll le, a hang nem változik)
     cb.quitEngine = [] { dispatch_async(dispatch_get_main_queue(), ^{ [NSApp terminate:nil]; }); };
+
+    // Haladó hangkimenet: a mentett pufferméret indításkor is érvényes
+    {
+        const std::string doc = linux_store::loadAudioOptions();
+        json::Value v;
+        if (!doc.empty() && json::parse(doc, v)) c->audioOpts = audioopt::fromJson(v);
+        c->engine.setBufferFrames(static_cast<uint32_t>(c->audioOpts.bufferFrames));
+        c->filePlayer.setReplayGain(c->audioOpts.replayGain, c->audioOpts.rgPreampDb, c->audioOpts.rgPreventClip);
+        c->filePlayer.setPreload(c->audioOpts.preload);
+    }
+    cb.setVolume = [c](double level, int mute) { c->engine.setOutputVolume(static_cast<float>(level), mute); };
+    cb.audioOptionsJson = [c]() -> std::string {
+        std::lock_guard<std::mutex> lk(c->audioMutex);
+        return "{\"opts\":" + audioopt::toJson(c->audioOpts) +
+               ",\"caps\":{\"buffer\":true,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true}}";
+    };
+    cb.setAudioOptions = [c](const json::Value& v) {
+        std::lock_guard<std::mutex> lk(c->audioMutex);
+        audioopt::AudioOptions o = audioopt::fromJson(v, c->audioOpts);
+        o.keepAwake = false;
+        o.rateMode = audioopt::RateMode::System;
+        o.resampleQuality = -1;
+        if (o == c->audioOpts) return;
+        c->audioOpts = o;
+        c->engine.setBufferFrames(static_cast<uint32_t>(o.bufferFrames));
+        c->filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
+        c->filePlayer.setPreload(o.preload);
+        if (!linux_store::saveAudioOptions(audioopt::toJson(o))) std::cerr << "[Hangkimenet] Figyelem: az audio.json nem írható.\n";
+    };
 
     // Több kimenet: a beállítás és a zónák lánca / IR-je megmarad, de induláskor ki van kapcsolva (a hangzás nem
     // változik). A 2–4. kimenet céleszköze csak a rendszer egy használható kimeneti eszköze lehet (UID).

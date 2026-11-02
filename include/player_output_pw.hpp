@@ -18,6 +18,7 @@
 #include <cstring>
 #include <string>
 
+#include "audio_options.hpp"
 #include "file_player.hpp"
 
 namespace ee_analyzer::player {
@@ -50,6 +51,9 @@ public:
             "target.object", target_.c_str(),   // PW_KEY_TARGET_OBJECT (0.3.64-től)
             "node.target", target_.c_str(),     // régebbi PipeWire / WirePlumber
             nullptr);
+        // A fájl mintavételét a PipeWire alakítja a gráféra (ha eltér): a minőség a haladó beállításból
+        if (const int q = audioopt::resampleQuality().load(); q >= 0)
+            pw_properties_set(props, "resample.quality", std::to_string(q).c_str());
         stream_ = pw_stream_new(core_, "aqulify_player", props);
         if (!stream_) {
             pw_thread_loop_unlock(loop_);

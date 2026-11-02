@@ -19,6 +19,10 @@
  * A kimenetek közti időeltolódás így legfeljebb két quantum, és indításonként eltérhet (független zónáknál nem
  * hallható; keresztváltónál a pontos igazítás még nincs megoldva).
  * A céleszköz eltűnésekor a stream nem kapcsolódik át máshová (node.dont-reconnect).
+ *
+ * Haladó hangkimenet (audio_options.hpp): a pufferméret a csomópontok node.latency kérése (futás közben is
+ * változtatható; a gráf a legkisebb kérést veszi). Ébren tartásnál egy csendes, nem passzív hangfolyam szól a saját
+ * virtuális eszközünkre, így a lánc és a hangkártya akkor sem alszik el, ha éppen senki nem játszik.
  */
 #include <pipewire/pipewire.h>
 #include <spa/param/audio/format-utils.h>
@@ -28,6 +32,7 @@
 #include <array>
 #include <atomic>
 #include <cstring>
+#include <ctime>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -36,6 +41,7 @@
 #include <vector>
 
 #include "aether_chain.hpp"
+#include "audio_options.hpp"
 #include "multi_output.hpp"
 #include "aq_i18n.hpp"
 #include "param_block.hpp"
@@ -79,6 +85,7 @@ public:
         std::atomic<uint32_t> underruns{0};
         std::atomic<uint32_t> availMin{~0u}, availMax{0}, reads{0}, lastN{0};   // diagnosztika: töltöttség olvasáskor
         bool primed = false;                          // csak a stream saját szála
+        int createdQuality = -1;                      // az újramintavételezés minősége a létrehozáskor
     };
 
     explicit AetherSinkNode(uint32_t initialRate = 48000) {
@@ -114,6 +121,30 @@ public:
         }
         if (loop && zoneEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), zoneEvent_);
     }
+
+    /**
+     * Pufferméret-kérés (mintában, 0: automatikus) és a hangkártya ébren tartása (bármely szálról). A változás a fő
+     * hurok szálán lép életbe; az újramintavételezés minőségének változásakor a további kimenetek újraépülnek.
+     * autoFrames: a rendszer alapértelmezett quantuma. A PipeWire a már beállított node.latency-t nem törli, ezért
+     * automatikusra visszaváltáskor ezt kérjük (a hangfolyam létrehozásakor automatikusnál nincs kérés).
+     */
+    void setAudioOptions(int bufferFrames, bool keepAwake, int autoFrames = 1024) {
+        latencyReq_.store(static_cast<uint32_t>(std::max(0, bufferFrames)));
+        autoLatency_.store(static_cast<uint32_t>(std::max(32, autoFrames)));
+        keepAwakeWanted_.store(keepAwake);
+        if (loop && optsEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), optsEvent_);
+    }
+
+    /** A legutóbbi feldolgozott blokk hossza (a gráf tényleges quantuma) mintában. */
+    uint32_t actualQuantum() const { return lastQuantum_.load(std::memory_order_relaxed); }
+    /** A feldolgozás átlagos terhelése a quantum idejéhez képest (0–1, csúszó átlag). */
+    float dspLoad() const { return loadAvg_.load(std::memory_order_relaxed); }
+    /** A legnagyobb terhelés az előző lekérdezés óta (a lekérdezés nullázza). */
+    float takeDspPeak() { return loadPeak_.exchange(0.0f, std::memory_order_relaxed); }
+    /** Hányszor tartott a feldolgozás tovább, mint egy quantum ideje (akadásveszély) az indítás óta. */
+    uint32_t overruns() const { return overruns_.load(std::memory_order_relaxed); }
+    /** Fut-e az ébren tartó hangfolyam. */
+    bool keepAwakeActive() const { return keepAliveStreaming_.load(); }
 
     /** A k-adik kimenet (1–3) saját lánca, pl. impulzusválasz egy zónának (submitIr szálbiztos). */
     AetherChain& zoneChain(int k) { return multi_.chain(k); }
@@ -171,6 +202,7 @@ public:
             SPA_KEY_AUDIO_POSITION, "FL,FR",
             "device.icon-name", "audio-card",
             nullptr);
+        applyLatencyProp(cprops);
         capture = pw_stream_new(core, (sinkName + "_input").c_str(), cprops);
 
         // 2. Lejátszó stream a valódi hangeszköz felé
@@ -185,6 +217,7 @@ public:
             SPA_KEY_AUDIO_POSITION, "FL,FR",
             PW_KEY_MEDIA_ROLE, "DSP",
             nullptr);
+        applyLatencyProp(pprops);
         playback = pw_stream_new(core, (sinkName + "_output").c_str(), pprops);
         if (!capture || !playback) return fail("a streamek nem hozhatók létre");
 
@@ -208,6 +241,8 @@ public:
         sinkName_ = sinkName;
         description_ = description;
         zoneEvent_ = pw_loop_add_event(pw_main_loop_get_loop(loop), onZoneEvent, this);
+        optsEvent_ = pw_loop_add_event(pw_main_loop_get_loop(loop), onOptsEvent, this);
+        appliedLatency_ = latencyReq_.load();
 
         // Formátum: 32 bites lebegőpontos, sztereó, nem-interleaved; a mintavételt a gráf adja (rate = 0)
         uint8_t buf[1024];
@@ -234,6 +269,7 @@ public:
                                                            PW_STREAM_FLAG_RT_PROCESS | PW_STREAM_FLAG_TRIGGER),
                               pparams, 1) < 0)
             return fail("a lejátszó stream nem csatlakoztatható");
+        if (keepAwakeWanted_.load()) createKeepAlive();
         return true;
     }
 
@@ -255,6 +291,7 @@ public:
 
     void shutdown() {
         for (auto& z : zones_) if (z && z->stream) { pw_stream_destroy(z->stream); z->stream = nullptr; }
+        destroyKeepAlive();
         chain.stopWorker();
         multi_.stopWorkers();
         if (capture) { pw_stream_destroy(capture); capture = nullptr; }
@@ -274,6 +311,17 @@ private:
     std::array<std::string, kExtraZones> wantedTargets_{};
     std::mutex zoneMutex_;
     struct spa_source* zoneEvent_ = nullptr;
+    struct spa_source* optsEvent_ = nullptr;
+    std::atomic<uint32_t> latencyReq_{0};             // a kért pufferméret mintában (0: automatikus)
+    std::atomic<uint32_t> autoLatency_{1024};         // automatikusra visszaváltáskor kért érték
+    uint32_t appliedLatency_ = 0;                     // csak a fő hurok szála
+    std::atomic<bool> keepAwakeWanted_{false};
+    struct pw_stream* keepAlive_ = nullptr;           // csak a fő hurok szála
+    struct spa_hook keepAliveListener_{};
+    std::atomic<bool> keepAliveStreaming_{false};
+    std::atomic<uint32_t> lastQuantum_{0};
+    std::atomic<float> loadAvg_{0.0f}, loadPeak_{0.0f};
+    std::atomic<uint32_t> overruns_{0};
     std::string group_, sinkName_, description_;
     std::vector<float> inL_, inR_;
     std::array<std::vector<float>, kExtraZones> zoneL_, zoneR_;
@@ -288,7 +336,7 @@ private:
         }
         for (int k = 0; k < kExtraZones; ++k) {
             ZoneStream& z = *self->zones_[k];
-            if (z.stream && z.target == want[k]) continue;
+            if (z.stream && z.target == want[k] && z.createdQuality == audioopt::resampleQuality().load()) continue;
             if (z.stream) {
                 pw_stream_destroy(z.stream);
                 z.stream = nullptr;
@@ -316,6 +364,9 @@ private:
             SPA_KEY_AUDIO_POSITION, "FL,FR",
             PW_KEY_MEDIA_ROLE, "DSP",
             nullptr);
+        z.createdQuality = audioopt::resampleQuality().load();
+        if (z.createdQuality >= 0) pw_properties_set(props, "resample.quality", std::to_string(z.createdQuality).c_str());
+        applyLatencyProp(props);
         z.stream = pw_stream_new(core, name.c_str(), props);
         if (!z.stream) {
             std::cerr << "[PipeWire] a(z) " << (z.index + 1) << ". kimenet streamje nem hozható létre\n";
@@ -408,6 +459,126 @@ private:
         pw_stream_queue_buffer(z->stream, out);
     }
 
+    /** A kért pufferméret a létrehozandó hangfolyam tulajdonságai közé (node.latency = N/mintavétel). */
+    void applyLatencyProp(struct pw_properties* props) const {
+        const uint32_t n = latencyReq_.load();
+        if (n > 0) pw_properties_setf(props, PW_KEY_NODE_LATENCY, "%u/%u", n, sampleRate.load());
+    }
+
+    /** A fő hurok szálán: a pufferméret frissítése a meglévő hangfolyamokon, az ébren tartás be / ki. */
+    static void onOptsEvent(void* data, uint64_t) {
+        auto* self = static_cast<AetherSinkNode*>(data);
+        const uint32_t n = self->latencyReq_.load();
+        if (n != self->appliedLatency_) {
+            self->appliedLatency_ = n;
+            char val[32];
+            std::snprintf(val, sizeof(val), "%u/%u", n > 0 ? n : self->autoLatency_.load(), self->sampleRate.load());
+            struct spa_dict_item item = SPA_DICT_ITEM_INIT(PW_KEY_NODE_LATENCY, val);
+            struct spa_dict dict = SPA_DICT_INIT(&item, 1);
+            for (struct pw_stream* st : { self->capture, self->playback, self->keepAlive_ })
+                if (st) pw_stream_update_properties(st, &dict);
+            for (auto& z : self->zones_) if (z && z->stream) pw_stream_update_properties(z->stream, &dict);
+            std::cout << "[PipeWire] Pufferméret: " << (n ? std::to_string(n) + " minta" : std::string("automatikus")) << "\n";
+        }
+        const bool want = self->keepAwakeWanted_.load();
+        if (want && !self->keepAlive_) self->createKeepAlive();
+        else if (!want && self->keepAlive_) self->destroyKeepAlive();
+        onZoneEvent(data, 0);   // az újramintavételezés minősége változhatott
+    }
+
+    /**
+     * Ébren tartás: csendes, nem passzív hangfolyam a saját virtuális eszközünkre (nem a link-group tagja, így a
+     * WirePlumber rá köti). Amíg szól, a lánc fut, és a hangkártya nem függesztődik fel.
+     */
+    void createKeepAlive() {
+        if (keepAlive_ || !core) return;
+        struct pw_properties* props = pw_properties_new(
+            PW_KEY_MEDIA_TYPE, "Audio",
+            PW_KEY_MEDIA_CATEGORY, "Playback",
+            PW_KEY_NODE_NAME, (sinkName_ + "_keepalive").c_str(),
+            PW_KEY_NODE_DESCRIPTION, (description_ + " – ébren tartás").c_str(),
+            PW_KEY_APP_NAME, "Aqulify",
+            PW_KEY_TARGET_OBJECT, sinkName_.c_str(),
+            PW_KEY_NODE_DONT_RECONNECT, "true",
+            PW_KEY_AUDIO_CHANNELS, "2",
+            SPA_KEY_AUDIO_POSITION, "FL,FR",
+            nullptr);
+        applyLatencyProp(props);
+        keepAlive_ = pw_stream_new(core, (sinkName_ + "_keepalive").c_str(), props);
+        if (!keepAlive_) return;
+        static const struct pw_stream_events events = [] {
+            pw_stream_events e{};
+            e.version = PW_VERSION_STREAM_EVENTS;
+            e.process = onKeepAliveProcess;
+            e.state_changed = onKeepAliveState;
+            return e;
+        }();
+        spa_zero(keepAliveListener_);
+        pw_stream_add_listener(keepAlive_, &keepAliveListener_, &events, this);
+        uint8_t buf[1024];
+        struct spa_audio_info_raw info{};
+        info.format = SPA_AUDIO_FORMAT_F32P;
+        info.channels = 2;
+        info.position[0] = SPA_AUDIO_CHANNEL_FL;
+        info.position[1] = SPA_AUDIO_CHANNEL_FR;
+        struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buf, sizeof(buf));
+        const struct spa_pod* params[1] = { spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &info) };
+        if (pw_stream_connect(keepAlive_, PW_DIRECTION_OUTPUT, PW_ID_ANY,
+                              static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
+                                                           PW_STREAM_FLAG_RT_PROCESS),
+                              params, 1) < 0) {
+            pw_stream_destroy(keepAlive_);
+            keepAlive_ = nullptr;
+            std::cerr << "[PipeWire] az ébren tartó hangfolyam nem csatlakoztatható\n";
+            return;
+        }
+        std::cout << "[PipeWire] Hangkártya ébren tartása: be\n";
+    }
+
+    void destroyKeepAlive() {
+        if (!keepAlive_) return;
+        pw_stream_destroy(keepAlive_);
+        keepAlive_ = nullptr;
+        keepAliveStreaming_ = false;
+        std::cout << "[PipeWire] Hangkártya ébren tartása: ki\n";
+    }
+
+    static void onKeepAliveState(void* data, enum pw_stream_state, enum pw_stream_state state, const char*) {
+        static_cast<AetherSinkNode*>(data)->keepAliveStreaming_ = (state == PW_STREAM_STATE_STREAMING);
+    }
+
+    static void onKeepAliveProcess(void* data) {
+        auto* self = static_cast<AetherSinkNode*>(data);
+        struct pw_buffer* out = pw_stream_dequeue_buffer(self->keepAlive_);
+        if (!out) return;
+        struct spa_buffer* ob = out->buffer;
+        const uint32_t maxFrames = ob->n_datas ? ob->datas[0].maxsize / sizeof(float) : 0;
+        uint32_t n = out->requested ? std::min<uint32_t>(static_cast<uint32_t>(out->requested), maxFrames) : 0;
+        if (n == 0) n = std::min<uint32_t>(1024, maxFrames);
+        for (uint32_t i = 0; i < ob->n_datas; ++i) {
+            if (ob->datas[i].data) std::memset(ob->datas[i].data, 0, std::min<uint32_t>(n * sizeof(float), ob->datas[i].maxsize));
+            ob->datas[i].chunk->offset = 0;
+            ob->datas[i].chunk->size = n * sizeof(float);
+            ob->datas[i].chunk->stride = sizeof(float);
+        }
+        pw_stream_queue_buffer(self->keepAlive_, out);
+    }
+
+    /** A feldolgozás terhelése: az eltelt idő a quantum idejéhez képest (valós idejű szál, foglalás nélkül). */
+    void noteLoad(const struct timespec& t0, uint32_t n) {
+        struct timespec t1;
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        const double dt = static_cast<double>(t1.tv_sec - t0.tv_sec) + 1e-9 * static_cast<double>(t1.tv_nsec - t0.tv_nsec);
+        const uint32_t sr = sampleRate.load(std::memory_order_relaxed);
+        if (n == 0 || sr == 0) return;
+        const float load = static_cast<float>(dt * sr / n);
+        lastQuantum_.store(n, std::memory_order_relaxed);
+        const float avg = loadAvg_.load(std::memory_order_relaxed);
+        loadAvg_.store(avg + 0.05f * (load - avg), std::memory_order_relaxed);
+        if (load > loadPeak_.load(std::memory_order_relaxed)) loadPeak_.store(load, std::memory_order_relaxed);
+        if (load > 1.0f) overruns_.fetch_add(1, std::memory_order_relaxed);
+    }
+
     bool fail(const char* what) {
         std::cerr << "[Hiba] PipeWire: " << what << "\n";
         return false;
@@ -444,6 +615,8 @@ private:
 
     static void onPlaybackProcess(void* data) {
         auto* self = static_cast<AetherSinkNode*>(data);
+        struct timespec t0;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
 
         // A legfrissebb bemeneti buffer (a régebbieket visszaadjuk)
         struct pw_buffer* in = nullptr;
@@ -544,6 +717,7 @@ private:
         }
         pw_stream_queue_buffer(self->playback, out);
         if (in) pw_stream_queue_buffer(self->capture, in);
+        self->noteLoad(t0, n);
     }
 };
 

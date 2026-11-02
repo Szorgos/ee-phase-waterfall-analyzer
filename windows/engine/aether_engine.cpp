@@ -42,13 +42,57 @@
 #include "../common/eqapo_paths.hpp"
 #include "dsp_state.hpp"
 #include "wasapi_loopback.hpp"
+#include <endpointvolume.h>
 #include "tray.hpp"
 #include "media_smtc.hpp"
+#include "audio_options.hpp"
 #include "file_player.hpp"
 #include "library_bridge.hpp"
 #include "player_output_wasapi.hpp"
 
 using namespace ee_analyzer;
+
+namespace {
+// A „most szól” sáv hangerő-csúszkája: az alapértelmezett lejátszóeszköz hangereje (mint a tálca hangerő-szabályzójáé)
+const IID kIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
+
+template <class F>
+bool withEndpointVolume(F&& fn) {
+    const HRESULT ci = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    bool ok = false;
+    {
+        win::ComPtr<IMMDeviceEnumerator> en;
+        win::ComPtr<IMMDevice> dev;
+        win::ComPtr<IAudioEndpointVolume> vol;
+        if (SUCCEEDED(CoCreateInstance(win::kCLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL, win::kIID_IMMDeviceEnumerator,
+                                       reinterpret_cast<void**>(en.put()))) &&
+            SUCCEEDED(en->GetDefaultAudioEndpoint(eRender, eConsole, dev.put())) &&
+            SUCCEEDED(dev->Activate(kIID_IAudioEndpointVolume, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(vol.put())))) {
+            ok = fn(vol.p);
+        }
+    }
+    if (SUCCEEDED(ci)) CoUninitialize();
+    return ok;
+}
+
+std::string endpointVolumeJson() {
+    float level = 0.0f;
+    BOOL muted = FALSE;
+    if (!withEndpointVolume([&](IAudioEndpointVolume* v) {
+            return SUCCEEDED(v->GetMasterVolumeLevelScalar(&level)) && SUCCEEDED(v->GetMute(&muted));
+        }))
+        return {};
+    return ",\"volume\":{\"level\":" + std::to_string(level) + ",\"muted\":" + (muted ? "true" : "false") + "}";
+}
+
+void setEndpointVolume(double level, int mute) {
+    withEndpointVolume([&](IAudioEndpointVolume* v) {
+        if (level >= 0.0) v->SetMasterVolumeLevelScalar(static_cast<float>(std::min(1.0, level)), nullptr);
+        if (mute >= 0) v->SetMute(mute ? TRUE : FALSE, nullptr);
+        return true;
+    });
+}
+} // namespace
 
 namespace {
 
@@ -515,7 +559,8 @@ int main(int argc, char** argv) {
         }
         sources.pushParams(p);
     };
-    cb.statusFields = [&]() { return sources.statusFields(); };
+    cb.statusFields = [&]() { return sources.statusFields() + endpointVolumeJson(); };
+    cb.setVolume = [](double level, int mute) { setEndpointVolume(level, mute); };
     cb.setIr = [&](IrData&& ir) { sources.setIr(std::move(ir)); };
     cb.getIr = [&]() { return sources.irCopy(); };
     cb.loadLibraryIr = loadLibraryIr;
@@ -612,6 +657,39 @@ int main(int argc, char** argv) {
     // Ablak bezárása „Bezárás” választással: ugyanaz, mint a tálcamenü „Kilépés” pontja (rendes leállás)
     static std::atomic<win::TrayApp*> s_tray{ nullptr };
     cb.quitEngine = [] { if (win::TrayApp* t = s_tray.load()) t->quit(); };
+
+    // Haladó hangkimenet Windowson: csak a beépített lejátszó beállításai (ReplayGain, előbetöltés). A pufferméretet
+    // és a mintavételt a Windows hangmotorja határozza meg (az Equalizer APO abban fut).
+    std::mutex audioMutex;
+    audioopt::AudioOptions audioOpts;
+    auto playerOnly = [](audioopt::AudioOptions o) {
+        o.bufferFrames = 0;
+        o.keepAwake = false;
+        o.rateMode = audioopt::RateMode::System;
+        o.resampleQuality = -1;
+        return o;
+    };
+    {
+        const std::string doc = readSmallFile(userFilePath(L"audio.json", false), 64 * 1024);
+        json::Value v;
+        if (!doc.empty() && json::parse(doc, v)) audioOpts = playerOnly(audioopt::fromJson(v));
+        filePlayer.setReplayGain(audioOpts.replayGain, audioOpts.rgPreampDb, audioOpts.rgPreventClip);
+        filePlayer.setPreload(audioOpts.preload);
+    }
+    cb.audioOptionsJson = [&]() -> std::string {
+        std::lock_guard<std::mutex> lk(audioMutex);
+        return "{\"opts\":" + audioopt::toJson(audioOpts) +
+               ",\"caps\":{\"buffer\":false,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true}}";
+    };
+    cb.setAudioOptions = [&](const json::Value& v) {
+        std::lock_guard<std::mutex> lk(audioMutex);
+        const audioopt::AudioOptions o = playerOnly(audioopt::fromJson(v, audioOpts));
+        if (o == audioOpts) return;
+        audioOpts = o;
+        filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
+        filePlayer.setPreload(o.preload);
+        writeFileAtomic(userFilePath(L"audio.json", true), audioopt::toJson(o));
+    };
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     cb.setLanguage = [](const std::string& l) {
         if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cout << "[Nyelv] Figyelem: a language.txt nem írható.\n";
