@@ -66,7 +66,7 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
 
 6. **Több kimenet – 2–4 hangkártya egyszerre (Linux és macOS):**
    * **Független zónák:** minden kimenet saját, teljes DSP-lánccal szól. Például az egyik DAC-on fejhallgató a saját AutoEq-profiljával, a másikon hangfal szobakorrekcióval (EQ vagy impulzusválasz). A fejlécben a **„Szerkesztett kimenet: 1 | 2 | …”** választóval döntöd el, melyik kimenetet állítod: minden modul (EQ, Konvolver, Crossfeed, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch), minden profil és import arra a kimenetre vonatkozik.
-   * **Aktív keresztváltó:** a közös lánc után a jel Linkwitz–Riley szűrőkkel (12 / 24 / 48 dB/oktáv) 2–4 sávra bomlik, és minden kimenet egy sávot kap (pl. mélynyomó és szatelitek). A sávok összege amplitúdóban egyenes.
+   * **Aktív keresztváltó (kísérleti):** a közös lánc után a jel Linkwitz–Riley szűrőkkel (12 / 24 / 48 dB/oktáv) 2–4 sávra bomlik, és minden kimenet egy sávot kap (pl. mélynyomó és szatelitek). A sávok összege amplitúdóban egyenes.
    * Kimenetenként erősítés, késleltetés (a hangszórók távolságához, cm-ben is kijelezve) és polaritás.
    * **Beállítás:** *Kimenetek* fül → bekapcsolás → a 2–4. kimenet hangkártyája a listából. Induláskor a több kimenet kikapcsolva indul (a hangzás nem változik), a beállítás és a kimenetek profiljai megmaradnak. Ha egy hangkártyát kihúzol, a hozzá tartozó kimenet elnémul, és nem szól máshol.
    * **Linuxon** a PipeWire egy ütemezőhöz rendeli a kimeneteket (a többi hangkártya adaptív újramintavételezéssel követi), **macOS-en** a hangkártyák egy privát aggregált eszközbe kerülnek a Core Audio sodródás-kiegyenlítésével. **Windowson** a több kimenet még nem érhető el.

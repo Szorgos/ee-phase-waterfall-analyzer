@@ -1,8 +1,15 @@
-### Újdonságok (következő kiadás)
+### Újdonságok (2.0.7)
+
+**Letöltés (2.0.7):**
+- Windows 11: [Aqulify-Setup-2.0.7.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.7/Aqulify-Setup-2.0.7.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.7/Aqulify-Setup-2.0.7.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.0.7-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.7/Aqulify-2.0.7-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.7/Aqulify-2.0.7-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.0.7.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.7/Aqulify-Linux-2.0.7.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.7/Aqulify-Linux-2.0.7.tar.gz.sha256))
+- Fedora: [aqulify-2.0.7-1.fc44.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.7/aqulify-2.0.7-1.fc44.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.0.7-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.7/aqulify_2.0.7-1_amd64.deb) · Arch: [aqulify-2.0.7-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.7/aqulify-2.0.7-1-x86_64.pkg.tar.zst)
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
 
 - **Több kimenet – 2–4 hangkártya egyszerre (Linux és macOS):**
   - *Független zónák:* minden kimenet saját, teljes DSP-lánccal szól, így a két DAC-hoz eltérő fejhallgató- vagy szobaprofil importálható (AutoEq, REW, impulzusválasz). A fejléc „Szerkesztett kimenet” választójával minden modul külön állítható kimenetenként.
-  - *Aktív keresztváltó:* Linkwitz–Riley 12 / 24 / 48 dB/oktáv, 2–4 sáv; a sávok összege amplitúdóban egyenes.
+  - *Aktív keresztváltó (kísérleti, amíg a kimenetek időzítése nem mintapontos):* Linkwitz–Riley 12 / 24 / 48 dB/oktáv, 2–4 sáv; a sávok összege amplitúdóban egyenes.
   - Kimenetenként erősítés, késleltetés és polaritás. Induláskor kikapcsolva (a hangzás nem változik), a beállítás és a profilok megmaradnak; kihúzott hangkártya hangja nem kerül át máshová.
   - Linuxon PipeWire (egy ütemező, adaptív újramintavételezés), macOS-en Core Audio aggregált eszköz (sodródás-kiegyenlítés). Windowson még nem érhető el.
   - A kimenetek nincsenek mintapontosan összehangolva (Linuxon legfeljebb két quantum eltolódás); két hangkártyára osztott keresztváltónál az automatikus igazítás még fejlesztés alatt van.
