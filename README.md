@@ -70,7 +70,7 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
    * Kimenetenként erősítés, késleltetés (a hangszórók távolságához, cm-ben is kijelezve) és polaritás.
    * **Beállítás:** *Kimenetek* fül → bekapcsolás → a 2–4. kimenet hangkártyája a listából. Induláskor a több kimenet kikapcsolva indul (a hangzás nem változik), a beállítás és a kimenetek profiljai megmaradnak. Ha egy hangkártyát kihúzol, a hozzá tartozó kimenet elnémul, és nem szól máshol.
    * **Linuxon** a PipeWire egy ütemezőhöz rendeli a kimeneteket (a többi hangkártya adaptív újramintavételezéssel követi), **macOS-en** a hangkártyák egy privát aggregált eszközbe kerülnek a Core Audio sodródás-kiegyenlítésével. **Windowson** a több kimenet még nem érhető el.
-   * Két különböző hangkártya saját késleltetése eltérhet (néhány ms); ezt a kimenet késleltetésével lehet kiegyenlíteni.
+   * **Időzítés:** a kimenetek nincsenek mintapontosan összehangolva. Linuxon a 2–4. kimenet a fő kimenethez képest legfeljebb két PipeWire-quantummal (1024-es quantumnál kb. 43 ms) eltolva szólhat, és ez indításonként eltérhet; a hangkártyák saját késleltetése is különbözhet. Független zónáknál (pl. fejhallgató és hangfal) ez nem hallható; két hangkártyára osztott aktív keresztváltónál az automatikus igazítás még fejlesztés alatt van.
 
 7. **Motor és felület:**
    * Linuxon PipeWire virtuális kimenet („Aqulify”), Windowson Equalizer APO plugin. A hangszál zárak nélkül veszi át a beállításokat; a modulok be- és kikapcsolása, valamint az EQ-mód és a decramp váltása rövid le- és felúsztatással, kattanás nélkül történik (lineáris fázisú módra váltáskor a kimenet a módhoz tartozó késleltetés kitöltéséig, kb. 0,1 s-ig néma). A felület és a grafika külön folyamatban fut, nem tartja fel a lejátszást.

@@ -15,8 +15,10 @@
  * Több kimenet (2–4 hangkártya): a további kimenetek külön lejátszó streamek, megadott céleszközzel
  * (target.object). A közös node.group miatt a PipeWire egy ütemezőhöz (driverhez) rendeli őket, a többi
  * hangkártya követőként, adaptív újramintavételezéssel fut, így az órajelek eltérése nem halmozódik.
- * A fő hangszál a kimenetek jelét gyűrűpufferekbe írja; a további streamek egy quantumnyi előtöltéssel
- * olvassák. A céleszköz eltűnésekor a stream nem kapcsolódik át máshová (node.dont-reconnect).
+ * A fő hangszál a kimenetek jelét gyűrűpufferekbe írja; a további streamek két quantumnyi előtöltéssel olvassák.
+ * A kimenetek közti időeltolódás így legfeljebb két quantum, és indításonként eltérhet (független zónáknál nem
+ * hallható; keresztváltónál a pontos igazítás még nincs megoldva).
+ * A céleszköz eltűnésekor a stream nem kapcsolódik át máshová (node.dont-reconnect).
  */
 #include <pipewire/pipewire.h>
 #include <spa/param/audio/format-utils.h>
@@ -75,6 +77,7 @@ public:
         std::atomic<bool> fresh{false};               // új stream: az elavult puffertartalom eldobandó
         std::atomic<bool> streaming{false};
         std::atomic<uint32_t> underruns{0};
+        std::atomic<uint32_t> availMin{~0u}, availMax{0}, reads{0}, lastN{0};   // diagnosztika: töltöttség olvasáskor
         bool primed = false;                          // csak a stream saját szála
     };
 
@@ -122,7 +125,10 @@ public:
         for (int k = 0; k < kExtraZones; ++k) {
             if (k) s += ",";
             s += "{\"output\":" + std::to_string(k + 2) + ",\"target\":\"" + wantedTargets_[k] + "\",\"streaming\":" +
-                 (zones_[k]->streaming.load() ? "true" : "false") + ",\"underruns\":" + std::to_string(zones_[k]->underruns.load()) + "}";
+                 (zones_[k]->streaming.load() ? "true" : "false") + ",\"underruns\":" + std::to_string(zones_[k]->underruns.load()) +
+                 ",\"fillMin\":" + std::to_string(zones_[k]->availMin.load() == ~0u ? 0 : zones_[k]->availMin.load()) +
+                 ",\"fillMax\":" + std::to_string(zones_[k]->availMax.load()) + ",\"reads\":" + std::to_string(zones_[k]->reads.load()) +
+                 ",\"quantum\":" + std::to_string(zones_[k]->lastN.load()) + "}";
         }
         return s + "]";
     }
@@ -371,15 +377,18 @@ private:
         uint32_t n = out->requested ? std::min<uint32_t>(static_cast<uint32_t>(out->requested), maxFrames) : 0;
         if (n == 0) n = std::min<uint32_t>(1024, maxFrames);
 
-        if (z->fresh.exchange(false)) {
-            z->ring.skip(z->ring.available());
-            z->primed = false;
-        }
+        if (z->fresh.exchange(false)) z->primed = false;
+        const uint32_t avail = z->ring.available();
+        if (avail < z->availMin.load(std::memory_order_relaxed)) z->availMin.store(avail, std::memory_order_relaxed);
+        if (avail > z->availMax.load(std::memory_order_relaxed)) z->availMax.store(avail, std::memory_order_relaxed);
+        z->reads.fetch_add(1, std::memory_order_relaxed);
+        z->lastN.store(n, std::memory_order_relaxed);
+        // Előtöltés: két quantum; ha ennél jóval több gyűlt össze (pl. a stream egy ideig nem futott), a régi adat
+        // eldobódik, így a késleltetés korlátos marad
         const uint32_t target = 2 * n;
         uint32_t got = 0;
-        if (!z->primed && z->ring.available() >= target) z->primed = true;
+        if (!z->primed && avail >= target) z->primed = true;
         if (z->primed) {
-            const uint32_t avail = z->ring.available();
             if (avail > target + 4 * n) z->ring.skip(avail - target);
             got = z->ring.read(L, R, n);
             if (got < n) {
@@ -522,6 +531,7 @@ private:
             self->multi_.process(self->inL_.data(), self->inR_.data(), oL, oR, n);
             const int nOut = self->multi_.config().numOutputs;
             for (int k = 1; k < nOut; ++k) self->zones_[k - 1]->ring.write(oL[k], oR[k], n);
+
         } else {
             self->chain.process(outL, outR, n);
         }

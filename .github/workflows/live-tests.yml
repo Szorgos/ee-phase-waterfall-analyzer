@@ -1,0 +1,58 @@
+name: Élő tesztek (Linux, PipeWire)
+
+# A motor és a felület élő tesztje valódi PipeWire-gráfon, két virtuális hangkártyával (tests/live):
+# több kimenet, a DSP-modulok hangmérése, a felület kezelőszervei (headless Chromium).
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - "include/**"
+      - "src/**"
+      - "gui_integrated_system.html"
+      - "gui_i18n.js"
+      - "tests/live/**"
+      - "CMakeLists.txt"
+      - ".github/workflows/live-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Függőségek
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q build-essential cmake pkg-config libpipewire-0.3-dev libfftw3-dev \
+            pipewire wireplumber pipewire-pulse pulseaudio-utils dbus python3-numpy
+
+      - name: RNNoise modell (az Ubuntu forráscsomagjából)
+        run: |
+          for i in 1 2 3; do curl -fsSL -o /tmp/rnnoise.tar.xz http://archive.ubuntu.com/ubuntu/pool/universe/r/rnnoise/rnnoise_0.2+ds.orig.tar.xz && break; sleep 15; done
+          got=$(sha256sum < /tmp/rnnoise.tar.xz | cut -d' ' -f1)
+          want=db2718ee4a0b294bfbbe198fe94aabfdc8cd0d77cb9cd95d76c7a818ad805f0b
+          if [ "$got" != "$want" ]; then echo "::error title=RNNoise::sha256 eltérés: $got"; exit 1; fi
+          mkdir -p "$RUNNER_TEMP/rnnoise-model"
+          tar -xJf /tmp/rnnoise.tar.xz -C "$RUNNER_TEMP/rnnoise-model" --strip-components=2 rnnoise-0.2/src/rnnoise_data.c rnnoise-0.2/src/rnnoise_data.h
+
+      - name: Fordítás (motor)
+        run: |
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=OFF \
+            -DAQULIFY_RNNOISE_MODEL_DIR="$RUNNER_TEMP/rnnoise-model"
+          cmake --build build -j"$(nproc)" --target aqulify-engine
+
+      - name: Playwright (headless Chromium a felületi tesztekhez)
+        run: |
+          mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw"
+          npm init -y >/dev/null
+          npm install --silent playwright@1.49.1
+          npx playwright install --with-deps chromium
+          echo "NODE_PATH=$RUNNER_TEMP/pw/node_modules" >> "$GITHUB_ENV"
+
+      - name: Élő tesztek
+        run: tests/live/run_all.sh build
