@@ -126,6 +126,33 @@ time.sleep(0.5)
 check(setting("clock.allowed-rates") == orig_allowed and setting("clock.force-rate") == orig_force,
       f"rendszer: az eredeti visszaállt ({setting('clock.allowed-rates')}, {setting('clock.force-rate')})")
 
+# --- a beépített lejátszó: „A forrást követi” mellett a gráf a fájl mintavételére vált (ébren tartással is)
+flac = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "player_stereo44.flac")
+for keep in (False, True):
+    opts(rateMode="follow", keepAwake=keep)
+    time.sleep(1.0)
+    ws = WS(PORT)
+    ws.send({"type": "hello", "client": "audio_opts_live"})
+    ws.send({"type": "player_open", "path": os.path.abspath(flac)})
+    ws.wait_type("player_result", limit=200)
+    time.sleep(3.5)
+    st = status()
+    ws2 = WS(PORT); ws2.send({"type": "hello", "client": "audio_opts_live"}); ws2.send({"type": "subscribe", "spectrum": 0})
+    sm = ws2.wait_type("status", limit=5000) or {}
+    ws2.s.close()
+    check(sm.get("sr") == 44100 and st.get("playerRate") == 44100,
+          f"forrást követő, ébren tartás {'be' if keep else 'ki'}: a gráf {sm.get('sr')} Hz, a lejátszó {st.get('playerRate')} Hz")
+    if keep:
+        check(status().get("keepAwake") is False, "lejátszás közben az ébren tartás szünetel (a hangkártya úgyis szól)")
+    ws.send({"type": "player_stop"})
+    ws.wait_type("player_result", limit=200)
+    ws.s.close()
+    time.sleep(2.5)
+    if keep:
+        check(status().get("keepAwake") is True, "a lejátszás vége után az ébren tartás visszakapcsolt")
+opts(rateMode="system", keepAwake=False)
+time.sleep(0.5)
+
 # --- újramintavételezés a további kimeneteken
 ws = WS(PORT)
 ws.send({"type": "hello", "client": "audio_opts_live"})
@@ -145,8 +172,12 @@ saved = open(os.path.join(os.environ.get("XDG_CONFIG_HOME", ""), "aqulify", "aud
 check('"rateMode":"follow"' in saved and '"resampleQuality":10' in saved, f"mentve: {saved}")
 ws = WS(PORT)
 ws.send({"type": "hello", "client": "audio_opts_live"})
+ws.send({"type": "player_open", "path": os.path.abspath(flac)})   # leállás szóló lejátszóval (régen itt omlott össze)
+time.sleep(1.5)
 ws.send({"type": "engine_quit"})
 time.sleep(2.0)
+check(subprocess.run(["pgrep", "-x", "aqulify-engine"], capture_output=True).returncode != 0,
+      "a motor leállt szóló lejátszóval (a kilépési kódot a multiout_live.sh ellenőrzi)")
 check(setting("clock.allowed-rates") == orig_allowed, f"leálláskor a mintavétel visszaállt ({setting('clock.allowed-rates')})")
 
 print("SIKERES" if fails == 0 else f"{fails} HIBA")

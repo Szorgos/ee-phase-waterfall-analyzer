@@ -16,12 +16,27 @@
 
 #include <algorithm>
 #include <cstring>
+#include <functional>
 #include <string>
 
 #include "audio_options.hpp"
 #include "file_player.hpp"
 
 namespace ee_analyzer::player {
+
+/**
+ * A hangfolyam megnyitása előtt hívódik (a fájl mintavételével; a lejátszó szálán, zár nélkül). A motor itt engedheti
+ * el egy időre az ébren tartó hangfolyamot, hogy a PipeWire a „forrást követő” beállításnál válthasson mintavételt.
+ */
+inline std::function<void(uint32_t rate)>& pwBeforeOpenHook() {
+    static std::function<void(uint32_t)> hook;
+    return hook;
+}
+/** A hangfolyam megszűnése után hívódik (a lejátszó szálán, zár nélkül). */
+inline std::function<void()>& pwAfterCloseHook() {
+    static std::function<void()> hook;
+    return hook;
+}
 
 class PwPlayerOutput : public PlayerOutput {
 public:
@@ -37,6 +52,7 @@ public:
     }
 
     bool open(uint32_t sampleRate, RenderFn render, std::string* error) override {
+        if (pwBeforeOpenHook()) pwBeforeOpenHook()(sampleRate);
         if (!ensureLoop(error)) return false;
         close();
         pw_thread_loop_lock(loop_);
@@ -51,6 +67,9 @@ public:
             "target.object", target_.c_str(),   // PW_KEY_TARGET_OBJECT (0.3.64-től)
             "node.target", target_.c_str(),     // régebbi PipeWire / WirePlumber
             nullptr);
+        // A kért mintavétel (node.rate): „A forrást követi” beállításnál a PipeWire erre váltja a gráfot (ha a
+        // hangkártya tudja), így a lejátszás újramintavételezés nélkül, bitpontosan szólhat
+        pw_properties_setf(props, PW_KEY_NODE_RATE, "1/%u", sampleRate);
         // A fájl mintavételét a PipeWire alakítja a gráféra (ha eltér): a minőség a haladó beállításból
         if (const int q = audioopt::resampleQuality().load(); q >= 0)
             pw_properties_set(props, "resample.quality", std::to_string(q).c_str());
@@ -100,6 +119,7 @@ public:
         stream_ = nullptr;
         render_ = nullptr;
         pw_thread_loop_unlock(loop_);
+        if (pwAfterCloseHook()) pwAfterCloseHook()();
     }
 
     void setActive(bool active) override {

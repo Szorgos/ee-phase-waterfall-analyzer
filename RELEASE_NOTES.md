@@ -1,4 +1,11 @@
-### Újdonságok (következő kiadás)
+### Újdonságok (2.0.8)
+
+**Letöltés (2.0.8):**
+- Windows 11: [Aqulify-Setup-2.0.8.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.8/Aqulify-Setup-2.0.8.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.8/Aqulify-Setup-2.0.8.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.0.8-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.8/Aqulify-2.0.8-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.8/Aqulify-2.0.8-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.0.8.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.8/Aqulify-Linux-2.0.8.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.8/Aqulify-Linux-2.0.8.tar.gz.sha256))
+- Fedora: [aqulify-2.0.8-1.fc44.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.8/aqulify-2.0.8-1.fc44.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.0.8-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.8/aqulify_2.0.8-1_amd64.deb) · Arch: [aqulify-2.0.8-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.8/aqulify-2.0.8-1-x86_64.pkg.tar.zst)
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
 
 - **Hangkimenet (haladó)** a *Kimenet* menüben:
   - *Pufferméret* (automatikus vagy 64–4096 minta, ms-ban kijelezve), terhelés- és túllépésjelzővel. Linuxon és macOS-en.
@@ -10,6 +17,8 @@
 - **Hangerő a „most szól” sávban:** csúszka és némítás gomb; a kimeneti hangkártya hangerejét állítja (mint a rendszer hangerő-szabályzója, ahol van, hardveresen), így a DSP-lánc érintetlen marad. A telefonos távirányítóról is állítható.
 - **Lejátszó:** ReplayGain szám vagy album szerint (előerősítés, túlvezérlés-védelem a csúcs-címkéből; FLAC, Ogg, Opus R128, MP3, WavPack), fájl betöltése memóriába lejátszás előtt.
 - A mentett beállítások (params.bin, multiout.bin) az új formátumba kerülnek; a 2.0.7 több kimenetes beállítása megmarad.
+- **Javítás (Linux):** a motor leálláskor összeomolhatott, ha a beépített lejátszó közben használatban volt (a 2.0.7-ben is). A „Bezárás” után így nem indult újra feleslegesen.
+- **Javítás (Linux):** a beépített lejátszó jelzi a fájl mintavételét, így „A forrást követi” beállításnál a 44,1 kHz-es zene újramintavételezés nélkül szól. Ébren tartás mellett a csendes hangfolyam a lejátszás idejére szünetel (a hangkártya úgyis szól), utána visszakapcsol. Más programoknál ébren tartás mellett a mintavétel nem vált: ott a rögzített mintavétel a megoldás.
 
 ### Újdonságok (2.0.7)
 

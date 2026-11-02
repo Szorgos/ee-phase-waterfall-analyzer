@@ -30,6 +30,7 @@ wireplumber > "$W/wireplumber.log" 2>&1 &
 pipewire-pulse > "$W/pulse.log" 2>&1 &
 sleep 2.5
 "$ENGINE" --port 47810 > "$W/engine.log" 2>&1 &
+ENGINE_PID=$!
 sleep 3
 if [ $# -gt 0 ]; then
     AQ_PORT=47810 AQ_WORK="$W" "$@"
@@ -37,5 +38,10 @@ else
     python3 -I "$HERE/multiout_live.py" 47810 "$W"
 fi
 rc=$?
+# Ha a motor a teszt alatt kilépett: összeomlás (jelzés, 128 fölötti kód) nem lehet
+if ! kill -0 $ENGINE_PID 2>/dev/null; then
+    wait $ENGINE_PID; erc=$?
+    if [ $erc -ge 128 ]; then echo "  [HIBA] a motor összeomlott (kilépési kód $erc)"; rc=1; fi
+fi
 [ $rc -ne 0 ] && { echo "--- motor napló ---"; tail -n 40 "$W/engine.log"; }
 exit $rc

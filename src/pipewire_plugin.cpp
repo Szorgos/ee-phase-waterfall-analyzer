@@ -269,6 +269,7 @@ bool chainTransparent(const ParamData& d) { return !AetherChain::modifiesSignal(
 } // namespace
 
 int main(int argc, char* argv[]) {
+    PwDeinitGuard pwDeinit;   // utoljára szűnik meg: a PipeWire lezárása minden más objektum után
     std::cout << "========================================================\n";
     std::cout << " Aqulify • Fázis & Akusztikai Vízesés – Linux motor (PipeWire)\n";
     std::cout << "========================================================\n";
@@ -312,6 +313,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    pwDeinit.armed = true;
     if (!node.start(argc, argv)) {
         std::cerr << "[Hiba] A PipeWire nem érhető el. Fut a pipewire (és a wireplumber) szolgáltatás?\n";
         return 1;
@@ -581,12 +583,15 @@ int main(int argc, char* argv[]) {
     const std::string origAllowedRates = pwSetting("clock.allowed-rates");
     const std::string origForceRate = pwSetting("clock.force-rate");
     bool ratesTouched = false;
+    std::atomic<bool> playerStreamOpenFlag{false};
+    auto playerStreamOpen = [&]() { return playerStreamOpenFlag.load(); };
     auto applyAudio = [&](const audioopt::AudioOptions& o) {
         audioopt::resampleQuality().store(o.resampleQuality);
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         filePlayer.setPreload(o.preload);
         const int autoQ = std::atoi(pwSetting("clock.quantum").c_str());
-        node.setAudioOptions(o.bufferFrames, o.keepAwake, autoQ > 0 ? autoQ : 1024);
+        const bool pauseForPlayer = o.rateMode == audioopt::RateMode::Follow && playerStreamOpen();
+        node.setAudioOptions(o.bufferFrames, o.keepAwake && !pauseForPlayer, autoQ > 0 ? autoQ : 1024);
         if (o.rateMode == audioopt::RateMode::Follow) {
             pwSetSetting("clock.force-rate", "0");
             pwSetSetting("clock.allowed-rates", "[ 44100 48000 88200 96000 176400 192000 ]");
@@ -601,6 +606,39 @@ int main(int argc, char* argv[]) {
         }
     };
     applyAudio(audioOpts);
+    // „A forrást követi” + ébren tartás: a folyamatosan szóló csendes hangfolyam mellett a PipeWire nem vált
+    // mintavételt (és újracsatlakozáskor vissza is váltana). Amíg a beépített lejátszó hangfolyama nyitva van, a
+    // hangkártya úgyis szól, ezért az ébren tartás addig szünetel; a hangfolyam bezárása után 1,5 s-mal visszakapcsol
+    // (ha közben új szám nyílt, nem). Más programoknál ez nem lehetséges: ott a rögzített mintavétel a megoldás.
+    static std::atomic<uint64_t> s_playerTicket{0};
+    static std::atomic<bool> s_engineQuit{false};
+    std::atomic<bool>& s_playerOpen = playerStreamOpenFlag;
+    player::pwBeforeOpenHook() = [&](uint32_t) {
+        s_playerTicket.fetch_add(1);
+        s_playerOpen = true;
+        bool paused = false;
+        {
+            std::lock_guard<std::mutex> lk(audioMutex);
+            if (audioOpts.rateMode == audioopt::RateMode::Follow && audioOpts.keepAwake) {
+                const int autoQ = std::max(32, std::atoi(pwSetting("clock.quantum").c_str()));
+                node.setAudioOptions(audioOpts.bufferFrames, false, autoQ);
+                paused = true;
+            }
+        }
+        if (paused) std::this_thread::sleep_for(std::chrono::milliseconds(300));   // az ébren tartó hangfolyam megszűnik
+    };
+    player::pwAfterCloseHook() = [&]() {
+        const uint64_t ticket = s_playerTicket.fetch_add(1) + 1;
+        std::thread([&, ticket] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+            if (s_playerTicket.load() != ticket || s_engineQuit.load()) return;   // közben új szám nyílt, vagy leállás
+            s_playerOpen = false;
+            std::lock_guard<std::mutex> lk(audioMutex);
+            if (!audioOpts.keepAwake) return;
+            const int autoQ = std::max(32, std::atoi(pwSetting("clock.quantum").c_str()));
+            node.setAudioOptions(audioOpts.bufferFrames, true, autoQ);
+        }).detach();
+    };
     cb.audioOptionsJson = [&]() -> std::string {
         std::lock_guard<std::mutex> lk(audioMutex);
         return "{\"opts\":" + audioopt::toJson(audioOpts) +
@@ -677,6 +715,9 @@ int main(int argc, char* argv[]) {
 
     std::cout << "[Info] Leállítás...\n";
     bridge->stop();
+    s_engineQuit = true;
+    player::pwBeforeOpenHook() = nullptr;
+    player::pwAfterCloseHook() = nullptr;
     filePlayer.stop();
     mediaSession.stop();
     {

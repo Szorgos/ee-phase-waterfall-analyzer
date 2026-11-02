@@ -75,7 +75,7 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
 
 7. **Hangkimenet (haladó)** – a fejléc *Kimenet* menüjében:
    * **Pufferméret:** automatikus vagy 64–4096 minta (a késleltetés ms-ban kijelezve). Kisebb puffer kisebb késleltetés, de nagyobb az akadás veszélye; a terhelés és a túllépések száma alatta látszik. Linuxon a PipeWire-quantum kérése, macOS-en a Core Audio IO-puffere. Windowson az Equalizer APO a Windows hangmotorjában fut, ott a puffert a Windows határozza meg.
-   * **Mintavétel (Linux):** a rendszer beállítása, *A forrást követi* (a gráf a lejátszott hang mintavételére vált, ha a hangkártya tudja; pl. 44,1 kHz-es zene újramintavételezés nélkül), vagy rögzített érték. Kilépéskor a PipeWire eredeti beállítása visszaáll.
+   * **Mintavétel (Linux):** a rendszer beállítása, *A forrást követi* (a gráf a lejátszott hang mintavételére vált, ha a hangkártya tudja; pl. 44,1 kHz-es zene újramintavételezés nélkül), vagy rögzített érték. Kilépéskor a PipeWire eredeti beállítása visszaáll. A beépített lejátszónál ébren tartás mellett is működik (lejátszás közben az ébren tartás szünetel); más programoknál ébren tartás mellett a gráf nem vált mintavételt.
    * **Újramintavételezés minősége (Linux):** a beépített lejátszó és a 2–4. kimenet átalakítójáé.
    * **Hangkártya ébren tartása (Linux):** a hangkártya csendben sem függesztődik fel, így nincs pattanás, és a számok eleje sem vész el. macOS-en a motor folyamatosan fut, ott nem kell.
    * **Jelút:** bitpontos-e a lánc, a puffer, a DSP saját késleltetése (lineáris fázisú EQ, limiter előretekintés, konvolver), a becsült teljes késleltetés, a terhelés, és a lejátszónál a fájl és a kimenet mintavétele.

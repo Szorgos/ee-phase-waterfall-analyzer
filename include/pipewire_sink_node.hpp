@@ -49,6 +49,15 @@
 
 namespace ee_analyzer {
 
+/**
+ * A PipeWire lezárása a folyamat legvégén: a main() elején deklarálva ez szűnik meg utoljára, így a többi PipeWire-t
+ * használó objektum (pl. a beépített lejátszó saját hurka) még lezárás előtt leáll.
+ */
+struct PwDeinitGuard {
+    bool armed = false;   // a pw_init() megtörtént (AetherSinkNode::start)
+    ~PwDeinitGuard() { if (armed) pw_deinit(); }
+};
+
 class AetherSinkNode {
 public:
     struct pw_main_loop* loop = nullptr;
@@ -298,7 +307,8 @@ public:
         if (playback) { pw_stream_destroy(playback); playback = nullptr; }
         if (core) { pw_core_disconnect(core); core = nullptr; }
         if (context) { pw_context_destroy(context); context = nullptr; }
-        if (loop) { pw_main_loop_destroy(loop); loop = nullptr; pw_deinit(); }
+        // a pw_deinit()-et a hívó végzi a legvégén (PwDeinitGuard): a lejátszó saját PipeWire-hurka ezután áll le
+        if (loop) { pw_main_loop_destroy(loop); loop = nullptr; }
     }
 
 private:
