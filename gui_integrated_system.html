@@ -495,6 +495,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .app-version { font: 500 var(--aq-fs-micro) var(--aq-mono); color: var(--aq-text-3); background: var(--aq-surface); border: 1px solid var(--aq-line); border-radius: 6px; padding: 2px 7px; }
   .header-right { flex-shrink: 1; min-width: 0; }
   .header-right > * { flex-shrink: 0; }   /* csak a Kimenet választó rövidül (lent) */
+  .header-right > select.theme-select { flex-shrink: 1; min-width: 96px; }   /* hosszú nyelveknél és keskeny ablakban ez rövidül (…) */
+  .header-right > .status-badge { flex-shrink: 1; min-width: 72px; overflow: hidden; text-overflow: ellipsis; }   /* végső esetben a motor állapota is rövidül */
   .header-right .status-badge, .header-right .support-link { white-space: nowrap; }
 
   /* ======================================================= */
@@ -1096,7 +1098,7 @@ if (!window.THREE) window.THREE = (function () {
     border-bottom: 1px solid var(--aq-line);
   }
   header.app-header .title-group {
-    flex: 0 1 auto;
+    flex: 0 0 auto;   /* a márkanév és a verzió nem csúszik a nézetváltó alá: szűkülésnél a téma-választó rövidül */
     min-width: 0;
   }
   header.app-header .header-center {
@@ -1105,7 +1107,7 @@ if (!window.THREE) window.THREE = (function () {
     align-items: center;
   }
   header.app-header .header-right {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -2736,8 +2738,8 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
 // Hiányzó fordításnál az angol, majd a magyar szöveg jelenik meg.
 // =========================================================================
 // Új nyelv: ide egy sor, és az i18n/<terület>/<nyelv>.json fájlok (tools/i18n_build.py)
-const AQ_LANGS = [["hu", "Magyar"], ["en", "English"]];
-const AQ_LOCALES = { hu: "hu-HU", en: "en-US" };
+const AQ_LANGS = [["hu", "Magyar"], ["en", "English"], ["es", "Español"], ["fr", "Français"], ["zh", "简体中文"]];
+const AQ_LOCALES = { hu: "hu-HU", en: "en-US", es: "es-ES", fr: "fr-FR", zh: "zh-CN" };
 var aqLang = "hu";
 function t(key, vars) {
   const tables = window.AQ_I18N || {};

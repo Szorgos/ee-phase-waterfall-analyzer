@@ -24,7 +24,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Új nyelv: kód ide, a három JSON fájl mellé, és a felület AQ_LANGS listájába (gui_integrated_system.html)
-LANGS = ["hu", "en"]
+LANGS = ["hu", "en", "es", "fr", "zh"]
 SOURCE = "hu"
 
 errors = []

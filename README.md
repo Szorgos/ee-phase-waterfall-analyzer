@@ -13,7 +13,7 @@
 
 ---
 
-Az **Aqulify** valós idejű hangfeldolgozó lánc zenehallgatáshoz: parametrikus EQ több mint 8 850 AutoEq fejhallgató-profillal, crossfeed, konvolver (szobakorrekció), bass enhancer és True Peak limiter az EasyEffects DSP könyvtáraival, valamint a **Magic Touch**, egy automatikus, visszafogott hangszépítő és helyreállító. A lejátszott jel valódi spektruma élő 3D vízesésen látszik, az EQ fázis- és csoportkésleltetés-görbéjével együtt. Linuxon PipeWire virtuális kimenetként, Windows 11-en Equalizer APO pluginként működik; a felület magyarul és angolul használható. Ingyenes és nyílt forrású (GPL-3.0).
+Az **Aqulify** valós idejű hangfeldolgozó lánc zenehallgatáshoz: parametrikus EQ több mint 8 850 AutoEq fejhallgató-profillal, crossfeed, konvolver (szobakorrekció), bass enhancer és True Peak limiter az EasyEffects DSP könyvtáraival, valamint a **Magic Touch**, egy automatikus, visszafogott hangszépítő és helyreállító. A lejátszott jel valódi spektruma élő 3D vízesésen látszik, az EQ fázis- és csoportkésleltetés-görbéjével együtt. Linuxon PipeWire virtuális kimenetként, Windows 11-en Equalizer APO pluginként működik; a felület magyarul, angolul, spanyolul, franciául és kínaiul (egyszerűsített) használható. Ingyenes és nyílt forrású (GPL-3.0).
 
 ![Aqulify: élő 3D vízesés és parametrikus EQ egy AutoEq fejhallgató-profillal](docs/screenshots/aqulify-main.png)
 
@@ -85,7 +85,7 @@ Az **Aqulify** ezt egyesíti a modern digitális jelfeldolgozással:
 8. **Motor és felület:**
    * Linuxon PipeWire virtuális kimenet („Aqulify”), Windowson Equalizer APO plugin. A hangszál zárak nélkül veszi át a beállításokat; a modulok be- és kikapcsolása, valamint az EQ-mód és a decramp váltása rövid le- és felúsztatással, kattanás nélkül történik (lineáris fázisú módra váltáskor a kimenet a módhoz tartozó késleltetés kitöltéséig, kb. 0,1 s-ig néma). A felület és a grafika külön folyamatban fut, nem tartja fel a lejátszást.
    * WebSocket híd a `127.0.0.1` címen (az első szabad port: 47810–47814, végső tartalékként 8080): a motor a spektrumot, az EQ-görbét, a limiter erősítéscsökkentését és a mentett állapotot küldi; a felület az összes modulbeállítást, az IR-t és az EQ profilokat (a protokoll leírása: [docs/remote-api.md](docs/remote-api.md)).
-   * **Felület:** magyarul és angolul (alapból a rendszer nyelvén, váltás a fejlécben); Linuxon saját ablakban (WebKitGTK, ennek hiányában böngészőben), Windowson saját ablakban (WebView2).
+   * **Felület:** magyarul, angolul, spanyolul, franciául és kínaiul (egyszerűsített; alapból a rendszer nyelvén, váltás a fejlécben); Linuxon saját ablakban (WebKitGTK, ennek hiányában böngészőben), Windowson saját ablakban (WebView2).
    * **Ablak bezárása:** a program megkérdezi, hogy a tálcára (macOS: menüsorra, Linux: háttérbe) kerüljön, és a hangfeldolgozás fusson tovább, vagy teljesen bezáródjon. Bezáráskor a motor leáll, és a hang visszaáll eredetire. A „Mindig ezt válaszd” jelölővel a kérdés elmarad; a választás a *Kimenet* menüben módosítható.
    * **Alap állapot:** a motor indításkor és leálláskor minden modult kikapcsol, így a program bezárása és a gép újraindítása után sem változik a hangzás. A mentett profilok megmaradnak.
 
@@ -233,7 +233,7 @@ cmake --build build -j$(nproc)
 ├── uninstall.sh                # Linux eltávolító
 ├── gui_integrated_system.html  # Grafikus felület és 3D WebGL vízesés (beágyazott Inter és IBM Plex Mono betűkkel)
 ├── autoeq_index.js             # 8 850+ modellt tartalmazó AutoEq fülhallgató adatbázis
-├── gui_i18n.js                 # A felület szövegei magyarul és angolul (előállítva: tools/i18n_build.py)
+├── gui_i18n.js                 # A felület szövegei öt nyelven (előállítva: tools/i18n_build.py)
 ├── i18n/                       # Fordítások forrásai: gui/ (felület), native/ (tálca, telepítő), scripts/ (install.sh)
 ├── tools/i18n_build.py         # A fordítások összeállítása és ellenőrzése
 ├── include/

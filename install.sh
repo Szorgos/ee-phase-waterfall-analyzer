@@ -23,7 +23,7 @@ aq_detect_lang() {
     [ -z "$l" ] && l="${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}"
     l="${l%%[_.@-]*}"
     case "$l" in
-        hu|en) printf "%s" "$l" ;;
+        hu|en|es|fr|zh) printf "%s" "$l" ;;
         *) printf "en" ;;
     esac
 }
@@ -77,6 +77,144 @@ msg_text() {
         inst.sumState) f='Motor állapota: systemctl --user status aqulify' ;;
         inst.sumLog) f='Napló:          journalctl --user -u aqulify -f' ;;
         inst.sumUninstall) f='Eltávolítás:    ./uninstall.sh' ;;
+        esac ;;
+    es) case "$2" in
+        common.errorPrefix) f='[Error]' ;;
+        inst.title) f='Aqulify – instalación en Linux' ;;
+        inst.noRoot) f='¡No lo ejecutes como root! Inícialo con tu propio usuario (te pedirá la contraseña de sudo para los paquetes).' ;;
+        inst.step1) f='[1/6] Instalando paquetes necesarios...' ;;
+        inst.noOsRelease) f='No se puede determinar la distribución (/etc/os-release).' ;;
+        inst.unknownDistro1) f='Distribución desconocida (%s). Necesario: compilador C/C++20, cmake, pkg-config, paquetes de desarrollo de libpipewire-0.3 y fftw3 (float);' ;;
+        inst.unknownDistro2) f='para la ventana de la aplicación: paquetes de desarrollo gtk3 y webkit2gtk-4.1 (o 4.0).' ;;
+        inst.noWebkit) f='El paquete WebKitGTK no está instalado: la interfaz se abrirá en un navegador.' ;;
+        inst.noPwCli) f='No se encontró pw-cli. ¿Tu sistema de sonido es realmente PipeWire?' ;;
+        inst.systemPkg) f='También hay un paquete de Aqulify instalado (/usr/bin). Esta instalación (~/.local) tendrá prioridad a partir de ahora; para usar la empaquetada, ejecuta ./uninstall.sh después.' ;;
+        inst.step2) f='[2/6] Compilando...' ;;
+        inst.rnnSystem) f='RNNoise (reducción de ruido de voz): paquete del sistema.' ;;
+        inst.rnnDownload) f='Descargando el modelo RNNoise (archivo de Ubuntu, unos 19 MB)...' ;;
+        inst.rnnOk) f='RNNoise (reducción de ruido de voz): integrado.' ;;
+        inst.rnnFail) f='No se pudo descargar el modelo RNNoise: la reducción de ruido de voz usará el método por bandas integrado.' ;;
+        inst.engineFail) f='Falló la compilación del motor.' ;;
+        inst.engineOk) f='Motor: build/aqulify-engine' ;;
+        inst.guiOk) f='Interfaz de ventana: build/aqulify-gui' ;;
+        inst.guiFail1) f='La interfaz de ventana (WebKitGTK) no se compiló (detalles: build/gui-build.log).' ;;
+        inst.guiFail2) f='Alternativa: la ventana de aplicación de un navegador basado en Chromium o, si no hay ninguno, el navegador predeterminado.' ;;
+        inst.guiFail3) f='Solución: instala los paquetes de desarrollo gtk3 y webkit2gtk-4.1, y ejecuta ./install.sh de nuevo.' ;;
+        inst.step3) f='[3/6] Copiando archivos (%s)...' ;;
+        inst.legacy) f='Eliminando la instalación anterior de AetherAudio (se conservan los ajustes)...' ;;
+        inst.filesOk) f='Archivos en su lugar.' ;;
+        inst.step4) f='[4/6] Configurando el inicio automático (servicio de usuario de systemd)...' ;;
+        inst.unitDesc) f='Motor DSP de Aqulify (salida de audio virtual «Aqulify»)' ;;
+        inst.serviceOk) f='El motor está en ejecución y se inicia automáticamente al iniciar sesión.' ;;
+        inst.serviceFail) f='El servicio de usuario de systemd no está disponible. Inícialo manualmente: %s &' ;;
+        inst.step5) f='[5/6] Entrada en el menú...' ;;
+        inst.desktopGeneric) f='Ecualizador y analizador acústico en cascada' ;;
+        inst.desktopComment) f='EQ paramétrico, convolucionador, crossfeed y limitador True Peak para PipeWire con analizador en cascada 3D en vivo' ;;
+        inst.menuOk) f='En el menú y en el escritorio: Aqulify' ;;
+        inst.step6) f='[6/6] Salida de audio predeterminada' ;;
+        inst.defaultExplain) f='El audio de las aplicaciones pasa por Aqulify cuando «Aqulify» es el dispositivo de salida.' ;;
+        inst.legacyDefault) f='La versión anterior AetherAudio era la salida predeterminada: Aqulify toma el relevo.' ;;
+        inst.askDefault) f='¿Establecerla como predeterminada ahora? [y/N] ' ;;
+        inst.defaultOk) f='«Aqulify» es ahora la salida predeterminada.' ;;
+        inst.defaultFail) f='No ha funcionado; configúralo en los ajustes de Sonido (Salida: Aqulify).' ;;
+        inst.defaultLater) f='Puedes seleccionarlo más tarde en los ajustes de Sonido (Salida: Aqulify).' ;;
+        inst.done) f='¡Listo! Aqulify está instalado.' ;;
+        inst.sumGui) f='Interfaz:       menú → Aqulify  (o: aqulify-gui)' ;;
+        inst.sumState) f='Estado motor:   systemctl --user status aqulify' ;;
+        inst.sumLog) f='Registro:       journalctl --user -u aqulify -f' ;;
+        inst.sumUninstall) f='Desinstalar:    ./uninstall.sh' ;;
+        esac ;;
+    fr) case "$2" in
+        common.errorPrefix) f='[Error]' ;;
+        inst.title) f='Aqulify – installation sous Linux' ;;
+        inst.noRoot) f='Ne l'"'"'exécutez pas en tant que root ! Lancez-le avec votre propre utilisateur (le mot de passe sudo sera demandé pour les paquets).' ;;
+        inst.step1) f='[1/6] Installation des paquets requis...' ;;
+        inst.noOsRelease) f='Impossible de déterminer la distribution (/etc/os-release).' ;;
+        inst.unknownDistro1) f='Distribution inconnue (%s). Requis : compilateur C/C++20, cmake, pkg-config, paquets de développement libpipewire-0.3 et fftw3 (float) ;' ;;
+        inst.unknownDistro2) f='pour la fenêtre de l'"'"'application : paquets de développement gtk3 et webkit2gtk-4.1 (ou 4.0).' ;;
+        inst.noWebkit) f='Le paquet WebKitGTK n'"'"'est pas installé : l'"'"'interface s'"'"'ouvrira dans un navigateur.' ;;
+        inst.noPwCli) f='pw-cli est introuvable. Votre système audio est-il bien PipeWire ?' ;;
+        inst.systemPkg) f='Une version empaquetée d'"'"'Aqulify est également installée (/usr/bin). Cette installation (~/.local) est désormais prioritaire ; pour utiliser la version empaquetée, lancez ./uninstall.sh par la suite.' ;;
+        inst.step2) f='[2/6] Compilation...' ;;
+        inst.rnnSystem) f='RNNoise (réduction du bruit de la voix) : paquet système.' ;;
+        inst.rnnDownload) f='Téléchargement du modèle RNNoise (archive Ubuntu, environ 19 Mo)...' ;;
+        inst.rnnOk) f='RNNoise (réduction du bruit de la voix) : intégré.' ;;
+        inst.rnnFail) f='Impossible de télécharger le modèle RNNoise : la réduction du bruit de la voix utilise la méthode par bandes intégrée.' ;;
+        inst.engineFail) f='La compilation du moteur a échoué.' ;;
+        inst.engineOk) f='Moteur : build/aqulify-engine' ;;
+        inst.guiOk) f='Interface de fenêtre : build/aqulify-gui' ;;
+        inst.guiFail1) f='L'"'"'interface de fenêtre (WebKitGTK) n'"'"'a pas pu être compilée (détails : build/gui-build.log).' ;;
+        inst.guiFail2) f='Solution de repli : fenêtre d'"'"'un navigateur basé sur Chromium, ou à défaut le navigateur par défaut.' ;;
+        inst.guiFail3) f='Solution : installez les paquets de développement gtk3 et webkit2gtk-4.1, puis relancez ./install.sh.' ;;
+        inst.step3) f='[3/6] Copie des fichiers (%s)...' ;;
+        inst.legacy) f='Suppression de l'"'"'ancienne installation d'"'"'AetherAudio (les paramètres sont conservés)...' ;;
+        inst.filesOk) f='Fichiers installés.' ;;
+        inst.step4) f='[4/6] Configuration du démarrage automatique (service utilisateur systemd)...' ;;
+        inst.unitDesc) f='Moteur DSP Aqulify (sortie audio virtuelle « Aqulify »)' ;;
+        inst.serviceOk) f='Le moteur fonctionne et démarre automatiquement à l'"'"'ouverture de session.' ;;
+        inst.serviceFail) f='Le service utilisateur systemd n'"'"'est pas disponible. Démarrez-le manuellement : %s &' ;;
+        inst.step5) f='[5/6] Entrée dans le menu...' ;;
+        inst.desktopGeneric) f='Égaliseur et analyseur à cascade acoustique' ;;
+        inst.desktopComment) f='EQ paramétrique, convolueur, crossfeed et limiteur True Peak pour PipeWire avec analyseur cascade 3D en direct' ;;
+        inst.menuOk) f='Dans le menu et sur le bureau : Aqulify' ;;
+        inst.step6) f='[6/6] Sortie audio par défaut' ;;
+        inst.defaultExplain) f='L'"'"'audio des applications passe par Aqulify quand « Aqulify » est le périphérique de sortie.' ;;
+        inst.legacyDefault) f='L'"'"'ancienne version AetherAudio était la sortie par défaut : Aqulify prend le relais.' ;;
+        inst.askDefault) f='La définir par défaut maintenant ? [y/N] ' ;;
+        inst.defaultOk) f='« Aqulify » est maintenant la sortie par défaut.' ;;
+        inst.defaultFail) f='L'"'"'opération a échoué ; définissez-la dans les paramètres Son (Sortie : Aqulify).' ;;
+        inst.defaultLater) f='Vous pourrez la sélectionner plus tard dans les paramètres Son (Sortie : Aqulify).' ;;
+        inst.done) f='Terminé ! Aqulify est installé.' ;;
+        inst.sumGui) f='Interface :     menu → Aqulify  (ou : aqulify-gui)' ;;
+        inst.sumState) f='État moteur :   systemctl --user status aqulify' ;;
+        inst.sumLog) f='Journal :       journalctl --user -u aqulify -f' ;;
+        inst.sumUninstall) f='Désinstaller :  ./uninstall.sh' ;;
+        esac ;;
+    zh) case "$2" in
+        common.errorPrefix) f='[Error]' ;;
+        inst.title) f='Aqulify – Linux 安装' ;;
+        inst.noRoot) f='请勿以 root 身份运行！请以你自己的用户身份启动（安装软件包时会提示输入 sudo 密码）。' ;;
+        inst.step1) f='[1/6] 正在安装所需软件包...' ;;
+        inst.noOsRelease) f='无法确定发行版（/etc/os-release）。' ;;
+        inst.unknownDistro1) f='未知发行版（%s）。需要：C/C++20 编译器、cmake、pkg-config、libpipewire-0.3 及 fftw3（float）开发包；' ;;
+        inst.unknownDistro2) f='应用程序窗口需要：gtk3 与 webkit2gtk-4.1（或 4.0）开发包。' ;;
+        inst.noWebkit) f='未安装 WebKitGTK 软件包：界面将在浏览器中打开。' ;;
+        inst.noPwCli) f='未找到 pw-cli。你的声音系统确实是 PipeWire 吗？' ;;
+        inst.systemPkg) f='系统还安装了打包版 Aqulify（/usr/bin）。此安装（~/.local）自此具有更高优先级；如需使用打包版，请在此后运行 ./uninstall.sh。' ;;
+        inst.step2) f='[2/6] 正在编译...' ;;
+        inst.rnnSystem) f='RNNoise（语音降噪）：系统软件包。' ;;
+        inst.rnnDownload) f='正在下载 RNNoise 模型（Ubuntu 归档，约 19 MB）...' ;;
+        inst.rnnOk) f='RNNoise（语音降噪）：内置。' ;;
+        inst.rnnFail) f='无法下载 RNNoise 模型：语音降噪将使用内置分频段算法。' ;;
+        inst.engineFail) f='编译引擎失败。' ;;
+        inst.engineOk) f='引擎：build/aqulify-engine' ;;
+        inst.guiOk) f='应用程序窗口界面：build/aqulify-gui' ;;
+        inst.guiFail1) f='应用程序窗口（WebKitGTK）界面编译失败（详情：build/gui-build.log）。' ;;
+        inst.guiFail2) f='回退方案：基于 Chromium 的浏览器应用窗口，若没有则使用默认浏览器。' ;;
+        inst.guiFail3) f='解决办法：安装 gtk3 和 webkit2gtk-4.1 开发包，然后重新运行 ./install.sh。' ;;
+        inst.step3) f='[3/6] 正在复制文件（%s）...' ;;
+        inst.legacy) f='正在移除旧版 AetherAudio 安装（设置将继承）...' ;;
+        inst.filesOk) f='文件已就位。' ;;
+        inst.step4) f='[4/6] 正在配置自动启动（systemd 用户服务）...' ;;
+        inst.unitDesc) f='Aqulify DSP 引擎（虚拟“Aqulify”音频输出）' ;;
+        inst.serviceOk) f='引擎正在运行，并将在登录时自动启动。' ;;
+        inst.serviceFail) f='systemd 用户服务不可用。请手动启动：%s &' ;;
+        inst.step5) f='[5/6] 正在添加菜单项...' ;;
+        inst.desktopGeneric) f='均衡器与声学瀑布图分析器' ;;
+        inst.desktopComment) f='适用于 PipeWire 的参数 EQ、卷积器、crossfeed 及 True Peak 限幅器，配备实时 3D 瀑布图分析器' ;;
+        inst.menuOk) f='已在菜单和桌面上添加：Aqulify' ;;
+        inst.step6) f='[6/6] 默认音频输出' ;;
+        inst.defaultExplain) f='当“Aqulify”设为输出设备时，应用程序音频将流经 Aqulify。' ;;
+        inst.legacyDefault) f='原先的 AetherAudio 是默认输出：Aqulify 已接管。' ;;
+        inst.askDefault) f='现在将其设为默认输出吗？[y/N] ' ;;
+        inst.defaultOk) f='“Aqulify”现已成为默认输出。' ;;
+        inst.defaultFail) f='设置未生效；请在“声音”设置中手动指定（输出：Aqulify）。' ;;
+        inst.defaultLater) f='你稍后可以在“声音”设置中进行选择（输出：Aqulify）。' ;;
+        inst.done) f='大功告成！Aqulify 已安装完毕。' ;;
+        inst.sumGui) f='界面：        菜单 → Aqulify  （或：aqulify-gui）' ;;
+        inst.sumState) f='引擎状态：    systemctl --user status aqulify' ;;
+        inst.sumLog) f='日志：        journalctl --user -u aqulify -f' ;;
+        inst.sumUninstall) f='卸载：        ./uninstall.sh' ;;
         esac ;;
     esac
     if [ -z "$f" ]; then
@@ -139,7 +277,7 @@ msg() {
 # desktop_l10n MEZŐ KULCS – a .desktop fájl fordított sorai (MEZŐ[nyelv]=...)
 desktop_l10n() {
     local l
-    for l in hu; do
+    for l in hu es fr zh; do
         printf "%s[%s]=%s\n" "$1" "$l" "$(msg_text "$l" "$2")"
     done
 }

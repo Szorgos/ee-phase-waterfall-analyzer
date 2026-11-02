@@ -11,7 +11,7 @@ aq_detect_lang() {
     [ -z "$l" ] && l="${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}"
     l="${l%%[_.@-]*}"
     case "$l" in
-        hu|en) printf "%s" "$l" ;;
+        hu|en|es|fr|zh) printf "%s" "$l" ;;
         *) printf "en" ;;
     esac
 }
@@ -24,6 +24,21 @@ msg_text() {
         common.errorPrefix) f='[Hiba]' ;;
         uninst.purged) f='Az Aqulify és a mentett beállításai eltávolítva.' ;;
         uninst.removed) f='Az Aqulify eltávolítva. (A beállítások megmaradtak: ~/.config/aqulify — törlés: ./uninstall.sh --purge)' ;;
+        esac ;;
+    es) case "$2" in
+        common.errorPrefix) f='[Error]' ;;
+        uninst.purged) f='Aqulify y sus ajustes guardados han sido eliminados.' ;;
+        uninst.removed) f='Aqulify ha sido eliminado. (Se han conservado los ajustes: ~/.config/aqulify — para borrarlos: ./uninstall.sh --purge)' ;;
+        esac ;;
+    fr) case "$2" in
+        common.errorPrefix) f='[Error]' ;;
+        uninst.purged) f='Aqulify et ses paramètres enregistrés ont été supprimés.' ;;
+        uninst.removed) f='Aqulify a été supprimé. (Les paramètres ont été conservés : ~/.config/aqulify — pour les supprimer : ./uninstall.sh --purge)' ;;
+        esac ;;
+    zh) case "$2" in
+        common.errorPrefix) f='[Error]' ;;
+        uninst.purged) f='Aqulify 及其保存的设置已被清除。' ;;
+        uninst.removed) f='Aqulify 已被移除。（保留了设置：~/.config/aqulify — 如需删除：./uninstall.sh --purge）' ;;
         esac ;;
     esac
     if [ -z "$f" ]; then
