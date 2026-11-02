@@ -2406,13 +2406,13 @@ if (!window.THREE) window.THREE = (function () {
 
         <section class="os-dither" aria-labelledby="osHeadD">
           <h4 class="os-head" id="osHeadD" data-i18n="os.ditherTitle">Dither</h4>
-          <p class="os-text" data-i18n="os.ditherDesc">Ha a lánc módosítja a jelet (EQ, konvolver, szintállítás…), a számítás eredménye sokkal finomabb, mint amit a hangkártya fogad, ezért 16 vagy 24 bitre kell kerekíteni. A kerekítési hiba a zenével együtt mozog, és halk részeknél (lecsengés, elhalkulás) érdes, torz zajként hallatszhat. A dither egy nagyon halk, egyenletes zajt ad hozzá, így ez a hiba semleges, állandó alapzajjá válik. Csak akkor fut, ha a lánc módosítja a jelet; érintetlen jelnél a kimenet bitpontos marad.</p>
+          <p class="os-text" data-i18n="os.ditherDesc">A DSP-lánc sokkal nagyobb pontossággal számol, mint amit a hangkártya fogad. A dither gondoskodik róla, hogy ez a pontosság a 16 vagy 24 bites kimeneten is megmaradjon: a halk részletek, a lecsengések és az elhalkulások is tisztán, természetesen szólnak. A stúdiós masteringben és a komoly audiofil lejátszókban is ez a bevett eljárás. Csak akkor fut, ha a lánc módosítja a jelet; érintetlen jelnél a kimenet bitpontos marad.</p>
           <div class="os-dgrid" id="outstageDither"></div>
           <ul class="os-modes">
-            <li data-i18n-html="os.modeOff"><strong>Ki:</strong> nincs dither; a hangkártya bitmélységére a rendszer kerekít, dither nélkül.</li>
-            <li data-i18n-html="os.modeTpdf"><strong>TPDF:</strong> a szabványos, semleges dither: egyenletes, nagyon halk zaj a teljes hangsávban.</li>
-            <li data-i18n-html="os.modeShaped"><strong>Zajformált:</strong> a zaj nagyobb része a legmagasabb hangok felé tolódik, ahol a hallás kevésbé érzékeny, így még kevésbé hallható.</li>
-            <li data-i18n-html="os.modeTip"><strong>Melyiket?</strong> 24 bites hangkártyánál a különbség gyakorlatilag nem hallható, a TPDF elég. 16 bitnél (régebbi USB DAC, 16 bites S/PDIF) a zajformált a jobb.</li>
+            <li data-i18n-html="os.modeOff"><strong>Ki:</strong> nincs dither; a hangkártya bitmélységére a rendszer kerekít.</li>
+            <li data-i18n-html="os.modeTpdf"><strong>TPDF:</strong> a legelterjedtebb, semleges változat, a teljes hangsávban egyenletes.</li>
+            <li data-i18n-html="os.modeShaped"><strong>Zajformált:</strong> a maradék zajt a legmagasabb hangok felé tolja, ahol a hallás a legkevésbé érzékeny; 16 bitnél ez adja a legtisztább hangot.</li>
+            <li data-i18n-html="os.modeTip"><strong>Melyiket?</strong> 24 bites hangkártyához a TPDF tökéletes. 16 bitnél (régebbi USB DAC, 16 bites S/PDIF) a zajformált a jobb.</li>
           </ul>
         </section>
       </div>
