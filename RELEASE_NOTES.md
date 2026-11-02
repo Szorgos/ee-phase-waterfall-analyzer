@@ -1,3 +1,18 @@
+### Újdonságok (2.0.9)
+
+**Letöltés (2.0.9):**
+- Windows 11: [Aqulify-Setup-2.0.9.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.9/Aqulify-Setup-2.0.9.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.9/Aqulify-Setup-2.0.9.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.0.9-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.9/Aqulify-2.0.9-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.9/Aqulify-2.0.9-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.0.9.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.9/Aqulify-Linux-2.0.9.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.9/Aqulify-Linux-2.0.9.tar.gz.sha256))
+- Fedora: [aqulify-2.0.9-1.fc44.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.9/aqulify-2.0.9-1.fc44.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.0.9-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.9/aqulify_2.0.9-1_amd64.deb) · Arch: [aqulify-2.0.9-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.0.9/aqulify-2.0.9-1-x86_64.pkg.tar.zst)
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Új nyelvek: spanyol, francia és kínai (egyszerűsített).** A felület, a lejátszósáv és a zenetár, a tálcamenü és az üzenetablakok, a Windows-telepítő, a macOS-alkalmazás és a Linuxos telepítő is öt nyelven szól. Az első indulás a rendszer nyelvén történik (pl. kínai rendszeren kínaiul), a nyelv a fejlécben váltható.
+- **Csatornák és dither:** a bal és a jobb csatorna egymás mellett (keskeny ablakban egymás alatt), mindkettőben késleltetés, szint és polaritás. A dither külön részt kapott közérthető leírással: mit ad (a lánc pontossága a 16 / 24 bites kimeneten is megmarad, a halk részletek tisztán szólnak), a három mód röviden, és melyiket mikor érdemes választani.
+- **Fejléc:** keskeny ablakban a márkanév és a verzió nem csúszik a nézetváltó alá; szűkülésnél a téma-választó és a motor állapota rövidül.
+- **Hangkimenet (haladó):** a jelölőnégyzetes sorok hosszú felirata a négyzet mellett tördelődik.
+- Angol felület: a több kimenet állapotában „dropouts: 1” (a hibás „1 dropouts” helyett).
+
 ### Újdonságok (2.0.8)
 
 **Letöltés (2.0.8):**
