@@ -1,3 +1,17 @@
+### Újdonságok (2.1.0)
+
+**Letöltés (2.1.0):**
+- Windows 11: [Aqulify-Setup-2.1.0.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.0/Aqulify-Setup-2.1.0.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.0/Aqulify-Setup-2.1.0.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.1.0-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.0/Aqulify-2.1.0-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.0/Aqulify-2.1.0-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.1.0.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.0/Aqulify-Linux-2.1.0.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.0/Aqulify-Linux-2.1.0.tar.gz.sha256))
+- Fedora: [aqulify-2.1.0-1.fc44.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.0/aqulify-2.1.0-1.fc44.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.1.0-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.0/aqulify_2.1.0-1_amd64.deb) · Arch: [aqulify-2.1.0-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.0/aqulify-2.1.0-1-x86_64.pkg.tar.zst)
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Kizárólagos mód (WASAPI exclusive) a beépített lejátszónak, Windowson.** A Kimenet menü „Beépített lejátszó” részében kapcsolható (alapból ki). A lejátszó egyedül használja a hangkártyát: a Windows keverője és az Equalizer APO kimarad, a fájl a saját mintavételén szól, a teljes DSP-lánc a programban fut, ugyanazokkal a beállításokkal. A formátumot magától választja (32 bit float, 32, 24 vagy 16 bit); ha az eszköz foglalt, nem engedélyezett vagy nem támogatja a fájl mintavételét, megosztott módban szól tovább, és a felület kiírja az okát. Lejátszás közben is átkapcsolható. Amíg így szól, más programok nem hallhatók ugyanazon az eszközön.
+- **Hangerő kizárólagos módban:** ha a hangkártyának van hardveres hangereje, a csúszka azt állítja; ha nincs, a lánc végén digitálisan (a dither előtt) szabályoz.
+- **Vízesés, mérők, Magic Touch** kizárólagos módban is működnek, a lejátszó saját jeléből.
+- **Jelút (Hangkimenet, haladó):** Windowson is látszik a lejátszó útja: kizárólagos vagy megosztott mód, a kimenet formátuma, és hogy bitpontos-e (ha nem, miért: DSP, ReplayGain, digitális hangerő vagy kisebb bitmélység).
+
 ### Újdonságok (2.0.9)
 
 **Letöltés (2.0.9):**
