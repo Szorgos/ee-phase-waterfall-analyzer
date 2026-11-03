@@ -11,6 +11,7 @@
 
 #include "aether_chain.hpp"
 #include "ebur128.h"
+#include "pcm_convert.hpp"
 
 using namespace ee_analyzer;
 
@@ -1702,6 +1703,72 @@ static void testOutputGain() {
     CHECK(L == L0 && R == R0, "vissza 1-re: ismét bitpontos");
 }
 
+/**
+ * float → egész PCM (pcm_convert.hpp; a Windows-lejátszó kizárólagos módja): bájtsorrend, a 24 bites minta helye a
+ * 32 bites keretben, kerekítés, vágás, és hogy a rácson lévő minta (pl. dekódolt 16 bites fájl) bitpontosan megy át.
+ */
+static void testPcmConvert() {
+    std::printf("\n--- float → egész PCM (kizárólagos mód kimenete) ---\n");
+    auto rd16 = [](const uint8_t* b, size_t i) { int16_t s; std::memcpy(&s, b + i * 2, 2); return static_cast<long>(s); };
+    auto rd24 = [](const uint8_t* b, size_t i) {
+        int32_t s = b[i * 3] | (b[i * 3 + 1] << 8) | (b[i * 3 + 2] << 16);
+        if (s & 0x800000) s -= 0x1000000;
+        return static_cast<long>(s);
+    };
+    auto rd32 = [](const uint8_t* b, size_t i) { int32_t s; std::memcpy(&s, b + i * 4, 4); return static_cast<long long>(s); };
+
+    // 1. ismert értékek, mind a négy formátumban
+    const float x[] = { 0.0f, 0.5f, -0.5f, -1.0f, 1.0f, 1.0f / 32768.0f, -1.0f / 32768.0f };
+    const size_t n = sizeof(x) / sizeof(x[0]);
+    uint8_t b[4 * 16];
+    bool ex = pcm::floatToInt(x, b, n, 16, 16);
+    CHECK(rd16(b, 0) == 0 && rd16(b, 1) == 16384 && rd16(b, 2) == -16384 && rd16(b, 3) == -32768 && rd16(b, 4) == 32767 &&
+          rd16(b, 5) == 1 && rd16(b, 6) == -1 && !ex,
+          "16 bit: 0 / ±0,5 / -1 / +1 (vágva 32767-re) / ±1 LSB helyes, a vágás miatt nem bitpontos");
+    ex = pcm::floatToInt(x, b, n, 24, 24);
+    CHECK(rd24(b, 1) == 4194304 && rd24(b, 2) == -4194304 && rd24(b, 3) == -8388608 && rd24(b, 4) == 8388607 &&
+          rd24(b, 5) == 256 && b[3] == 0x00 && b[4] == 0x00 && b[5] == 0x40 && !ex,
+          "24 bit (3 bájt): értékek és kis-endián bájtsorrend (0,5 = 00 00 40)");
+    ex = pcm::floatToInt(x, b, n, 32, 24);
+    CHECK(rd32(b, 1) == 0x40000000LL && rd32(b, 3) == -2147483648LL && rd32(b, 4) == 0x7FFFFF00LL && rd32(b, 5) == 256LL * 256 &&
+              (rd32(b, 5) & 0xFF) == 0 && !ex,
+          "24 bit 32 bites keretben: a minta a felső 24 biten, az alsó bájt 0");
+    ex = pcm::floatToInt(x, b, n, 32, 32);
+    CHECK(rd32(b, 1) == 0x40000000LL && rd32(b, 3) == -2147483648LL && rd32(b, 4) == 2147483647LL && rd32(b, 5) == 65536 && !ex,
+          "32 bit: ±0,5, -1, +1 (vágva), 1/32768 = 65536");
+
+    // 2. kerekítés a legközelebbire, és a nem rácsra eső érték jelzése
+    const float r[] = { 0.3f };
+    ex = pcm::floatToInt(r, b, 1, 16, 16);
+    CHECK(rd16(b, 0) == std::lround(0.3f * 32768.0) && !ex, "16 bit: 0,3 → %ld (legközelebbi), nem bitpontos", rd16(b, 0));
+
+    // 3. dekódolt 16 és 24 bites hang: minden formátumban bitpontosan, a vágás határain is
+    std::mt19937 rng(5);
+    std::uniform_int_distribution<int> u16(-32768, 32767), u24(-8388608, 8388607);
+    std::vector<float> s16(4096), s24(4096);
+    for (size_t i = 0; i < s16.size(); ++i) {
+        s16[i] = static_cast<float>(u16(rng)) / 32768.0f;
+        s24[i] = static_cast<float>(u24(rng)) / 8388608.0f;
+    }
+    s16[0] = -1.0f;                       // -32768
+    s16[1] = 32767.0f / 32768.0f;         // a legnagyobb pozitív kód
+    s24[0] = -1.0f;
+    s24[1] = 8388607.0f / 8388608.0f;
+    std::vector<uint8_t> o(s16.size() * 4);
+    bool ok16 = pcm::floatToInt(s16.data(), o.data(), s16.size(), 16, 16);
+    for (size_t i = 0; i < s16.size(); ++i) ok16 = ok16 && rd16(o.data(), i) == std::lround(s16[i] * 32768.0);
+    bool ok16in32 = pcm::floatToInt(s16.data(), o.data(), s16.size(), 32, 32);
+    for (size_t i = 0; i < s16.size(); ++i) ok16in32 = ok16in32 && rd32(o.data(), i) == std::llround(s16[i] * 32768.0) * 65536;
+    bool ok24 = pcm::floatToInt(s24.data(), o.data(), s24.size(), 24, 24);
+    for (size_t i = 0; i < s24.size(); ++i) ok24 = ok24 && rd24(o.data(), i) == std::lround(s24[i] * 8388608.0);
+    bool ok24in32 = pcm::floatToInt(s24.data(), o.data(), s24.size(), 32, 24);
+    for (size_t i = 0; i < s24.size(); ++i) ok24in32 = ok24in32 && rd32(o.data(), i) == std::llround(s24[i] * 8388608.0) * 256;
+    CHECK(ok16 && ok16in32, "16 bites hang → 16 és 32 bit: minden minta bitpontosan (a -32768 és 32767 határon is)");
+    CHECK(ok24 && ok24in32, "24 bites hang → 24 és 24/32 bit: minden minta bitpontosan (a határokon is)");
+    const bool lossy = pcm::floatToInt(s24.data(), o.data(), s24.size(), 16, 16);
+    CHECK(!lossy, "24 bites hang → 16 bit: nem bitpontosként jelezve (a jelút ezt mutatja)");
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify DSP modulteszt (EasyEffects könyvtárak)\n");
@@ -1724,6 +1791,7 @@ int main() {
     testIrLibraryFormat();
     testOutStage();
     testOutputGain();
+    testPcmConvert();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

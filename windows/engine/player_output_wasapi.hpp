@@ -38,6 +38,7 @@
 #include <vector>
 
 #include "file_player.hpp"
+#include "pcm_convert.hpp"
 #include "wasapi_loopback.hpp"   // GUID-ok és ComPtr
 
 namespace ee_analyzer::player {
@@ -173,29 +174,7 @@ public:
             std::memcpy(out, in, samples * sizeof(float));
             return true;
         }
-        const double scale = std::ldexp(1.0, f.valid - 1);
-        const long long hi = (1LL << (f.valid - 1)) - 1, lo = -(1LL << (f.valid - 1));
-        bool exact = true;
-        for (size_t i = 0; i < samples; ++i) {
-            const double v = static_cast<double>(in[i]) * scale;
-            long long r = std::llround(v);
-            if (r > hi) r = hi;
-            else if (r < lo) r = lo;
-            if (static_cast<double>(r) != v) exact = false;
-            if (f.bits == 32) {
-                const int32_t s = static_cast<int32_t>(r * (1LL << (32 - f.valid)));   // 24 érvényes bit: a felső bitekre
-                std::memcpy(out + i * 4, &s, 4);
-            } else if (f.bits == 24) {
-                const int32_t s = static_cast<int32_t>(r);
-                out[i * 3] = static_cast<BYTE>(s & 0xFF);
-                out[i * 3 + 1] = static_cast<BYTE>((s >> 8) & 0xFF);
-                out[i * 3 + 2] = static_cast<BYTE>((s >> 16) & 0xFF);
-            } else {
-                const int16_t s = static_cast<int16_t>(r);
-                std::memcpy(out + i * 2, &s, 2);
-            }
-        }
-        return exact;
+        return pcm::floatToInt(in, out, samples, f.bits, f.valid);
     }
 
 private:
