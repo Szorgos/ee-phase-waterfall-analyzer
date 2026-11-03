@@ -40,11 +40,13 @@ struct AudioOptions {
     float rgPreampDb = 0.0f;     // -15 .. +15 dB
     bool rgPreventClip = true;   // a csúcs-címke szerint nem vezérel túl
     bool preload = false;        // a fájl lejátszás előtt a memóriába kerül
+    bool exclusive = false;      // Windows: kizárólagos mód (WASAPI exclusive; a DSP a motorban fut)
 
     bool operator==(const AudioOptions& o) const {
         return bufferFrames == o.bufferFrames && keepAwake == o.keepAwake && rateMode == o.rateMode &&
                fixedRate == o.fixedRate && resampleQuality == o.resampleQuality && replayGain == o.replayGain &&
-               rgPreampDb == o.rgPreampDb && rgPreventClip == o.rgPreventClip && preload == o.preload;
+               rgPreampDb == o.rgPreampDb && rgPreventClip == o.rgPreventClip && preload == o.preload &&
+               exclusive == o.exclusive;
     }
     bool operator!=(const AudioOptions& o) const { return !(*this == o); }
 };
@@ -88,7 +90,7 @@ inline std::string toJson(const AudioOptions& o) {
            ",\"resampleQuality\":" + std::to_string(o.resampleQuality) +
            ",\"replayGain\":\"" + (o.replayGain == 2 ? "album" : o.replayGain == 1 ? "track" : "off") +
            "\",\"rgPreamp\":" + std::to_string(o.rgPreampDb) + ",\"rgClip\":" + (o.rgPreventClip ? "true" : "false") +
-           ",\"preload\":" + (o.preload ? "true" : "false") + "}";
+           ",\"preload\":" + (o.preload ? "true" : "false") + ",\"exclusive\":" + (o.exclusive ? "true" : "false") + "}";
 }
 
 /** A JSON-objektum mezői felülírják a megadott alapot (a hiányzó mező marad). */
@@ -104,6 +106,7 @@ inline AudioOptions fromJson(const json::Value& v, AudioOptions base = {}) {
     if (const json::Value* x = v.get("rgPreamp"); x && x->type == T::Number) base.rgPreampDb = static_cast<float>(x->num);
     if (const json::Value* x = v.get("rgClip"); x && x->type == T::Bool) base.rgPreventClip = x->b;
     if (const json::Value* x = v.get("preload"); x && x->type == T::Bool) base.preload = x->b;
+    if (const json::Value* x = v.get("exclusive"); x && x->type == T::Bool) base.exclusive = x->b;
     sanitize(base);
     return base;
 }

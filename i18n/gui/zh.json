@@ -562,5 +562,17 @@
   "ao.rgPreamp": "前级增益",
   "ao.rgClip": "削波保护（基于峰值标签）",
   "ao.preload": "将文件加载到内存中",
-  "ao.preloadHint": "播放期间无磁盘或网络读取（例如休眠的外置硬盘、NAS）。"
+  "ao.preloadHint": "播放期间无磁盘或网络读取（例如休眠的外置硬盘、NAS）。",
+  "ao.exclusive": "独占模式（WASAPI exclusive）",
+  "ao.exclusiveHint": "播放器独占声卡：绕过 Windows 混音器和 Equalizer APO，文件以其原始采样率播放，DSP 链在程序内运行。在此期间，其他程序无法在此设备上发声。播放中切换时，声音会短暂中断。",
+  "ao.exclOn": "独占模式：{format}",
+  "ao.exclFallback": "独占模式未能启动（{reason}），正以共享模式播放",
+  "ao.exclBusy": "设备正被其他程序占用",
+  "ao.exclNotAllowed": "Windows 声音设置中未允许",
+  "ao.exclFormat": "设备不支持此采样率或格式",
+  "ao.exclError": "错误",
+  "ao.mixed": "共享模式：Windows 音频引擎会混合信号（非比特完美）",
+  "ao.notBitperfect": "非比特完美",
+  "ao.truncated": "输出位深低于文件的位深",
+  "ao.volDigital": "数字音量（设备没有硬件音量）"
 }

@@ -562,5 +562,17 @@
   "ao.rgPreamp": "Préampli",
   "ao.rgClip": "Protection anti-écrêtage (balise de crête)",
   "ao.preload": "Charger le fichier en mémoire",
-  "ao.preloadHint": "Aucune lecture disque ou réseau pendant la lecture (ex. disque externe en veille, NAS)."
+  "ao.preloadHint": "Aucune lecture disque ou réseau pendant la lecture (ex. disque externe en veille, NAS).",
+  "ao.exclusive": "Mode exclusif (WASAPI exclusive)",
+  "ao.exclusiveHint": "Le lecteur utilise seul la carte son : le mélangeur de Windows et Equalizer APO sont contournés, le fichier est lu à sa propre fréquence d'échantillonnage et la chaîne DSP tourne dans le programme. Pendant ce temps, les autres programmes ne peuvent pas jouer sur ce périphérique. Le changer pendant la lecture interrompt brièvement le son.",
+  "ao.exclOn": "Mode exclusif : {format}",
+  "ao.exclFallback": "Le mode exclusif n'a pas démarré ({reason}) ; lecture en mode partagé",
+  "ao.exclBusy": "un autre programme utilise le périphérique",
+  "ao.exclNotAllowed": "il n'est pas autorisé dans les paramètres audio de Windows",
+  "ao.exclFormat": "le périphérique ne prend pas en charge cette fréquence ou ce format",
+  "ao.exclError": "erreur",
+  "ao.mixed": "Mode partagé : le moteur audio de Windows mixe le signal (pas bit-perfect)",
+  "ao.notBitperfect": "Pas bit-perfect",
+  "ao.truncated": "La profondeur de bits de sortie est inférieure à celle du fichier",
+  "ao.volDigital": "Volume numérique (le périphérique n'a pas de volume matériel)"
 }

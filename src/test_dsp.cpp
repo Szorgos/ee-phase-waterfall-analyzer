@@ -1649,6 +1649,59 @@ static void testOutStage() {
           "v11-es params.bin: betöltve, a kimeneti fokozat alapértéken");
 }
 
+/** A kimeneti hangerő (setOutputGain; a Windows-lejátszó kizárólagos módja): 1-nél bitpontos, különben pontos szorzó. */
+static void testOutputGain() {
+    std::printf("\n--- Kimeneti hangerő (kizárólagos mód, digitális hangerő) ---\n");
+    std::mt19937 rng(11);
+    std::uniform_real_distribution<float> u(-0.9f, 0.9f);
+    auto noise = [&](std::vector<float>& L, std::vector<float>& R) {
+        for (auto& v : L) v = u(rng);
+        for (auto& v : R) v = u(rng);
+    };
+    AetherChain chain;
+    chain.setSampleRate(48000.0);
+    chain.applyParamsRT(transparentParams());
+    std::vector<float> L(9600), R(9600);
+    noise(L, R);
+    std::vector<float> L0 = L, R0 = R;
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 480);
+    CHECK(L == L0 && R == R0, "1-es hangerő: a kimenet bitpontosan a bemenet");
+
+    chain.setOutputGain(0.5f);
+    noise(L, R);
+    L0 = L;
+    R0 = R;
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 480);
+    bool half = true, ramp = std::abs(L[0]) > std::abs(0.5f * L0[0]) || L0[0] == 0.0f;
+    for (size_t i = 480; i < L.size(); ++i)
+        if (L[i] != 0.5f * L0[i] || R[i] != 0.5f * R0[i]) half = false;
+    CHECK(half && ramp, "0,5-ös hangerő: az első blokkban úszik, utána pontosan fele");
+
+    ParamData d = transparentParams();
+    d.set(kFlagOutStage, true);
+    d.ditherMode = 1;
+    d.ditherBits = 16;
+    chain.applyParamsRT(d);
+    noise(L, R);
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 480);
+    bool grid = true;
+    for (size_t i = 4800; i < L.size(); ++i) {
+        const double q = L[i] * 32768.0;
+        if (std::abs(q - std::round(q)) > 1e-3) grid = false;
+    }
+    CHECK(grid, "csökkentett hangerő + dither 16 bit: a minták a 16 bites rácson (a lánc egyébként érintetlen)");
+
+    chain.applyParamsRT(transparentParams());
+    chain.setOutputGain(1.0f);
+    noise(L, R);
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 480);   // úszás vissza 1-re
+    noise(L, R);
+    L0 = L;
+    R0 = R;
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 480);
+    CHECK(L == L0 && R == R0, "vissza 1-re: ismét bitpontos");
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify DSP modulteszt (EasyEffects könyvtárak)\n");
@@ -1670,6 +1723,7 @@ int main() {
     testEqLatency();
     testIrLibraryFormat();
     testOutStage();
+    testOutputGain();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

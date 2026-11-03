@@ -23,8 +23,11 @@
 #include <shellapi.h>
 #include <iphlpapi.h>
 #include <psapi.h>
+#include <xmmintrin.h>
+#include <pmmintrin.h>
 
 #include <atomic>
+#include <cmath>
 #include <chrono>
 #include <cstdio>
 #include <iostream>
@@ -37,6 +40,8 @@
 
 #include "ws_bridge.hpp"
 #include "param_block.hpp"
+#include "aether_chain.hpp"
+#include "shared_state.hpp"
 #include "aq_i18n.hpp"
 #include "../common/win_shared.hpp"
 #include "../common/eqapo_paths.hpp"
@@ -83,6 +88,13 @@ std::string endpointVolumeJson() {
         }))
         return {};
     return ",\"volume\":{\"level\":" + std::to_string(level) + ",\"muted\":" + (muted ? "true" : "false") + "}";
+}
+
+/** Van-e az eszköznek hardveres hangereje (kizárólagos módban csak az hat; különben a csúszka digitálisan szabályoz). */
+bool endpointHardwareVolume() {
+    DWORD mask = 0;
+    if (!withEndpointVolume([&](IAudioEndpointVolume* v) { return SUCCEEDED(v->QueryHardwareSupport(&mask)); })) return true;
+    return (mask & ENDPOINT_HARDWARE_SUPPORT_VOLUME) != 0;
 }
 
 void setEndpointVolume(double level, int mute) {
@@ -259,10 +271,126 @@ bool hasArg(int argc, char** argv, const char* a) {
     return false;
 }
 
+/**
+ * A beépített lejátszó saját DSP-lánca a kizárólagos módhoz (WASAPI exclusive): ilyenkor az Equalizer APO kimarad,
+ * ezért a lánc itt, a lejátszó kimenetének szálán fut (mint macOS-en). A beállítások és az IR ugyanazok, mint amelyeket
+ * a motor a pluginnak küld; a feldolgozott jel a vízesésnek és a mérőknek a saját lehallgatóba kerül.
+ */
+class PlayerDsp : public player::ExclusiveDsp {
+public:
+    PlayerDsp() : tap_(std::make_unique<SharedTapRing>()) {
+        chain_.setSampleRate(48000);
+        chain_.startWorker();
+    }
+    ~PlayerDsp() override { chain_.stopWorker(); }
+
+    void setParams(const ParamData& p) { params_.write(p); }
+    void submitIr(IrData ir) { chain_.submitIr(std::move(ir)); }
+
+    /**
+     * Digitális hangerő (a felület csúszkája, 0..1) és némítás. Csak hardveres hangerő nélküli eszközön hat; ott a lánc
+     * végén (a limiter után, a dither előtt) szabályoz. Hardveres hangerőnél a lánc kimenete érintetlen (bitpontos).
+     */
+    void setVolume(double level, int mute) {
+        if (level >= 0.0) level_ = static_cast<float>(std::clamp(level, 0.0, 1.0));
+        if (mute >= 0) muted_ = mute != 0;
+        applyVolume();
+    }
+    bool hardwareVolume() const { return hwVolume_.load(); }
+    std::string volumeJson() const {
+        return ",\"volume\":{\"level\":" + std::to_string(level_.load()) + ",\"muted\":" + (muted_.load() ? "true" : "false") +
+               ",\"digital\":true}";
+    }
+    /** A digitális hangerő módosítja-e most a jelet (nem bitpontos). */
+    bool volumeTouches() const { return chain_.outputGain() != 1.0f; }
+
+    // ---- player::ExclusiveDsp (a kimenet szálán)
+    void prepare(uint32_t rate, uint32_t blockFrames, int ditherBits) override {
+        hwVolume_ = endpointHardwareVolume();   // az első blokk előtt: ne szóljon egy pillanatig se teljes hangerővel
+        applyVolume();
+        std::cout << "[Lejátszó] Hangerő kizárólagos módban: "
+                  << (hwVolume_ ? "az eszköz hardveres hangereje" : "digitális (a DSP-lánc végén)") << ".\n";
+        chain_.setSampleRate(rate);
+        chain_.reset();
+        rate_ = rate;
+        bits_ = ditherBits;
+        appliedSeq_ = 0;                 // a beállítás újra, az új bitmélységgel
+        L_.assign(blockFrames, 0.0f);
+        R_.assign(blockFrames, 0.0f);
+    }
+
+    void process(float* lr, size_t n) override {
+        const unsigned int oldCsr = _mm_getcsr();
+        _mm_setcsr(oldCsr | 0x8040);     // FTZ | DAZ (mint a pluginban)
+        const uint32_t seq = params_.currentSeq();
+        if (seq != appliedSeq_ && (seq & 1u) == 0) {
+            ParamData pd;
+            uint32_t readSeq = 0;
+            if (params_.tryRead(pd, readSeq)) {
+                if (bits_) pd.ditherBits = bits_;   // a dither a kimenet tényleges bitmélységére
+                chain_.applyParamsRT(pd);
+                transparent_.store(!AetherChain::modifiesSignal(pd), std::memory_order_relaxed);
+                appliedSeq_ = readSeq;
+            }
+        }
+        if (L_.size() < n) { L_.resize(n); R_.resize(n); }   // nem várt blokkméret (nem fordulhat elő)
+        for (size_t i = 0; i < n; ++i) { L_[i] = lr[2 * i]; R_[i] = lr[2 * i + 1]; }
+        chain_.process(L_.data(), R_.data(), n);
+        for (size_t i = 0; i < n; ++i) { lr[2 * i] = L_[i]; lr[2 * i + 1] = R_[i]; }
+        tap_->write(L_.data(), R_.data(), static_cast<uint32_t>(n));
+        gr_.store(static_cast<float>(chain_.gainReductionDb()), std::memory_order_relaxed);
+        bass_.store(static_cast<float>(chain_.bassHarmonicsDb()), std::memory_order_relaxed);
+        latency_.store(chain_.eqLatencySamples() + chain_.limiterLatencySamples() +
+                           (chain_.params().has(kFlagConvolver) && chain_.convolverActive() ? ee::ZitaInstance::latencyFor(static_cast<uint32_t>(n)) : 0),
+                       std::memory_order_relaxed);
+        lastData_.store(GetTickCount64(), std::memory_order_relaxed);
+        _mm_setcsr(oldCsr);
+    }
+
+    size_t latencySamples() const override { return latency_.load(std::memory_order_relaxed); }
+
+    // ---- a motornak (bármely szálról)
+    const SharedTapRing& tap() const { return *tap_; }
+    uint32_t sampleRate() const { return rate_.load(); }
+    double gainReductionDb() const { return gr_.load(); }
+    double bassHarmonicsDb() const { return bass_.load(); }
+    bool transparent() const { return transparent_.load(); }
+    uint64_t lastDataMs() const { return lastData_.load(); }
+    std::string magicDiagJson() const {
+        magic::MagicDiag d;
+        return chain_.magicDiag(d) ? magic::diagToJson(d) : std::string();
+    }
+
+private:
+    void applyVolume() {
+        const float l = level_.load();
+        // hallás szerinti skála: 0 → néma, 1 → 0 dB, közte dB-ben egyenletesen (-50 dB-ig)
+        float g = muted_.load() || l <= 0.0f ? 0.0f : (l >= 1.0f ? 1.0f : std::pow(10.0f, (l - 1.0f) * 50.0f / 20.0f));
+        if (hwVolume_.load()) g = 1.0f;
+        chain_.setOutputGain(g);
+    }
+
+    AetherChain chain_;
+    ParamBlock params_;
+    std::unique_ptr<SharedTapRing> tap_;
+    std::vector<float> L_, R_;
+    uint32_t appliedSeq_ = 0;
+    int bits_ = 0;
+    std::atomic<uint32_t> rate_{48000};
+    std::atomic<float> gr_{0.0f}, bass_{-100.0f};
+    std::atomic<bool> transparent_{true};
+    std::atomic<size_t> latency_{0};
+    std::atomic<uint64_t> lastData_{0};
+    std::atomic<float> level_{1.0f};
+    std::atomic<bool> muted_{false};
+    std::atomic<bool> hwVolume_{true};
+};
+
 /** Az EQ APO plugin közös memóriájának figyelése és a jelforrás kiválasztása. */
 class SourceManager {
 public:
-    explicit SourceManager(win::WasapiLoopback& lb) : loopback_(lb), apoDevice_(loadApoDevice()) {}
+    SourceManager(win::WasapiLoopback& lb, PlayerDsp& dsp, player::WasapiPlayerOutput& out)
+        : loopback_(lb), player_(dsp), playerOut_(out), apoDevice_(loadApoDevice()) {}
 
     /** Rendszeresen hívandó (pl. 250 ms-onként) a fő szálból. */
     void poll(const ParamData& currentParams) {
@@ -278,6 +406,19 @@ public:
                     if (!ir_.empty()) win::writeIrBlock(mapping_.state()->ir, ir_);
                 }
                 pluginReadPos_ = mapping_.state()->tap.writePos.load();
+            }
+        }
+        // A lejátszó kizárólagos módban: a hang nem megy át a pluginon, a mérés a lejátszó saját láncából jön
+        const bool excl = playerOut_.exclusiveActive();
+        if (excl != playerActive_) {
+            playerActive_ = excl;
+            std::cout << (excl ? "[Forrás] Beépített lejátszó, kizárólagos mód (a DSP a motorban fut).\n"
+                               : "[Forrás] A kizárólagos mód véget ért.\n");
+            playerReadPos_ = player_.tap().writePos.load();
+            lastPlayerData_ = GetTickCount64();
+            if (!excl) {
+                if (pluginActive_ && mapping_.state()) pluginReadPos_ = mapping_.state()->tap.writePos.load();
+                loopbackReadPos_ = loopback_.ring().writePos.load();
             }
         }
         const bool alive = pluginAliveLocked();
@@ -303,6 +444,23 @@ public:
 
     size_t pull(float* lr, size_t maxFrames) {
         std::lock_guard<std::mutex> lk(mutex_);
+        if (playerActive_) {
+            const size_t n = readTapRing(player_.tap(), playerReadPos_, lr, maxFrames);
+            const uint64_t now = GetTickCount64();
+            if (n > 0) {
+                lastPlayerData_ = now;
+                return n;
+            }
+            // szünetben nincs feldolgozás: csend, hogy a vízesés lecsengjen
+            if (now - player_.lastDataMs() > 100 && now - lastPlayerData_ > 20) {
+                const uint64_t ms = std::min<uint64_t>(now - lastPlayerData_, 100);
+                const size_t frames = std::min<size_t>(maxFrames, static_cast<size_t>(ms * player_.sampleRate() / 1000));
+                std::fill(lr, lr + frames * 2, 0.0f);
+                lastPlayerData_ = now;
+                return frames;
+            }
+            return 0;
+        }
         if (pluginActive_ && mapping_.state()) {
             const AetherSharedState* st = mapping_.state();
             const size_t n = readTapRing(st->tap, pluginReadPos_, lr, maxFrames);
@@ -329,6 +487,7 @@ public:
 
     double sampleRate() {
         std::lock_guard<std::mutex> lk(mutex_);
+        if (playerActive_) return player_.sampleRate();
         if (pluginActive_ && mapping_.state()) return mapping_.state()->sampleRate.load();
         return loopback_.sampleRate();
     }
@@ -336,6 +495,7 @@ public:
     /** A Bass Enhancer felharmonikus-szintje (dB) a pluginból; plugin nélkül nincs feldolgozás (-100). */
     double bassHarmonicsDb() {
         std::lock_guard<std::mutex> lk(mutex_);
+        if (playerActive_) return player_.bassHarmonicsDb();
         if (pluginActive_ && mapping_.state()) return mapping_.state()->bassHarmonicsDb.load();
         return -100.0;
     }
@@ -346,6 +506,7 @@ public:
             std::lock_guard<std::mutex> ik(irMutex_);
             ir_ = std::move(ir);
             if (!win::saveIrFile(ir_)) std::cout << "[IR] Figyelem: az ir.bin nem menthető a ProgramData mappába.\n";
+            player_.submitIr(ir_);
         }
         std::lock_guard<std::mutex> lk(mutex_);
         if (mapping_.state()) {
@@ -371,17 +532,24 @@ public:
             std::cout << "[IR] Mentett impulzusválasz: " << ir.name << " (" << ir.frames() << " minta)\n";
             std::lock_guard<std::mutex> ik(irMutex_);
             ir_ = std::move(ir);
+            player_.submitIr(ir_);
         }
     }
 
     void pushParams(const ParamData& p) {
         std::lock_guard<std::mutex> lk(mutex_);
+        player_.setParams(p);
         if (mapping_.state()) mapping_.state()->params.write(p);
     }
 
     /** Rövid, emberi leírás a tálcaikonhoz. */
     std::wstring label() {
         std::lock_guard<std::mutex> lk(mutex_);
+        if (playerActive_) {
+            wchar_t buf[96];
+            swprintf(buf, 96, L"WASAPI exclusive (%.1f kHz)", player_.sampleRate() / 1000.0);
+            return buf;
+        }
         if (pluginActive_ && mapping_.state()) {
             wchar_t buf[96];
             swprintf(buf, 96, L"EQ APO plugin (%.1f kHz)", mapping_.state()->sampleRate.load() / 1000.0);
@@ -394,7 +562,12 @@ public:
         std::lock_guard<std::mutex> lk(mutex_);
         std::string s = "\"platform\":\"windows\"";
         char buf[160];
-        if (pluginActive_ && mapping_.state()) {
+        if (playerActive_) {
+            std::snprintf(buf, sizeof(buf), ",\"source\":\"WASAPI exclusive\",\"dspActive\":true,\"sr\":%u,\"gr\":%.2f",
+                          player_.sampleRate(), player_.gainReductionDb());
+            s += buf;
+            s += ",\"dspState\":\"active\"";
+        } else if (pluginActive_ && mapping_.state()) {
             std::snprintf(buf, sizeof(buf),
                           ",\"source\":\"EQ APO plugin\",\"dspActive\":true,\"sr\":%u,\"instances\":%u,\"gr\":%.2f",
                           mapping_.state()->sampleRate.load(), mapping_.state()->activeInstances.load(),
@@ -435,6 +608,7 @@ public:
     /** A Magic Touch mérései (csak a pluginból: WASAPI loopbacknél nincs DSP). Üres, ha nincs adat. */
     std::string magicDiagJson() {
         std::lock_guard<std::mutex> lk(mutex_);
+        if (playerActive_) return player_.magicDiagJson();
         if (!pluginActive_ || !mapping_.state()) return {};
         magic::MagicDiag d;
         if (!mapping_.state()->magicDiag.read(d)) return {};
@@ -483,8 +657,13 @@ private:
     }
 
     win::WasapiLoopback& loopback_;
+    PlayerDsp& player_;
+    player::WasapiPlayerOutput& playerOut_;
     win::SharedMapping mapping_;
     std::mutex mutex_;
+    bool playerActive_ = false;
+    uint64_t playerReadPos_ = 0;
+    uint64_t lastPlayerData_ = 0;
     bool pluginActive_ = false;
     uint64_t pluginReadPos_ = 0;
     uint64_t loopbackReadPos_ = 0;
@@ -541,7 +720,13 @@ int main(int argc, char** argv) {
     auto loopback = std::make_unique<win::WasapiLoopback>();
     loopback->start();
 
-    SourceManager sources(*loopback);
+    // A beépített lejátszó kimenete és a kizárólagos módú saját lánca (a lánc a lejátszónál tovább él)
+    PlayerDsp playerDsp;
+    auto playerOutOwned = std::make_unique<player::WasapiPlayerOutput>();
+    player::WasapiPlayerOutput& playerOut = *playerOutOwned;
+    playerOut.setExclusiveDsp(&playerDsp);
+
+    SourceManager sources(*loopback, playerDsp, playerOut);
     sources.loadStoredIr();
     sources.poll(current);
 
@@ -559,8 +744,12 @@ int main(int argc, char** argv) {
         }
         sources.pushParams(p);
     };
-    cb.statusFields = [&]() { return sources.statusFields() + endpointVolumeJson(); };
-    cb.setVolume = [](double level, int mute) { setEndpointVolume(level, mute); };
+    // (a statusFields a lejátszó után, lent)
+    cb.setVolume = [&](double level, int mute) {
+        // kizárólagos módban, hardveres hangerő nélküli eszközön a csúszka a lánc digitális hangereje
+        if (playerOut.exclusiveActive() && !playerDsp.hardwareVolume()) playerDsp.setVolume(level, mute);
+        else setEndpointVolume(level, mute);
+    };
     cb.setIr = [&](IrData&& ir) { sources.setIr(std::move(ir)); };
     cb.getIr = [&]() { return sources.irCopy(); };
     cb.loadLibraryIr = loadLibraryIr;
@@ -587,7 +776,8 @@ int main(int argc, char** argv) {
     // A beépített lejátszó (2.x): az alapértelmezett lejátszóeszközre játszik (WASAPI), így a hang az Equalizer APO-ban
     // futó Aqulify DSP-láncon át szól. Amíg van betöltött szám, a „most szól” és a vezérlés ezt mutatja; utána ismét
     // a gépen futó lejátszót (SMTC).
-    player::FilePlayer filePlayer(std::make_unique<player::WasapiPlayerOutput>());
+    // Kizárólagos módban (Hangkimenet, haladó) a lejátszó egyedül használja az eszközt: az APO kimarad, a lánc a motorban fut.
+    player::FilePlayer filePlayer(std::move(playerOutOwned));
     // Zenetár (2.x): a mentett zenei mappák (%APPDATA%\Aqulify\library.json), különben a Zene mappa
     library::MusicLibrary musicLibrary;
     // A lejátszási napló (3c2, %APPDATA%\Aqulify\stats.json): a sor előtt, mert a sor mérőszála a megszűnéséig hívhatja
@@ -639,6 +829,29 @@ int main(int argc, char** argv) {
         return true;
     };
     cb.playerStop = [&] { filePlayer.stop(); };
+    cb.statusFields = [&]() {
+        std::string s = sources.statusFields();
+        const bool digitalVolume = playerOut.exclusiveActive() && !playerDsp.hardwareVolume();
+        s += digitalVolume ? playerDsp.volumeJson() : endpointVolumeJson();
+        if (!filePlayer.hasTrack()) return s;
+        // A jelút (Hangkimenet, haladó): megosztott módban a Windows hangmotorja keveri a jelet (nem bitpontos);
+        // kizárólagos módban bitpontos, ha sem a lánc, sem a ReplayGain, sem a hangerő, sem a formátum nem változtat rajta
+        const bool excl = playerOut.exclusiveActive();
+        const uint32_t rate = filePlayer.streamRate();
+        const float rg = filePlayer.currentGainDb();
+        const double dspMs = excl && rate ? 1000.0 * static_cast<double>(playerDsp.latencySamples()) / rate : 0.0;
+        const bool transparent = excl && playerDsp.transparent() && !playerDsp.volumeTouches() && rg == 0.0f &&
+                                 playerOut.quantExact();
+        std::string out = playerOut.statusJson(dspMs);
+        char pb[256];
+        std::snprintf(pb, sizeof(pb), ",\"dspMs\":%.2f,\"transparent\":%s,\"mixer\":%s,\"keepAwake\":false,\"playerRate\":%u,"
+                      "\"playerGain\":%.2f,\"digitalVolume\":%s,\"dspTransparent\":%s,\"volTouch\":%s",
+                      dspMs, transparent ? "true" : "false", excl ? "false" : "true", rate, rg,
+                      digitalVolume ? "true" : "false", playerDsp.transparent() ? "true" : "false",
+                      digitalVolume && playerDsp.volumeTouches() ? "true" : "false");
+        out += pb;
+        return s + ",\"path\":{" + out + "}";
+    };
     {
         musicLibrary.setCacheStorage([] { return readSmallFile(userFilePath(L"library-cache.json", false), 64 * 1024 * 1024); },
                                      [](const std::string& doc) {
@@ -658,8 +871,9 @@ int main(int argc, char** argv) {
     static std::atomic<win::TrayApp*> s_tray{ nullptr };
     cb.quitEngine = [] { if (win::TrayApp* t = s_tray.load()) t->quit(); };
 
-    // Haladó hangkimenet Windowson: csak a beépített lejátszó beállításai (ReplayGain, előbetöltés). A pufferméretet
-    // és a mintavételt a Windows hangmotorja határozza meg (az Equalizer APO abban fut).
+    // Haladó hangkimenet Windowson: csak a beépített lejátszó beállításai (ReplayGain, előbetöltés, kizárólagos mód).
+    // A pufferméretet és a mintavételt a Windows hangmotorja határozza meg (az Equalizer APO abban fut); kizárólagos
+    // módban a fájl mintavétele szól.
     std::mutex audioMutex;
     audioopt::AudioOptions audioOpts;
     auto playerOnly = [](audioopt::AudioOptions o) {
@@ -675,11 +889,13 @@ int main(int argc, char** argv) {
         if (!doc.empty() && json::parse(doc, v)) audioOpts = playerOnly(audioopt::fromJson(v));
         filePlayer.setReplayGain(audioOpts.replayGain, audioOpts.rgPreampDb, audioOpts.rgPreventClip);
         filePlayer.setPreload(audioOpts.preload);
+        playerOut.setExclusive(audioOpts.exclusive);
     }
     cb.audioOptionsJson = [&]() -> std::string {
         std::lock_guard<std::mutex> lk(audioMutex);
         return "{\"opts\":" + audioopt::toJson(audioOpts) +
-               ",\"caps\":{\"buffer\":false,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true}}";
+               ",\"caps\":{\"buffer\":false,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true,"
+               "\"exclusive\":true}}";
     };
     cb.setAudioOptions = [&](const json::Value& v) {
         std::lock_guard<std::mutex> lk(audioMutex);
@@ -688,6 +904,10 @@ int main(int argc, char** argv) {
         audioOpts = o;
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         filePlayer.setPreload(o.preload);
+        if (o.exclusive != playerOut.wantExclusive()) {
+            playerOut.setExclusive(o.exclusive);
+            std::cout << "[Lejátszó] Kizárólagos mód: " << (o.exclusive ? "be" : "ki") << ".\n";
+        }
         writeFileAtomic(userFilePath(L"audio.json", true), audioopt::toJson(o));
     };
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };

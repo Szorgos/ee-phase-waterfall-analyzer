@@ -562,5 +562,17 @@
   "ao.rgPreamp": "Előerősítés",
   "ao.rgClip": "Túlvezérlés elleni védelem (csúcs-címke)",
   "ao.preload": "Fájl betöltése memóriába",
-  "ao.preloadHint": "Lejátszás közben nincs lemez- vagy hálózati olvasás (pl. elalvó külső lemez, NAS)."
+  "ao.preloadHint": "Lejátszás közben nincs lemez- vagy hálózati olvasás (pl. elalvó külső lemez, NAS).",
+  "ao.exclusive": "Kizárólagos mód (WASAPI exclusive)",
+  "ao.exclusiveHint": "A lejátszó egyedül használja a hangkártyát: a Windows keverője és az Equalizer APO kimarad, a fájl saját mintavételén szól, a DSP-lánc a programban fut. Közben más programok nem szólnak ezen az eszközön. Lejátszás közbeni váltáskor a hang egy pillanatra megszakad.",
+  "ao.exclOn": "Kizárólagos mód: {format}",
+  "ao.exclFallback": "A kizárólagos mód nem indult el ({reason}), megosztott módban szól",
+  "ao.exclBusy": "az eszközt egy másik program használja",
+  "ao.exclNotAllowed": "a Windows hangbeállításaiban nincs engedélyezve",
+  "ao.exclFormat": "az eszköz nem támogatja ezt a mintavételt vagy formátumot",
+  "ao.exclError": "hiba",
+  "ao.mixed": "Megosztott mód: a Windows hangmotorja keveri a jelet (nem bitpontos)",
+  "ao.notBitperfect": "Nem bitpontos",
+  "ao.truncated": "A kimenet bitmélysége kisebb a fájlénál",
+  "ao.volDigital": "Digitális hangerő (az eszköznek nincs hardveres hangereje)"
 }

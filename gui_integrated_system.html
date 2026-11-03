@@ -1899,6 +1899,10 @@ if (!window.THREE) window.THREE = (function () {
               <label class="ao-row ao-check" id="aoRowRgClip"><input type="checkbox" id="aoRgClip" checked onchange="aoSend()"> <span data-i18n="ao.rgClip">Túlvezérlés elleni védelem (csúcs-címke)</span></label>
               <label class="ao-row ao-check"><input type="checkbox" id="aoPreload" onchange="aoSend()"> <span data-i18n="ao.preload">Fájl betöltése memóriába</span></label>
               <div class="ao-hint" data-i18n="ao.preloadHint">Lejátszás közben nincs lemez- vagy hálózati olvasás (pl. elalvó külső lemez, NAS).</div>
+              <div id="aoExclWrap" hidden>
+                <label class="ao-row ao-check"><input type="checkbox" id="aoExclusive" onchange="aoSend()"> <span data-i18n="ao.exclusive">Kizárólagos mód (WASAPI exclusive)</span></label>
+                <div class="ao-hint" data-i18n="ao.exclusiveHint">A lejátszó egyedül használja a hangkártyát: a Windows keverője és az Equalizer APO kimarad, a fájl saját mintavételén szól, a DSP-lánc a programban fut. Közben más programok nem szólnak ezen az eszközön. Lejátszás közbeni váltáskor a hang egy pillanatra megszakad.</div>
+              </div>
             </div>
             <div class="ao-path" id="aoPath"></div>
           </div>
@@ -6041,6 +6045,8 @@ function aoOnMessage(m) {
   document.getElementById("aoRgPreamp").value = typeof o.rgPreamp === "number" ? o.rgPreamp : 0;
   document.getElementById("aoRgClip").checked = o.rgClip !== false;
   document.getElementById("aoPreload").checked = !!o.preload;
+  document.getElementById("aoExclWrap").hidden = cp.exclusive !== true;
+  document.getElementById("aoExclusive").checked = !!o.exclusive;
   const rgOn = (o.replayGain || "off") !== "off";
   document.getElementById("aoRowRgPreamp").hidden = !rgOn;
   document.getElementById("aoRowRgClip").hidden = !rgOn;
@@ -6059,6 +6065,7 @@ function aoSend() {
     opts.rgClip = document.getElementById("aoRgClip").checked;
     opts.preload = document.getElementById("aoPreload").checked;
   }
+  if (aoCapsDetail && aoCapsDetail.exclusive) opts.exclusive = document.getElementById("aoExclusive").checked;
   moSend({ type: "set_audio_opts", opts });
 }
 /** A jelút és a késleltetés (a motor állapotüzenetének "path" mezője). */
@@ -6070,7 +6077,27 @@ function aoRenderPath() {
   const sr = engineStatus.sr || 48000;
   const f1 = v => fmtNum(Math.round(+v * 10) / 10);
   const lines = [];
-  lines.push(p.transparent ? `<span class="ok">● ${t("ao.bitperfect")}</span>` : `<span class="warn">● ${t("ao.modified")}</span>`);
+  // Windows, beépített lejátszó: kizárólagos mód (exclusive) vagy megosztott mód (mixer: a Windows keveri a jelet)
+  const ex = p.exclusive;
+  if (ex && ex.want) {
+    if (ex.active) lines.push(`<span class="ok">● ${t("ao.exclOn", { format: ex.format })}</span>`);
+    else if (ex.fallback) {
+      const why = "ao.excl" + ex.fallback.charAt(0).toUpperCase() + ex.fallback.slice(1);
+      lines.push(`<span class="warn">● ${t("ao.exclFallback", { reason: t(why) })}</span>`);
+    }
+  }
+  if (p.mixer) lines.push(`<span class="warn">● ${t("ao.mixed")}</span>`);
+  else if (ex) {
+    if (p.transparent) lines.push(`<span class="ok">● ${t("ao.bitperfect")}</span>`);
+    else {
+      lines.push(`<span class="warn">● ${t("ao.notBitperfect")}</span>`);
+      if (p.dspTransparent === false) lines.push(t("ao.modified"));
+      if (ex.exact === false) lines.push(t("ao.truncated"));
+      if (p.volTouch) lines.push(t("ao.volDigital"));
+    }
+  } else {
+    lines.push(p.transparent ? `<span class="ok">● ${t("ao.bitperfect")}</span>` : `<span class="warn">● ${t("ao.modified")}</span>`);
+  }
   if (p.playerRate) {
     const same = p.playerRate === sr;
     lines.push(t("ao.player", { src: aoKhz(p.playerRate), dst: aoKhz(sr) }) + " · " +

@@ -562,5 +562,17 @@
   "ao.rgPreamp": "Preamp",
   "ao.rgClip": "Clipping protection (peak tag)",
   "ao.preload": "Load file into memory",
-  "ao.preloadHint": "No disk or network reads during playback (e.g. a sleeping external drive, NAS)."
+  "ao.preloadHint": "No disk or network reads during playback (e.g. a sleeping external drive, NAS).",
+  "ao.exclusive": "Exclusive mode (WASAPI exclusive)",
+  "ao.exclusiveHint": "The player uses the sound card on its own: the Windows mixer and Equalizer APO are bypassed, the file plays at its own sample rate, and the DSP chain runs inside the program. Other programs can't play on this device meanwhile. Switching during playback briefly interrupts the sound.",
+  "ao.exclOn": "Exclusive mode: {format}",
+  "ao.exclFallback": "Exclusive mode didn't start ({reason}); playing in shared mode",
+  "ao.exclBusy": "another program is using the device",
+  "ao.exclNotAllowed": "it isn't allowed in the Windows sound settings",
+  "ao.exclFormat": "the device doesn't support this sample rate or format",
+  "ao.exclError": "error",
+  "ao.mixed": "Shared mode: the Windows audio engine mixes the signal (not bit-perfect)",
+  "ao.notBitperfect": "Not bit-perfect",
+  "ao.truncated": "The output bit depth is lower than the file's",
+  "ao.volDigital": "Digital volume (the device has no hardware volume)"
 }

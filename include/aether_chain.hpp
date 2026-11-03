@@ -131,6 +131,13 @@ public:
 
     const ParamData& params() const { return current_; }
 
+    /**
+     * Kimeneti hangerő (lineáris, 0..1) a limiter után, a dither előtt: a Windows-lejátszó kizárólagos módjában
+     * (hardveres hangerő nélküli eszközön) a csúszka itt szabályoz. Bármely szálról; 5 ms alatt úszik. 1: érintetlen.
+     */
+    void setOutputGain(float g) { outGainTarget_.store(std::clamp(g, 0.0f, 1.0f), std::memory_order_relaxed); }
+    float outputGain() const { return outGainTarget_.load(std::memory_order_relaxed); }
+
     /** Helyben végzett sztereó feldolgozás. */
     void process(float* L, float* R, size_t n) {
         ee::DspScope scope;
@@ -428,8 +435,28 @@ private:
         }
 
         if (fade_ != Fade::None) applyFade(L, R, m);
+        const float og = outGainTarget_.load(std::memory_order_relaxed);
+        if (og != 1.0f || outGainCur_ != 1.0f) applyOutputGain(L, R, m, og);
         // Dither a legvégén, csak ha a lánc módosítja a jelet (érintetlen jelnél bitpontos marad)
-        if (d.has(kFlagOutStage) && d.ditherMode != 0 && modifiesSignal(d)) outStage_.processDither(L, R, m);
+        if (d.has(kFlagOutStage) && d.ditherMode != 0 && (modifiesSignal(d) || outGainCur_ != 1.0f))
+            outStage_.processDither(L, R, m);
+    }
+
+    /** A kimeneti hangerő (setOutputGain) alkalmazása, a változás 5 ms alatt úszik. */
+    void applyOutputGain(float* L, float* R, size_t m, float target) {
+        if (outGainCur_ == target) {
+            for (size_t i = 0; i < m; ++i) { L[i] *= target; R[i] *= target; }
+            return;
+        }
+        const float step = (target - outGainCur_) / fadeSamples_;
+        for (size_t i = 0; i < m; ++i) {
+            if (outGainCur_ != target) {
+                outGainCur_ += step;
+                if ((step > 0.0f && outGainCur_ >= target) || (step <= 0.0f && outGainCur_ <= target)) outGainCur_ = target;
+            }
+            L[i] *= outGainCur_;
+            R[i] *= outGainCur_;
+        }
     }
 
     // ------------------------------------------------------------ háttérszál
@@ -559,10 +586,12 @@ private:
     bool eqWasReset_ = false;           // a legutóbbi váltásnál újraindult-e az EQ (üres késleltető vonal)
     float preampCur_ = 1.0f, preampTarget_ = 1.0f, preampStep_ = 0.0f;
     float convIn_ = 1.0f, convOut_ = 1.0f, convDry_ = 0.0f, convWet_ = 1.0f;
+    float outGainCur_ = 1.0f;           // a kimeneti hangerő pillanatnyi értéke (setOutputGain)
     std::vector<float> aL_, aR_, bL_, bR_, dryL_, dryR_;
     Stage irStage_;
 
     // megosztott
+    std::atomic<float> outGainTarget_{1.0f};
     std::atomic<uint32_t> sampleRate_{48000};
     std::atomic<uint32_t> quantum_{0};
     ParamBlock workerParams_;

@@ -562,5 +562,17 @@
   "ao.rgPreamp": "Preamplificación",
   "ao.rgClip": "Protección contra recortes (etiqueta de pico)",
   "ao.preload": "Cargar archivo en memoria",
-  "ao.preloadHint": "Sin lecturas de disco o red durante la reproducción (p. ej. disco externo en suspensión, NAS)."
+  "ao.preloadHint": "Sin lecturas de disco o red durante la reproducción (p. ej. disco externo en suspensión, NAS).",
+  "ao.exclusive": "Modo exclusivo (WASAPI exclusive)",
+  "ao.exclusiveHint": "El reproductor usa la tarjeta de sonido en exclusiva: se omiten el mezclador de Windows y Equalizer APO, el archivo suena a su propia frecuencia de muestreo y la cadena DSP se ejecuta en el programa. Mientras tanto, otros programas no suenan en este dispositivo. Al cambiarlo durante la reproducción, el sonido se interrumpe un instante.",
+  "ao.exclOn": "Modo exclusivo: {format}",
+  "ao.exclFallback": "El modo exclusivo no se inició ({reason}); suena en modo compartido",
+  "ao.exclBusy": "otro programa está usando el dispositivo",
+  "ao.exclNotAllowed": "no está permitido en la configuración de sonido de Windows",
+  "ao.exclFormat": "el dispositivo no admite esta frecuencia de muestreo o formato",
+  "ao.exclError": "error",
+  "ao.mixed": "Modo compartido: el motor de audio de Windows mezcla la señal (no es bit-perfect)",
+  "ao.notBitperfect": "No es bit-perfect",
+  "ao.truncated": "La profundidad de bits de salida es menor que la del archivo",
+  "ao.volDigital": "Volumen digital (el dispositivo no tiene volumen por hardware)"
 }
