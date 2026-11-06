@@ -1902,6 +1902,12 @@ if (!window.THREE) window.THREE = (function () {
               <div id="aoExclWrap" hidden>
                 <label class="ao-row ao-check"><input type="checkbox" id="aoExclusive" onchange="aoSend()"> <span data-i18n="ao.exclusive">Kizárólagos mód (WASAPI exclusive)</span></label>
                 <div class="ao-hint" data-i18n="ao.exclusiveHint">A lejátszó egyedül használja a hangkártyát: a Windows keverője és az Equalizer APO kimarad, a fájl saját mintavételén szól, a DSP-lánc a programban fut. Közben más programok nem szólnak ezen az eszközön. Lejátszás közbeni váltáskor a hang egy pillanatra megszakad.</div>
+                <label class="ao-row" id="aoRowExclVol"><span data-i18n="ao.exclVol">Hangerő kizárólagos módban</span>
+                  <select id="aoExclVol" class="mini-select" onchange="aoSend()">
+                    <option value="digital" data-i18n="ao.exclVolDigital">Digitális (alapértelmezett)</option>
+                    <option value="hardware" data-i18n="ao.exclVolHw">A DAC hardveres hangereje</option>
+                  </select></label>
+                <div class="ao-hint" data-i18n="ao.exclVolHint">Digitális: a csúszka a program végén szabályoz, a DAC hangereje nem változik. 100%-nál bitpontos, alatta nem. Hardveres: a DAC saját hangerejét állítja, bitpontos, de csak akkor működik, ha a driver kizárólagos módban is alkalmazza; ha nem, a csúszka hatástalan. A következő számtól érvényes.</div>
               </div>
             </div>
             <div class="ao-path" id="aoPath"></div>
@@ -6047,6 +6053,7 @@ function aoOnMessage(m) {
   document.getElementById("aoPreload").checked = !!o.preload;
   document.getElementById("aoExclWrap").hidden = cp.exclusive !== true;
   document.getElementById("aoExclusive").checked = !!o.exclusive;
+  document.getElementById("aoExclVol").value = o.exclHwVolume ? "hardware" : "digital";
   const rgOn = (o.replayGain || "off") !== "off";
   document.getElementById("aoRowRgPreamp").hidden = !rgOn;
   document.getElementById("aoRowRgClip").hidden = !rgOn;
@@ -6065,7 +6072,10 @@ function aoSend() {
     opts.rgClip = document.getElementById("aoRgClip").checked;
     opts.preload = document.getElementById("aoPreload").checked;
   }
-  if (aoCapsDetail && aoCapsDetail.exclusive) opts.exclusive = document.getElementById("aoExclusive").checked;
+  if (aoCapsDetail && aoCapsDetail.exclusive) {
+    opts.exclusive = document.getElementById("aoExclusive").checked;
+    opts.exclHwVolume = document.getElementById("aoExclVol").value === "hardware";
+  }
   moSend({ type: "set_audio_opts", opts });
 }
 /** A jelút és a késleltetés (a motor állapotüzenetének "path" mezője). */

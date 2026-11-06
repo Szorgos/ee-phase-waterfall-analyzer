@@ -90,10 +90,13 @@ std::string endpointVolumeJson() {
     return ",\"volume\":{\"level\":" + std::to_string(level) + ",\"muted\":" + (muted ? "true" : "false") + "}";
 }
 
-/** Van-e az eszköznek hardveres hangereje (kizárólagos módban csak az hat; különben a csúszka digitálisan szabályoz). */
+/**
+ * Van-e az eszköznek hardveres hangereje. Ha nem olvasható, nincs (false): a csúszka ilyenkor a digitális úton
+ * szabályoz, és nem hat csendben egy olyan hangerőre, amelyet nem lehet állítani.
+ */
 bool endpointHardwareVolume() {
     DWORD mask = 0;
-    if (!withEndpointVolume([&](IAudioEndpointVolume* v) { return SUCCEEDED(v->QueryHardwareSupport(&mask)); })) return true;
+    if (!withEndpointVolume([&](IAudioEndpointVolume* v) { return SUCCEEDED(v->QueryHardwareSupport(&mask)); })) return false;
     return (mask & ENDPOINT_HARDWARE_SUPPORT_VOLUME) != 0;
 }
 
@@ -286,6 +289,8 @@ public:
 
     void setParams(const ParamData& p) { params_.write(p); }
     void submitIr(IrData ir) { chain_.submitIr(std::move(ir)); }
+    /** A felhasználó választása: a DAC hardveres hangereje (true) vagy a digitális (false). A következő számtól hat. */
+    void setHardwarePref(bool on) { hwPref_ = on; }
 
     /**
      * Digitális hangerő (a felület csúszkája, 0..1) és némítás. Csak hardveres hangerő nélküli eszközön hat; ott a lánc
@@ -306,10 +311,12 @@ public:
 
     // ---- player::ExclusiveDsp (a kimenet szálán)
     void prepare(uint32_t rate, uint32_t blockFrames, int ditherBits) override {
-        hwVolume_ = endpointHardwareVolume();   // az első blokk előtt: ne szóljon egy pillanatig se teljes hangerővel
+        // a hardveres út csak akkor, ha a felhasználó azt választotta és az eszköz tényleg tud hangerőt
+        hwVolume_ = hwPref_.load() && endpointHardwareVolume();
         applyVolume();
         std::cout << "[Lejátszó] Hangerő kizárólagos módban: "
-                  << (hwVolume_ ? "az eszköz hardveres hangereje" : "digitális (a DSP-lánc végén)") << ".\n";
+                  << (hwVolume_ ? "az eszköz hardveres hangereje" : "digitális (a DSP-lánc végén)")
+                  << (hwPref_.load() == hwVolume_ ? "" : " (a hardveres hangerő nem érhető el)") << ".\n";
         chain_.setSampleRate(rate);
         chain_.reset();
         rate_ = rate;
@@ -383,7 +390,7 @@ private:
     std::atomic<uint64_t> lastData_{0};
     std::atomic<float> level_{1.0f};
     std::atomic<bool> muted_{false};
-    std::atomic<bool> hwVolume_{true};
+    std::atomic<bool> hwVolume_{false}, hwPref_{false};
 };
 
 /** Az EQ APO plugin közös memóriájának figyelése és a jelforrás kiválasztása. */
@@ -890,6 +897,7 @@ int main(int argc, char** argv) {
         filePlayer.setReplayGain(audioOpts.replayGain, audioOpts.rgPreampDb, audioOpts.rgPreventClip);
         filePlayer.setPreload(audioOpts.preload);
         playerOut.setExclusive(audioOpts.exclusive);
+        playerDsp.setHardwarePref(audioOpts.exclHwVolume);
     }
     cb.audioOptionsJson = [&]() -> std::string {
         std::lock_guard<std::mutex> lk(audioMutex);
@@ -904,6 +912,7 @@ int main(int argc, char** argv) {
         audioOpts = o;
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         filePlayer.setPreload(o.preload);
+        playerDsp.setHardwarePref(o.exclHwVolume);
         if (o.exclusive != playerOut.wantExclusive()) {
             playerOut.setExclusive(o.exclusive);
             std::cout << "[Lejátszó] Kizárólagos mód: " << (o.exclusive ? "be" : "ki") << ".\n";

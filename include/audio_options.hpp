@@ -41,12 +41,13 @@ struct AudioOptions {
     bool rgPreventClip = true;   // a csúcs-címke szerint nem vezérel túl
     bool preload = false;        // a fájl lejátszás előtt a memóriába kerül
     bool exclusive = false;      // Windows: kizárólagos mód (WASAPI exclusive; a DSP a motorban fut)
+    bool exclHwVolume = false;   // Windows, kizárólagos módban: a DAC hardveres hangereje (false: digitális, a lánc végén)
 
     bool operator==(const AudioOptions& o) const {
         return bufferFrames == o.bufferFrames && keepAwake == o.keepAwake && rateMode == o.rateMode &&
                fixedRate == o.fixedRate && resampleQuality == o.resampleQuality && replayGain == o.replayGain &&
                rgPreampDb == o.rgPreampDb && rgPreventClip == o.rgPreventClip && preload == o.preload &&
-               exclusive == o.exclusive;
+               exclusive == o.exclusive && exclHwVolume == o.exclHwVolume;
     }
     bool operator!=(const AudioOptions& o) const { return !(*this == o); }
 };
@@ -90,7 +91,7 @@ inline std::string toJson(const AudioOptions& o) {
            ",\"resampleQuality\":" + std::to_string(o.resampleQuality) +
            ",\"replayGain\":\"" + (o.replayGain == 2 ? "album" : o.replayGain == 1 ? "track" : "off") +
            "\",\"rgPreamp\":" + std::to_string(o.rgPreampDb) + ",\"rgClip\":" + (o.rgPreventClip ? "true" : "false") +
-           ",\"preload\":" + (o.preload ? "true" : "false") + ",\"exclusive\":" + (o.exclusive ? "true" : "false") + "}";
+           ",\"preload\":" + (o.preload ? "true" : "false") + ",\"exclusive\":" + (o.exclusive ? "true" : "false") + ",\"exclHwVolume\":" + (o.exclHwVolume ? "true" : "false") + "}";
 }
 
 /** A JSON-objektum mezői felülírják a megadott alapot (a hiányzó mező marad). */
@@ -107,6 +108,7 @@ inline AudioOptions fromJson(const json::Value& v, AudioOptions base = {}) {
     if (const json::Value* x = v.get("rgClip"); x && x->type == T::Bool) base.rgPreventClip = x->b;
     if (const json::Value* x = v.get("preload"); x && x->type == T::Bool) base.preload = x->b;
     if (const json::Value* x = v.get("exclusive"); x && x->type == T::Bool) base.exclusive = x->b;
+    if (const json::Value* x = v.get("exclHwVolume"); x && x->type == T::Bool) base.exclHwVolume = x->b;
     sanitize(base);
     return base;
 }
