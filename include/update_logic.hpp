@@ -7,7 +7,11 @@
  *        Linuxon is ellenőrzik.
  */
 #include <cctype>
+#include <filesystem>
+#include <functional>
 #include <string>
+#include <system_error>
+#include <vector>
 
 namespace ee_analyzer::update {
 
@@ -67,6 +71,66 @@ inline std::string dmgUrl(const std::string& v) {
 }
 
 inline std::string dmgChecksumUrl(const std::string& v) { return dmgUrl(v) + ".sha256"; }
+
+/** Hogyan került a gépre a Linux-változat: ezen múlik, milyen paranccsal frissíthető. */
+enum class LinuxInstall { Copr, Rpm, Deb, Arch, Script, Unknown };
+
+inline const char* linuxInstallName(LinuxInstall k) {
+    switch (k) {
+    case LinuxInstall::Copr: return "copr";
+    case LinuxInstall::Rpm: return "rpm";
+    case LinuxInstall::Deb: return "deb";
+    case LinuxInstall::Arch: return "arch";
+    case LinuxInstall::Script: return "script";
+    default: return "unknown";
+    }
+}
+
+/** Fájlrendszer-hozzáférés a felismeréshez (a tesztek hamisat adnak). list: a mappa elemeinek neve. */
+struct FsProbe {
+    std::function<bool(const std::string&)> exists;
+    std::function<std::vector<std::string>(const std::string&)> list;
+};
+
+inline FsProbe realFs() {
+    FsProbe fs;
+    fs.exists = [](const std::string& p) {
+        std::error_code ec;
+        return std::filesystem::exists(p, ec);
+    };
+    fs.list = [](const std::string& dir) {
+        std::vector<std::string> out;
+        std::error_code ec;
+        for (auto it = std::filesystem::directory_iterator(dir, ec); !ec && it != std::filesystem::directory_iterator();
+             it.increment(ec))
+            out.push_back(it->path().filename().string());
+        return out;
+    };
+    return fs;
+}
+
+/**
+ * A futó motor útvonala és a csomagkezelők saját nyilvántartása alapján. /usr/... (de nem /usr/local) → csomag: a dpkg,
+ * a pacman, illetve az rpm nyilvántartása dönt; rpm-nél a COPR-t a tárolófájlja jelzi (az /etc/yum.repos.d mappában egy
+ * „aqulify”-t tartalmazó .repo fájl; a „dnf copr enable nlali/aqulify” hozza létre). Minden más (pl. ~/.local) → az
+ * install.sh-val telepítve.
+ */
+inline LinuxInstall detectLinuxInstall(const std::string& exe, const FsProbe& fs) {
+    if (exe.empty()) return LinuxInstall::Unknown;
+    const bool packaged = exe.rfind("/usr/", 0) == 0 && exe.rfind("/usr/local/", 0) != 0;
+    if (!packaged) return LinuxInstall::Script;
+    if (fs.exists("/var/lib/dpkg/info/aqulify.list") || fs.exists("/var/lib/dpkg/info/aqulify:amd64.list"))
+        return LinuxInstall::Deb;
+    for (const std::string& n : fs.list("/var/lib/pacman/local"))
+        if (n.rfind("aqulify-", 0) == 0) return LinuxInstall::Arch;
+    if (fs.exists("/var/lib/rpm") || fs.exists("/usr/lib/sysimage/rpm")) {
+        for (const std::string& n : fs.list("/etc/yum.repos.d"))
+            if (n.find("aqulify") != std::string::npos && n.size() > 5 && n.compare(n.size() - 5, 5, ".repo") == 0)
+                return LinuxInstall::Copr;
+        return LinuxInstall::Rpm;
+    }
+    return LinuxInstall::Unknown;
+}
 
 /**
  * A .sha256 fájl első szava (a sha256sum formája: "<kivonat>  <fájlnév>"), kisbetűsítve; üres, ha nem 64 hexadecimális

@@ -3,6 +3,7 @@
 #include <atomic>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -567,6 +568,42 @@ static void testUpdate() {
               "https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.1/Aqulify-2.1.1-macOS.dmg" &&
           update::dmgChecksumUrl("2.1.1") == update::dmgUrl("2.1.1") + ".sha256",
           "a macOS-lemezkép címe a saját kiadásé (a kiadás fájlneve szerint)");
+
+    // Linux: a telepítés módjának felismerése (hamis fájlrendszerrel)
+    auto fakeFs = [](std::vector<std::string> files, std::vector<std::pair<std::string, std::string>> dirEntries) {
+        update::FsProbe fs;
+        fs.exists = [files](const std::string& p) { return std::find(files.begin(), files.end(), p) != files.end(); };
+        fs.list = [dirEntries](const std::string& d) {
+            std::vector<std::string> out;
+            for (const auto& e : dirEntries)
+                if (e.first == d) out.push_back(e.second);
+            return out;
+        };
+        return fs;
+    };
+    using update::LinuxInstall;
+    const std::string usrBin = "/usr/bin/aqulify-engine";
+    CHECK(update::detectLinuxInstall("/home/u/.local/bin/aqulify-engine", fakeFs({}, {})) == LinuxInstall::Script &&
+          update::detectLinuxInstall("/usr/local/bin/aqulify-engine", fakeFs({ "/var/lib/rpm" }, {})) == LinuxInstall::Script,
+          "Linux: a saját mappából (~/.local) és a /usr/local alól futó motor az install.sh-é");
+    CHECK(update::detectLinuxInstall(usrBin, fakeFs({ "/var/lib/dpkg/info/aqulify.list" }, {})) == LinuxInstall::Deb &&
+          update::detectLinuxInstall(usrBin, fakeFs({ "/var/lib/dpkg/info/aqulify:amd64.list" }, {})) == LinuxInstall::Deb,
+          "Linux: Debian / Ubuntu csomag (a dpkg nyilvántartása szerint)");
+    CHECK(update::detectLinuxInstall(usrBin, fakeFs({}, { { "/var/lib/pacman/local", "glibc-2.40-1" },
+                                                          { "/var/lib/pacman/local", "aqulify-2.1.1-1" } })) == LinuxInstall::Arch,
+          "Linux: Arch csomag (a pacman nyilvántartása szerint)");
+    CHECK(update::detectLinuxInstall(usrBin, fakeFs({ "/usr/lib/sysimage/rpm" },
+                                                    { { "/etc/yum.repos.d", "fedora.repo" },
+                                                      { "/etc/yum.repos.d", "_copr:copr.fedorainfracloud.org:nlali:aqulify.repo" } })) ==
+                  LinuxInstall::Copr &&
+              update::detectLinuxInstall(usrBin, fakeFs({ "/var/lib/rpm" }, { { "/etc/yum.repos.d", "fedora.repo" } })) ==
+                  LinuxInstall::Rpm,
+          "Linux: Fedora – COPR-tárolóból, illetve kézzel telepített rpm");
+    CHECK(update::detectLinuxInstall(usrBin, fakeFs({}, {})) == LinuxInstall::Unknown &&
+          update::detectLinuxInstall("", fakeFs({}, {})) == LinuxInstall::Unknown &&
+          std::string(update::linuxInstallName(LinuxInstall::Copr)) == "copr" &&
+          std::string(update::linuxInstallName(LinuxInstall::Script)) == "script",
+          "Linux: ismeretlen csomagkezelő vagy útvonal → unknown; a nevek a felületnek");
     const std::string empty = Sha256::hex("", 0);
     const std::string upper = "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855";
     CHECK(update::parseChecksum(upper + "  Aqulify-Setup-2.1.1.exe\n") == empty &&

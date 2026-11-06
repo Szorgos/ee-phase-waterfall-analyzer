@@ -27,6 +27,8 @@
 #include "media_mpris.hpp"
 #include "pipewire_sink_node.hpp"
 #include "player_output_pw.hpp"
+#include "self_path.hpp"
+#include "update_logic.hpp"
 #include "ws_bridge.hpp"
 
 using namespace ee_analyzer;
@@ -372,6 +374,10 @@ int main(int argc, char* argv[]) {
         updateSinksCache();
     };
 
+    // A telepítés módja (csomag, COPR, install.sh): a felület ebből tudja, milyen paranccsal frissíthető a program
+    const char* installKind = update::linuxInstallName(update::detectLinuxInstall(selfExePath(), update::realFs()));
+    std::cout << "[Frissítés] A telepítés módja: " << installKind << "\n";
+    const std::string installJson = std::string(",\"install\":\"") + installKind + "\"";
     cb.statusFields = [&]() {
         auto now = std::chrono::steady_clock::now();
         if (now - lastSinkQuery > std::chrono::seconds(2)) {
@@ -386,6 +392,7 @@ int main(int argc, char* argv[]) {
         s += ",\"currentSink\":\"" + jsonEscape(cachedCurrentSink) + "\"";
         s += ",\"outputSinks\":" + cachedSinksJson;
         s += cachedVolumeJson;
+        s += installJson;
         return s;
     };
     cb.setVolume = [&](double level, int mute) {

@@ -2639,6 +2639,13 @@ if (!window.THREE) window.THREE = (function () {
     <ul id="updNotes" style="margin:0; padding-left:20px; display:flex; flex-direction:column; gap:6px; font-size:0.9rem; color:var(--aq-text); line-height:1.4;"></ul>
     <p id="updNoNotes" class="module-desc" style="margin:0;" hidden data-i18n="upd.noNotes">A változások a kiadás oldalán olvashatók.</p>
     <p id="updProgress" class="module-desc" style="margin:0; font-weight:600;" hidden aria-live="polite"></p>
+    <div id="updLinux" style="display:none; flex-direction:column; gap:6px;">
+      <p id="updLinuxText" class="module-desc" style="margin:0;"></p>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <code id="updLinuxCmd" style="flex:1 1 220px; padding:6px 8px; border-radius:6px; background:var(--aq-bg-2); color:var(--aq-text); font-size:0.85rem; user-select:all; overflow-wrap:anywhere;"></code>
+        <button type="button" class="adw-btn" id="btnUpdCopy" onclick="updCopyCmd()" data-i18n="upd.copy">Másolás</button>
+      </div>
+    </div>
     <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
       <button class="adw-btn" id="btnUpdSkip" onclick="updClose('skip')" data-i18n="upd.skip">Kihagyom ezt a verziót</button>
       <button class="adw-btn" id="btnUpdLater" onclick="updClose('later')" data-i18n="upd.later">Később</button>
@@ -8439,6 +8446,43 @@ const UPD_INTERVAL_MS = 24 * 3600 * 1000;
 var updInfo = null, updMode = "update", updStatusKey = null, updStatusVars = null;
 // Egykattintásos frissítés (Windows: a motor "update" képessége): a telepítőt a motor tölti le, ellenőrzi és indítja
 var updCanInstall = false, updRunning = false, updFallbackPage = false, updProgressState = null;
+// Linux: a frissítés a csomagkezelőé; a motor a telepítés módját küldi (állapotüzenet "install"), a felület a hozzá
+// tartozó parancsot mutatja (a parancs nem fordítandó szöveg)
+const UPD_LINUX_CMDS = {
+  copr: () => "sudo dnf upgrade --refresh aqulify",
+  rpm: v => `sudo dnf install ./aqulify-${v}-1.*.x86_64.rpm`,
+  deb: v => `sudo apt install ./aqulify_${v}-1_amd64.deb`,
+  arch: v => `sudo pacman -U aqulify-${v}-1-x86_64.pkg.tar.zst`,
+  script: () => "bash install.sh",
+};
+var updCopied = false;
+function updLinuxKind() {
+  const k = engineStatus && typeof engineStatus.install === "string" ? engineStatus.install : "";
+  return Object.prototype.hasOwnProperty.call(UPD_LINUX_CMDS, k) ? k : "";
+}
+/** A Linux-parancs vágólapra másolása (ha a vágólap-API nem érhető el, a régi módon). */
+function updCopyCmd() {
+  const text = document.getElementById("updLinuxCmd").textContent;
+  const done = () => {
+    updCopied = true;
+    updRender();
+    setTimeout(() => { updCopied = false; updRender(); }, 2000);
+  };
+  const fallback = () => {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { if (document.execCommand("copy")) done(); } catch (e) {}
+    ta.remove();
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  } catch (e) { fallback(); }
+}
 
 function updStore(key, val) {
   try {
@@ -8544,6 +8588,14 @@ function updRender() {
   p.textContent = ps ? ps.keys.map(k => t(k, ps.vars)).join(" ") : "";
   p.style.color = ps && ps.error ? "var(--ee-orange)" : "";
   updShowEl("updProgress", !!ps);
+  // Linux: a telepítés módjához tartozó frissítési parancs (ahol a motor maga nem tud frissíteni)
+  const lk = !wn && !updCanInstall ? updLinuxKind() : "";
+  updShowEl("updLinux", !!lk, "flex");
+  if (lk) {
+    document.getElementById("updLinuxText").textContent = t("upd.linux" + lk.charAt(0).toUpperCase() + lk.slice(1), { ver: updInfo.ver });
+    document.getElementById("updLinuxCmd").textContent = UPD_LINUX_CMDS[lk](updInfo.ver);
+    document.getElementById("btnUpdCopy").textContent = t(updCopied ? "upd.copied" : "upd.copy");
+  }
 }
 /** A frissítés állapotsora az ablakban (a nyelvváltáskor is újraírható kulcsokból). */
 function updSetProgress(keys, vars, error, done) {
