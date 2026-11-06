@@ -974,7 +974,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .param-box .title { font-size: var(--aq-fs-micro); color: var(--aq-text-3); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
   .param-box .val { font: 500 1.05rem var(--aq-mono); }
   .param-box [id^="lbl-"] { font-family: var(--aq-mono) !important; font-weight: 500 !important; color: var(--aq-accent-2) !important; }
-  .param-box [id^="lbl-"].ctl-bold { color: var(--aq-amber) !important; }   /* Magic Touch 100 % fölött („Bátor”) */
+  .param-box [id^="lbl-"].ctl-bold { color: var(--aq-amber) !important; }   /* Magic Touch 100% fölött („Bátor”) */
   @media (max-width: 1100px) { .param-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   /* Csatornák és dither: a bal és a jobb csatorna egymás mellett, alatta a dither */
   .os-channels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 6px; }
@@ -2219,7 +2219,7 @@ if (!window.THREE) window.THREE = (function () {
           </div>
           <button type="button" class="aq-switch" id="btnToggle-crossfeed" onclick="toggleModule('crossfeed')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
         </div>
-        <p class="module-desc" data-i18n="cf.desc">Megszünteti a fejhallgatók „fej közepében szóló”, természetellenes sztereó izolációját. Kiszámolja a fej akusztikai árnyékolását és késleltetését (ITD/ILD), így a zene nem a füleidben, hanem előtted, mint egy igazi stúdió hangfalpár szólal meg.</p>
+        <p class="module-desc" data-i18n="cf.desc">Megszünteti a fejhallgatók „fej közepében szóló”, természetellenes sztereó izolációját. Kiszámolja a fej akusztikai árnyékolását és késleltetését (ITD/ILD), így a zene nem a füleidben, hanem előtted, mint egy igazi stúdió hangsugárzópár szólal meg.</p>
 
         <div style="display:flex; gap:10px; align-items:center; margin-top:4px;">
           <span style="font-size:var(--aq-fs-sub); color:var(--aq-text-2); font-weight:600;" data-i18n="cf.presets">Iparági Mester-Beállítások:</span>
@@ -2333,7 +2333,7 @@ if (!window.THREE) window.THREE = (function () {
           </div>
         </div>
 
-        <p class="module-desc" data-i18n="bass.desc">Kisebb hangfalakhoz és mélyhiányos fejhallgatókhoz: nem pusztán hangerőt emel (ami membrántorzítást és akusztikai zörgést okozna), hanem felharmonikusokat generál, amit az agy a mély alaphang jelenléteként dekódol.</p>
+        <p class="module-desc" data-i18n="bass.desc">Kisebb hangsugárzókhoz és mélyhiányos fejhallgatókhoz: nem pusztán hangerőt emel (ami membrántorzítást és akusztikai zörgést okozna), hanem felharmonikusokat generál, amit az agy a mély alaphang jelenléteként dekódol.</p>
 
         <div class="param-grid" id="bassControls"></div>
         <div class="param-grid" style="grid-template-columns: repeat(3, 1fr);">
@@ -2365,7 +2365,7 @@ if (!window.THREE) window.THREE = (function () {
           </div>
         </div>
 
-        <p class="module-desc" data-i18n="mono.desc">Mélyvágás: a kiválasztott frekvencia alatti mélyeket 24 dB/oktáves felüláteresztővel levágja (rumble és hangszóróvédelem). Mono: a határfrekvencia (alapérték 100 Hz) alatti sztereó basszust a két csatornán azonos (összegzett) basszusra keveri; a középső csatorna nem változik.</p>
+        <p class="module-desc" data-i18n="mono.desc">Mélyvágás: a kiválasztott frekvencia alatti mélyeket 24 dB/oktáves felüláteresztővel levágja (rumble és hangsugárzóvédelem). Mono: a határfrekvencia (alapérték 100 Hz) alatti sztereó basszust a két csatornán azonos (összegzett) basszusra keveri; a középső csatorna nem változik.</p>
 
         <div class="param-grid" id="monoControls"></div>
       </div>
@@ -2403,7 +2403,7 @@ if (!window.THREE) window.THREE = (function () {
           </div>
         </div>
 
-        <p class="module-desc" data-i18n="os.desc">Ha nem középen ülsz a hangfalak között, a közelebbi hangfal késleltetésével és szintjével a hangkép újra középre kerül. 1 ms késleltetés ≈ 34,3 cm távolság.</p>
+        <p class="module-desc" data-i18n="os.desc">Ha nem középen ülsz a hangsugárzók között, a közelebbi hangsugárzó késleltetésével és szintjével a hangkép újra középre kerül. 1 ms késleltetés ≈ 34,3 cm távolság.</p>
 
         <div class="os-channels">
           <section class="os-ch" aria-labelledby="osHeadL"><h4 class="os-head" id="osHeadL" data-i18n="os.left">Bal csatorna</h4><div class="os-stack" id="outstageLeft"></div></section>
@@ -3287,7 +3287,7 @@ const renderer = (() => {
   }
 })();
 if (renderer) {
-  renderer.setSize(wfCanvas.clientWidth, wfCanvas.clientHeight, false);   // a CSS-méret marad 100 %: az ablakkal együtt méreteződik
+  renderer.setSize(wfCanvas.clientWidth, wfCanvas.clientHeight, false);   // a CSS-méret marad 100%: az ablakkal együtt méreteződik
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));           // a fokozat (applyWfView) később felülírja
 } else {
   document.querySelectorAll("[data-wf3d]").forEach(el => { el.style.display = "none"; });
@@ -3920,7 +3920,7 @@ function updateFreqRange(levels, now) {
       lo *= scale; hi *= scale;
     }
   }
-  // Az alsó határ az, ami az utolsó 300 ms 70 %-ában jelen volt: egy hangindítás pillanatnyi szétterülése
+  // Az alsó határ az, ami az utolsó 300 ms 70%-ában jelen volt: egy hangindítás pillanatnyi szétterülése
   // nem rántja le a jelet a skála aljára (ott ragadna, és lassan húzódna vissza)
   FS_LO_RECENT.push({ t: now, lo });
   while (FS_LO_RECENT.length && now - FS_LO_RECENT[0].t > FS_LO_PERSIST_MS) FS_LO_RECENT.shift();
@@ -5834,7 +5834,7 @@ class Biquad {
     return y;
   }
 }
-/** Lágy csúcskorlát: a térd (a plafon 70 %-a) alatt érintetlen, fölötte simán közelít a plafonhoz (nincs kemény vágás). */
+/** Lágy csúcskorlát: a térd (a plafon 70%-a) alatt érintetlen, fölötte simán közelít a plafonhoz (nincs kemény vágás). */
 function softLimit(v, peak) {
   const k = 0.7 * peak, a = Math.abs(v);
   if (a <= k) return v;
@@ -7418,7 +7418,7 @@ function sendOutstage() {
 
 // --- Magic Touch (automatikus hangszépítő; docs/plans/magic-touch.md)
 buildControls("magicControls", [
-  // 100 % fölött „Bátor” tartomány (200 %-ig): a hangszépítő korlátok a kétszeresükig nőnek (magic_touch.hpp)
+  // 100% fölött „Bátor” tartomány (200%-ig): a hangszépítő korlátok a kétszeresükig nőnek (magic_touch.hpp)
   { id: "magicAmount", kind: "num", label: "ctl.magicAmount", min: 0, max: 200, step: 1, unit: "%", def: 50, hint: "ctl.magicAmountHint",
     after: (v) => {
       const lbl = document.getElementById("lbl-magicAmount");
