@@ -54,6 +54,7 @@
 #include "file_player.hpp"
 #include "library_bridge.hpp"
 #include "player_output_wasapi.hpp"
+#include "updater.hpp"
 
 using namespace ee_analyzer;
 
@@ -836,8 +837,11 @@ int main(int argc, char** argv) {
         return true;
     };
     cb.playerStop = [&] { filePlayer.stop(); };
+    // Egykattintásos frissítés (a felület „Új verzió érhető el” ablakából): letöltés, ellenőrzés, a telepítő indítása
+    win::Updater updater;
+    cb.updateInstall = [&](const std::string& version, std::string& error) { return updater.start(version, error); };
     cb.statusFields = [&]() {
-        std::string s = sources.statusFields();
+        std::string s = sources.statusFields() + updater.statusJson();
         const bool digitalVolume = playerOut.exclusiveActive() && !playerDsp.hardwareVolume();
         s += digitalVolume ? playerDsp.volumeJson() : endpointVolumeJson();
         if (!filePlayer.hasTrack()) return s;
@@ -984,6 +988,7 @@ int main(int argc, char** argv) {
 
     std::cout << "[Info] Leállítás...\n";
     bridge->stop();
+    updater.stop();
     filePlayer.stop();
     mediaSession.stop();
     loopback->stop();

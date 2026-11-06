@@ -151,6 +151,12 @@ struct BridgeCallbacks {
      * mute 0 / 1 (< 0: nem változik). A pillanatnyi értéket a platform az állapotüzenet "volume" mezőjében küldi.
      */
     std::function<void(double level, int mute)> setVolume;
+    /**
+     * Egykattintásos frissítés (Windows): a megadott kiadás telepítőjének letöltése, ellenőrzése és indítása. false:
+     * nem indult (error: "version", "busy"). A haladást a platform az állapotüzenet "update" mezőjében küldi. Csak a
+     * saját gépről indítható; ha be van kötve, a "caps" mezőben "update" áll.
+     */
+    std::function<bool(const std::string& version, std::string& error)> updateInstall;
 };
 
 /**
@@ -1332,6 +1338,15 @@ private:
                           m && m->type == json::Value::Type::Bool ? (m->b ? 1 : 0) : -1);
             return;
         }
+        if (type == "update_install") {
+            // Telepítőt indít: csak a saját gépről (a hálózati távirányítóról nem)
+            if (!cb_.updateInstall) return;
+            std::string err = "remote";
+            const std::string ver = msg.get("version") ? msg.get("version")->stringOr("") : "";
+            if (!remote && cb_.updateInstall(ver, err)) return;
+            sendText("{\"type\":\"update_result\",\"ok\":false,\"error\":\"" + jsonEscape(err) + "\"}");
+            return;
+        }
         if (type == "set_audio_opts" || type == "get_audio_opts") {
             if (!cb_.audioOptionsJson) return;
             if (type == "set_audio_opts" && !remote && cb_.setAudioOptions) {
@@ -1784,6 +1799,11 @@ public:
         if (cb_.audioOptionsJson) {
             if (hasCap) caps += ",";
             caps += "\"audio_opts\"";
+            hasCap = true;
+        }
+        if (cb_.updateInstall) {
+            if (hasCap) caps += ",";
+            caps += "\"update\"";
             hasCap = true;
         }
         caps += "]";

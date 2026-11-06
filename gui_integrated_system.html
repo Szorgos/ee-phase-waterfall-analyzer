@@ -2638,6 +2638,7 @@ if (!window.THREE) window.THREE = (function () {
     <p id="updVersions" class="module-desc" style="margin:0;"></p>
     <ul id="updNotes" style="margin:0; padding-left:20px; display:flex; flex-direction:column; gap:6px; font-size:0.9rem; color:var(--aq-text); line-height:1.4;"></ul>
     <p id="updNoNotes" class="module-desc" style="margin:0;" hidden data-i18n="upd.noNotes">A változások a kiadás oldalán olvashatók.</p>
+    <p id="updProgress" class="module-desc" style="margin:0; font-weight:600;" hidden aria-live="polite"></p>
     <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
       <button class="adw-btn" id="btnUpdSkip" onclick="updClose('skip')" data-i18n="upd.skip">Kihagyom ezt a verziót</button>
       <button class="adw-btn" id="btnUpdLater" onclick="updClose('later')" data-i18n="upd.later">Később</button>
@@ -8001,6 +8002,8 @@ function initPipewireBridge() {
           onIrMissing(data.id);
         } else if (data.type === "multiout") {
           moOnStatus(data.status);
+        } else if (data.type === "update_result") {
+          updOnResult(data);
         } else if (data.type === "audio_opts") {
           aoOnMessage(data);
         } else if (data.type === "state") {
@@ -8010,6 +8013,7 @@ function initPipewireBridge() {
           syncLanguageWithEngine(data.language);
           moOnCaps(data.caps);
           aoOnCaps(data.caps);
+          updOnCaps(data.caps);
           const stZone = typeof data.zone === "number" ? data.zone : 0;
           // Teljes állapotot csak a munkamenet első csatlakozásakor veszünk át. Újracsatlakozáskor
           // (pl. a motor rövid ideig nem volt elérhető) a felület a forrás: a közben tett változtatások nem vesznek el.
@@ -8066,6 +8070,7 @@ function initPipewireBridge() {
           }
         } else if (data.type === "status") {
           engineStatus = data;
+          updOnEngineStatus(data.update);
           updateEngineBadge();
           if (aoCaps) aoRenderPath();
           if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);
@@ -8432,6 +8437,8 @@ const UPD_PAGE = `https://github.com/${UPD_REPO}/releases/latest`;
 const UPD_KEYS = { auto: "aqulify_upd_auto", last: "aqulify_upd_last", skip: "aqulify_upd_skip", seen: "aqulify_seen_version" };
 const UPD_INTERVAL_MS = 24 * 3600 * 1000;
 var updInfo = null, updMode = "update", updStatusKey = null, updStatusVars = null;
+// Egykattintásos frissítés (Windows: a motor "update" képessége): a telepítőt a motor tölti le, ellenőrzi és indítja
+var updCanInstall = false, updRunning = false, updFallbackPage = false, updProgressState = null;
 
 function updStore(key, val) {
   try {
@@ -8492,6 +8499,7 @@ async function updCheck(manual) {
     // csak a saját kiadási oldal nyitható meg
     const url = typeof rel.html_url === "string" && rel.html_url.startsWith(`https://github.com/${UPD_REPO}/releases/`)
       ? rel.html_url : UPD_PAGE;
+    if (!updInfo || updInfo.ver !== ver) { updFallbackPage = false; updProgressState = null; }
     updInfo = { ver, cur, url, list };
     const m = document.getElementById("modalUpdate");
     if (!manual && m && m.style.display === "flex") return;   // nyitott ablak (pl. Újdonságok) fölé nem ugrik fel
@@ -8524,9 +8532,51 @@ function updRender() {
   notes.forEach(s => { const li = document.createElement("li"); li.textContent = s; ul.appendChild(li); });
   updShowEl("updNotes", notes.length > 0, "flex");
   updShowEl("updNoNotes", !wn && !notes.length);
-  ["btnUpdSkip", "btnUpdLater", "btnUpdGo"].forEach(id => updShowEl(id, !wn));
+  // frissítés közben a „Frissítés” és a „Kihagyom” nem látszik; a „Később” bezárja az ablakot (a letöltés folytatódik)
+  updShowEl("btnUpdSkip", !wn && !updRunning);
+  updShowEl("btnUpdLater", !wn);
+  updShowEl("btnUpdGo", !wn && !updRunning);
   updShowEl("btnUpdOk", wn);
+  const p = document.getElementById("updProgress");
+  const ps = !wn && updProgressState;
+  p.textContent = ps ? ps.keys.map(k => t(k, ps.vars)).join(" ") : "";
+  p.style.color = ps && ps.error ? "var(--ee-orange)" : "";
+  updShowEl("updProgress", !!ps);
 }
+/** A frissítés állapotsora az ablakban (a nyelvváltáskor is újraírható kulcsokból). */
+function updSetProgress(keys, vars, error) {
+  updProgressState = { keys, vars: vars || null, error: !!error };
+  updRender();
+}
+/** A „Frissítés” gomb Windowson: a motor tölti le, ellenőrzi és indítja a telepítőt (a Windows engedélyt kér). */
+function updStartInstall() {
+  updRunning = true;
+  updSetProgress(["upd.downloadingStart"]);
+  moSend({ type: "update_install", version: updInfo.ver });
+}
+/** A motor állapotüzenetének "update" mezője (fázis, letöltött bájtok, hiba). */
+function updOnEngineStatus(u) {
+  if (!u || !updRunning || !updInfo || u.version !== updInfo.ver) return;
+  if (u.phase === "download") {
+    if (u.total > 0) updSetProgress(["upd.downloading"], { pct: Math.min(100, Math.round(100 * u.got / u.total)) });
+    else updSetProgress(["upd.downloadingStart"]);
+  } else if (u.phase === "verify") updSetProgress(["upd.verifying"]);
+  else if (u.phase === "launch") updSetProgress(["upd.launching"]);
+  else if (u.phase === "installing") updSetProgress(["upd.installing"]);
+  else if (u.phase === "error") updFail(u.error);
+}
+/** A motor azonnali elutasítása (pl. már fut egy frissítés). */
+function updOnResult(m) {
+  if (updRunning && m && m.ok === false) updFail(m.error);
+}
+function updFail(code) {
+  updRunning = false;
+  updFallbackPage = true;   // a következő „Frissítés” a kiadás oldalát nyitja meg (kézi letöltés)
+  const key = { download: "upd.errDownload", checksum: "upd.errChecksum", uac: "upd.errUac", launch: "upd.errLaunch",
+                busy: "upd.errBusy" }[code] || "upd.errOther";
+  updSetProgress([key, "upd.errHint"], null, true);
+}
+function updOnCaps(caps) { updCanInstall = Array.isArray(caps) && caps.includes("update"); }
 function updShow(mode) {
   updMode = mode;
   updRender();
@@ -8535,6 +8585,10 @@ function updShow(mode) {
   if (b) b.focus();
 }
 function updClose(action) {
+  if (action === "update" && updMode === "update" && updInfo && updCanInstall && isPipewireConnected && !updFallbackPage) {
+    updStartInstall();
+    return;   // az ablak nyitva marad: benne látszik a letöltés és a telepítés
+  }
   document.getElementById("modalUpdate").style.display = "none";
   if (!updInfo || updMode !== "update") return;
   if (action === "skip") updStore(UPD_KEYS.skip, updInfo.ver);

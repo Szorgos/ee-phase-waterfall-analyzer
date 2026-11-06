@@ -3,7 +3,8 @@
  * @brief Aqulify-Setup.exe – egyfájlos Windows telepítő és eltávolító.
  *
  * Telepítés:   Aqulify-Setup.exe            (varázsló)
- *              Aqulify-Setup.exe /S [/D=mappa] [/NOAPO] [/DOWNLOADAPO]   (csendes telepítés)
+ *              Aqulify-Setup.exe /S [/LAUNCH] [/NOAPO] [/DOWNLOADAPO] [/D=mappa]   (csendes telepítés; /D= a végén;
+ *              /LAUNCH: utána az Aqulify elindul – az egykattintásos frissítés így hívja)
  * Eltávolítás: Uninstall.exe /uninstall [/S]     (a "Programok és szolgáltatások" ezt hívja)
  */
 #ifndef UNICODE
@@ -669,11 +670,18 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         opt.downloadApo = hasSwitch(cmd, L"/downloadapo");
         opt.desktopIcon = false;
         opt.silent = true;
+        // Frissítés (már telepítve): az automatikus indítás és az asztali ikon a felhasználó eddigi választása szerint marad
+        if (fileExists(joinPath(opt.installDir, L"Aqulify.exe"))) {
+            opt.autostart = !regReadString(HKEY_CURRENT_USER, kRunKey, L"Aqulify").empty();
+            opt.desktopIcon = fileExists(joinPath(knownFolder(FOLDERID_PublicDesktop), L"Aqulify.lnk"));
+        }
         Installer ins;
         ins.log = [](const std::wstring&) {};
         ins.progress = [](int) {};
         ins.phase = [](const std::wstring&) {};
         rc = ins.run(opt).ok ? 0 : 1;
+        // /launch (egykattintásos frissítés a motorból): utána az Aqulify újraindul, a felhasználó normál jogaival
+        if (rc == 0 && hasSwitch(cmd, L"/launch")) launchUnelevated(joinPath(opt.installDir, L"Aqulify.exe"), L"");
     } else {
         // Egyszerre csak egy telepítő fusson
         HANDLE m = CreateMutexW(nullptr, TRUE, L"Global\\AqulifySetup");

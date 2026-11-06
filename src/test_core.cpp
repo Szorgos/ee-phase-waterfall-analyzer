@@ -1,5 +1,8 @@
 // Platformfüggetlen magteszt: FFT spektrum, paraméter-alkalmazás, seqlock, tap körpuffer.
+#include <algorithm>
 #include <atomic>
+#include <mutex>
+#include <string>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -16,6 +19,8 @@
 #include "dsp_state.hpp"
 #include "self_path.hpp"
 #include "ws_bridge.hpp"
+#include "sha256.hpp"
+#include "update_logic.hpp"
 
 using namespace ee_analyzer;
 
@@ -517,6 +522,107 @@ static void testEngineQuit() {
     bridge.stop();
 }
 
+static void testUpdate() {
+    std::printf("[12] Frissítés: SHA-256, verziók, letöltési címek; az update_install csak a saját gépről\n");
+    // SHA-256: a FIPS 180-4 tesztvektorai
+    CHECK(Sha256::hex("", 0) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "SHA-256: üres bemenet");
+    CHECK(Sha256::hex("abc", 3) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "SHA-256: \"abc\"");
+    const std::string m448 = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+    CHECK(Sha256::hex(m448.data(), m448.size()) == "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
+          "SHA-256: 448 bites üzenet (a kitöltés miatt két blokk)");
+    {
+        Sha256 h;
+        const std::string chunk(1000, 'a');
+        for (int i = 0; i < 1000; ++i) h.update(chunk.data(), chunk.size());
+        CHECK(h.hexDigest() == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
+              "SHA-256: egymillió 'a', 1000 bájtos darabokban");
+    }
+    {
+        std::string data(5000, '\0');
+        for (size_t i = 0; i < data.size(); ++i) data[i] = static_cast<char>(i * 31 + 7);
+        Sha256 h;
+        size_t off = 0, step = 1;
+        while (off < data.size()) {
+            const size_t k = std::min(step, data.size() - off);
+            h.update(data.data() + off, k);
+            off += k;
+            step = step * 3 % 97 + 1;
+        }
+        CHECK(h.hexDigest() == Sha256::hex(data.data(), data.size()), "SHA-256: változó méretű darabokban ugyanaz, mint egyben");
+    }
+
+    // Verziók és címek
+    CHECK(update::validVersion("2.1.1") && update::validVersion("10.0.12") && !update::validVersion("2.1") &&
+          !update::validVersion("2.1.1.0") && !update::validVersion("v2.1.1") && !update::validVersion("2..1") &&
+          !update::validVersion("2.1.1/../x") && !update::validVersion("12345.0.0") && !update::validVersion(""),
+          "érvényes verzió csak X.Y.Z számjegyekkel (előtag, útvonal, hiányzó vagy túl hosszú rész nem)");
+    CHECK(update::compareVersions("2.1.10", "2.1.9") > 0 && update::compareVersions("2.2.0", "2.10.0") < 0 &&
+          update::compareVersions("2.1.1", "2.1.1") == 0 && update::compareVersions("3.0.0", "2.99.99") > 0,
+          "verzió-összevetés számként (2.1.10 > 2.1.9, 2.2.0 < 2.10.0)");
+    CHECK(update::installerUrl("2.1.1") ==
+              "https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.1/Aqulify-Setup-2.1.1.exe" &&
+          update::checksumUrl("2.1.1") == update::installerUrl("2.1.1") + ".sha256",
+          "a letöltési cím a saját kiadásé (rögzített tároló)");
+    const std::string empty = Sha256::hex("", 0);
+    const std::string upper = "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855";
+    CHECK(update::parseChecksum(upper + "  Aqulify-Setup-2.1.1.exe\n") == empty &&
+          update::parseChecksum("\xEF\xBB\xBF" + upper) == empty && update::parseChecksum("abc  x.exe").empty() &&
+          update::parseChecksum("<html>Not Found</html>").empty() && update::parseChecksum("").empty(),
+          "a .sha256 fájl: az első szó kisbetűsítve (BOM nélkül); hibás tartalomnál üres");
+
+    // A híd: az update_install a helyi felületről eljut a motorhoz, a távirányítóról nem
+    std::mutex gm;
+    std::string got;
+    std::atomic<int> calls{ 0 };
+    const std::string token = bridge_detail::randomHex(32);
+    const std::string remoteDoc = "{\"enabled\":true,\"port\":47877,\"devices\":[{\"id\":\"0a0b0c0e\",\"name\":\"Teszt\",\"hash\":\"" +
+                                  bridge_detail::sha1Hex(token) + "\",\"created\":0,\"last\":0}]}";
+    BridgeCallbacks cb;
+    cb.pullAudio = [](float*, size_t) -> size_t { return 0; };
+    cb.sampleRate = [] { return 48000.0; };
+    cb.getParams = [] { return transparentParams(); };
+    cb.setParams = [](const ParamData&) {};
+    cb.loadRemote = [&] { return remoteDoc; };
+    cb.saveRemote = [](const std::string&) { return true; };
+    cb.updateInstall = [&](const std::string& v, std::string&) {
+        std::lock_guard<std::mutex> lk(gm);
+        got = v;
+        ++calls;
+        return true;
+    };
+    WebSocketBridge bridge(47876);
+    const bool started = bridge.start(cb);
+    CHECK(started, "a híd elindul (127.0.0.1:47876)");
+    if (!started) return;
+    auto waitCalls = [&](int want, int ms) {
+        for (int i = 0; i < ms / 20 && calls.load() < want; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        return calls.load();
+    };
+    net::socket_t r = net::kInvalidSocket;
+    for (int port = 47877; port < 47882 && r == net::kInvalidSocket; ++port)
+        r = wsConnectLive(port, "/?token=" + token + "&client=aqulify_remote&name=Teszt");
+    CHECK(r != net::kInvalidSocket, "párosított távoli eszköz csatlakozik (token)");
+    if (r != net::kInvalidSocket) {
+        wsSendText(r, "{\"type\":\"update_install\",\"version\":\"2.2.0\"}");
+        CHECK(waitCalls(1, 500) == 0, "távirányítóról érkező update_install: a motor NEM tölt le és NEM telepít");
+        net::closeSocket(r);
+    }
+    net::socket_t l = wsConnectLive(47876, "/");
+    CHECK(l != net::kInvalidSocket, "helyi felület csatlakozik (127.0.0.1)");
+    if (l != net::kInvalidSocket) {
+        wsSendText(l, "{\"type\":\"update_install\",\"version\":\"2.2.0\"}");
+        const int n = waitCalls(1, 2000);
+        std::string v;
+        {
+            std::lock_guard<std::mutex> lk(gm);
+            v = got;
+        }
+        CHECK(n == 1 && v == "2.2.0", "helyi update_install: a motor pontosan egyszer kapja meg, a kért verzióval");
+        net::closeSocket(l);
+    }
+    bridge.stop();
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
@@ -532,6 +638,7 @@ int main() {
     testMdns();
     testPushPairing();
     testEngineQuit();
+    testUpdate();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }
