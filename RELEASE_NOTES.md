@@ -1,3 +1,16 @@
+### Újdonságok (2.1.1)
+
+**Letöltés (2.1.1):**
+- Windows 11: [Aqulify-Setup-2.1.1.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.1/Aqulify-Setup-2.1.1.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.1/Aqulify-Setup-2.1.1.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.1.1-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.1/Aqulify-2.1.1-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.1/Aqulify-2.1.1-macOS.dmg.sha256))
+- Linux (bármely disztribúció, ash install.sh): [Aqulify-Linux-2.1.1.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.1/Aqulify-Linux-2.1.1.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.1/Aqulify-Linux-2.1.1.tar.gz.sha256))
+- Fedora: [aqulify-2.1.1-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.1/aqulify-2.1.1-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.1.1-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.1/aqulify_2.1.1-1_amd64.deb) · Arch: [aqulify-2.1.1-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.1/aqulify-2.1.1-1-x86_64.pkg.tar.zst)
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Hangerő kizárólagos módban, választható (Windows).** A Kimenet menü „Beépített lejátszó” részében a „Hangerő kizárólagos módban” beállítás szerint a csúszka alapból digitálisan, a lejátszó végén szabályoz: a DAC saját hangereje nem változik, 100%-nál a jel bitpontos. Választható a DAC hardveres hangereje is, ha a driver a kizárólagos módban is alkalmazza. Ha az eszköz hangerejét nem lehet olvasni, a program digitálisra vált, és nem marad csendben hatástalan csúszkával.
+- **Változás a 2.1.0-hoz képest:** a 2.1.0-ban a hardveres hangerő volt az alapértelmezett, ha az eszköz jelezte. 2.1.1-től az alapértelmezés a digitális, mert az mindig hat; a hardveres út akkor működik, ha az illesztőprogram kizárólagos módban is alkalmazza a hangerőt (ez eszközönként eltérhet, érdemes kipróbálni).
+- A hangerő csak csökkenteni tud: 100%-nál a jel érintetlen, a limiter és a DSP-modulok változatlanul működnek.
+
 ### Újdonságok (2.1.0)
 
 **Letöltés (2.1.0):**
