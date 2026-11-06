@@ -8532,20 +8532,22 @@ function updRender() {
   notes.forEach(s => { const li = document.createElement("li"); li.textContent = s; ul.appendChild(li); });
   updShowEl("updNotes", notes.length > 0, "flex");
   updShowEl("updNoNotes", !wn && !notes.length);
-  // frissítés közben a „Frissítés” és a „Kihagyom” nem látszik; a „Később” bezárja az ablakot (a letöltés folytatódik)
-  updShowEl("btnUpdSkip", !wn && !updRunning);
-  updShowEl("btnUpdLater", !wn);
-  updShowEl("btnUpdGo", !wn && !updRunning);
-  updShowEl("btnUpdOk", wn);
-  const p = document.getElementById("updProgress");
+  // frissítés közben a „Frissítés” és a „Kihagyom” nem látszik; a „Később” bezárja az ablakot (a letöltés folytatódik).
+  // Ha a frissítés a felhasználóra vár (macOS: a lemezkép megnyílt, az alkalmazást ő húzza át), csak a „Rendben” marad.
   const ps = !wn && updProgressState;
+  const done = !!(ps && ps.done);
+  updShowEl("btnUpdSkip", !wn && !updRunning && !done);
+  updShowEl("btnUpdLater", !wn && !done);
+  updShowEl("btnUpdGo", !wn && !updRunning && !done);
+  updShowEl("btnUpdOk", wn || done);
+  const p = document.getElementById("updProgress");
   p.textContent = ps ? ps.keys.map(k => t(k, ps.vars)).join(" ") : "";
   p.style.color = ps && ps.error ? "var(--ee-orange)" : "";
   updShowEl("updProgress", !!ps);
 }
 /** A frissítés állapotsora az ablakban (a nyelvváltáskor is újraírható kulcsokból). */
-function updSetProgress(keys, vars, error) {
-  updProgressState = { keys, vars: vars || null, error: !!error };
+function updSetProgress(keys, vars, error, done) {
+  updProgressState = { keys, vars: vars || null, error: !!error, done: !!done };
   updRender();
 }
 /** A „Frissítés” gomb Windowson: a motor tölti le, ellenőrzi és indítja a telepítőt (a Windows engedélyt kér). */
@@ -8563,7 +8565,11 @@ function updOnEngineStatus(u) {
   } else if (u.phase === "verify") updSetProgress(["upd.verifying"]);
   else if (u.phase === "launch") updSetProgress(["upd.launching"]);
   else if (u.phase === "installing") updSetProgress(["upd.installing"]);
-  else if (u.phase === "error") updFail(u.error);
+  else if (u.phase === "open") updSetProgress(["upd.opening"]);
+  else if (u.phase === "opened") {   // macOS: a lemezkép megnyílt; innen a felhasználó húzza át az alkalmazást
+    updRunning = false;
+    updSetProgress(["upd.opened"], null, false, true);
+  } else if (u.phase === "error") updFail(u.error);
 }
 /** A motor azonnali elutasítása (pl. már fut egy frissítés). */
 function updOnResult(m) {
@@ -8573,7 +8579,7 @@ function updFail(code) {
   updRunning = false;
   updFallbackPage = true;   // a következő „Frissítés” a kiadás oldalát nyitja meg (kézi letöltés)
   const key = { download: "upd.errDownload", checksum: "upd.errChecksum", uac: "upd.errUac", launch: "upd.errLaunch",
-                busy: "upd.errBusy" }[code] || "upd.errOther";
+                open: "upd.errOpen", busy: "upd.errBusy" }[code] || "upd.errOther";
   updSetProgress([key, "upd.errHint"], null, true);
 }
 function updOnCaps(caps) { updCanInstall = Array.isArray(caps) && caps.includes("update"); }

@@ -3,7 +3,8 @@
  * @file update_logic.hpp
  * @brief A frissítés rendszerfüggetlen része: a verziószám ellenőrzése és összevetése, a kiadás letöltési címei (rögzített
  *        tároló: csak a saját GitHub-kiadásból), és a kiadás .sha256 fájljának értelmezése. A Windows-frissítő
- *        (windows/engine/updater.hpp) használja; a tesztek (test_core) Linuxon is ellenőrzik.
+ *        (windows/engine/updater.hpp) és a macOS-frissítő (macos/app/mac_updater.hpp) használja; a tesztek (test_core)
+ *        Linuxon is ellenőrzik.
  */
 #include <cctype>
 #include <string>
@@ -59,6 +60,13 @@ inline std::string installerUrl(const std::string& v) {
 }
 
 inline std::string checksumUrl(const std::string& v) { return installerUrl(v) + ".sha256"; }
+
+/** A macOS-lemezkép (DMG) címe a kiadásban (csak érvényes verzióval hívható). */
+inline std::string dmgUrl(const std::string& v) {
+    return std::string("https://github.com/") + kRepo + "/releases/download/v" + v + "/Aqulify-" + v + "-macOS.dmg";
+}
+
+inline std::string dmgChecksumUrl(const std::string& v) { return dmgUrl(v) + ".sha256"; }
 
 /**
  * A .sha256 fájl első szava (a sha256sum formája: "<kivonat>  <fájlnév>"), kisbetűsítve; üres, ha nem 64 hexadecimális

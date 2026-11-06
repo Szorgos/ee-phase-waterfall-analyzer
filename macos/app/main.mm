@@ -40,6 +40,7 @@
 #include "play_stats.hpp"
 #include "smart_lists.hpp"
 #include "phone_cache.hpp"
+#include "mac_updater.hpp"
 
 using namespace ee_analyzer;
 using aq_i18n::Msg;
@@ -135,6 +136,7 @@ struct Core {
     media::MacMediaSession media;   // a gépen szóló lejátszó („most szól”, vezérlés)
     std::unique_ptr<WebSocketBridge> bridge;
     std::function<void(const std::string&)> broadcast;
+    mac::Updater updater;   // frissítés a felület „Frissítés” gombjára: a DMG letöltése, ellenőrzése, megnyitása
 
     // Beépített lejátszó és zenetár (2.x)
     player::FilePlayer filePlayer{std::make_unique<player::CoreAudioPlayerOutput>()};
@@ -397,7 +399,8 @@ struct Core {
     cb.gainReduction = [c]() { return c->engine.chain.gainReductionDb(); };
     cb.bassHarmonics = [c]() { return c->engine.chain.bassHarmonicsDb(); };
     cb.setOutputSink = [c](const std::string& target) { c->setOutput(target); };
-    cb.statusFields = [c]() { return c->statusFields(); };
+    cb.statusFields = [c]() { return c->statusFields() + c->updater.statusJson(); };
+    cb.updateInstall = [c](const std::string& version, std::string& error) { return c->updater.start(version, error); };
     cb.setIr = [c](IrData&& ir) {
         if (!linux_store::saveIr(ir)) std::cerr << "[Konvolver] Figyelem: az IR nem menthető.\n";
         c->engine.chain.submitIr(std::move(ir));
@@ -597,6 +600,7 @@ struct Core {
     [saveTimer_ invalidate];
     core_->broadcast = nullptr;
     if (core_->bridge) core_->bridge->stop();
+    core_->updater.stop();
     core_->media.stop();
     core_->engine.stop();
     core_->filePlayer.stop();

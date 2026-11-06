@@ -563,6 +563,10 @@ static void testUpdate() {
               "https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.1/Aqulify-Setup-2.1.1.exe" &&
           update::checksumUrl("2.1.1") == update::installerUrl("2.1.1") + ".sha256",
           "a letöltési cím a saját kiadásé (rögzített tároló)");
+    CHECK(update::dmgUrl("2.1.1") ==
+              "https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.1/Aqulify-2.1.1-macOS.dmg" &&
+          update::dmgChecksumUrl("2.1.1") == update::dmgUrl("2.1.1") + ".sha256",
+          "a macOS-lemezkép címe a saját kiadásé (a kiadás fájlneve szerint)");
     const std::string empty = Sha256::hex("", 0);
     const std::string upper = "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855";
     CHECK(update::parseChecksum(upper + "  Aqulify-Setup-2.1.1.exe\n") == empty &&
