@@ -1920,6 +1920,15 @@ if (!window.THREE) window.THREE = (function () {
               <option value="quit" data-i18n="close.optQuit">Bezárás (leállás)</option>
             </select>
           </div>
+          <div id="updWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:10px;">
+            <div class="sink-sec-title" data-i18n="upd.section">Frissítések</div>
+            <label class="ao-row ao-check"><input type="checkbox" id="chkUpdAuto" onchange="updSetAuto(this.checked)"> <span data-i18n="upd.auto">Frissítések automatikus keresése</span></label>
+            <div class="ao-hint" data-i18n="upd.autoHint">Naponta legfeljebb egyszer a GitHubtól kérdezi le a legújabb kiadást. Azonosítót nem küld.</div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:6px;">
+              <button type="button" class="adw-btn" onclick="updCheck(true)" data-i18n="upd.checkNow">Keresés most</button>
+              <span id="updStatus" class="ao-hint" style="margin:0;"></span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2620,6 +2629,24 @@ if (!window.THREE) window.THREE = (function () {
   </div>
 </div>
 <!-- ABLAK BEZÁRÁSA: tálcára / háttérbe vagy bezárás (a natív ablak kérdezi a felülettől) -->
+<div id="modalUpdate" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:200; align-items:center; justify-content:center;">
+  <div class="aq-modal" role="dialog" aria-modal="true" aria-labelledby="updTitle" style="width:520px; max-width:calc(100vw - 32px); display:flex; flex-direction:column; gap:14px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
+      <span id="updTitle" style="font-size:1.1rem; font-weight:600; color:var(--aq-text);">Új verzió érhető el</span>
+      <button class="icon-btn" onclick="updClose('later')" title="Bezárás" data-i18n-title="common.close" data-i18n-aria-label="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+    <p id="updVersions" class="module-desc" style="margin:0;"></p>
+    <ul id="updNotes" style="margin:0; padding-left:20px; display:flex; flex-direction:column; gap:6px; font-size:0.9rem; color:var(--aq-text); line-height:1.4;"></ul>
+    <p id="updNoNotes" class="module-desc" style="margin:0;" hidden data-i18n="upd.noNotes">A változások a kiadás oldalán olvashatók.</p>
+    <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+      <button class="adw-btn" id="btnUpdSkip" onclick="updClose('skip')" data-i18n="upd.skip">Kihagyom ezt a verziót</button>
+      <button class="adw-btn" id="btnUpdLater" onclick="updClose('later')" data-i18n="upd.later">Később</button>
+      <button class="adw-btn primary" id="btnUpdGo" onclick="updClose('update')" data-i18n="upd.update">Frissítés</button>
+      <button class="adw-btn primary" id="btnUpdOk" onclick="updClose('ok')" hidden data-i18n="wn.ok">Rendben</button>
+    </div>
+  </div>
+</div>
+
 <div id="modalClose" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:200; align-items:center; justify-content:center;">
   <div class="aq-modal" role="dialog" aria-modal="true" aria-labelledby="closeTitle" style="width:520px; max-width:calc(100vw - 32px); display:flex; flex-direction:column; gap:14px;">
     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
@@ -8394,6 +8421,155 @@ function openExternal(url) {
   } catch (e) {}
   window.open(url, "_blank", "noopener");
 }
+
+// ---------------------------------------------------------------- Frissítések: értesítés és rövid változásnapló
+// A felület naponta legfeljebb egyszer (és a „Keresés most” gombra) a GitHubtól kérdezi le a legutóbbi kiadást;
+// azonosítót nem küld. Újabb verziónál ablak a változásnaplóval (a kiadás címkéjéhez tartozó whatsnew.json); a
+// „Frissítés” egyelőre a kiadás oldalát nyitja meg. Frissítés utáni első indításkor az „Újdonságok” a beépített
+// listából jön (gui_i18n.js: AQ_WHATSNEW). A telefonos alkalmazásban nem fut: ott nem az asztali program frissül.
+const UPD_REPO = "Szorgos/ee-phase-waterfall-analyzer";
+const UPD_PAGE = `https://github.com/${UPD_REPO}/releases/latest`;
+const UPD_KEYS = { auto: "aqulify_upd_auto", last: "aqulify_upd_last", skip: "aqulify_upd_skip", seen: "aqulify_seen_version" };
+const UPD_INTERVAL_MS = 24 * 3600 * 1000;
+var updInfo = null, updMode = "update", updStatusKey = null, updStatusVars = null;
+
+function updStore(key, val) {
+  try {
+    if (val === undefined) return localStorage.getItem(key);
+    if (val === null) localStorage.removeItem(key); else localStorage.setItem(key, String(val));
+  } catch (e) {}
+  return null;
+}
+function updSupported() { return !window.Capacitor; }
+function updGuiVersion() { const el = document.getElementById("lblAppVersion"); return (el && el.dataset.guiVersion) || ""; }
+/** Verziók összevetése (X.Y.Z): negatív, ha a < b. */
+function updCompare(a, b) {
+  const pa = String(a).split("."), pb = String(b).split(".");
+  for (let i = 0; i < 3; i++) {
+    const d = (parseInt(pa[i], 10) || 0) - (parseInt(pb[i], 10) || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+/** Egy verzió pontjai a választott nyelven (hiányzó nyelvnél angolul, végül magyarul). */
+function updNotes(list, ver) {
+  const e = Array.isArray(list) ? list.find(x => x && x.version === ver) : null;
+  const n = e && e.notes ? (e.notes[aqLang] || e.notes.en || e.notes.hu) : null;
+  return Array.isArray(n) ? n.filter(s => typeof s === "string" && s.trim()) : [];
+}
+function updAuto() { return updStore(UPD_KEYS.auto) !== "0"; }
+function updSetAuto(on) {
+  updStore(UPD_KEYS.auto, on ? "1" : "0");
+  if (on) updMaybeCheck();
+}
+function updSetStatus(key, vars) {
+  updStatusKey = key;
+  updStatusVars = vars || null;
+  const el = document.getElementById("updStatus");
+  if (el) el.textContent = key ? t(key, vars) : "";
+}
+async function updCheck(manual) {
+  if (!updSupported()) return;
+  updSetStatus("upd.checking");
+  try {
+    const r = await fetch(`https://api.github.com/repos/${UPD_REPO}/releases/latest`,
+                          { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" });
+    if (!r.ok) throw new Error(String(r.status));
+    const rel = await r.json();
+    updStore(UPD_KEYS.last, Date.now());
+    const tag = String(rel.tag_name || "");
+    const ver = tag.replace(/^v/, "");
+    if (!/^\d+\.\d+\.\d+$/.test(ver)) throw new Error("tag");
+    const cur = updGuiVersion();
+    if (updCompare(ver, cur) <= 0) { updSetStatus("upd.upToDate", { ver: cur }); return; }
+    updSetStatus("upd.available", { ver });
+    if (!manual && updStore(UPD_KEYS.skip) === ver) return;
+    let list = null;
+    try {
+      const w = await fetch(`https://raw.githubusercontent.com/${UPD_REPO}/${encodeURIComponent(tag)}/whatsnew.json`, { cache: "no-store" });
+      if (w.ok) list = (await w.json()).versions;
+    } catch (e) {}
+    // csak a saját kiadási oldal nyitható meg
+    const url = typeof rel.html_url === "string" && rel.html_url.startsWith(`https://github.com/${UPD_REPO}/releases/`)
+      ? rel.html_url : UPD_PAGE;
+    updInfo = { ver, cur, url, list };
+    const m = document.getElementById("modalUpdate");
+    if (!manual && m && m.style.display === "flex") return;   // nyitott ablak (pl. Újdonságok) fölé nem ugrik fel
+    updShow("update");
+  } catch (e) {
+    updSetStatus("upd.failed");
+  }
+}
+function updMaybeCheck() {
+  if (!updSupported() || !updAuto()) return;
+  const last = parseInt(updStore(UPD_KEYS.last) || "0", 10) || 0;
+  if (Date.now() - last < UPD_INTERVAL_MS) return;
+  updCheck(false);
+}
+/** Elem megjelenítése / elrejtése: a hidden attribútum mellett a display is (a gombok osztálya felülírná). */
+function updShowEl(id, on, display) {
+  const el = document.getElementById(id);
+  el.hidden = !on;
+  el.style.display = on ? (display || "") : "none";
+}
+function updRender() {
+  if (!updInfo) return;
+  const wn = updMode === "whatsnew";
+  document.getElementById("updTitle").textContent = wn ? t("wn.title", { ver: updInfo.ver }) : t("upd.title");
+  document.getElementById("updVersions").textContent = t("upd.versions", { cur: updInfo.cur, ver: updInfo.ver });
+  updShowEl("updVersions", !wn);
+  const notes = wn ? updNotes(window.AQ_WHATSNEW, updInfo.ver) : updNotes(updInfo.list, updInfo.ver);
+  const ul = document.getElementById("updNotes");
+  ul.textContent = "";
+  notes.forEach(s => { const li = document.createElement("li"); li.textContent = s; ul.appendChild(li); });
+  updShowEl("updNotes", notes.length > 0, "flex");
+  updShowEl("updNoNotes", !wn && !notes.length);
+  ["btnUpdSkip", "btnUpdLater", "btnUpdGo"].forEach(id => updShowEl(id, !wn));
+  updShowEl("btnUpdOk", wn);
+}
+function updShow(mode) {
+  updMode = mode;
+  updRender();
+  document.getElementById("modalUpdate").style.display = "flex";
+  const b = document.getElementById(mode === "whatsnew" ? "btnUpdOk" : "btnUpdGo");
+  if (b) b.focus();
+}
+function updClose(action) {
+  document.getElementById("modalUpdate").style.display = "none";
+  if (!updInfo || updMode !== "update") return;
+  if (action === "skip") updStore(UPD_KEYS.skip, updInfo.ver);
+  if (action === "update") openExternal(updInfo.url);
+}
+/** Nyelvváltáskor (refreshDynamicTexts): az állapotsor és a nyitott ablak az új nyelven. */
+function updRefreshTexts() {
+  if (updStatusKey) updSetStatus(updStatusKey, updStatusVars);
+  const m = document.getElementById("modalUpdate");
+  if (m && m.style.display === "flex") updRender();
+}
+/** Frissítés utáni első indítás: az új verzió pontjai a beépített listából (első telepítéskor nem jelenik meg). */
+function updWhatsNew() {
+  const cur = updGuiVersion();
+  const seen = updStore(UPD_KEYS.seen);
+  if (cur) updStore(UPD_KEYS.seen, cur);
+  if (!seen || !cur || updCompare(cur, seen) <= 0) return;
+  if (!updNotes(window.AQ_WHATSNEW, cur).length) return;
+  updInfo = { ver: cur, cur, url: "", list: null };
+  updShow("whatsnew");
+}
+function updInit() {
+  if (!updSupported()) return;
+  const wrap = document.getElementById("updWrap");
+  if (wrap) wrap.hidden = false;
+  const chk = document.getElementById("chkUpdAuto");
+  if (chk) chk.checked = updAuto();
+  updWhatsNew();
+  setTimeout(updMaybeCheck, 4000);
+}
+setTimeout(updInit, 1500);
+document.addEventListener("keydown", (e) => {
+  const m = document.getElementById("modalUpdate");
+  if (e.key === "Escape" && m && m.style.display === "flex") updClose("later");
+});
 function toggleSupport(ev) {
   if (ev) ev.stopPropagation();
   const pop = document.getElementById("supportPop");
@@ -8409,6 +8585,7 @@ function refreshDynamicTexts() {
   applyWfView();
   ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'outstage', 'magic'].forEach(renderModuleTexts);
   if (aoOpts) aoOnMessage({ opts: aoOpts });
+  if (typeof updRefreshTexts === "function") updRefreshTexts();
   renderAbButtons();   // a végén a gombsor illesztése is (fitEqActionRow): a feliratok hossza nyelvenként más
   renderMagicCompare();
   updateMagicDiag(magicDiagLast);

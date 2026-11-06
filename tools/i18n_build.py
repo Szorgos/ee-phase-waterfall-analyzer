@@ -6,9 +6,11 @@ Források (a magyar a mérvadó, minden más nyelvnek ugyanazok a kulcsai vannak
   i18n/gui/<nyelv>.json      – a felület (gui_integrated_system.html) szövegei
   i18n/native/<nyelv>.json   – Windows tálcamenü, üzenetablakok, telepítő; Linux ablak üzenetei
   i18n/scripts/<nyelv>.json  – install.sh / uninstall.sh üzenetei
+  whatsnew.json              – rövid változásnapló verziónként, minden nyelven (a legfrissebb elöl; a legfrissebb
+                               bejegyzés a CMakeLists.txt verziója kell legyen: a verzióléptetés része)
 
 Előállított (a tárolóban is benne lévő) fájlok:
-  gui_i18n.js                    – window.AQ_I18N = { hu: {...}, en: {...}, ... }
+  gui_i18n.js                    – window.AQ_I18N = { hu: {...}, en: {...}, ... }; window.AQ_WHATSNEW = [...]
   include/aq_i18n_strings.hpp    – UTF-8 szövegtábla a C++ kódnak (enum + tömbök)
   install.sh, uninstall.sh       – a „# >>> i18n” … „# <<< i18n” közötti blokk
   linux/io.github.szorgos.Aqulify.desktop – a GenericName[..] / Comment[..] sorok
@@ -77,13 +79,57 @@ def validate(domain, d):
                 errors.append(f"{domain}/{lang}: fölösleges kulcs {k}")
 
 
-def gen_gui_js(d):
-    out = ["// Előállítva: tools/i18n_build.py – ne szerkeszd kézzel; a források: i18n/gui/<nyelv>.json",
+def load_whatsnew():
+    """A rövid változásnapló (whatsnew.json): verziónként néhány pont minden nyelven, a legfrissebb elöl."""
+    p = os.path.join(ROOT, "whatsnew.json")
+    if not os.path.exists(p):
+        errors.append("whatsnew.json: hiányzik")
+        return []
+    with open(p, encoding="utf-8") as f:
+        d = json.load(f)
+    vers = d.get("versions") if isinstance(d, dict) else None
+    if not isinstance(vers, list) or not vers:
+        errors.append("whatsnew.json: üres a versions lista")
+        return []
+    prev = None
+    for e in vers:
+        v = e.get("version", "") if isinstance(e, dict) else ""
+        if not re.fullmatch(r"\d+\.\d+\.\d+", v):
+            errors.append(f"whatsnew.json: hibás verzió: {v!r}")
+            continue
+        key = tuple(int(x) for x in v.split("."))
+        if prev is not None and key >= prev:
+            errors.append(f"whatsnew.json: a verziók nincsenek csökkenő sorrendben ({v})")
+        prev = key
+        notes = e.get("notes", {})
+        ok = lambda n: isinstance(n, list) and n and all(isinstance(s, str) and s.strip() for s in n)
+        src = notes.get(SOURCE)
+        if not ok(src):
+            errors.append(f"whatsnew.json: {v}: {SOURCE}: nincs pont")
+            continue
+        for lang in LANGS:
+            if not ok(notes.get(lang)) or len(notes[lang]) != len(src):
+                errors.append(f"whatsnew.json: {v}: {lang}: hiányzó vagy a magyartól eltérő számú pont")
+        for k in notes:
+            if k not in LANGS:
+                errors.append(f"whatsnew.json: {v}: fölösleges nyelv {k}")
+    # A legfrissebb bejegyzés a mostani verzióé: a verzióléptetés része a változásnapló is
+    with open(os.path.join(ROOT, "CMakeLists.txt"), encoding="utf-8") as f:
+        m = re.search(r"VERSION\s+(\d+\.\d+\.\d+)", f.read())
+    if m and vers[0].get("version") != m.group(1):
+        errors.append(f"whatsnew.json: a legfrissebb bejegyzés ({vers[0].get('version')}) nem a CMakeLists.txt "
+                      f"verziója ({m.group(1)})")
+    return [{"version": e["version"], "date": e.get("date", ""), "notes": e["notes"]} for e in vers if isinstance(e, dict)]
+
+
+def gen_gui_js(d, whatsnew):
+    out = ["// Előállítva: tools/i18n_build.py – ne szerkeszd kézzel; a források: i18n/gui/<nyelv>.json, whatsnew.json",
            "window.AQ_I18N = {"]
     for lang in LANGS:
         if lang in d:
             out.append(f'"{lang}":' + json.dumps(d[lang], ensure_ascii=False, separators=(",", ":")) + ",")
     out.append("};")
+    out.append("window.AQ_WHATSNEW = " + json.dumps(whatsnew, ensure_ascii=False, separators=(",", ":")) + ";")
     return "\n".join(out) + "\n"
 
 
@@ -227,6 +273,7 @@ def main():
     check = "--check" in sys.argv
     gui = load("gui")
     validate("gui", gui)
+    whatsnew = load_whatsnew()
     native = load("native") if os.path.isdir(os.path.join(ROOT, "i18n", "native")) else None
     if native:
         validate("native", native)
@@ -236,7 +283,7 @@ def main():
     if errors and not check:
         print("\n".join(errors))
         sys.exit(1)
-    write_if_changed("gui_i18n.js", gen_gui_js(gui), check)
+    write_if_changed("gui_i18n.js", gen_gui_js(gui, whatsnew), check)
     if native:
         write_if_changed("include/aq_i18n_strings.hpp", gen_native_hpp(native), check)
     if scripts:

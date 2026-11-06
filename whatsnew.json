@@ -1,0 +1,66 @@
+{
+  "versions": [
+    {
+      "version": "2.1.1",
+      "date": "2026-11-06",
+      "notes": {
+        "hu": [
+          "Hangerő kizárólagos módban: választható digitális (alapértelmezett) vagy a DAC hardveres hangereje.",
+          "Ha az eszköz hangereje nem olvasható, a csúszka digitálisan szabályoz.",
+          "Helyesírási javítások a magyar szövegekben."
+        ],
+        "en": [
+          "Volume in exclusive mode: choose digital (default) or the DAC's hardware volume.",
+          "If the device's volume can't be read, the slider works digitally.",
+          "Spelling fixes in the Hungarian texts."
+        ],
+        "es": [
+          "Volumen en modo exclusivo: elige digital (predeterminado) o el volumen hardware del DAC.",
+          "Si no se puede leer el volumen del dispositivo, el control actúa de forma digital.",
+          "Correcciones ortográficas en los textos en húngaro."
+        ],
+        "fr": [
+          "Volume en mode exclusif : au choix numérique (par défaut) ou le volume matériel du DAC.",
+          "Si le volume du périphérique ne peut pas être lu, le curseur agit numériquement.",
+          "Corrections orthographiques dans les textes hongrois."
+        ],
+        "zh": [
+          "独占模式下的音量：可选数字（默认）或 DAC 硬件音量。",
+          "若无法读取设备音量，滑块以数字方式调节。",
+          "修正匈牙利语文本的拼写。"
+        ]
+      }
+    },
+    {
+      "version": "2.1.0",
+      "date": "2026-11-03",
+      "notes": {
+        "hu": [
+          "Kizárólagos mód (WASAPI exclusive) a beépített lejátszónak Windowson: a fájl saját mintavételén, a Windows keverője nélkül.",
+          "A jelút kijelzi a módot, a kimenet formátumát és a bitpontosságot.",
+          "A vízesés, a mérők és a Magic Touch kizárólagos módban is működik."
+        ],
+        "en": [
+          "Exclusive mode (WASAPI exclusive) for the built-in player on Windows: at the file's own sample rate, without the Windows mixer.",
+          "The signal path shows the mode, the output format and whether playback is bit-perfect.",
+          "The waterfall, the meters and Magic Touch also work in exclusive mode."
+        ],
+        "es": [
+          "Modo exclusivo (WASAPI exclusive) para el reproductor integrado en Windows: a la frecuencia de muestreo del archivo, sin el mezclador de Windows.",
+          "La ruta de la señal muestra el modo, el formato de salida y si la reproducción es bit-perfect.",
+          "La cascada, los medidores y Magic Touch también funcionan en modo exclusivo."
+        ],
+        "fr": [
+          "Mode exclusif (WASAPI exclusive) pour le lecteur intégré sous Windows : à la fréquence d'échantillonnage du fichier, sans le mélangeur de Windows.",
+          "Le chemin du signal indique le mode, le format de sortie et si la lecture est bit-perfect.",
+          "La cascade, les indicateurs et Magic Touch fonctionnent aussi en mode exclusif."
+        ],
+        "zh": [
+          "Windows 上内置播放器的独占模式（WASAPI exclusive）：按文件原始采样率播放，不经过 Windows 混音器。",
+          "信号路径会显示模式、输出格式以及是否比特完美。",
+          "瀑布图、电平表和 Magic Touch 在独占模式下同样可用。"
+        ]
+      }
+    }
+  ]
+}
