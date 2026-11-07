@@ -166,7 +166,7 @@ private:
     mutable std::mutex m_;
     std::thread thread_;
     bool busy_ = false;
-    bool cancel_ = false;        // a letöltés megszakítása (stop); a downloadFile csak olvassa
+    std::atomic<bool> cancel_{false};   // a letöltés megszakítása (stop, másik szálról); a downloadFile csak olvassa
     std::string version_, phase_, error_;
     uint64_t got_ = 0, total_ = 0;
 };

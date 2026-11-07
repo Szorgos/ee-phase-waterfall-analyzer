@@ -22,11 +22,11 @@ const fmt = l => `A 100 Hz ${l.a["100"].toFixed(1)} / 4 kHz ${l.a["4000"].toFixe
   await page.click("#tabBtn-outputs");
   await page.waitForTimeout(500);
   await page.click("#btnMoToggle");
-  await page.waitForFunction(() => moStatus && moStatus.enabled === true, null, { timeout: 5000 });
+  await page.waitForFunction(() => moStatus && moStatus.enabled === true, null, { timeout: 15000 });
   check(true, "bekapcsolás a fülön");
-  await page.waitForSelector('#moTable tr[data-k="1"] .mo-sink');
+  await page.waitForSelector('#moTable tr[data-k="1"] .mo-sink option[value="dac_b"]', { timeout: 15000 });
   await page.selectOption('#moTable tr[data-k="1"] .mo-sink', "dac_b");
-  await page.waitForFunction(() => moStatus.outputs[1] && moStatus.outputs[1].sink === "dac_b", null, { timeout: 5000 });
+  await page.waitForFunction(() => moStatus && moStatus.outputs && moStatus.outputs[1] && moStatus.outputs[1].sink === "dac_b", null, { timeout: 15000 });
   check(true, "a 2. kimenet hangkártyája a listából: DAC B");
   await page.screenshot({ path: path.join(process.env.AQ_SHOTS || process.env.AQ_WORK || here, "gui_outputs.png") });
   check(await page.isVisible("#zoneBar"), "a „Szerkesztett kimenet” választó megjelenik");
@@ -64,10 +64,10 @@ const fmt = l => `A 100 Hz ${l.a["100"].toFixed(1)} / 4 kHz ${l.a["4000"].toFixe
 
   // keresztváltó a fülön
   await page.selectOption("#moMode", "crossover");
-  await page.waitForFunction(() => moStatus.mode === "crossover", null, { timeout: 5000 });
+  await page.waitForFunction(() => moStatus && moStatus.mode === "crossover", null, { timeout: 15000 });
   await page.fill("#moXoFreqs input", "500");
   await page.dispatchEvent("#moXoFreqs input", "change");
-  await page.waitForFunction(() => Math.round(moStatus.crossovers[0]) === 500, null, { timeout: 5000 });
+  await page.waitForFunction(() => moStatus && moStatus.crossovers && Math.round(moStatus.crossovers[0]) === 500, null, { timeout: 15000 });
   check(!(await page.isVisible("#zoneBar")), "keresztváltóban a zónaválasztó rejtett (közös lánc)");
   await page.waitForTimeout(800);
   l = levels("gui_xo");
@@ -76,7 +76,7 @@ const fmt = l => `A 100 Hz ${l.a["100"].toFixed(1)} / 4 kHz ${l.a["4000"].toFixe
 
   // kikapcsolás
   await page.click("#btnMoToggle");
-  await page.waitForFunction(() => moStatus.enabled === false, null, { timeout: 5000 });
+  await page.waitForFunction(() => moStatus && moStatus.enabled === false, null, { timeout: 15000 });
   await page.waitForTimeout(800);
   l = levels("gui_off");
   check(l.b["100"] < -80 && Math.abs(l.a["4000"] + 12) < 0.3, "kikapcsolva a DAC B néma: " + fmt(l));

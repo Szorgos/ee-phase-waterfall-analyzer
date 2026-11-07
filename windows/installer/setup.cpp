@@ -66,7 +66,7 @@ public:
     Logger log;
     std::function<void(int)> progress;     // 0..100
     std::function<void(const std::wstring&)> phase;
-    bool cancel = false;
+    std::atomic<bool> cancel{false};   // a downloadFile megszakítása (atomi, a letöltés háttérszálon fut)
 
     Result run(const Options& opt) {
         Result res;

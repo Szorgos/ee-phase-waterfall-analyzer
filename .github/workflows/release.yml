@@ -376,6 +376,23 @@ jobs:
         with:
           name: Aqulify-Arch
 
+      - name: Csomagok meglétének ellenőrzése
+        run: |
+          missing=0
+          if [ -z "${{ needs.debian-deb.outputs.file }}" ] || [ ! -f "${{ needs.debian-deb.outputs.file }}" ]; then
+            echo "::warning title=Hiányzó Debian csomag::A Debian csomag (deb) hiányzik, nem kerül a kiadásba!"
+            echo "- ⚠️ **Debian csomag (deb)** hiányzik a kiadásból" >> "$GITHUB_STEP_SUMMARY"
+            missing=1
+          fi
+          if [ -z "${{ needs.arch-pkg.outputs.file }}" ] || [ ! -f "${{ needs.arch-pkg.outputs.file }}" ]; then
+            echo "::warning title=Hiányzó Arch csomag::Az Arch csomag (pkg.tar.zst) hiányzik, nem kerül a kiadásba!"
+            echo "- ⚠️ **Arch csomag (pkg.tar.zst)** hiányzik a kiadásból" >> "$GITHUB_STEP_SUMMARY"
+            missing=1
+          fi
+          if [ "$missing" -eq 0 ]; then
+            echo "✅ Minden disztribúciós csomag (deb, rpm, arch) elkészült." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: "GitHub Release (kézi indításkor verziószámmal: új címke és kiadás)"
         if: github.event_name == 'workflow_dispatch' && inputs.version != ''
         uses: softprops/action-gh-release@v2

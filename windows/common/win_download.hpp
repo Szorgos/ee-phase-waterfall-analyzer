@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <winhttp.h>
 
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
@@ -15,9 +16,13 @@
 
 namespace ee_analyzer::win {
 
-/** HTTPS letöltés WinHTTP-vel (átirányítások követése). */
+/** Időkorlátok (ms): névfeloldás, kapcsolódás, küldés, és egy-egy olvasás (ennyi ideig adat nélkül → hiba). Így
+ *  megakadt hálózatnál a letöltés legfeljebb ennyi idő után véget ér, és a megszakítás (cancel) is legkésőbb ekkor hat. */
+inline constexpr int kDownloadTimeoutMs = 15000;
+
+/** HTTPS letöltés WinHTTP-vel (átirányítások követése). A cancel másik szálról állítható (atomi). */
 inline bool downloadFile(const std::wstring& url, const std::wstring& dest, std::function<void(uint64_t, uint64_t)> progress,
-                         const bool* cancel) {
+                         const std::atomic<bool>* cancel) {
     URL_COMPONENTS uc{};
     uc.dwStructSize = sizeof(uc);
     wchar_t host[256], path[2048];
@@ -30,6 +35,7 @@ inline bool downloadFile(const std::wstring& url, const std::wstring& dest, std:
     if (!ses) ses = WinHttpOpen(L"Wget/1.21.4 (Aqulify-Setup)", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!ses) return false;
+    WinHttpSetTimeouts(ses, kDownloadTimeoutMs, kDownloadTimeoutMs, kDownloadTimeoutMs, kDownloadTimeoutMs);
     bool ok = false;
     HINTERNET con = WinHttpConnect(ses, host, uc.nPort, 0);
     HINTERNET req = con ? WinHttpOpenRequest(con, L"GET", path, nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
@@ -50,7 +56,7 @@ inline bool downloadFile(const std::wstring& url, const std::wstring& dest, std:
                 uint64_t got = 0;
                 ok = true;
                 for (;;) {
-                    if (cancel && *cancel) { ok = false; break; }
+                    if (cancel && cancel->load()) { ok = false; break; }
                     DWORD n = 0;
                     if (!WinHttpReadData(req, buf.data(), static_cast<DWORD>(buf.size()), &n)) { ok = false; break; }
                     if (n == 0) break;
