@@ -11,7 +11,7 @@
 
 #include "mini_json.hpp"
 
-namespace startup_restore {
+namespace ee_analyzer::startup_restore {
 
 enum class Mode { Ask, Always, Never };
 
@@ -91,4 +91,4 @@ inline std::string statusMessage(bool pending, const Pref& p, bool availChain, b
            partsJson(Parts{ availChain, availMulti, availAudio }) + "}";
 }
 
-} // namespace startup_restore
+} // namespace ee_analyzer::startup_restore
