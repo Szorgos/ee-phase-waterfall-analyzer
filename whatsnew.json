@@ -1,6 +1,37 @@
 {
   "versions": [
     {
+      "version": "2.1.5",
+      "date": "2026-11-07",
+      "notes": {
+        "hu": [
+          "Frissítés és letöltés: szálbiztos megszakítás és 15 másodperces időkorlát védi a folyamatot a megakadt hálózat ellen.",
+          "Linux: a kiadási munkafolyamat automatikusan ellenőrzi a disztribúciós csomagok (DEB, Arch) elkészültét.",
+          "Javítás: megbízhatóbb felületi tesztek több kimenet használatakor."
+        ],
+        "en": [
+          "Update and download: thread-safe cancellation and a 15-second timeout protect the download against stalled connections.",
+          "Linux: the release workflow automatically verifies that distribution packages (DEB, Arch) are created.",
+          "Fix: more reliable UI testing when using multiple outputs."
+        ],
+        "es": [
+          "Actualización y descarga: cancelación segura entre hilos y límite de 15 segundos contra bloqueos de red.",
+          "Linux: el flujo de publicación comprueba automáticamente la presencia de paquetes de distribución (DEB, Arch).",
+          "Corrección: pruebas de interfaz más fiables al usar múltiples salidas."
+        ],
+        "fr": [
+          "Mise à jour et téléchargement : annulation sécurisée entre threads et délai de 15 secondes contre les blocages réseau.",
+          "Linux : le flux de publication vérifie automatiquement la présence des paquets de distribution (DEB, Arch).",
+          "Correctif : tests d'interface plus fiables lors de l'utilisation de plusieurs sorties."
+        ],
+        "zh": [
+          "更新与下载：线程安全的下载取消与 15 秒超时保护，防止网络停滞卡死。",
+          "Linux：发布工作流自动检查发行版软件包（DEB、Arch）是否齐全。",
+          "修复：使用多输出时更稳定的界面测试。"
+        ]
+      }
+    },
+    {
       "version": "2.1.4",
       "date": "2026-11-07",
       "notes": {

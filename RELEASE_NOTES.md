@@ -1,3 +1,16 @@
+### Újdonságok (2.1.5)
+
+**Letöltés (2.1.5):**
+- Windows 11: [Aqulify-Setup-2.1.5.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.5/Aqulify-Setup-2.1.5.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.5/Aqulify-Setup-2.1.5.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.1.5-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.5/Aqulify-2.1.5-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.5/Aqulify-2.1.5-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.1.5.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.5/Aqulify-Linux-2.1.5.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.5/Aqulify-Linux-2.1.5.tar.gz.sha256))
+- Fedora: [aqulify-2.1.5-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.5/aqulify-2.1.5-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.1.5-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.5/aqulify_2.1.5-1_amd64.deb) · Arch: [aqulify-2.1.5-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.5/aqulify-2.1.5-1-x86_64.pkg.tar.zst)
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Frissítés és letöltés (Windows).** A frissítés és az Equalizer APO letöltési megszakítása szálbiztos (`std::atomic<bool>`), és 15 másodperces időkorlát védi a folyamatot a megakadt hálózati kapcsolatok ellen.
+- **Kiadási csomagellenőrzés (Linux).** A kiadási munkafolyamat automatikusan ellenőrzi a Debian (`deb`) és Arch csomagok elkészültét, és figyelmeztetést ad a kiadás összesítőjében, ha valamelyik disztribúciós csomag hiányzik.
+- **Tesztek és stabilitás.** Megbízhatóbbá vált a több kimenetet vizsgáló élő felületi teszt, valamint a kezelőfelület menüpont-elnevezései pontosítva lettek az asztali környezetekhez.
+
 ### Újdonságok (2.1.4)
 
 **Letöltés (2.1.4):**
