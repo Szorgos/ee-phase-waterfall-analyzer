@@ -17,3 +17,13 @@ Terminal=false
 Categories=AudioVideo;Audio;Mixer;
 Keywords=equalizer;eq;autoeq;pipewire;headphone;crossfeed;convolver;limiter;spectrum;analyzer;
 StartupWMClass=Aqulify
+
+Actions=Quit;
+
+[Desktop Action Quit]
+Name=Stop Aqulify
+Name[hu]=Aqulify leállítása
+Name[es]=Detener Aqulify
+Name[fr]=Arrêter Aqulify
+Name[zh]=停止 Aqulify
+Exec=sh -c "systemctl --user stop aqulify.service >/dev/null 2>&1; pkill -TERM -x aqulify-engine"

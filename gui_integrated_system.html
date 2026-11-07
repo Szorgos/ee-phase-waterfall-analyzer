@@ -5981,9 +5981,14 @@ function renderBurnInState() {
 const CLOSE_PREF_KEY = "aqulify_close_action";
 let aqClosing = false;
 
+/** Linuxon nincs tálcaikon: a „háttérbe” zárás nem kínálható (a motor nem látszana, és nem lehetne visszahozni). */
+function closeNoTray() {
+  return /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+}
 function closePref() {
   try {
     const v = localStorage.getItem(CLOSE_PREF_KEY);
+    if (v === "tray" && closeNoTray()) return "ask";
     return v === "tray" || v === "quit" ? v : "ask";
   } catch (e) { return "ask"; }
 }
@@ -6058,7 +6063,11 @@ function syncClosePrefSelect() {
   const wrap = document.getElementById("closePrefWrap");
   if (wrap) wrap.hidden = typeof window.aetherCloseWindow !== "function";
   const sel = document.getElementById("selectClosePref");
-  if (sel) sel.value = closePref();
+  if (sel) {
+    const trayOpt = sel.querySelector('option[value="tray"]');
+    if (trayOpt && closeNoTray()) trayOpt.remove();
+    sel.value = closePref();
+  }
 }
 /** A „tálcára” gomb felirata rendszerenként: Windows tálca, macOS menüsor, Linux háttér. */
 function closeTrayKey() {
@@ -6079,8 +6088,11 @@ function openCloseDialog() {
   if (lbl) { lbl.setAttribute("data-i18n", closeTrayKey()); lbl.textContent = t(closeTrayKey()); }
   const chk = document.getElementById("chkCloseAlways");
   if (chk) chk.checked = false;
+  const noTray = closeNoTray();
+  const trayBtn = document.getElementById("btnCloseTray");
+  if (trayBtn) trayBtn.style.display = noTray ? "none" : "";
   document.getElementById("modalClose").style.display = "flex";
-  const btn = document.getElementById("btnCloseTray");
+  const btn = document.getElementById(noTray ? "btnCloseQuit" : "btnCloseTray");
   if (btn) btn.focus();
 }
 function hideCloseDialog() {
