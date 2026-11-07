@@ -6002,6 +6002,9 @@ function setClosePref(v) {
 }
 // ---- Indításkori visszaállítás (startup_restore.hpp): a motor kérdezi-e, és mit állítson vissza
 let restoreState = null;   // a motor legutóbbi "restore" üzenete: pending, mode, parts, available
+// A motor a visszaállítás állapotát küldi (indításkor is): ettől a felület nem tolja vissza a saját állapotát, a motor
+// állapotát veszi át. Így a visszaállítás (vagy az alap) a felületen is ugyanaz, mint a motorban.
+let engineRestoreSeen = false;
 function restoreSend(obj) {
   try {
     if (pipewireWs && pipewireWs.readyState === WebSocket.OPEN) pipewireWs.send(JSON.stringify(obj));
@@ -7919,7 +7922,7 @@ function applyEngineState(st, fromSync) {
     suppressEngineSync = false;
   }
   if (fromSync) return;
-  if (!st.initialized) {
+  if (!st.initialized && !engineRestoreSeen) {
     // A motor még üres: a felület (biztonságos, sík) állapotát teljes egészében átadjuk
     pushAllToEngine();
   }
@@ -8088,7 +8091,7 @@ function initPipewireBridge() {
     pipewireWs.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data);
-        if (data && data.type === "restore") { onRestoreState(data); return; }
+        if (data && data.type === "restore") { engineRestoreSeen = true; onRestoreState(data); return; }
         if (data && (data.type === "state" || data.type === "status" || data.type === "spectrum")) engineVerified = true;
         if (aqNowPlaying && data) {
           // a "state" részüzenetei (ir, sync) nem hordoznak képességeket: csak a caps-os állapot számít
@@ -8163,7 +8166,7 @@ function initPipewireBridge() {
             sendCurveMsg({ type: "get_eq_response" });
           } else {
             receivePresetsFromEngine(data.presets);
-            if (guiStateSynced && data.initialized) {
+            if (guiStateSynced && data.initialized && !engineRestoreSeen) {
               applyEngineIr(data);
               pushAllToEngine();
             } else {

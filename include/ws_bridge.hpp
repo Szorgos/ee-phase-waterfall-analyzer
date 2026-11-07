@@ -1449,11 +1449,12 @@ private:
             return;
         }
         if (type == "hello" || type == "get_state") {
-            sendText(buildStateMessage());
+            // a visszaállítás állapota ELŐBB megy: a felület így tudja, hogy a motor állapotát nem tolja vissza
             if (!remote && cb_.restoreStatus) {
                 const std::string r = cb_.restoreStatus();
                 if (!r.empty()) sendText(r);
             }
+            sendText(buildStateMessage());
             return;
         }
         if ((type == "restore_choice" || type == "restore_mode") && !remote) {
@@ -1462,6 +1463,8 @@ private:
                 const std::string r = cb_.restoreStatus();
                 if (!r.empty()) sendText(r);
             }
+            // a döntés után a motor tényleges állapota (a visszaállított vagy az alap) megy a felületre
+            if (type == "restore_choice") sendText(buildStateMessage());
             return;
         }
         if (type == "save_presets") {
