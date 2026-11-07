@@ -28,6 +28,7 @@
 #include "pipewire_sink_node.hpp"
 #include "player_output_pw.hpp"
 #include "self_path.hpp"
+#include "startup_restore.hpp"
 #include "update_logic.hpp"
 #include "ws_bridge.hpp"
 
@@ -297,23 +298,22 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Indításkor mindig alap (minden modul ki): az utolsó lánc nem áll vissza automatikusan,
-    // a felület a saját állapotát a csatlakozáskor adja át
     std::mutex paramMutex;
-    ParamData current = transparentParams();
+    // Indításkori visszaállítás (startup_restore.hpp): a mentett részeket az restore.json szerint állítjuk vissza.
+    // Kérdezés (mód „ask”) esetén a felület válaszáig az alapállapot marad, a mentett adat a fájlokban van.
+    std::mutex restoreMutex;
+    startup_restore::Pref restorePref = startup_restore::parsePref(linux_store::loadRestorePref());
+    ParamData savedChain = transparentParams();
+    const bool hasChain = linux_store::loadParams(savedChain);
+    IrData savedIr;
+    const bool hasIr = linux_store::loadIr(savedIr);
+    ParamData current = transparentParams();   // az élő lánc (alap, amíg nincs visszaállítás)
     bool dirty = false;
     auto lastChange = std::chrono::steady_clock::now();
 
     AetherSinkNode node(48000);
     g_node = &node;
     node.params.write(current);
-    {
-        IrData ir;
-        if (linux_store::loadIr(ir)) {
-            std::cout << "[Konvolver] Mentett impulzusválasz betöltve: " << ir.name << "\n";
-            node.chain.submitIr(std::move(ir));
-        }
-    }
 
     pwDeinit.armed = true;
     if (!node.start(argc, argv)) {
@@ -502,19 +502,19 @@ int main(int argc, char* argv[]) {
     // nem változik); a felület a csatlakozáskor adja át. A 2–4. kimenet céleszköze csak létező fizikai nyelő lehet.
     // A beállítás és a zónák lánca / IR-je megmarad (multiout.bin, zoneN_ir.bin), de induláskor ki van kapcsolva.
     std::mutex multiMutex;
-    multiout::MultiConfig multiState;
+    multiout::MultiConfig multiState;             // az élő állapot (alap, amíg nincs visszaállítás)
     std::array<std::string, 3> multiTargets{};
-    if (linux_store::loadMultiOut(multiState, multiTargets)) {
-        multiState.enabled = false;
-        std::cout << "[Több kimenet] Mentett beállítás betöltve (" << multiState.numOutputs << " kimenet, kikapcsolva).\n";
-    }
-    for (int k = 1; k < multiout::kMaxOutputs; ++k) {
-        IrData ir;
-        if (linux_store::loadIrFile("zone" + std::to_string(k + 1) + "_ir.bin", ir)) node.zoneChain(k).submitIr(std::move(ir));
+    // A mentett több kimenet és a zónák IR-je: a visszaállítás (multi rész) élesíti
+    multiout::MultiConfig savedMulti;
+    std::array<std::string, 3> savedTargets{};
+    const bool hasMulti = linux_store::loadMultiOut(savedMulti, savedTargets);
+    std::array<IrData, multiout::kMaxOutputs> savedZoneIr{};
+    if (hasMulti) {
+        for (int k = 1; k < multiout::kMaxOutputs; ++k)
+            linux_store::loadIrFile("zone" + std::to_string(k + 1) + "_ir.bin", savedZoneIr[k]);
     }
     static std::atomic<bool> s_multiDirty{ false };
     auto pushMulti = [&] { node.setMultiOutput(multiState, multiTargets); s_multiDirty = true; };
-    pushMulti();
     struct MultiSaver { std::mutex* m; multiout::MultiConfig* c; std::array<std::string, 3>* t; };
     static MultiSaver s_multiSaver{ &multiMutex, &multiState, &multiTargets };
     node.addTimer([](void* data, uint64_t) {
@@ -581,12 +581,15 @@ int main(int argc, char* argv[]) {
     // Haladó hangkimenet: pufferméret, ébren tartás, mintavétel, újramintavételezés (audio.json; megmarad).
     // A PipeWire mintavételi beállítását a motor leálláskor visszaállítja az eredetire.
     std::mutex audioMutex;
-    audioopt::AudioOptions audioOpts;
-    {
+    audioopt::AudioOptions audioOpts;             // az élő beállítás (alap, amíg nincs visszaállítás)
+    audioopt::AudioOptions savedAudio;            // a mentett (audio.json), a visszaállítás (audio rész) élesíti
+    const bool hasAudio = [&] {
         const std::string doc = linux_store::loadAudioOptions();
         json::Value v;
-        if (!doc.empty() && json::parse(doc, v)) audioOpts = audioopt::fromJson(v);
-    }
+        if (doc.empty() || !json::parse(doc, v)) return false;
+        savedAudio = audioopt::fromJson(v);
+        return true;
+    }();
     const std::string origAllowedRates = pwSetting("clock.allowed-rates");
     const std::string origForceRate = pwSetting("clock.force-rate");
     bool ratesTouched = false;
@@ -599,6 +602,7 @@ int main(int argc, char* argv[]) {
         const int autoQ = std::atoi(pwSetting("clock.quantum").c_str());
         const bool pauseForPlayer = o.rateMode == audioopt::RateMode::Follow && playerStreamOpen();
         node.setAudioOptions(o.bufferFrames, o.keepAwake && !pauseForPlayer, autoQ > 0 ? autoQ : 1024);
+        node.setRateFollow(o.rateMode == audioopt::RateMode::Follow);
         if (o.rateMode == audioopt::RateMode::Follow) {
             pwSetSetting("clock.force-rate", "0");
             pwSetSetting("clock.allowed-rates", "[ 44100 48000 88200 96000 176400 192000 ]");
@@ -613,10 +617,72 @@ int main(int argc, char* argv[]) {
         }
     };
     applyAudio(audioOpts);
+
+    // Indításkori visszaállítás: a mentett részek alkalmazása (mód „always”: azonnal; „ask”: a felület kérdezi)
+    auto applyRestoreParts = [&](const startup_restore::Parts& want) {
+        if (want.chain) {
+            if (hasChain) {
+                std::lock_guard<std::mutex> lk(paramMutex);
+                current = savedChain;
+                node.params.write(current);
+            }
+            if (hasIr) {
+                std::cout << "[Konvolver] Mentett impulzusválasz visszaállítva: " << savedIr.name << "\n";
+                node.chain.submitIr(IrData(savedIr));
+            }
+        }
+        if (want.multi && hasMulti) {
+            std::lock_guard<std::mutex> lk(multiMutex);
+            multiState = savedMulti;
+            multiTargets = savedTargets;
+            for (int k = 1; k < multiout::kMaxOutputs; ++k)
+                if (!savedZoneIr[k].empty()) node.zoneChain(k).submitIr(IrData(savedZoneIr[k]));
+            pushMulti();
+        }
+        if (want.audio && hasAudio) {
+            std::lock_guard<std::mutex> lk(audioMutex);
+            audioOpts = savedAudio;
+            applyAudio(audioOpts);
+        }
+    };
+    if (restorePref.mode == startup_restore::Mode::Always) applyRestoreParts(restorePref.parts);
+    std::atomic<bool> restorePending{ restorePref.mode == startup_restore::Mode::Ask &&
+                                      (hasChain || hasIr || hasMulti || hasAudio) };
+    if (restorePending) std::cout << "[Beállítások] Indításkor a felület megkérdezi, mit állítson vissza.\n";
+    cb.restoreStatus = [&]() {
+        std::lock_guard<std::mutex> lk(restoreMutex);
+        return startup_restore::statusMessage(restorePending.load(), restorePref, hasChain || hasIr, hasMulti, hasAudio);
+    };
+    cb.restoreRequest = [&](const std::string& type, const json::Value& msg) {
+        std::lock_guard<std::mutex> lk(restoreMutex);
+        if (type == "restore_choice") {
+            // choice: "restore" (a kijelölt részek) vagy "default" (semmi); remember: legközelebb ne kérdezzen
+            const bool restore = msg.get("choice") && msg.get("choice")->stringOr("") == "restore";
+            const startup_restore::Parts want = restore
+                ? startup_restore::partsFromJson(msg.get("parts"), startup_restore::Parts{})
+                : startup_restore::Parts{ false, false, false };
+            if (restorePending.exchange(false)) applyRestoreParts(want);
+            const json::Value* rem = msg.get("remember");
+            if (rem && rem->type == json::Value::Type::Bool && rem->b) {
+                restorePref.parts = want;
+                restorePref.mode = startup_restore::anyPart(want) ? startup_restore::Mode::Always : startup_restore::Mode::Never;
+                if (!linux_store::saveRestorePref(startup_restore::serializePref(restorePref)))
+                    std::cerr << "[Beállítások] Figyelem: a restore.json nem írható.\n";
+            }
+        } else if (type == "restore_mode") {
+            // a Kimenet menü beállítása: mode („ask” / „always” / „never”) és a részek
+            if (const json::Value* m = msg.get("mode"); m && m->type == json::Value::Type::String)
+                restorePref.mode = startup_restore::modeFromName(m->str);
+            restorePref.parts = startup_restore::partsFromJson(msg.get("parts"), restorePref.parts);
+            if (!linux_store::saveRestorePref(startup_restore::serializePref(restorePref)))
+                std::cerr << "[Beállítások] Figyelem: a restore.json nem írható.\n";
+        }
+    };
+
     // „A forrást követi” + ébren tartás: a folyamatosan szóló csendes hangfolyam mellett a PipeWire nem vált
-    // mintavételt (és újracsatlakozáskor vissza is váltana). Amíg a beépített lejátszó hangfolyama nyitva van, a
-    // hangkártya úgyis szól, ezért az ébren tartás addig szünetel; a hangfolyam bezárása után 1,5 s-mal visszakapcsol
-    // (ha közben új szám nyílt, nem). Más programoknál ez nem lehetséges: ott a rögzített mintavétel a megoldás.
+    // mintavételt. Amíg a beépített lejátszó hangfolyama nyitva van, a hangkártya úgyis szól, ezért az ébren tartás
+    // addig szünetel; a hangfolyam bezárása után 1,5 s-mal visszakapcsol (ha közben új szám nyílt, nem). Külső
+    // program új hangfolyamakor az ébren tartás szintén rövid időre szünetel (AetherSinkNode::onRegistryGlobal).
     static std::atomic<uint64_t> s_playerTicket{0};
     static std::atomic<bool> s_engineQuit{false};
     std::atomic<bool>& s_playerOpen = playerStreamOpenFlag;
@@ -728,11 +794,9 @@ int main(int argc, char* argv[]) {
     filePlayer.stop();
     mediaSession.stop();
     {
-        // Leálláskor alap: minden modul ki, így a program bezárása után nem változik a hangzás
+        // Az utolsó beállítás marad a params.bin-ben: a következő indításkor visszaáll
         std::lock_guard<std::mutex> lk(paramMutex);
-        current = transparentParams();
-        node.params.write(current);
-        linux_store::saveParams(current);
+        if (dirty) linux_store::saveParams(current);
     }
     {
         // A PipeWire mintavételi beállítása visszaáll (a program bezárása után a rendszer a régi)

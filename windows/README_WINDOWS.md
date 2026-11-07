@@ -38,7 +38,7 @@ A felület jelvénye mutatja, honnan jön a jel:
 | **Élő analízis – WASAPI loopback** | Nincs aktív plugin: csak analízis, a DSP beállítások nem hatnak a hangra |
 | **Motor Offline** | Nem fut az `Aqulify.exe` |
 
-A beállítások (EQ, modulok, betöltött impulzusválasz) a `C:\ProgramData\Aqulify\` mappába mentődnek. A plugin onnan tölti be őket, így a lánc akkor is él, ha a motor nem fut.
+A beállítások (EQ, modulok, betöltött impulzusválasz) a `C:\ProgramData\Aqulify\` mappába mentődnek. A plugin a `params.bin`-ből olvas. Kilépéskor a lánc alapállapotra áll (a hang nem változik), az utolsó működő láncot a `last_params.bin` őrzi. Indításkor a felület megkérdezi, hogy visszaálljon-e (a válasz és a mód a `restore.json`-ban van, a Kimenet menüben módosítható); „Mindig ezt válaszd” jelöléssel a kérdés elmarad. Kérdezés közben a lánc alapállapotban marad.
 
 ## Felület
 

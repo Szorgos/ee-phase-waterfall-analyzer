@@ -31,6 +31,7 @@
 #include "mac_engine.hpp"
 #include "mac_media.hpp"
 #include "ws_bridge.hpp"
+#include "startup_restore.hpp"
 #include "file_player.hpp"
 #include "player_output_coreaudio.hpp"
 #include "music_library.hpp"
@@ -126,6 +127,52 @@ struct Core {
     // Core Audio kezeli; az IOProc folyamatosan fut, így a hangkártya nem alszik el)
     std::mutex audioMutex;
     audioopt::AudioOptions audioOpts;
+
+    // Indításkori visszaállítás (startup_restore.hpp): a mentett állapot, és hogy a felület kérdez-e
+    std::mutex restoreMutex;
+    startup_restore::Pref restorePref;
+    std::atomic<bool> restorePending{false};
+    ParamData savedChain = transparentParams();
+    bool hasChain = false;
+    IrData savedIr;
+    bool hasIr = false;
+    multiout::MultiConfig savedMulti;
+    std::array<std::string, 3> savedTargets{};
+    bool hasMulti = false;
+    std::array<IrData, multiout::kMaxOutputs> savedZoneIr{};
+    audioopt::AudioOptions savedAudio;
+    bool hasAudio = false;
+
+    /** A kért részek élesítése (indításkor „always” módban, vagy a felület kérésére). */
+    void applyRestoreParts(const startup_restore::Parts& want) {
+        if (want.chain) {
+            if (hasChain) {
+                std::lock_guard<std::mutex> lk(paramMutex);
+                current = savedChain;
+                engine.params.write(current);
+            }
+            if (hasIr) engine.chain.submitIr(IrData(savedIr));
+        }
+        if (want.multi && hasMulti) {
+            std::lock_guard<std::mutex> lk(multiMutex);
+            multiState = savedMulti;
+            multiTargets = savedTargets;
+            for (int k = 1; k < multiout::kMaxOutputs; ++k)
+                if (!savedZoneIr[k].empty()) engine.zoneChain(k).submitIr(IrData(savedZoneIr[k]));
+            engine.setMultiOutput(multiState, multiTargets);
+            multiDirty = true;
+        }
+        if (want.audio && hasAudio) {
+            std::lock_guard<std::mutex> lk(audioMutex);
+            audioOpts = savedAudio;
+            audioOpts.keepAwake = false;                      // macOS-en ezek nem állíthatók (lásd setAudioOptions)
+            audioOpts.rateMode = audioopt::RateMode::System;
+            audioOpts.resampleQuality = -1;
+            engine.setBufferFrames(static_cast<uint32_t>(audioOpts.bufferFrames));
+            filePlayer.setReplayGain(audioOpts.replayGain, audioOpts.rgPreampDb, audioOpts.rgPreventClip);
+            filePlayer.setPreload(audioOpts.preload);
+        }
+    }
 
     std::mutex outputMutex;
     std::string selectedOutput;   // UID, vagy üres: a rendszer alapértelmezettje
@@ -314,22 +361,31 @@ struct Core {
     core_ = std::make_unique<Core>();
     Core* c = core_.get();
 
-    // Utolsó beállítások; első indításkor átlátszó (minden modul kikapcsolva), a felület adja át a sajátját
-    if (linux_store::loadParams(c->current))
-        std::cout << "[Beállítások] Utolsó DSP lánc betöltve (" << c->current.numBands << " EQ sáv).\n";
-    c->engine.params.write(c->current);
-    {
-        IrData ir;
-        if (linux_store::loadIr(ir)) {
-            std::cout << "[Konvolver] Mentett impulzusválasz betöltve: " << ir.name << "\n";
-            c->engine.chain.submitIr(std::move(ir));
-        }
+    // Indításkori visszaállítás: a mentett részek (lánc, IR, több kimenet, hangkimenet) a restore.json szerint állnak
+    // vissza; mód „ask” esetén a felület kérdez, addig az alapállapot marad (a mentett fájlok érintetlenek)
+    c->restorePref = startup_restore::parsePref(linux_store::loadRestorePref());
+    c->hasChain = linux_store::loadParams(c->savedChain);
+    c->hasIr = linux_store::loadIr(c->savedIr);
+    c->hasMulti = linux_store::loadMultiOut(c->savedMulti, c->savedTargets);
+    if (c->hasMulti) {
+        for (int k = 1; k < multiout::kMaxOutputs; ++k)
+            linux_store::loadIrFile("zone" + std::to_string(k + 1) + "_ir.bin", c->savedZoneIr[k]);
     }
+    {
+        const std::string doc = linux_store::loadAudioOptions();
+        json::Value v;
+        c->hasAudio = !doc.empty() && json::parse(doc, v);
+        if (c->hasAudio) c->savedAudio = audioopt::fromJson(v);
+    }
+    c->engine.params.write(c->current);
     c->presetDoc = linux_store::loadPresets();
     c->selectedOutput = linux_store::loadOutputSink();
     if (!c->selectedOutput.empty()) c->engine.setOutput(c->selectedOutput);
     c->engine.start();
     c->media.start();
+    if (c->restorePref.mode == startup_restore::Mode::Always) c->applyRestoreParts(c->restorePref.parts);
+    c->restorePending = c->restorePref.mode == startup_restore::Mode::Ask && (c->hasChain || c->hasIr || c->hasMulti || c->hasAudio);
+    if (c->restorePending) std::cout << "[Beállítások] Indításkor a felület megkérdezi, mit állítson vissza.\n";
 
     if (![self startBridge]) {
         NSAlert* a = [NSAlert new];
@@ -470,15 +526,6 @@ struct Core {
     // Ablak bezárása „Bezárás” választással: az alkalmazás kilép (a motor vele áll le, a hang nem változik)
     cb.quitEngine = [] { dispatch_async(dispatch_get_main_queue(), ^{ [NSApp terminate:nil]; }); };
 
-    // Haladó hangkimenet: a mentett pufferméret indításkor is érvényes
-    {
-        const std::string doc = linux_store::loadAudioOptions();
-        json::Value v;
-        if (!doc.empty() && json::parse(doc, v)) c->audioOpts = audioopt::fromJson(v);
-        c->engine.setBufferFrames(static_cast<uint32_t>(c->audioOpts.bufferFrames));
-        c->filePlayer.setReplayGain(c->audioOpts.replayGain, c->audioOpts.rgPreampDb, c->audioOpts.rgPreventClip);
-        c->filePlayer.setPreload(c->audioOpts.preload);
-    }
     cb.setVolume = [c](double level, int mute) { c->engine.setOutputVolume(static_cast<float>(level), mute); };
     cb.audioOptionsJson = [c]() -> std::string {
         std::lock_guard<std::mutex> lk(c->audioMutex);
@@ -499,14 +546,35 @@ struct Core {
         if (!linux_store::saveAudioOptions(audioopt::toJson(o))) std::cerr << "[Hangkimenet] Figyelem: az audio.json nem írható.\n";
     };
 
-    // Több kimenet: a beállítás és a zónák lánca / IR-je megmarad, de induláskor ki van kapcsolva (a hangzás nem
-    // változik). A 2–4. kimenet céleszköze csak a rendszer egy használható kimeneti eszköze lehet (UID).
-    if (linux_store::loadMultiOut(c->multiState, c->multiTargets)) c->multiState.enabled = false;
-    for (int k = 1; k < multiout::kMaxOutputs; ++k) {
-        IrData ir;
-        if (linux_store::loadIrFile("zone" + std::to_string(k + 1) + "_ir.bin", ir)) c->engine.zoneChain(k).submitIr(std::move(ir));
-    }
+    // A több kimenet alapja induláskor kikapcsolt; a mentett állapot a visszaállítás (multi rész) után él
     c->engine.setMultiOutput(c->multiState, c->multiTargets);
+    cb.restoreStatus = [c]() {
+        std::lock_guard<std::mutex> lk(c->restoreMutex);
+        return startup_restore::statusMessage(c->restorePending.load(), c->restorePref, c->hasChain || c->hasIr, c->hasMulti, c->hasAudio);
+    };
+    cb.restoreRequest = [c](const std::string& type, const json::Value& msg) {
+        std::lock_guard<std::mutex> lk(c->restoreMutex);
+        if (type == "restore_choice") {
+            const bool restore = msg.get("choice") && msg.get("choice")->stringOr("") == "restore";
+            const startup_restore::Parts want = restore
+                ? startup_restore::partsFromJson(msg.get("parts"), startup_restore::Parts{})
+                : startup_restore::Parts{ false, false, false };
+            if (c->restorePending.exchange(false)) c->applyRestoreParts(want);
+            const json::Value* rem = msg.get("remember");
+            if (rem && rem->type == json::Value::Type::Bool && rem->b) {
+                c->restorePref.parts = want;
+                c->restorePref.mode = startup_restore::anyPart(want) ? startup_restore::Mode::Always : startup_restore::Mode::Never;
+                if (!linux_store::saveRestorePref(startup_restore::serializePref(c->restorePref)))
+                    std::cerr << "[Beállítások] Figyelem: a restore.json nem írható.\n";
+            }
+        } else if (type == "restore_mode") {
+            if (const json::Value* m = msg.get("mode"); m && m->type == json::Value::Type::String)
+                c->restorePref.mode = startup_restore::modeFromName(m->str);
+            c->restorePref.parts = startup_restore::partsFromJson(msg.get("parts"), c->restorePref.parts);
+            if (!linux_store::saveRestorePref(startup_restore::serializePref(c->restorePref)))
+                std::cerr << "[Beállítások] Figyelem: a restore.json nem írható.\n";
+        }
+    };
     cb.setMultiOut = [c](const multiout::MultiConfig& in, const std::array<std::string, 3>& sinks) {
         const auto devices = c->engine.outputDevices();
         std::lock_guard<std::mutex> lk(c->multiMutex);

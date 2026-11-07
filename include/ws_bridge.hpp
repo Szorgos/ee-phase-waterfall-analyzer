@@ -146,6 +146,11 @@ struct BridgeCallbacks {
      */
     std::function<std::string()> audioOptionsJson;
     std::function<void(const json::Value& opts)> setAudioOptions;
+
+    /** Indításkori visszaállítás (startup_restore.hpp): a helyi felületnek küldött állapot (üres: nincs), és a
+     *  felület válasza ("restore_choice" a kérdésre, "restore_mode" a beállításra). Távoli kliensnek nem megy. */
+    std::function<std::string()> restoreStatus;
+    std::function<void(const std::string& type, const json::Value& msg)> restoreRequest;
     /**
      * A kimeneti hangkártya hangereje (a „most szól” sáv csúszkája; a telefonról is): level 0–1 (< 0: nem változik),
      * mute 0 / 1 (< 0: nem változik). A pillanatnyi értéket a platform az állapotüzenet "volume" mezőjében küldi.
@@ -1445,6 +1450,18 @@ private:
         }
         if (type == "hello" || type == "get_state") {
             sendText(buildStateMessage());
+            if (!remote && cb_.restoreStatus) {
+                const std::string r = cb_.restoreStatus();
+                if (!r.empty()) sendText(r);
+            }
+            return;
+        }
+        if ((type == "restore_choice" || type == "restore_mode") && !remote) {
+            if (cb_.restoreRequest) cb_.restoreRequest(type, msg);
+            if (cb_.restoreStatus) {
+                const std::string r = cb_.restoreStatus();
+                if (!r.empty()) sendText(r);
+            }
             return;
         }
         if (type == "save_presets") {

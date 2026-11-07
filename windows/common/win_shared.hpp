@@ -160,8 +160,13 @@ inline std::wstring dataDirectory(bool createDir) {
     return dir;
 }
 
-inline bool loadParamFile(ParamData& out) {
-    const std::wstring path = paramFilePath(false);
+/** C:\ProgramData\Aqulify\last_params.bin – az utolsó működő lánc: kilépéskor ebből áll vissza a következő indításkor
+ *  (a params.bin kilépéskor alapra vált, mert a plugin a program bezárása után is abból olvas). */
+inline std::wstring restoreFilePath(bool createDir) {
+    return dataDirectory(createDir) + L"\\last_params.bin";
+}
+
+inline bool loadParamFileAt(const std::wstring& path, ParamData& out) {
     HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (f == INVALID_HANDLE_VALUE) return false;
@@ -177,8 +182,9 @@ inline bool loadParamFile(ParamData& out) {
     return loadParamBytes(buf.data() + 12, read - 12, hdr[1], hdr[2], out);
 }
 
-inline bool saveParamFile(const ParamData& d) {
-    const std::wstring path = paramFilePath(true);
+inline bool loadParamFile(ParamData& out) { return loadParamFileAt(paramFilePath(false), out); }
+
+inline bool saveParamFileAt(const std::wstring& path, const ParamData& d) {
     const std::wstring tmp = path + L".tmp";
     ParamFile pf{ kParamFileMagic, kParamFileVersion, static_cast<uint32_t>(sizeof(ParamData)), d };
     HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -187,6 +193,39 @@ inline bool saveParamFile(const ParamData& d) {
     const BOOL ok = WriteFile(f, &pf, sizeof(pf), &written, nullptr);
     CloseHandle(f);
     if (!ok || written != sizeof(pf)) return false;
+    return MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+}
+
+inline bool saveParamFile(const ParamData& d) { return saveParamFileAt(paramFilePath(true), d); }
+inline bool loadRestoreParamFile(ParamData& out) { return loadParamFileAt(restoreFilePath(false), out); }
+inline bool saveRestoreParamFile(const ParamData& d) { return saveParamFileAt(restoreFilePath(true), d); }
+
+/** C:\ProgramData\Aqulify\restore.json – az indításkori visszaállítás beállítása (startup_restore.hpp). */
+inline std::string loadRestorePrefText() {
+    const std::wstring path = dataDirectory(false) + L"\\restore.json";
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return {};
+    std::string out;
+    char buf[4096];
+    for (;;) {
+        DWORD read = 0;
+        if (!ReadFile(f, buf, sizeof(buf), &read, nullptr) || read == 0) break;
+        out.append(buf, read);
+    }
+    CloseHandle(f);
+    return out;
+}
+
+inline bool saveRestorePrefText(const std::string& doc) {
+    const std::wstring path = dataDirectory(true) + L"\\restore.json";
+    const std::wstring tmp = path + L".tmp";
+    HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    DWORD written = 0;
+    const BOOL ok = WriteFile(f, doc.data(), static_cast<DWORD>(doc.size()), &written, nullptr);
+    CloseHandle(f);
+    if (!ok || written != doc.size()) return false;
     return MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
 }
 

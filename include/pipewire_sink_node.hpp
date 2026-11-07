@@ -31,6 +31,8 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <iostream>
@@ -80,6 +82,7 @@ public:
     static constexpr int kExtraZones = multiout::kMaxOutputs - 1;
     static constexpr uint32_t kZoneRing = 32768;      // kb. 0,7 s 48 kHz-en
     static constexpr uint32_t kScratch = 16384;       // a legnagyobb feldolgozott quantum
+    static constexpr int kKeepAlivePauseMs = 1500;    // forrás-követésnél új külső hangfolyamkor ennyi ideig nincs ébren tartás
 
     /** Egy további kimenet (2.–4.): lejátszó stream a céleszköz felé és a gyűrűpuffere. */
     struct ZoneStream {
@@ -143,6 +146,13 @@ public:
         keepAwakeWanted_.store(keepAwake);
         if (loop && optsEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), optsEvent_);
     }
+
+    /**
+     * Forrás-követés (bármely szálról): ha be van kapcsolva és az ébren tartás is, egy új külső hangfolyam
+     * indulásakor az ébren tartás rövid időre szünetel, hogy a gráf (ha tétlen) át tudjon váltani a forrás
+     * mintavételére. Egyéb módban nincs szünet.
+     */
+    void setRateFollow(bool on) { rateFollow_.store(on); }
 
     /** A legutóbbi feldolgozott blokk hossza (a gráf tényleges quantuma) mintában. */
     uint32_t actualQuantum() const { return lastQuantum_.load(std::memory_order_relaxed); }
@@ -279,6 +289,23 @@ public:
                               pparams, 1) < 0)
             return fail("a lejátszó stream nem csatlakoztatható");
         if (keepAwakeWanted_.load()) createKeepAlive();
+
+        // Regiszter: a külső Stream/Output/Audio csomópontok megjelenését figyeljük (forrás-követés, ébren tartás szünet)
+        registry_ = pw_core_get_registry(core, PW_VERSION_REGISTRY, 0);
+        if (registry_) {
+            static const struct pw_registry_events regEvents = [] {
+                pw_registry_events e{};
+                e.version = PW_VERSION_REGISTRY_EVENTS;
+                e.global = onRegistryGlobal;
+                return e;
+            }();
+            pw_registry_add_listener(registry_, &registryListener_, &regEvents, this);
+        }
+        // Az ébren tartás visszakapcsolása a szünet után (negyedmásodpercenként ellenőrzi)
+        struct pw_loop* l = pw_main_loop_get_loop(loop);
+        resumeTimer_ = pw_loop_add_timer(l, onResumeTimer, this);
+        struct timespec iv{ 0, 250 * 1000000L };
+        pw_loop_update_timer(l, resumeTimer_, &iv, &iv, false);
         return true;
     }
 
@@ -305,6 +332,7 @@ public:
         multi_.stopWorkers();
         if (capture) { pw_stream_destroy(capture); capture = nullptr; }
         if (playback) { pw_stream_destroy(playback); playback = nullptr; }
+        if (registry_) { pw_proxy_destroy(reinterpret_cast<struct pw_proxy*>(registry_)); registry_ = nullptr; }
         if (core) { pw_core_disconnect(core); core = nullptr; }
         if (context) { pw_context_destroy(context); context = nullptr; }
         // a pw_deinit()-et a hívó végzi a legvégén (PwDeinitGuard): a lejátszó saját PipeWire-hurka ezután áll le
@@ -329,6 +357,11 @@ private:
     struct pw_stream* keepAlive_ = nullptr;           // csak a fő hurok szála
     struct spa_hook keepAliveListener_{};
     std::atomic<bool> keepAliveStreaming_{false};
+    std::atomic<bool> rateFollow_{false};             // a forrást követi (setRateFollow)
+    std::chrono::steady_clock::time_point keepAlivePauseUntil_{};   // csak a fő hurok szála
+    struct pw_registry* registry_ = nullptr;          // csak a fő hurok szála
+    struct spa_hook registryListener_{};
+    struct spa_source* resumeTimer_ = nullptr;        // csak a fő hurok szála
     std::atomic<uint32_t> lastQuantum_{0};
     std::atomic<float> loadAvg_{0.0f}, loadPeak_{0.0f};
     std::atomic<uint32_t> overruns_{0};
@@ -491,7 +524,7 @@ private:
             std::cout << "[PipeWire] Pufferméret: " << (n ? std::to_string(n) + " minta" : std::string("automatikus")) << "\n";
         }
         const bool want = self->keepAwakeWanted_.load();
-        if (want && !self->keepAlive_) self->createKeepAlive();
+        if (want && !self->keepAlive_ && !self->keepAlivePaused()) self->createKeepAlive();
         else if (!want && self->keepAlive_) self->destroyKeepAlive();
         onZoneEvent(data, 0);   // az újramintavételezés minősége változhatott
     }
@@ -551,6 +584,33 @@ private:
         keepAlive_ = nullptr;
         keepAliveStreaming_ = false;
         std::cout << "[PipeWire] Hangkártya ébren tartása: ki\n";
+    }
+
+    /** Ébren tartás szünetel-e (forrás-követés: új külső hangfolyam). A fő hurok szálán hívandó. */
+    bool keepAlivePaused() const { return std::chrono::steady_clock::now() < keepAlivePauseUntil_; }
+
+    /**
+     * Új csomópont a gráfban (a fő hurok szálán). Külső Stream/Output/Audio (nem a saját folyamatunk) indulásakor,
+     * ha a forrás-követés és az ébren tartás be van kapcsolva, az ébren tartás kilép a gráfból kb. 1,5 s-ra: a tétlen
+     * gráf így át tud váltani a forrás mintavételére, mielőtt a külső hangfolyam elindul.
+     */
+    static void onRegistryGlobal(void* data, uint32_t, uint32_t, const char* type, uint32_t, const struct spa_dict* props) {
+        auto* self = static_cast<AetherSinkNode*>(data);
+        if (!type || !props || std::strcmp(type, PW_TYPE_INTERFACE_Node) != 0) return;
+        const char* cls = spa_dict_lookup(props, PW_KEY_MEDIA_CLASS);
+        if (!cls || std::strcmp(cls, "Stream/Output/Audio") != 0) return;
+        const char* pid = spa_dict_lookup(props, "application.process.id");
+        if (pid && std::strtol(pid, nullptr, 10) == static_cast<long>(getpid())) return;   // a saját streamjeink
+        if (!self->rateFollow_.load() || !self->keepAwakeWanted_.load()) return;
+        self->keepAlivePauseUntil_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(kKeepAlivePauseMs);
+        if (self->keepAlive_) self->destroyKeepAlive();
+        std::cout << "[PipeWire] Külső hangfolyam: az ébren tartás rövid időre szünetel (mintavétel-követés)\n";
+    }
+
+    /** Az ébren tartás visszakapcsolása a szünet végén (a fő hurok szálán). */
+    static void onResumeTimer(void* data, uint64_t) {
+        auto* self = static_cast<AetherSinkNode*>(data);
+        if (self->keepAwakeWanted_.load() && !self->keepAlive_ && !self->keepAlivePaused()) self->createKeepAlive();
     }
 
     static void onKeepAliveState(void* data, enum pw_stream_state, enum pw_stream_state state, const char*) {

@@ -39,6 +39,7 @@
 #include <cstring>
 
 #include "ws_bridge.hpp"
+#include "startup_restore.hpp"
 #include "param_block.hpp"
 #include "aether_chain.hpp"
 #include "shared_state.hpp"
@@ -718,10 +719,16 @@ int main(int argc, char** argv) {
     // Nyelv (tálcamenü, üzenetek): a felületen választott, különben a Windows nyelve
     aq_i18n::init();
 
-    // Indításkor mindig alap (minden modul ki): az utolsó lánc nem áll vissza automatikusan,
-    // a felület a saját állapotát a csatlakozáskor adja át
+    // Indításkori visszaállítás (startup_restore.hpp): az utolsó működő lánc és az IR (a Windows-on több kimenet
+    // és hangkimenet-beállítás nincs). Mód „ask”: a felület kérdez, addig az alapállapot marad.
     std::mutex paramMutex;
+    std::mutex restoreMutex;
+    startup_restore::Pref restorePref = startup_restore::parsePref(win::loadRestorePrefText());
+    ParamData savedChain = transparentParams();
+    const bool hasChain = win::loadRestoreParamFile(savedChain);
+    const bool chainNow = hasChain && restorePref.mode == startup_restore::Mode::Always && restorePref.parts.chain;
     ParamData current = transparentParams();
+    if (chainNow) current = savedChain;
     bool dirty = false;
     auto lastChange = std::chrono::steady_clock::now();
 
@@ -735,8 +742,30 @@ int main(int argc, char** argv) {
     playerOut.setExclusiveDsp(&playerDsp);
 
     SourceManager sources(*loopback, playerDsp, playerOut);
-    sources.loadStoredIr();
+    if (chainNow) {
+        sources.loadStoredIr();
+        // a plugin a params.bin-ből olvas: a visszaállított láncot oda is kiírjuk
+        if (!win::saveParamFile(current)) std::cout << "[Beállítások] Figyelem: a params.bin nem írható.\n";
+        std::cout << "[Beállítások] A mentett lánc visszaállítva.\n";
+    }
     sources.poll(current);
+    // Mód „ask”, és van mentett lánc: a felület kérdez (a válaszig a lánc alapállapotban marad)
+    std::atomic<bool> restorePending{ restorePref.mode == startup_restore::Mode::Ask && hasChain };
+    if (restorePending) std::cout << "[Beállítások] Indításkor a felület megkérdezi, mit állítson vissza.\n";
+    // A mentett lánc és IR élesítése (a felület kérésére)
+    auto applyChain = [&] {
+        ParamData p;
+        {
+            std::lock_guard<std::mutex> lk(paramMutex);
+            if (!hasChain) return;
+            current = savedChain;
+            p = current;
+        }
+        sources.loadStoredIr();
+        sources.pushParams(p);
+        if (!win::saveParamFile(p)) std::cout << "[Beállítások] Figyelem: a params.bin nem írható.\n";
+        std::cout << "[Beállítások] A mentett lánc visszaállítva.\n";
+    };
 
     BridgeCallbacks cb;
     cb.pullAudio = [&](float* lr, size_t maxFrames) { return sources.pull(lr, maxFrames); };
@@ -751,6 +780,33 @@ int main(int argc, char** argv) {
             lastChange = std::chrono::steady_clock::now();
         }
         sources.pushParams(p);
+    };
+    cb.restoreStatus = [&]() {
+        std::lock_guard<std::mutex> lk(restoreMutex);
+        return startup_restore::statusMessage(restorePending.load(), restorePref, hasChain, false, false);
+    };
+    cb.restoreRequest = [&](const std::string& type, const json::Value& msg) {
+        std::lock_guard<std::mutex> lk(restoreMutex);
+        if (type == "restore_choice") {
+            const bool restore = msg.get("choice") && msg.get("choice")->stringOr("") == "restore";
+            const startup_restore::Parts want = restore
+                ? startup_restore::partsFromJson(msg.get("parts"), startup_restore::Parts{})
+                : startup_restore::Parts{ false, false, false };
+            if (restorePending.exchange(false) && want.chain) applyChain();
+            const json::Value* rem = msg.get("remember");
+            if (rem && rem->type == json::Value::Type::Bool && rem->b) {
+                restorePref.parts = want;
+                restorePref.mode = startup_restore::anyPart(want) ? startup_restore::Mode::Always : startup_restore::Mode::Never;
+                if (!win::saveRestorePrefText(startup_restore::serializePref(restorePref)))
+                    std::cout << "[Beállítások] Figyelem: a restore.json nem írható.\n";
+            }
+        } else if (type == "restore_mode") {
+            if (const json::Value* m = msg.get("mode"); m && m->type == json::Value::Type::String)
+                restorePref.mode = startup_restore::modeFromName(m->str);
+            restorePref.parts = startup_restore::partsFromJson(msg.get("parts"), restorePref.parts);
+            if (!win::saveRestorePrefText(startup_restore::serializePref(restorePref)))
+                std::cout << "[Beállítások] Figyelem: a restore.json nem írható.\n";
+        }
     };
     // (a statusFields a lejátszó után, lent)
     cb.setVolume = [&](double level, int mute) {
@@ -962,8 +1018,9 @@ int main(int argc, char** argv) {
             }
         }
         sources.poll(snapshot);
-        if (save && !win::saveParamFile(snapshot)) {
-            std::cout << "[Beállítások] Figyelem: a ProgramData\\Aqulify\\params.bin nem írható.\n";
+        if (save) {
+            if (!win::saveParamFile(snapshot)) std::cout << "[Beállítások] Figyelem: a ProgramData\\Aqulify\\params.bin nem írható.\n";
+            if (!win::saveRestoreParamFile(snapshot)) std::cout << "[Beállítások] Figyelem: a last_params.bin nem írható.\n";
         }
     };
 
@@ -992,14 +1049,16 @@ int main(int argc, char** argv) {
     filePlayer.stop();
     mediaSession.stop();
     loopback->stop();
-    // Leálláskor alap: minden modul ki, így a program bezárása után nem változik a hangzás
+    // Az utolsó lánc a params.bin-be és a last_params.bin-be kerül (a visszaállításhoz). Utána a params.bin alapra
+    // vált: a plugin a program bezárása után is abból olvas, és nem szabad tovább szűrnie a hangot.
+    saveIfDue(true);
     {
         std::lock_guard<std::mutex> lk(paramMutex);
         current = transparentParams();
-        dirty = true;
+        dirty = false;
     }
     sources.pushParams(current);
-    saveIfDue(true);
+    if (!win::saveParamFile(current)) std::cout << "[Beállítások] Figyelem: a params.bin nem állítható alapra.\n";
     if (single) { ReleaseMutex(single); CloseHandle(single); }
     CoUninitialize();
     return 0;

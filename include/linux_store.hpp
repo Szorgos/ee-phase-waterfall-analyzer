@@ -219,6 +219,16 @@ inline std::string loadAudioOptions() {
     return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 }
 
+/** Indításkori visszaállítás beállítása (restore.json, startup_restore.hpp). */
+inline bool saveRestorePref(const std::string& doc) {
+    return writeAtomic(configDir(true) + "/restore.json", std::vector<char>(doc.begin(), doc.end()));
+}
+inline std::string loadRestorePref() {
+    std::ifstream f(configDir(false) + "/restore.json", std::ios::binary);
+    if (!f) return {};
+    return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+}
+
 /** IR-tár: az IR-profilok impulzusválaszai (~/.config/aqulify/irs/<azonosító>.bin, az ir.bin formátumában). */
 inline std::string libraryIrPath(const std::string& id, bool create) {
     std::string dir = configDir(create) + "/irs";

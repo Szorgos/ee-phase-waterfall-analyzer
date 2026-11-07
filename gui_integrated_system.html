@@ -1920,6 +1920,18 @@ if (!window.THREE) window.THREE = (function () {
               <option value="quit" data-i18n="close.optQuit">Bezárás (leállás)</option>
             </select>
           </div>
+          <div id="restorePrefWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:10px;">
+            <div class="sink-sec-title" data-i18n="restore.setting">Indításkor:</div>
+            <select id="selectRestoreMode" class="mini-select" style="width:100%; max-width:none;" onchange="restoreModeChanged()">
+              <option value="ask" data-i18n="restore.optAsk">Kérdezzen</option>
+              <option value="always" data-i18n="restore.optAlways">Mindig állítsa vissza</option>
+              <option value="never" data-i18n="restore.optNever">Soha ne állítsa vissza</option>
+            </select>
+            <div class="sink-sec-title" style="margin-top:8px;" data-i18n="restore.partsSetting">Visszaállítandó részek:</div>
+            <label class="ao-row ao-check" id="rowRestoreChain"><input type="checkbox" id="chkRestoreChain" onchange="restoreModeChanged()"> <span data-i18n="restore.chain">DSP-lánc és impulzusválasz</span></label>
+            <label class="ao-row ao-check" id="rowRestoreMulti"><input type="checkbox" id="chkRestoreMulti" onchange="restoreModeChanged()"> <span data-i18n="restore.multi">Több kimenet (2–4. kimenet)</span></label>
+            <label class="ao-row ao-check" id="rowRestoreAudio"><input type="checkbox" id="chkRestoreAudio" onchange="restoreModeChanged()"> <span data-i18n="restore.audio">Haladó hangkimenet (puffer, mintavétel, ébren tartás)</span></label>
+          </div>
           <div id="updWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:10px;">
             <div class="sink-sec-title" data-i18n="upd.section">Frissítések</div>
             <label class="ao-row ao-check"><input type="checkbox" id="chkUpdAuto" onchange="updSetAuto(this.checked)"> <span data-i18n="upd.auto">Frissítések automatikus keresése</span></label>
@@ -2680,6 +2692,34 @@ if (!window.THREE) window.THREE = (function () {
     <div style="display:flex; justify-content:flex-end; border-top:1px solid var(--aq-line); padding-top:12px;">
       <button class="adw-btn" onclick="closeDialogCancel()" data-i18n="common.cancel">Mégse</button>
     </div>
+  </div>
+</div>
+<div id="modalRestore" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:200; align-items:center; justify-content:center;">
+  <div class="aq-modal" role="dialog" aria-modal="true" aria-labelledby="restoreTitle" style="width:520px; max-width:calc(100vw - 32px); display:flex; flex-direction:column; gap:14px;">
+    <div style="border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
+      <span id="restoreTitle" style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="restore.title">Visszaállítsam az előző beállítást?</span>
+    </div>
+    <p class="module-desc" style="margin:0;" data-i18n="restore.desc">Az indítás a legutóbbi működő beállítással történhet, vagy alapállapotban.</p>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <label class="ao-row ao-check" id="rowDlgChain"><input type="checkbox" id="chkDlgChain" checked> <span data-i18n="restore.chain">DSP-lánc és impulzusválasz</span></label>
+      <label class="ao-row ao-check" id="rowDlgMulti"><input type="checkbox" id="chkDlgMulti" checked> <span data-i18n="restore.multi">Több kimenet (2–4. kimenet)</span></label>
+      <label class="ao-row ao-check" id="rowDlgAudio"><input type="checkbox" id="chkDlgAudio" checked> <span data-i18n="restore.audio">Haladó hangkimenet (puffer, mintavétel, ébren tartás)</span></label>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button class="adw-btn primary" id="btnRestoreDo" onclick="restoreDialogChoose('restore')" style="display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:3px; text-align:left; padding:10px 14px; height:auto; min-height:56px; line-height:1.35; white-space:normal;">
+        <span style="font-weight:600;" data-i18n="restore.restore">Visszaállítás</span>
+        <span style="font-size:0.8rem; opacity:0.85;" data-i18n="restore.restoreHint">A kijelölt részek visszatérnek a legutóbbi beállításra.</span>
+      </button>
+      <button class="adw-btn" onclick="restoreDialogChoose('default')" style="display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:3px; text-align:left; padding:10px 14px; height:auto; min-height:56px; line-height:1.35; white-space:normal;">
+        <span style="font-weight:600;" data-i18n="restore.default">Alapállapot</span>
+        <span style="font-size:0.8rem; opacity:0.85;" data-i18n="restore.defaultHint">Minden modul kikapcsolva indul.</span>
+      </button>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:0.9rem; cursor:pointer;">
+      <input type="checkbox" id="chkRestoreAlways">
+      <span data-i18n="restore.always">Mindig ezt válaszd (ne kérdezze újra)</span>
+    </label>
+    <div style="font-size:0.75rem; color:var(--aq-text-3); margin-top:-8px;" data-i18n="restore.alwaysNote">Később a Kimenet menüben módosíthatod.</div>
   </div>
 </div>
 <div id="modalImport" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;">
@@ -5954,6 +5994,66 @@ function setClosePref(v) {
   } catch (e) {}
   syncClosePrefSelect();
 }
+// ---- Indításkori visszaállítás (startup_restore.hpp): a motor kérdezi-e, és mit állítson vissza
+let restoreState = null;   // a motor legutóbbi "restore" üzenete: pending, mode, parts, available
+function restoreSend(obj) {
+  try {
+    if (pipewireWs && pipewireWs.readyState === WebSocket.OPEN) pipewireWs.send(JSON.stringify(obj));
+  } catch (e) {}
+}
+function onRestoreState(st) {
+  restoreState = st;
+  syncRestorePrefUi();
+  if (st.pending) openRestoreDialog();
+}
+function syncRestorePrefUi() {
+  const st = restoreState || {};
+  const av = st.available || {};
+  const parts = st.parts || {};
+  const wrap = document.getElementById("restorePrefWrap");
+  if (wrap) wrap.hidden = !restoreState;
+  const sel = document.getElementById("selectRestoreMode");
+  if (sel) sel.value = st.mode || "ask";
+  const row = (id, avail) => { const el = document.getElementById(id); if (el) el.hidden = !avail; };
+  const chk = (id, on) => { const el = document.getElementById(id); if (el) el.checked = !!on; };
+  row("rowRestoreChain", av.chain); row("rowRestoreMulti", av.multi); row("rowRestoreAudio", av.audio);
+  chk("chkRestoreChain", parts.chain); chk("chkRestoreMulti", parts.multi); chk("chkRestoreAudio", parts.audio);
+}
+function openRestoreDialog() {
+  const av = (restoreState && restoreState.available) || {};
+  const row = (id, avail) => { const el = document.getElementById(id); if (el) el.hidden = !avail; };
+  row("rowDlgChain", av.chain); row("rowDlgMulti", av.multi); row("rowDlgAudio", av.audio);
+  const setChk = (id) => { const el = document.getElementById(id); if (el) el.checked = true; };
+  setChk("chkDlgChain"); setChk("chkDlgMulti"); setChk("chkDlgAudio");
+  const always = document.getElementById("chkRestoreAlways");
+  if (always) always.checked = false;
+  const m = document.getElementById("modalRestore");
+  if (m) m.style.display = "flex";
+  const btn = document.getElementById("btnRestoreDo");
+  if (btn) btn.focus();
+}
+function restoreDialogChoose(choice) {
+  const val = (id) => { const el = document.getElementById(id); return !!(el && el.checked); };
+  const always = document.getElementById("chkRestoreAlways");
+  restoreSend({
+    type: "restore_choice",
+    choice: choice,
+    parts: { chain: val("chkDlgChain"), multi: val("chkDlgMulti"), audio: val("chkDlgAudio") },
+    remember: !!(always && always.checked)
+  });
+  if (restoreState) restoreState.pending = false;
+  const m = document.getElementById("modalRestore");
+  if (m) m.style.display = "none";
+}
+function restoreModeChanged() {
+  const sel = document.getElementById("selectRestoreMode");
+  const val = (id) => { const el = document.getElementById(id); return !!(el && el.checked); };
+  restoreSend({
+    type: "restore_mode",
+    mode: sel ? sel.value : "ask",
+    parts: { chain: val("chkRestoreChain"), multi: val("chkRestoreMulti"), audio: val("chkRestoreAudio") }
+  });
+}
 function syncClosePrefSelect() {
   const wrap = document.getElementById("closePrefWrap");
   if (wrap) wrap.hidden = typeof window.aetherCloseWindow !== "function";
@@ -7973,6 +8073,7 @@ function initPipewireBridge() {
     pipewireWs.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data);
+        if (data && data.type === "restore") { onRestoreState(data); return; }
         if (data && (data.type === "state" || data.type === "status" || data.type === "spectrum")) engineVerified = true;
         if (aqNowPlaying && data) {
           // a "state" részüzenetei (ir, sync) nem hordoznak képességeket: csak a caps-os állapot számít
