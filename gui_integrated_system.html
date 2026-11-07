@@ -1187,7 +1187,12 @@ if (!window.THREE) window.THREE = (function () {
     position: absolute;
     top: calc(100% + 8px);
     right: 0;
-    width: 280px;
+    width: 290px;
+    max-height: calc(100vh - 74px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    box-sizing: border-box;
     background: var(--aq-surface);
     border: 1px solid var(--aq-line-2);
     border-radius: var(--aq-radius-m);
@@ -2516,7 +2521,7 @@ if (!window.THREE) window.THREE = (function () {
   </div> <!-- /workspaceStage -->
 
   <!-- ZENETÁR MAPPÁK MODAL (2.X) -->
-  <div id="modalLibrary" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;" onclick="if(event.target===this)closeLibraryModal()">
+  <div id="modalLibrary" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:10000; align-items:center; justify-content:center;" onclick="if(event.target===this)closeLibraryModal()">
     <div class="aq-modal" style="width:580px; max-width:calc(100vw - 32px); max-height:90vh; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
       <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
         <div style="display:flex; align-items:center; gap:8px;">
@@ -2576,7 +2581,7 @@ if (!window.THREE) window.THREE = (function () {
   </div>
 
   <!-- ESZKÖZPÁROSÍTÁSI JÓVÁHAGYÁS MODAL (2.X - 8c) -->
-  <div id="modalPairRequest" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:1000; align-items:center; justify-content:center;" onclick="if(event.target===this)rejectCurrentPairRequest()">
+  <div id="modalPairRequest" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:10000; align-items:center; justify-content:center;" onclick="if(event.target===this)rejectCurrentPairRequest()">
     <div class="aq-modal" style="width:480px; max-width:calc(100vw - 32px); display:flex; flex-direction:column; gap:16px;">
       <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
         <div style="display:flex; align-items:center; gap:8px;">
@@ -2624,7 +2629,7 @@ if (!window.THREE) window.THREE = (function () {
   </div>
 
   <!-- AUTOEQ ÉS SQUIGLINK PROFIL IMPORTÁLÓ ÉS ONLINE KERESŐ MODAL -->
-  <div id="modalBurnIn" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;">
+  <div id="modalBurnIn" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:10000; align-items:center; justify-content:center;">
   <div class="aq-modal" style="width:560px; max-width:calc(100vw - 32px); display:flex; flex-direction:column; gap:14px;">
     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
       <span style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="burnin.title">Burn-in (fejhallgató-bejárató)</span>
@@ -2641,7 +2646,7 @@ if (!window.THREE) window.THREE = (function () {
   </div>
 </div>
 <!-- ABLAK BEZÁRÁSA: tálcára / háttérbe vagy bezárás (a natív ablak kérdezi a felülettől) -->
-<div id="modalUpdate" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:200; align-items:center; justify-content:center;">
+<div id="modalUpdate" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:10000; align-items:center; justify-content:center;">
   <div class="aq-modal" role="dialog" aria-modal="true" aria-labelledby="updTitle" style="width:520px; max-width:calc(100vw - 32px); display:flex; flex-direction:column; gap:14px;">
     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
       <span id="updTitle" style="font-size:1.1rem; font-weight:600; color:var(--aq-text);">Új verzió érhető el</span>
@@ -2667,7 +2672,7 @@ if (!window.THREE) window.THREE = (function () {
   </div>
 </div>
 
-<div id="modalClose" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:200; align-items:center; justify-content:center;">
+<div id="modalClose" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:10000; align-items:center; justify-content:center;">
   <div class="aq-modal" role="dialog" aria-modal="true" aria-labelledby="closeTitle" style="width:520px; max-width:calc(100vw - 32px); display:flex; flex-direction:column; gap:14px;">
     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
       <span id="closeTitle" style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="close.title">Bezárod az Aqulify ablakát?</span>
@@ -2694,7 +2699,7 @@ if (!window.THREE) window.THREE = (function () {
     </div>
   </div>
 </div>
-<div id="modalRestore" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:200; align-items:center; justify-content:center;">
+<div id="modalRestore" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:10000; align-items:center; justify-content:center;">
   <div class="aq-modal" role="dialog" aria-modal="true" aria-labelledby="restoreTitle" style="width:520px; max-width:calc(100vw - 32px); display:flex; flex-direction:column; gap:14px;">
     <div style="border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
       <span id="restoreTitle" style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="restore.title">Visszaállítsam az előző beállítást?</span>
@@ -2722,7 +2727,7 @@ if (!window.THREE) window.THREE = (function () {
     <div style="font-size:0.75rem; color:var(--aq-text-3); margin-top:-8px;" data-i18n="restore.alwaysNote">Később a Kimenet menüben módosíthatod.</div>
   </div>
 </div>
-<div id="modalImport" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:100; align-items:center; justify-content:center;">
+<div id="modalImport" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:10000; align-items:center; justify-content:center;">
     <div class="aq-modal" style="width:650px; max-width:calc(100vw - 32px); max-height:90vh; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
       
       <!-- Modál Fejléc -->
@@ -5958,6 +5963,7 @@ function initBurnInOptions() {
   sel.value = String(10 * 60);
 }
 function openBurnIn() {
+  closeSinkMenu();
   if (aqEditZone) setEditZone(0);   // a burn-in a fő kimenet láncát kapcsolja
   initBurnInOptions();
   document.getElementById('modalBurnIn').style.display = 'flex';
@@ -6029,6 +6035,7 @@ function syncRestorePrefUi() {
   chk("chkRestoreChain", parts.chain); chk("chkRestoreMulti", parts.multi); chk("chkRestoreAudio", parts.audio);
 }
 function openRestoreDialog() {
+  closeSinkMenu();
   const av = (restoreState && restoreState.available) || {};
   const row = (id, avail) => { const el = document.getElementById(id); if (el) el.hidden = !avail; };
   row("rowDlgChain", av.chain); row("rowDlgMulti", av.multi); row("rowDlgAudio", av.audio);
@@ -6090,6 +6097,7 @@ window.aqRequestClose = function () {
   openCloseDialog();
 };
 function openCloseDialog() {
+  closeSinkMenu();
   const lbl = document.getElementById("closeTrayLabel");
   if (lbl) { lbl.setAttribute("data-i18n", closeTrayKey()); lbl.textContent = t(closeTrayKey()); }
   const chk = document.getElementById("chkCloseAlways");
@@ -8755,6 +8763,7 @@ function updFail(code) {
 }
 function updOnCaps(caps) { updCanInstall = Array.isArray(caps) && caps.includes("update"); }
 function updShow(mode) {
+  closeSinkMenu();
   updMode = mode;
   updRender();
   document.getElementById("modalUpdate").style.display = "flex";
@@ -8866,6 +8875,7 @@ function updateLibraryCaps(hasLib) {
 }
 
 function openLibraryModal() {
+  closeSinkMenu();
   const modal = document.getElementById("modalLibrary");
   if (!modal) return;
   modal.style.display = "flex";

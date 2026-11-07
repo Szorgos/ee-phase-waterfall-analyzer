@@ -334,9 +334,26 @@ int main() {
             applyTitlebar(req.find("\"light\"") != std::string::npos);
             return "null";
         });
-        w.bind("aetherOpenUrl", [](const std::string& req) -> std::string {
+        w.bind("aetherOpenUrl", [gtkWin](const std::string& req) -> std::string {
             const std::string target = allowedExternalUrl(req);
-            if (!target.empty()) g_app_info_launch_default_for_uri(target.c_str(), nullptr, nullptr);
+            if (!target.empty()) {
+                GError* err = nullptr;
+                gboolean ok = g_app_info_launch_default_for_uri(target.c_str(), nullptr, &err);
+                if (!ok) {
+                    if (err) { g_error_free(err); err = nullptr; }
+                    if (gtkWin && gtk_show_uri_on_window(gtkWin, target.c_str(), GDK_CURRENT_TIME, &err)) {
+                        ok = TRUE;
+                    } else if (err) {
+                        g_error_free(err);
+                        err = nullptr;
+                    }
+                }
+                if (!ok) {
+                    // Végső tartalék: közvetlen xdg-open a háttérben (a targetben nincsenek vezérlő- vagy idézőjelek)
+                    const std::string cmd = "xdg-open '" + target + "' >/dev/null 2>&1 &";
+                    if (std::system(cmd.c_str()) != 0) { /* nem sikerült elindítani */ }
+                }
+            }
             return "null";
         });
         // Burn-in alatt nincs alvás: a systemd-inhibit zárat tart, amíg a gyerekfolyamat (sleep infinity) fut.
