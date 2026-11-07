@@ -1,3 +1,16 @@
+### Újdonságok (2.1.4)
+
+**Letöltés (2.1.4):**
+- Windows 11: [Aqulify-Setup-2.1.4.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.4/Aqulify-Setup-2.1.4.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.4/Aqulify-Setup-2.1.4.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.1.4-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.4/Aqulify-2.1.4-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.4/Aqulify-2.1.4-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.1.4.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.4/Aqulify-Linux-2.1.4.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.4/Aqulify-Linux-2.1.4.tar.gz.sha256))
+- Fedora: [aqulify-2.1.4-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.4/aqulify-2.1.4-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.1.4-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.4/aqulify_2.1.4-1_amd64.deb) · Arch: [aqulify-2.1.4-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.4/aqulify-2.1.4-1-x86_64.pkg.tar.zst)
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Tálcaikon Linuxon.** A motor tálcaikont kap a KDE/Plasma tálcán (GNOME-on az AppIndicator-kiterjesztéssel), jobb klikkes menüvel: *Megnyitás* és *Kilépés*. Bal klikkel a felület nyílik meg. A tálcaikon a motorhoz tartozik, így háttérbe zárt állapotban is látszik és leállítható. A „Tálcára/háttérbe” zárás újra elérhető, ha van tálcagazda.
+- **Javítás: indításkori visszaállítás.** A felület csatlakozáskor nem tolta vissza a saját, régi beállítását a motorba. Az alapállapot most tényleg kikapcsolt modulokkal indul, a visszaállítás pedig a mentett láncot élesíti, és a kapcsolók ezt mutatják.
+- **Asztali menü (Linux).** Az Aqulify indítóikonjának *Stop Aqulify* műveletével a motor leállítható.
+
 ### Újdonságok (2.1.2)
 
 **Letöltés (2.1.2):**

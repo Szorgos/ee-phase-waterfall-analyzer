@@ -1,6 +1,37 @@
 {
   "versions": [
     {
+      "version": "2.1.4",
+      "date": "2026-11-07",
+      "notes": {
+        "hu": [
+          "Linux: tálcaikon a KDE/Plasma tálcán (GNOME-on AppIndicator-kiterjesztéssel), Megnyitás és Kilépés menüvel. Háttérbe zárás, ha van tálca.",
+          "Javítás: indításkor a visszaállítás vagy az alapállapot a motor tényleges állapotát mutatja; a felület nem tolja vissza a régi beállítást.",
+          "Linux: az asztali menü „Stop Aqulify” műveletével a motor leállítható."
+        ],
+        "en": [
+          "Linux: tray icon on the KDE/Plasma tray (GNOME with the AppIndicator extension), with Open and Quit menu. Close to background when a tray is available.",
+          "Fix: on startup, restore or defaults now show the engine's actual state; the interface no longer pushes the old settings back.",
+          "Linux: the \"Stop Aqulify\" action in the desktop menu stops the engine."
+        ],
+        "es": [
+          "Linux: icono en la bandeja de KDE/Plasma (en GNOME con la extensión AppIndicator), con menú Abrir y Salir. Cerrar a segundo plano si hay bandeja.",
+          "Corrección: al iniciar, restaurar o usar los valores predeterminados ahora se muestra el estado real del motor; la interfaz ya no devuelve la configuración anterior.",
+          "Linux: la acción «Stop Aqulify» del menú de escritorio detiene el motor."
+        ],
+        "fr": [
+          "Linux : icône dans la zone de notification KDE/Plasma (sous GNOME avec l'extension AppIndicator), avec menu Ouvrir et Quitter. Fermeture en arrière-plan si une zone de notification est disponible.",
+          "Correctif : au démarrage, la restauration ou les valeurs par défaut affichent l'état réel du moteur ; l'interface ne renvoie plus les anciens réglages.",
+          "Linux : l'action « Stop Aqulify » du menu du bureau arrête le moteur."
+        ],
+        "zh": [
+          "Linux：KDE/Plasma 托盘图标（GNOME 需 AppIndicator 扩展），带“打开”和“退出”菜单。若有托盘，可最小化到后台。",
+          "修复：启动时恢复或使用默认设置现在显示引擎的实际状态；界面不再把旧设置写回引擎。",
+          "Linux：桌面菜单中的“Stop Aqulify”操作可停止引擎。"
+        ]
+      }
+    },
+    {
       "version": "2.1.2",
       "date": "2026-11-07",
       "notes": {
