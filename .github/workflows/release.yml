@@ -44,7 +44,7 @@ jobs:
       - name: Függőségek
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config libpipewire-0.3-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y ninja-build pkg-config libpipewire-0.3-dev libsystemd-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Fordítások ellenőrzése (i18n/ és az előállított fájlok egyeznek)
         run: python3 tools/i18n_build.py --check
@@ -139,7 +139,7 @@ jobs:
       - name: Függőségek
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential dpkg-dev fakeroot cmake ninja-build pkg-config g++ xz-utils libpipewire-0.3-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y build-essential dpkg-dev fakeroot cmake ninja-build pkg-config g++ xz-utils libpipewire-0.3-dev libsystemd-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
       - name: RNNoise modell (az Ubuntu forráscsomagjából)
         run: |
           for i in 1 2 3; do curl -fsSL -o debian/rnnoise_0.2+ds.orig.tar.xz http://archive.ubuntu.com/ubuntu/pool/universe/r/rnnoise/rnnoise_0.2+ds.orig.tar.xz && break; sleep 15; done
