@@ -1,6 +1,37 @@
 {
   "versions": [
     {
+      "version": "2.2.0",
+      "date": "2026-11-07",
+      "notes": {
+        "hu": [
+          "Indításkor visszaállítás: a motor a legutóbbi működő láncot, a több kimenetet és a hangkimenet-beállításokat állítja vissza. Alapból megkérdezi, mit állítson vissza; a kérdés a „Mindig ezt válaszd” jelöléssel elhagyható, a mód a Kimenet menüben módosítható.",
+          "Forrás-követés ébren tartással (Linux): új külső hangfolyam indulásakor az ébren tartás rövid időre szünetel, hogy a PipeWire át tudjon váltani a forrás mintavételére.",
+          "Windowson kilépéskor a plugin alapállapotra vált; az utolsó lánc a program mappájában marad, és indításkor visszaáll."
+        ],
+        "en": [
+          "Restore on startup: the engine brings back the last working chain, multiple outputs and advanced audio output settings. By default it asks what to restore; tick “Always choose this” to stop the question, and change the mode in the Output menu.",
+          "Source-following with keep-awake (Linux): when an external audio stream starts, keep-awake pauses briefly so PipeWire can switch to the source's sample rate.",
+          "On Windows, the plugin returns to the default state on exit; the last chain is kept and restored on startup."
+        ],
+        "es": [
+          "Restauración al iniciar: el motor recupera la última cadena que funcionaba, las salidas múltiples y los ajustes de salida de audio avanzada. Por defecto pregunta qué restaurar; marca «Elegir siempre esta opción» para no volver a preguntar, y el modo se cambia en el menú Salida.",
+          "Seguimiento de la fuente con mantener activo (Linux): al iniciarse un flujo de audio externo, el mantener activo se pausa brevemente para que PipeWire pueda cambiar a la frecuencia de muestreo de la fuente.",
+          "En Windows, al salir el plugin vuelve al estado predeterminado; la última cadena se conserva y se restaura al iniciar."
+        ],
+        "fr": [
+          "Restauration au démarrage : le moteur rétablit la dernière chaîne fonctionnelle, les sorties multiples et les réglages de sortie audio avancée. Par défaut, il demande quoi restaurer ; cochez « Toujours choisir cette option » pour ne plus être interrogé, et modifiez le mode dans le menu Sortie.",
+          "Suivi de la source avec maintien éveillé (Linux) : au démarrage d'un flux audio externe, le maintien éveillé se suspend brièvement pour que PipeWire puisse passer à la fréquence d'échantillonnage de la source.",
+          "Sous Windows, le plugin revient à l'état par défaut à la fermeture ; la dernière chaîne est conservée et restaurée au démarrage."
+        ],
+        "zh": [
+          "启动时恢复：引擎会恢复上次正常工作的 DSP 链、多输出和高级音频输出设置。默认会询问恢复哪些内容；勾选“始终选择此项”即可不再询问，模式可在“输出”菜单中修改。",
+          "保持唤醒下的采样率跟随（Linux）：外部音频流开始时，保持唤醒会短暂暂停，以便 PipeWire 切换到源的采样率。",
+          "Windows 上退出时插件会恢复为默认状态；上次的链会被保留，并在启动时恢复。"
+        ]
+      }
+    },
+    {
       "version": "2.1.1",
       "date": "2026-11-06",
       "notes": {

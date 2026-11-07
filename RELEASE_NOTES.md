@@ -1,3 +1,16 @@
+### Újdonságok (2.2.0)
+
+**Letöltés (2.2.0):**
+- Windows 11: [Aqulify-Setup-2.2.0.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/Aqulify-Setup-2.2.0.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/Aqulify-Setup-2.2.0.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.2.0-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/Aqulify-2.2.0-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/Aqulify-2.2.0-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.2.0.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/Aqulify-Linux-2.2.0.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/Aqulify-Linux-2.2.0.tar.gz.sha256))
+- Fedora: [aqulify-2.2.0-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/aqulify-2.2.0-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.2.0-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/aqulify_2.2.0-1_amd64.deb) · Arch: [aqulify-2.2.0-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/aqulify-2.2.0-1-x86_64.pkg.tar.zst)
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Indításkori visszaállítás.** A motor a legutóbbi működő láncot, a több kimenetet és a haladó hangkimenet-beállításokat állítja vissza. Alapból indításkor megkérdezi, mit állítson vissza (a három rész külön jelölhető); a „Mindig ezt válaszd” jelöléssel a kérdés elmarad. A mód (Kérdezzen / Mindig állítsa vissza / Soha ne állítsa vissza) a *Kimenet* menüben módosítható. Kérdezés közben a motor alapállapotban marad.
+- **Forrás-követés ébren tartással (Linux).** Ha az ébren tartás be van kapcsolva, új külső hangfolyam indulásakor rövid időre (kb. 1,5 s) szünetel, hogy a PipeWire át tudjon váltani a forrás mintavételére (pl. 44,1 kHz-es Tidal-szám). A szünet nem minden kliensnél elég, ha az a streamet nyitva tartja.
+- **Kilépés:** Linuxon az utolsó beállítás a mentésben marad. Windowson a plugin kilépéskor alapállapotra vált, az utolsó lánc a `last_params.bin`-ben marad és indításkor visszaáll.
+
 ### Újdonságok (2.1.1)
 
 **Letöltés (2.1.1):**
