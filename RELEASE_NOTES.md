@@ -132,8 +132,7 @@
 - **Mélyvágás:** a 10, 20 és 30 Hz mellett köztes 15, 25 és 35 Hz is választható.
 - **EQ-grafikon:** induláskor a nézet mindig magától a görbéhez igazodik (az „Auto” illesztés bekapcsol). A kézi nagyítás vagy eltolás csak az adott futásra kapcsolja ki.
 - **Borítónézet:** a bal alsó sarokból nyitott borítókép nem nagyul túl (legfeljebb a saját méretének másfélszerese, 440 px-ig), így a kis miniatűr sem mosódik el; a hátteret ugyanaz a kép tölti ki elmosva.
-- **Verzió a hálózaton:** a telefonos távirányító a valódi verziót látja (eddig 2.0.0-t).
-- **Eltávolítva:** a kijelző nélküli (headless) mód, a Raspberry Pi telepítő és a Bluetooth-vevő.
+- **Verzió a hálózaton:** a hálózati távirányító a valódi verziót látja (eddig 2.0.0-t).
 
 ### Újdonságok és fejlesztések (2.0.5)
 
@@ -283,7 +282,7 @@
 - **EQ grafikon:** nagyításkor a késleltetés-görbe a rajzterületen belül marad, a nézeten kívül futó EQ-görbe a szélen szaggatott vonallal látszik, a nagyítás-felirat a görbék fölött is olvasható.
 
 ### Előkészítve (1.7.0)
-- **Raspberry Pi (64 bites ARM):** a motor és a tesztek keresztfordítással lefordulnak (`linux/toolchain-aarch64-linux-gnu.cmake`), a tesztek QEMU alatt sikeresek; az így talált Convolver-hiba (100 %-os IR-szélességnél nem volt pontosan érintetlen) javítva. Valódi Pi-n még nem futott.
+- **64 bites ARM (Linux):** a motor és a tesztek keresztfordítással lefordulnak (`linux/toolchain-aarch64-linux-gnu.cmake`), a tesztek QEMU alatt sikeresek; az így talált Convolver-hiba (100 %-os IR-szélességnél nem volt pontosan érintetlen) javítva.
 
 ### Javítások (1.6.3)
 - **Felület ↔ motor:** megszűnt a felület és a motor közötti folyamatos üzenetváltás (tétlen felületnél is kb. 23 EQ-üzenet másodpercenként). Ennek következményei is megszűntek: a kézi módosítás ismét mentődik az aktív profilba, AutoEq-profil módosításakor létrejön a „– módosított” profil, a motor pedig nyitott felület mellett is elmenti a beállításokat (`params.bin`).

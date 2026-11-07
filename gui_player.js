@@ -684,7 +684,7 @@ body.aqnp-on { padding-bottom: 72px; }
       addFolder: "Mappa hozzáadása", rescan: "Újrabejárás",
       scanningPhone: "A telefon zenetárának beolvasása...",
       phoneTracks: "{n} szám található a telefonon",
-      onlyAndroid: "A telefon zenetára az Android alkalmazásban érhető el.",
+      notSupportedHere: "Ez a funkció ezen az eszközön nem érhető el.",
       removeFolderConfirm: "Törlöd a(z) „{name}” mappát a telefonos zenetárból?",
       phoneTrackLocalMatch: "Helyi másolat a PC-n: „{title}”",
       sendingTrack: "Zene küldése a PC-re...",
@@ -737,7 +737,7 @@ body.aqnp-on { padding-bottom: 72px; }
       addFolder: "Add folder", rescan: "Rescan",
       scanningPhone: "Scanning phone music library...",
       phoneTracks: "{n} tracks found on phone",
-      onlyAndroid: "Phone music library is available in the Android app.",
+      notSupportedHere: "This feature is not available on this device.",
       removeFolderConfirm: "Remove folder \"{name}\" from phone library?",
       phoneTrackLocalMatch: "Local copy found on PC: \"{title}\"",
       sendingTrack: "Streaming track to PC...",
@@ -869,7 +869,7 @@ body.aqnp-on { padding-bottom: 72px; }
       rescan: "Reexplorar",
       scanningPhone: "Explorando biblioteca de música del teléfono...",
       phoneTracks: "{n} pistas encontradas en el teléfono",
-      onlyAndroid: "La biblioteca de música del teléfono está disponible en la aplicación para Android.",
+      notSupportedHere: "Esta función no está disponible en este dispositivo.",
       removeFolderConfirm: "¿Eliminar la carpeta «{name}» de la biblioteca del teléfono?",
       phoneTrackLocalMatch: "Copia local encontrada en el PC: «{title}»",
       sendingTrack: "Transmitiendo pista al PC...",
@@ -1001,7 +1001,7 @@ body.aqnp-on { padding-bottom: 72px; }
       rescan: "Réanalyser",
       scanningPhone: "Analyse de la bibliothèque musicale du téléphone...",
       phoneTracks: "{n} pistes trouvées sur le téléphone",
-      onlyAndroid: "La bibliothèque musicale du téléphone est disponible dans l'application Android.",
+      notSupportedHere: "Cette fonction n'est pas disponible sur cet appareil.",
       removeFolderConfirm: "Retirer le dossier « {name} » de la bibliothèque du téléphone ?",
       phoneTrackLocalMatch: "Copie locale trouvée sur le PC : « {title} »",
       sendingTrack: "Diffusion de la piste vers le PC...",
@@ -1133,7 +1133,7 @@ body.aqnp-on { padding-bottom: 72px; }
       rescan: "重新扫描",
       scanningPhone: "正在扫描手机音乐库...",
       phoneTracks: "在手机上找到 {n} 首曲目",
-      onlyAndroid: "手机音乐库可在 Android 应用中使用。",
+      notSupportedHere: "此功能在此设备上不可用。",
       removeFolderConfirm: "确定从手机音乐库中移除文件夹“{name}”吗？",
       phoneTrackLocalMatch: "在电脑上找到本地副本：“{title}”",
       sendingTrack: "正在向电脑传输曲目...",
@@ -1791,7 +1791,7 @@ body.aqnp-on { padding-bottom: 72px; }
     // ---- Telefonos zenetár (4a: SAF mappák, címkék és bejárás)
     async function scanPhoneLibrary() {
       if (!MobileLib) {
-        toast(t("onlyAndroid"));
+        toast(t("notSupportedHere"));
         return;
       }
       phoneScanning = true;
@@ -1811,7 +1811,7 @@ body.aqnp-on { padding-bottom: 72px; }
 
     async function addPhoneFolder() {
       if (!MobileLib) {
-        toast(t("onlyAndroid"));
+        toast(t("notSupportedHere"));
         return;
       }
       try {
@@ -2042,7 +2042,7 @@ body.aqnp-on { padding-bottom: 72px; }
 
       if (!MobileLib) {
         const c = el("div", "lib-phone-card");
-        c.appendChild(el("p", null, t("onlyAndroid")));
+        c.appendChild(el("p", null, t("notSupportedHere")));
         body.appendChild(c);
         return;
       }

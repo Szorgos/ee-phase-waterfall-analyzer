@@ -1,4 +1,4 @@
-# Keresztfordítás Linuxról 64 bites ARM Linuxra (pl. Raspberry Pi 4 / 5, 64 bites Raspberry Pi OS).
+# Keresztfordítás Linuxról 64 bites ARM Linuxra (aarch64).
 # Debian / Ubuntu gépen:
 #   sudo apt install g++-aarch64-linux-gnu
 #   sudo dpkg --add-architecture arm64   (Ubuntun az arm64 csomagok a ports.ubuntu.com tárolóból jönnek)
