@@ -28,7 +28,7 @@ jobs:
       - name: Függőségek
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q build-essential cmake pkg-config libpipewire-0.3-dev libfftw3-dev \
+          sudo apt-get install -y -q build-essential cmake pkg-config libpipewire-0.3-dev libfftw3-dev libsystemd-dev \
             pipewire wireplumber pipewire-pulse pulseaudio-utils dbus python3-numpy
 
       - name: RNNoise modell (az Ubuntu forráscsomagjából)

@@ -29,6 +29,10 @@
 #include "player_output_pw.hpp"
 #include "self_path.hpp"
 #include "startup_restore.hpp"
+#if defined(AQ_HAVE_SYSTEMD)
+#include "linux_tray.hpp"
+#endif
+#include <unistd.h>
 #include "update_logic.hpp"
 #include "ws_bridge.hpp"
 
@@ -271,6 +275,19 @@ bool chainTransparent(const ParamData& d) { return !AetherChain::modifiesSignal(
 
 } // namespace
 
+#if defined(AQ_HAVE_SYSTEMD)
+/** A felület megnyitása a tálcáról: az aqulify-gui a motor mappájából (vagy a PATH-ból), a háttérben indul. */
+void openGuiFromTray() {
+    std::string gui = "aqulify-gui";
+    const std::string self = selfExePath();
+    const size_t slash = self.rfind('/');
+    if (slash != std::string::npos) {
+        const std::string candidate = self.substr(0, slash) + "/aqulify-gui";
+        if (access(candidate.c_str(), X_OK) == 0) gui = candidate;
+    }
+    std::thread([gui] { std::system(("\"" + gui + "\" >/dev/null 2>&1 &").c_str()); }).detach();
+}
+#endif
 int main(int argc, char* argv[]) {
     PwDeinitGuard pwDeinit;   // utoljára szűnik meg: a PipeWire lezárása minden más objektum után
     std::cout << "========================================================\n";
@@ -313,6 +330,9 @@ int main(int argc, char* argv[]) {
 
     AetherSinkNode node(48000);
     g_node = &node;
+#if defined(AQ_HAVE_SYSTEMD)
+    LinuxTray tray;   // tálcaikon: a motor az ablak nélkül is fut, a menü: Megnyitás / Kilépés
+#endif
     node.params.write(current);
 
     pwDeinit.armed = true;
@@ -322,6 +342,12 @@ int main(int argc, char* argv[]) {
     }
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);
+#if defined(AQ_HAVE_SYSTEMD)
+    if (tray.start({ std::string(aq_i18n::tr(aq_i18n::Msg::tray_open)), std::string(aq_i18n::tr(aq_i18n::Msg::tray_exit)) }, { openGuiFromTray, [] { if (g_node) g_node->quit(); } }))
+        std::cout << "[Tálca] A tálcaikon exportálva; a tálcagazda csatlakozását figyeli.\n";
+    else
+        std::cout << "[Tálca] Nincs session-busz: a motor tálcaikon nélkül fut.\n";
+#endif
     std::cout << "[PipeWire] \"Aqulify\" kimeneti eszköz létrehozva (aqulify_sink).\n";
 
     // Kezdeti kimenet: csak ha a felhasználó korábban választott. Különben a rendszer (WirePlumber)
@@ -393,6 +419,9 @@ int main(int argc, char* argv[]) {
         s += ",\"outputSinks\":" + cachedSinksJson;
         s += cachedVolumeJson;
         s += installJson;
+#if defined(AQ_HAVE_SYSTEMD)
+        s += std::string(",\"tray\":") + (tray.registered() ? "true" : "false");
+#endif
         return s;
     };
     cb.setVolume = [&](double level, int mute) {
@@ -804,6 +833,9 @@ int main(int argc, char* argv[]) {
         off.rateMode = audioopt::RateMode::System;
         applyAudio(off);
     }
+#if defined(AQ_HAVE_SYSTEMD)
+    tray.stop();
+#endif
     const bool crashedDaemon = node.coreError.load();
     node.shutdown();
     return crashedDaemon ? 2 : 0;

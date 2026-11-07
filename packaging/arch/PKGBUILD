@@ -9,7 +9,7 @@ arch=('x86_64' 'aarch64')
 url='https://github.com/Szorgos/ee-phase-waterfall-analyzer'
 license=('GPL-3.0-or-later')
 depends=('pipewire' 'fftw' 'gtk3' 'webkit2gtk-4.1' 'hicolor-icon-theme')
-makedepends=('cmake' 'ninja')
+makedepends=('cmake' 'ninja' 'systemd')
 install=aqulify.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
         "rnnoise_0.2+ds.orig.tar.xz::http://archive.ubuntu.com/ubuntu/pool/universe/r/rnnoise/rnnoise_0.2+ds.orig.tar.xz")

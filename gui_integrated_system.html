@@ -5981,9 +5981,10 @@ function renderBurnInState() {
 const CLOSE_PREF_KEY = "aqulify_close_action";
 let aqClosing = false;
 
-/** Linuxon nincs tálcaikon: a „háttérbe” zárás nem kínálható (a motor nem látszana, és nem lehetne visszahozni). */
+/** Linuxon a „háttérbe” zárás csak akkor kínálható, ha a motor tálcaikonja be van jegyezve a tálcagazdánál. */
 function closeNoTray() {
-  return /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+  if (!/Linux/.test(navigator.userAgent) || /Android/.test(navigator.userAgent)) return false;
+  return !(typeof engineStatus !== "undefined" && engineStatus && engineStatus.tray === true);
 }
 function closePref() {
   try {
@@ -6059,13 +6060,15 @@ function restoreModeChanged() {
     parts: { chain: val("chkRestoreChain"), multi: val("chkRestoreMulti"), audio: val("chkRestoreAudio") }
   });
 }
+let closeTrayOpt = null;   // a tálcás opció, ha Linuxon éppen nincs tálca (a visszatéréshez)
 function syncClosePrefSelect() {
   const wrap = document.getElementById("closePrefWrap");
   if (wrap) wrap.hidden = typeof window.aetherCloseWindow !== "function";
   const sel = document.getElementById("selectClosePref");
   if (sel) {
-    const trayOpt = sel.querySelector('option[value="tray"]');
-    if (trayOpt && closeNoTray()) trayOpt.remove();
+    const existing = sel.querySelector('option[value="tray"]');
+    if (closeNoTray()) { if (existing) { closeTrayOpt = existing; existing.remove(); } }
+    else if (!existing && closeTrayOpt) sel.insertBefore(closeTrayOpt, sel.querySelector('option[value="quit"]'));
     sel.value = closePref();
   }
 }

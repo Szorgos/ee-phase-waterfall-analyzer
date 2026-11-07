@@ -373,6 +373,18 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
     target_link_libraries(aqulify-engine PRIVATE ee_dsp_core aq_player ${PIPEWIRE_LIBRARIES} Threads::Threads)
     target_compile_definitions(aqulify-engine PRIVATE AQULIFY_VERSION="${PROJECT_VERSION}")
 
+    # Tálcaikon Linuxon (StatusNotifierItem, sd-bus): csak ha a libsystemd fejléce megvan; nélküle a motor tálca nélkül fut
+    pkg_check_modules(SYSTEMD libsystemd)
+    if(SYSTEMD_FOUND)
+        target_compile_definitions(aqulify-engine PRIVATE AQ_HAVE_SYSTEMD=1)
+        target_include_directories(aqulify-engine PRIVATE ${SYSTEMD_INCLUDE_DIRS})
+        target_link_directories(aqulify-engine PRIVATE ${SYSTEMD_LIBRARY_DIRS})
+        target_link_libraries(aqulify-engine PRIVATE ${SYSTEMD_LIBRARIES})
+        message(STATUS "Linux tálcaikon: libsystemd ${SYSTEMD_VERSION}")
+    else()
+        message(STATUS "Linux tálcaikon: nincs libsystemd, a motor tálca nélkül épül")
+    endif()
+
     # Parancssori indító a beépített lejátszóhoz: aqulify-play <fájl> | play | pause | stop
     add_executable(aqulify-play src/aqulify_play.cpp)
 
