@@ -9,7 +9,8 @@
 
 - **Indításkori visszaállítás.** A motor a legutóbbi működő láncot, a több kimenetet és a haladó hangkimenet-beállításokat állítja vissza. Alapból indításkor megkérdezi, mit állítson vissza (a három rész külön jelölhető); a „Mindig ezt válaszd” jelöléssel a kérdés elmarad. A mód (Kérdezzen / Mindig állítsa vissza / Soha ne állítsa vissza) a *Kimenet* menüben módosítható. Kérdezés közben a motor alapállapotban marad.
 - **Forrás-követés ébren tartással (Linux).** Ha az ébren tartás be van kapcsolva, új külső hangfolyam indulásakor rövid időre (kb. 1,5 s) szünetel, hogy a PipeWire át tudjon váltani a forrás mintavételére (pl. 44,1 kHz-es Tidal-szám). A szünet nem minden kliensnél elég, ha az a streamet nyitva tartja.
-- **Kilépés:** Linuxon az utolsó beállítás a mentésben marad. Windowson a plugin kilépéskor alapállapotra vált, az utolsó lánc a `last_params.bin`-ben marad és indításkor visszaáll.
+- **Kilépés:** Linuxon az utolsó beállítás a mentésben marad.
+- **Frissítés az alkalmazásból.** Az Aqulify jelzi, ha új verzió érhető el: naponta legfeljebb egyszer kérdez a GitHubtól, azonosító nélkül (a *Kimenet* menüben kikapcsolható, vagy kézzel is kereshető). **Windowson** egykattintásos frissítés: a telepítő letöltése, ellenőrzőösszeg-ellenőrzés, majd telepítés. **macOS-en** a lemezkép letöltése és ellenőrzése után megnyílik. **Linuxon** a telepítési módnak megfelelő parancsot mutatja (csomagkezelő vagy install.sh). Windowson a plugin kilépéskor alapállapotra vált, az utolsó lánc a `last_params.bin`-ben marad és indításkor visszaáll.
 
 ### Újdonságok (2.1.1)
 

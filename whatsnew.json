@@ -7,27 +7,32 @@
         "hu": [
           "Indításkor visszaállítás: a motor a legutóbbi működő láncot, a több kimenetet és a hangkimenet-beállításokat állítja vissza. Alapból megkérdezi, mit állítson vissza; a kérdés a „Mindig ezt válaszd” jelöléssel elhagyható, a mód a Kimenet menüben módosítható.",
           "Forrás-követés ébren tartással (Linux): új külső hangfolyam indulásakor az ébren tartás rövid időre szünetel, hogy a PipeWire át tudjon váltani a forrás mintavételére.",
-          "Windowson kilépéskor a plugin alapállapotra vált; az utolsó lánc a program mappájában marad, és indításkor visszaáll."
+          "Windowson kilépéskor a plugin alapállapotra vált; az utolsó lánc a program mappájában marad, és indításkor visszaáll.",
+          "Frissítés az alkalmazásból: az Aqulify jelzi, ha új verzió érhető el (naponta legfeljebb egyszer kérdez a GitHubtól, azonosító nélkül; kikapcsolható). Windowson egykattintásos frissítés, macOS-en és Linuxon a telepítési módnak megfelelő lépés."
         ],
         "en": [
           "Restore on startup: the engine brings back the last working chain, multiple outputs and advanced audio output settings. By default it asks what to restore; tick “Always choose this” to stop the question, and change the mode in the Output menu.",
           "Source-following with keep-awake (Linux): when an external audio stream starts, keep-awake pauses briefly so PipeWire can switch to the source's sample rate.",
-          "On Windows, the plugin returns to the default state on exit; the last chain is kept and restored on startup."
+          "On Windows, the plugin returns to the default state on exit; the last chain is kept and restored on startup.",
+          "Updates from the app: Aqulify shows when a new version is available (checks GitHub at most once a day, without an identifier; can be turned off). One-click update on Windows; on macOS and Linux, the step that matches your install method."
         ],
         "es": [
           "Restauración al iniciar: el motor recupera la última cadena que funcionaba, las salidas múltiples y los ajustes de salida de audio avanzada. Por defecto pregunta qué restaurar; marca «Elegir siempre esta opción» para no volver a preguntar, y el modo se cambia en el menú Salida.",
           "Seguimiento de la fuente con mantener activo (Linux): al iniciarse un flujo de audio externo, el mantener activo se pausa brevemente para que PipeWire pueda cambiar a la frecuencia de muestreo de la fuente.",
-          "En Windows, al salir el plugin vuelve al estado predeterminado; la última cadena se conserva y se restaura al iniciar."
+          "En Windows, al salir el plugin vuelve al estado predeterminado; la última cadena se conserva y se restaura al iniciar.",
+          "Actualizaciones desde la aplicación: Aqulify avisa cuando hay una versión nueva (consulta GitHub como máximo una vez al día, sin identificador; se puede desactivar). Actualización con un clic en Windows; en macOS y Linux, el paso adecuado según cómo lo instalaste."
         ],
         "fr": [
           "Restauration au démarrage : le moteur rétablit la dernière chaîne fonctionnelle, les sorties multiples et les réglages de sortie audio avancée. Par défaut, il demande quoi restaurer ; cochez « Toujours choisir cette option » pour ne plus être interrogé, et modifiez le mode dans le menu Sortie.",
           "Suivi de la source avec maintien éveillé (Linux) : au démarrage d'un flux audio externe, le maintien éveillé se suspend brièvement pour que PipeWire puisse passer à la fréquence d'échantillonnage de la source.",
-          "Sous Windows, le plugin revient à l'état par défaut à la fermeture ; la dernière chaîne est conservée et restaurée au démarrage."
+          "Sous Windows, le plugin revient à l'état par défaut à la fermeture ; la dernière chaîne est conservée et restaurée au démarrage.",
+          "Mises à jour depuis l'application : Aqulify signale les nouvelles versions (interrogation de GitHub au plus une fois par jour, sans identifiant ; désactivable). Mise à jour en un clic sous Windows ; sous macOS et Linux, l'étape correspondant à votre mode d'installation."
         ],
         "zh": [
           "启动时恢复：引擎会恢复上次正常工作的 DSP 链、多输出和高级音频输出设置。默认会询问恢复哪些内容；勾选“始终选择此项”即可不再询问，模式可在“输出”菜单中修改。",
           "保持唤醒下的采样率跟随（Linux）：外部音频流开始时，保持唤醒会短暂暂停，以便 PipeWire 切换到源的采样率。",
-          "Windows 上退出时插件会恢复为默认状态；上次的链会被保留，并在启动时恢复。"
+          "Windows 上退出时插件会恢复为默认状态；上次的链会被保留，并在启动时恢复。",
+          "应用内更新：Aqulify 会在有新版本时提示（每天最多向 GitHub 查询一次，不发送标识符；可关闭）。Windows 上可一键更新；macOS 和 Linux 上则按安装方式提供对应步骤。"
         ]
       }
     },
