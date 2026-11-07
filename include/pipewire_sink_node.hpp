@@ -599,8 +599,12 @@ private:
         if (!type || !props || std::strcmp(type, PW_TYPE_INTERFACE_Node) != 0) return;
         const char* cls = spa_dict_lookup(props, PW_KEY_MEDIA_CLASS);
         if (!cls || std::strcmp(cls, "Stream/Output/Audio") != 0) return;
-        const char* pid = spa_dict_lookup(props, "application.process.id");
-        if (pid && std::strtol(pid, nullptr, 10) == static_cast<long>(getpid())) return;   // a saját streamjeink
+        // a saját streamjeink (fő kimenet, zónák, lejátszó, ébren tartás) nem számítanak: nevük „aqulify…”,
+        // az ébren tartó és a lejátszó alkalmazásneve „Aqulify” (az application.process.id nem megbízható)
+        const char* nodeName = spa_dict_lookup(props, PW_KEY_NODE_NAME);
+        const char* appName = spa_dict_lookup(props, PW_KEY_APP_NAME);
+        if (nodeName && std::strncmp(nodeName, "aqulify", 7) == 0) return;
+        if (appName && std::strcmp(appName, "Aqulify") == 0) return;
         if (!self->rateFollow_.load() || !self->keepAwakeWanted_.load()) return;
         self->keepAlivePauseUntil_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(kKeepAlivePauseMs);
         if (self->keepAlive_) self->destroyKeepAlive();
