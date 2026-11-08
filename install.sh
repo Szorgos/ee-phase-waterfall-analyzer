@@ -455,7 +455,11 @@ fi
 
 # ------------------------------------------------------------------ 5. menübejegyzés
 say "\n$(msg inst.step5)"
-cat > "$APP_DIR/aqulify.desktop" <<EOF
+# A fájlnév az ablak alkalmazás-azonosítója (aether_gui_linux.cpp: kAppId): Waylanden ez alapján kapja az ablak
+# az ikonját. A 2.1.5-ig használt aqulify.desktop nevet lecseréljük.
+DESKTOP_ID="io.github.szorgos.Aqulify.desktop"
+rm -f "$APP_DIR/aqulify.desktop"
+cat > "$APP_DIR/$DESKTOP_ID" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Aqulify
@@ -469,12 +473,12 @@ Terminal=false
 Categories=AudioVideo;Audio;
 StartupWMClass=Aqulify
 EOF
-chmod +x "$APP_DIR/aqulify.desktop"
+chmod +x "$APP_DIR/$DESKTOP_ID"
 
 # Asztali ikon létrehozása (ha létezik Asztal vagy Desktop mappa)
 for d in "$HOME/Asztal" "$HOME/Desktop"; do
     if [ -d "$d" ]; then
-        cp "$APP_DIR/aqulify.desktop" "$d/aqulify.desktop"
+        cp "$APP_DIR/$DESKTOP_ID" "$d/aqulify.desktop"
         chmod +x "$d/aqulify.desktop"
         gio set "$d/aqulify.desktop" metadata::trusted true >/dev/null 2>&1 || true
     fi

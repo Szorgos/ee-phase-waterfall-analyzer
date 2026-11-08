@@ -69,7 +69,7 @@ systemctl --user daemon-reload >/dev/null 2>&1 || true
 
 rm -f "$PREFIX/bin/aqulify-engine" "$PREFIX/bin/aqulify-gui" "$PREFIX/bin/aqulify-play"
 rm -rf "$PREFIX/share/aqulify"
-rm -f "$PREFIX/share/applications/aqulify.desktop"
+rm -f "$PREFIX/share/applications/io.github.szorgos.Aqulify.desktop" "$PREFIX/share/applications/aqulify.desktop"
 rm -f "$PREFIX/share/icons/hicolor/256x256/apps/aqulify.png"
 update-desktop-database "$PREFIX/share/applications" >/dev/null 2>&1 || true
 

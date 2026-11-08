@@ -9,6 +9,9 @@
 #include "webview/webview.h"
 
 #include <glib-unix.h>
+#ifdef GDK_WINDOWING_WAYLAND
+#include <gdk/gdkwayland.h>
+#endif
 
 #include <arpa/inet.h>
 #include <chrono>
@@ -28,6 +31,25 @@
 #include "aq_i18n.hpp"
 
 extern char** environ;
+
+/**
+ * Az ablak alkalmazás-azonosítója: ez alapján keresi meg az asztali környezet a menübejegyzést és benne az ikont.
+ * Waylanden az ablakra tett ikont (gtk_window_set_icon_*) a kompozitor nem használja, csak az app_id-hoz tartozó
+ * .desktop fájlt: e nélkül a program nevéből lett „aqulify-gui” azonosítóhoz nincs bejegyzés, és pl. a KDE a
+ * Wayland általános „W” ikonját mutatja. A név a csomagok (és az install.sh) .desktop fájljáé.
+ * A g_set_prgname-et szándékosan nem írjuk át: a WebKitGTK a program nevéből képzett mappában tartja a felület
+ * beállításait (localStorage), az átnevezéssel ezek elvesznének.
+ */
+static constexpr const char* kAppId = "io.github.szorgos.Aqulify";
+
+static void applyWaylandAppId(GtkWidget* widget) {
+#if defined(GDK_WINDOWING_WAYLAND) && GTK_CHECK_VERSION(3, 24, 22)
+    GdkWindow* gw = gtk_widget_get_window(widget);
+    if (gw && GDK_IS_WAYLAND_WINDOW(gw)) gdk_wayland_window_set_application_id(gw, kAppId);
+#else
+    (void)widget;
+#endif
+}
 
 /**
  * Ébren tartás (burn-in): a systemd-inhibit alvás-zárat tart, amíg a gyerekfolyamata fut. Csak az alvást tiltja,
@@ -290,6 +312,9 @@ int main() {
 
     ensureEngineRunning();
 
+    // X11: a WM_CLASS osztálya a .desktop fájl StartupWMClass=Aqulify sorához illeszkedjen (a GTK indítása előtt)
+    gdk_set_program_class("Aqulify");
+
     try {
         webview::webview w(false, nullptr);
         w.set_title("Aqulify " AQULIFY_VERSION);   // az ablak címsora a verziószámmal
@@ -301,6 +326,11 @@ int main() {
                 g_object_set(settings, "gtk-application-prefer-dark-theme", TRUE, nullptr);
             }
             applyTitlebar(false);   // a felület betöltése után a saját témája szerint (aetherSetTheme)
+            // Wayland app_id: ha az ablak már látható, most; ha még nem, a megjelenítésekor
+            applyWaylandAppId(GTK_WIDGET(win.value()));
+            g_signal_connect(G_OBJECT(win.value()), "realize", G_CALLBACK(+[](GtkWidget* wdg, gpointer) {
+                applyWaylandAppId(wdg);
+            }), nullptr);
             gtk_window_set_icon_name(GTK_WINDOW(win.value()), "aqulify");
             gtk_window_maximize(GTK_WINDOW(win.value()));
             std::string iconFile = folder + "/../../icons/hicolor/256x256/apps/aqulify.png";
