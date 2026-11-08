@@ -24,7 +24,8 @@ const fmt = l => `A 100 Hz ${l.a["100"].toFixed(1)} / 4 kHz ${l.a["4000"].toFixe
   await page.click("#btnMoToggle");
   await page.waitForFunction(() => moStatus && moStatus.enabled === true, null, { timeout: 15000 });
   check(true, "bekapcsolás a fülön");
-  await page.waitForSelector('#moTable tr[data-k="1"] .mo-sink option[value="dac_b"]', { timeout: 15000 });
+  // A zárt <select> opcióit a Playwright mindig rejtettnek látja: a jelenlétre várunk, nem a láthatóságra
+  await page.waitForSelector('#moTable tr[data-k="1"] .mo-sink option[value="dac_b"]', { state: "attached", timeout: 15000 });
   await page.selectOption('#moTable tr[data-k="1"] .mo-sink', "dac_b");
   await page.waitForFunction(() => moStatus && moStatus.outputs && moStatus.outputs[1] && moStatus.outputs[1].sink === "dac_b", null, { timeout: 15000 });
   check(true, "a 2. kimenet hangkártyája a listából: DAC B");

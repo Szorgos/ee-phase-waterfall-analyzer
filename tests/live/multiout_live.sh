@@ -11,6 +11,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 W=$(mktemp -d)
 trap 'kill $(jobs -p) 2>/dev/null; [ -n "${DBUS_PID:-}" ] && kill $DBUS_PID 2>/dev/null; sleep 0.5; rm -rf "$W" 2>/dev/null' EXIT
 export XDG_RUNTIME_DIR="$W/run" XDG_CONFIG_HOME="$W/conf" XDG_STATE_HOME="$W/state" PIPEWIRE_RUNTIME_DIR="$W/run"
+# A gazdagép hangszervere ne szivárogjon be (pl. WSLg: PULSE_SERVER=unix:/mnt/wslg/PulseServer): a pactl és a
+# motor csak a saját, elszigetelt pipewire-pulse példányunkat lássa.
+unset PULSE_SERVER PULSE_SINK PULSE_SOURCE PULSE_COOKIE PIPEWIRE_REMOTE
 mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME/pipewire/pipewire.conf.d" "$XDG_STATE_HOME"
 chmod 700 "$XDG_RUNTIME_DIR"
 cat > "$XDG_CONFIG_HOME/pipewire/pipewire.conf.d/10-null.conf" <<'CONF'
