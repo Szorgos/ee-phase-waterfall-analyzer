@@ -142,6 +142,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: macos-screenshot
           path: macos-screenshot.png
           if-no-files-found: ignore
@@ -170,6 +171,7 @@ jobs:
       - name: Feltöltés munkatermékként
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: Aqulify-macOS
           path: |
             ${{ steps.dmg.outputs.file }}
@@ -204,6 +206,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: macos-install-${{ matrix.os }}
           path: ${{ runner.temp }}/screenshot.png
           if-no-files-found: ignore

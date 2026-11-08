@@ -92,6 +92,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: Aqulify-Linux
           path: |
             ${{ steps.pkg.outputs.file }}
@@ -123,6 +124,7 @@ jobs:
           echo "file=$(basename "$f")" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: Aqulify-Fedora
           path: |
             ${{ steps.rpm.outputs.file }}
@@ -166,6 +168,7 @@ jobs:
           sudo apt-get remove -y aqulify
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: Aqulify-Debian
           path: |
             ${{ steps.deb.outputs.file }}
@@ -212,6 +215,7 @@ jobs:
           /usr/bin/aqulify-engine --help | head -5
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: Aqulify-Arch
           path: |
             ${{ steps.arch.outputs.file }}
@@ -282,6 +286,7 @@ jobs:
         id: upload-binaries
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: unsigned-binaries
           path: |
             build-win/Aqulify.exe
@@ -313,6 +318,7 @@ jobs:
         id: upload-setup
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: unsigned-setup
           path: build-win/Aqulify-Setup.exe
 
@@ -349,6 +355,7 @@ jobs:
       - name: Feltöltés munkatermékként
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: Aqulify-Windows
           path: |
             ${{ steps.name.outputs.file }}
