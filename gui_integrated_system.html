@@ -1086,7 +1086,9 @@ if (!window.THREE) window.THREE = (function () {
   header.app-header {
     position: sticky;
     top: 0;
-    z-index: 850;
+    /* A „most szól” sáv (.aqnp, gui_player.js: 900) fölött: a fejléc felugró menüi (Kimenet) ne kerüljenek alá;
+       a modális ablakok (10000) ennél feljebb maradnak */
+    z-index: 950;
     flex: 0 0 54px;
     min-height: 54px;
     padding: 8px 20px;
