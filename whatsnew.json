@@ -1,6 +1,42 @@
 {
   "versions": [
     {
+      "version": "2.1.6",
+      "date": "2026-11-08",
+      "notes": {
+        "hu": [
+          "Kimenet menü: kis ablakban is görgethető, és a „most szól” sáv már nem takarja el az alját.",
+          "Hangkártyák neve: a Kimenet menüben és a Kimenetek fülön a rendszer szerinti eszköznév és a fajta a felület nyelvén jelenik meg (Linux, macOS).",
+          "Linux: a felület ablaka Waylanden is a saját ikonját mutatja; a linkek megnyitása javítva.",
+          "Javítás: a Kimenetek fülön a hangkártya választását nem írja felül a háttérben érkező állapotfrissítés."
+        ],
+        "en": [
+          "Output menu: scrollable in small windows, and the now-playing bar no longer covers its bottom.",
+          "Sound card names: the Output menu and the Outputs tab show the system device name and its type in the interface language (Linux, macOS).",
+          "Linux: the window shows its own icon on Wayland too; opening links fixed.",
+          "Fix: a background status update no longer overrides the sound card you pick on the Outputs tab."
+        ],
+        "es": [
+          "Menú Salida: se puede desplazar en ventanas pequeñas y la barra de reproducción ya no tapa su parte inferior.",
+          "Nombres de tarjetas de sonido: el menú Salida y la pestaña Salidas muestran el nombre del dispositivo del sistema y su tipo en el idioma de la interfaz (Linux, macOS).",
+          "Linux: la ventana muestra su propio icono también en Wayland; corregida la apertura de enlaces.",
+          "Corrección: una actualización de estado en segundo plano ya no anula la tarjeta de sonido elegida en la pestaña Salidas."
+        ],
+        "fr": [
+          "Menu Sortie : défilable dans les petites fenêtres, et la barre de lecture ne masque plus son bas.",
+          "Noms des cartes son : le menu Sortie et l'onglet Sorties affichent le nom système du périphérique et son type dans la langue de l'interface (Linux, macOS).",
+          "Linux : la fenêtre affiche sa propre icône aussi sous Wayland ; ouverture des liens corrigée.",
+          "Correctif : une mise à jour d'état en arrière-plan n'écrase plus la carte son choisie dans l'onglet Sorties."
+        ],
+        "zh": [
+          "输出菜单：小窗口中也可滚动，正在播放栏不再遮挡其底部。",
+          "声卡名称：输出菜单和“输出”标签页以界面语言显示系统设备名称及其类型（Linux、macOS）。",
+          "Linux：窗口在 Wayland 下也显示自己的图标；修复了链接打开。",
+          "修复：后台状态更新不再覆盖在“输出”标签页中选择的声卡。"
+        ]
+      }
+    },
+    {
       "version": "2.1.5",
       "date": "2026-11-07",
       "notes": {

@@ -1,3 +1,17 @@
+### Újdonságok (2.1.6)
+
+**Letöltés (2.1.6):**
+- Windows 11: [Aqulify-Setup-2.1.6.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.6/Aqulify-Setup-2.1.6.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.6/Aqulify-Setup-2.1.6.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.1.6-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.6/Aqulify-2.1.6-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.6/Aqulify-2.1.6-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.1.6.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.6/Aqulify-Linux-2.1.6.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.6/Aqulify-Linux-2.1.6.tar.gz.sha256))
+- Fedora: [aqulify-2.1.6-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.6/aqulify-2.1.6-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.1.6-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.6/aqulify_2.1.6-1_amd64.deb) · Arch: [aqulify-2.1.6-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.6/aqulify-2.1.6-1-x86_64.pkg.tar.zst)
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Kimenet menü.** A menü kis ablakban is görgethető, és a „most szól” sáv már nem takarja el az alját (Windows, Linux, macOS).
+- **Hangkártyák neve a felület nyelvén.** A Kimenet menüben és a „Kimenetek” fülön a hangkártya a rendszer szerinti nevével jelenik meg (Linuxon a PipeWire leírása, macOS-en a Core Audio neve), a fajtája („Hangszóró”, „USB”, „HDMI”, „Bluetooth”) a választott nyelven; a nyers azonosító a buboréksúgóban.
+- **Saját ablakikon Linuxon.** Waylanden (pl. KDE Plasma) a felület ablaka az Aqulify ikonját mutatja a Wayland általános ikonja helyett. A `bash install.sh` menübejegyzése `io.github.szorgos.Aqulify.desktop` néven készül (a régi `aqulify.desktop` törlődik). A linkek megnyitása Linuxon javítva.
+- **Javítás: hangkártya választása a Kimenetek fülön.** A háttérben érkező állapotfrissítés nem írja felül a választást, és nem zárja be a nyitott listát.
+
 ### Újdonságok (2.1.5)
 
 **Letöltés (2.1.5):**
