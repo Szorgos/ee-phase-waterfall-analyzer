@@ -6316,8 +6316,11 @@ function moToggle() {
   if (c.enabled && c.mode === "crossover" && c.outputs.every(o => o.band === -1)) c.outputs.forEach((o, k) => { o.band = k; });
   moSend(Object.assign({ type: "set_multiout" }, c));
 }
-/** A fül mezőiből új beállítás (bármely mező változásakor). */
-function moEdit() {
+/** A fül mezőiből új beállítás (bármely mező változásakor). A `src` a megváltozott mező: az ő értéke a döntő,
+ *  akkor is, ha a táblát közben egy állapotfrissítés újraépítette (a régi elem már nincs a DOM-ban). */
+let moTableHtml = "";   // a kimenet-tábla legutóbb kirajzolt tartalma (renderMultiOut)
+function moEdit(src) {
+  moTableHtml = "";     // a válasz után mindenképp újrarajzol (pl. ha a motor egy választást elutasított)
   const c = moCfgFromStatus();
   const prevMode = c.mode, prevN = c.outputs.length;
   c.mode = document.getElementById("moMode").value === "crossover" ? "crossover" : "zones";
@@ -6334,6 +6337,16 @@ function moEdit() {
     if (q(".mo-inv")) o.invert = q(".mo-inv").checked;
     if (q(".mo-band")) o.band = parseInt(q(".mo-band").value, 10);
   });
+  const srcRow = src && src.closest ? src.closest("tr[data-k]") : null;
+  const so = srcRow ? c.outputs[parseInt(srcRow.getAttribute("data-k"), 10)] : null;
+  if (so) {
+    if (src.matches(".mo-sink")) so.sink = src.value;
+    else if (src.matches(".mo-en")) so.enabled = src.checked;
+    else if (src.matches(".mo-inv")) so.invert = src.checked;
+    else if (src.matches(".mo-band")) so.band = parseInt(src.value, 10);
+    else if (src.matches(".mo-gain")) so.gain = Math.max(-24, Math.min(12, parseFloat(src.value) || 0));
+    else if (src.matches(".mo-delay")) so.delay = Math.max(0, Math.min(50, parseFloat(src.value) || 0));
+  }
   while (c.outputs.length < n) c.outputs.push({ sink: "", band: -1, gain: 0, delay: 0, invert: false, enabled: true });
   c.outputs.length = n;
   const freqs = [...document.querySelectorAll("#moXoFreqs input")].map(i => parseFloat(i.value)).filter(v => v >= 20 && v <= 20000);
@@ -6370,7 +6383,9 @@ function renderMultiOut() {
   if (fx && !fx.contains(document.activeElement))
     fx.innerHTML = xoF.map((f, j) => `<input type="number" class="ee-input" min="20" max="20000" step="1" value="${Math.round(f)}" aria-label="${escHtml(t("mo.xover"))} ${j + 1}" onchange="moEdit()">`).join("");
   const tbl = document.getElementById("moTable");
-  if (!tbl || tbl.contains(document.activeElement) && document.activeElement.tagName === "INPUT" && document.activeElement.type === "number") return;
+  // Szerkesztés közben (számmező vagy nyitott legördülő lista) nem építjük újra: a lista bezárulna, a bevitel elveszne
+  const ae = document.activeElement;
+  if (!tbl || tbl.contains(ae) && (ae.tagName === "SELECT" || ae.tagName === "INPUT" && ae.type === "number")) return;
   const sinks = Array.isArray(moStatus.sinks) ? moStatus.sinks : [];
   const zones = Array.isArray(moStatus.zones) ? moStatus.zones : [];
   let h = `<tr><th>#</th><th>${escHtml(t("mo.device"))}</th><th>${escHtml(t("mo.enabled"))}</th>` + (xo ? `<th>${escHtml(t("mo.band"))}</th>` : "") +
@@ -6381,7 +6396,7 @@ function renderMultiOut() {
       dev = `<span class="mo-status">${escHtml(t("mo.mainDevice"))}</span>`;
     } else {
       const known = sinks.some(si => si.name === o.sink);
-      dev = `<select class="ee-select mo-sink" onchange="moEdit()" aria-label="${escHtml(t("mo.out", { n: k + 1 }))}"><option value="">${escHtml(t("mo.noDevice"))}</option>` +
+      dev = `<select class="ee-select mo-sink" onchange="moEdit(this)" aria-label="${escHtml(t("mo.out", { n: k + 1 }))}"><option value="">${escHtml(t("mo.noDevice"))}</option>` +
             sinks.map(si => `<option value="${escHtml(si.name)}"${si.name === o.sink ? " selected" : ""}${sinkTitleAttr(si)}>${escHtml(sinkDisplayLabel(si))}</option>`).join("") +
             (o.sink && !known ? `<option value="${escHtml(o.sink)}" selected>${escHtml(o.sink)} (${escHtml(t("mo.missing"))})</option>` : "") + `</select>`;
       const z = zones[k - 1];
@@ -6390,17 +6405,20 @@ function renderMultiOut() {
         if (z.underruns) dev += ` <span class="mo-status">${escHtml(t("mo.statusUnder", { n: z.underruns }))}</span>`;
       }
     }
-    const band = xo ? `<td><select class="ee-select mo-band" onchange="moEdit()">` +
+    const band = xo ? `<td><select class="ee-select mo-band" onchange="moEdit(this)">` +
                       [-1, ...Array.from({ length: n }, (_, i) => i)].map(b => `<option value="${b}"${b === o.band ? " selected" : ""}>${escHtml(moBandLabel(n, b, xoF))}</option>`).join("") +
                       `</select></td>` : "";
     const edit = !xo && on ? `<button type="button" class="adw-btn${aqEditZone === k ? " primary" : ""}" onclick="setEditZone(${k})">${escHtml(t("mo.edit"))}</button>` : "";
     const dl = +o.delay || 0;
     h += `<tr data-k="${k}"><td>${k + 1}.</td><td>${dev}</td>` +
-         `<td><input type="checkbox" class="mo-en"${o.enabled !== false ? " checked" : ""} onchange="moEdit()" aria-label="${escHtml(t("mo.enabled"))}"></td>${band}` +
-         `<td><input type="number" class="ee-input mo-gain" min="-24" max="12" step="0.5" value="${+o.gain || 0}" onchange="moEdit()" aria-label="${escHtml(t("mo.gain"))}"> dB</td>` +
-         `<td><input type="number" class="ee-input mo-delay" min="0" max="50" step="0.1" value="${dl}" onchange="moEdit()" aria-label="${escHtml(t("mo.delay"))}"> ms <span class="mo-status">${escHtml(t("mo.cm", { cm: Math.round(dl * 34.3) }))}</span></td>` +
-         `<td><input type="checkbox" class="mo-inv"${o.invert ? " checked" : ""} onchange="moEdit()" aria-label="${escHtml(t("mo.invert"))}"></td><td>${edit}</td></tr>`;
+         `<td><input type="checkbox" class="mo-en"${o.enabled !== false ? " checked" : ""} onchange="moEdit(this)" aria-label="${escHtml(t("mo.enabled"))}"></td>${band}` +
+         `<td><input type="number" class="ee-input mo-gain" min="-24" max="12" step="0.5" value="${+o.gain || 0}" onchange="moEdit(this)" aria-label="${escHtml(t("mo.gain"))}"> dB</td>` +
+         `<td><input type="number" class="ee-input mo-delay" min="0" max="50" step="0.1" value="${dl}" onchange="moEdit(this)" aria-label="${escHtml(t("mo.delay"))}"> ms <span class="mo-status">${escHtml(t("mo.cm", { cm: Math.round(dl * 34.3) }))}</span></td>` +
+         `<td><input type="checkbox" class="mo-inv"${o.invert ? " checked" : ""} onchange="moEdit(this)" aria-label="${escHtml(t("mo.invert"))}"></td><td>${edit}</td></tr>`;
   });
+  // A motor kb. 2 másodpercenként küld állapotot: változatlan tartalomnál a táblát nem cseréljük le
+  if (moTableHtml === h) return;
+  moTableHtml = h;
   tbl.innerHTML = h;
 }
 function renderZoneBar() {
