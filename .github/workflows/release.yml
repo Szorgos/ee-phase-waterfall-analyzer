@@ -461,6 +461,12 @@ jobs:
         with:
           name: Aqulify-macOS
 
+      # Állandó nevű példány: a README "legújabb kiadás" letöltési linkje erre mutat
+      - name: Aqulify-macOS.dmg (állandó név)
+        run: |
+          test -f "${{ needs.macos-app.outputs.file }}"
+          cp "${{ needs.macos-app.outputs.file }}" Aqulify-macOS.dmg
+
       - name: Feltöltés a kiadáshoz
         uses: softprops/action-gh-release@v2
         with:

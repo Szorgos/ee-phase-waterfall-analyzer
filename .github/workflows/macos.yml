@@ -164,8 +164,8 @@ jobs:
           ln -s /Applications dmgroot/Applications
           hdiutil create -volname "Aqulify" -srcfolder dmgroot -ov -format UDZO "$file"
           shasum -a 256 "$file" > "$file.sha256"
-          # Állandó nevű példány: a README "legújabb kiadás" letöltési linkje erre mutat
-          cp "$file" Aqulify-macOS.dmg
+          # Az állandó nevű példány (Aqulify-macOS.dmg) csak kiadáskor készül, a release.yml macos-release
+          # feladatában: így a munkatermékben nincs kétszer ugyanaz a DMG
           echo "file=$file" >> "$GITHUB_OUTPUT"
 
       - name: Feltöltés munkatermékként
@@ -176,7 +176,6 @@ jobs:
           path: |
             ${{ steps.dmg.outputs.file }}
             ${{ steps.dmg.outputs.file }}.sha256
-            Aqulify-macOS.dmg
 
   # Telepítés egy friss gépen, ahogy egy felhasználó teszi (macos/ci/install_check.sh): Apple Silicon és Intel
   macos-install:
