@@ -302,7 +302,7 @@ Részletek a beállításhoz: [docs/code-signing.md](docs/code-signing.md).
 Ez a projekt a **GNU General Public License v3.0 (GPL-3.0)** alatt érhető el.
 * Copyright (C) 2026 **Szorgos** (<https://github.com/Szorgos>)
 * A részletes licencfeltételeket a [LICENSE](LICENSE) fájl tartalmazza.
-* Beépített külső összetevők: [three.js](https://threejs.org/) (MIT), [webview/webview](https://github.com/webview/webview) (MIT), Microsoft WebView2 SDK fejlécek (BSD-3-Clause).
+* Beépített külső összetevők: [three.js](https://threejs.org/) (MIT), [webview/webview](https://github.com/webview/webview) (MIT), Microsoft WebView2 SDK fejlécek (BSD-3-Clause), [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT, a telefonos távirányító párosító QR-kódjához).
 * DSP könyvtárak ([third_party/README.md](third_party/README.md)): LSP (LGPL-3.0+), Calf (LGPL-2.1+), libbs2b (MIT), SpeexDSP (BSD-3-Clause), zita-convolver (GPL-3.0+), RNNoise (BSD-3-Clause); FFTW3 (GPL-2.0+) – Linuxon a rendszer csomagja, a Windows binárisokba beépítve.
 * Az AutoEq index és profilok forrása az [AutoEq GitHub projekt](https://github.com/jaakkopasanen/AutoEq) (MIT Licenc).
 

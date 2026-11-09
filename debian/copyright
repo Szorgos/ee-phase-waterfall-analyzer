@@ -13,6 +13,7 @@ License: GPL-3+ and MIT and LGPL-3+ and LGPL-2.1+ and BSD-3-clause and Apache-2.
 Comment: A 2.x beépített lejátszó dekóderei (third_party/decoders/README.md): dr_libs és stb_vorbis
  (public domain / MIT-0 / MIT), Apple ALAC (Apache-2.0), libopus, libogg, opusfile és WavPack (BSD-3-Clause).
  A felület betűtípusai (Inter, IBM Plex Mono) az SIL Open Font License 1.1 alatt állnak, a three.js MIT.
+ A felületbe ágyazott qrcode-generator (c) 2009 Kazuhiko Arase, MIT (third_party/qrcode-generator).
  A pontos licencszövegek a forrásfában a megfelelő könyvtár mellett vannak.
 
 License: GPL-3+
