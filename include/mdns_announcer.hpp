@@ -40,11 +40,19 @@ public:
      * @brief mDNS hirdetés indítása a megadott porttal és gépnévvel.
      * @param servicePort A távoli WebSocket elérés portja (pl. 47820)
      * @param customName Egyedi megjelenítendő név (üres: a gép neve)
+     * @param addresses A gép IPv4-címei: A-rekordként és a TXT "addr" mezőjében hirdetjük őket, és minden címhez
+     *        tartozó hálózati kártyán kiküldjük a csomagot (különben csak az alapértelmezett kártyán – több
+     *        kártyánál, pl. virtuális hálózat mellett, a Wi-Fi-re nem jutna ki).
      */
-    bool start(int servicePort, const std::string& customName = "") {
+    bool start(int servicePort, const std::string& customName = "", std::vector<std::string> addresses = {}) {
         if (running_) stop();
 
         servicePort_ = servicePort;
+        addresses_.clear();
+        for (auto& a : addresses) {
+            in_addr tmp{};
+            if (inet_pton(AF_INET, a.c_str(), &tmp) == 1 && addresses_.size() < 8) addresses_.push_back(a);
+        }
         hostname_ = defaultHostname();
         instanceName_ = customName.empty() ? ("Aqulify (" + hostname_ + ")") : customName;
         running_ = true;
@@ -80,8 +88,8 @@ public:
         pkt.push_back(0x84); pkt.push_back(0x00);
         // QDCOUNT = 0
         pkt.push_back(0x00); pkt.push_back(0x00);
-        // ANCOUNT = 3 (PTR + SRV + TXT rekordok)
-        pkt.push_back(0x00); pkt.push_back(0x03);
+        // ANCOUNT = 3 (PTR + SRV + TXT rekordok) + a gép címeinek A-rekordjai
+        appendU16(pkt, static_cast<uint16_t>(3 + addresses_.size()));
         // NSCOUNT = 0, ARCOUNT = 0
         pkt.push_back(0x00); pkt.push_back(0x00);
         pkt.push_back(0x00); pkt.push_back(0x00);
@@ -134,6 +142,11 @@ public:
             "platform=linux"
 #endif
         };
+        if (!addresses_.empty()) {
+            std::string addr = "addr=";
+            for (size_t i = 0; i < addresses_.size(); ++i) addr += (i ? "," : "") + addresses_[i];
+            txtEntries.push_back(addr);
+        }
         std::vector<uint8_t> txtData;
         for (const auto& entry : txtEntries) {
             if (entry.empty() || entry.size() > 255) continue;
@@ -143,8 +156,23 @@ public:
         appendU16(pkt, static_cast<uint16_t>(txtData.size()));
         pkt.insert(pkt.end(), txtData.begin(), txtData.end());
 
+        // 4. A-rekordok (<Hostname>.local -> IPv4): a kliens (pl. az Android NSD) ezekből oldja fel a gép címét
+        for (const auto& a : addresses_) {
+            in_addr ip{};
+            if (inet_pton(AF_INET, a.c_str(), &ip) != 1) continue;
+            appendDnsName(pkt, hostname_ + ".local");
+            appendU16(pkt, 0x0001); // TYPE: A (1)
+            appendU16(pkt, 0x8001); // CLASS: IN | Flush
+            appendU32(pkt, ttl);
+            appendU16(pkt, 4);
+            const auto* b = reinterpret_cast<const uint8_t*>(&ip.s_addr);
+            pkt.insert(pkt.end(), b, b + 4);
+        }
+
         return pkt;
     }
+
+    const std::vector<std::string>& addresses() const { return addresses_; }
 
     static void appendDnsName(std::vector<uint8_t>& buf, const std::string& name) {
         size_t start = 0;
@@ -164,7 +192,24 @@ private:
     int servicePort_{47820};
     std::string hostname_;
     std::string instanceName_;
+    std::vector<std::string> addresses_;
     std::thread worker_;
+
+    /** A csomag kiküldése minden ismert cím hálózati kártyáján (cím nélkül: az alapértelmezetten). */
+    void sendAll(net::socket_t sock, const std::vector<uint8_t>& pkt, const sockaddr_in& dest) const {
+        if (addresses_.empty()) {
+            ::sendto(sock, reinterpret_cast<const char*>(pkt.data()), static_cast<int>(pkt.size()), 0,
+                     reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+            return;
+        }
+        for (const auto& a : addresses_) {
+            in_addr ifAddr{};
+            if (inet_pton(AF_INET, a.c_str(), &ifAddr) != 1) continue;
+            setsockopt(sock, IPPROTO_IP, IP_MULTICAST_IF, reinterpret_cast<const char*>(&ifAddr), sizeof(ifAddr));
+            ::sendto(sock, reinterpret_cast<const char*>(pkt.data()), static_cast<int>(pkt.size()), 0,
+                     reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+        }
+    }
 
     static constexpr const char* kMulticastGroup = "224.0.0.251";
     static constexpr uint16_t kMdnsPort = 5353;
@@ -207,8 +252,7 @@ private:
         inet_pton(AF_INET, kMulticastGroup, &dest.sin_addr);
 
         std::vector<uint8_t> pkt = buildPacket(ttl);
-        ::sendto(sock, reinterpret_cast<const char*>(pkt.data()), static_cast<int>(pkt.size()), 0,
-                 reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+        sendAll(sock, pkt, dest);
 
         net::closeSocket(sock);
     }
@@ -251,8 +295,7 @@ private:
 
         // 1. Kezdeti bejelentés küldése (initial burst: 2 csomag, 1s különbséggel)
         std::vector<uint8_t> annPkt = buildPacket(120);
-        ::sendto(sock, reinterpret_cast<const char*>(annPkt.data()), static_cast<int>(annPkt.size()), 0,
-                 reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+        sendAll(sock, annPkt, dest);
 
         auto lastAnnounce = std::chrono::steady_clock::now();
         int burstCount = 1;
@@ -273,8 +316,7 @@ private:
                     // Ha query (QR bit == 0) és szerepel benne az "_aqulify"
                     bool isQuery = ((inBuf[2] & 0x80) == 0);
                     if (isQuery && matchesQuery(inBuf, n, "_aqulify")) {
-                        ::sendto(sock, reinterpret_cast<const char*>(annPkt.data()), static_cast<int>(annPkt.size()), 0,
-                                 reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+                        sendAll(sock, annPkt, dest);
                     }
                 }
             }
@@ -284,13 +326,11 @@ private:
 
             auto now = std::chrono::steady_clock::now();
             if (burstCount < 2 && now - lastAnnounce >= std::chrono::seconds(1)) {
-                ::sendto(sock, reinterpret_cast<const char*>(annPkt.data()), static_cast<int>(annPkt.size()), 0,
-                         reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+                sendAll(sock, annPkt, dest);
                 lastAnnounce = now;
                 burstCount++;
             } else if (now - lastAnnounce >= std::chrono::seconds(15)) {
-                ::sendto(sock, reinterpret_cast<const char*>(annPkt.data()), static_cast<int>(annPkt.size()), 0,
-                         reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+                sendAll(sock, annPkt, dest);
                 lastAnnounce = now;
             }
         }

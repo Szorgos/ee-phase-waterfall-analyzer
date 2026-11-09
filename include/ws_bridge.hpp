@@ -1017,7 +1017,7 @@ private:
             if (remoteListener_ == net::kInvalidSocket) continue;
             remoteListenPort_ = port;
             std::cout << "[WS Bridge] Hálózati elérés bekapcsolva: 0.0.0.0:" << port << "\n";
-            mdnsAnnouncer_.start(port);
+            mdnsAnnouncer_.start(port, "", bridge_detail::localAddresses());
             return true;
         }
         std::cerr << "[WS Bridge] A hálózati elérés portjai (" << remotePort_ << "–" << remotePort_ + kRemotePortCount - 1

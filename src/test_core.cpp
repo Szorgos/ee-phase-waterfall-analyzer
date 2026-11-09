@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 #include <limits>
 #include <random>
 #include <thread>
@@ -382,6 +383,23 @@ static void testMdns() {
 
     an.stop();
     CHECK(!an.isRunning(), "mDNS hirdető leállt és búcsúcsomagot küldött");
+
+    // 3. Címekkel: A-rekordok (a kliens ezekből oldja fel a gépet) és TXT "addr"; érvénytelen cím kimarad
+    MdnsAnnouncer an2;
+    an2.start(47820, "Aqulify Teszt PC", { "192.168.1.20", "10.0.0.5", "nem-cim" });
+    auto p2 = an2.buildPacket(120);
+    const int ancount = (p2[6] << 8) | p2[7];
+    CHECK(ancount == 5, "ANCOUNT két címmel: 5 (PTR, SRV, TXT + 2 A-rekord), kapott: %d", ancount);
+    CHECK(an2.addresses().size() == 2, "az érvénytelen cím kimaradt (%zu cím)", an2.addresses().size());
+    std::string s2(p2.begin(), p2.end());
+    CHECK(s2.find("addr=192.168.1.20,10.0.0.5") != std::string::npos, "TXT rekord tartalmazza a címeket (addr=...)");
+    const uint8_t a1[] = { 0x00, 0x01, 0x80, 0x01, 0x00, 0x00, 0x00, 0x78, 0x00, 0x04, 192, 168, 1, 20 };
+    const uint8_t a2[] = { 0x00, 0x01, 0x80, 0x01, 0x00, 0x00, 0x00, 0x78, 0x00, 0x04, 10, 0, 0, 5 };
+    CHECK(std::search(p2.begin(), p2.end(), std::begin(a1), std::end(a1)) != p2.end() &&
+          std::search(p2.begin(), p2.end(), std::begin(a2), std::end(a2)) != p2.end(),
+          "A-rekordok: típus 1, IN|flush, TTL 120, 4 bájtos cím (192.168.1.20, 10.0.0.5)");
+    CHECK(p2.size() < 512, "csomagméret címekkel is érvényes (%zu bájt)", p2.size());
+    an2.stop();
 }
 
 static void testPushPairing() {
