@@ -104,6 +104,13 @@ inline std::string systemLanguage() {
         case LANG_CZECH: return "cs";
         case LANG_DUTCH: return "nl";
         case LANG_TURKISH: return "tr";
+        case LANG_ROMANIAN: return "ro";
+        case LANG_GREEK: return "el";
+        case LANG_FINNISH: return "fi";
+        case LANG_DANISH: return "da";
+        case LANG_NORWEGIAN: return "nb";
+        case LANG_SWEDISH: return "sv";
+        case LANG_HEBREW: return "he";
         case LANG_CHINESE: return "zh";
         case LANG_JAPANESE: return "ja";
         case LANG_KOREAN: return "ko";

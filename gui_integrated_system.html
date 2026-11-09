@@ -1843,7 +1843,7 @@ if (!window.THREE) window.THREE = (function () {
       <svg class="app-mark" viewBox="0 0 28 28" aria-hidden="true"><path d="M3 13c3-4 5-4 8 0s5 4 8 0 5-4 6-2" fill="none" stroke="var(--aq-accent)" stroke-width="2.2" stroke-linecap="round"/><path d="M3 19.5c3-3 5-3 8 0s5 3 8 0 5-3 6-1.5" fill="none" stroke="var(--aq-accent-2)" stroke-width="2" stroke-linecap="round"/></svg>
       <span class="app-brand" title="Aqulify • Audiofil DSP Rendszer" data-i18n-title="app.title">Aqulify</span>
       <span class="app-title" title="Aqulify • Audiofil DSP Rendszer" data-i18n-title="app.title"><span data-i18n="app.subtitle">Audiofil DSP Rendszer</span></span>
-      <span class="app-version" id="lblAppVersion" data-gui-version="2.1.6" title="Verziószám" data-i18n-title="ver.title">v2.1.6</span>
+      <span class="app-version" id="lblAppVersion" data-gui-version="2.1.7" title="Verziószám" data-i18n-title="ver.title">v2.1.7</span>
     </div>
 
     <!-- KÖZÉPSŐ ZÓNA: FŐ NÉZETVÁLTÓ CSÚSZÓ KAPSZULÁVAL -->
@@ -2059,15 +2059,15 @@ if (!window.THREE) window.THREE = (function () {
     <div class="dsp-header-row">
       <div class="plugin-tabs">
         <div class="tab-glider" id="tabGlider"></div>
-        <button class="tab-btn active" id="tabBtn-eq" onclick="switchTab('eq', this)"><span class="module-dot" id="dot-eq"></span>Equalizer</button>
-        <button class="tab-btn" id="tabBtn-crossfeed" onclick="switchTab('crossfeed', this)"><span class="module-dot" id="dot-crossfeed"></span>Crossfeed</button>
-        <button class="tab-btn" id="tabBtn-convolver" onclick="switchTab('convolver', this)"><span class="module-dot" id="dot-convolver"></span>Convolver</button>
-        <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter', this)"><span class="module-dot" id="dot-limiter"></span>Limiter</button>
-        <button class="tab-btn" id="tabBtn-bass" onclick="switchTab('bass', this)"><span class="module-dot" id="dot-bass"></span>Bass Enhancer</button>
-        <button class="tab-btn" id="tabBtn-mono" onclick="switchTab('mono', this)"><span class="module-dot" id="dot-mono"></span>Mono</button>
-        <button class="tab-btn" id="tabBtn-autogain" onclick="switchTab('autogain', this)"><span class="module-dot" id="dot-autogain"></span>Autogain</button>
+        <button class="tab-btn active" id="tabBtn-eq" onclick="switchTab('eq', this)"><span class="module-dot" id="dot-eq"></span><span data-i18n="mod.eq">Equalizer</span></button>
+        <button class="tab-btn" id="tabBtn-crossfeed" onclick="switchTab('crossfeed', this)"><span class="module-dot" id="dot-crossfeed"></span><span data-i18n="mod.crossfeed">Crossfeed</span></button>
+        <button class="tab-btn" id="tabBtn-convolver" onclick="switchTab('convolver', this)"><span class="module-dot" id="dot-convolver"></span><span data-i18n="mod.convolver">Convolver</span></button>
+        <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter', this)"><span class="module-dot" id="dot-limiter"></span><span data-i18n="mod.limiter">Limiter</span></button>
+        <button class="tab-btn" id="tabBtn-bass" onclick="switchTab('bass', this)"><span class="module-dot" id="dot-bass"></span><span data-i18n="mod.bass">Bass Enhancer</span></button>
+        <button class="tab-btn" id="tabBtn-mono" onclick="switchTab('mono', this)"><span class="module-dot" id="dot-mono"></span><span data-i18n="mod.mono">Mono</span></button>
+        <button class="tab-btn" id="tabBtn-autogain" onclick="switchTab('autogain', this)"><span class="module-dot" id="dot-autogain"></span><span data-i18n="mod.autogain">Autogain</span></button>
         <button class="tab-btn" id="tabBtn-outstage" onclick="switchTab('outstage', this)"><span class="module-dot" id="dot-outstage"></span><span data-i18n="os.tab">Csatornák</span></button>
-        <button class="tab-btn" id="tabBtn-magic" onclick="switchTab('magic', this)"><span class="module-dot" id="dot-magic"></span>Magic Touch</button>
+        <button class="tab-btn" id="tabBtn-magic" onclick="switchTab('magic', this)"><span class="module-dot" id="dot-magic"></span><span data-i18n="mod.magic">Magic Touch</span></button>
         <button class="tab-btn" id="tabBtn-outputs" hidden onclick="switchTab('outputs', this)"><span class="module-dot" id="dot-outputs"></span><span data-i18n="mo.tab">Kimenetek</span></button>
       </div>
       <!-- DSP PROFILOK: közvetlenül a Hangzás modulfülei mellett, nem a Zenetár felett -->
@@ -2355,7 +2355,7 @@ if (!window.THREE) window.THREE = (function () {
       <div class="module-card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div style="display:flex; align-items:center; gap:10px;">
-            <h3 style="margin:0;"><svg class="aq-icon" aria-hidden="true"><use href="#i-speaker"/></svg><span>Bass Enhancer</span></h3>
+            <h3 style="margin:0;"><svg class="aq-icon" aria-hidden="true"><use href="#i-speaker"/></svg><span data-i18n="mod.bass">Bass Enhancer</span></h3>
             <span class="status-badge off" id="badgeStatus-bass" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
           </div>
           <div style="display:flex; align-items:center; gap:12px;">
@@ -2462,7 +2462,7 @@ if (!window.THREE) window.THREE = (function () {
       <div class="module-card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div style="display:flex; align-items:center; gap:10px;">
-            <h3 style="margin:0;"><svg class="aq-icon" aria-hidden="true"><use href="#i-sparkle"/></svg><span>Magic Touch</span></h3>
+            <h3 style="margin:0;"><svg class="aq-icon" aria-hidden="true"><use href="#i-sparkle"/></svg><span data-i18n="mod.magic">Magic Touch</span></h3>
             <span class="status-badge off" id="badgeStatus-magic" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
           </div>
           <div style="display:flex; align-items:center; gap:12px;">
@@ -2830,8 +2830,8 @@ Filter 3: ON HSC Fc 10000 Hz Gain 3.0 dB Q 0.71"></textarea>
 // Hiányzó fordításnál az angol, majd a magyar szöveg jelenik meg.
 // =========================================================================
 // Új nyelv: ide egy sor, és az i18n/<terület>/<nyelv>.json fájlok (tools/i18n_build.py)
-const AQ_LANGS = [["hu", "Magyar"], ["en", "English"], ["es", "Español"], ["fr", "Français"], ["zh", "简体中文"]];
-const AQ_LOCALES = { hu: "hu-HU", en: "en-US", es: "es-ES", fr: "fr-FR", zh: "zh-CN" };
+const AQ_LANGS = [["hu", "Magyar"], ["en", "English"], ["es", "Español"], ["fr", "Français"], ["zh", "简体中文"], ["de", "Deutsch"], ["it", "Italiano"], ["nl", "Nederlands"], ["pl", "Polski"], ["ru", "Русский"], ["pt", "Português"], ["ro", "Română"], ["el", "Ελληνικά"], ["tr", "Türkçe"], ["fi", "Suomi"], ["da", "Dansk"], ["nb", "Norsk"], ["sv", "Svenska"], ["he", "עברית"], ["ja", "日本語"], ["ko", "한국어"], ["cs", "Čeština"], ["uk", "Українська"]];
+const AQ_LOCALES = { hu: "hu-HU", en: "en-US", es: "es-ES", fr: "fr-FR", zh: "zh-CN", de: "de-DE", it: "it-IT", nl: "nl-NL", pl: "pl-PL", ru: "ru-RU", pt: "pt-BR", ro: "ro-RO", el: "el-GR", tr: "tr-TR", fi: "fi-FI", da: "da-DK", nb: "nb-NO", sv: "sv-SE", he: "he-IL", ja: "ja-JP", ko: "ko-KR", cs: "cs-CZ", uk: "uk-UA" };
 var aqLang = "hu";
 function t(key, vars) {
   const tables = window.AQ_I18N || {};

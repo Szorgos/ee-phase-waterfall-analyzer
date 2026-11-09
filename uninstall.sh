@@ -11,7 +11,7 @@ aq_detect_lang() {
     [ -z "$l" ] && l="${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}"
     l="${l%%[_.@-]*}"
     case "$l" in
-        hu|en|es|fr|zh) printf "%s" "$l" ;;
+        hu|en|es|fr|zh|de|it|nl|pl|ru|pt|ro|el|tr|fi|da|nb|sv|he|ja|ko|cs|uk) printf "%s" "$l" ;;
         *) printf "en" ;;
     esac
 }
@@ -39,6 +39,96 @@ msg_text() {
         common.errorPrefix) f='[Error]' ;;
         uninst.purged) f='Aqulify 及其保存的设置已被清除。' ;;
         uninst.removed) f='Aqulify 已被移除。（保留了设置：~/.config/aqulify — 如需删除：./uninstall.sh --purge）' ;;
+        esac ;;
+    de) case "$2" in
+        common.errorPrefix) f='[Fehler]' ;;
+        uninst.purged) f='Aqulify und alle gespeicherten Einstellungen wurden entfernt.' ;;
+        uninst.removed) f='Aqulify wurde entfernt. (Einstellungen beibehalten: ~/.config/aqulify – zum Löschen: ./uninstall.sh --purge)' ;;
+        esac ;;
+    it) case "$2" in
+        common.errorPrefix) f='[Errore]' ;;
+        uninst.purged) f='Aqulify e le relative impostazioni salvate sono stati rimossi.' ;;
+        uninst.removed) f='Aqulify è stato rimosso. (Impostazioni conservate in: ~/.config/aqulify — per eliminarle: ./uninstall.sh --purge)' ;;
+        esac ;;
+    nl) case "$2" in
+        common.errorPrefix) f='[Fout]' ;;
+        uninst.purged) f='Aqulify en alle opgeslagen instellingen zijn verwijderd.' ;;
+        uninst.removed) f='Aqulify is verwijderd. (Instellingen zijn behouden: ~/.config/aqulify — om te wissen: ./uninstall.sh --purge)' ;;
+        esac ;;
+    pl) case "$2" in
+        common.errorPrefix) f='[Błąd]' ;;
+        uninst.purged) f='Aqulify i zapisane ustawienia zostały usunięte.' ;;
+        uninst.removed) f='Aqulify został usunięty. (Ustawienia zachowano w: ~/.config/aqulify — usunięcie: ./uninstall.sh --purge)' ;;
+        esac ;;
+    ru) case "$2" in
+        common.errorPrefix) f='[Ошибка]' ;;
+        uninst.purged) f='Aqulify и сохраненные настройки удалены.' ;;
+        uninst.removed) f='Aqulify удален. (Настройки сохранены: ~/.config/aqulify — для удаления: ./uninstall.sh --purge)' ;;
+        esac ;;
+    pt) case "$2" in
+        common.errorPrefix) f='[Erro]' ;;
+        uninst.purged) f='O Aqulify e todas as configurações salvas foram removidos.' ;;
+        uninst.removed) f='O Aqulify foi removido. (Configurações mantidas em: ~/.config/aqulify – para apagar: ./uninstall.sh --purge)' ;;
+        esac ;;
+    ro) case "$2" in
+        common.errorPrefix) f='[Eroare]' ;;
+        uninst.purged) f='Aqulify și setările salvate au fost eliminate.' ;;
+        uninst.removed) f='Aqulify a fost eliminat. (Setări păstrate în: ~/.config/aqulify – pentru ștergere: ./uninstall.sh --purge)' ;;
+        esac ;;
+    el) case "$2" in
+        common.errorPrefix) f='[Σφάλμα]' ;;
+        uninst.purged) f='Το Aqulify και οι αποθηκευμένες ρυθμίσεις καταργήθηκαν.' ;;
+        uninst.removed) f='Το Aqulify καταργήθηκε. (Οι ρυθμίσεις διατηρήθηκαν στο: ~/.config/aqulify – για διαγραφή: ./uninstall.sh --purge)' ;;
+        esac ;;
+    tr) case "$2" in
+        common.errorPrefix) f='[Hata]' ;;
+        uninst.purged) f='Aqulify ve kaydedilen ayarlar kaldırıldı.' ;;
+        uninst.removed) f='Aqulify kaldırıldı. (Ayarlar korundu: ~/.config/aqulify – silmek için: ./uninstall.sh --purge)' ;;
+        esac ;;
+    fi) case "$2" in
+        common.errorPrefix) f='[Virhe]' ;;
+        uninst.purged) f='Aqulify ja tallennetut asetukset on poistettu.' ;;
+        uninst.removed) f='Aqulify on poistettu. (Asetukset säilytetty: ~/.config/aqulify – poistaaksesi ne: ./uninstall.sh --purge)' ;;
+        esac ;;
+    da) case "$2" in
+        common.errorPrefix) f='[Fejl]' ;;
+        uninst.purged) f='Aqulify og alle gemte indstillinger er fjernet.' ;;
+        uninst.removed) f='Aqulify er fjernet. (Indstillinger bevaret i: ~/.config/aqulify – slet med: ./uninstall.sh --purge)' ;;
+        esac ;;
+    nb) case "$2" in
+        common.errorPrefix) f='[Feil]' ;;
+        uninst.purged) f='Aqulify og alle lagrede innstillinger er fjernet.' ;;
+        uninst.removed) f='Aqulify er fjernet. (Innstillinger beholdt i: ~/.config/aqulify – slett med: ./uninstall.sh --purge)' ;;
+        esac ;;
+    sv) case "$2" in
+        common.errorPrefix) f='[Fel]' ;;
+        uninst.purged) f='Aqulify och alla sparade inställningar har tagits bort.' ;;
+        uninst.removed) f='Aqulify har tagits bort. (Inställningar finns kvar i: ~/.config/aqulify – ta bort med: ./uninstall.sh --purge)' ;;
+        esac ;;
+    he) case "$2" in
+        common.errorPrefix) f='[שגיאה]' ;;
+        uninst.purged) f='Aqulify וכל ההגדרות שנשמרו הוסרו.' ;;
+        uninst.removed) f='Aqulify הוסר. (הגדרות נשמרו בנתיב: ~/.config/aqulify – למחיקה: ./uninstall.sh --purge)' ;;
+        esac ;;
+    ja) case "$2" in
+        common.errorPrefix) f='[エラー]' ;;
+        uninst.purged) f='Aqulifyおよび保存されたすべての設定が削除されました。' ;;
+        uninst.removed) f='Aqulifyは削除されました。（設定は ~/.config/aqulify に保持されます。完全に削除するには: ./uninstall.sh --purge）' ;;
+        esac ;;
+    ko) case "$2" in
+        common.errorPrefix) f='[오류]' ;;
+        uninst.purged) f='Aqulify 및 저장된 모든 설정이 제거되었습니다.' ;;
+        uninst.removed) f='Aqulify가 제거되었습니다. (설정은 ~/.config/aqulify 에 보존됨 – 삭제하려면: ./uninstall.sh --purge)' ;;
+        esac ;;
+    cs) case "$2" in
+        common.errorPrefix) f='[Chyba]' ;;
+        uninst.purged) f='Aqulify a veškerá uložená nastavení byla odstraněna.' ;;
+        uninst.removed) f='Aqulify bylo odstraněno. (Nastavení zůstává v: ~/.config/aqulify – pro úplné smazání: ./uninstall.sh --purge)' ;;
+        esac ;;
+    uk) case "$2" in
+        common.errorPrefix) f='[Помилка]' ;;
+        uninst.purged) f='Aqulify та всі збережені налаштування видалено.' ;;
+        uninst.removed) f='Aqulify видалено. (Налаштування збережено в: ~/.config/aqulify – видалити повністю: ./uninstall.sh --purge)' ;;
         esac ;;
     esac
     if [ -z "$f" ]; then

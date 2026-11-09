@@ -1,6 +1,127 @@
 {
   "versions": [
     {
+      "version": "2.1.7",
+      "date": "2026-11-09",
+      "notes": {
+        "hu": [
+          "A felület 23 nyelven érhető el (18 új nyelv), a fejléc nyelvválasztójából.",
+          "A modulfülek és kártyacímek (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) nyelvváltáskor átállnak.",
+          "A lejátszósáv és a zenetár szövegei 23 nyelven jelennek meg."
+        ],
+        "en": [
+          "The interface is available in 23 languages (18 new ones), selectable from the header language menu.",
+          "Module tabs and card titles (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) now follow the selected language.",
+          "The now-playing bar and library texts are available in all 23 languages."
+        ],
+        "es": [
+          "La interfaz está disponible en 23 idiomas (18 nuevos), seleccionables desde el selector de idioma de la cabecera.",
+          "Las pestañas y títulos de los módulos (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) cambian con el idioma.",
+          "La barra de reproducción y los textos de la biblioteca están disponibles en los 23 idiomas."
+        ],
+        "fr": [
+          "L'interface est disponible en 23 langues (18 nouvelles), au choix dans le sélecteur de langue de l'en-tête.",
+          "Les onglets et titres des modules (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) suivent la langue choisie.",
+          "La barre de lecture et les textes de la bibliothèque sont disponibles dans les 23 langues."
+        ],
+        "zh": [
+          "界面现已支持 23 种语言（其中 18 种为新增），可在顶部的语言选择器中切换。",
+          "模块标签和卡片标题（Equalizer、Crossfeed、Convolver、Limiter、Bass Enhancer、Mono、Autogain、Magic Touch）现在会随界面语言切换。",
+          "正在播放栏和音乐库的文字现已支持全部 23 种语言。"
+        ],
+        "de": [
+          "Die Oberfläche ist in 23 Sprachen verfügbar (18 neu), auswählbar über die Sprachauswahl in der Kopfzeile.",
+          "Modul-Reiter und Kartentitel (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) folgen der gewählten Sprache.",
+          "Die Wiedergabeleiste und die Medientexte gibt es in allen 23 Sprachen."
+        ],
+        "it": [
+          "L'interfaccia è disponibile in 23 lingue (18 nuove), selezionabili dal selettore lingua nell'intestazione.",
+          "Le schede e i titoli dei moduli (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) seguono la lingua scelta.",
+          "La barra di riproduzione e i testi della libreria sono disponibili in tutte le 23 lingue."
+        ],
+        "nl": [
+          "De interface is beschikbaar in 23 talen (18 nieuwe), te kiezen via de taalkeuze in de koptekst.",
+          "Moduletabbladen en kaarttitels (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) volgen de gekozen taal.",
+          "De afspeelbalk en de teksten van de bibliotheek zijn beschikbaar in alle 23 talen."
+        ],
+        "pl": [
+          "Interfejs jest dostępny w 23 językach (18 nowych), wybieranych w selektorze języka w nagłówku.",
+          "Zakładki modułów i tytuły kart (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) zmieniają się wraz z językiem.",
+          "Pasek odtwarzania i teksty biblioteki są dostępne we wszystkich 23 językach."
+        ],
+        "ru": [
+          "Интерфейс доступен на 23 языках (18 новых), выбирается в меню языка в шапке.",
+          "Вкладки модулей и заголовки карточек (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) следуют за выбранным языком.",
+          "Панель воспроизведения и тексты медиатеки доступны на всех 23 языках."
+        ],
+        "pt": [
+          "A interface está disponível em 23 idiomas (18 novos), selecionáveis no seletor de idioma do cabeçalho.",
+          "As abas e os títulos dos módulos (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) acompanham o idioma escolhido.",
+          "A barra de reprodução e os textos da biblioteca estão disponíveis nos 23 idiomas."
+        ],
+        "ro": [
+          "Interfața este disponibilă în 23 de limbi (18 noi), selectabile din meniul de limbă din antet.",
+          "Filele și titlurile modulelor (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) urmează limba selectată.",
+          "Bara de redare și textele bibliotecii sunt disponibile în toate cele 23 de limbi."
+        ],
+        "el": [
+          "Η διεπαφή είναι διαθέσιμη σε 23 γλώσσες (18 νέες), με επιλογή από το μενού γλώσσας στην κεφαλίδα.",
+          "Οι καρτέλες και οι τίτλοι των ενοτήτων (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) ακολουθούν τη γλώσσα που επιλέξατε.",
+          "Η μπάρα αναπαραγωγής και τα κείμενα της βιβλιοθήκης είναι διαθέσιμα και στις 23 γλώσσες."
+        ],
+        "tr": [
+          "Arayüz 23 dilde kullanılabilir (18'i yeni), üst bilgideki dil seçicisinden seçilebilir.",
+          "Modül sekmeleri ve kart başlıkları (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) seçilen dili izler.",
+          "Oynatma çubuğu ve kütüphane metinleri 23 dilin tamamında kullanılabilir."
+        ],
+        "fi": [
+          "Käyttöliittymä on saatavilla 23 kielellä (18 uutta), valittavissa yläpalkin kielivalikosta.",
+          "Moduulivälilehdet ja korttien otsikot (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) seuraavat valittua kieltä.",
+          "Toistopalkki ja kirjaston tekstit ovat saatavilla kaikilla 23 kielellä."
+        ],
+        "da": [
+          "Grænsefladen er tilgængelig på 23 sprog (18 nye), valgfrie i sprogmenuen i topbjælken.",
+          "Modulfanerne og korttitlerne (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) følger det valgte sprog.",
+          "Afspilningslinjen og biblioteksteksterne findes på alle 23 sprog."
+        ],
+        "nb": [
+          "Grensesnittet er tilgjengelig på 23 språk (18 nye), valgbare i språkmenyen i topplinjen.",
+          "Modulfanene og korttitlene (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) følger det valgte språket.",
+          "Avspillingslinjen og biblioteksteksterne finnes på alle 23 språk."
+        ],
+        "sv": [
+          "Gränssnittet finns på 23 språk (18 nya), väljs i språkmenyn i namnlisten.",
+          "Modulflikarna och korttitlarna (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) följer det valda språket.",
+          "Uppspelningsfältet och bibliotekstexterna finns på alla 23 språk."
+        ],
+        "he": [
+          "הממשק זמין ב-23 שפות (18 חדשות), ניתן לבחור בתפריט השפה בכותרת.",
+          "לשוניות המודולים וכותרות הכרטיסים (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) עוקבות אחר השפה שנבחרה.",
+          "סרגל הניגון וטקסטי הספרייה זמינים בכל 23 השפות."
+        ],
+        "ja": [
+          "インターフェースは23言語に対応しました（新規18言語）。ヘッダーの言語選択から切り替えられます。",
+          "モジュールのタブとカードの見出し（Equalizer、Crossfeed、Convolver、Limiter、Bass Enhancer、Mono、Autogain、Magic Touch）が選択した言語に切り替わります。",
+          "再生バーとライブラリの文字は23言語すべてに対応しました。"
+        ],
+        "ko": [
+          "인터페이스는 23개 언어를 지원합니다(신규 18개). 상단의 언어 선택에서 바꿀 수 있습니다.",
+          "모듈 탭과 카드 제목(Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch)이 선택한 언어를 따릅니다.",
+          "재생 막대와 라이브러리 텍스트가 23개 언어 모두를 지원합니다."
+        ],
+        "cs": [
+          "Rozhraní je dostupné ve 23 jazycích (18 nových), vybíráte je v jazykovém výběru v záhlaví.",
+          "Záložky modulů a nadpisy karet (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) se řídí zvoleným jazykem.",
+          "Lišta přehrávání a texty knihovny jsou dostupné ve všech 23 jazycích."
+        ],
+        "uk": [
+          "Інтерфейс доступний 23 мовами (18 нових), обирається в меню мови у верхній панелі.",
+          "Вкладки модулів і заголовки карток (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) слідують за обраною мовою.",
+          "Панель відтворення та тексти бібліотеки доступні всіма 23 мовами."
+        ]
+      }
+    },
+    {
       "version": "2.1.6",
       "date": "2026-11-08",
       "notes": {
@@ -33,6 +154,114 @@
           "声卡名称：输出菜单和“输出”标签页以界面语言显示系统设备名称及其类型（Linux、macOS）。",
           "Linux：窗口在 Wayland 下也显示自己的图标；修复了链接打开。",
           "修复：后台状态更新不再覆盖在“输出”标签页中选择的声卡。"
+        ],
+        "de": [
+          "Ausgangsmenü: Auch in kleinen Fenstern scrollbar, und die Wiedergabeleiste verdeckt nicht mehr den unteren Bereich.",
+          "Soundkarten-Namen: Im Ausgangsmenü und im Reiter Ausgänge werden der Systemname des Geräts und dessen Typ in der Sprache der Benutzeroberfläche angezeigt (Linux, macOS).",
+          "Linux: Das Fenster zeigt sein eigenes Symbol auch unter Wayland; das Öffnen von Links wurde korrigiert.",
+          "Korrektur: Eine Statusaktualisierung im Hintergrund überschreibt nicht mehr die im Reiter Ausgänge gewählte Soundkarte."
+        ],
+        "it": [
+          "Menu Uscita: scorrevole anche nelle finestre piccole e la barra di riproduzione non copre più la parte inferiore.",
+          "Nomi delle schede audio: nel menu Uscita e nella scheda Uscite, il nome del dispositivo e il tipo vengono mostrati nella lingua dell'interfaccia (Linux, macOS).",
+          "Linux: la finestra mostra la propria icona anche su Wayland; corretta l'apertura dei collegamenti.",
+          "Correzione: un aggiornamento di stato in background non sovrascrive più la scheda audio scelta nella scheda Uscite."
+        ],
+        "nl": [
+          "Uitvoermenu: scrollbaar in kleine vensters en de balk \"nu aan het spelen\" bedekt de onderkant niet meer.",
+          "Geluidskaartnamen: in het Uitvoermenu en op het tabblad Uitvoeren worden de apparaatnaam en het type weergegeven in de taal van de interface (Linux, macOS).",
+          "Linux: het venster toont zijn eigen pictogram ook op Wayland; openen van links gecorrigeerd.",
+          "Oplossing: een statusupdate op de achtergrond overschrijft niet langer de gekozen geluidskaart op het tabblad Uitvoeren."
+        ],
+        "pl": [
+          "Menu Wyjście: można przewijać w małych oknach, a pasek odtwarzania nie zasłania już dolnej części.",
+          "Nazwy kart dźwiękowych: w menu Wyjście i na karcie Wyjścia nazwa urządzenia i jego typ wyświetlają się w języku interfejsu (Linux, macOS).",
+          "Linux: okno wyświetla własną ikonę także pod Wayland; naprawiono otwieranie odnośników.",
+          "Poprawka: aktualizacja stanu w tle nie nadpisuje już karty dźwiękowej wybranej na karcie Wyjścia."
+        ],
+        "ru": [
+          "Меню вывода: прокручивается в маленьких окнах, а панель воспроизведения больше не закрывает нижнюю часть.",
+          "Названия звуковых карт: в меню вывода и на вкладке выходов имя устройства и его тип отображаются на языке интерфейса (Linux, macOS).",
+          "Linux: окно показывает собственную иконку также и в Wayland; исправлено открытие ссылок.",
+          "Исправление: фоновое обновление состояния больше не сбрасывает выбранную звуковую карту на вкладке выходов."
+        ],
+        "pt": [
+          "Menu de saída: rolável em janelas pequenas, e a barra de reprodução não cobre mais sua parte inferior.",
+          "Nomes de placas de som: o menu de saída e a aba Saídas mostram o nome do dispositivo do sistema e seu tipo no idioma da interface (Linux, macOS).",
+          "Linux: a janela exibe seu próprio ícone também no Wayland; abertura de links corrigida.",
+          "Correção: a atualização de status em segundo plano não sobrescreve mais a placa de som escolhida na aba Saídas."
+        ],
+        "ro": [
+          "Meniul de ieșire: derulabil în ferestre mici, iar bara de redare nu mai acoperă partea inferioară.",
+          "Numele plăcilor de sunet: meniul Ieșire și fila Ieșiri afișează numele de sistem al dispozitivului și tipul acestuia în limba interfeței (Linux, macOS).",
+          "Linux: fereastra afișează propria pictogramă și pe Wayland; deschiderea legăturilor a fost remediată.",
+          "Remediere: actualizarea de stare din fundal nu mai suprascrie placa de sunet selectată în fila Ieșiri."
+        ],
+        "el": [
+          "Μενού εξόδου: με δυνατότητα κύλισης σε μικρά παράθυρα, και η γραμμή αναπαραγωγής δεν καλύπτει πλέον το κάτω μέρος.",
+          "Ονόματα καρτών ήχου: το μενού Εξόδου και η καρτέλα Εξόδων εμφανίζουν το όνομα της συσκευής και τον τύπο στη γλώσσα διεπαφής (Linux, macOS).",
+          "Linux: το παράθυρο εμφανίζει το δικό του εικονίδιο και στο Wayland· διορθώθηκε το άνοιγμα συνδέσμων.",
+          "Διόρθωση: η ενημέρωση κατάστασης στο παρασκήνιο δεν παρακάμπτει πλέον την κάρτα ήχου που επιλέχθηκε στην καρτέλα Εξόδων."
+        ],
+        "tr": [
+          "Çıkış menüsü: küçük pencerelerde kaydırılabilir ve oynatma çubuğu artık alt kısmı kapatmaz.",
+          "Ses kartı adları: Çıkış menüsü ve Çıkışlar sekmesi, sistem aygıt adını ve türünü arayüz dilinde gösterir (Linux, macOS).",
+          "Linux: pencere Wayland üzerinde de kendi simgesini gösterir; bağlantıların açılması düzeltildi.",
+          "Düzeltme: arka plan durum güncellemesi artık Çıkışlar sekmesinde seçilen ses kartının üzerine yazmaz."
+        ],
+        "fi": [
+          "Lähtövalikko: vieritettävissä pienissä ikkunoissa, eikä toistopalkki enää peitä sen alaosaa.",
+          "Äänikorttien nimet: Lähtövalikko ja Lähdöt-välilehti näyttävät järjestelmälaitteen nimen ja tyypin käyttöliittymän kielellä (Linux, macOS).",
+          "Linux: ikkuna näyttää oman kuvakkeensa myös Waylandissa; linkkien avaaminen korjattu.",
+          "Korjaus: taustatilan päivitys ei enää korvaa Lähdöt-välilehdellä valitsemaasi äänikorttia."
+        ],
+        "da": [
+          "Outputmenu: kan rulles i små vinduer, og nu-afspilles-linjen dækker ikke længere bunden.",
+          "Lydkortnavne: Outputmenuen og fanen Udgange viser systemets enhedsnavn og dets type på grænsefladesproget (Linux, macOS).",
+          "Linux: vinduet viser sit eget ikon også på Wayland; åbning af links er rettet.",
+          "Rettelse: en baggrundsstatusopdatering overskriver ikke længere det lydkort, du vælger på fanen Udgange."
+        ],
+        "nb": [
+          "Utgangsmeny: kan rulles i små vinduer, og nå-spilles-linjen dekker ikke lenger bunnen.",
+          "Lydkortnavn: Utgangsmenyen og fanen Utganger viser systemets enhetsnavn og type på grensesnittspråket (Linux, macOS).",
+          "Linux: vinduet viser sitt eget ikon også på Wayland; åpning av lenker er rettet.",
+          "Rettelse: en bakgrunnsstatusoppdatering overskriver ikke lenger lydkortet du velger på fanen Utganger."
+        ],
+        "sv": [
+          "Utgångsmeny: rullningsbar i små fönster, och nu-spelas-fältet täcker inte längre nederkanten.",
+          "Ljudkortsnamn: Utgångsmenyn och fliken Utgångar visar systemets enhetsnamn och typ på gränssnittsspråket (Linux, macOS).",
+          "Linux: fönstret visar sin egen ikon även på Wayland; öppning av länkar har åtgärdats.",
+          "Rättelse: en bakgrundsstatusuppdatering skriver inte längre över ljudkortet du valt på fliken Utgångar."
+        ],
+        "he": [
+          "תפריט פלט: ניתן לגלילה בחלונות קטנים, וסרגל הניגון הנוכחי אינו מכסה עוד את החלק התחתון.",
+          "שמות כרטיסי קול: תפריט הפלט ולשונית הפלטים מציגים את שם התקן המערכת ואת סוגו בשפת הממשק (Linux, macOS).",
+          "Linux: החלון מציג את הסמל שלו גם ב-Wayland; פתיחת קישורים תוקנה.",
+          "תיקון: עדכון מצב ברקע אינו דורס עוד את כרטיס הקול שנבחר בלשונית הפלטים."
+        ],
+        "ja": [
+          "出力メニュー: 小さなウィンドウでもスクロール可能になり、再生中バーが下部を覆わなくなりました。",
+          "サウンドカード名: 出力メニューおよび「出力」タブに、システムデバイス名とその種類がUI言語で表示されます (Linux, macOS)。",
+          "Linux: Waylandでもウィンドウに専用アイコンが表示されるようになり、リンクの開き方を修正しました。",
+          "修正: バックグラウンドの状態更新によって、「出力」タブで選択したサウンドカードが上書きされる問題を修正しました。"
+        ],
+        "ko": [
+          "출력 메뉴: 작은 창에서도 스크롤 가능하며, 현재 재생 표시줄이 더 이상 하단을 가리지 않습니다.",
+          "사운드 카드 이름: 출력 메뉴 및 출력 탭에서 시스템 장치 이름과 유형이 UI 언어로 표시됩니다 (Linux, macOS).",
+          "Linux: Wayland에서도 창에 전용 아이콘이 표시되며 링크 열기 동작이 수정되었습니다.",
+          "수정: 백그라운드 상태 업데이트로 인해 출력 탭에서 선택한 사운드 카드가 덮어써지지 않습니다."
+        ],
+        "cs": [
+          "Nabídka výstupu: posouvatelná v malých oknech, panel právě hrající skladby již nezakrývá spodní část.",
+          "Názvy zvukových karet: nabídka výstupu a karta Výstupy zobrazují název systémového zařízení a jeho typ v jazyce rozhraní (Linux, macOS).",
+          "Linux: okno zobrazuje vlastní ikonu i na Waylandu; opraveno otevírání odkazů.",
+          "Oprava: aktualizace stavu na pozadí již nepřepisuje zvukovou kartu vybranou na kartě Výstupy."
+        ],
+        "uk": [
+          "Меню виходу: прокручується в малих вікнах, рядок відтворення більше не перекриває нижню частину.",
+          "Назви звукових карт: меню виходу та вкладка Виходи відображають назву пристрою системи та його тип мовою інтерфейсу (Linux, macOS).",
+          "Linux: вікно показує власну піктограму також у Wayland; виправлено відкриття посилань.",
+          "Виправлення: фонове оновлення стану більше не перезаписує звукову карту, вибрану на вкладці Виходи."
         ]
       }
     },
@@ -64,6 +293,96 @@
           "更新与下载：线程安全的下载取消与 15 秒超时保护，防止网络停滞卡死。",
           "Linux：发布工作流自动检查发行版软件包（DEB、Arch）是否齐全。",
           "修复：使用多输出时更稳定的界面测试。"
+        ],
+        "de": [
+          "Aktualisierung und Download: Threadsicherer Abbruch und 15-Sekunden-Timeout schützen vor hängenden Netzwerkverbindungen.",
+          "Linux: Der Veröffentlichungs-Workflow überprüft automatisch das Vorhandensein von Distributionspaketen (DEB, Arch).",
+          "Korrektur: Zuverlässigere UI-Tests bei Verwendung mehrerer Ausgänge."
+        ],
+        "it": [
+          "Aggiornamento e download: annullamento sicuro tra thread e timeout di 15 secondi contro i blocchi di rete.",
+          "Linux: il flusso di rilascio verifica automaticamente la disponibilità dei pacchetti di distribuzione (DEB, Arch).",
+          "Correzione: test dell'interfaccia più affidabili quando si usano più uscite."
+        ],
+        "nl": [
+          "Bijwerken en downloaden: thread-veilige annulering en een time-out van 15 seconden beschermen tegen vastlopende netwerkverbindingen.",
+          "Linux: de release-werkstroom controleert automatisch de aanwezigheid van distributiepakketten (DEB, Arch).",
+          "Oplossing: betrouwbaardere UI-tests bij het gebruik van meerdere uitgangen."
+        ],
+        "pl": [
+          "Aktualizacja i pobieranie: bezpieczne wielowątkowo anulowanie i 15-sekundowy limit czasu chronią przed zawieszeniem sieci.",
+          "Linux: proces wydania automatycznie weryfikuje dostępność pakietów dystrybucyjnych (DEB, Arch).",
+          "Poprawka: bardziej niezawodne testy interfejsu przy używaniu wielu wyjść."
+        ],
+        "ru": [
+          "Обновление и загрузка: потокобезопасная отмена и 15-секундный таймаут защищают от зависания сетевого соединения.",
+          "Linux: рабочий процесс выпуска автоматически проверяет наличие пакетов дистрибутивов (DEB, Arch).",
+          "Исправление: более надежные тесты интерфейса при использовании нескольких выходов."
+        ],
+        "pt": [
+          "Atualização e download: cancelamento seguro entre threads e limite de 15 segundos protegem o download contra conexões travadas.",
+          "Linux: o fluxo de trabalho de lançamento verifica automaticamente se os pacotes de distribuição (DEB, Arch) estão presentes.",
+          "Correção: testes de interface mais confiáveis ao usar múltiplas saídas."
+        ],
+        "ro": [
+          "Actualizare și descărcare: anulare sigură între fire de execuție și timeout de 15 secunde împotriva blocajelor de rețea.",
+          "Linux: fluxul de lansare verifică automat crearea pachetelor de distribuție (DEB, Arch).",
+          "Remediere: testare mai fiabilă a interfeței la utilizarea ieșirilor multiple."
+        ],
+        "el": [
+          "Ενημέρωση και λήψη: ασφαλής ακύρωση νημάτων και χρονικό όριο 15 δευτερολέπτων προστατεύουν τη λήψη από κολλήματα δικτύου.",
+          "Linux: η ροή εργασιών έκδοσης επαληθεύει αυτόματα τη δημιουργία πακέτων διανομής (DEB, Arch).",
+          "Διόρθωση: πιο αξιόπιστες δοκιμές διεπαφής κατά τη χρήση πολλαπλών εξόδων."
+        ],
+        "tr": [
+          "Güncelleme ve indirme: iş parçacığı güvenli iptal ve 15 saniyelik zaman aşımı, indirmeyi takılan ağ bağlantılarına karşı korur.",
+          "Linux: yayın iş akışı, dağıtım paketlerinin (DEB, Arch) oluşturulduğunu otomatik olarak doğrular.",
+          "Düzeltme: birden çok çıkış kullanılırken daha güvenilir arayüz testleri."
+        ],
+        "fi": [
+          "Päivitys ja lataus: säikeistysturvallinen peruutus ja 15 sekunnin aikakatkaisu suojaavat latausta verkkoyhteyden jumiutumiselta.",
+          "Linux: julkaisutyönkulku tarkistaa automaattisesti jakelupakettien (DEB, Arch) luonnin.",
+          "Korjaus: luotettavampi käyttöliittymätestaus useita lähtöjä käytettäessä."
+        ],
+        "da": [
+          "Opdatering og download: trådsikker afbrydelse og en timeout på 15 sekunder beskytter overførslen mod fastlåste forbindelser.",
+          "Linux: udgivelsesworkflowet bekræfter automatisk, at distributionspakker (DEB, Arch) oprettes.",
+          "Rettelse: mere pålidelig UI-test ved brug af flere udgange."
+        ],
+        "nb": [
+          "Oppdatering og nedlasting: trådsikker avbrytelse og en tidsavbruddgrense på 15 sekunder beskytter nedlastingen mot fastlåste tilkoblinger.",
+          "Linux: utgivelsesarbeidsflyten bekrefter automatisk at distribusjonspakker (DEB, Arch) opprettes.",
+          "Rettelse: mer pålitelig grensesnittesting ved bruk av flere utganger."
+        ],
+        "sv": [
+          "Uppdatering och nedladdning: trådsäker avbrytning och en 15-sekunders timeout skyddar nedladdningen mot låsta anslutningar.",
+          "Linux: versionsarbetsflödet kontrollerar automatiskt att distributionspaket (DEB, Arch) skapas.",
+          "Rättelse: mer tillförlitlig UI-testning vid användning av flera utgångar."
+        ],
+        "he": [
+          "עדכון והורדה: ביטול בטוח בריבוי תהליכונים ומגבלת זמן של 15 שניות מגנים על ההורדה מפני חיבורים שנתקעו.",
+          "Linux: תהליך ההפצה מוודא באופן אוטומטי שנוצרו חבילות הפצה (DEB, Arch).",
+          "תיקון: בדיקות ממשק משתמש אמינות יותר בעת שימוש במספר פלטים."
+        ],
+        "ja": [
+          "アップデートとダウンロード: スレッドセーフな中断と15秒のタイムアウトにより、スタックした接続からダウンロードを保護します。",
+          "Linux: リリースワークフローがディストリビューションパッケージ (DEB, Arch) の生成を自動検証します。",
+          "修正: 複数の出力を使用する際のUIテストの信頼性を向上させました。"
+        ],
+        "ko": [
+          "업데이트 및 다운로드: 스레드 안전 중단 및 15초 제한 시간으로 중단된 연결로부터 다운로드를 보호합니다.",
+          "Linux: 릴리스 워크플로가 배포 패키지(DEB, Arch) 생성을 자동으로 확인합니다.",
+          "수정: 다중 출력 사용 시 UI 테스트 안정성이 향상되었습니다."
+        ],
+        "cs": [
+          "Aktualizace a stahování: bezpečné přerušení ve vláknech a 15sekundový časový limit chrání před zamrznutým připojením.",
+          "Linux: pracovní postup vydání automaticky ověřuje vytvoření distribučních balíčků (DEB, Arch).",
+          "Oprava: spolehlivější testování rozhraní při použití více výstupů."
+        ],
+        "uk": [
+          "Оновлення та завантаження: безпечне переривання у потоках та 15-секундний таймаут захищають завантаження від завислих з'єднань.",
+          "Linux: процес випуску автоматично перевіряє створення пакетів дистрибутивів (DEB, Arch).",
+          "Виправлення: надійніше тестування інтерфейсу при використанні кількох виходів."
         ]
       }
     },
@@ -95,6 +414,96 @@
           "Linux：KDE/Plasma 托盘图标（GNOME 需 AppIndicator 扩展），带“打开”和“退出”菜单。若有托盘，可最小化到后台。",
           "修复：启动时恢复或使用默认设置现在显示引擎的实际状态；界面不再把旧设置写回引擎。",
           "Linux：桌面菜单中的“停止 Aqulify”操作可停止引擎。"
+        ],
+        "de": [
+          "Linux: Taskleistensymbol in der KDE/Plasma-Leiste (unter GNOME mit AppIndicator-Erweiterung) mit Menü zum Öffnen und Beenden. Schließen in den Hintergrund bei vorhandenem Tray.",
+          "Korrektur: Beim Start zeigen Wiederherstellung oder Standardeinstellungen den tatsächlichen Zustand der Engine; die Oberfläche überschreibt diesen nicht mehr mit alten Werten.",
+          "Linux: Die Aktion „Aqulify beenden“ im Desktop-Menü stoppt die Engine."
+        ],
+        "it": [
+          "Linux: icona nell'area di notifica di KDE/Plasma (su GNOME con estensione AppIndicator), con menu Apri ed Esci. Chiusura in background se presente l'area di notifica.",
+          "Correzione: all'avvio, il ripristino o i valori predefiniti mostrano lo stato effettivo del motore; l'interfaccia non reimposta più le vecchie impostazioni.",
+          "Linux: l'azione \"Arresta Aqulify\" nel menu desktop arresta il motore."
+        ],
+        "nl": [
+          "Linux: systeemvakpictogram in de KDE/Plasma-balk (op GNOME met AppIndicator-extensie), met menu Openen en Afsluiten. Sluiten naar achtergrond indien systeemvak beschikbaar.",
+          "Oplossing: bij het opstarten toont herstellen of de standaardinstellingen de werkelijke status van de engine; de interface schrijft oude instellingen niet meer terug.",
+          "Linux: met de actie \"Aqulify stoppen\" in het bureaubladmenu stopt u de engine."
+        ],
+        "pl": [
+          "Linux: ikona w zasobniku systemowym KDE/Plasma (w GNOME z rozszerzeniem AppIndicator), z menu Otwórz i Zakończ. Zamykanie do tła, jeśli zasobnik jest dostępny.",
+          "Poprawka: przy uruchomieniu przywracanie lub wartości domyślne pokazują rzeczywisty stan silnika; interfejs nie cofa już starych ustawień.",
+          "Linux: akcja „Zatrzymaj Aqulify” w menu pulpitu zatrzymuje silnik."
+        ],
+        "ru": [
+          "Linux: значок в системном трее KDE/Plasma (в GNOME с расширением AppIndicator) с меню «Открыть» и «Выход». Сворачивание в фон при наличии трея.",
+          "Исправление: при запуске восстановление или настройки по умолчанию отображают реальное состояние движка; интерфейс больше не перезаписывает старые параметры.",
+          "Linux: действие «Остановить Aqulify» в меню рабочего стола останавливает движок."
+        ],
+        "pt": [
+          "Linux: ícone na bandeja do KDE/Plasma (GNOME com extensão AppIndicator), com menu Abrir e Sair. Fecha para segundo plano quando houver bandeja.",
+          "Correção: na inicialização, restaurar ou padrões agora mostram o estado real do motor; a interface não envia mais as configurações antigas de volta.",
+          "Linux: a ação \"Parar o Aqulify\" no menu do sistema interrompe o motor."
+        ],
+        "ro": [
+          "Linux: pictogramă în tava de sistem KDE/Plasma (GNOME cu extensia AppIndicator), cu meniul Deschide și Ieșire. Închidere în fundal când este disponibilă o tavă.",
+          "Remediere: la pornire, restaurarea sau valorile implicite afișează starea reală a motorului; interfața nu mai trimite setările vechi înapoi.",
+          "Linux: acțiunea „Oprire Aqulify” din meniul desktop oprește motorul."
+        ],
+        "el": [
+          "Linux: εικονίδιο περιοχής ειδοποιήσεων σε KDE/Plasma (GNOME με επέκταση AppIndicator), με μενού Άνοιγμα και Έξοδος. Κλείσιμο στο παρασκήνιο όταν υπάρχει περιοχή ειδοποιήσεων.",
+          "Διόρθωση: κατά την εκκίνηση, η επαναφορά ή οι προεπιλογές εμφανίζουν την πραγματική κατάσταση του κινητήρα· η διεπαφή δεν επαναφέρει τις παλιές ρυθμίσεις.",
+          "Linux: η ενέργεια \"Διακοπή Aqulify\" στο μενού επιφάνειας εργασίας τερματίζει τον κινητήρα."
+        ],
+        "tr": [
+          "Linux: Aç ve Çıkış menüsüyle KDE/Plasma sistem tepsisinde (AppIndicator uzantısıyla GNOME) tepsi simgesi. Sistem tepsisi mevcutsa arka planda çalışmaya devam eder.",
+          "Düzeltme: başlangıçta, geri yükleme veya varsayılanlar artık motorun gerçek durumunu gösterir; arayüz artık eski ayarları geri yüklemez.",
+          "Linux: masaüstü menüsündeki \"Aqulify'ı Durdur\" eylemi motoru durdurur."
+        ],
+        "fi": [
+          "Linux: ilmoitusalueen kuvake KDE/Plasma-alustalla (GNOME AppIndicator-laajennuksella), jossa Avaa- ja Lopeta-valikko. Sulkeutuu taustalle, kun ilmoitusalue on käytettävissä.",
+          "Korjaus: käynnistyksen yhteydessä palautus tai oletusasetukset näyttävät moottorin todellisen tilan; käyttöliittymä ei enää palauta vanhoja asetuksia.",
+          "Linux: työpöytävalikon \"Pysäytä Aqulify\" -toiminto pysäyttää moottorin."
+        ],
+        "da": [
+          "Linux: statusfeltikon på KDE/Plasma (GNOME med AppIndicator-udvidelse) med Åbn- og Afslut-menu. Luk til baggrunden, når proceslinje er tilgængelig.",
+          "Rettelse: ved opstart viser gendannelse eller standarder nu motorens faktiske tilstand; brugerfladen overskriver ikke længere med gamle indstillinger.",
+          "Linux: handlingen 'Stop Aqulify' i skrivebordsmenuen stopper motoren."
+        ],
+        "nb": [
+          "Linux: systemstatusfeltikon på KDE/Plasma (GNOME med AppIndicator-utvidelse) med Åpne- og Avslutt-meny. Lukk til bakgrunnen når statusfelt er tilgjengelig.",
+          "Rettelse: ved oppstart viser gjenoppretting eller standardinnstillinger nå motorens faktiske tilstand; grensesnittet overskriver ikke lenger med gamle innstillinger.",
+          "Linux: handlingen 'Stopp Aqulify' i skrivebordsmenyen stopper motoren."
+        ],
+        "sv": [
+          "Linux: ikon i meddelandefältet på KDE/Plasma (GNOME med AppIndicator-tillägg), med meny för Öppna och Avsluta. Stäng till bakgrunden när fältet är tillgängligt.",
+          "Rättelse: vid uppstart visar återställning eller standardvärden nu motorns faktiska tillstånd; gränssnittet trycker inte längre tillbaka gamla inställningar.",
+          "Linux: åtgärden 'Stoppa Aqulify' i skrivbordsmenyn stoppar motorn."
+        ],
+        "he": [
+          "Linux: סמל במגש המערכת ב-KDE/Plasma (ב-GNOME עם הרחבת AppIndicator), עם תפריט פתיחה ויציאה. סגירה לרקע כאשר מגש המערכת זמין.",
+          "תיקון: בעת ההפעלה, שחזור או ברירות מחדל מציגים כעת את המצב האמיתי של המנוע; הממשק אינו דוחף עוד את ההגדרות הישנות בחזרה.",
+          "Linux: הפעולה 'עצור את Aqulify' בתפריט שולחן העבודה עוצרת את המנוע."
+        ],
+        "ja": [
+          "Linux: KDE/Plasma（GNOMEではAppIndicator拡張機能）のトレイアイコンに対応し、「開く」「終了」メニューを追加。トレイが利用可能な場合はバックグラウンドに閉じます。",
+          "修正: 起動時の復元またはデフォルト値がエンジンの実際の状態を正しく反映するようになり、古い設定で上書きされなくなりました。",
+          "Linux: デスクトップメニューの「Aqulifyの停止」アクションでエンジンを停止できます。"
+        ],
+        "ko": [
+          "Linux: KDE/Plasma(GNOME은 AppIndicator 확장 기능 사용)의 트레이 아이콘 지원, 열기 및 종료 메뉴 제공. 트레이가 사용 가능할 때 백그라운드로 닫기 지원.",
+          "수정: 시작 시 복원 또는 기본값이 엔진의 실제 상태를 표시하며, 인터페이스가 이전 설정을 다시 덮어쓰지 않습니다.",
+          "Linux: 데스크톱 메뉴의 'Aqulify 중지' 동작으로 엔진을 중지할 수 있습니다."
+        ],
+        "cs": [
+          "Linux: ikona v systémové liště na KDE/Plasma (GNOME s rozšířením AppIndicator) s nabídkou Otevřít a Ukončit. Zavření na pozadí, pokud je lišta k dispozici.",
+          "Oprava: při spuštění obnovení nebo výchozí hodnoty zobrazují skutečný stav motoru; rozhraní již nepřepisuje stará nastavení.",
+          "Linux: akce 'Zastavit Aqulify' v nabídce plochy zastaví motor."
+        ],
+        "uk": [
+          "Linux: піктограма в системному лотку на KDE/Plasma (GNOME з розширенням AppIndicator) з меню Відкрити та Вийти. Закриття у фоновий режим, якщо лоток доступний.",
+          "Виправлення: під час запуску відновлення або типові значення відображають реальний стан двигуна; інтерфейс більше не перезаписує старі налаштування.",
+          "Linux: дія 'Зупинити Aqulify' у меню стільниці зупиняє двигун."
         ]
       }
     },
@@ -131,6 +540,114 @@
           "保持唤醒下的采样率跟随（Linux）：外部音频流开始时，保持唤醒会短暂暂停，以便 PipeWire 切换到源的采样率。",
           "Windows 上退出时插件会恢复为默认状态；上次的链会被保留，并在启动时恢复。",
           "应用内更新：Aqulify 会在有新版本时提示（每天最多向 GitHub 查询一次，不发送标识符；可关闭）。Windows 上可一键更新；macOS 和 Linux 上则按安装方式提供对应步骤。"
+        ],
+        "de": [
+          "Wiederherstellung beim Start: Die Engine stellt die zuletzt funktionierende Kette, mehrere Ausgänge und erweiterte Audioausgangs-Einstellungen wieder her. Standardmäßig wird nachgefragt; die Abfrage kann mit „Immer diese Option wählen“ deaktiviert und im Ausgangsmenü geändert werden.",
+          "Quellen-Folgen mit Wachhalten (Linux): Beim Start eines externen Audiostreams pausiert das Wachhalten kurzzeitig, damit PipeWire auf die Abtastrate der Quelle umschalten kann.",
+          "Unter Windows kehrt das Plugin beim Beenden in den Ausgangszustand zurück; die letzte Kette bleibt im Programmordner erhalten und wird beim Start wiederhergestellt.",
+          "Aktualisierung aus der Anwendung: Aqulify benachrichtigt bei neuen Versionen (prüft GitHub maximal einmal täglich ohne Kennung; deaktivierbar). Ein-Klick-Update unter Windows; unter macOS und Linux der entsprechende Installationsschritt."
+        ],
+        "it": [
+          "Ripristino all'avvio: il motore ripristina l'ultima catena funzionante, le uscite multiple e le impostazioni avanzate di uscita audio. Per impostazione predefinita viene chiesto cosa ripristinare; è possibile spuntare \"Scegli sempre questa opzione\" e modificare la modalità nel menu Uscita.",
+          "Inseguimento sorgente con mantenimento attivo (Linux): all'avvio di un flusso audio esterno, la sospensione si interrompe brevemente affinché PipeWire possa passare alla frequenza di campionamento della sorgente.",
+          "Su Windows, alla chiusura il plugin torna allo stato predefinito; l'ultima catena viene conservata e ripristinata all'avvio.",
+          "Aggiornamenti dall'applicazione: Aqulify segnala quando è disponibile una nuova versione (interroga GitHub al massimo una volta al giorno, senza identificativi; disattivabile). Aggiornamento con un clic su Windows; su macOS e Linux il comando relativo al metodo di installazione."
+        ],
+        "nl": [
+          "Herstellen bij opstarten: de engine herstelt de laatst werkende keten, meervoudige uitgangen en geavanceerde audio-uitvoerinstellingen. Standaard wordt gevraagd wat te herstellen; vink \"Altijd deze keuze onthouden\" aan om de vraag uit te schakelen, modus aanpasbaar in het Uitvoermenu.",
+          "Bron volgen met actief houden (Linux): wanneer een externe audiostream start, pauzeert actief houden kort zodat PipeWire kan overschakelen naar de samplefrequentie van de bron.",
+          "Onder Windows keert de plugin bij het afsluiten terug naar de standaardstatus; de laatste keten blijft bewaard en wordt bij opstarten hersteld.",
+          "Bijwerken vanuit de app: Aqulify meldt wanneer er een nieuwe versie beschikbaar is (controleert GitHub maximaal één keer per dag, anoniem; uitschakelbaar). Update met één klik op Windows; op macOS en Linux de bijbehorende installatiestap."
+        ],
+        "pl": [
+          "Przywracanie przy uruchomieniu: silnik przywraca ostatnio działający łańcuch, wiele wyjść i zaawansowane ustawienia wyjścia audio. Domyślnie pyta, co przywrócić; zaznaczenie „Zawsze wybieraj tę opcję” wyłącza pytanie, a tryb można zmienić w menu Wyjście.",
+          "Śledzenie źródła z podtrzymaniem aktywności (Linux): przy rozpoczęciu zewnętrznego strumienia audio podtrzymanie aktywności jest na chwilę wstrzymywane, aby PipeWire mógł przełączyć częstotliwość próbkowania na źródłową.",
+          "W systemie Windows wtyczka powraca do stanu domyślnego przy wyjściu; ostatni łańcuch jest zachowywany w folderze programu i przywracany przy starcie.",
+          "Aktualizacje z poziomu aplikacji: Aqulify informuje o dostępności nowej wersji (sprawdza GitHub maksymalnie raz dziennie bez identyfikatora; możliwość wyłączenia). Aktualizacja jednym kliknięciem w Windows; w macOS i Linux odpowiedni krok instalacyjny."
+        ],
+        "ru": [
+          "Восстановление при запуске: движок восстанавливает последнюю рабочую цепочку, несколько выходов и расширенные настройки аудиовыхода. По умолчанию спрашивает, что восстанавливать; отметка «Всегда выбирать это» отключает запрос, режим меняется в меню вывода.",
+          "Следование за источником с поддержанием активности (Linux): при запуске внешнего аудиопотока поддержание активности кратковременно приостанавливается, чтобы PipeWire переключился на частоту дискретизации источника.",
+          "В Windows при выходе плагин возвращается в исходное состояние; последняя цепочка сохраняется в папке программы и восстанавливается при запуске.",
+          "Обновление из приложения: Aqulify уведомляет о выходе новой версии (проверяет GitHub не чаще одного раза в день, анонимно; можно отключить). Обновление в один клик в Windows; в macOS и Linux — шаг, соответствующий способу установки."
+        ],
+        "pt": [
+          "Restauração na inicialização: o motor recupera a última cadeia ativa, múltiplas saídas e configurações avançadas de saída de áudio. Por padrão, ele pergunta o que restaurar; marque \"Escolher sempre isto\" para não perguntar mais, e altere o modo no menu Saída.",
+          "Acompanhamento da fonte com keep-awake (Linux): quando um fluxo de áudio externo começa, o keep-awake pausa brevemente para que o PipeWire possa mudar para a taxa de amostragem da fonte.",
+          "No Windows, o plugin retorna ao estado padrão ao sair; a última cadeia é mantida e restaurada na inicialização.",
+          "Atualizações no aplicativo: o Aqulify avisa quando há uma nova versão (verifica o GitHub no máximo uma vez ao dia, de forma anônima; pode ser desativado). Atualização com um clique no Windows; no macOS e Linux, a etapa compatível com seu método de instalação."
+        ],
+        "ro": [
+          "Restaurare la pornire: motorul restabilește ultimul lanț activ, ieșirile multiple și setările avansate de ieșire audio. În mod implicit, întreabă ce să restaureze; bifați „Alege întotdeauna aceasta” pentru a opri întrebarea și schimbați modul din meniul Ieșire.",
+          "Urmărirea sursei cu keep-awake (Linux): la pornirea unui flux audio extern, keep-awake face o scurtă pauză pentru ca PipeWire să poată comuta la rata de eșantionare a sursei.",
+          "Pe Windows, pluginul revine la starea implicită la ieșire; ultimul lanț este păstrat și restaurat la pornire.",
+          "Actualizări din aplicație: Aqulify afișează când este disponibilă o versiune nouă (verifică GitHub cel mult o dată pe zi, anonim; poate fi dezactivat). Actualizare cu un clic pe Windows; pe macOS și Linux, pasul corespunzător metodei de instalare."
+        ],
+        "el": [
+          "Επαναφορά κατά την εκκίνηση: ο κινητήρας ανακτά την τελευταία ενεργή αλυσίδα, τις πολλαπλές εξόδους και τις προηγμένες ρυθμίσεις εξόδου ήχου. Από προεπιλογή ρωτά τι να επαναφέρει· επιλέξτε \"Πάντα αυτή η επιλογή\" για να μην ερωτάστε, και αλλάξτε τη λειτουργία στο μενού Εξόδου.",
+          "Παρακολούθηση πηγής με keep-awake (Linux): όταν ξεκινά μια εξωτερική ροή ήχου, το keep-awake σταματά για λίγο ώστε το PipeWire να μεταβεί στο ρυθμό δειγματοληψίας της πηγής.",
+          "Στα Windows, το πρόσθετο επιστρέφει στην προεπιλεγμένη κατάσταση κατά την έξοδο· η τελευταία αλυσίδα διατηρείται και επαναφέρεται κατά την εκκίνηση.",
+          "Ενημερώσεις εντός της εφαρμογής: το Aqulify ειδοποιεί όταν είναι διαθέσιμη νέα έκδοση (ελέγχει το GitHub το πολύ μία φορά την ημέρα, ανώνυμα· μπορεί να απενεργοποιηθεί). Ενημέρωση με ένα κλικ στα Windows· σε macOS και Linux, το αντίστοιχο βήμα της μεθόδου εγκατάστασής σας."
+        ],
+        "tr": [
+          "Başlangıçta geri yükleme: motor son çalışan zinciri, çoklu çıkışları ve gelişmiş ses çıkış ayarlarını geri getirir. Varsayılan olarak neyin geri yükleneceğini sorar; soruyu kapatmak için \"Her zaman bunu seç\" seçeneğini işaretleyin ve modu Çıkış menüsünden değiştirin.",
+          "Keep-awake ile kaynak takibi (Linux): harici bir ses akışı başladığında, PipeWire'ın kaynağın örnekleme hızına geçebilmesi için keep-awake kısa bir süre duraklar.",
+          "Windows'ta eklenti çıkışta varsayılan duruma döner; son zincir korunur ve başlangıçta geri yüklenir.",
+          "Uygulama içinden güncellemeler: Aqulify yeni bir sürüm çıktığında bildirir (GitHub'ı günde en fazla bir kez anonim kontrol eder; kapatılabilir). Windows'ta tek tıkla güncelleme; macOS ve Linux'ta kurulum yönteminize uygun adım."
+        ],
+        "fi": [
+          "Palautus käynnistyksen yhteydessä: moottori palauttaa viimeisimmän toimivan ketjun, monilähtöasetukset ja edistyneet äänilähtöasetukset. Oletuksena se kysyy mitä palautetaan; valitse \"Valitse aina tämä\" lopettaaksesi kyselyn ja vaihda tilaa Lähtövalikosta.",
+          "Lähteen seuranta hereilläpidolla (Linux): kun ulkoinen äänivirta alkaa, hereilläpito keskeytyy hetkeksi, jotta PipeWire voi vaihtaa lähteen näytteenottotaajuudelle.",
+          "Windowsissa liitännäinen palaa oletustilaan suljettaessa; viimeisin ketju säilytetään ja palautetaan käynnistettäessä.",
+          "Päivitykset suoraan sovelluksesta: Aqulify ilmoittaa uuden version ilmestymisestä (tarkistaa GitHubin enintään kerran päivässä nimettömästi; voidaan poistaa käytöstä). Yhden napsautuksen päivitys Windowsissa; macOS:ssä ja Linuxissa asennustapaa vastaava vaihe."
+        ],
+        "da": [
+          "Gendan ved opstart: motoren gendanner den senest fungerende kæde, flere udgange og avancerede lydindstillinger. Spørger som standard, hvad der skal gendannes; kan slås fra med 'Vælg altid dette', og tilstanden kan ændres i Outputmenuen.",
+          "Kilde-følgning med hold-vågen (Linux): når en ekstern lydstrøm starter, pauses hold-vågen kortvarigt, så PipeWire kan skifte til kildens samplingshastighed.",
+          "På Windows vender pluginet tilbage til standardtilstand ved afslutning; den sidste kæde gemmes og gendannes ved opstart.",
+          "Opdateringer direkte fra appen: Aqulify viser, når en ny version er tilgængelig (tjekker GitHub højst én gang om dagen, uden identifikation; kan deaktiveres). Et-klik-opdatering på Windows; på macOS og Linux følges installationsmetoden."
+        ],
+        "nb": [
+          "Gjenopprett ved oppstart: motoren gjenoppretter den sist fungerende kjeden, flere utganger og avanserte lydinnstillinger. Spør som standard hva som skal gjenopprettes; kan slås av med 'Velg alltid dette', og modusen kan endres i Utgangsmenyen.",
+          "Kildefølging med hold-våken (Linux): når en ekstern lydstrøm starter, settes hold-våken på pause et øyeblikk slik at PipeWire kan bytte til kildens samplingsfrekvens.",
+          "På Windows går pluginen tilbake til standardtilstand ved avslutning; den siste kjeden beholdes og gjenopprettes ved oppstart.",
+          "Oppdateringer direkte fra appen: Aqulify varsler når en ny versjon er tilgjengelig (sjekker GitHub maksimalt én gang daglig, uten ID; kan slås av). Ett-klikks oppdatering på Windows; på macOS og Linux følges installasjonsmetoden."
+        ],
+        "sv": [
+          "Återställ vid uppstart: motorn återställer den senaste fungerande kedjan, flera utgångar och avancerade ljudutgångsinställningar. Frågar som standard vad som ska återställas; kan stängas av med 'Välj alltid detta', och läget kan ändras i Utgångsmenyn.",
+          "Källföljning med håll-vaken (Linux): när en extern ljudström startar pausas håll-vaken kort så att PipeWire kan växla till källans samplingsfrekvens.",
+          "På Windows återgår pluginet till standardläge vid avslut; den senaste kedjan sparas och återställs vid uppstart.",
+          "Uppdateringar från appen: Aqulify visar när en ny version finns tillgänglig (kontrollerar GitHub högst en gång per dag, utan ID; kan inaktiveras). Enklicksuppdatering på Windows; på macOS och Linux utförs steget enligt installationsmetod."
+        ],
+        "he": [
+          "שחזור בעת הפעלה: המנוע משחזר את השרשרת התקינה האחרונה, ריבוי פלטים והגדרות פלט שמע מתקדמות. כברירת מחדל מופיעה שאלה מה לשחזר; ניתן לבטל זאת בסימון 'בחר תמיד באפשרות זו', ולשנות את המצב בתפריט הפלט.",
+          "מעקב אחר המקור עם שמירה על ערנות (Linux): כאשר מתחיל זרם שמע חיצוני, מופסקת זמנית השמירה על ערנות כדי ש-PipeWire יוכל לעבור לקצב הדגימה של המקור.",
+          "ב-Windows, התוסף חוזר למצב ברירת המחדל ביציאה; השרשרת האחרונה נשמרת ומשוחזרת בעת ההפעלה.",
+          "עדכונים מתוך היישום: Aqulify מציג הודעה כאשר גרסה חדשה זמינה (בודק מול GitHub לכל היותר פעם ביום, ללא זיהוי; ניתן לכיבוי). עדכון בלחיצה אחת ב-Windows; ב-macOS וב-Linux בהתאם לאופן ההתקנה."
+        ],
+        "ja": [
+          "起動時の復元: エンジンが最後に動作していたチェーン、複数出力、高度なオーディオ出力設定を復元します。デフォルトで復元対象を尋ねますが、「常にこれを選択」で省略可能。出力メニューから変更できます。",
+          "ウェイク維持付きソース追従 (Linux): 外部オーディオストリームが開始されると、ウェイク維持が一時停止し、PipeWireがソースのサンプルレートに切り替えることができます。",
+          "Windowsでは終了時にプラグインがデフォルト状態に戻ります。最後のチェーンは保存され、起動時に復元されます。",
+          "アプリ内アップデート: Aqulifyは新しいバージョンが利用可能になると通知します（GitHubへの確認は1日最大1回、識別情報なし、無効化可能）。Windowsではワンクリック更新、macOSおよびLinuxではインストール方法に応じた更新が可能です。"
+        ],
+        "ko": [
+          "시작 시 복원: 엔진이 마지막으로 작동했던 체인, 다중 출력 및 고급 오디오 출력 설정을 복원합니다. 기본적으로 복원할 대상을 묻지만 '항상 이 항목 선택'으로 생략 가능하며, 출력 메뉴에서 변경할 수 있습니다.",
+          "깨우기 유지 소스 추종 (Linux): 외부 오디오 스트림이 시작되면 PipeWire가 소스의 샘플링 속도로 전환할 수 있도록 깨우기 유지가 잠시 일시 중지됩니다.",
+          "Windows에서는 종료 시 플러그인이 기본 상태로 돌아가며, 마지막 체인은 유지되어 시작 시 복원됩니다.",
+          "앱 내 업데이트: Aqulify는 새 버전이 출시되면 알림을 표시합니다 (GitHub 확인은 하루 최대 1회, 식별자 없음, 끄기 가능). Windows에서는 원클릭 업데이트 지원, macOS 및 Linux는 설치 방식에 맞게 진행됩니다."
+        ],
+        "cs": [
+          "Obnovení při spuštění: motor obnoví naposledy fungující řetězec, více výstupů a pokročilá nastavení zvukového výstupu. Ve výchozím stavu se dotáže, co obnovit; lze vypnout možností 'Vždy vybrat toto' a režim změnit v nabídce Výstup.",
+          "Sledování zdroje s udržením v bdělém stavu (Linux): při spuštění externího zvukového toku se udržování bdělosti krátce pozastaví, aby PipeWire mohl přepnout na vzorkovací frekvenci zdroje.",
+          "Ve Windows se plugin při ukončení vrací do výchozího stavu; poslední řetězec je uložen a obnoven při spuštění.",
+          "Aktualizace přímo z aplikace: Aqulify upozorní na dostupnost nové verze (kontroluje GitHub nejvýše jednou denně, bez identifikace; lze vypnout). Aktualizace jedním kliknutím ve Windows; v macOS a Linuxu podle způsobu instalace."
+        ],
+        "uk": [
+          "Відновлення під час запуску: двигун відновлює останній робочий ланцюжок, мульти-виходи та розширені налаштування аудіовиходу. За замовчуванням запитує, що відновлювати; можна вимкнути опцією 'Завжди вибирати це', а режим змінити в меню Вихід.",
+          "Відстеження джерела з підтримкою активності (Linux): коли починається зовнішній аудіопотік, підтримка активності ненадовго призупиняється, щоб PipeWire міг перемкнутися на частоту дискретизації джерела.",
+          "У Windows плагін повертається до початкового стану під час виходу; останній ланцюжок зберігається та відновлюється під час запуску.",
+          "Оновлення безпосередньо з програми: Aqulify сповіщає про доступність нової версії (перевіряє GitHub не частіше ніж раз на день, без ідентифікації; можна вимкнути). Оновлення в один клік у Windows; у macOS та Linux згідно зі способом встановлення."
         ]
       }
     },
@@ -162,6 +679,96 @@
           "独占模式下的音量：可选数字（默认）或 DAC 硬件音量。",
           "若无法读取设备音量，滑块以数字方式调节。",
           "修正匈牙利语文本的拼写。"
+        ],
+        "de": [
+          "Lautstärke im Exklusivmodus: Wahlweise digital (Standard) oder Hardware-Lautstärke des DAC.",
+          "Wenn die Lautstärke des Geräts nicht gelesen werden kann, regelt der Schieberegler digital.",
+          "Rechtschreibkorrekturen in den ungarischen Texten."
+        ],
+        "it": [
+          "Volume in modalità esclusiva: a scelta digitale (predefinito) o volume hardware del DAC.",
+          "Se il volume del dispositivo non può essere letto, il cursore si regola digitalmente.",
+          "Correzioni ortografiche nei testi ungheresi."
+        ],
+        "nl": [
+          "Volume in exclusieve modus: keuze tussen digitaal (standaard) of het hardwarematige volume van de DAC.",
+          "Als het volume van het apparaat niet kan worden uitgelezen, regelt de schuifregelaar digitaal.",
+          "Spellingcorrecties in de Hongaarse teksten."
+        ],
+        "pl": [
+          "Głośność w trybie wyłącznym: do wyboru regulacja cyfrowa (domyślna) lub sprzętowa głośność przetwornika DAC.",
+          "Jeśli odczyt głośności urządzenia jest niemożliwy, suwak steruje cyfrowo.",
+          "Poprawki pisowni w tekstach węgierskich."
+        ],
+        "ru": [
+          "Громкость в эксклюзивном режиме: на выбор цифровая (по умолчанию) или аппаратная громкость ЦАП.",
+          "Если громкость устройства не удается прочитать, ползунок регулирует цифровым способом.",
+          "Исправление орфографии в венгерских текстах."
+        ],
+        "pt": [
+          "Volume em modo exclusivo: escolha digital (padrão) ou volume de hardware do DAC.",
+          "Se o volume do dispositivo não puder ser lido, o controle deslizante funcionará digitalmente.",
+          "Correções ortográficas nos textos em húngaro."
+        ],
+        "ro": [
+          "Volum în modul exclusiv: alegeți digital (implicit) sau volumul hardware al DAC-ului.",
+          "Dacă volumul dispozitivului nu poate fi citit, glisorul funcționează digital.",
+          "Corecții ortografice în textele maghiare."
+        ],
+        "el": [
+          "Ένταση σε αποκλειστική λειτουργία: επιλέξτε ψηφιακή (προεπιλογή) ή ένταση υλικού του DAC.",
+          "Εάν η ένταση της συσκευής δεν μπορεί να διαβαστεί, το ρυθμιστικό λειτουργεί ψηφιακά.",
+          "Διορθώσεις ορθογραφίας στα ουγγρικά κείμενα."
+        ],
+        "tr": [
+          "Özel modda ses seviyesi: dijital (varsayılan) veya DAC'nin donanım ses seviyesini seçin.",
+          "Aygıtın ses seviyesi okunamıyorsa, kaydırıcı dijital olarak çalışır.",
+          "Macarca metinlerde yazım düzeltmeleri."
+        ],
+        "fi": [
+          "Äänenvoimakkuus yksinomaisessa tilassa: valitse digitaalinen (oletus) tai DAC:n laitteistokohtainen äänenvoimakkuus.",
+          "Jos laitteen äänenvoimakkuutta ei voida lukea, liukusäädin toimii digitaalisesti.",
+          "Oikeinkirjoituskorjauksia unkarinkielisissä teksteissä."
+        ],
+        "da": [
+          "Lydstyrke i eksklusiv tilstand: vælg digital (standard) eller DAC'ens hardwarelydstyrke.",
+          "Hvis enhedens lydstyrke ikke kan aflæses, fungerer skyderen digitalt.",
+          "Stavekorrektioner i de ungarske tekster."
+        ],
+        "nb": [
+          "Volum i eksklusiv modus: velg digital (standard) eller DAC-ens maskinvarevolum.",
+          "Hvis enhetens volum ikke kan leses, fungerer glidebryteren digitalt.",
+          "Stavefeilrettinger i de ungarske tekstene."
+        ],
+        "sv": [
+          "Volym i exklusivt läge: välj digital (standard) eller DAC:ens hårdvaruvolym.",
+          "Om enhetens volym inte kan läsas styrs den digitalt med reglaget.",
+          "Stavningskorrigeringar i de ungerska texterna."
+        ],
+        "he": [
+          "עוצמת שמע במצב בלעדי: ניתן לבחור עוצמה דיגיטלית (ברירת מחדל) או עוצמת חומרה של ה-DAC.",
+          "אם לא ניתן לקרוא את עוצמת ההתקן, המחוון פועל באופן דיגיטלי.",
+          "תיקוני איות בטקסטים ההונגריים."
+        ],
+        "ja": [
+          "排他モードでの音量: デジタル（デフォルト）またはDACのハードウェア音量を選択できます。",
+          "デバイスの音量を読み取れない場合、スライダーはデジタル制御として機能します。",
+          "ハンガリー語テキストのスペル修正。"
+        ],
+        "ko": [
+          "단독 모드 볼륨: 디지털(기본값) 또는 DAC 하드웨어 볼륨 중 선택 가능합니다.",
+          "장치 볼륨을 읽을 수 없는 경우 슬라이더가 디지털 방식으로 작동합니다.",
+          "헝가리어 텍스트 오탈자 수정."
+        ],
+        "cs": [
+          "Hlasitost v exkluzivním režimu: možnost volby digitální (výchozí) nebo hardwarové hlasitosti DAC.",
+          "Pokud nelze hlasitost zařízení přečíst, posuvník funguje digitálně.",
+          "Opravy pravopisu v maďarských textech."
+        ],
+        "uk": [
+          "Гучність в ексклюзивному режимі: вибір цифрової (за замовчуванням) або апаратної гучності ЦАП.",
+          "Якщо гучність пристрою не вдається прочитати, повзунок працює цифровим способом.",
+          "Виправлення орфографії в угорських текстах."
         ]
       }
     },
@@ -193,6 +800,96 @@
           "Windows 上内置播放器的独占模式（WASAPI exclusive）：按文件原始采样率播放，不经过 Windows 混音器。",
           "信号路径会显示模式、输出格式以及是否比特完美。",
           "瀑布图、电平表和 Magic Touch 在独占模式下同样可用。"
+        ],
+        "de": [
+          "Exklusivmodus (WASAPI exclusive) für den integrierten Player unter Windows: Mit der nativen Abtastrate der Datei, ohne den Windows-Mixer.",
+          "Der Signalpfad zeigt den Modus, das Ausgabeformat und an, ob die Wiedergabe bit-perfekt ist.",
+          "Der Wasserfall, die Pegelmesser und Magic Touch funktionieren auch im Exklusivmodus."
+        ],
+        "it": [
+          "Modalità esclusiva (WASAPI exclusive) per il lettore integrato su Windows: alla frequenza di campionamento originale del file, senza il mixer di Windows.",
+          "Il percorso del segnale mostra la modalità, il formato di uscita e se la riproduzione è bit-perfect.",
+          "La cascata, i misuratori e Magic Touch funzionano anche in modalità esclusiva."
+        ],
+        "nl": [
+          "Exclusieve modus (WASAPI exclusive) voor de ingebouwde speler op Windows: op de eigen samplefrequentie van het bestand, zonder de Windows-mixer.",
+          "Het signaalpad toont de modus, het uitvoerformaat en of de weergave bit-perfect is.",
+          "De waterval, de meters en Magic Touch werken ook in exclusieve modus."
+        ],
+        "pl": [
+          "Tryb wyłączny (WASAPI exclusive) dla wbudowanego odtwarzacza w Windows: z natywną częstotliwością próbkowania pliku, z pominięciem miksera Windows.",
+          "Ścieżka sygnału wyświetla tryb, format wyjściowy oraz informację, czy odtwarzanie jest bit-perfect.",
+          "Wodospad, mierniki i Magic Touch działają również w trybie wyłącznym."
+        ],
+        "ru": [
+          "Эксклюзивный режим (WASAPI exclusive) для встроенного проигрывателя в Windows: с собственной частотой дискретизации файла, в обход микшера Windows.",
+          "Путь сигнала отображает режим, формат вывода и бит-перфектность воспроизведения.",
+          "Водопад, измерители уровня и Magic Touch работают и в эксклюзивном режиме."
+        ],
+        "pt": [
+          "Modo exclusivo (WASAPI exclusive) para o reprodutor integrado no Windows: na taxa de amostragem nativa do arquivo, sem o mixer do Windows.",
+          "O caminho do sinal mostra o modo, o formato de saída e se a reprodução é bit-perfect.",
+          "A cascata, os medidores e o Magic Touch também funcionam em modo exclusivo."
+        ],
+        "ro": [
+          "Mod exclusiv (WASAPI exclusive) pentru playerul încorporat pe Windows: la rata de eșantionare nativă a fișierului, fără mixerul Windows.",
+          "Calea semnalului indică modul, formatul de ieșire și dacă redarea este bit-perfect.",
+          "Cascada, vumetrele și Magic Touch funcționează și în modul exclusiv."
+        ],
+        "el": [
+          "Αποκλειστική λειτουργία (WASAPI exclusive) για το ενσωματωμένο πρόγραμμα αναπαραγωγής στα Windows: στον αρχικό ρυθμό δειγματοληψίας του αρχείου, χωρίς το μίκτη των Windows.",
+          "Η διαδρομή σήματος δείχνει τη λειτουργία, τη μορφή εξόδου και αν η αναπαραγωγή είναι bit-perfect.",
+          "Ο καταρράκτης, τα όργανα μέτρησης και το Magic Touch λειτουργούν επίσης σε αποκλειστική λειτουργία."
+        ],
+        "tr": [
+          "Windows'ta yerleşik oynatıcı için özel mod (WASAPI exclusive): Windows mikseri olmadan, dosyanın kendi örnekleme hızında.",
+          "Sinyal yolu modu, çıkış biçimini ve oynatmanın bit-perfect olup olmadığını gösterir.",
+          "Şelale, sayaçlar ve Magic Touch da özel modda çalışır."
+        ],
+        "fi": [
+          "Yksinomainen tila (WASAPI exclusive) sisäänrakennetulle soittimelle Windowsissa: tiedoston omalla näytteenottotaajuudella ilman Windows-mikseriä.",
+          "Signaalipolku näyttää tilan, lähtömuodon ja sen, onko toisto bit-perfect.",
+          "Vesiputous, mittarit ja Magic Touch toimivat myös yksinomaisessa tilassa."
+        ],
+        "da": [
+          "Eksklusiv tilstand (WASAPI exclusive) for den indbyggede afspiller på Windows: ved filens egen samplingshastighed, uden om Windows-mixeren.",
+          "Signalvejen viser tilstand, outputformat og om afspilningen er bit-perfekt.",
+          "Vandfald, målere og Magic Touch fungerer også i eksklusiv tilstand."
+        ],
+        "nb": [
+          "Eksklusiv modus (WASAPI exclusive) for den innebygde spilleren på Windows: på filens egen samplingsfrekvens, uten Windows-mikseren.",
+          "Signalveien viser modus, utgangsformat og om avspillingen er bit-perfekt.",
+          "Foss, målere og Magic Touch fungerer også i eksklusiv modus."
+        ],
+        "sv": [
+          "Exklusivt läge (WASAPI exclusive) för den inbyggda spelaren på Windows: vid filens egen samplingsfrekvens, utan Windows-mixern.",
+          "Signalvägen visar läge, utgångsformat och huruvida uppspelningen är bit-perfekt.",
+          "Vattenfallet, mätarna och Magic Touch fungerar även i exklusivt läge."
+        ],
+        "he": [
+          "מצב בלעדי (WASAPI exclusive) עבור הנגן המובנה ב-Windows: בקצב הדגימה המקורי של הקובץ, ללא המיקסר של Windows.",
+          "נתיב האות מציג את המצב, את פורמט הפלט והאם הניגון הוא bit-perfect.",
+          "תצוגת המפל, המדים ו-Magic Touch פועלים גם במצב בלעדי."
+        ],
+        "ja": [
+          "Windows内蔵プレーヤーの排他モード (WASAPI exclusive): Windowsミキサーをバイパスし、ファイル独自のサンプルレートで再生。",
+          "シグナルパスにモード、出力フォーマット、ビットパーフェクトかどうかが表示されます。",
+          "ウォーターフォール、メーター、Magic Touchも排他モードで動作します。"
+        ],
+        "ko": [
+          "Windows 내장 플레이어 단독 모드(WASAPI exclusive): Windows 믹서를 거치지 않고 파일 자체 샘플링 속도로 재생.",
+          "신호 경로에 모드, 출력 형식 및 비트 퍼펙트 여부가 표시됩니다.",
+          "폭포 화면, 미터 및 Magic Touch가 단독 모드에서도 정상 작동합니다."
+        ],
+        "cs": [
+          "Exkluzivní režim (WASAPI exclusive) pro vestavěný přehrávač ve Windows: na vlastní vzorkovací frekvenci souboru, mimo směšovač Windows.",
+          "Cesta signálu zobrazuje režim, výstupní formát a zda je přehrávání bit-perfektní.",
+          "Vodopád, měřiče a Magic Touch fungují i v exkluzivním režimu."
+        ],
+        "uk": [
+          "Ексклюзивний режим (WASAPI exclusive) для вбудованого програвача у Windows: на власній частоті дискретизації файлу, в обхід мікшера Windows.",
+          "Шлях сигналу показує режим, вихідний формат та чи є відтворення біт-перфектним.",
+          "Водоспад, вимірювачі та Magic Touch працюють також в ексклюзивному режимі."
         ]
       }
     }
