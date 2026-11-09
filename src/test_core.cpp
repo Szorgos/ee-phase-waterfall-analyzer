@@ -350,6 +350,56 @@ static void testNanGuard() {
           "NaN -> alapérték (preamp %.1f dB, scope %.1f Hz, célszint %.1f LUFS)", d.preampDb, d.bassScopeHz, d.agcTargetLufs);
 }
 
+/** DNS-név olvasása a csomagból, a tömörítő mutatók követésével; hibás csomagnál üres. */
+static std::string dnsReadName(const std::vector<uint8_t>& p, size_t& off) {
+    std::string out;
+    size_t pos = off;
+    bool jumped = false;
+    for (int guard = 0; guard < 64 && pos < p.size(); ++guard) {
+        const uint8_t len = p[pos];
+        if (len == 0) {
+            if (!jumped) off = pos + 1;
+            return out;
+        }
+        if ((len & 0xC0) == 0xC0) {
+            if (pos + 1 >= p.size()) return "";
+            if (!jumped) off = pos + 2;
+            pos = (static_cast<size_t>(len & 0x3F) << 8) | p[pos + 1];
+            jumped = true;
+            continue;
+        }
+        if (pos + 1 + len > p.size()) return "";
+        if (!out.empty()) out += '.';
+        out.append(reinterpret_cast<const char*>(&p[pos + 1]), len);
+        pos += 1 + len;
+    }
+    return "";
+}
+
+struct DnsRecord { std::string name; uint16_t type; std::string target; };
+
+/** A válaszrekordok végigolvasása (név, típus; PTR és SRV esetén a cél neve). */
+static std::vector<DnsRecord> dnsReadAnswers(const std::vector<uint8_t>& p) {
+    std::vector<DnsRecord> out;
+    if (p.size() < 12) return out;
+    const int count = (p[6] << 8) | p[7];
+    size_t off = 12;
+    for (int i = 0; i < count; ++i) {
+        DnsRecord r;
+        r.name = dnsReadName(p, off);
+        if (r.name.empty() || off + 10 > p.size()) return {};
+        r.type = static_cast<uint16_t>((p[off] << 8) | p[off + 1]);
+        const size_t rdlen = (static_cast<size_t>(p[off + 8]) << 8) | p[off + 9];
+        size_t rd = off + 10;
+        if (rd + rdlen > p.size()) return {};
+        if (r.type == 12) r.target = dnsReadName(p, rd);
+        else if (r.type == 33) { rd += 6; r.target = dnsReadName(p, rd); }
+        off = off + 10 + rdlen;
+        out.push_back(r);
+    }
+    return off == p.size() ? out : std::vector<DnsRecord>{};
+}
+
 static void testMdns() {
     std::printf("[9] mDNS hálózati bejelentés és csomagépítés (RFC 6762)\n");
     MdnsAnnouncer an;
@@ -399,6 +449,17 @@ static void testMdns() {
           std::search(p2.begin(), p2.end(), std::begin(a2), std::end(a2)) != p2.end(),
           "A-rekordok: típus 1, IN|flush, TTL 120, 4 bájtos cím (192.168.1.20, 10.0.0.5)");
     CHECK(p2.size() < 512, "csomagméret címekkel is érvényes (%zu bájt)", p2.size());
+    // A tömörített nevek (mutatók) feloldva: a rekordok a helyes névre szólnak, a csomag végig olvasható
+    const auto recs = dnsReadAnswers(p2);
+    const std::string inst = "Aqulify Teszt PC._aqulify._tcp.local";
+    std::string host;
+    for (const auto& r : recs) if (r.type == 33) host = r.target;
+    bool namesOk = recs.size() == 5 && recs[0].type == 12 && recs[0].name == "_aqulify._tcp.local" &&
+                   recs[0].target == inst && recs[1].type == 33 && recs[1].name == inst && recs[2].type == 16 &&
+                   recs[2].name == inst && host.size() > 6 && host.compare(host.size() - 6, 6, ".local") == 0;
+    for (size_t i = 3; i < recs.size(); ++i) namesOk = namesOk && recs[i].type == 1 && recs[i].name == host;
+    CHECK(namesOk, "a rekordnevek a tömörítés feloldása után helyesek (SRV cél: %s)", host.c_str());
+    CHECK(dnsReadAnswers(pkt).size() == 3, "a címek nélküli csomag is végig olvasható (3 rekord)");
     an2.stop();
 }
 

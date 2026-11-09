@@ -105,11 +105,14 @@ public:
         std::vector<uint8_t> ptrData;
         appendDnsName(ptrData, fullInstance);
         appendU16(pkt, static_cast<uint16_t>(ptrData.size()));
+        // A példánynév helye a csomagban: a további rekordok névtömörítéssel (RFC 1035 4.1.4) erre mutatnak,
+        // így a hosszú gépnév nem ismétlődik (a csomag hosszú gépnévvel is 512 bájt alatt marad)
+        const size_t instanceOffset = pkt.size();
         pkt.insert(pkt.end(), ptrData.begin(), ptrData.end());
 
         // 2. Rekord: SRV (<InstanceName>._aqulify._tcp.local -> Target: <Hostname>.local, Port)
         // Egyedi rekord: cache-flush bit 0x8000 bekapcsolva (CLASS = 0x8001)
-        appendDnsName(pkt, fullInstance);
+        appendNamePointer(pkt, instanceOffset);
         appendU16(pkt, 0x0021); // TYPE: SRV (33)
         appendU16(pkt, 0x8001); // CLASS: IN | Flush (0x8001)
         appendU32(pkt, ttl);    // TTL
@@ -120,10 +123,11 @@ public:
         appendU16(srvData, static_cast<uint16_t>(servicePort_)); // Port
         appendDnsName(srvData, hostname_ + ".local");
         appendU16(pkt, static_cast<uint16_t>(srvData.size()));
+        const size_t hostOffset = pkt.size() + 6; // a cél (Hostname.local) a prioritás, súly és port után
         pkt.insert(pkt.end(), srvData.begin(), srvData.end());
 
         // 3. Rekord: TXT (<InstanceName>._aqulify._tcp.local -> metaadatok)
-        appendDnsName(pkt, fullInstance);
+        appendNamePointer(pkt, instanceOffset);
         appendU16(pkt, 0x0010); // TYPE: TXT (16)
         appendU16(pkt, 0x8001); // CLASS: IN | Flush (0x8001)
         appendU32(pkt, ttl);    // TTL
@@ -160,7 +164,7 @@ public:
         for (const auto& a : addresses_) {
             in_addr ip{};
             if (inet_pton(AF_INET, a.c_str(), &ip) != 1) continue;
-            appendDnsName(pkt, hostname_ + ".local");
+            appendNamePointer(pkt, hostOffset);
             appendU16(pkt, 0x0001); // TYPE: A (1)
             appendU16(pkt, 0x8001); // CLASS: IN | Flush
             appendU32(pkt, ttl);
@@ -185,6 +189,12 @@ public:
             start = dot + 1;
         }
         buf.push_back(0x00); // Végzáró null
+    }
+
+    /** Névtömörítés: mutató a csomagban korábban szereplő névre (2 bájt, 0xC000 | eltolás). */
+    static void appendNamePointer(std::vector<uint8_t>& buf, size_t offset) {
+        buf.push_back(static_cast<uint8_t>(0xC0 | ((offset >> 8) & 0x3F)));
+        buf.push_back(static_cast<uint8_t>(offset & 0xFF));
     }
 
 private:
