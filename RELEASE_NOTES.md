@@ -1,3 +1,15 @@
+### Újdonságok (2.1.7)
+
+**Letöltés (2.1.7):**
+- Windows 11: [Aqulify-Setup-2.1.7.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.7/Aqulify-Setup-2.1.7.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.7/Aqulify-Setup-2.1.7.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.1.7-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.7/Aqulify-2.1.7-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.7/Aqulify-2.1.7-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.1.7.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.7/Aqulify-Linux-2.1.7.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.7/Aqulify-Linux-2.1.7.tar.gz.sha256))
+- Fedora: [aqulify-2.1.7-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.7/aqulify-2.1.7-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.1.7-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.7/aqulify_2.1.7-1_amd64.deb) · Arch: [aqulify-2.1.7-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.1.7/aqulify-2.1.7-1-x86_64.pkg.tar.zst)
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **23 nyelv.** A felület 23 nyelven érhető el (18 új nyelv: német, olasz, holland, lengyel, orosz, portugál, román, görög, török, finn, dán, norvég, svéd, héber, japán, koreai, cseh, ukrán). A nyelv a fejléc nyelvválasztójából állítható.
+- **Modulnevek nyelvfüggők.** A modulfülek és kártyacímek (Equalizer, Crossfeed, Convolver, Limiter, Bass Enhancer, Mono, Autogain, Magic Touch) nyelvváltáskor átállnak.
+- **Lejátszósáv és zenetár 23 nyelven.** A telefonos lejátszósáv és a zenetár szövegei minden támogatott nyelven megjelennek.
 ### Újdonságok (2.1.6)
 
 **Letöltés (2.1.6):**
