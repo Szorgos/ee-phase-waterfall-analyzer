@@ -605,6 +605,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .mini-btn { background: var(--aq-surface); border: 1px solid var(--aq-line); color: var(--aq-text); padding: 4px 10px; border-radius: 7px; font-size: var(--aq-fs-body); cursor: pointer; font-weight: 500; transition: background .15s, border-color .15s, color .15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 28px; height: 28px; white-space: nowrap !important; flex-shrink: 0; box-sizing: border-box; line-height: 1; }
   .mini-btn:hover { background: var(--aq-surface-2); border-color: var(--aq-line-2); }
   .mini-btn.active { background: var(--aq-accent-soft); border-color: var(--aq-accent); color: var(--aq-accent-2); }
+  /* Jelzőpötty a Távirányító gombon, amíg a panelt egyszer meg nem nyitották (a funkció így könnyen észrevehető) */
+  #btnRemote { position: relative; }
+  #btnRemote.attn::after { content: ""; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--aq-accent); box-shadow: 0 0 0 2px var(--aq-surface); }
   .strip-controls .ctrl-group .mini-btn { border-color: transparent; background: transparent; }
   .strip-controls .mini-btn.icon-only { padding: 4px 6px; }
   .strip-controls .mini-btn[hidden] { display: none; }
@@ -11483,7 +11486,22 @@ let remoteState = null;
 let remoteCodeDeadline = 0;
 let remoteCodeTimer = null;
 
+/** A Távirányító gomb jelzőpöttye eltűnik, ha a panelt megnyitották, vagy a távirányító már használatban van. */
+function remoteMarkSeen() {
+  const b = document.getElementById("btnRemote");
+  if (b) b.classList.remove("attn");
+  try { localStorage.setItem("aqulify_remote_seen", "1"); } catch (e) {}
+}
+
+(function remoteAttentionInit() {
+  let seen = false;
+  try { seen = localStorage.getItem("aqulify_remote_seen") === "1"; } catch (e) {}
+  const apply = () => { const b = document.getElementById("btnRemote"); if (b && !seen) b.classList.add("attn"); };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply); else apply();
+})();
+
 function openRemotePanel() {
+  remoteMarkSeen();
   document.getElementById("modalRemote").style.display = "flex";
   sendEngine({ type: "get_remote" });
   renderRemotePanel();
@@ -11500,6 +11518,7 @@ function remoteRevoke(id) { sendEngine({ type: "remote_revoke", id }); }
 
 function onRemoteState(st) {
   remoteState = st;
+  if (st && (st.enabled || (st.devices && st.devices.length))) remoteMarkSeen();
   remoteCodeDeadline = st && st.code ? Date.now() + (st.codeSeconds || 0) * 1000 : 0;
   renderRemotePanel();
 }

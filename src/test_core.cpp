@@ -546,6 +546,29 @@ static net::socket_t wsConnectLive(int port, const std::string& path) {
     return s;
 }
 
+/** A kézfogásra adott teljes HTTP-válasz (fejlécekkel); üres, ha nem sikerült kapcsolódni. */
+static std::string wsHandshakeLive(int port, const std::string& path) {
+    net::socket_t s = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (s == net::kInvalidSocket) return "";
+    sockaddr_in a{};
+    a.sin_family = AF_INET;
+    a.sin_port = htons(static_cast<uint16_t>(port));
+    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)) != 0) { net::closeSocket(s); return ""; }
+    const std::string req = "GET " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n";
+    ::send(s, req.data(), static_cast<int>(req.size()), 0);
+    std::string resp;
+    char buf[512];
+    for (int i = 0; i < 40 && resp.find("\r\n\r\n") == std::string::npos; ++i) {
+        const int n = static_cast<int>(::recv(s, buf, sizeof(buf), 0));
+        if (n <= 0) break;
+        resp.append(buf, static_cast<size_t>(n));
+    }
+    net::closeSocket(s);
+    return resp;
+}
+
 /** Maszkolt szöveges keret (a kliens minden keretét maszkolja, RFC 6455). */
 static void wsSendText(net::socket_t s, const std::string& text) {
     std::string f;
@@ -579,6 +602,19 @@ static void testEngineQuit() {
         for (int i = 0; i < ms / 20 && quits.load() < want; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(20));
         return quits.load();
     };
+
+    // Jóváhagyásos párosítás, amíg a gépen nincs nyitva a felület: 503 és a pontos ok (no-window); idegen alkalmazás: client
+    int remotePort = 0;
+    std::string noWin;
+    for (int port = 47870; port < 47875 && noWin.empty(); ++port) {
+        noWin = wsHandshakeLive(port, "/?pair=request&client=aqulify_remote&name=Teszt");
+        if (!noWin.empty()) remotePort = port;
+    }
+    CHECK(noWin.rfind("HTTP/1.1 503", 0) == 0 && noWin.find("\r\nX-Aqulify-Reason: no-window\r\n") != std::string::npos,
+          "párosítási kérés nyitott ablak nélkül: 503, ok: no-window");
+    const std::string foreign = remotePort ? wsHandshakeLive(remotePort, "/?pair=request&client=mas_app&name=X") : "";
+    CHECK(foreign.rfind("HTTP/1.1 403", 0) == 0 && foreign.find("\r\nX-Aqulify-Reason: client\r\n") != std::string::npos,
+          "idegen alkalmazás párosítási kérése: 403, ok: client");
 
     // Távirányító (párosított eszköz, hálózati port): a kérést a híd figyelmen kívül hagyja
     net::socket_t r = net::kInvalidSocket;

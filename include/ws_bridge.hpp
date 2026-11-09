@@ -574,8 +574,16 @@ private:
         }
     }
 
-    static void reply(net::socket_t s, const char* status) {
-        const std::string r = std::string("HTTP/1.1 ") + status + "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+    /**
+     * Elutasító HTTP-válasz a kézfogásra. A reason (X-Aqulify-Reason) a távirányítónak mondja meg a pontos okot, hogy
+     * érthető üzenetet mutathasson: no-window (a gépen nincs nyitva az ablak, ott kellene jóváhagyni), rejected (a
+     * gépen elutasították), busy (túl sok kapcsolat), closed (közben kikapcsolták a hálózati elérést), client
+     * (nem az Aqulify Remote alkalmazás).
+     */
+    static void reply(net::socket_t s, const char* status, const char* reason = nullptr) {
+        std::string r = std::string("HTTP/1.1 ") + status + "\r\n";
+        if (reason) r += std::string("X-Aqulify-Reason: ") + reason + "\r\n";
+        r += "Content-Length: 0\r\nConnection: close\r\n\r\n";
         net::sendSome(s, r.data(), r.size());
     }
 
@@ -583,13 +591,13 @@ private:
         // Harmadik féltől származó távirányítók kizárása: csak a hitelesített Aqulify Remote kliens párosítható
         const std::string clientType = bridge_detail::cleanName(bridge_detail::queryParam(request, "client"));
         if (clientType != "aqulify_remote") {
-            reply(p.sock, "403 Forbidden");
+            reply(p.sock, "403 Forbidden", "client");
             return false;
         }
 
         const bool hasLocal = std::any_of(clients_.begin(), clients_.end(), [](const auto& c) { return !c->remote && !c->dead; });
         if (!hasLocal) {
-            reply(p.sock, "503 Service Unavailable");
+            reply(p.sock, "503 Service Unavailable", "no-window");
             return false;
         }
         if (clock::now() < pairLockUntil_) {
@@ -668,7 +676,7 @@ private:
 
         std::string deviceId, issuedToken;
         if (p.remote && remoteListener_ == net::kInvalidSocket) {   // közben kikapcsolták
-            reply(p.sock, "503 Service Unavailable");
+            reply(p.sock, "503 Service Unavailable", "closed");
             return false;
         }
         if (p.remote) {
@@ -682,7 +690,7 @@ private:
                 // Harmadik féltől származó távirányítók kizárása: csak a hitelesített Aqulify Remote kliens párosítható
                 const std::string clientType = bridge_detail::cleanName(bridge_detail::queryParam(request, "client"));
                 if (clientType != "aqulify_remote") {
-                    reply(p.sock, "403 Forbidden");
+                    reply(p.sock, "403 Forbidden", "client");
                     return false;
                 }
                 if (code == "request") {
@@ -703,7 +711,7 @@ private:
         if (clients_.size() >= kBridgeMaxClients) {
             // Helyi felületnek helyet csinálunk (a legrégebbi helyi kapcsolat bomlik, pl. egy újratöltött ablaké)
             auto oldest = std::find_if(clients_.begin(), clients_.end(), [](const auto& c) { return !c->remote; });
-            if (p.remote || oldest == clients_.end()) { reply(p.sock, "503 Service Unavailable"); return false; }
+            if (p.remote || oldest == clients_.end()) { reply(p.sock, "503 Service Unavailable", "busy"); return false; }
             kill(**oldest, "új felület csatlakozott");
             removeDead();
         }
@@ -1028,7 +1036,7 @@ private:
     void closeRemoteListener(bool quiet = false) {
         mdnsAnnouncer_.stop();
         for (auto& pr : pendingPairRequests_) {
-            reply(pr.sock, "503 Service Unavailable");
+            reply(pr.sock, "503 Service Unavailable", "closed");
             net::closeSocket(pr.sock);
         }
         pendingPairRequests_.clear();
@@ -1167,14 +1175,14 @@ private:
         pendingPairRequests_.erase(it);
 
         if (!approve) {
-            reply(pr.sock, "403 Forbidden");
+            reply(pr.sock, "403 Forbidden", "rejected");
             net::closeSocket(pr.sock);
             std::cout << "[WS Bridge] Párosítás elutasítva: " << reqId << "\n";
             return;
         }
 
         if (clients_.size() >= kBridgeMaxClients) {
-            reply(pr.sock, "503 Service Unavailable");
+            reply(pr.sock, "503 Service Unavailable", "busy");
             net::closeSocket(pr.sock);
             return;
         }
