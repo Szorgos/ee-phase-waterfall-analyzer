@@ -531,6 +531,12 @@ struct Core {
         });
         return true;
     };
+    // Van-e alkalmazás a protokollhoz (pl. "tidal"): ha igen, a szolgáltatás hivatkozása abban nyílik meg
+    cb.hasUrlHandler = [](const std::string& scheme) -> bool {
+        NSString* s = [NSString stringWithFormat:@"%s://", scheme.c_str()];
+        NSURL* probe = [NSURL URLWithString:s];
+        return probe && [NSWorkspace.sharedWorkspace URLForApplicationToOpenURL:probe] != nil;
+    };
 
     library::attachLibrary(cb, c->musicLibrary, c->playQueue, c->playlists, c->playStats, [](const std::string& doc) {
         if (!linux_store::saveLibrary(doc)) std::cerr << "[Zenetár] Figyelem: a library.json nem írható.\n";

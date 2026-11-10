@@ -168,6 +168,11 @@ struct BridgeCallbacks {
      * Ha be van kötve, az állapotüzenet "caps" mezőjében "open_url" áll.
      */
     std::function<bool(const std::string& url)> openUrl;
+    /**
+     * Van-e a gépen alkalmazás az adott protokollhoz (pl. "tidal"): ha igen, a szolgáltatás hivatkozása abban nyílik
+     * meg, különben a webes lejátszóban (media_url.hpp, mediaOpenTarget). Opcionális; nélküle mindig a web.
+     */
+    std::function<bool(const std::string& scheme)> hasUrlHandler;
 };
 
 /**
@@ -1465,7 +1470,10 @@ private:
                 }
                 cur_->lastOpenUrl = now;
             }
-            if (!cb_.openUrl(url)) {
+            // Szolgáltatás-hivatkozás: az asztali alkalmazásban, ha van, különben a webes lejátszóban
+            const bool tidalApp = cb_.hasUrlHandler && host.size() >= 9 &&
+                                  host.compare(host.size() - 9, 9, "tidal.com") == 0 && cb_.hasUrlHandler("tidal");
+            if (!cb_.openUrl(mediaOpenTarget(url, tidalApp))) {
                 sendText("{\"type\":\"open_url_result\",\"ok\":false,\"error\":\"failed\"}");
                 return;
             }

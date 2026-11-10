@@ -21,6 +21,7 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <shellapi.h>
+#include <shlwapi.h>
 #include <iphlpapi.h>
 #include <psapi.h>
 #include <xmmintrin.h>
@@ -33,6 +34,7 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <iterator>
 #include <string>
 #include <thread>
 #include <vector>
@@ -917,6 +919,18 @@ int main(int argc, char** argv) {
             return false;   // a szál nem indult el
         }
         return true;
+    };
+    // Van-e alkalmazás a protokollhoz (pl. "tidal"): a Windows társítása szerint, az áruházas alkalmazásokat is
+    // beleértve. Egy félbemaradt, parancs nélküli regisztráció nem számít (akkor a webes lejátszó nyílik meg).
+    cb.hasUrlHandler = [](const std::string& scheme) -> bool {
+        const std::wstring ws(scheme.begin(), scheme.end());   // csak ASCII protokollnév jön (pl. "tidal")
+        for (ASSOCSTR what : { ASSOCSTR_EXECUTABLE, ASSOCSTR_COMMAND }) {
+            wchar_t buf[MAX_PATH * 2];
+            DWORD n = static_cast<DWORD>(std::size(buf));
+            if (AssocQueryStringW(ASSOCF_IS_PROTOCOL, what, ws.c_str(), nullptr, buf, &n) == S_OK && buf[0] != L'\0')
+                return true;
+        }
+        return false;
     };
     cb.statusFields = [&]() {
         std::string s = sources.statusFields() + updater.statusJson();

@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <iterator>
 #include <string>
 
 namespace ee_analyzer {
@@ -144,6 +145,56 @@ inline bool isAllowedMediaUrl(const std::string& url, std::string* hostOut = nul
     }
 
     return false;
+}
+
+/** Egy streaming szolgáltatás hivatkozásának tartalma (pl. track / album / playlist + azonosító). */
+struct ServiceLink {
+    std::string type;   // track, album, playlist, artist, mix, video
+    std::string id;     // csak [A-Za-z0-9-], legfeljebb 64 karakter
+};
+
+/**
+ * A már ellenőrzött (isAllowedMediaUrl) tidal.com-os cím tartalma: a megosztott címek alakjai
+ * https://tidal.com/browse/track/123?u, https://tidal.com/track/123/u, https://listen.tidal.com/album/456,
+ * https://tidal.com/browse/playlist/<uuid>. false: nem ilyen cím (akkor változatlanul nyílik meg).
+ */
+inline bool parseTidalLink(const std::string& url, ServiceLink& out) {
+    std::string host;
+    if (!isAllowedMediaUrl(url, &host)) return false;
+    if (host != "tidal.com" && host != "www.tidal.com" && host != "listen.tidal.com") return false;
+    const size_t pathStart = url.find('/', 8);
+    if (pathStart == std::string::npos) return false;
+    std::string path = url.substr(pathStart + 1);
+    const size_t cut = path.find_first_of("?#");
+    if (cut != std::string::npos) path.resize(cut);
+    if (path.rfind("browse/", 0) == 0) path.erase(0, 7);
+    const size_t slash = path.find('/');
+    if (slash == std::string::npos) return false;
+    std::string type = path.substr(0, slash);
+    std::string id = path.substr(slash + 1);
+    const size_t idEnd = id.find('/');
+    if (idEnd != std::string::npos) id.resize(idEnd);
+    static constexpr const char* kTypes[] = { "track", "album", "playlist", "artist", "mix", "video" };
+    if (std::find_if(std::begin(kTypes), std::end(kTypes), [&](const char* t) { return type == t; }) == std::end(kTypes))
+        return false;
+    if (id.empty() || id.size() > 64) return false;
+    for (char c : id)
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-') return false;
+    out.type = type;
+    out.id = id;
+    return true;
+}
+
+/**
+ * Mit nyisson meg a gép egy már ellenőrzött címhez. A tidal.com-os címek: ha a gépen van asztali alkalmazás a
+ * "tidal:" protokollhoz, akkor "tidal://<típus>/<azonosító>" (az alkalmazásban nyílik meg), különben a webes
+ * lejátszó (https://listen.tidal.com/<típus>/<azonosító>), nem a bemutatóoldal. Minden más cím változatlan.
+ * A kimenet csak a fix típusnevekből és a [A-Za-z0-9-] azonosítóból áll, így nem kell újra ellenőrizni.
+ */
+inline std::string mediaOpenTarget(const std::string& url, bool tidalAppAvailable) {
+    ServiceLink l;
+    if (!parseTidalLink(url, l)) return url;
+    return tidalAppAvailable ? "tidal://" + l.type + "/" + l.id : "https://listen.tidal.com/" + l.type + "/" + l.id;
 }
 
 } // namespace ee_analyzer

@@ -991,6 +991,24 @@ static void testOpenUrl() {
           isAllowedMediaUrl("https://youtube.com#@evil.com", &h) && h == "youtube.com",
           "URL: záró pont és töredék (a hoszt youtube.com)");
     CHECK(!isAllowedMediaUrl(std::string("https://youtube.com/") + std::string(2035, 'a')), "URL elutasítás: 2049 karakter");
+
+    // Szolgáltatás-hivatkozás: asztali alkalmazás, ha van, különben a webes lejátszó (nem a bemutatóoldal)
+    CHECK(mediaOpenTarget("https://tidal.com/browse/track/123?u", false) == "https://listen.tidal.com/track/123" &&
+          mediaOpenTarget("https://tidal.com/browse/track/123?u", true) == "tidal://track/123",
+          "Tidal szám: web -> listen.tidal.com/track/123, alkalmazás -> tidal://track/123");
+    CHECK(mediaOpenTarget("https://tidal.com/track/55/u", true) == "tidal://track/55" &&
+          mediaOpenTarget("https://listen.tidal.com/album/456", false) == "https://listen.tidal.com/album/456" &&
+          mediaOpenTarget("https://tidal.com/browse/playlist/6f1c2a3b-0000-4d5e-9f00-123456789abc", true) ==
+              "tidal://playlist/6f1c2a3b-0000-4d5e-9f00-123456789abc" &&
+          mediaOpenTarget("https://www.tidal.com/browse/artist/7#x", false) == "https://listen.tidal.com/artist/7",
+          "Tidal: /track/<id>/u, listen.tidal.com album, playlist UUID, www + töredék");
+    CHECK(mediaOpenTarget("https://tidal.com/", true) == "https://tidal.com/" &&
+          mediaOpenTarget("https://tidal.com/browse/podcast/1", true) == "https://tidal.com/browse/podcast/1" &&
+          mediaOpenTarget("https://tidal.com/browse/track/1_2", true) == "https://tidal.com/browse/track/1_2" &&
+          mediaOpenTarget("https://tidal.com/browse/track/", true) == "https://tidal.com/browse/track/" &&
+          mediaOpenTarget("https://www.youtube.com/watch?v=abc", true) == "https://www.youtube.com/watch?v=abc" &&
+          mediaOpenTarget("https://evil.com/browse/track/1", true) == "https://evil.com/browse/track/1",
+          "nem felismert Tidal-cím, ismeretlen típus, rossz azonosító és más szolgáltatás: változatlan");
     CHECK(!isAllowedMediaUrl(""), "URL elutasítás: üres szöveg");
 
     // 2. Élő hídteszt: openUrl nélküli híd -> nincs open_url a caps-ban, és unsupported hiba
@@ -1040,6 +1058,8 @@ static void testOpenUrl() {
             ++calls;
             return true;
         };
+        std::atomic<bool> tidalApp{ false };
+        cb.hasUrlHandler = [&](const std::string& scheme) { return scheme == "tidal" && tidalApp.load(); };
 
         WebSocketBridge bridge(47888);
         const bool started = bridge.start(cb);
@@ -1092,6 +1112,19 @@ static void testOpenUrl() {
                 const std::string rep3 = recvFor(remote, 400);
                 CHECK(rawField(rep3, "error") == "url", "tiltott tartomány -> error: url");
                 CHECK(calls.load() == 1, "rossz címnél a callback nem hívódott");
+
+                // 3d: Tidal-szám alkalmazás nélkül -> a webes lejátszó; alkalmazással -> tidal://
+                auto lastUrl = [&] { std::lock_guard<std::mutex> lk(gm); return gotUrl; };
+                wsSendText(remote, "{\"type\":\"open_url\",\"url\":\"https://tidal.com/browse/track/123?u\"}");
+                recvFor(remote, 400);
+                CHECK(calls.load() == 2 && lastUrl() == "https://listen.tidal.com/track/123",
+                      "Tidal alkalmazás nélkül: a webes lejátszó nyílik meg (listen.tidal.com/track/123)");
+                std::this_thread::sleep_for(std::chrono::milliseconds(2100));
+                tidalApp = true;
+                wsSendText(remote, "{\"type\":\"open_url\",\"url\":\"https://tidal.com/browse/track/123?u\"}");
+                recvFor(remote, 400);
+                CHECK(calls.load() == 3 && lastUrl() == "tidal://track/123",
+                      "Tidal alkalmazással: az alkalmazás nyílik meg (tidal://track/123)");
 
                 net::closeSocket(remote);
             }
