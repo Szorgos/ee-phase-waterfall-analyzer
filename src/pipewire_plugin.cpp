@@ -577,6 +577,21 @@ int main(int argc, char* argv[]) {
             }).detach();
             return true;
         };
+        // Van-e alkalmazás a protokollhoz (pl. "tidal" → a SONE vagy más TIDAL-kliens, "spotify" → Spotify): az
+        // xdg-mime alapértelmezett kezelője (a Flatpak- és Snap-alkalmazások exportált .desktop fájljaival is)
+        cb.hasUrlHandler = [](const std::string& scheme) -> bool {
+            // A protokollnév a parancssorba kerül: csak kisbetű, legfeljebb 20 karakter
+            if (scheme.empty() || scheme.size() > 20) return false;
+            for (char ch : scheme)
+                if (ch < 'a' || ch > 'z') return false;
+            const std::string cmd = "xdg-mime query default x-scheme-handler/" + scheme + " 2>/dev/null";
+            FILE* f = popen(cmd.c_str(), "r");
+            if (!f) return false;
+            char buf[256] = {};
+            const bool got = std::fgets(buf, sizeof(buf), f) != nullptr;
+            pclose(f);
+            return got && std::strstr(buf, ".desktop") != nullptr;
+        };
     }
     {
         musicLibrary.setCacheStorage([] { return linux_store::loadLibraryCache(); },

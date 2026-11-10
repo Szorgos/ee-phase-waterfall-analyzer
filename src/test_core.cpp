@@ -992,23 +992,52 @@ static void testOpenUrl() {
           "URL: záró pont és töredék (a hoszt youtube.com)");
     CHECK(!isAllowedMediaUrl(std::string("https://youtube.com/") + std::string(2035, 'a')), "URL elutasítás: 2049 karakter");
 
-    // Szolgáltatás-hivatkozás: asztali alkalmazás, ha van, különben a webes lejátszó (nem a bemutatóoldal)
-    CHECK(mediaOpenTarget("https://tidal.com/browse/track/123?u", false) == "https://listen.tidal.com/track/123" &&
-          mediaOpenTarget("https://tidal.com/browse/track/123?u", true) == "tidal://track/123",
+    // Szolgáltatás-hivatkozás: asztali alkalmazás, ha van kezelő a protokolljához, különben a webes lejátszó
+    const auto none = [](const std::string&) { return false; };
+    const auto all = [](const std::string&) { return true; };
+    CHECK(mediaOpenTarget("https://tidal.com/browse/track/123?u", none) == "https://listen.tidal.com/track/123" &&
+          mediaOpenTarget("https://tidal.com/browse/track/123?u", all) == "tidal://track/123",
           "Tidal szám: web -> listen.tidal.com/track/123, alkalmazás -> tidal://track/123");
-    CHECK(mediaOpenTarget("https://tidal.com/track/55/u", true) == "tidal://track/55" &&
-          mediaOpenTarget("https://listen.tidal.com/album/456", false) == "https://listen.tidal.com/album/456" &&
-          mediaOpenTarget("https://tidal.com/browse/playlist/6f1c2a3b-0000-4d5e-9f00-123456789abc", true) ==
+    CHECK(mediaOpenTarget("https://tidal.com/track/55/u", all) == "tidal://track/55" &&
+          mediaOpenTarget("https://listen.tidal.com/album/456", none) == "https://listen.tidal.com/album/456" &&
+          mediaOpenTarget("https://tidal.com/browse/playlist/6f1c2a3b-0000-4d5e-9f00-123456789abc", all) ==
               "tidal://playlist/6f1c2a3b-0000-4d5e-9f00-123456789abc" &&
-          mediaOpenTarget("https://www.tidal.com/browse/artist/7#x", false) == "https://listen.tidal.com/artist/7",
+          mediaOpenTarget("https://www.tidal.com/browse/artist/7#x", none) == "https://listen.tidal.com/artist/7",
           "Tidal: /track/<id>/u, listen.tidal.com album, playlist UUID, www + töredék");
-    CHECK(mediaOpenTarget("https://tidal.com/", true) == "https://tidal.com/" &&
-          mediaOpenTarget("https://tidal.com/browse/podcast/1", true) == "https://tidal.com/browse/podcast/1" &&
-          mediaOpenTarget("https://tidal.com/browse/track/1_2", true) == "https://tidal.com/browse/track/1_2" &&
-          mediaOpenTarget("https://tidal.com/browse/track/", true) == "https://tidal.com/browse/track/" &&
-          mediaOpenTarget("https://www.youtube.com/watch?v=abc", true) == "https://www.youtube.com/watch?v=abc" &&
-          mediaOpenTarget("https://evil.com/browse/track/1", true) == "https://evil.com/browse/track/1",
-          "nem felismert Tidal-cím, ismeretlen típus, rossz azonosító és más szolgáltatás: változatlan");
+    CHECK(mediaOpenTarget("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC?si=abc", all) ==
+              "spotify:track:4uLU6hMCjMI75M1A2tKUQC" &&
+          mediaOpenTarget("https://open.spotify.com/intl-de/album/1DFixLWuPkv3KT3TnV35m3", all) ==
+              "spotify:album:1DFixLWuPkv3KT3TnV35m3" &&
+          mediaOpenTarget("https://open.spotify.com/intl-de/album/1DFixLWuPkv3KT3TnV35m3?si=x", none) ==
+              "https://open.spotify.com/album/1DFixLWuPkv3KT3TnV35m3",
+          "Spotify: spotify:<típus>:<id> (intl- előtag és si nélkül), különben open.spotify.com");
+    CHECK(mediaOpenTarget("https://open.qobuz.com/track/416397342", all) == "qobuzapp://track/416397342" &&
+          mediaOpenTarget("https://play.qobuz.com/album/0060254757893", none) == "https://play.qobuz.com/album/0060254757893" &&
+          mediaOpenTarget("https://www.qobuz.com/gb-en/album/some-name-artist/0060254757893", all) ==
+              "qobuzapp://album/0060254757893",
+          "Qobuz: qobuzapp://<típus>/<id>, a bolt albumoldala is; különben play.qobuz.com");
+    CHECK(mediaOpenTarget("https://music.apple.com/hu/album/name/1440857781?i=1440857795", all) ==
+              "music://music.apple.com/hu/album/name/1440857781?i=1440857795" &&
+          mediaOpenTarget("https://music.apple.com/hu/album/name/1440857781", none) ==
+              "https://music.apple.com/hu/album/name/1440857781",
+          "Apple Music: music://, különben változatlan");
+    // Csak a szolgáltatás saját protokolljára kérdez (a Tidal-kezelő nem nyitja meg a Spotify-címet)
+    const auto onlyTidal = [](const std::string& s) { return s == "tidal"; };
+    CHECK(mediaOpenTarget("https://open.spotify.com/track/abc", onlyTidal) == "https://open.spotify.com/track/abc" &&
+          mediaOpenTarget("https://tidal.com/browse/track/9", onlyTidal) == "tidal://track/9",
+          "a kezelő-kérdés a szolgáltatás saját protokolljára szól");
+    CHECK(mediaOpenTarget("https://tidal.com/", all) == "https://tidal.com/" &&
+          mediaOpenTarget("https://tidal.com/browse/podcast/1", all) == "https://tidal.com/browse/podcast/1" &&
+          mediaOpenTarget("https://tidal.com/browse/track/1_2", all) == "https://tidal.com/browse/track/1_2" &&
+          mediaOpenTarget("https://tidal.com/browse/track/", all) == "https://tidal.com/browse/track/" &&
+          mediaOpenTarget("https://open.spotify.com/track/a-b", all) == "https://open.spotify.com/track/a-b" &&
+          mediaOpenTarget("https://spotify.link/xyz", all) == "https://spotify.link/xyz" &&
+          mediaOpenTarget("https://www.qobuz.com/gb-en/label/x", all) == "https://www.qobuz.com/gb-en/label/x" &&
+          mediaOpenTarget("https://www.youtube.com/watch?v=abc", all) == "https://www.youtube.com/watch?v=abc" &&
+          mediaOpenTarget("https://www.deezer.com/hu/track/123", all) == "https://www.deezer.com/hu/track/123" &&
+          mediaOpenTarget("https://evil.com/browse/track/1", all) == "https://evil.com/browse/track/1",
+          "nem felismert alak, ismeretlen típus, rossz azonosító, rövidlink, alkalmazás-hivatkozás nélküli szolgáltatás "
+          "és tiltott cím: változatlan");
     CHECK(!isAllowedMediaUrl(""), "URL elutasítás: üres szöveg");
 
     // 2. Élő hídteszt: openUrl nélküli híd -> nincs open_url a caps-ban, és unsupported hiba

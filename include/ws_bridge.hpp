@@ -1470,10 +1470,11 @@ private:
                 }
                 cur_->lastOpenUrl = now;
             }
-            // Szolgáltatás-hivatkozás: az asztali alkalmazásban, ha van, különben a webes lejátszóban
-            const bool tidalApp = cb_.hasUrlHandler && host.size() >= 9 &&
-                                  host.compare(host.size() - 9, 9, "tidal.com") == 0 && cb_.hasUrlHandler("tidal");
-            if (!cb_.openUrl(mediaOpenTarget(url, tidalApp))) {
+            // Szolgáltatás-hivatkozás: az asztali alkalmazásban, ha van, különben a webes lejátszóban (media_url.hpp)
+            const std::string target = mediaOpenTarget(url, [this](const std::string& scheme) {
+                return cb_.hasUrlHandler && cb_.hasUrlHandler(scheme);
+            });
+            if (!cb_.openUrl(target)) {
                 sendText("{\"type\":\"open_url_result\",\"ok\":false,\"error\":\"failed\"}");
                 return;
             }
