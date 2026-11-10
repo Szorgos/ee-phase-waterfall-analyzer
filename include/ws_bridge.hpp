@@ -426,6 +426,7 @@ private:
         std::string clientIp;
         std::string clientType;
         std::string tier;
+        std::string app;   // a telefonos alkalmazás telepítésenkénti azonosítója (lásd RemoteDevice::app)
         net::socket_t sock = net::kInvalidSocket;
         std::string secWebSocketKey;
         clock::time_point deadline;
@@ -433,8 +434,54 @@ private:
 
     struct RemoteDevice {
         std::string id, name, hash;     // a tokennek csak a kivonatát tároljuk
+        // A telefonos alkalmazás telepítésenkénti véletlen azonosítója (nem hardverazonosító): ha ugyanaz a
+        // telepítés újra párosodik (pl. megváltozott a gép címe), a régi bejegyzés helyére kerül, nem gyűlnek.
+        std::string app;
         long long created = 0, last = 0;
     };
+
+    /**
+     * A gép állandó, véletlen azonosítója (a távoli elérés beállításaiban tárolva, nem hardverazonosító): a telefon
+     * ebből ismeri fel, hogy két mentett bejegyzés ugyanaz a gép (pl. megváltozott a gép címe).
+     */
+    const std::string& machineId() {
+        if (machineId_.empty()) machineId_ = bridge_detail::randomHex(8);
+        return machineId_;
+    }
+
+    /** A párosítási kérésben küldött alkalmazás-azonosító: 16–64 hexadecimális jegy (kisbetűsítve), különben üres. */
+    static std::string cleanAppId(const std::string& raw) {
+        std::string s;
+        for (char ch : raw) s += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        return (s.size() >= 16 && s.size() <= 64 && bridge_detail::isHex(s)) ? s : std::string();
+    }
+
+    /**
+     * Új párosított eszköz felvétele. Ugyanannak az alkalmazás-telepítésnek a korábbi párosítása kikerül, és a
+     * régebbi alkalmazásverziók azonosító nélküli, ugyanilyen nevű, éppen nem kapcsolódó bejegyzései is (ezek
+     * ugyanannak a telefonnak a korábbi párosításai). Így a lista nem gyűlik egy telefon újrapárosításaitól.
+     */
+    void addDevice(const RemoteDevice& d) {
+        if (!d.app.empty()) {
+            auto online = [&](const RemoteDevice& x) {
+                return std::any_of(clients_.begin(), clients_.end(),
+                                   [&](const auto& c) { return !c->dead && c->remote && c->deviceId == x.id; });
+            };
+            std::vector<std::string> gone;
+            for (const auto& x : devices_)
+                if (x.app == d.app || (x.app.empty() && x.name == d.name && !online(x))) gone.push_back(x.id);
+            for (const auto& id : gone) {
+                devices_.erase(std::remove_if(devices_.begin(), devices_.end(), [&](const RemoteDevice& x) { return x.id == id; }),
+                               devices_.end());
+                for (auto& c : clients_)
+                    if (c->remote && c->deviceId == id) kill(*c, "ugyanez az eszköz újra párosodott");
+            }
+            if (!gone.empty()) std::cout << "[WS Bridge] " << gone.size() << " korábbi párosítás lecserélve: " << d.name << "\n";
+        }
+        devices_.push_back(d);
+        if (devices_.size() > 32) devices_.erase(devices_.begin());
+        saveRemoteConfig();
+    }
 
     // ------------------------------------------------------------------ hálózat
     static net::socket_t openListener(uint32_t hostAddr, int port) {
@@ -622,6 +669,7 @@ private:
         pr.clientIp = p.clientIp;
         pr.clientType = clientType;
         pr.tier = tier;
+        pr.app = cleanAppId(bridge_detail::queryParam(request, "app"));
         pr.sock = p.sock;
         pr.secWebSocketKey = key;
         pr.deadline = clock::now() + std::chrono::seconds(kPairRequestTimeoutSeconds);
@@ -696,7 +744,8 @@ private:
                 if (code == "request") {
                     return handlePushPairRequest(p, key, request);
                 }
-                const int r = tryPair(code, bridge_detail::queryParam(request, "name"), deviceId, issuedToken);
+                const int r = tryPair(code, bridge_detail::queryParam(request, "name"), deviceId, issuedToken,
+                                      cleanAppId(bridge_detail::queryParam(request, "app")));
                 if (r != 0) { reply(p.sock, r == 429 ? "429 Too Many Requests" : "401 Unauthorized"); return false; }
             } else {
                 reply(p.sock, "401 Unauthorized");
@@ -734,7 +783,10 @@ private:
 
         cur_ = &cl;
         if (!issuedToken.empty())
-            sendText("{\"type\":\"paired\",\"id\":\"" + cl.deviceId + "\",\"token\":\"" + issuedToken + "\"}");
+            sendText("{\"type\":\"paired\",\"id\":\"" + cl.deviceId + "\",\"token\":\"" + issuedToken +
+                     "\",\"machine\":\"" + machineId() + "\"}");
+        else if (cl.remote)
+            sendText("{\"type\":\"machine\",\"machine\":\"" + machineId() + "\"}");
         sendText(buildStateMessage());
         cur_ = nullptr;
         if (cl.remote) broadcastRemoteState();   // a helyi felület látja, hogy az eszköz csatlakozott
@@ -975,7 +1027,8 @@ private:
     }
 
     /** Párosítás a motor által mutatott kóddal: 0 = siker, 401 = hibás vagy lejárt kód, 429 = túl sok próbálkozás. */
-    int tryPair(const std::string& code, const std::string& name, std::string& outId, std::string& outToken) {
+    int tryPair(const std::string& code, const std::string& name, std::string& outId, std::string& outToken,
+                const std::string& app = "") {
         const auto now = clock::now();
         if (now < pairLockUntil_) return 429;
         if (now >= pairUntil_) return 401;   // párosítani csak a kód megjelenítése után néhány percig lehet
@@ -994,16 +1047,15 @@ private:
         RemoteDevice d;
         d.id = bridge_detail::randomHex(4);
         d.name = bridge_detail::cleanName(name);
+        d.app = app;
         outToken = bridge_detail::randomHex(32);
         d.hash = bridge_detail::sha1Hex(outToken);
         d.created = d.last = static_cast<long long>(std::time(nullptr));
-        devices_.push_back(d);
-        if (devices_.size() > 32) devices_.erase(devices_.begin());
         outId = d.id;
         pairFails_ = 0;
         pairCode_.clear();   // egy kód egy párosításra jó; a következőhöz újat kell kérni
         pairUntil_ = now;
-        saveRemoteConfig();
+        addDevice(d);
         std::cout << "[WS Bridge] Új eszköz párosítva: " << deviceName(d.id) << "\n";
         return 0;
     }
@@ -1055,6 +1107,10 @@ private:
         const std::string doc = cb_.loadRemote();
         if (doc.empty() || !json::parse(doc, v) || v.type != json::Value::Type::Object) return;
         remoteEnabled_ = num(v, "enabled", 0.0) != 0.0;
+        if (const json::Value* m = v.get("machine")) {
+            const std::string id = m->stringOr("");
+            if (id.size() == 16 && bridge_detail::isHex(id)) machineId_ = id;
+        }
         remotePort_ = std::clamp(static_cast<int>(num(v, "port", kRemotePortFirst)), 1024, 65535 - kRemotePortCount);
         if (const json::Value* list = v.get("devices"); list && list->type == json::Value::Type::Array) {
             for (const auto& e : list->arr) {
@@ -1062,10 +1118,15 @@ private:
                 d.id = e.get("id") ? e.get("id")->stringOr("") : "";
                 d.name = bridge_detail::cleanName(e.get("name") ? e.get("name")->stringOr("") : "");
                 d.hash = e.get("hash") ? e.get("hash")->stringOr("") : "";
+                d.app = cleanAppId(e.get("app") ? e.get("app")->stringOr("") : "");
                 d.created = static_cast<long long>(num(e, "created", 0.0));
                 d.last = static_cast<long long>(num(e, "last", 0.0));
                 if (bridge_detail::isHex(d.id) && d.hash.size() == 40 && bridge_detail::isHex(d.hash)) devices_.push_back(d);
             }
+        }
+        if (machineId_.empty()) {   // régebbi beállítás: az azonosító most jön létre, és megmarad
+            machineId();
+            saveRemoteConfig();
         }
         if (remoteEnabled_) openRemoteListener();
     }
@@ -1074,12 +1135,13 @@ private:
         if (!cb_.saveRemote) return;
         std::string s = "{\"enabled\":";
         s += remoteEnabled_ ? "true" : "false";
-        s += ",\"port\":" + std::to_string(remotePort_) + ",\"devices\":[";
+        s += ",\"port\":" + std::to_string(remotePort_) + ",\"machine\":\"" + machineId() + "\",\"devices\":[";
         for (size_t i = 0; i < devices_.size(); ++i) {
             const auto& d = devices_[i];
             if (i) s += ',';
-            s += "{\"id\":\"" + d.id + "\",\"name\":\"" + jsonEscape(d.name) + "\",\"hash\":\"" + d.hash +
-                 "\",\"created\":" + std::to_string(d.created) + ",\"last\":" + std::to_string(d.last) + "}";
+            s += "{\"id\":\"" + d.id + "\",\"name\":\"" + jsonEscape(d.name) + "\",\"hash\":\"" + d.hash + "\"";
+            if (!d.app.empty()) s += ",\"app\":\"" + d.app + "\"";
+            s += ",\"created\":" + std::to_string(d.created) + ",\"last\":" + std::to_string(d.last) + "}";
         }
         s += "]}";
         if (!cb_.saveRemote(s)) std::cerr << "[WS Bridge] Figyelem: a távoli elérés beállításai nem menthetők.\n";
@@ -1192,11 +1254,10 @@ private:
         RemoteDevice d;
         d.id = devId;
         d.name = pr.deviceName.empty() ? ("Eszköz (" + devId + ")") : pr.deviceName;
+        d.app = pr.app;
         d.hash = bridge_detail::sha1Hex(token);
         d.created = d.last = static_cast<long long>(std::time(nullptr));
-        devices_.push_back(d);
-        if (devices_.size() > 32) devices_.erase(devices_.begin());
-        saveRemoteConfig();
+        addDevice(d);
 
         const std::string magicGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
         const std::string acceptKey = Base64::encode(Sha1::hash(pr.secWebSocketKey + magicGuid));
@@ -1214,7 +1275,8 @@ private:
         std::cout << "[WS Bridge] Távoli eszköz jóváhagyva és csatlakozott: " << cl.deviceName << "\n";
 
         cur_ = &cl;
-        sendText("{\"type\":\"paired\",\"id\":\"" + cl.deviceId + "\",\"token\":\"" + token + "\"}");
+        sendText("{\"type\":\"paired\",\"id\":\"" + cl.deviceId + "\",\"token\":\"" + token + "\",\"machine\":\"" +
+                 machineId() + "\"}");
         sendText(buildStateMessage());
         cur_ = nullptr;
         broadcastRemoteState();
@@ -1327,6 +1389,21 @@ private:
         const std::string type = typeV->stringOr("");
         const json::Value* val = msg.get("val");
         const bool remote = cur_ && cur_->remote;
+
+        // A telefon a saját párosítását törli (a telefonon a gép törlésekor), hogy ne maradjon a gép listájában
+        if (type == "unpair_self") {
+            if (remote && !cur_->deviceId.empty()) {
+                const std::string id = cur_->deviceId;
+                devices_.erase(std::remove_if(devices_.begin(), devices_.end(), [&](const RemoteDevice& d) { return d.id == id; }),
+                               devices_.end());
+                for (auto& c : clients_)
+                    if (c->remote && c->deviceId == id) kill(*c, "a telefon törölte a párosítást");
+                saveRemoteConfig();
+                std::cout << "[WS Bridge] A telefon törölte a párosítását: " << id << ".\n";
+                broadcastRemoteState();
+            }
+            return;
+        }
 
         // A távoli elérés vezérlése csak a saját gépről
         if (type == "get_remote" || type == "set_remote" || type.rfind("remote_", 0) == 0) {
@@ -1999,6 +2076,7 @@ private:
     static constexpr int kPairRequestTimeoutSeconds = 45;
     std::vector<PendingPairRequest> pendingPairRequests_;
     std::vector<RemoteDevice> devices_;
+    std::string machineId_;
     std::string pairCode_;
     clock::time_point pairUntil_{};     // eddig párosítható
     int pairFails_ = 0;

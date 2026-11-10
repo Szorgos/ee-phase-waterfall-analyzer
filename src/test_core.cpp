@@ -524,7 +524,7 @@ static void testPushPairing() {
 }
 
 /** Élő WebSocket-kapcsolat a hídhoz (valódi socket, kézfogás); kInvalidSocket, ha nem sikerült. */
-static net::socket_t wsConnectLive(int port, const std::string& path) {
+static net::socket_t wsConnectLive(int port, const std::string& path, std::string* leftover = nullptr) {
     net::socket_t s = ::socket(AF_INET, SOCK_STREAM, 0);
     if (s == net::kInvalidSocket) return s;
     sockaddr_in a{};
@@ -543,6 +543,7 @@ static net::socket_t wsConnectLive(int port, const std::string& path) {
         resp.append(buf, static_cast<size_t>(n));
     }
     if (resp.rfind("HTTP/1.1 101", 0) != 0) { net::closeSocket(s); return net::kInvalidSocket; }
+    if (leftover) leftover->assign(resp, resp.find("\r\n\r\n") + 4, std::string::npos);   // a kézfogással együtt érkezett keretek
     return s;
 }
 
@@ -635,6 +636,172 @@ static void testEngineQuit() {
         CHECK(waitQuit(1, 2000) == 1, "helyi engine_quit: a motor leállítása pontosan egyszer hívódik");
         net::closeSocket(l);
     }
+    bridge.stop();
+}
+
+/** A következő szöveges keret a szervertől (maszkolatlan), legfeljebb ms ideig várva; üres, ha nem jött. */
+static std::string wsReadText(net::socket_t s, int ms) {
+#ifdef _WIN32
+    DWORD tv = static_cast<DWORD>(ms);
+#else
+    timeval tv{ ms / 1000, (ms % 1000) * 1000 };
+#endif
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+    std::string buf;
+    auto need = [&](size_t n) {
+        char tmp[4096];
+        while (buf.size() < n) {
+            const int r = static_cast<int>(::recv(s, tmp, sizeof(tmp), 0));
+            if (r <= 0) return false;
+            buf.append(tmp, static_cast<size_t>(r));
+        }
+        return true;
+    };
+    for (int guard = 0; guard < 50; ++guard) {
+        if (!need(2)) return "";
+        const int op = static_cast<unsigned char>(buf[0]) & 0x0F;
+        size_t len = static_cast<unsigned char>(buf[1]) & 0x7F, off = 2;
+        if (len == 126) { if (!need(4)) return ""; len = (static_cast<unsigned char>(buf[2]) << 8) | static_cast<unsigned char>(buf[3]); off = 4; }
+        else if (len == 127) { if (!need(10)) return ""; len = 0; for (int i = 2; i < 10; ++i) len = (len << 8) | static_cast<unsigned char>(buf[i]); off = 10; }
+        if (!need(off + len)) return "";
+        std::string payload = buf.substr(off, len);
+        buf.erase(0, off + len);
+        if (op == 1) return payload;
+    }
+    return "";
+}
+
+/** A szöveges keretek közül az első, amelyik tartalmazza a mintát (ms-en belül). */
+static std::string wsWaitFor(net::socket_t s, const std::string& needle, int ms) {
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+    while (std::chrono::steady_clock::now() < end) {
+        const std::string t = wsReadText(s, 300);
+        if (t.find(needle) != std::string::npos) return t;
+    }
+    return "";
+}
+
+/** A beérkező nyers bájtok gyűjtése ms ideig (a keretek fejlécével együtt; mintakereséshez). */
+static std::string recvFor(net::socket_t s, int ms) {
+    std::string out;
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+    while (std::chrono::steady_clock::now() < end) {
+#ifdef _WIN32
+        DWORD tv = 100;
+#else
+        timeval tv{ 0, 100000 };
+#endif
+        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+        char tmp[4096];
+        const int r = static_cast<int>(::recv(s, tmp, sizeof(tmp), 0));
+        if (r > 0) out.append(tmp, static_cast<size_t>(r));
+        else if (r == 0) break;
+    }
+    return out;
+}
+
+/** "kulcs":"érték" szövegmező az első előfordulásnál (nyers bájtokban is működik). */
+static std::string rawField(const std::string& raw, const std::string& key) {
+    const std::string pat = "\"" + key + "\":\"";
+    const size_t p = raw.find(pat);
+    if (p == std::string::npos) return "";
+    const size_t e = raw.find('"', p + pat.size());
+    return e == std::string::npos ? "" : raw.substr(p + pat.size(), e - p - pat.size());
+}
+
+static std::string jsonField(const std::string& doc, const std::string& key) {
+    json::Value v;
+    if (!json::parse(doc, v) || !v.get(key.c_str())) return "";
+    return v.get(key.c_str())->stringOr("");
+}
+
+static void testRepairReplacesDevice() {
+    std::printf("[11b] Újrapárosítás: ugyanaz a telefon nem gyűlik a gép listájában; a telefon törölheti a saját párosítását\n");
+    std::mutex mu;
+    std::string saved;
+    const std::string remoteDoc =
+        "{\"enabled\":true,\"port\":47880,\"devices\":["
+        "{\"id\":\"0a0b0c0d\",\"name\":\"Teszt-telefon\",\"hash\":\"" + std::string(40, 'a') + "\",\"created\":0,\"last\":0},"
+        "{\"id\":\"1a1b1c1d\",\"name\":\"Masik\",\"hash\":\"" + std::string(40, 'b') + "\",\"created\":0,\"last\":0}]}";
+    BridgeCallbacks cb;
+    cb.pullAudio = [](float*, size_t) -> size_t { return 0; };
+    cb.sampleRate = [] { return 48000.0; };
+    cb.getParams = [] { return transparentParams(); };
+    cb.setParams = [](const ParamData&) {};
+    cb.loadRemote = [&] { return remoteDoc; };
+    cb.saveRemote = [&](const std::string& s) { std::lock_guard<std::mutex> g(mu); saved = s; return true; };
+    WebSocketBridge bridge(47879);
+    const bool started = bridge.start(cb);
+    CHECK(started, "a híd elindul (127.0.0.1:47879)");
+    if (!started) return;
+    auto savedDoc = [&] { std::lock_guard<std::mutex> g(mu); return saved; };
+    auto count = [](const std::string& doc, const std::string& needle) {
+        size_t n = 0;
+        for (size_t p = doc.find(needle); p != std::string::npos; p = doc.find(needle, p + 1)) ++n;
+        return n;
+    };
+
+    net::socket_t local = wsConnectLive(47879, "/");
+    CHECK(local != net::kInvalidSocket, "helyi felület csatlakozik");
+    if (local == net::kInvalidSocket) { bridge.stop(); return; }
+    const std::string app = "0123456789abcdef0123456789abcdef";
+    int remotePort = 0;
+    std::string token;
+    std::vector<std::string> machines;
+    for (int round = 0; round < 2; ++round) {
+        wsSendText(local, "{\"type\":\"remote_new_code\"}");
+        std::string code;
+        for (int i = 0; i < 10 && code.empty(); ++i) code = jsonField(wsWaitFor(local, "\"code\":\"", 2000), "code");
+        net::socket_t r = net::kInvalidSocket;
+        std::string first;
+        for (int port = remotePort ? remotePort : 47880; port < 47885 && r == net::kInvalidSocket; ++port) {
+            r = wsConnectLive(port, "/?pair=" + code + "&client=aqulify_remote&name=Teszt-telefon&app=" + app, &first);
+            if (r != net::kInvalidSocket) remotePort = port;
+        }
+        CHECK(r != net::kInvalidSocket, "%d. párosítás kóddal, ugyanazzal az alkalmazás-azonosítóval", round + 1);
+        if (r == net::kInvalidSocket) break;
+        // A "paired" üzenet (benne a token és a gép azonosítója) a kézfogással együtt vagy közvetlenül utána érkezik
+        const std::string raw = first + recvFor(r, 400);
+        token = rawField(raw, "token");
+        machines.push_back(rawField(raw, "machine"));
+        net::closeSocket(r);
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    const std::string doc = savedDoc();
+    CHECK(count(doc, "\"name\":\"Teszt-telefon\"") == 1 && count(doc, "\"app\":\"" + app + "\"") == 1,
+          "két párosítás után egy bejegyzés maradt (a régi, azonosító nélküli azonos nevű is lecserélődött)");
+    CHECK(doc.find("\"name\":\"Masik\"") != std::string::npos, "a másik telefon párosítása megmaradt");
+    CHECK(machines.size() == 2 && machines[0].size() == 16 && machines[0] == machines[1] &&
+          jsonField(doc, "machine") == machines[0],
+          "a gép azonosítója (machine) a párosításkor megjön, állandó és el van mentve");
+
+    // Már párosított telefon csatlakozásakor is megkapja a gép azonosítóját
+    {
+        std::string first;
+        net::socket_t t = (remotePort && token.size() == 64) ? wsConnectLive(remotePort, "/?token=" + token, &first)
+                                                            : net::kInvalidSocket;
+        const std::string m = t == net::kInvalidSocket ? "" : rawField(first + recvFor(t, 400), "machine");
+        CHECK(!machines.empty() && !m.empty() && m == machines[0],
+              "tokennel csatlakozáskor a gép azonosítója is megjön");
+        if (t != net::kInvalidSocket) net::closeSocket(t);
+    }
+
+    // A telefon törli a saját párosítását (a telefonon a gép törlésekor)
+    net::socket_t me = (remotePort && token.size() == 64) ? wsConnectLive(remotePort, "/?token=" + token) : net::kInvalidSocket;
+    CHECK(me != net::kInvalidSocket, "a párosított telefon csatlakozik a kapott tokennel");
+    if (me != net::kInvalidSocket) {
+        wsSendText(me, "{\"type\":\"unpair_self\"}");
+        std::string after;
+        for (int i = 0; i < 50; ++i) {
+            after = savedDoc();
+            if (after.find("Teszt-telefon") == std::string::npos) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        CHECK(after.find("Teszt-telefon") == std::string::npos && after.find("\"name\":\"Masik\"") != std::string::npos,
+              "unpair_self: a telefon párosítása törlődött, a másiké megmaradt");
+        net::closeSocket(me);
+    }
+    net::closeSocket(local);
     bridge.stop();
 }
 
@@ -794,6 +961,7 @@ int main() {
     testMdns();
     testPushPairing();
     testEngineQuit();
+    testRepairReplacesDevice();
     testUpdate();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
