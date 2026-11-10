@@ -22,6 +22,10 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <shlwapi.h>
+// Az llvm-mingw shlwapi.h-jából hiányzik (Windows 8 óta; értéke a Microsoft leírása szerint 0x1000)
+#ifndef ASSOCF_IS_PROTOCOL
+#define ASSOCF_IS_PROTOCOL static_cast<ASSOCF>(0x00001000)
+#endif
 #include <iphlpapi.h>
 #include <psapi.h>
 #include <xmmintrin.h>
