@@ -34,6 +34,10 @@
 #include "linux_tray.hpp"
 #endif
 #include <unistd.h>
+#include <spawn.h>
+#include <sys/wait.h>
+
+extern char** environ;
 #include "update_logic.hpp"
 #include "ws_bridge.hpp"
 
@@ -554,6 +558,26 @@ int main(int argc, char* argv[]) {
         return true;
     };
     cb.playerStop = [&] { filePlayer.stop(); };
+    // Média-hivatkozás (URL) megnyitása: csak grafikus munkamenetben (DISPLAY / WAYLAND_DISPLAY)
+    const char* disp = std::getenv("DISPLAY");
+    const char* wayland = std::getenv("WAYLAND_DISPLAY");
+    if ((disp && *disp) || (wayland && *wayland)) {
+        cb.openUrl = [](const std::string& u) -> bool {
+            pid_t pid = -1;
+            char* const argv[] = {
+                const_cast<char*>("xdg-open"),
+                const_cast<char*>(u.c_str()),
+                nullptr
+            };
+            if (posix_spawnp(&pid, "xdg-open", nullptr, nullptr, argv, environ) != 0) {
+                return false;
+            }
+            std::thread([pid]() {
+                waitpid(pid, nullptr, 0);
+            }).detach();
+            return true;
+        };
+    }
     {
         musicLibrary.setCacheStorage([] { return linux_store::loadLibraryCache(); },
                                      [](const std::string& doc) {

@@ -664,5 +664,6 @@
   "ao.mixed": "Modo compartilhado: o motor de áudio do Windows mistura o sinal (não bit-perfect)",
   "ao.notBitperfect": "Não bit-perfect",
   "ao.truncated": "A resolução de bits da saída é menor que a do arquivo",
-  "ao.volDigital": "Volume digital (o dispositivo não tem volume de hardware)"
+  "ao.volDigital": "Volume digital (o dispositivo não tem volume de hardware)",
+  "remote.openedUrlToast": "O telefone {device} abriu uma ligação ({host})."
 }

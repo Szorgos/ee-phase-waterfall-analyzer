@@ -664,5 +664,6 @@
   "imp.noteGuard": "ファイルにプリアンプなし -> Auto-Guard: ヘッドルームを確保し合成EQカーブのピークから計算",
   "imp.noteNoBoost": "0.0 dB (ブーストなし)",
   "imp.noteNoBoostFilters": "0.0 dB (フィルター内のブーストなし)",
-  "imp.noParam": "ファイルにパラメトリックEQバンドが含まれていません"
+  "imp.noParam": "ファイルにパラメトリックEQバンドが含まれていません",
+  "remote.openedUrlToast": "スマートフォン {device} がリンクを開きました ({host})。"
 }

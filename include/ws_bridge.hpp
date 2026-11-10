@@ -45,6 +45,7 @@
 #include "media_session.hpp"
 #include "mdns_announcer.hpp"
 #include "multi_output_config.hpp"
+#include "media_url.hpp"
 #include <fstream>
 
 namespace ee_analyzer {
@@ -162,6 +163,11 @@ struct BridgeCallbacks {
      * saját gépről indítható; ha be van kötve, a "caps" mezőben "update" áll.
      */
     std::function<bool(const std::string& version, std::string& error)> updateInstall;
+    /**
+     * Média-hivatkozás (URL) megnyitása a gépen a böngészőben vagy asztali appban. false: nem sikerült elindítani.
+     * Ha be van kötve, az állapotüzenet "caps" mezőjében "open_url" áll.
+     */
+    std::function<bool(const std::string& url)> openUrl;
 };
 
 /**
@@ -405,6 +411,7 @@ private:
         bool spectrum = true;           // kér-e spektrumot, és milyen gyakran
         int spectrumMs = 16;
         clock::time_point lastSpectrum{};
+        clock::time_point lastOpenUrl{};
         uint64_t spectrumSeq = 0;
         bool dead = false;
         const char* why = "";
@@ -1437,6 +1444,42 @@ private:
             sendText("{\"type\":\"update_result\",\"ok\":false,\"error\":\"" + jsonEscape(err) + "\"}");
             return;
         }
+        if (type == "open_url") {
+            // Média-hivatkozás megnyitása a gépen (a párosított távirányítóról és a helyi felületről is)
+            if (!cb_.openUrl) {
+                sendText("{\"type\":\"open_url_result\",\"ok\":false,\"error\":\"unsupported\"}");
+                return;
+            }
+            const std::string url = msg.get("url") ? msg.get("url")->stringOr("") : "";
+            std::string host;
+            if (!isAllowedMediaUrl(url, &host)) {
+                sendText("{\"type\":\"open_url_result\",\"ok\":false,\"error\":\"url\"}");
+                return;
+            }
+            if (cur_) {
+                const auto now = clock::now();
+                if (cur_->lastOpenUrl.time_since_epoch().count() != 0 &&
+                    now - cur_->lastOpenUrl < std::chrono::seconds(2)) {
+                    sendText("{\"type\":\"open_url_result\",\"ok\":false,\"error\":\"busy\"}");
+                    return;
+                }
+                cur_->lastOpenUrl = now;
+            }
+            if (!cb_.openUrl(url)) {
+                sendText("{\"type\":\"open_url_result\",\"ok\":false,\"error\":\"failed\"}");
+                return;
+            }
+            sendText("{\"type\":\"open_url_result\",\"ok\":true}");
+            // Üres név: a felület a saját nyelvén írja ki („Telefon”), lásd pair.defaultName
+            const std::string dev = (cur_ && !cur_->deviceName.empty()) ? cur_->deviceName : "";
+            std::cout << "[WS Bridge] Távoli hivatkozás megnyitása: " << (dev.empty() ? "-" : dev) << " (" << host << ").\n";
+            const std::string notify = "{\"type\":\"remote_opened_url\",\"device\":\"" + jsonEscape(dev) +
+                                       "\",\"host\":\"" + jsonEscape(host) + "\"}";
+            for (auto& c : clients_) {
+                if (!c->remote) queueText(*c, notify);
+            }
+            return;
+        }
         if (type == "set_audio_opts" || type == "get_audio_opts") {
             if (!cb_.audioOptionsJson) return;
             if (type == "set_audio_opts" && !remote && cb_.setAudioOptions) {
@@ -1909,6 +1952,11 @@ public:
         if (cb_.updateInstall) {
             if (hasCap) caps += ",";
             caps += "\"update\"";
+            hasCap = true;
+        }
+        if (cb_.openUrl) {
+            if (hasCap) caps += ",";
+            caps += "\"open_url\"";
             hasCap = true;
         }
         caps += "]";

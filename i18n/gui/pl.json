@@ -664,5 +664,6 @@
   "ao.mixed": "Tryb współdzielony: silnik audio Windows miksuje sygnał (brak bit-perfect)",
   "ao.notBitperfect": "Brak bit-perfect",
   "ao.truncated": "Głębia wyjściowa jest niższa niż pliku",
-  "ao.volDigital": "Głośność cyfrowa (urządzenie nie ma regulacji sprzętowej)"
+  "ao.volDigital": "Głośność cyfrowa (urządzenie nie ma regulacji sprzętowej)",
+  "remote.openedUrlToast": "Telefon {device} otworzył link ({host})."
 }

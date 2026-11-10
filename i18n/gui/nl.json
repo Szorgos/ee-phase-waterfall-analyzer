@@ -664,5 +664,6 @@
   "ao.mixed": "Gedeelde modus: de Windows-audio-engine mixt het signaal (niet bit-perfect)",
   "ao.notBitperfect": "Niet bit-perfect",
   "ao.truncated": "De uitvoerbitdiepte is lager dan die van het bestand",
-  "ao.volDigital": "Digitaal volume (het apparaat heeft geen hardwarevolume)"
+  "ao.volDigital": "Digitaal volume (het apparaat heeft geen hardwarevolume)",
+  "remote.openedUrlToast": "De telefoon {device} heeft een link geopend ({host})."
 }

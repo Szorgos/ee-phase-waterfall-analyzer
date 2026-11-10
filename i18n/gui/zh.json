@@ -664,5 +664,6 @@
   "ao.mixed": "共享模式：Windows 音频引擎会混合信号（非比特完美）",
   "ao.notBitperfect": "非比特完美",
   "ao.truncated": "输出位深低于文件的位深",
-  "ao.volDigital": "数字音量（设备没有硬件音量）"
+  "ao.volDigital": "数字音量（设备没有硬件音量）",
+  "remote.openedUrlToast": "手机 {device} 打开了一个链接 ({host})。"
 }

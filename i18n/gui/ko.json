@@ -664,5 +664,6 @@
   "imp.noteGuard": "파일에 프리앰프 없음 -> Auto-Guard: 전체 EQ 곡선 피크 기반, 헤드룸 적용",
   "imp.noteNoBoost": "0.0 dB (부스트 없음)",
   "imp.noteNoBoostFilters": "0.0 dB (필터 내 부스트 없음)",
-  "imp.noParam": "파일에 파라메트릭 EQ 밴드가 포함되어 있지 않습니다"
+  "imp.noParam": "파일에 파라메트릭 EQ 밴드가 포함되어 있지 않습니다",
+  "remote.openedUrlToast": "휴대폰 {device}이(가) 링크를 열었습니다 ({host})."
 }

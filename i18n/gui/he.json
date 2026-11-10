@@ -664,5 +664,6 @@
   "imp.noteGuard": "בקובץ לא היה preamp -> הגנה אוטומטית (Auto-Guard): משיא עקומת ה-EQ המלאה, עם מרווח ביטחון",
   "imp.noteNoBoost": "0.0 dB (ללא הגברה)",
   "imp.noteNoBoostFilters": "0.0 dB (ללא הגברה במסננים)",
-  "imp.noParam": "הקובץ אינו מכיל פסי EQ פרמטרי"
+  "imp.noParam": "הקובץ אינו מכיל פסי EQ פרמטרי",
+  "remote.openedUrlToast": "הטלפון {device} פתח קישור ({host})."
 }

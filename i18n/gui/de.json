@@ -664,5 +664,6 @@
   "ao.mixed": "Geteilter Modus: Die Windows-Audioengine mischt das Signal (nicht bit-perfekt)",
   "ao.notBitperfect": "Nicht bit-perfekt",
   "ao.truncated": "Die Ausgabe-Bittiefe ist geringer als die der Datei",
-  "ao.volDigital": "Digitale Lautstärke (Gerät hat keine Hardware-Lautstärkeregelung)"
+  "ao.volDigital": "Digitale Lautstärke (Gerät hat keine Hardware-Lautstärkeregelung)",
+  "remote.openedUrlToast": "Das Telefon {device} hat einen Link geöffnet ({host})."
 }

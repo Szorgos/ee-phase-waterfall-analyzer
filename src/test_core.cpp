@@ -23,6 +23,7 @@
 #include "ws_bridge.hpp"
 #include "sha256.hpp"
 #include "update_logic.hpp"
+#include "media_url.hpp"
 
 using namespace ee_analyzer;
 
@@ -946,6 +947,169 @@ static void testUpdate() {
     bridge.stop();
 }
 
+
+static void testOpenUrl() {
+    std::printf("[13] Média-hivatkozások (open_url): címellenőrzés, híd, gyakoriságkorlát, értesítés\n");
+
+    // 1. isAllowedMediaUrl egységtesztek
+    std::string h;
+    CHECK(isAllowedMediaUrl("https://www.youtube.com/watch?v=abc", &h) && h == "www.youtube.com", "URL: www.youtube.com");
+    CHECK(isAllowedMediaUrl("https://youtu.be/abc?si=x", &h) && h == "youtu.be", "URL: youtu.be");
+    CHECK(isAllowedMediaUrl("https://music.youtube.com/watch?v=abc", &h) && h == "music.youtube.com", "URL: music.youtube.com");
+    CHECK(isAllowedMediaUrl("https://tidal.com/browse/track/123?u", &h) && h == "tidal.com", "URL: tidal.com");
+    CHECK(isAllowedMediaUrl("https://open.spotify.com/track/abc?si=x", &h) && h == "open.spotify.com", "URL: open.spotify.com");
+    CHECK(isAllowedMediaUrl("HTTPS://YouTube.com/x", &h) && h == "youtube.com", "URL: HTTPS://YouTube.com/x (kis-nagybetű)");
+
+    // Elutasítások
+    CHECK(!isAllowedMediaUrl("http://youtube.com/x"), "URL elutasítás: http");
+    CHECK(!isAllowedMediaUrl("file:///C:/x"), "URL elutasítás: file");
+    CHECK(!isAllowedMediaUrl("javascript:alert(1)"), "URL elutasítás: javascript");
+    CHECK(!isAllowedMediaUrl("tidal://track/1"), "URL elutasítás: tidal://");
+    CHECK(!isAllowedMediaUrl("ms-msdt:/id x"), "URL elutasítás: ms-msdt");
+    CHECK(!isAllowedMediaUrl("https://youtube.com.evil.com/"), "URL elutasítás: aldomain támadás");
+    CHECK(!isAllowedMediaUrl("https://evilyoutube.com/"), "URL elutasítás: előtag");
+    CHECK(!isAllowedMediaUrl("https://user@youtube.com/"), "URL elutasítás: @ a hosztban");
+    CHECK(!isAllowedMediaUrl("https://youtube.com:8080/"), "URL elutasítás: port a hosztban");
+    CHECK(!isAllowedMediaUrl("https://192.168.1.1/"), "URL elutasítás: IP-cím");
+    CHECK(!isAllowedMediaUrl("https://[::1]/"), "URL elutasítás: IPv6");
+    CHECK(!isAllowedMediaUrl("https://xn--ytube-xxx.com/"), "URL elutasítás: punycode");
+    CHECK(!isAllowedMediaUrl("https://youtube.com/foo bar"), "URL elutasítás: szóköz");
+    CHECK(!isAllowedMediaUrl("https://youtube.com/foo\\bar"), "URL elutasítás: visszaperjel");
+    CHECK(!isAllowedMediaUrl("https://youtube.com/foo%00bar"), "URL elutasítás: %%00");
+    // Kódolás nélkül nem megengedett URL-karakterek (Windowson a böngésző parancssorába kerülne)
+    for (const char* bad : { "https://youtube.com/watch?v=\"x", "https://youtube.com/<script>", "https://youtube.com/a>b",
+                             "https://youtube.com/a^b", "https://youtube.com/a|b", "https://youtube.com/a`b",
+                             "https://youtube.com/a{b", "https://youtube.com/a}b" })
+        CHECK(!isAllowedMediaUrl(bad), "URL elutasítás: nem URL-karakter (%s)", bad + 20);
+    // Hamis hoszt a töredékben / lekérdezésben / útvonalban, kódolt pont, hexadecimális IP, kötőjeles előtag
+    CHECK(!isAllowedMediaUrl("https://evil.com#.youtube.com") && !isAllowedMediaUrl("https://evil.com?.youtube.com") &&
+          !isAllowedMediaUrl("https://evil.com/.youtube.com") && !isAllowedMediaUrl("https://youtube.com%2eevil.com/") &&
+          !isAllowedMediaUrl("https://0x7f000001/") && !isAllowedMediaUrl("https://-youtube.com/") &&
+          !isAllowedMediaUrl("https:///youtube.com") && !isAllowedMediaUrl("https:youtube.com"),
+          "URL elutasítás: hamis hoszt a #/?/ után, kódolt pont, hexa IP, kötőjeles előtag, hiányzó hoszt");
+    CHECK(isAllowedMediaUrl("https://YOUTUBE.COM./x", &h) && h == "youtube.com" &&
+          isAllowedMediaUrl("https://youtube.com#@evil.com", &h) && h == "youtube.com",
+          "URL: záró pont és töredék (a hoszt youtube.com)");
+    CHECK(!isAllowedMediaUrl(std::string("https://youtube.com/") + std::string(2035, 'a')), "URL elutasítás: 2049 karakter");
+    CHECK(!isAllowedMediaUrl(""), "URL elutasítás: üres szöveg");
+
+    // 2. Élő hídteszt: openUrl nélküli híd -> nincs open_url a caps-ban, és unsupported hiba
+    {
+        BridgeCallbacks cb;
+        cb.pullAudio = [](float*, size_t) -> size_t { return 0; };
+        cb.sampleRate = [] { return 48000.0; };
+        cb.getParams = [] { return transparentParams(); };
+        cb.setParams = [](const ParamData&) {};
+        WebSocketBridge bridge(47888);
+        const bool started = bridge.start(cb);
+        CHECK(started, "a híd elindul openUrl nélkül (127.0.0.1:47888)");
+        if (started) {
+            std::string first;
+            net::socket_t l = wsConnectLive(47888, "/", &first);
+            CHECK(l != net::kInvalidSocket, "helyi kliens csatlakozik az openUrl nélküli hídhoz");
+            if (l != net::kInvalidSocket) {
+                const std::string state = first + recvFor(l, 400);
+                CHECK(state.find("\"open_url\"") == std::string::npos, "openUrl nélkül a caps NEM tartalmazza az \"open_url\"-t");
+                wsSendText(l, "{\"type\":\"open_url\",\"url\":\"https://www.youtube.com/watch?v=123\"}");
+                const std::string rep = recvFor(l, 400);
+                CHECK(rawField(rep, "error") == "unsupported", "openUrl nélkül open_url -> error: unsupported");
+                net::closeSocket(l);
+            }
+            bridge.stop();
+        }
+    }
+
+    // 3. Élő hídteszt: openUrl-lel felvértezett híd
+    {
+        std::mutex gm;
+        std::string gotUrl;
+        std::atomic<int> calls{ 0 };
+        const std::string token = bridge_detail::randomHex(32);
+        const std::string remoteDoc = "{\"enabled\":true,\"port\":47889,\"devices\":[{\"id\":\"0a0b0c0d\",\"name\":\"Mobil\",\"hash\":\"" +
+                                      bridge_detail::sha1Hex(token) + "\",\"created\":0,\"last\":0}]}";
+        BridgeCallbacks cb;
+        cb.pullAudio = [](float*, size_t) -> size_t { return 0; };
+        cb.sampleRate = [] { return 48000.0; };
+        cb.getParams = [] { return transparentParams(); };
+        cb.setParams = [](const ParamData&) {};
+        cb.loadRemote = [&] { return remoteDoc; };
+        cb.saveRemote = [](const std::string&) { return true; };
+        cb.openUrl = [&](const std::string& u) {
+            std::lock_guard<std::mutex> lk(gm);
+            gotUrl = u;
+            ++calls;
+            return true;
+        };
+
+        WebSocketBridge bridge(47888);
+        const bool started = bridge.start(cb);
+        CHECK(started, "a híd elindul openUrl-lel (127.0.0.1:47888)");
+        if (started) {
+            // Helyi felület csatlakozik
+            std::string localFirst;
+            net::socket_t local = wsConnectLive(47888, "/", &localFirst);
+            CHECK(local != net::kInvalidSocket, "helyi felület csatlakozik (127.0.0.1:47888)");
+            if (local != net::kInvalidSocket) {
+                const std::string state = localFirst + recvFor(local, 400);
+                CHECK(state.find("\"open_url\"") != std::string::npos, "a caps tartalmazza az \"open_url\"-t");
+            }
+
+            // Párosított távoli kliens csatlakozik
+            net::socket_t remote = net::kInvalidSocket;
+            for (int port = 47889; port < 47894 && remote == net::kInvalidSocket; ++port) {
+                remote = wsConnectLive(port, "/?token=" + token + "&client=aqulify_remote&name=Mobil");
+            }
+            CHECK(remote != net::kInvalidSocket, "párosított telefon csatlakozik (token)");
+
+            if (remote != net::kInvalidSocket) {
+                // 3a: Érvényes URL -> ok: true, a cb.openUrl lefut pontosan a megadott URL-lel
+                wsSendText(remote, "{\"type\":\"open_url\",\"url\":\"https://www.youtube.com/watch?v=good\"}");
+                const std::string rep1 = recvFor(remote, 400);
+                CHECK(rep1.find("\"type\":\"open_url_result\",\"ok\":true") != std::string::npos, "érvényes URL -> ok: true");
+                std::string u1;
+                {
+                    std::lock_guard<std::mutex> lk(gm);
+                    u1 = gotUrl;
+                }
+                CHECK(calls.load() == 1 && u1 == "https://www.youtube.com/watch?v=good", "cb.openUrl pontosan egyszer futott az URL-lel");
+
+                // A helyi felület megkapja a remote_opened_url üzenetet a hoszttal, a teljes URL nélkül
+                const std::string notify = recvFor(local, 400);
+                CHECK(notify.find("\"type\":\"remote_opened_url\"") != std::string::npos &&
+                      rawField(notify, "host") == "www.youtube.com" &&
+                      notify.find("watch?v=good") == std::string::npos,
+                      "a helyi felület megkapta a remote_opened_url üzenetet a hoszttal, a teljes URL nélkül");
+
+                // 3b: 2 másodpercen belül újra küldve -> busy
+                wsSendText(remote, "{\"type\":\"open_url\",\"url\":\"https://www.youtube.com/watch?v=good2\"}");
+                const std::string rep2 = recvFor(remote, 400);
+                CHECK(rawField(rep2, "error") == "busy", "2 s-on belül ismétlés -> error: busy");
+                CHECK(calls.load() == 1, "busy esetén a callback nem hívódott újra");
+
+                // 3c: Várakozás után rossz cím -> nem hívódik, error: url
+                std::this_thread::sleep_for(std::chrono::milliseconds(2100));
+                wsSendText(remote, "{\"type\":\"open_url\",\"url\":\"https://evil.com/malicious\"}");
+                const std::string rep3 = recvFor(remote, 400);
+                CHECK(rawField(rep3, "error") == "url", "tiltott tartomány -> error: url");
+                CHECK(calls.load() == 1, "rossz címnél a callback nem hívódott");
+
+                net::closeSocket(remote);
+            }
+            // Név nélküli kliens (a helyi felület): az értesítésben üres eszköznév megy (a felület a saját nyelvén írja ki)
+            if (local != net::kInvalidSocket) {
+                recvFor(local, 200);   // a korábbi üzenetek elnyelése
+                wsSendText(local, "{\"type\":\"open_url\",\"url\":\"https://youtu.be/abc\"}");
+                const std::string got = recvFor(local, 400);
+                CHECK(got.find("\"type\":\"open_url_result\",\"ok\":true") != std::string::npos &&
+                      got.find("\"type\":\"remote_opened_url\",\"device\":\"\",\"host\":\"youtu.be\"") != std::string::npos,
+                      "név nélküli kliensnél üres eszköznév (nem magyar szöveg) az értesítésben");
+            }
+            if (local != net::kInvalidSocket) net::closeSocket(local);
+            bridge.stop();
+        }
+    }
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
@@ -963,6 +1127,7 @@ int main() {
     testEngineQuit();
     testRepairReplacesDevice();
     testUpdate();
+    testOpenUrl();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

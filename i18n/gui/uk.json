@@ -664,5 +664,6 @@
   "imp.noFiltersPasted": "У вставленому тексті не знайдено дійсних параметричних фільтрів EQ!",
   "imp.noteFromFile": "Зчитано з оригінального файлу (без подвійного віднімання!)",
   "imp.noteNoBoostFilters": "0.0 dB (без підсилення у фільтрах)",
-  "imp.toastManual": "Профіль створено та збережено: {name}\n\n• Еквалайзер: ON (активні смуги: {n})\n• Встановлений преамп: {preamp} dB\n  ↳ {note}\n• Лімітер: {limiter}\n• Crossfeed, Convolver, Bass Enhancer: OFF (можна ввімкнути вручну будь-коли)\n• Режим фільтра: смуги IIR, APO (DR)"
+  "imp.toastManual": "Профіль створено та збережено: {name}\n\n• Еквалайзер: ON (активні смуги: {n})\n• Встановлений преамп: {preamp} dB\n  ↳ {note}\n• Лімітер: {limiter}\n• Crossfeed, Convolver, Bass Enhancer: OFF (можна ввімкнути вручну будь-коли)\n• Режим фільтра: смуги IIR, APO (DR)",
+  "remote.openedUrlToast": "Телефон {device} відкрив посилання ({host})."
 }

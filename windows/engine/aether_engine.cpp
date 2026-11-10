@@ -34,6 +34,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 #include <algorithm>
 #include <cstring>
@@ -896,6 +897,27 @@ int main(int argc, char** argv) {
     // Egykattintásos frissítés (a felület „Új verzió érhető el” ablakából): letöltés, ellenőrzés, a telepítő indítása
     win::Updater updater;
     cb.updateInstall = [&](const std::string& version, std::string& error) { return updater.start(version, error); };
+    // Média-hivatkozás (URL) megnyitása a felhasználó alapértelmezett böngészőjében. Külön, rövid életű szálon: a
+    // böngésző indítása eltarthat egy ideig, és ne állítsa meg a WebSocket-hidat; a ShellExecute előtt a COM-ot
+    // inicializálni kell (Microsoft-leírás). A cím már ellenőrzött (isAllowedMediaUrl).
+    cb.openUrl = [](const std::string& u) -> bool {
+        const int n = MultiByteToWideChar(CP_UTF8, 0, u.c_str(), -1, nullptr, 0);
+        if (n <= 1) return false;
+        std::wstring wurl(static_cast<size_t>(n), L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, u.c_str(), -1, wurl.data(), n);
+        wurl.resize(static_cast<size_t>(n - 1));   // a záró nulla nélkül
+        try {
+            std::thread([wurl] {
+                const HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+                const auto r = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", wurl.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+                if (r <= 32) std::cerr << "[Hivatkozás] A megnyitás nem sikerült (" << r << ").\n";
+                if (SUCCEEDED(hr)) CoUninitialize();
+            }).detach();
+        } catch (...) {
+            return false;   // a szál nem indult el
+        }
+        return true;
+    };
     cb.statusFields = [&]() {
         std::string s = sources.statusFields() + updater.statusJson();
         const bool digitalVolume = playerOut.exclusiveActive() && !playerDsp.hardwareVolume();

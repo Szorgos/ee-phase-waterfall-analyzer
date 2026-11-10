@@ -664,5 +664,6 @@
   "ao.mixed": "Jaettu tila: Windowsin äänimoottori miksaa signaalin (ei bittitarkka)",
   "ao.notBitperfect": "Ei bittitarkka",
   "ao.truncated": "Lähdön bittisyvyys on pienempi kuin tiedoston",
-  "ao.volDigital": "Digitaalinen äänenvoimakkuus (laitteessa ei ole laitteistoäänenvoimakkuutta)"
+  "ao.volDigital": "Digitaalinen äänenvoimakkuus (laitteessa ei ole laitteistoäänenvoimakkuutta)",
+  "remote.openedUrlToast": "Puhelin {device} avasi linkin ({host})."
 }

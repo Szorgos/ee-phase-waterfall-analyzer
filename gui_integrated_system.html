@@ -10602,6 +10602,10 @@ function initPipewireBridge() {
           handlePairRequestReceived(data);
         } else if (data.type === "pair_cancel") {
           handlePairCancelReceived(data);
+        } else if (data.type === "remote_opened_url") {
+          const dev = data.device || t("pair.defaultName");
+          const host = data.host || "";
+          showToast(t("remote.openedUrlToast", { device: dev, host }), 5000);
         }
       } catch (err) {}
     };

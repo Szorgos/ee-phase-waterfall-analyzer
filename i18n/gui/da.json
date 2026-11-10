@@ -664,5 +664,6 @@
   "imp.noteGuard": "Filen havde ingen preamp -> Auto-Guard: fra toppen af den fulde EQ-kurve, med headroom",
   "imp.noteNoBoost": "0.0 dB (intet boost)",
   "imp.noteNoBoostFilters": "0.0 dB (intet boost i filtrene)",
-  "imp.noParam": "filen indeholder ingen parametriske EQ-bånd"
+  "imp.noParam": "filen indeholder ingen parametriske EQ-bånd",
+  "remote.openedUrlToast": "Telefonen {device} åbnede et link ({host})."
 }

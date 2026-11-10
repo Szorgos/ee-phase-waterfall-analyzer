@@ -664,5 +664,6 @@
   "ao.mixed": "Mod partajat: motorul audio Windows mixează semnalul (nu este bit-perfect)",
   "ao.notBitperfect": "Nu este bit-perfect",
   "ao.truncated": "Adâncimea de biți de ieșire este mai mică decât a fișierului",
-  "ao.volDigital": "Volum digital (dispozitivul nu are volum hardware)"
+  "ao.volDigital": "Volum digital (dispozitivul nu are volum hardware)",
+  "remote.openedUrlToast": "Telefonul {device} a deschis un link ({host})."
 }

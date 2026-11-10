@@ -520,6 +520,17 @@ struct Core {
         return true;
     };
     cb.playerStop = [c] { c->filePlayer.stop(); };
+    // Média-hivatkozás (URL) megnyitása a macOS alapértelmezett böngészőjében
+    cb.openUrl = [](const std::string& u) -> bool {
+        NSString* s = [NSString stringWithUTF8String:u.c_str()];
+        if (!s) return false;
+        NSURL* url = [NSURL URLWithString:s];
+        if (!url) return false;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [NSWorkspace.sharedWorkspace openURL:url];
+        });
+        return true;
+    };
 
     library::attachLibrary(cb, c->musicLibrary, c->playQueue, c->playlists, c->playStats, [](const std::string& doc) {
         if (!linux_store::saveLibrary(doc)) std::cerr << "[Zenetár] Figyelem: a library.json nem írható.\n";

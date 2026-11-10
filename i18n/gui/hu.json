@@ -664,5 +664,6 @@
   "ao.mixed": "Megosztott mód: a Windows hangmotorja keveri a jelet (nem bitpontos)",
   "ao.notBitperfect": "Nem bitpontos",
   "ao.truncated": "A kimenet bitmélysége kisebb a fájlénál",
-  "ao.volDigital": "Digitális hangerő (az eszköznek nincs hardveres hangereje)"
+  "ao.volDigital": "Digitális hangerő (az eszköznek nincs hardveres hangereje)",
+  "remote.openedUrlToast": "A(z) {device} telefon megnyitott egy hivatkozást ({host})."
 }

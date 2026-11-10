@@ -664,5 +664,6 @@
   "imp.noFiltersPasted": "Ve vloženém textu nebyl nalezen žádný platný parametrický filtr EQ!",
   "imp.noteFromFile": "Načteno z původního souboru (bez dvojitého odečítání!)",
   "imp.noteNoBoostFilters": "0.0 dB (ve filtrech není žádný zdvih)",
-  "imp.toastManual": "Profil vytvořen a uložen: {name}\n\n• Ekvalizér: ON (aktivní pásma: {n})\n• Nastavené předzesílení: {preamp} dB\n  ↳ {note}\n• Limiter: {limiter}\n• Crossfeed, Convolver, Bass Enhancer: OFF (lze kdykoli ručně zapnout)\n• Režim filtru: pásma IIR, APO (DR)"
+  "imp.toastManual": "Profil vytvořen a uložen: {name}\n\n• Ekvalizér: ON (aktivní pásma: {n})\n• Nastavené předzesílení: {preamp} dB\n  ↳ {note}\n• Limiter: {limiter}\n• Crossfeed, Convolver, Bass Enhancer: OFF (lze kdykoli ručně zapnout)\n• Režim filtru: pásma IIR, APO (DR)",
+  "remote.openedUrlToast": "Telefon {device} otevřel odkaz ({host})."
 }

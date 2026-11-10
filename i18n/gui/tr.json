@@ -664,5 +664,6 @@
   "ao.mixed": "Paylaşılan mod: Windows ses motoru sinyali karıştırır (bit-perfect değil)",
   "ao.notBitperfect": "Bit-perfect değil",
   "ao.truncated": "Çıkış bit derinliği dosyanınkinden düşük",
-  "ao.volDigital": "Dijital ses seviyesi (aygıtta donanım ses seviyesi yok)"
+  "ao.volDigital": "Dijital ses seviyesi (aygıtta donanım ses seviyesi yok)",
+  "remote.openedUrlToast": "{device} telefonu bir bağlantı açtı ({host})."
 }
