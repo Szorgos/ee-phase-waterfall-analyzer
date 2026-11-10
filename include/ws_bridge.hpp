@@ -794,11 +794,13 @@ private:
         else std::cout << "[WS Bridge] Grafikus felület csatlakozott.\n";
 
         cur_ = &cl;
+        // A gép neve is megy: a telefon QR-kódos párosítás után is meg tudja különböztetni a gépeket
+        const std::string computer = jsonEscape(MdnsAnnouncer::computerName());
         if (!issuedToken.empty())
             sendText("{\"type\":\"paired\",\"id\":\"" + cl.deviceId + "\",\"token\":\"" + issuedToken +
-                     "\",\"machine\":\"" + machineId() + "\"}");
+                     "\",\"machine\":\"" + machineId() + "\",\"computer\":\"" + computer + "\"}");
         else if (cl.remote)
-            sendText("{\"type\":\"machine\",\"machine\":\"" + machineId() + "\"}");
+            sendText("{\"type\":\"machine\",\"machine\":\"" + machineId() + "\",\"computer\":\"" + computer + "\"}");
         sendText(buildStateMessage());
         cur_ = nullptr;
         if (cl.remote) broadcastRemoteState();   // a helyi felület látja, hogy az eszköz csatlakozott

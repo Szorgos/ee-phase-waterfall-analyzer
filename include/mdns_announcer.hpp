@@ -73,6 +73,8 @@ public:
     bool isRunning() const { return running_.load(); }
     int servicePort() const { return servicePort_; }
     const std::string& instanceName() const { return instanceName_; }
+    /** A számítógép neve (a hirdetésben is ez szerepel): a telefon ezzel különbözteti meg a gépeket. */
+    static std::string computerName() { return defaultHostname(); }
 
     /**
      * @brief RFC 6762 kompatibilis DNS válaszcsomag összeállítása (teszteléshez is).
@@ -239,8 +241,13 @@ private:
     static std::string defaultHostname() {
         char buf[256] = {0};
 #ifdef _WIN32
-        DWORD sz = sizeof(buf);
-        if (GetComputerNameA(buf, &sz) && sz > 0) return std::string(buf);
+        // Unicode-os lekérdezés UTF-8-ra alakítva (az ANSI változat az ékezetes neveket elrontaná)
+        wchar_t wbuf[256] = {0};
+        DWORD wsz = 256;
+        if (GetComputerNameW(wbuf, &wsz) && wsz > 0) {
+            int n = WideCharToMultiByte(CP_UTF8, 0, wbuf, static_cast<int>(wsz), buf, sizeof(buf) - 1, nullptr, nullptr);
+            if (n > 0) return std::string(buf, static_cast<size_t>(n));
+        }
 #else
         if (gethostname(buf, sizeof(buf) - 1) == 0 && buf[0] != '\0') return std::string(buf);
 #endif
@@ -290,10 +297,23 @@ private:
         bool bound = (::bind(sock, reinterpret_cast<const sockaddr*>(&localAddr), sizeof(localAddr)) == 0);
 
         if (bound) {
-            ip_mreq mreq{};
-            inet_pton(AF_INET, kMulticastGroup, &mreq.imr_multiaddr);
-            mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-            setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, reinterpret_cast<const char*>(&mreq), sizeof(mreq));
+            // A csoporthoz minden ismert cím hálózati kártyáján csatlakozunk: az INADDR_ANY csak az alapértelmezett
+            // kártyát jelenti, és ha az egy virtuális hálózat (pl. WSL / Hyper-V, kisebb metrikával), a Wi-Fin érkező
+            // kérdéseket (a telefon keresését) nem hallanánk.
+            int joined = 0;
+            for (const auto& a : addresses_) {
+                ip_mreq mreq{};
+                inet_pton(AF_INET, kMulticastGroup, &mreq.imr_multiaddr);
+                if (inet_pton(AF_INET, a.c_str(), &mreq.imr_interface) != 1) continue;
+                if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, reinterpret_cast<const char*>(&mreq), sizeof(mreq)) == 0)
+                    ++joined;
+            }
+            if (joined == 0) {
+                ip_mreq mreq{};
+                inet_pton(AF_INET, kMulticastGroup, &mreq.imr_multiaddr);
+                mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+                setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, reinterpret_cast<const char*>(&mreq), sizeof(mreq));
+            }
         }
 
         net::setNonBlocking(sock, true);

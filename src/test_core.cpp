@@ -781,9 +781,12 @@ static void testRepairReplacesDevice() {
         std::string first;
         net::socket_t t = (remotePort && token.size() == 64) ? wsConnectLive(remotePort, "/?token=" + token, &first)
                                                             : net::kInvalidSocket;
-        const std::string m = t == net::kInvalidSocket ? "" : rawField(first + recvFor(t, 400), "machine");
+        const std::string got = t == net::kInvalidSocket ? "" : first + recvFor(t, 400);
+        const std::string m = rawField(got, "machine");
         CHECK(!machines.empty() && !m.empty() && m == machines[0],
               "tokennel csatlakozáskor a gép azonosítója is megjön");
+        CHECK(!rawField(got, "computer").empty() && rawField(got, "computer") == MdnsAnnouncer::computerName(),
+              "tokennel csatlakozáskor a gép neve (computer) is megjön");
         if (t != net::kInvalidSocket) net::closeSocket(t);
     }
 
