@@ -924,11 +924,13 @@ int main(int argc, char** argv) {
         }
         return true;
     };
-    // Van-e alkalmazás a protokollhoz (pl. "tidal"): a Windows társítása szerint, az áruházas alkalmazásokat is
-    // beleértve. Egy félbemaradt, parancs nélküli regisztráció nem számít (akkor a webes lejátszó nyílik meg).
+    // Van-e alkalmazás a protokollhoz (pl. "tidal"): a Windows társítása szerint. A hagyományos alkalmazásnak
+    // indítóparancsa van (EXECUTABLE / COMMAND), az áruházas (Microsoft Store) alkalmazásnak nincs, de alkalmazás-
+    // azonosítója van (ASSOCSTR_APPID = 21; az llvm-mingw fejlécéből hiányzik). Élő próbán a Store-os TIDAL csak
+    // az APPID-re válaszolt; nem regisztrált protokollnál mindhárom hibát ad (akkor a webes lejátszó nyílik meg).
     cb.hasUrlHandler = [](const std::string& scheme) -> bool {
         const std::wstring ws(scheme.begin(), scheme.end());   // csak ASCII protokollnév jön (pl. "tidal")
-        for (ASSOCSTR what : { ASSOCSTR_EXECUTABLE, ASSOCSTR_COMMAND }) {
+        for (ASSOCSTR what : { ASSOCSTR_EXECUTABLE, ASSOCSTR_COMMAND, static_cast<ASSOCSTR>(21) }) {
             wchar_t buf[MAX_PATH * 2];
             DWORD n = static_cast<DWORD>(std::size(buf));
             if (AssocQueryStringW(ASSOCF_IS_PROTOCOL, what, ws.c_str(), nullptr, buf, &n) == S_OK && buf[0] != L'\0')
