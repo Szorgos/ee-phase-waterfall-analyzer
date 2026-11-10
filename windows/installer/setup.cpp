@@ -14,6 +14,7 @@
 #define _UNICODE
 #endif
 #include "install_ops.hpp"
+#include "firewall.hpp"
 #include "aq_i18n.hpp"
 
 #include <commctrl.h>
@@ -178,6 +179,10 @@ public:
         regDeleteValue(HKEY_LOCAL_MACHINE, kRunKey, L"Aqulify");
         if (opt.autostart) regWriteString(HKEY_CURRENT_USER, kRunKey, L"Aqulify", L"\"" + exe + L"\" --background");
         else regDeleteValue(HKEY_CURRENT_USER, kRunKey, L"Aqulify");
+
+        // Tűzfal: a telefonos távirányító magán- és tartományi hálózaton elérje a gépet (firewall.hpp)
+        log(addRemoteFirewallRules(exe) ? L"  Windows Firewall: Aqulify Remote (TCP 47820-47824, UDP 5353)"
+                                        : L"  Windows Firewall: rule not added");
         progress(90);
 
         // 4. Programok és szolgáltatások
@@ -238,6 +243,7 @@ int runUninstall(bool silent) {
     Logger log = [](const std::wstring&) {};
     closeRunningEngine(joinPath(installDir, L"Aqulify.exe"));
     removeEqApoIntegration(log);
+    removeRemoteFirewallRules();
 
     DeleteFileW(joinPath(knownFolder(FOLDERID_PublicDesktop), L"Aqulify.lnk").c_str());
     deleteTree(joinPath(knownFolder(FOLDERID_CommonPrograms), L"Aqulify"));
