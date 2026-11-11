@@ -11074,8 +11074,11 @@ function schedulePresetAutosave() {
     const sn = eqSnapshot();
     const cur = presetsDoc.presets[activePresetName];
     if (!cur) return;
+    // Az IR-profil a Konvolveré: nincs EQ-sávja, ezért az EQ állapotát nem vetjük össze vele. Különben minden
+    // IR-választás (pl. a telefonról) egy új „… – egyedi” EQ-profilt hozna létre, és az lenne az aktív.
+    if (cur.kind === "ir") return;
     if (snapshotSig(cur) === snapshotSig(sn)) return;
-    if (cur.kind === "autoeq" || cur.kind === "import" || cur.kind === "ir") {
+    if (cur.kind === "autoeq" || cur.kind === "import") {
       // Csak akkor hozunk létre módosított profilt, ha valóban módosultak a sávok
       const bandsEqual = bandsSig(cur.bands) === bandsSig(sn.bands);
       if (bandsEqual) return;
