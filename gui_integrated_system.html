@@ -408,9 +408,6 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     background: rgba(255, 255, 255, 0.92);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   }
-  :root[data-mode="light"] .adw-btn:hover, :root[data-theme$="-light"] .adw-btn:hover, :root[data-theme="light"] .adw-btn:hover {
-    background: var(--aq-surface-2);
-  }
   :root[data-mode="light"] .status-badge.off, :root[data-theme$="-light"] .status-badge.off, :root[data-theme="light"] .status-badge.off {
     background: rgba(0, 0, 0, 0.04);
     color: var(--aq-text-2);
@@ -578,6 +575,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .library-view { flex: 1; padding: 20px 24px 32px 24px; background: var(--aq-bg); }
   .library-view[hidden], .main-content[hidden] { display: none; }
   .preset-lbl { font-size: var(--aq-fs-body); color: var(--aq-text-2); font-weight: 500; }
+  .preset-sep { width: 1px; align-self: stretch; margin: 2px 4px; background: var(--aq-line); }
+  .preset-eq-only { display: inline-flex; align-items: center; gap: 8px; }
+  .preset-eq-only[hidden] { display: none; }
+  /* A Profil sor keskeny ablakban tördelődik (nem lóg ki): a végén lévő EQ-vezérlők új sorba kerülnek */
+  #presetBar { flex-wrap: wrap; row-gap: 6px; max-width: 100%; box-sizing: border-box; }
+  #presetBar .preset-eq-only { flex-wrap: wrap; row-gap: 6px; }
+  #presetBar .preset-select { flex: 0 1 auto; min-width: 200px; }   /* a profilnév olvasható marad, inkább a gombok tördelődnek */
   .preset-select { min-width: 140px; max-width: 320px; }
   /* Keskeny ablakban (a legkisebb ablak 1000 px) a fejléc tömörebb: a Támogatás gombból csak a szív marad (a felirat
      a buborékban), a jobb oldal pedig a Kimenet választónál rövidül, nem csúszik a név és a profil fölé */
@@ -3488,6 +3492,11 @@ var qrcode = function() {
     position: relative;
     display: inline-flex;
   }
+  /* Eszköz panel: a szekciók elválasztása és a gombok egymás alatt, teljes szélességben */
+  .dev-sec { border-top: 1px solid var(--aq-line); margin-top: 10px; padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .dev-sec[hidden] { display: none; }
+  .dev-actions { display: flex; flex-direction: column; gap: 6px; }
+  .dev-actions .adw-btn, .dev-sec > .adw-btn { justify-content: flex-start; width: 100%; height: 30px; }
   .sink-popover {
     position: absolute;
     top: calc(100% + 8px);
@@ -4097,6 +4106,649 @@ var qrcode = function() {
       width: 92px;
     }
   }
+
+  /* ========================================================================== */
+  /* HIFI ELŐLAP: szálcsiszolt, a téma kiemelőszínére eloxált fém gombok, LED-ek */
+  /* A telefonos távirányító (HifiControls.kt) mintája, ugyanazokkal az arányokkal: */
+  /*  - nyers alumínium (sötét: #4A505A, világos: #D3D8DF) a kiemelőszínnel színezve */
+  /*    (sima gomb 16 %, kiemelt gomb 82 %);                                     */
+  /*  - vízszintes csiszolás, felül fényesebb, alul mélyebb felület, átlós csillanás; */
+  /*  - keskeny, sötétebb fémkeret (a gomb az előlapba süllyesztve);            */
+  /*  - lenyomva besüllyed; a reteszelő gomb (BE / kiválasztott) félig benn marad; */
+  /*  - a LED a téma kiemelőszínével világít (szürkés témán borostyán).         */
+  /* ========================================================================== */
+  :root {
+    --hf-metal: #4A505A;
+    --hf-hi-p: 30%; --hf-lo-p: 40%;            /* felül világosabb, alul sötétebb */
+    --hf-bz-hi-p: 35%; --hf-bz-lo-p: 70%;      /* a keret sötétítése */
+    --hf-line: 0.07;                           /* a csiszolás vonalainak erőssége */
+    --hf-sheen: 0.16;                          /* az átlós csillanás */
+    --hf-rim: 0.30;                            /* a felső él fénye */
+    --hf-led-off: #2A2E35;
+    --hf-sh: 1;                                /* a vetett árnyék erőssége */
+    --hf-mix-plain: 16%;                       /* a sima (nem kiemelt) gomb színezése */
+    --hf-mix-accent: 55%;                      /* a kiemelt gomb eloxálása: visszafogott, hogy illjen a csiszolt fémhez */
+    --hf-accent-text: var(--aq-accent-ink);
+    --aq-led: var(--aq-accent);
+  }
+  :root[data-mode="light"], :root[data-theme$="-light"], :root[data-theme="light"] {
+    /* Világos témán visszafogottabb fém: világosabb alumínium, halványabb keret és árnyék (ne üssön el a háttértől) */
+    --hf-metal: #E2E6EB;
+    --hf-hi-p: 50%; --hf-lo-p: 10%;
+    --hf-bz-hi-p: 5%; --hf-bz-lo-p: 22%;
+    --hf-line: 0.06;
+    --hf-sh: 0.4;
+    --hf-mix-plain: 8%;
+    --hf-mix-accent: 30%;
+    --hf-accent-text: var(--aq-text);
+    --hf-sheen: 0.26;
+    --hf-rim: 0.65;
+    --hf-led-off: #9EA5AF;
+  }
+  /* A szinte szürke kiemelőszínű téma LED-je borostyán (mint a régi hifik jelzőfényei) */
+  [data-theme="sapphire-dark"], [data-concept="sapphire"][data-mode="dark"] { --aq-led: #FFB020; }
+
+  .adw-btn, .aq-switch {
+    --hf-mix: var(--hf-mix-plain);                                                     /* sima gomb: finoman színezett alumínium */
+    --hf-anod: color-mix(in srgb, var(--aq-accent) var(--hf-mix), var(--hf-metal));
+    --hf-face-hi: color-mix(in srgb, var(--hf-anod), #fff var(--hf-hi-p));
+    --hf-face-lo: color-mix(in srgb, var(--hf-anod), #000 var(--hf-lo-p));
+    --hf-bz-hi: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-hi-p));
+    --hf-bz-lo: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-lo-p));
+    --hf-bg:
+      linear-gradient(135deg, transparent 38%, rgba(255,255,255,var(--hf-sheen)) 50%, transparent 62%) padding-box,
+      repeating-linear-gradient(180deg, rgba(255,255,255,var(--hf-line)) 0 1px, transparent 1px 2.6px) padding-box,
+      repeating-linear-gradient(180deg, rgba(0,0,0,var(--hf-line)) 0 1px, transparent 1px 1.7px) padding-box,
+      linear-gradient(180deg, var(--hf-face-hi), var(--hf-anod) 52%, var(--hf-face-lo)) padding-box,
+      linear-gradient(180deg, var(--hf-bz-hi), var(--hf-bz-lo)) border-box;
+    border: 2px solid transparent;
+    color: var(--aq-text);
+    box-shadow: 0 3px 7px rgba(0,0,0,calc(0.35 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.28);
+    transition: transform 90ms ease-out, box-shadow 90ms ease-out, filter 120ms ease-out;
+  }
+  .adw-btn { border-radius: 8px; }
+  .adw-btn:hover, .aq-switch:hover { filter: brightness(1.06); }
+  /* Kiemelt gomb: a téma kiemelőszínére erősen eloxált (pl. „Hangzás”, „Betöltés”) */
+  .adw-btn.primary { --hf-mix: var(--hf-mix-accent); color: var(--hf-accent-text); }
+  .adw-btn.danger-solid { --aq-accent: var(--aq-danger); --hf-mix: 82%; }
+  /* A fémfelület minden állapotban marad (a régi, sima háttérszíneket felülírja) */
+  .adw-btn, .adw-btn:hover, .adw-btn.selected, .adw-btn.primary, .adw-btn.primary:hover,
+  .adw-btn.danger:hover, .adw-btn.danger-solid, .adw-btn.danger-solid:hover,
+  .adw-btn:disabled, .adw-btn:disabled:hover, .aq-switch, .aq-switch:hover {
+    background: var(--hf-bg); border-color: transparent;
+  }
+  /* Lenyomás: végállásig besüllyed (kisebb árnyék, sötétebb, halványabb csillanás) */
+  .adw-btn:active:not(:disabled), .aq-switch:active {
+    transform: translateY(1px) scale(0.965);
+    filter: brightness(0.86);
+    box-shadow: 0 1px 2px rgba(0,0,0,calc(0.30 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.5)), inset 0 -1px 0 rgba(0,0,0,0.22);
+  }
+  /* Reteszelő állapot (kiválasztott gomb, bekapcsolt kapcsoló): félig benn marad */
+  .adw-btn.selected, .aq-switch.on {
+    transform: translateY(0.6px) scale(0.98);
+    filter: brightness(0.93);
+    box-shadow: 0 1.5px 3px rgba(0,0,0,calc(0.32 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.7)), inset 0 -1px 0 rgba(0,0,0,0.25);
+    color: var(--aq-text);
+  }
+  .adw-btn:disabled, .adw-btn:disabled:hover { opacity: 0.45; filter: none; transform: none; box-shadow: none; }
+  .adw-btn:focus-visible, .aq-switch:focus-visible { outline: 2px solid var(--aq-accent); outline-offset: 2px; }
+
+  /* LED: kikapcsolva halvány, színes üveg; bekapcsolva forró, világos maggal és fényudvarral */
+  .module-dot, .aq-switch::before, .adw-btn.selected::before {
+    content: ""; width: 8px; height: 8px; border: none; border-radius: 50%; flex: 0 0 auto;
+    background:
+      radial-gradient(circle at 36% 32%, rgba(255,255,255,0.32) 0 17%, transparent 24%),
+      color-mix(in srgb, var(--aq-led) 14%, var(--hf-led-off));
+    box-shadow: 0 0 0 1.1px rgba(0,0,0,0.40);
+    transition: background .2s ease, box-shadow .2s ease;
+  }
+  .module-dot.active, .aq-switch.on::before, .adw-btn.selected::before {
+    background:
+      radial-gradient(circle at 36% 32%, rgba(255,255,255,0.62) 0 17%, transparent 24%),
+      radial-gradient(circle, color-mix(in srgb, var(--aq-led), #fff 62%) 0 28%, var(--aq-led) 72%);
+    box-shadow: 0 0 0 1.1px rgba(0,0,0,0.65),
+                0 0 6px 1px color-mix(in srgb, var(--aq-led) 85%, transparent),
+                0 0 14px 3px color-mix(in srgb, var(--aq-led) 32%, transparent);
+  }
+  .adw-btn.selected::before { width: 7px; height: 7px; margin-right: 2px; }
+
+  /* BE / KI kapcsoló: reteszelő fém nyomógomb LED-del; csak az aktuális állapot felirata látszik */
+  .aq-switch { width: 76px; height: 30px; border-radius: 8px; overflow: visible; align-items: center; justify-content: center;
+               gap: 8px; padding: 0 10px 0 8px; }
+  .aq-switch .aq-switch-knob { display: none; }
+  .aq-switch::before { width: 7px; height: 7px; }
+  .aq-switch .aq-switch-lbl { flex: 0 0 auto; color: var(--aq-text-2); }
+  .aq-switch:not(.on) .aq-lbl-on, .aq-switch.on .aq-lbl-off { display: none; }
+  .aq-switch.on .aq-lbl-on { color: var(--aq-text); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .adw-btn, .aq-switch { transition: none; }
+  }
+
+  /* ========================================================================== */
+  /* HIFI ELŐLAP KITERJESZTÉS: a többi vezérlő ugyanezekkel a --hf-* változókkal */
+  /* ========================================================================== */
+  :root {
+    --hf-bz-hi: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-hi-p));
+    --hf-bz-lo: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-lo-p));
+  }
+
+  /* A fém alapréteg megosztása az új gombszelektorokkal (.strip-controls és .support-btn kivételével) */
+  header.app-header button.mini-btn:not(.support-btn),
+  .preset-bar button.mini-btn,
+  .aq-modal button.mini-btn,
+  button.view-switch-btn,
+  body .aqlib button.lib-tab,
+  body .aqlib button.lib-src-tab,
+  button.modal-tab-btn,
+  button.tab-btn,
+  button.icon-btn,
+  .aqnp button.aqnp-btn,
+  body .aqlib button.lib-btn,
+  button.dsp-warn-btn {
+    --hf-mix: var(--hf-mix-plain);
+    --hf-anod: color-mix(in srgb, var(--aq-accent) var(--hf-mix), var(--hf-metal));
+    --hf-face-hi: color-mix(in srgb, var(--hf-anod), #fff var(--hf-hi-p));
+    --hf-face-lo: color-mix(in srgb, var(--hf-anod), #000 var(--hf-lo-p));
+    --hf-bz-hi: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-hi-p));
+    --hf-bz-lo: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-lo-p));
+    --hf-bg:
+      linear-gradient(135deg, transparent 38%, rgba(255,255,255,var(--hf-sheen)) 50%, transparent 62%) padding-box,
+      repeating-linear-gradient(180deg, rgba(255,255,255,var(--hf-line)) 0 1px, transparent 1px 2.6px) padding-box,
+      repeating-linear-gradient(180deg, rgba(0,0,0,var(--hf-line)) 0 1px, transparent 1px 1.7px) padding-box,
+      linear-gradient(180deg, var(--hf-face-hi), var(--hf-anod) 52%, var(--hf-face-lo)) padding-box,
+      linear-gradient(180deg, var(--hf-bz-hi), var(--hf-bz-lo)) border-box;
+    border: 2px solid transparent;
+    background: var(--hf-bg);
+    color: var(--aq-text);
+    box-shadow: 0 3px 7px rgba(0,0,0,calc(0.35 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.28);
+    transition: transform 90ms ease-out, box-shadow 90ms ease-out, filter 120ms ease-out;
+  }
+
+  /* 1. button.mini-btn (fejléc, profilsor, modál): sima 16% fém, azonos külső mérettel */
+  header.app-header button.mini-btn:not(.support-btn),
+  .preset-bar button.mini-btn,
+  .aq-modal button.mini-btn {
+    border-radius: 7px;
+    padding: 3px 9px;
+  }
+  header.app-header button#btnRemote.mini-btn.attn {
+    padding-right: 12px;
+  }
+
+  /* 2. Nézetváltó (Hangzás/Zenetár), Zenetár fülek, Import modál fülei: reteszelő fémgombok LED-del */
+  .view-switch-glider { display: none; }
+  button.view-switch-btn {
+    border-radius: 7px;
+    min-width: 96px;
+    padding: 3px 10px;
+    background: var(--hf-bg) !important; /* felülírja a 3453. sor transparent !important-ját */
+    border-color: transparent;
+  }
+  button.view-switch-btn.active {
+    color: var(--aq-text) !important; /* felülírja a 3468. sor --aq-accent-ink !important-ját */
+  }
+  button.view-switch-btn.active::before {
+    margin-right: 0;
+  }
+  body .aqlib button.lib-src-tab {
+    border-radius: 7px;
+    padding: 6px 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  body .aqlib button.lib-tab {
+    border-radius: 8px;
+    padding: 6px 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  button.modal-tab-btn {
+    border-radius: 8px;
+    padding: 6px 12px;
+  }
+
+  /* 4. Modulfülek (button.tab-btn): a .module-dot marad az egyetlen LED, az aktív fül 30% reteszelt fém */
+  .tab-glider { display: none; }
+  button.tab-btn {
+    border-radius: 8px;
+    padding: 5px 13px; /* 2px kerettel együtt pixelre azonos a régi 6px 14px + 1px kerettel */
+  }
+  button.tab-btn.active {
+    --hf-mix: 30%;
+  }
+
+  /* 5. Ikon-gombok, Lejátszó gombok, Zenetár gombok, Figyelmeztető gomb */
+  button.icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    padding: 0;
+  }
+  .aqnp button.aqnp-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    padding: 0;
+  }
+  .aqnp button.aqnp-btn:hover,
+  :root[data-mode="light"] .aqnp button.aqnp-btn:hover,
+  :root[data-theme$="-light"] .aqnp button.aqnp-btn:hover,
+  :root[data-theme="light"] .aqnp button.aqnp-btn:hover {
+    background: var(--hf-bg) !important; /* felülírja a 4080. sor világos témás !important hátterét */
+    border-color: transparent !important;
+    color: var(--aq-text);
+  }
+  .aqnp button.aqnp-btn.aqnp-play {
+    width: 40px;
+    height: 40px;
+    --hf-mix: var(--hf-mix-accent);
+    color: var(--hf-accent-text);
+  }
+  .aqnp button.aqnp-btn.aqnp-play:hover:not(:active):not(:disabled),
+  :root[data-mode="light"] .aqnp button.aqnp-btn.aqnp-play:hover:not(:active):not(:disabled),
+  :root[data-theme$="-light"] .aqnp button.aqnp-btn.aqnp-play:hover:not(:active):not(:disabled),
+  :root[data-theme="light"] .aqnp button.aqnp-btn.aqnp-play:hover:not(:active):not(:disabled) {
+    color: var(--hf-accent-text);
+    transform: none;
+  }
+  .aqnp button.aqnp-btn.on {
+    color: var(--aq-led);
+  }
+  body .aqlib button.lib-btn {
+    border-radius: 8px;
+    padding: 6px 11px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  body .aqlib button.lib-btn.accent {
+    --hf-mix: var(--hf-mix-accent);
+    color: var(--hf-accent-text);
+  }
+  body .aqlib button.lib-btn.danger {
+    color: var(--aq-danger);
+  }
+  button.dsp-warn-btn {
+    --aq-accent: var(--aq-amber, #E3B66B);
+    --hf-mix: 82%;
+    color: #1A1206;
+    border-radius: 6px;
+    padding: 2px 9px;
+  }
+
+  /* Állapotok minden új fémgombra (hover, lenyomás, reteszelés, tiltás, billentyűzetfókusz) */
+  header.app-header button.mini-btn:not(.support-btn):hover:not(:disabled),
+  .preset-bar button.mini-btn:hover:not(:disabled),
+  .aq-modal button.mini-btn:hover:not(:disabled),
+  button.view-switch-btn:hover:not(:disabled),
+  body .aqlib button.lib-tab:hover:not(:disabled),
+  body .aqlib button.lib-src-tab:hover:not(:disabled),
+  button.modal-tab-btn:hover:not(:disabled),
+  button.tab-btn:hover:not(:disabled),
+  button.icon-btn:hover:not(:disabled),
+  .aqnp button.aqnp-btn:hover:not(:disabled),
+  body .aqlib button.lib-btn:hover:not(:disabled),
+  button.dsp-warn-btn:hover:not(:disabled) {
+    background: var(--hf-bg);
+    border-color: transparent;
+    filter: brightness(1.06);
+  }
+
+  header.app-header button.mini-btn:not(.support-btn):active:not(:disabled),
+  .preset-bar button.mini-btn:active:not(:disabled),
+  .aq-modal button.mini-btn:active:not(:disabled),
+  button.view-switch-btn:active:not(:disabled),
+  body .aqlib button.lib-tab:active:not(:disabled),
+  body .aqlib button.lib-src-tab:active:not(:disabled),
+  button.modal-tab-btn:active:not(:disabled),
+  button.tab-btn:active:not(:disabled),
+  button.icon-btn:active:not(:disabled),
+  .aqnp button.aqnp-btn:active:not(:disabled),
+  body .aqlib button.lib-btn:active:not(:disabled),
+  button.dsp-warn-btn:active:not(:disabled) {
+    transform: translateY(1px) scale(0.965);
+    filter: brightness(0.86);
+    box-shadow: 0 1px 2px rgba(0,0,0,calc(0.30 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.5)), inset 0 -1px 0 rgba(0,0,0,0.22);
+  }
+
+  /* 3. button.adw-btn.active és az összes új reteszelő gomb állapota */
+  button.view-switch-btn.active,
+  body .aqlib button.lib-tab.active,
+  body .aqlib button.lib-src-tab.active,
+  button.modal-tab-btn.active,
+  button.tab-btn.active,
+  .aqnp button.aqnp-btn.on,
+  body .aqlib button.lib-btn.on,
+  button.adw-btn.active:not([data-curve]),
+  button.adw-btn.primary.active,
+  button.adw-btn[data-curve].active-opt {
+    transform: translateY(0.6px) scale(0.98);
+    filter: brightness(0.93);
+    box-shadow: 0 1.5px 3px rgba(0,0,0,calc(0.32 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.7)), inset 0 -1px 0 rgba(0,0,0,0.25);
+    background: var(--hf-bg);
+    border-color: transparent;
+  }
+  button.view-switch-btn.active,
+  body .aqlib button.lib-tab.active,
+  body .aqlib button.lib-src-tab.active,
+  button.modal-tab-btn.active,
+  button.tab-btn.active,
+  body .aqlib button.lib-btn.on,
+  button.adw-btn.active:not([data-curve]),
+  button.adw-btn.primary.active,
+  button.adw-btn[data-curve].active-opt {
+    color: var(--aq-text);
+  }
+  /* A .primary.active reteszelő toggle gombok (pl. Auto, modul kapcsolók) sima 16% fém + LED-del */
+  button.adw-btn.primary.active {
+    --hf-mix: var(--hf-mix-plain);
+    color: var(--aq-text);
+  }
+  /* A kiemelt (NEM reteszelő) .adw-btn.primary szövege a kiemelés erősségéhez illő szín (--hf-accent-text) */
+  button.adw-btn.primary:not(.active):not(.selected) {
+    color: var(--hf-accent-text);
+  }
+  /* A görbekapcsolók (data-curve) csíkja bekapcsolva világít, kikapcsolva marad */
+  button.adw-btn[data-curve]:not(.active-opt) {
+    color: var(--aq-text-3);
+  }
+  button.adw-btn[data-curve].active-opt::before {
+    background: var(--curve, var(--aq-accent));
+    box-shadow: 0 0 6px 1px color-mix(in srgb, var(--curve, var(--aq-accent)) 70%, transparent);
+  }
+
+  /* Reteszelő LED-ek (7px, mint .adw-btn.selected::before) */
+  button.view-switch-btn.active::before,
+  body .aqlib button.lib-tab.active::before,
+  body .aqlib button.lib-src-tab.active::before,
+  button.modal-tab-btn.active::before,
+  body .aqlib button.lib-btn.on::before,
+  button.adw-btn.active:not([data-curve])::before,
+  button.adw-btn.primary.active::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    margin-right: 2px;
+    border: none;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    background:
+      radial-gradient(circle at 36% 32%, rgba(255,255,255,0.62) 0 17%, transparent 24%),
+      radial-gradient(circle, color-mix(in srgb, var(--aq-led), #fff 62%) 0 28%, var(--aq-led) 72%);
+    box-shadow: 0 0 0 1.1px rgba(0,0,0,0.65),
+                0 0 6px 1px color-mix(in srgb, var(--aq-led) 85%, transparent),
+                0 0 14px 3px color-mix(in srgb, var(--aq-led) 32%, transparent);
+  }
+
+  header.app-header button.mini-btn:not(.support-btn):disabled,
+  .preset-bar button.mini-btn:disabled,
+  .aq-modal button.mini-btn:disabled,
+  button.view-switch-btn:disabled,
+  body .aqlib button.lib-tab:disabled,
+  body .aqlib button.lib-src-tab:disabled,
+  button.modal-tab-btn:disabled,
+  button.tab-btn:disabled,
+  button.icon-btn:disabled,
+  .aqnp button.aqnp-btn:disabled,
+  body .aqlib button.lib-btn:disabled,
+  button.dsp-warn-btn:disabled {
+    opacity: 0.45;
+    filter: none;
+    transform: none;
+    box-shadow: none;
+    cursor: default;
+  }
+
+  header.app-header button.mini-btn:not(.support-btn):focus-visible,
+  .preset-bar button.mini-btn:focus-visible,
+  .aq-modal button.mini-btn:focus-visible,
+  button.view-switch-btn:focus-visible,
+  body .aqlib button.lib-tab:focus-visible,
+  body .aqlib button.lib-src-tab:focus-visible,
+  button.modal-tab-btn:focus-visible,
+  button.tab-btn:focus-visible,
+  button.icon-btn:focus-visible,
+  .aqnp button.aqnp-btn:focus-visible,
+  body .aqlib button.lib-btn:focus-visible,
+  button.dsp-warn-btn:focus-visible {
+    outline: 2px solid var(--aq-accent);
+    outline-offset: 2px;
+  }
+
+  /* 6 & 9. Süllyesztett (bemélyedő) fémkeret: selectek (.strip-controls kívül) és .ee-input mezők */
+  header.app-header select.mini-select,
+  .sink-popover select.mini-select,
+  .preset-bar select.mini-select,
+  .aq-modal select.mini-select,
+  select.ee-select,
+  input.ee-input,
+  textarea.ee-input {
+    --hf-bz-hi: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-hi-p));
+    --hf-bz-lo: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-lo-p));
+    border: 2px solid var(--hf-bz-hi) !important; /* felülírja a 625. és 919. sor 1px !important keretét */
+    border-top-color: var(--hf-bz-lo) !important;
+    border-bottom-color: color-mix(in srgb, var(--hf-metal), #fff calc(var(--hf-hi-p) * 0.45)) !important;
+    background-color: var(--aq-input) !important;
+    color: var(--aq-text) !important;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,calc(0.42 * var(--hf-sh))), inset 0 -1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.35)), 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.30));
+  }
+  header.app-header select.mini-select,
+  .sink-popover select.mini-select,
+  .preset-bar select.mini-select,
+  .aq-modal select.mini-select,
+  select.ee-select:not(.eq-zoom-overlay select.ee-select):not(.node-fields-group select.ee-select) {
+    padding: 3px 25px 3px 9px !important; /* 2px kerettel megőrzi a régi szélességet */
+    background-position: right 7px center !important;
+  }
+  input.ee-input:not(.search-input):not(textarea.ee-input) {
+    padding: 3px 7px !important;
+  }
+  header.app-header select.mini-select:hover:not(:disabled),
+  .sink-popover select.mini-select:hover:not(:disabled),
+  .preset-bar select.mini-select:hover:not(:disabled),
+  .aq-modal select.mini-select:hover:not(:disabled),
+  select.ee-select:hover:not(:disabled),
+  input.ee-input:hover:not(:disabled),
+  textarea.ee-input:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--hf-metal), var(--aq-text) 25%) !important;
+    border-top-color: var(--hf-bz-lo) !important;
+  }
+  header.app-header select.mini-select:focus,
+  .sink-popover select.mini-select:focus,
+  .preset-bar select.mini-select:focus,
+  .aq-modal select.mini-select:focus,
+  select.ee-select:focus,
+  input.ee-input:focus,
+  textarea.ee-input:focus {
+    border-color: var(--aq-accent) !important;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,calc(0.35 * var(--hf-sh))), 0 0 0 3px var(--aq-accent-soft) !important;
+  }
+  header.app-header select.mini-select:disabled,
+  .sink-popover select.mini-select:disabled,
+  .preset-bar select.mini-select:disabled,
+  .aq-modal select.mini-select:disabled,
+  select.ee-select:disabled,
+  input.ee-input:disabled,
+  textarea.ee-input:disabled {
+    opacity: 0.45;
+    cursor: default;
+    box-shadow: none;
+  }
+
+  /* 7. Csúszkák fém forgatógombja / tolókája (sáv változatlan) */
+  input[type="range"] {
+    --hf-mix: var(--hf-mix-plain);
+    --hf-anod: color-mix(in srgb, var(--aq-accent) var(--hf-mix), var(--hf-metal));
+    --hf-face-hi: color-mix(in srgb, var(--hf-anod), #fff var(--hf-hi-p));
+    --hf-face-lo: color-mix(in srgb, var(--hf-anod), #000 var(--hf-lo-p));
+    --hf-bz-hi: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-hi-p));
+    --hf-bz-lo: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-lo-p));
+    --hf-thumb-bg:
+      linear-gradient(135deg, transparent 32%, rgba(255,255,255,var(--hf-sheen)) 50%, transparent 68%) padding-box,
+      linear-gradient(180deg, var(--hf-face-hi), var(--hf-anod) 52%, var(--hf-face-lo)) padding-box,
+      linear-gradient(180deg, var(--hf-bz-hi), var(--hf-bz-lo)) border-box;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -6px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    background: var(--hf-thumb-bg);
+    box-shadow: 0 2px 5px rgba(0,0,0,calc(0.48 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.30);
+    transition: transform 90ms ease-out, filter 120ms ease-out, box-shadow 90ms ease-out;
+  }
+  input[type="range"]:hover:not(:disabled)::-webkit-slider-thumb { filter: brightness(1.08); }
+  input[type="range"]:active:not(:disabled)::-webkit-slider-thumb { transform: scale(0.95); filter: brightness(0.88); }
+  input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--aq-accent-soft); }
+  input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    background: var(--hf-thumb-bg);
+    box-shadow: 0 2px 5px rgba(0,0,0,calc(0.48 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.30);
+    transition: transform 90ms ease-out, filter 120ms ease-out, box-shadow 90ms ease-out;
+  }
+  input[type="range"]:hover:not(:disabled)::-moz-range-thumb { filter: brightness(1.08); }
+  input[type="range"]:active:not(:disabled)::-moz-range-thumb { transform: scale(0.95); filter: brightness(0.88); }
+  input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(--aq-accent-soft); }
+  input[type="range"]:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  input[type="range"]:disabled::-webkit-slider-thumb,
+  input[type="range"]:disabled::-moz-range-thumb {
+    filter: none;
+    transform: none;
+    box-shadow: none;
+  }
+
+  /* 8. Checkboxok (18×18px, 4px sarok): reteszelő fémgomb középen 7px-es LED-del */
+  body input[type="checkbox"],
+  body input[type="checkbox"].aq-checkbox {
+    -webkit-appearance: none;
+    appearance: none;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    border-radius: 4px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    vertical-align: middle;
+    --hf-mix: var(--hf-mix-plain);
+    --hf-anod: color-mix(in srgb, var(--aq-accent) var(--hf-mix), var(--hf-metal));
+    --hf-face-hi: color-mix(in srgb, var(--hf-anod), #fff var(--hf-hi-p));
+    --hf-face-lo: color-mix(in srgb, var(--hf-anod), #000 var(--hf-lo-p));
+    --hf-bz-hi: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-hi-p));
+    --hf-bz-lo: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-lo-p));
+    --hf-bg:
+      linear-gradient(135deg, transparent 38%, rgba(255,255,255,var(--hf-sheen)) 50%, transparent 62%) padding-box,
+      repeating-linear-gradient(180deg, rgba(255,255,255,var(--hf-line)) 0 1px, transparent 1px 2.6px) padding-box,
+      repeating-linear-gradient(180deg, rgba(0,0,0,var(--hf-line)) 0 1px, transparent 1px 1.7px) padding-box,
+      linear-gradient(180deg, var(--hf-face-hi), var(--hf-anod) 52%, var(--hf-face-lo)) padding-box,
+      linear-gradient(180deg, var(--hf-bz-hi), var(--hf-bz-lo)) border-box;
+    background: var(--hf-bg);
+    box-shadow: 0 2px 4px rgba(0,0,0,calc(0.32 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.28);
+    transition: transform 90ms ease-out, box-shadow 90ms ease-out, filter 120ms ease-out;
+  }
+  body input[type="checkbox"].aq-checkbox:checked::after,
+  body input[type="checkbox"].aq-checkbox:indeterminate::after {
+    content: none;
+    display: none;
+  }
+  body input[type="checkbox"]::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    background:
+      radial-gradient(circle at 36% 32%, rgba(255,255,255,0.32) 0 17%, transparent 24%),
+      color-mix(in srgb, var(--aq-led) 14%, var(--hf-led-off));
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.40);
+    transition: background .2s ease, box-shadow .2s ease;
+  }
+  body input[type="checkbox"]:checked::before {
+    background:
+      radial-gradient(circle at 36% 32%, rgba(255,255,255,0.62) 0 17%, transparent 24%),
+      radial-gradient(circle, color-mix(in srgb, var(--aq-led), #fff 62%) 0 28%, var(--aq-led) 72%);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.65),
+                0 0 6px 1px color-mix(in srgb, var(--aq-led) 85%, transparent),
+                0 0 14px 3px color-mix(in srgb, var(--aq-led) 32%, transparent);
+  }
+  body input[type="checkbox"]:indeterminate::before {
+    background:
+      radial-gradient(circle at 36% 32%, rgba(255,255,255,0.45) 0 17%, transparent 24%),
+      color-mix(in srgb, var(--aq-led) 55%, var(--hf-led-off));
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.50),
+                0 0 5px 1px color-mix(in srgb, var(--aq-led) 40%, transparent);
+  }
+  body input[type="checkbox"]:hover:not(:disabled),
+  label:hover > input[type="checkbox"]:not(:disabled),
+  .aq-checkbox-wrap:hover .aq-checkbox:not(:disabled) {
+    filter: brightness(1.06);
+  }
+  body input[type="checkbox"]:active:not(:disabled) {
+    transform: translateY(1px) scale(0.965);
+    filter: brightness(0.86);
+    box-shadow: 0 1px 2px rgba(0,0,0,calc(0.30 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.5)), inset 0 -1px 0 rgba(0,0,0,0.22);
+  }
+  body input[type="checkbox"]:checked,
+  body input[type="checkbox"]:indeterminate {
+    transform: translateY(0.6px) scale(0.98);
+    filter: brightness(0.93);
+    box-shadow: 0 1.5px 3px rgba(0,0,0,calc(0.32 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.7)), inset 0 -1px 0 rgba(0,0,0,0.25);
+    background: var(--hf-bg);
+    border-color: transparent;
+  }
+  body input[type="checkbox"]:disabled {
+    opacity: 0.45;
+    filter: none;
+    transform: none;
+    box-shadow: none;
+    cursor: default;
+  }
+  body input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--aq-accent);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    header.app-header button.mini-btn:not(.support-btn),
+    .preset-bar button.mini-btn,
+    .aq-modal button.mini-btn,
+    button.view-switch-btn,
+    body .aqlib button.lib-tab,
+    body .aqlib button.lib-src-tab,
+    button.modal-tab-btn,
+    button.tab-btn,
+    button.icon-btn,
+    .aqnp button.aqnp-btn,
+    body .aqlib button.lib-btn,
+    button.dsp-warn-btn,
+    body input[type="checkbox"],
+    body input[type="checkbox"]::before,
+    input[type="range"]::-webkit-slider-thumb,
+    input[type="range"]::-moz-range-thumb {
+      transition: none;
+    }
+  }
 </style>
 
 </head>
@@ -4167,12 +4819,13 @@ var qrcode = function() {
     <!-- JOBB ZÓNA: KIMENET GOMB, BURN-IN, TÁMOGATÁS, 8 AUDIOFIL TÉMA, NYELV ÉS MOTOR ÁLLAPOT -->
     <div class="header-right">
       <div class="sink-menu-wrap" id="sinkMenuWrap">
-        <button type="button" class="mini-btn" id="btnSinkMenu" onclick="toggleSinkMenu(event)" title="Válassz kimeneti hangeszközt" data-i18n-title="sink.title">
-          <svg class="aq-icon" aria-hidden="true"><use href="#i-speaker"/></svg>
-          <span data-i18n="sink.btn">Kimenet</span>
+        <button type="button" class="mini-btn" id="btnSinkMenu" onclick="toggleSinkMenu(event)" title="Kimeneti eszköz (DAC) és fejhallgató-profil" data-i18n-title="dev.title" aria-haspopup="true">
+          <svg class="aq-icon" aria-hidden="true"><use href="#i-headphones"/></svg>
+          <span data-i18n="sink.btn">Eszköz</span>
         </button>
+        <!-- ESZKÖZ PANEL: a kimeneti eszköz (DAC) és a fejhallgató-profil egy helyen (felhasználói visszajelzés alapján) -->
         <div class="sink-popover" id="sinkPopover" hidden>
-          <div class="sink-sec-title" data-i18n="sink.label">Kimenet:</div>
+          <div class="sink-sec-title" data-i18n="sink.label">Kimeneti eszköz (DAC)</div>
           <div id="physicalSinkWrap" style="display:none; align-items:center; gap:8px;">
             <select id="selectPhysicalSink" class="mini-select" onchange="onPhysicalSinkChanged(this.value)" style="width:100%; max-width:none;" title="Válassz kimeneti hangeszközt" data-i18n-title="sink.title"></select>
           </div>
@@ -4184,6 +4837,22 @@ var qrcode = function() {
             <div style="font-size:0.75rem; color:var(--aq-text-3);" data-i18n="sink.systemHint">
               A hang a rendszer (Equalizer APO) által vezérelt alapértelmezett kimeneten szólal meg.
             </div>
+          </div>
+          <div class="dev-sec">
+            <div class="sink-sec-title" data-i18n="dev.profileTitle">Fejhallgató-profil</div>
+            <select id="selectPresetDev" class="mini-select" onchange="onPresetSelected(this.value)" style="width:100%; max-width:none;"></select>
+            <div class="dev-actions">
+              <button type="button" class="adw-btn primary" onclick="closeSinkMenu(); document.getElementById('btnImportAutoEq').onclick();">
+                <svg class="aq-icon" aria-hidden="true"><use href="#i-headphones"/></svg><span data-i18n="dev.importBtn">EQ-profil keresése és importálása</span></button>
+              <button type="button" class="adw-btn" onclick="closeSinkMenu(); document.getElementById('convFileInput').click();">
+                <svg class="aq-icon" aria-hidden="true"><use href="#i-speaker"/></svg><span data-i18n="dev.irBtn">Impulzusválasz (Konvolver) betöltése</span></button>
+            </div>
+            <div class="ao-hint" data-i18n="dev.profileHint">A kiválasztott profil azonnal szól. EQ-profilnál az Equalizer, impulzusválasznál a Konvolver kapcsol be.</div>
+          </div>
+          <div class="dev-sec" id="devMultiWrap" hidden>
+            <div class="sink-sec-title" data-i18n="mo.title">Több kimenet</div>
+            <button type="button" class="adw-btn" onclick="closeSinkMenu(); const b = document.getElementById('tabBtn-outputs'); if (b && !b.hidden) switchTab('outputs', b);">
+              <span data-i18n="dev.multiBtn">Kimenetek beállítása</span></button>
           </div>
           <button type="button" id="btnLibraryRoots" hidden onclick="openLibraryModal()"></button>
           <div id="audioOptsWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:10px;">
@@ -4386,6 +5055,33 @@ var qrcode = function() {
         <button class="mini-btn" onclick="savePresetAs()" title="Mentés új profilként" data-i18n-title="preset.saveAs" data-i18n-aria-label="preset.saveAs"><svg class="aq-icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
         <button class="mini-btn" id="btnPresetRename" onclick="renamePreset()" title="Aktív profil átnevezése" data-i18n-title="preset.rename" data-i18n-aria-label="preset.rename"><svg class="aq-icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>
         <button class="mini-btn" id="btnPresetDelete" onclick="deletePreset()" title="Aktív profil törlése" data-i18n-title="preset.delete" data-i18n-aria-label="preset.delete"><svg class="aq-icon" aria-hidden="true"><use href="#i-trash"/></svg></button>
+        <!-- A fejhallgató-EQ betöltése a profilválasztó mellett, minden fülön (felhasználói visszajelzés: „sokáig
+             keresgéltem, hol lehet a fejhallgató EQ-t betölteni”); az EQ BE/KI és az A/B csak az Equalizer fülön látszik -->
+        <span class="preset-sep" aria-hidden="true"></span>
+        <button class="adw-btn primary" id="btnImportAutoEq" title="AutoEq kereső és fájl / szöveges profil importáló" data-i18n-title="eq.importTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-headphones"/></svg><span data-i18n="eq.importBtn">AutoEq Kereső & Import</span></button>
+        <span class="preset-eq-only" id="presetEqOnly">
+          <button class="adw-btn" id="btnEqBypassTab">EQ: KI (Bypass)</button>
+          <button class="adw-btn" id="btnEqAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
+          <span class="preset-sep" aria-hidden="true"></span>
+          <div class="stat-group">
+            <span class="lbl" data-i18n="strip.eqMode">EQ Mód:</span>
+            <select id="selectEqMode" class="ee-select">
+              <option value="0" selected>IIR</option>
+              <option value="1">FIR</option>
+              <option value="2">FFT</option>
+              <option value="3">SPM</option>
+            </select>
+          </div>
+          <div class="stat-group">
+            <span class="lbl" data-i18n="eq.decramp">Decramp:</span>
+            <select id="selectDecramp" class="ee-select" title="Decramping: túlmintavételezés IIR és FIR módban (44,1 kHz-hez viszonyítva)" data-i18n-title="strip.decrampTitle">
+              <option value="0" selected>Off</option>
+              <option value="1">x2</option>
+              <option value="2">x3</option>
+              <option value="3">x4</option>
+            </select>
+          </div>
+        </span>
       </div>
       <!-- Több kimenet (független zónák): melyik kimenet beállításait szerkeszti a felület -->
       <div id="zoneBar" class="zone-bar" hidden>
@@ -4438,28 +5134,7 @@ var qrcode = function() {
         <!-- 1. SÁV: GLOBÁLIS EQ-LÁNC VEZÉRLŐK (Balra: AutoEq, EQ BE/KI, A/B, EQ Mód, Decramp; Jobbra: Preamp) -->
         <div class="actions-group eq-global-row" id="eqGlobalRow">
           <div class="eq-global-left">
-            <button class="adw-btn primary" id="btnImportAutoEq" title="AutoEq kereső és fájl / szöveges profil importáló" data-i18n-title="eq.importTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-headphones"/></svg><span data-i18n="eq.importBtn">AutoEq Kereső & Import</span></button>
-            <button class="adw-btn" id="btnEqBypassTab">EQ: KI (Bypass)</button>
-            <button class="adw-btn" id="btnEqAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
-            <span class="eq-bar-sep" aria-hidden="true"></span>
-            <div class="stat-group">
-              <span class="lbl" data-i18n="strip.eqMode">EQ Mód:</span>
-              <select id="selectEqMode" class="ee-select">
-                <option value="0" selected>IIR</option>
-                <option value="1">FIR</option>
-                <option value="2">FFT</option>
-                <option value="3">SPM</option>
-              </select>
-            </div>
-            <div class="stat-group">
-              <span class="lbl" data-i18n="eq.decramp">Decramp:</span>
-              <select id="selectDecramp" class="ee-select" title="Decramping: túlmintavételezés IIR és FIR módban (44,1 kHz-hez viszonyítva)" data-i18n-title="strip.decrampTitle">
-                <option value="0" selected>Off</option>
-                <option value="1">x2</option>
-                <option value="2">x3</option>
-                <option value="3">x4</option>
-              </select>
-            </div>
+            <!-- Az AutoEq-import, az EQ BE/KI, az A/B, az EQ mód és a Decramp a Profil sorba került (presetBar) -->
           </div>
 
           <div class="eq-global-right">
@@ -5615,6 +6290,9 @@ function switchTab(tabId, el) {
 
   const oldTabId = currentActiveTab;
   currentActiveTab = tabId;
+  // A Profil sorban az EQ BE/KI és az A/B csak az Equalizer fülön látszik (az import gomb mindig)
+  const eqOnly = document.getElementById('presetEqOnly');
+  if (eqOnly) eqOnly.hidden = tabId !== 'eq';
 
   // 1. Gombsor kijelölés és a finoman átcsúszó glider animálása
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -8682,6 +9360,8 @@ function moOnCaps(caps) {
   moCaps = has;
   const b = document.getElementById("tabBtn-outputs");
   if (b) b.hidden = !has;
+  const devMulti = document.getElementById("devMultiWrap");   // az Eszköz panelen is csak akkor, ha van több kimenet
+  if (devMulti) devMulti.hidden = !has;
   if (has) moSend({ type: "get_multiout" });
   else { moStatus = null; if (aqEditZone) setEditZone(0); }
   renderZoneBar();
@@ -10938,6 +11618,9 @@ function refreshPresetUi() {
   });
   sel.value = activePresetName || "";
   sel.title = activePresetName ? t("preset.activeTitle", { name: activePresetName }) : t("preset.noActive");
+  // Az Eszköz panel profilválasztója ugyanezt a listát mutatja (ugyanazzal a kezelővel)
+  const dev = document.getElementById("selectPresetDev");
+  if (dev) { dev.innerHTML = sel.innerHTML; dev.value = sel.value; dev.title = sel.title; }
   // Átnevezés / törlés csak akkor látszik, ha van mit (ne legyen hatástalan gomb)
   ["btnPresetRename", "btnPresetDelete"].forEach(id => {
     const b = document.getElementById(id);
