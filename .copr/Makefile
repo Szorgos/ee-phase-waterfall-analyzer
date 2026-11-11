@@ -16,7 +16,6 @@ srpm:
 	work=$$(mktemp -d); \
 	git archive --format=tar.gz --prefix=aqulify-$$ver/ -o $$work/aqulify-$$ver.tar.gz HEAD; \
 	rnn=$$work/rnnoise_0.2+ds.orig.tar.xz; \
-	for i in 1 2 3; do curl -fsSL -o $$rnn http://archive.ubuntu.com/ubuntu/pool/universe/r/rnnoise/rnnoise_0.2+ds.orig.tar.xz && break; sleep 15; done; \
-	echo "db2718ee4a0b294bfbbe198fe94aabfdc8cd0d77cb9cd95d76c7a818ad805f0b  $$rnn" | sha256sum -c; \
+	bash "$$top/tools/fetch_rnnoise.sh" $$rnn; \
 	sed "s/^Version: .*/Version:        $$ver/" $(spec) > $$work/aqulify.spec; \
 	rpmbuild -bs --define "_sourcedir $$work" --define "_srcrpmdir $(outdir)" $$work/aqulify.spec

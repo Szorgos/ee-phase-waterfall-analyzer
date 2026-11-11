@@ -1178,15 +1178,12 @@ RNN_OPT=""
 if pkg-config --exists rnnoise 2>/dev/null; then
     ok "$(msg inst.rnnSystem)"
 else
-    RNN_URL="http://archive.ubuntu.com/ubuntu/pool/universe/r/rnnoise/rnnoise_0.2+ds.orig.tar.xz"
-    RNN_SHA="db2718ee4a0b294bfbbe198fe94aabfdc8cd0d77cb9cd95d76c7a818ad805f0b"
     RNN_DIR="$PROJECT_DIR/build/rnnoise-model"
     if [ ! -f "$RNN_DIR/rnnoise_data.c" ]; then
         say "$(msg inst.rnnDownload)"
         mkdir -p "$RNN_DIR"
         RNN_TAR="$RNN_DIR/rnnoise.orig.tar.xz"
-        { curl -fsSL -o "$RNN_TAR" "$RNN_URL" 2>/dev/null || wget -q -O "$RNN_TAR" "$RNN_URL" 2>/dev/null; } &&
-            echo "$RNN_SHA  $RNN_TAR" | sha256sum -c --status &&
+        bash "$PROJECT_DIR/tools/fetch_rnnoise.sh" "$RNN_TAR" >/dev/null 2>&1 &&
             tar -xJf "$RNN_TAR" -C "$RNN_DIR" --strip-components=2 rnnoise-0.2/src/rnnoise_data.c rnnoise-0.2/src/rnnoise_data.h 2>/dev/null
         rm -f "$RNN_TAR"
     fi
