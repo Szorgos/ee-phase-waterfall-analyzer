@@ -84,7 +84,7 @@ def main():
     send = ws.send
 
     def all_off():
-        for m in ("eq", "crossfeed", "convolver", "limiter", "bass", "mono", "autogain", "magic"):
+        for m in ("eq", "crossfeed", "convolver", "limiter", "bass", "mono", "autogain", "magic", "loudness", "stereo"):
             send({"type": "set_module_" + m, "val": 0})
         send({"type": "set_preamp", "val": 0})
         time.sleep(0.6)
@@ -213,6 +213,24 @@ def main():
     d = level(s[:, 0], 4000) - level(s[:, 0], 100)
     check(abs(d) < 1.0, f"„előtte” állásban a 4 kHz és a 100 Hz különbsége {d:.2f} dB (EQ nélkül 0)")
     send({"type": "set_eq_compare", "compare": 0})
+    all_off()
+
+    print("[13] Loudness: ISO 226 görbe kiemelése alacsony hangerőn (-30 dB)")
+    send({"type": "set_module_loudness", "val": 1})
+    send({"type": "set_loudness", "volume": -30.0, "inputGain": 0.0, "outputGain": 0.0, "std": 1, "mode": 0, "hclip": 0, "hclipRange": 6.0, "approx": 2})
+    time.sleep(1.0)
+    s = seg(record("loudness", tone), start=1.0)
+    l100, l4k = level(s[:, 0], 100), level(s[:, 0], 4000)
+    check(l100 > l4k, f"Loudness bekapcsolva: 100 Hz ({l100:.2f} dBFS) > 4 kHz ({l4k:.2f} dBFS)")
+    all_off()
+
+    print("[14] Stereo Tools: -6 dB kimeneti szint")
+    send({"type": "set_module_stereo", "val": 1})
+    send({"type": "set_stereo", "inputGain": 0.0, "outputGain": -6.0, "balanceIn": 0.0, "balanceOut": 0.0, "softclip": 0, "mutel": 0, "muter": 0, "phasel": 0, "phaser": 0, "mode": 0, "slev": 0.0, "sbal": 0.0, "mlev": 0.0, "mpan": 0.0, "stereoBase": 0.0, "delay": 0.0, "scLevel": 1.0, "stereoPhase": 0.0, "dry": -100.0, "wet": 0.0})
+    time.sleep(0.8)
+    s = seg(record("stereo", tone), start=0.8)
+    l100 = level(s[:, 0], 100)
+    check(abs(l100 + 18) < 0.5, f"Stereo Tools -6 dB kimenet: 100 Hz {l100:.2f} dBFS (elvárt -18)")
     all_off()
 
     print("\n%s (%d hiba)" % ("SIKERTELEN" if fails else "MINDEN MODULTESZT SIKERES", fails))

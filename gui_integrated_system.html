@@ -4370,7 +4370,9 @@ var qrcode = function() {
         <button class="tab-btn" id="tabBtn-crossfeed" onclick="switchTab('crossfeed', this)"><span class="module-dot" id="dot-crossfeed"></span><span data-i18n="mod.crossfeed">Crossfeed</span></button>
         <button class="tab-btn" id="tabBtn-convolver" onclick="switchTab('convolver', this)"><span class="module-dot" id="dot-convolver"></span><span data-i18n="mod.convolver">Convolver</span></button>
         <button class="tab-btn" id="tabBtn-limiter" onclick="switchTab('limiter', this)"><span class="module-dot" id="dot-limiter"></span><span data-i18n="mod.limiter">Limiter</span></button>
+        <button class="tab-btn" id="tabBtn-loudness" onclick="switchTab('loudness', this)"><span class="module-dot" id="dot-loudness"></span><span data-i18n="mod.loudness">Loudness</span></button>
         <button class="tab-btn" id="tabBtn-bass" onclick="switchTab('bass', this)"><span class="module-dot" id="dot-bass"></span><span data-i18n="mod.bass">Bass Enhancer</span></button>
+        <button class="tab-btn" id="tabBtn-stereo" onclick="switchTab('stereo', this)"><span class="module-dot" id="dot-stereo"></span><span data-i18n="mod.stereo">Stereo Tools</span></button>
         <button class="tab-btn" id="tabBtn-mono" onclick="switchTab('mono', this)"><span class="module-dot" id="dot-mono"></span><span data-i18n="mod.mono">Mono</span></button>
         <button class="tab-btn" id="tabBtn-autogain" onclick="switchTab('autogain', this)"><span class="module-dot" id="dot-autogain"></span><span data-i18n="mod.autogain">Autogain</span></button>
         <button class="tab-btn" id="tabBtn-outstage" onclick="switchTab('outstage', this)"><span class="module-dot" id="dot-outstage"></span><span data-i18n="os.tab">Csatornák</span></button>
@@ -4657,6 +4659,26 @@ var qrcode = function() {
       </div>
     </div>
 
+    <!-- TAB: LOUDNESS -->
+    <div class="tab-pane" id="pane-loudness">
+      <div class="module-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <h3 style="margin:0;"><svg class="aq-icon" aria-hidden="true"><use href="#i-speaker"/></svg><span data-i18n="mod.loudness">Loudness</span></h3>
+            <span class="status-badge off" id="badgeStatus-loudness" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button class="adw-btn" id="btnLoudAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
+            <button type="button" class="aq-switch" id="btnToggle-loudness" onclick="toggleModule('loudness')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
+          </div>
+        </div>
+
+        <p class="module-desc" data-i18n="loudness.desc">Hangerőfüggő hangszínkorrekció (ISO 226 / Fletcher–Munson): alacsony hangerőn az emberi fül kevésbé érzékeny a mély és magas frekvenciákra; a Loudness ezt kompenzálja a hallásgörbék szerint.</p>
+
+        <div class="param-grid" id="loudnessControls"></div>
+      </div>
+    </div>
+
     <!-- 4. TAB: BASS ENHANCER -->
     <div class="tab-pane" id="pane-bass">
       <div class="module-card">
@@ -4689,6 +4711,26 @@ var qrcode = function() {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- TAB: STEREO TOOLS -->
+    <div class="tab-pane" id="pane-stereo">
+      <div class="module-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <h3 style="margin:0;"><svg class="aq-icon" aria-hidden="true"><use href="#i-speaker"/></svg><span data-i18n="mod.stereo">Stereo Tools</span></h3>
+            <span class="status-badge off" id="badgeStatus-stereo" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <button class="adw-btn" id="btnStereoAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
+            <button type="button" class="aq-switch" id="btnToggle-stereo" onclick="toggleModule('stereo')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
+          </div>
+        </div>
+
+        <p class="module-desc" data-i18n="stereo.desc">Sztereó kép és térhatás beállítása: sztereó alap, fázisforgatás, csatornamódok (Mid/Side), balansz és lágy vágás (Calf Stereo Tools).</p>
+
+        <div class="param-grid" id="stereoControls"></div>
       </div>
     </div>
 
@@ -5351,7 +5393,9 @@ var isFirMode = false;
 var isCrossfeedEnabled = false;
 var isConvolverEnabled = false;
 var isLimiterEnabled = false;
+var isLoudnessEnabled = false;
 var isBassEnabled = false;
+var isStereoEnabled = false;
 var isMagicEnabled = false;
 var isMonoEnabled = false;
 var isAutogainEnabled = false;
@@ -5367,7 +5411,9 @@ function setModuleActive(mod, active) {
   else if (mod === 'crossfeed') isCrossfeedEnabled = active;
   else if (mod === 'convolver') isConvolverEnabled = active;
   else if (mod === 'limiter') isLimiterEnabled = active;
+  else if (mod === 'loudness') isLoudnessEnabled = active;
   else if (mod === 'bass') isBassEnabled = active;
+  else if (mod === 'stereo') isStereoEnabled = active;
   else if (mod === 'magic') isMagicEnabled = active;
   else if (mod === 'mono') isMonoEnabled = active;
   else if (mod === 'autogain') isAutogainEnabled = active;
@@ -5422,7 +5468,8 @@ function setModuleActive(mod, active) {
 
 function moduleIsActive(mod) {
   return mod === 'eq' ? isEqEnabled : mod === 'crossfeed' ? isCrossfeedEnabled : mod === 'convolver' ? isConvolverEnabled
-       : mod === 'limiter' ? isLimiterEnabled : mod === 'bass' ? isBassEnabled : mod === 'magic' ? isMagicEnabled
+       : mod === 'limiter' ? isLimiterEnabled : mod === 'loudness' ? isLoudnessEnabled : mod === 'bass' ? isBassEnabled
+       : mod === 'stereo' ? isStereoEnabled : mod === 'magic' ? isMagicEnabled
        : mod === 'mono' ? isMonoEnabled : mod === 'autogain' ? isAutogainEnabled : mod === 'outstage' ? isOutstageEnabled : false;
 }
 /** A modul BE/KI gombjának, állapotjelvényének (és az EQ felső gombjának) felirata a választott nyelven. */
@@ -5445,13 +5492,14 @@ function renderModuleTexts(mod) {
 }
 
 /** A/B: az eredeti (hangerőre kiegyenlített) jel szól-e. Az EQ-hoz, a Konvolverhez, a Bass Enhancerhez és a Monóhoz külön. */
-var eqAbOn = false, convAbOn = false, bassAbOn = false, monoAbOn = false;
+var eqAbOn = false, convAbOn = false, bassAbOn = false, monoAbOn = false, loudAbOn = false, stereoAbOn = false;
 // modul -> [gomb, üzenettípus]
 var AB_MODS = { eq: ['btnEqAbTab', 'set_eq_compare'], convolver: ['btnConvAbTab', 'set_conv_compare'],
-                bass: ['btnBassAbTab', 'set_bass_compare'], mono: ['btnMonoAbTab', 'set_mono_compare'] };
-function abIsOn(mod) { return mod === 'eq' ? eqAbOn : mod === 'convolver' ? convAbOn : mod === 'bass' ? bassAbOn : monoAbOn; }
+                bass: ['btnBassAbTab', 'set_bass_compare'], mono: ['btnMonoAbTab', 'set_mono_compare'],
+                loudness: ['btnLoudAbTab', 'set_loudness_compare'], stereo: ['btnStereoAbTab', 'set_stereo_compare'] };
+function abIsOn(mod) { return mod === 'eq' ? eqAbOn : mod === 'convolver' ? convAbOn : mod === 'bass' ? bassAbOn : mod === 'mono' ? monoAbOn : mod === 'loudness' ? loudAbOn : stereoAbOn; }
 function setAb(mod, on) {
-  if (mod === 'eq') eqAbOn = on; else if (mod === 'convolver') convAbOn = on; else if (mod === 'bass') bassAbOn = on; else monoAbOn = on;
+  if (mod === 'eq') eqAbOn = on; else if (mod === 'convolver') convAbOn = on; else if (mod === 'bass') bassAbOn = on; else if (mod === 'mono') monoAbOn = on; else if (mod === 'loudness') loudAbOn = on; else stereoAbOn = on;
 }
 function renderAbButtons() {
   if (!AB_MODS) return;   // a betöltés legelején (a deklaráció sora előtt) még nincs mit kirajzolni
@@ -5493,7 +5541,9 @@ function toggleModule(mod) {
   else if (mod === 'crossfeed') curr = isCrossfeedEnabled;
   else if (mod === 'convolver') curr = isConvolverEnabled;
   else if (mod === 'limiter') curr = isLimiterEnabled;
+  else if (mod === 'loudness') curr = isLoudnessEnabled;
   else if (mod === 'bass') curr = isBassEnabled;
+  else if (mod === 'stereo') curr = isStereoEnabled;
   else if (mod === 'magic') curr = isMagicEnabled;
   else if (mod === 'mono') curr = isMonoEnabled;
   else if (mod === 'autogain') curr = isAutogainEnabled;
@@ -5519,7 +5569,7 @@ function sendParamToPipewire(type, val) {
 // =========================================================================
 // TAB VÁLTÓ LOGIKA & OLDALRA CSÚSZÓ ANIMÁCIÓ (GLIDER & VIEWPORT SLIDE)
 // =========================================================================
-const TAB_ORDER = ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'outstage', 'magic'];
+const TAB_ORDER = ['eq', 'crossfeed', 'convolver', 'limiter', 'loudness', 'bass', 'stereo', 'mono', 'autogain', 'outstage', 'magic'];
 let currentActiveTab = 'eq';
 let tabSlideTimer = null;
 
@@ -6006,6 +6056,10 @@ const btnBassAbTab = document.getElementById("btnBassAbTab");
 if (btnBassAbTab) btnBassAbTab.onclick = () => toggleAb('bass');
 const btnMonoAbTab = document.getElementById("btnMonoAbTab");
 if (btnMonoAbTab) btnMonoAbTab.onclick = () => toggleAb('mono');
+const btnLoudAbTab = document.getElementById("btnLoudAbTab");
+if (btnLoudAbTab) btnLoudAbTab.onclick = () => toggleAb('loudness');
+const btnStereoAbTab = document.getElementById("btnStereoAbTab");
+if (btnStereoAbTab) btnStereoAbTab.onclick = () => toggleAb('stereo');
 
 const btnCameraAngle = document.getElementById("btnCameraAngle");
 if (btnCameraAngle) {
@@ -8280,7 +8334,7 @@ registerProcessor('burn-in', BurnInProcessor);
 
 let burnCtx = null, burnNode = null, burnSaved = null, burnStartMs = 0, burnTotalSec = 0, burnStopping = false, burnWake = null;
 // Minden modul, amely a jelet módosítja: az Autogain a −30 dBFS-es szintet is megemelné
-const BURN_MODULES = ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'magic'];
+const BURN_MODULES = ['eq', 'crossfeed', 'convolver', 'limiter', 'loudness', 'bass', 'stereo', 'mono', 'autogain', 'magic'];
 const BURN_SAVED_KEY = 'aqulify_burnin_saved';   // a futás előtti modulállapot (ha a felület futás közben bezárul)
 
 function fmtBurnTime(sec) {
@@ -9882,6 +9936,38 @@ buildControls("limControls", [
 ], () => { sendLimiter(); nudgeIfOff('limiter'); });
 setCtl("limAlr", false);
 
+// --- Loudness (LSP loud_comp)
+buildControls("loudnessControls", [
+  { id: "loudVolume", kind: "num", label: "ctl.loudVolume", min: -83, max: 7, step: 0.1, unit: "dB", def: 0, sign: true },
+  { id: "loudStd", kind: "select", label: "ctl.loudStd", optKeys: true, def: 1,
+    options: ["loud.stdFlat", "loud.stdIso2003", "loud.stdFletcher", "loud.stdRobinson", "loud.stdIso2023"] },
+  { id: "loudMode", kind: "select", label: "ctl.loudMode", optKeys: true, def: 5,
+    options: ["loud.modeIir", "loud.modeFft256", "loud.modeFft512", "loud.modeFft1024", "loud.modeFft2048", "loud.modeFft4096", "loud.modeFft8192", "loud.modeFft16384"],
+    after: v => showBox("loudApprox", v === 0) },
+  { id: "loudApprox", kind: "select", label: "ctl.loudApprox", optKeys: true, def: 2,
+    options: ["loud.approx16", "loud.approx24", "loud.approx32", "loud.approx48", "loud.approx64"] },
+  { id: "loudHclip", kind: "toggle", label: "ctl.loudHclip", def: false, after: v => showBox("loudHclipRange", v) },
+  { id: "loudHclipRange", kind: "num", label: "ctl.loudHclipRange", min: 0, max: 24, step: 0.1, unit: "dB", def: 6 },
+  { id: "loudInGain", kind: "num", label: "ctl.inGain", min: -36, max: 36, step: 0.1, unit: "dB", def: 0, sign: true },
+  { id: "loudOutGain", kind: "num", label: "ctl.outGain", min: -36, max: 36, step: 0.1, unit: "dB", def: 0, sign: true },
+], () => { sendLoudness(); nudgeIfOff('loudness'); });
+setCtl("loudHclip", false);
+showBox("loudApprox", false);
+
+function sendLoudness() {
+  sendEngine({
+    type: "set_loudness",
+    volume: getCtl("loudVolume"),
+    inputGain: getCtl("loudInGain"),
+    outputGain: getCtl("loudOutGain"),
+    std: getCtl("loudStd"),
+    mode: getCtl("loudMode"),
+    hclip: getCtl("loudHclip") ? 1 : 0,
+    hclipRange: getCtl("loudHclipRange"),
+    approx: getCtl("loudApprox")
+  });
+}
+
 // --- Bass Enhancer (Calf)
 buildControls("bassControls", [
   { id: "bassAmount", kind: "num", label: "ctl.bassAmount", min: -100, max: 36, smin: -36, smax: 36, step: 0.1, unit: "dB", def: 0, sign: true },
@@ -9896,6 +9982,58 @@ buildControls("bassControls", [
 ], () => { sendBass(); nudgeIfOff('bass'); });
 // A vezérlők létrehozása után (az „Alsó határ frekvencia” doboza csak most létezik): kikapcsolt alsó határnál rejtve
 setCtl("bassFloorActive", false);
+
+// --- Stereo Tools (Calf Stereo Tools)
+buildControls("stereoControls", [
+  { id: "stMode", kind: "select", label: "ctl.stMode", optKeys: true, def: 0,
+    options: ["st.modeLrLr", "st.modeLrMs", "st.modeMsLr", "st.modeLrLl", "st.modeLrRr", "st.modeLrLp", "st.modeLrRl"] },
+  { id: "stStereoBase", kind: "num", label: "ctl.stStereoBase", min: -1, max: 1, step: 0.01, unit: "", def: 0, sign: true },
+  { id: "stStereoPhase", kind: "num", label: "ctl.stStereoPhase", min: 0, max: 360, step: 1, unit: "°", def: 0 },
+  { id: "stBalanceIn", kind: "num", label: "ctl.stBalanceIn", min: -1, max: 1, step: 0.01, unit: "", def: 0, sign: true },
+  { id: "stBalanceOut", kind: "num", label: "ctl.stBalanceOut", min: -1, max: 1, step: 0.01, unit: "", def: 0, sign: true },
+  { id: "stDelay", kind: "num", label: "ctl.stDelay", min: -20, max: 20, step: 0.01, unit: "ms", def: 0, sign: true },
+  { id: "stSoftclip", kind: "toggle", label: "ctl.stSoftclip", def: false, after: v => showBox("stScLevel", v) },
+  { id: "stScLevel", kind: "num", label: "ctl.stScLevel", min: 1, max: 100, step: 0.1, unit: "", def: 1 },
+  { id: "stMutel", kind: "toggle", label: "ctl.stMutel", def: false },
+  { id: "stMuter", kind: "toggle", label: "ctl.stMuter", def: false },
+  { id: "stPhasel", kind: "toggle", label: "ctl.stPhasel", def: false },
+  { id: "stPhaser", kind: "toggle", label: "ctl.stPhaser", def: false },
+  { id: "stSlev", kind: "num", label: "ctl.stSlev", min: -36, max: 36, step: 0.1, unit: "dB", def: 0, sign: true },
+  { id: "stSbal", kind: "num", label: "ctl.stSbal", min: -1, max: 1, step: 0.01, unit: "", def: 0, sign: true },
+  { id: "stMlev", kind: "num", label: "ctl.stMlev", min: -36, max: 36, step: 0.1, unit: "dB", def: 0, sign: true },
+  { id: "stMpan", kind: "num", label: "ctl.stMpan", min: -1, max: 1, step: 0.01, unit: "", def: 0, sign: true },
+  { id: "stDry", kind: "num", label: "ctl.stDry", min: -100, max: 20, step: 0.1, unit: "dB", def: -100, sign: true },
+  { id: "stWet", kind: "num", label: "ctl.stWet", min: -100, max: 20, step: 0.1, unit: "dB", def: 0, sign: true },
+  { id: "stInGain", kind: "num", label: "ctl.inGain", min: -36, max: 36, step: 0.1, unit: "dB", def: 0, sign: true },
+  { id: "stOutGain", kind: "num", label: "ctl.outGain", min: -36, max: 36, step: 0.1, unit: "dB", def: 0, sign: true },
+], () => { sendStereo(); nudgeIfOff('stereo'); });
+setCtl("stSoftclip", false);
+
+function sendStereo() {
+  sendEngine({
+    type: "set_stereo",
+    inputGain: getCtl("stInGain"),
+    outputGain: getCtl("stOutGain"),
+    balanceIn: getCtl("stBalanceIn"),
+    balanceOut: getCtl("stBalanceOut"),
+    softclip: getCtl("stSoftclip") ? 1 : 0,
+    mutel: getCtl("stMutel") ? 1 : 0,
+    muter: getCtl("stMuter") ? 1 : 0,
+    phasel: getCtl("stPhasel") ? 1 : 0,
+    phaser: getCtl("stPhaser") ? 1 : 0,
+    mode: getCtl("stMode"),
+    slev: getCtl("stSlev"),
+    sbal: getCtl("stSbal"),
+    mlev: getCtl("stMlev"),
+    mpan: getCtl("stMpan"),
+    stereoBase: getCtl("stStereoBase"),
+    delay: getCtl("stDelay"),
+    scLevel: getCtl("stScLevel"),
+    stereoPhase: getCtl("stStereoPhase"),
+    dry: getCtl("stDry"),
+    wet: getCtl("stWet")
+  });
+}
 
 // --- Mono és mélyvágás (mono_bass.hpp): a 0 Hz (ki) és a 10–35 Hz (5 Hz-es lépés) közötti választás indexe
 buildControls("monoControls", [
@@ -10064,12 +10202,12 @@ markCrossfeedPreset();
 
 /** A teljes felületi állapot elküldése a motornak. */
 function pushAllToEngine() {
-  ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'outstage', 'magic'].forEach(m => {
+  ['eq', 'crossfeed', 'convolver', 'limiter', 'loudness', 'bass', 'stereo', 'mono', 'autogain', 'outstage', 'magic'].forEach(m => {
     sendParamToPipewire('set_module_' + m, moduleIsActive(m) ? 1 : 0);
   });
   sendCurveMsg({ type: "set_eq_mode", val: currentEqMode });
   sendCurveMsg({ type: "set_decramp", val: currentDecramp });
-  sendBass(); sendLimiter(); sendCrossfeed(); sendConvolver(); sendMagic(); sendMono(); sendAutogain(); sendOutstage();
+  sendBass(); sendLoudness(); sendStereo(); sendLimiter(); sendCrossfeed(); sendConvolver(); sendMagic(); sendMono(); sendAutogain(); sendOutstage();
   lastSentPreamp = currentPreamp;
   sendParamToPipewire("set_preamp", currentPreamp);
   lastSentEqSig = null;   // a sávokat mindenképp átadjuk
@@ -10211,7 +10349,7 @@ function applyEngineState(st, fromSync) {
         if (typeof st.magic.content === "number") setCtl("magicContent", st.magic.content);
         magicCompare = !!st.magic.compare;
       }
-      if (st.ab) { eqAbOn = !!st.ab.eq; convAbOn = !!st.ab.conv; bassAbOn = !!st.ab.bass; monoAbOn = !!st.ab.mono; }
+      if (st.ab) { eqAbOn = !!st.ab.eq; convAbOn = !!st.ab.conv; bassAbOn = !!st.ab.bass; monoAbOn = !!st.ab.mono; loudAbOn = !!st.ab.loudness; stereoAbOn = !!st.ab.stereo; }
       if (st.monoBass) {
         setCtl("monoSubsonic", Math.max(0, MONO_SUBSONIC_HZ.indexOf(st.monoBass.subsonicHz)));
         setCtl("monoAmount", st.monoBass.amount);
@@ -10227,7 +10365,7 @@ function applyEngineState(st, fromSync) {
         setCtl("osInvertL", !!o.invertL); setCtl("osInvertR", !!o.invertR);
         setCtl("osDither", o.dither); setCtl("osBits", o.bits === 16 ? 0 : 1);
       }
-      ['eq', 'crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'outstage', 'magic'].forEach(m => {
+      ['eq', 'crossfeed', 'convolver', 'limiter', 'loudness', 'bass', 'stereo', 'mono', 'autogain', 'outstage', 'magic'].forEach(m => {
         if (m in mods) setModuleActive(m, !!mods[m]);
       });
       renderMagicCompare();
@@ -10253,6 +10391,22 @@ function applyEngineState(st, fromSync) {
         setCtl("bassFloor", b.floor); setCtl("bassBlend", b.blend); setCtl("bassFloorActive", b.floorActive);
         setCtl("bassListen", b.listen); setCtl("bassInGain", b.inputGain); setCtl("bassOutGain", b.outputGain);
       }
+      if (st.loudness) {
+        const l = st.loudness;
+        setCtl("loudVolume", l.volume); setCtl("loudInGain", l.inputGain); setCtl("loudOutGain", l.outputGain);
+        setCtl("loudStd", l.std); setCtl("loudMode", l.mode); setCtl("loudHclip", l.hclip);
+        setCtl("loudHclipRange", l.hclipRange); setCtl("loudApprox", l.approx);
+      }
+      if (st.stereo) {
+        const s = st.stereo;
+        setCtl("stInGain", s.inputGain); setCtl("stOutGain", s.outputGain);
+        setCtl("stBalanceIn", s.balanceIn); setCtl("stBalanceOut", s.balanceOut);
+        setCtl("stSoftclip", s.softclip); setCtl("stMutel", s.mutel); setCtl("stMuter", s.muter);
+        setCtl("stPhasel", s.phasel); setCtl("stPhaser", s.phaser); setCtl("stMode", s.mode);
+        setCtl("stSlev", s.slev); setCtl("stSbal", s.sbal); setCtl("stMlev", s.mlev); setCtl("stMpan", s.mpan);
+        setCtl("stStereoBase", s.stereoBase); setCtl("stDelay", s.delay); setCtl("stScLevel", s.scLevel);
+        setCtl("stStereoPhase", s.stereoPhase); setCtl("stDry", s.dry); setCtl("stWet", s.wet);
+      }
       if (st.convolver) {
         const c = st.convolver;
         setCtl("convIrWidth", c.irWidth); setCtl("convAutogain", c.autogain); setCtl("convDry", c.dry);
@@ -10261,13 +10415,13 @@ function applyEngineState(st, fromSync) {
     } else if (activePresetName && presetsDoc.presets[activePresetName]) {
       // A motor üres (pl. első indítás új gépen), de van mentett aktív profil: azt töltjük be
       applyPresetData(presetsDoc.presets[activePresetName]);
-      ['crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'magic'].forEach(m => setModuleActive(m, false));
+      ['crossfeed', 'convolver', 'limiter', 'loudness', 'bass', 'stereo', 'mono', 'autogain', 'magic'].forEach(m => setModuleActive(m, false));
       setModuleActive('eq', nodes.length > 0);
       armLimiterForProfile(currentPreamp, false);
     } else {
       // A motor még sosem kapott beállítást: teljesen tiszta, kikapcsolt (bypass) alapállapot
       nodes.forEach(n => { n.gain = 0.0; });
-      ['crossfeed', 'convolver', 'limiter', 'bass', 'mono', 'autogain', 'outstage', 'eq', 'magic'].forEach(m => setModuleActive(m, false));
+      ['crossfeed', 'convolver', 'limiter', 'loudness', 'bass', 'stereo', 'mono', 'autogain', 'outstage', 'eq', 'magic'].forEach(m => setModuleActive(m, false));
       currentPreamp = 0.0;
       autoPreampMode = false;
       setPreampBadge("preamp.clean", 0, "optimal");
