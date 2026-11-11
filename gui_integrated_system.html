@@ -4208,6 +4208,531 @@ var qrcode = function() {
   @media (prefers-reduced-motion: reduce) {
     .adw-btn, .aq-switch { transition: none; }
   }
+
+  /* ========================================================================== */
+  /* HIFI ELŐLAP KITERJESZTÉS: a többi vezérlő ugyanezekkel a --hf-* változókkal */
+  /* ========================================================================== */
+  :root {
+    --hf-bz-hi: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-hi-p));
+    --hf-bz-lo: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-lo-p));
+  }
+
+  /* A fém alapréteg megosztása az új gombszelektorokkal (.strip-controls és .support-btn kivételével) */
+  header.app-header button.mini-btn:not(.support-btn),
+  .preset-bar button.mini-btn,
+  .aq-modal button.mini-btn,
+  button.view-switch-btn,
+  body .aqlib button.lib-tab,
+  body .aqlib button.lib-src-tab,
+  button.modal-tab-btn,
+  button.tab-btn,
+  button.icon-btn,
+  .aqnp button.aqnp-btn,
+  body .aqlib button.lib-btn,
+  button.dsp-warn-btn {
+    --hf-mix: 16%;
+    --hf-anod: color-mix(in srgb, var(--aq-accent) var(--hf-mix), var(--hf-metal));
+    --hf-face-hi: color-mix(in srgb, var(--hf-anod), #fff var(--hf-hi-p));
+    --hf-face-lo: color-mix(in srgb, var(--hf-anod), #000 var(--hf-lo-p));
+    --hf-bz-hi: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-hi-p));
+    --hf-bz-lo: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-lo-p));
+    --hf-bg:
+      linear-gradient(135deg, transparent 38%, rgba(255,255,255,var(--hf-sheen)) 50%, transparent 62%) padding-box,
+      repeating-linear-gradient(180deg, rgba(255,255,255,var(--hf-line)) 0 1px, transparent 1px 2.6px) padding-box,
+      repeating-linear-gradient(180deg, rgba(0,0,0,var(--hf-line)) 0 1px, transparent 1px 1.7px) padding-box,
+      linear-gradient(180deg, var(--hf-face-hi), var(--hf-anod) 52%, var(--hf-face-lo)) padding-box,
+      linear-gradient(180deg, var(--hf-bz-hi), var(--hf-bz-lo)) border-box;
+    border: 2px solid transparent;
+    background: var(--hf-bg);
+    color: var(--aq-text);
+    box-shadow: 0 3px 7px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.28);
+    transition: transform 90ms ease-out, box-shadow 90ms ease-out, filter 120ms ease-out;
+  }
+
+  /* 1. button.mini-btn (fejléc, profilsor, modál): sima 16% fém, azonos külső mérettel */
+  header.app-header button.mini-btn:not(.support-btn),
+  .preset-bar button.mini-btn,
+  .aq-modal button.mini-btn {
+    border-radius: 7px;
+    padding: 3px 9px;
+  }
+  header.app-header button#btnRemote.mini-btn.attn {
+    padding-right: 12px;
+  }
+
+  /* 2. Nézetváltó (Hangzás/Zenetár), Zenetár fülek, Import modál fülei: reteszelő fémgombok LED-del */
+  .view-switch-glider { display: none; }
+  button.view-switch-btn {
+    border-radius: 7px;
+    min-width: 96px;
+    padding: 3px 10px;
+    background: var(--hf-bg) !important; /* felülírja a 3453. sor transparent !important-ját */
+    border-color: transparent;
+  }
+  button.view-switch-btn.active {
+    color: var(--aq-text) !important; /* felülírja a 3468. sor --aq-accent-ink !important-ját */
+  }
+  button.view-switch-btn.active::before {
+    margin-right: 0;
+  }
+  body .aqlib button.lib-src-tab {
+    border-radius: 7px;
+    padding: 6px 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  body .aqlib button.lib-tab {
+    border-radius: 8px;
+    padding: 6px 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  button.modal-tab-btn {
+    border-radius: 8px;
+    padding: 6px 12px;
+  }
+
+  /* 4. Modulfülek (button.tab-btn): a .module-dot marad az egyetlen LED, az aktív fül 30% reteszelt fém */
+  .tab-glider { display: none; }
+  button.tab-btn {
+    border-radius: 8px;
+    padding: 5px 13px; /* 2px kerettel együtt pixelre azonos a régi 6px 14px + 1px kerettel */
+  }
+  button.tab-btn.active {
+    --hf-mix: 30%;
+  }
+
+  /* 5. Ikon-gombok, Lejátszó gombok, Zenetár gombok, Figyelmeztető gomb */
+  button.icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    padding: 0;
+  }
+  .aqnp button.aqnp-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    padding: 0;
+  }
+  .aqnp button.aqnp-btn:hover,
+  :root[data-mode="light"] .aqnp button.aqnp-btn:hover,
+  :root[data-theme$="-light"] .aqnp button.aqnp-btn:hover,
+  :root[data-theme="light"] .aqnp button.aqnp-btn:hover {
+    background: var(--hf-bg) !important; /* felülírja a 4080. sor világos témás !important hátterét */
+    border-color: transparent !important;
+    color: var(--aq-text);
+  }
+  .aqnp button.aqnp-btn.aqnp-play {
+    width: 40px;
+    height: 40px;
+    --hf-mix: 82%;
+    color: var(--aq-accent-ink);
+  }
+  .aqnp button.aqnp-btn.aqnp-play:hover:not(:active):not(:disabled),
+  :root[data-mode="light"] .aqnp button.aqnp-btn.aqnp-play:hover:not(:active):not(:disabled),
+  :root[data-theme$="-light"] .aqnp button.aqnp-btn.aqnp-play:hover:not(:active):not(:disabled),
+  :root[data-theme="light"] .aqnp button.aqnp-btn.aqnp-play:hover:not(:active):not(:disabled) {
+    color: var(--aq-accent-ink);
+    transform: none;
+  }
+  .aqnp button.aqnp-btn.on {
+    color: var(--aq-led);
+  }
+  body .aqlib button.lib-btn {
+    border-radius: 8px;
+    padding: 6px 11px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  body .aqlib button.lib-btn.accent {
+    --hf-mix: 82%;
+    color: var(--aq-accent-ink);
+  }
+  body .aqlib button.lib-btn.danger {
+    color: var(--aq-danger);
+  }
+  button.dsp-warn-btn {
+    --aq-accent: var(--aq-amber, #E3B66B);
+    --hf-mix: 82%;
+    color: #1A1206;
+    border-radius: 6px;
+    padding: 2px 9px;
+  }
+
+  /* Állapotok minden új fémgombra (hover, lenyomás, reteszelés, tiltás, billentyűzetfókusz) */
+  header.app-header button.mini-btn:not(.support-btn):hover:not(:disabled),
+  .preset-bar button.mini-btn:hover:not(:disabled),
+  .aq-modal button.mini-btn:hover:not(:disabled),
+  button.view-switch-btn:hover:not(:disabled),
+  body .aqlib button.lib-tab:hover:not(:disabled),
+  body .aqlib button.lib-src-tab:hover:not(:disabled),
+  button.modal-tab-btn:hover:not(:disabled),
+  button.tab-btn:hover:not(:disabled),
+  button.icon-btn:hover:not(:disabled),
+  .aqnp button.aqnp-btn:hover:not(:disabled),
+  body .aqlib button.lib-btn:hover:not(:disabled),
+  button.dsp-warn-btn:hover:not(:disabled) {
+    background: var(--hf-bg);
+    border-color: transparent;
+    filter: brightness(1.06);
+  }
+
+  header.app-header button.mini-btn:not(.support-btn):active:not(:disabled),
+  .preset-bar button.mini-btn:active:not(:disabled),
+  .aq-modal button.mini-btn:active:not(:disabled),
+  button.view-switch-btn:active:not(:disabled),
+  body .aqlib button.lib-tab:active:not(:disabled),
+  body .aqlib button.lib-src-tab:active:not(:disabled),
+  button.modal-tab-btn:active:not(:disabled),
+  button.tab-btn:active:not(:disabled),
+  button.icon-btn:active:not(:disabled),
+  .aqnp button.aqnp-btn:active:not(:disabled),
+  body .aqlib button.lib-btn:active:not(:disabled),
+  button.dsp-warn-btn:active:not(:disabled) {
+    transform: translateY(1px) scale(0.965);
+    filter: brightness(0.86);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.5)), inset 0 -1px 0 rgba(0,0,0,0.22);
+  }
+
+  /* 3. button.adw-btn.active és az összes új reteszelő gomb állapota */
+  button.view-switch-btn.active,
+  body .aqlib button.lib-tab.active,
+  body .aqlib button.lib-src-tab.active,
+  button.modal-tab-btn.active,
+  button.tab-btn.active,
+  .aqnp button.aqnp-btn.on,
+  body .aqlib button.lib-btn.on,
+  button.adw-btn.active:not([data-curve]),
+  button.adw-btn.primary.active,
+  button.adw-btn[data-curve].active-opt {
+    transform: translateY(0.6px) scale(0.98);
+    filter: brightness(0.93);
+    box-shadow: 0 1.5px 3px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.7)), inset 0 -1px 0 rgba(0,0,0,0.25);
+    background: var(--hf-bg);
+    border-color: transparent;
+  }
+  button.view-switch-btn.active,
+  body .aqlib button.lib-tab.active,
+  body .aqlib button.lib-src-tab.active,
+  button.modal-tab-btn.active,
+  button.tab-btn.active,
+  body .aqlib button.lib-btn.on,
+  button.adw-btn.active:not([data-curve]),
+  button.adw-btn.primary.active,
+  button.adw-btn[data-curve].active-opt {
+    color: var(--aq-text);
+  }
+  /* A .primary.active reteszelő toggle gombok (pl. Auto, modul kapcsolók) sima 16% fém + LED-del */
+  button.adw-btn.primary.active {
+    --hf-mix: 16%;
+    color: var(--aq-text);
+  }
+  /* A 82%-os NEM reteszelő .adw-btn.primary szövege mindig --aq-accent-ink */
+  button.adw-btn.primary:not(.active):not(.selected) {
+    color: var(--aq-accent-ink);
+  }
+  /* A görbekapcsolók (data-curve) csíkja bekapcsolva világít, kikapcsolva marad */
+  button.adw-btn[data-curve]:not(.active-opt) {
+    color: var(--aq-text-3);
+  }
+  button.adw-btn[data-curve].active-opt::before {
+    background: var(--curve, var(--aq-accent));
+    box-shadow: 0 0 6px 1px color-mix(in srgb, var(--curve, var(--aq-accent)) 70%, transparent);
+  }
+
+  /* Reteszelő LED-ek (7px, mint .adw-btn.selected::before) */
+  button.view-switch-btn.active::before,
+  body .aqlib button.lib-tab.active::before,
+  body .aqlib button.lib-src-tab.active::before,
+  button.modal-tab-btn.active::before,
+  body .aqlib button.lib-btn.on::before,
+  button.adw-btn.active:not([data-curve])::before,
+  button.adw-btn.primary.active::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    margin-right: 2px;
+    border: none;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    background:
+      radial-gradient(circle at 36% 32%, rgba(255,255,255,0.62) 0 17%, transparent 24%),
+      radial-gradient(circle, color-mix(in srgb, var(--aq-led), #fff 62%) 0 28%, var(--aq-led) 72%);
+    box-shadow: 0 0 0 1.1px rgba(0,0,0,0.65),
+                0 0 6px 1px color-mix(in srgb, var(--aq-led) 85%, transparent),
+                0 0 14px 3px color-mix(in srgb, var(--aq-led) 32%, transparent);
+  }
+
+  header.app-header button.mini-btn:not(.support-btn):disabled,
+  .preset-bar button.mini-btn:disabled,
+  .aq-modal button.mini-btn:disabled,
+  button.view-switch-btn:disabled,
+  body .aqlib button.lib-tab:disabled,
+  body .aqlib button.lib-src-tab:disabled,
+  button.modal-tab-btn:disabled,
+  button.tab-btn:disabled,
+  button.icon-btn:disabled,
+  .aqnp button.aqnp-btn:disabled,
+  body .aqlib button.lib-btn:disabled,
+  button.dsp-warn-btn:disabled {
+    opacity: 0.45;
+    filter: none;
+    transform: none;
+    box-shadow: none;
+    cursor: default;
+  }
+
+  header.app-header button.mini-btn:not(.support-btn):focus-visible,
+  .preset-bar button.mini-btn:focus-visible,
+  .aq-modal button.mini-btn:focus-visible,
+  button.view-switch-btn:focus-visible,
+  body .aqlib button.lib-tab:focus-visible,
+  body .aqlib button.lib-src-tab:focus-visible,
+  button.modal-tab-btn:focus-visible,
+  button.tab-btn:focus-visible,
+  button.icon-btn:focus-visible,
+  .aqnp button.aqnp-btn:focus-visible,
+  body .aqlib button.lib-btn:focus-visible,
+  button.dsp-warn-btn:focus-visible {
+    outline: 2px solid var(--aq-accent);
+    outline-offset: 2px;
+  }
+
+  /* 6 & 9. Süllyesztett (bemélyedő) fémkeret: selectek (.strip-controls kívül) és .ee-input mezők */
+  header.app-header select.mini-select,
+  .sink-popover select.mini-select,
+  .preset-bar select.mini-select,
+  .aq-modal select.mini-select,
+  select.ee-select,
+  input.ee-input,
+  textarea.ee-input {
+    --hf-bz-hi: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-hi-p));
+    --hf-bz-lo: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-lo-p));
+    border: 2px solid var(--hf-bz-hi) !important; /* felülírja a 625. és 919. sor 1px !important keretét */
+    border-top-color: var(--hf-bz-lo) !important;
+    border-bottom-color: color-mix(in srgb, var(--hf-metal), #fff calc(var(--hf-hi-p) * 0.45)) !important;
+    background-color: var(--aq-input) !important;
+    color: var(--aq-text) !important;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.42), inset 0 -1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.35)), 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.30));
+  }
+  header.app-header select.mini-select,
+  .sink-popover select.mini-select,
+  .preset-bar select.mini-select,
+  .aq-modal select.mini-select,
+  select.ee-select:not(.eq-zoom-overlay select.ee-select):not(.node-fields-group select.ee-select) {
+    padding: 3px 25px 3px 9px !important; /* 2px kerettel megőrzi a régi szélességet */
+    background-position: right 7px center !important;
+  }
+  input.ee-input:not(.search-input):not(textarea.ee-input) {
+    padding: 3px 7px !important;
+  }
+  header.app-header select.mini-select:hover:not(:disabled),
+  .sink-popover select.mini-select:hover:not(:disabled),
+  .preset-bar select.mini-select:hover:not(:disabled),
+  .aq-modal select.mini-select:hover:not(:disabled),
+  select.ee-select:hover:not(:disabled),
+  input.ee-input:hover:not(:disabled),
+  textarea.ee-input:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--hf-metal), var(--aq-text) 25%) !important;
+    border-top-color: var(--hf-bz-lo) !important;
+  }
+  header.app-header select.mini-select:focus,
+  .sink-popover select.mini-select:focus,
+  .preset-bar select.mini-select:focus,
+  .aq-modal select.mini-select:focus,
+  select.ee-select:focus,
+  input.ee-input:focus,
+  textarea.ee-input:focus {
+    border-color: var(--aq-accent) !important;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.35), 0 0 0 3px var(--aq-accent-soft) !important;
+  }
+  header.app-header select.mini-select:disabled,
+  .sink-popover select.mini-select:disabled,
+  .preset-bar select.mini-select:disabled,
+  .aq-modal select.mini-select:disabled,
+  select.ee-select:disabled,
+  input.ee-input:disabled,
+  textarea.ee-input:disabled {
+    opacity: 0.45;
+    cursor: default;
+    box-shadow: none;
+  }
+
+  /* 7. Csúszkák fém forgatógombja / tolókája (sáv változatlan) */
+  input[type="range"] {
+    --hf-mix: 16%;
+    --hf-anod: color-mix(in srgb, var(--aq-accent) var(--hf-mix), var(--hf-metal));
+    --hf-face-hi: color-mix(in srgb, var(--hf-anod), #fff var(--hf-hi-p));
+    --hf-face-lo: color-mix(in srgb, var(--hf-anod), #000 var(--hf-lo-p));
+    --hf-bz-hi: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-hi-p));
+    --hf-bz-lo: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-lo-p));
+    --hf-thumb-bg:
+      linear-gradient(135deg, transparent 32%, rgba(255,255,255,var(--hf-sheen)) 50%, transparent 68%) padding-box,
+      linear-gradient(180deg, var(--hf-face-hi), var(--hf-anod) 52%, var(--hf-face-lo)) padding-box,
+      linear-gradient(180deg, var(--hf-bz-hi), var(--hf-bz-lo)) border-box;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -6px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    background: var(--hf-thumb-bg);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.30);
+    transition: transform 90ms ease-out, filter 120ms ease-out, box-shadow 90ms ease-out;
+  }
+  input[type="range"]:hover:not(:disabled)::-webkit-slider-thumb { filter: brightness(1.08); }
+  input[type="range"]:active:not(:disabled)::-webkit-slider-thumb { transform: scale(0.95); filter: brightness(0.88); }
+  input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--aq-accent-soft); }
+  input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    background: var(--hf-thumb-bg);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.30);
+    transition: transform 90ms ease-out, filter 120ms ease-out, box-shadow 90ms ease-out;
+  }
+  input[type="range"]:hover:not(:disabled)::-moz-range-thumb { filter: brightness(1.08); }
+  input[type="range"]:active:not(:disabled)::-moz-range-thumb { transform: scale(0.95); filter: brightness(0.88); }
+  input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(--aq-accent-soft); }
+  input[type="range"]:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  input[type="range"]:disabled::-webkit-slider-thumb,
+  input[type="range"]:disabled::-moz-range-thumb {
+    filter: none;
+    transform: none;
+    box-shadow: none;
+  }
+
+  /* 8. Checkboxok (18×18px, 4px sarok): reteszelő fémgomb középen 7px-es LED-del */
+  body input[type="checkbox"],
+  body input[type="checkbox"].aq-checkbox {
+    -webkit-appearance: none;
+    appearance: none;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    border-radius: 4px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    vertical-align: middle;
+    --hf-mix: 16%;
+    --hf-anod: color-mix(in srgb, var(--aq-accent) var(--hf-mix), var(--hf-metal));
+    --hf-face-hi: color-mix(in srgb, var(--hf-anod), #fff var(--hf-hi-p));
+    --hf-face-lo: color-mix(in srgb, var(--hf-anod), #000 var(--hf-lo-p));
+    --hf-bz-hi: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-hi-p));
+    --hf-bz-lo: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-lo-p));
+    --hf-bg:
+      linear-gradient(135deg, transparent 38%, rgba(255,255,255,var(--hf-sheen)) 50%, transparent 62%) padding-box,
+      repeating-linear-gradient(180deg, rgba(255,255,255,var(--hf-line)) 0 1px, transparent 1px 2.6px) padding-box,
+      repeating-linear-gradient(180deg, rgba(0,0,0,var(--hf-line)) 0 1px, transparent 1px 1.7px) padding-box,
+      linear-gradient(180deg, var(--hf-face-hi), var(--hf-anod) 52%, var(--hf-face-lo)) padding-box,
+      linear-gradient(180deg, var(--hf-bz-hi), var(--hf-bz-lo)) border-box;
+    background: var(--hf-bg);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.28);
+    transition: transform 90ms ease-out, box-shadow 90ms ease-out, filter 120ms ease-out;
+  }
+  body input[type="checkbox"].aq-checkbox:checked::after,
+  body input[type="checkbox"].aq-checkbox:indeterminate::after {
+    content: none;
+    display: none;
+  }
+  body input[type="checkbox"]::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    background:
+      radial-gradient(circle at 36% 32%, rgba(255,255,255,0.32) 0 17%, transparent 24%),
+      color-mix(in srgb, var(--aq-led) 14%, var(--hf-led-off));
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.40);
+    transition: background .2s ease, box-shadow .2s ease;
+  }
+  body input[type="checkbox"]:checked::before {
+    background:
+      radial-gradient(circle at 36% 32%, rgba(255,255,255,0.62) 0 17%, transparent 24%),
+      radial-gradient(circle, color-mix(in srgb, var(--aq-led), #fff 62%) 0 28%, var(--aq-led) 72%);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.65),
+                0 0 6px 1px color-mix(in srgb, var(--aq-led) 85%, transparent),
+                0 0 14px 3px color-mix(in srgb, var(--aq-led) 32%, transparent);
+  }
+  body input[type="checkbox"]:indeterminate::before {
+    background:
+      radial-gradient(circle at 36% 32%, rgba(255,255,255,0.45) 0 17%, transparent 24%),
+      color-mix(in srgb, var(--aq-led) 55%, var(--hf-led-off));
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.50),
+                0 0 5px 1px color-mix(in srgb, var(--aq-led) 40%, transparent);
+  }
+  body input[type="checkbox"]:hover:not(:disabled),
+  label:hover > input[type="checkbox"]:not(:disabled),
+  .aq-checkbox-wrap:hover .aq-checkbox:not(:disabled) {
+    filter: brightness(1.06);
+  }
+  body input[type="checkbox"]:active:not(:disabled) {
+    transform: translateY(1px) scale(0.965);
+    filter: brightness(0.86);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.5)), inset 0 -1px 0 rgba(0,0,0,0.22);
+  }
+  body input[type="checkbox"]:checked,
+  body input[type="checkbox"]:indeterminate {
+    transform: translateY(0.6px) scale(0.98);
+    filter: brightness(0.93);
+    box-shadow: 0 1.5px 3px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.7)), inset 0 -1px 0 rgba(0,0,0,0.25);
+    background: var(--hf-bg);
+    border-color: transparent;
+  }
+  body input[type="checkbox"]:disabled {
+    opacity: 0.45;
+    filter: none;
+    transform: none;
+    box-shadow: none;
+    cursor: default;
+  }
+  body input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--aq-accent);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    header.app-header button.mini-btn:not(.support-btn),
+    .preset-bar button.mini-btn,
+    .aq-modal button.mini-btn,
+    button.view-switch-btn,
+    body .aqlib button.lib-tab,
+    body .aqlib button.lib-src-tab,
+    button.modal-tab-btn,
+    button.tab-btn,
+    button.icon-btn,
+    .aqnp button.aqnp-btn,
+    body .aqlib button.lib-btn,
+    button.dsp-warn-btn,
+    body input[type="checkbox"],
+    body input[type="checkbox"]::before,
+    input[type="range"]::-webkit-slider-thumb,
+    input[type="range"]::-moz-range-thumb {
+      transition: none;
+    }
+  }
 </style>
 
 </head>
