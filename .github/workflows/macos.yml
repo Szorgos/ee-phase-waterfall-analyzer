@@ -39,6 +39,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Eszközök
+        timeout-minutes: 15
         run: |
           command -v ninja >/dev/null || brew install ninja
           cmake --version | head -n1
@@ -48,6 +49,7 @@ jobs:
         run: python3 tools/i18n_build.py --check
 
       - name: FFTW 3.3.10 forrás (statikusan épül be)
+        timeout-minutes: 10
         run: |
           for i in 1 2 3; do curl -fsSL -o /tmp/fftw.tar.gz https://www.fftw.org/fftw-3.3.10.tar.gz && break; sleep 15; done
           got=$(shasum -a 256 /tmp/fftw.tar.gz | cut -d' ' -f1)
@@ -56,6 +58,7 @@ jobs:
           tar -xzf /tmp/fftw.tar.gz -C "$RUNNER_TEMP"
 
       - name: RNNoise modell (az Ubuntu forráscsomagjából, a tárolóban nincs)
+        timeout-minutes: 10
         run: |
           bash tools/fetch_rnnoise.sh /tmp/rnnoise.tar.xz || { echo "::error title=RNNoise::a letöltés egyik tükörről sem sikerült"; exit 1; }
           mkdir -p "$RUNNER_TEMP/rnnoise-model"
