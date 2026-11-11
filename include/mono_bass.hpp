@@ -1,7 +1,8 @@
 #pragma once
 /**
  * @file mono_bass.hpp
- * @brief Mono és mélyvágás. A modul a láncban a Bass Enhancer után, a Crossfeed előtt fut.
+ * @brief Mono és mélyvágás. A mélyvágás a láncban a Preamp után, a Bass Enhancer előtt fut (processSubsonic), a
+ *        mono-keverés a Stereo Tools után, a Crossfeed előtt (processMix).
  *
  * Két szűrő, mindkettő 24 dB/oktáves Linkwitz–Riley 4. rendű (két egymás utáni Butterworth 2. rendű szakasz):
  *   - Mélyvágás (10 / 20 / 30 Hz): a bal és a jobb csatornán, a teljes jelen.
@@ -88,14 +89,28 @@ public:
 
     double monoHz() const { return monoHz_; }
 
-    /** Csak bekapcsolt modulnál hívandó. A mono-szűrő állapota a modul teljes ideje alatt fut, így a keverés bármikor pontos. */
+    /** Mindkét rész egymás után (mélyvágás, majd mono-keverés). Csak bekapcsolt modulnál hívandó. */
     void process(float* L, float* R, size_t n) {
+        processSubsonic(L, R, n);
+        processMix(L, R, n);
+    }
+
+    /**
+     * A mélyvágás külön: a láncban a Preamp után, a Bass Enhancer előtt fut, hogy a hallható tartomány alatti zörejből
+     * a Bass Enhancer ne keltsen hallható felharmonikusokat. Vágás nélkül nem nyúl a jelhez.
+     */
+    void processSubsonic(float* L, float* R, size_t n) {
+        if (subHz_ <= 0) return;
+        for (size_t i = 0; i < n; ++i) {
+            L[i] = static_cast<float>(subL_.process(L[i]));
+            R[i] = static_cast<float>(subR_.process(R[i]));
+        }
+    }
+
+    /** A mono-keverés: a láncban a Stereo Tools után, a Crossfeed előtt. A szűrő állapota a modul teljes ideje alatt fut. */
+    void processMix(float* L, float* R, size_t n) {
         for (size_t i = 0; i < n; ++i) {
             double l = L[i], r = R[i];
-            if (subHz_ > 0) {
-                l = subL_.process(l);
-                r = subR_.process(r);
-            }
             const double s = 0.5 * (l - r);
             const double sLow = side_.process(s);   // az oldalsó jel a határfrekvencia fölötti része (HP), a keveréshez
             if (aCur_ != aTarget_) aCur_ += std::clamp(aTarget_ - aCur_, -aStep_, aStep_);

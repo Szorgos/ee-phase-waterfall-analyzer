@@ -1104,6 +1104,44 @@ static bool passesUnchanged(const ParamData& d) {
     return std::equal(L.begin() + from, L.end(), L0.begin() + from) && std::equal(R.begin() + from, R.end(), R0.begin() + from);
 }
 
+/**
+ * Mélyvágás a Bass Enhancer előtt: a hallható tartomány alatti zörejből (15 Hz) a Bass Enhancer ne keltsen hallható
+ * felharmonikusokat. A felharmonikusok (45, 60, 75, 90 Hz) a 30 Hz-es mélyvágás fölé esnek, ezért ha a vágás csak a
+ * Bass Enhancer után jönne, nem tudná eltávolítani őket. A mérés a lánc teljes útján, 15 Hz-es, −6 dBFS-es szinusszal.
+ */
+static void testSubsonicBeforeBass() {
+    std::printf("[9b] Mélyvágás a Bass Enhancer előtt: 15 Hz-es zörejből nem keletkezik hallható felharmonikus\n");
+    const double sr = 48000.0;
+    auto harmonicsDb = [&](int32_t subHz, double& h45, double& h60, double& h90) {
+        AetherChain chain;
+        chain.setSampleRate(sr);
+        ParamData d = transparentParams();
+        d.set(kFlagBass, true);
+        d.bassAmountDb = 12.0f;
+        d.set(kFlagMono, true);
+        d.subsonicHz = subHz;
+        chain.applyParamsRT(d);
+        const size_t n = static_cast<size_t>(6.0 * sr);
+        std::vector<float> L = sine(15.0, 0.5, n, sr), R = L;
+        runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 480);
+        const size_t from = n - static_cast<size_t>(4.0 * sr);
+        auto db = [&](double f) { return 20.0 * std::log10(toneAmp(L, from, f, sr) + 1e-12); };
+        h45 = db(45.0); h60 = db(60.0); h90 = db(90.0);
+    };
+    double o45, o60, o90, c45, c60, c90;
+    harmonicsDb(0, o45, o60, o90);
+    harmonicsDb(30, c45, c60, c90);
+    std::printf("         vágás nélkül: 45 Hz %.1f dBFS, 60 Hz %.1f dBFS, 90 Hz %.1f dBFS\n", o45, o60, o90);
+    std::printf("         30 Hz-es vágással: 45 Hz %.1f dBFS, 60 Hz %.1f dBFS, 90 Hz %.1f dBFS\n", c45, c60, c90);
+    // A 24 dB/oktáves vágás a 15 Hz-et (egy oktávval a 30 Hz alatt) kb. 25 dB-lel csillapítja, a Bass Enhancer a
+    // maradékot +12 dB-lel emeli: a 45 Hz-es felharmonikus ennél jobban nem csökkenhet. Ha a vágás a Bass Enhancer után
+    // futna (a régi sorrend), a 45 Hz −15 dBFS körül maradna, és csak kb. 6 dB-lel csökkenne.
+    const double worst = std::max({ c45, c60, c90 });
+    CHECK(worst < -45.0, "30 Hz-es mélyvágással a legerősebb hallható felharmonikus %.1f dBFS (elvárt < −45)", worst);
+    CHECK(std::max({ o45, o60, o90 }) - worst > 30.0,
+          "a mélyvágás legalább 30 dB-lel csökkenti a felharmonikusokat (%.1f dB)", std::max({ o45, o60, o90 }) - worst);
+}
+
 static void testMonoBass() {
     std::printf("[9] Mélyvágás (10 / 15 / 20 / 25 / 30 / 35 Hz, 24 dB/oktáves) és a kikapcsolt modul\n");
     const double sr = 48000.0;
@@ -3058,6 +3096,7 @@ int main() {
     testDeclick(256);
     testMagicTouch();
     testMonoBass();
+    testSubsonicBeforeBass();
     testConvolverToggle();
     testAbCompare();
     testAutogain();
