@@ -408,9 +408,6 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     background: rgba(255, 255, 255, 0.92);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   }
-  :root[data-mode="light"] .adw-btn:hover, :root[data-theme$="-light"] .adw-btn:hover, :root[data-theme="light"] .adw-btn:hover {
-    background: var(--aq-surface-2);
-  }
   :root[data-mode="light"] .status-badge.off, :root[data-theme$="-light"] .status-badge.off, :root[data-theme="light"] .status-badge.off {
     background: rgba(0, 0, 0, 0.04);
     color: var(--aq-text-2);
@@ -3488,6 +3485,11 @@ var qrcode = function() {
     position: relative;
     display: inline-flex;
   }
+  /* Eszköz panel: a szekciók elválasztása és a gombok egymás alatt, teljes szélességben */
+  .dev-sec { border-top: 1px solid var(--aq-line); margin-top: 10px; padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .dev-sec[hidden] { display: none; }
+  .dev-actions { display: flex; flex-direction: column; gap: 6px; }
+  .dev-actions .adw-btn, .dev-sec > .adw-btn { justify-content: flex-start; width: 100%; height: 30px; }
   .sink-popover {
     position: absolute;
     top: calc(100% + 8px);
@@ -4097,6 +4099,115 @@ var qrcode = function() {
       width: 92px;
     }
   }
+
+  /* ========================================================================== */
+  /* HIFI ELŐLAP: szálcsiszolt, a téma kiemelőszínére eloxált fém gombok, LED-ek */
+  /* A telefonos távirányító (HifiControls.kt) mintája, ugyanazokkal az arányokkal: */
+  /*  - nyers alumínium (sötét: #4A505A, világos: #D3D8DF) a kiemelőszínnel színezve */
+  /*    (sima gomb 16 %, kiemelt gomb 82 %);                                     */
+  /*  - vízszintes csiszolás, felül fényesebb, alul mélyebb felület, átlós csillanás; */
+  /*  - keskeny, sötétebb fémkeret (a gomb az előlapba süllyesztve);            */
+  /*  - lenyomva besüllyed; a reteszelő gomb (BE / kiválasztott) félig benn marad; */
+  /*  - a LED a téma kiemelőszínével világít (szürkés témán borostyán).         */
+  /* ========================================================================== */
+  :root {
+    --hf-metal: #4A505A;
+    --hf-hi-p: 30%; --hf-lo-p: 40%;            /* felül világosabb, alul sötétebb */
+    --hf-bz-hi-p: 35%; --hf-bz-lo-p: 70%;      /* a keret sötétítése */
+    --hf-line: 0.07;                           /* a csiszolás vonalainak erőssége */
+    --hf-sheen: 0.16;                          /* az átlós csillanás */
+    --hf-rim: 0.30;                            /* a felső él fénye */
+    --hf-led-off: #2A2E35;
+    --aq-led: var(--aq-accent);
+  }
+  :root[data-mode="light"], :root[data-theme$="-light"], :root[data-theme="light"] {
+    --hf-metal: #D3D8DF;
+    --hf-hi-p: 45%; --hf-lo-p: 22%;
+    --hf-bz-hi-p: 10%; --hf-bz-lo-p: 40%;
+    --hf-line: 0.09;
+    --hf-sheen: 0.26;
+    --hf-rim: 0.65;
+    --hf-led-off: #9EA5AF;
+  }
+  /* A szinte szürke kiemelőszínű téma LED-je borostyán (mint a régi hifik jelzőfényei) */
+  [data-theme="sapphire-dark"], [data-concept="sapphire"][data-mode="dark"] { --aq-led: #FFB020; }
+
+  .adw-btn, .aq-switch {
+    --hf-mix: 16%;                                                     /* sima gomb: finoman színezett alumínium */
+    --hf-anod: color-mix(in srgb, var(--aq-accent) var(--hf-mix), var(--hf-metal));
+    --hf-face-hi: color-mix(in srgb, var(--hf-anod), #fff var(--hf-hi-p));
+    --hf-face-lo: color-mix(in srgb, var(--hf-anod), #000 var(--hf-lo-p));
+    --hf-bz-hi: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-hi-p));
+    --hf-bz-lo: color-mix(in srgb, var(--hf-metal), #000 var(--hf-bz-lo-p));
+    --hf-bg:
+      linear-gradient(135deg, transparent 38%, rgba(255,255,255,var(--hf-sheen)) 50%, transparent 62%) padding-box,
+      repeating-linear-gradient(180deg, rgba(255,255,255,var(--hf-line)) 0 1px, transparent 1px 2.6px) padding-box,
+      repeating-linear-gradient(180deg, rgba(0,0,0,var(--hf-line)) 0 1px, transparent 1px 1.7px) padding-box,
+      linear-gradient(180deg, var(--hf-face-hi), var(--hf-anod) 52%, var(--hf-face-lo)) padding-box,
+      linear-gradient(180deg, var(--hf-bz-hi), var(--hf-bz-lo)) border-box;
+    border: 2px solid transparent;
+    color: var(--aq-text);
+    box-shadow: 0 3px 7px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.28);
+    transition: transform 90ms ease-out, box-shadow 90ms ease-out, filter 120ms ease-out;
+  }
+  .adw-btn { border-radius: 8px; }
+  .adw-btn:hover, .aq-switch:hover { filter: brightness(1.06); }
+  /* Kiemelt gomb: a téma kiemelőszínére erősen eloxált (pl. „Hangzás”, „Betöltés”) */
+  .adw-btn.primary { --hf-mix: 82%; color: var(--aq-accent-ink); }
+  .adw-btn.danger-solid { --aq-accent: var(--aq-danger); --hf-mix: 82%; }
+  /* A fémfelület minden állapotban marad (a régi, sima háttérszíneket felülírja) */
+  .adw-btn, .adw-btn:hover, .adw-btn.selected, .adw-btn.primary, .adw-btn.primary:hover,
+  .adw-btn.danger:hover, .adw-btn.danger-solid, .adw-btn.danger-solid:hover,
+  .adw-btn:disabled, .adw-btn:disabled:hover, .aq-switch, .aq-switch:hover {
+    background: var(--hf-bg); border-color: transparent;
+  }
+  /* Lenyomás: végállásig besüllyed (kisebb árnyék, sötétebb, halványabb csillanás) */
+  .adw-btn:active:not(:disabled), .aq-switch:active {
+    transform: translateY(1px) scale(0.965);
+    filter: brightness(0.86);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.5)), inset 0 -1px 0 rgba(0,0,0,0.22);
+  }
+  /* Reteszelő állapot (kiválasztott gomb, bekapcsolt kapcsoló): félig benn marad */
+  .adw-btn.selected, .aq-switch.on {
+    transform: translateY(0.6px) scale(0.98);
+    filter: brightness(0.93);
+    box-shadow: 0 1.5px 3px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.7)), inset 0 -1px 0 rgba(0,0,0,0.25);
+    color: var(--aq-text);
+  }
+  .adw-btn:disabled, .adw-btn:disabled:hover { opacity: 0.45; filter: none; transform: none; box-shadow: none; }
+  .adw-btn:focus-visible, .aq-switch:focus-visible { outline: 2px solid var(--aq-accent); outline-offset: 2px; }
+
+  /* LED: kikapcsolva halvány, színes üveg; bekapcsolva forró, világos maggal és fényudvarral */
+  .module-dot, .aq-switch::before, .adw-btn.selected::before {
+    content: ""; width: 8px; height: 8px; border: none; border-radius: 50%; flex: 0 0 auto;
+    background:
+      radial-gradient(circle at 36% 32%, rgba(255,255,255,0.32) 0 17%, transparent 24%),
+      color-mix(in srgb, var(--aq-led) 14%, var(--hf-led-off));
+    box-shadow: 0 0 0 1.1px rgba(0,0,0,0.40);
+    transition: background .2s ease, box-shadow .2s ease;
+  }
+  .module-dot.active, .aq-switch.on::before, .adw-btn.selected::before {
+    background:
+      radial-gradient(circle at 36% 32%, rgba(255,255,255,0.62) 0 17%, transparent 24%),
+      radial-gradient(circle, color-mix(in srgb, var(--aq-led), #fff 62%) 0 28%, var(--aq-led) 72%);
+    box-shadow: 0 0 0 1.1px rgba(0,0,0,0.65),
+                0 0 6px 1px color-mix(in srgb, var(--aq-led) 85%, transparent),
+                0 0 14px 3px color-mix(in srgb, var(--aq-led) 32%, transparent);
+  }
+  .adw-btn.selected::before { width: 7px; height: 7px; margin-right: 2px; }
+
+  /* BE / KI kapcsoló: reteszelő fém nyomógomb LED-del; csak az aktuális állapot felirata látszik */
+  .aq-switch { width: 76px; height: 30px; border-radius: 8px; overflow: visible; align-items: center; justify-content: center;
+               gap: 8px; padding: 0 10px 0 8px; }
+  .aq-switch .aq-switch-knob { display: none; }
+  .aq-switch::before { width: 7px; height: 7px; }
+  .aq-switch .aq-switch-lbl { flex: 0 0 auto; color: var(--aq-text-2); }
+  .aq-switch:not(.on) .aq-lbl-on, .aq-switch.on .aq-lbl-off { display: none; }
+  .aq-switch.on .aq-lbl-on { color: var(--aq-text); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .adw-btn, .aq-switch { transition: none; }
+  }
 </style>
 
 </head>
@@ -4167,12 +4278,13 @@ var qrcode = function() {
     <!-- JOBB ZÓNA: KIMENET GOMB, BURN-IN, TÁMOGATÁS, 8 AUDIOFIL TÉMA, NYELV ÉS MOTOR ÁLLAPOT -->
     <div class="header-right">
       <div class="sink-menu-wrap" id="sinkMenuWrap">
-        <button type="button" class="mini-btn" id="btnSinkMenu" onclick="toggleSinkMenu(event)" title="Válassz kimeneti hangeszközt" data-i18n-title="sink.title">
-          <svg class="aq-icon" aria-hidden="true"><use href="#i-speaker"/></svg>
-          <span data-i18n="sink.btn">Kimenet</span>
+        <button type="button" class="mini-btn" id="btnSinkMenu" onclick="toggleSinkMenu(event)" title="Kimeneti eszköz (DAC) és fejhallgató-profil" data-i18n-title="dev.title" aria-haspopup="true">
+          <svg class="aq-icon" aria-hidden="true"><use href="#i-headphones"/></svg>
+          <span data-i18n="sink.btn">Eszköz</span>
         </button>
+        <!-- ESZKÖZ PANEL: a kimeneti eszköz (DAC) és a fejhallgató-profil egy helyen (felhasználói visszajelzés alapján) -->
         <div class="sink-popover" id="sinkPopover" hidden>
-          <div class="sink-sec-title" data-i18n="sink.label">Kimenet:</div>
+          <div class="sink-sec-title" data-i18n="sink.label">Kimeneti eszköz (DAC)</div>
           <div id="physicalSinkWrap" style="display:none; align-items:center; gap:8px;">
             <select id="selectPhysicalSink" class="mini-select" onchange="onPhysicalSinkChanged(this.value)" style="width:100%; max-width:none;" title="Válassz kimeneti hangeszközt" data-i18n-title="sink.title"></select>
           </div>
@@ -4184,6 +4296,22 @@ var qrcode = function() {
             <div style="font-size:0.75rem; color:var(--aq-text-3);" data-i18n="sink.systemHint">
               A hang a rendszer (Equalizer APO) által vezérelt alapértelmezett kimeneten szólal meg.
             </div>
+          </div>
+          <div class="dev-sec">
+            <div class="sink-sec-title" data-i18n="dev.profileTitle">Fejhallgató-profil</div>
+            <select id="selectPresetDev" class="mini-select" onchange="onPresetSelected(this.value)" style="width:100%; max-width:none;"></select>
+            <div class="dev-actions">
+              <button type="button" class="adw-btn primary" onclick="closeSinkMenu(); document.getElementById('btnImportAutoEq').onclick();">
+                <svg class="aq-icon" aria-hidden="true"><use href="#i-headphones"/></svg><span data-i18n="dev.importBtn">EQ-profil keresése és importálása</span></button>
+              <button type="button" class="adw-btn" onclick="closeSinkMenu(); document.getElementById('convFileInput').click();">
+                <svg class="aq-icon" aria-hidden="true"><use href="#i-speaker"/></svg><span data-i18n="dev.irBtn">Impulzusválasz (Konvolver) betöltése</span></button>
+            </div>
+            <div class="ao-hint" data-i18n="dev.profileHint">A kiválasztott profil azonnal szól. EQ-profilnál az Equalizer, impulzusválasznál a Konvolver kapcsol be.</div>
+          </div>
+          <div class="dev-sec" id="devMultiWrap" hidden>
+            <div class="sink-sec-title" data-i18n="mo.title">Több kimenet</div>
+            <button type="button" class="adw-btn" onclick="closeSinkMenu(); const b = document.getElementById('tabBtn-outputs'); if (b && !b.hidden) switchTab('outputs', b);">
+              <span data-i18n="dev.multiBtn">Kimenetek beállítása</span></button>
           </div>
           <button type="button" id="btnLibraryRoots" hidden onclick="openLibraryModal()"></button>
           <div id="audioOptsWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:10px;">
@@ -8682,6 +8810,8 @@ function moOnCaps(caps) {
   moCaps = has;
   const b = document.getElementById("tabBtn-outputs");
   if (b) b.hidden = !has;
+  const devMulti = document.getElementById("devMultiWrap");   // az Eszköz panelen is csak akkor, ha van több kimenet
+  if (devMulti) devMulti.hidden = !has;
   if (has) moSend({ type: "get_multiout" });
   else { moStatus = null; if (aqEditZone) setEditZone(0); }
   renderZoneBar();
@@ -10938,6 +11068,9 @@ function refreshPresetUi() {
   });
   sel.value = activePresetName || "";
   sel.title = activePresetName ? t("preset.activeTitle", { name: activePresetName }) : t("preset.noActive");
+  // Az Eszköz panel profilválasztója ugyanezt a listát mutatja (ugyanazzal a kezelővel)
+  const dev = document.getElementById("selectPresetDev");
+  if (dev) { dev.innerHTML = sel.innerHTML; dev.value = sel.value; dev.title = sel.title; }
   // Átnevezés / törlés csak akkor látszik, ha van mit (ne legyen hatástalan gomb)
   ["btnPresetRename", "btnPresetDelete"].forEach(id => {
     const b = document.getElementById(id);
