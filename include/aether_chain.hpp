@@ -3,7 +3,7 @@
  * @file aether_chain.hpp
  * @brief A teljes Aqulify DSP lánc (Linux PipeWire csomópont és Windows EQ APO plugin közös magja).
  *
- *   Magic Touch -> Preamp -> Equalizer (LSP) -> Bass Enhancer (Calf) -> Crossfeed (bs2b) -> Convolver (zita) -> Autogain (libebur128)
+ *   Magic Touch -> Preamp -> Equalizer (LSP) -> Loudness (LSP loudcomp) -> Bass Enhancer (Calf) -> Crossfeed (bs2b) -> Convolver (zita) -> Autogain (libebur128)
  *   -> csatornák (késleltetés / szint / polaritás) -> Limiter (LSP) -> dither
  *
  * A Magic Touch (magic_touch.hpp) a felvételt javítja, ezért a lánc elején van; az elemzése a háttérszálon fut.
@@ -157,6 +157,8 @@ public:
     /** Az Autogain pillanatnyi erősítése dB-ben (0 = nincs változtatás). A valós idejű szál írja, ezért csak leállított láncnál olvasd. */
     double autogainDb() const { return autogain_.gainDb(); }
     size_t eqLatencySamples() const { return current_.has(kFlagEq) ? eq_.latency() : 0; }
+    size_t loudnessLatencySamples() const { return current_.has(kFlagLoudness) ? loudness_.latency() : 0; }
+    bool isLoudnessClipping() const { return current_.has(kFlagLoudness) && loudness_.isClipping(); }
     bool convolverActive() const { return irStage_.active != nullptr; }
 
     /** A Magic Touch mérései és beavatkozásai (bármely szálról). false, ha még nincs adat. */
@@ -167,17 +169,19 @@ public:
 
     /** Módosítja-e a lánc a jelet (ha nem, a kimenet bitpontos, és a dither sem fut). */
     static bool modifiesSignal(const ParamData& d) {
-        const uint32_t mods = kFlagEq | kFlagBass | kFlagMono | kFlagCrossfeed | kFlagConvolver | kFlagLimiter | kFlagAutogain;
+        const uint32_t mods = kFlagEq | kFlagLoudness | kFlagBass | kFlagMono | kFlagCrossfeed | kFlagConvolver | kFlagLimiter | kFlagAutogain;
         return (d.flags & mods) != 0 || magicActive(d) || (d.has(kFlagOutStage) && !outstage::OutStage::neutral(d));
     }
 
     void reset() {
         magic_.reset();
         eq_.reset();
+        loudness_.reset();
         bass_.reset();
         monoBass_.reset();
         autogain_.reset();
         abEq_.reset();
+        abLoud_.reset();
         abConv_.reset();
         abBass_.reset();
         abMono_.reset();
@@ -201,11 +205,13 @@ private:
     void setSampleRateInternal(uint32_t sr) {
         magic_.setSampleRate(sr);
         eq_.setSampleRate(sr);
+        loudness_.setSampleRate(sr);
         limiter_.setSampleRate(sr);
         bass_.setSampleRate(sr);
         monoBass_.setSampleRate(sr);
         autogain_.setSampleRate(sr);
         abEq_.setSampleRate(sr, kChunk);
+        abLoud_.setSampleRate(sr, kChunk);
         abConv_.setSampleRate(sr, kChunk);
         abBass_.setSampleRate(sr, kChunk);
         abMono_.setSampleRate(sr, kChunk);
@@ -221,19 +227,21 @@ private:
         applyParamsInternal(current_);
         preampCur_ = preampTarget_;
         eq_.reset();
+        loudness_.reset();
         limiter_.reset();
         crossfeed_.reset();
     }
 
     /** Kell-e kattanásmentes (le-fel úsztatott) váltás a két beállítás között. */
     static bool needsDeclick(const ParamData& a, const ParamData& b) {
-        const uint32_t mods = kFlagEq | kFlagBass | kFlagMono | kFlagCrossfeed | kFlagConvolver | kFlagLimiter | kFlagAutogain |
+        const uint32_t mods = kFlagEq | kFlagLoudness | kFlagBass | kFlagMono | kFlagCrossfeed | kFlagConvolver | kFlagLimiter | kFlagAutogain |
                               kFlagOutStage;
         if ((a.flags & mods) != (b.flags & mods)) return true;
         if (b.has(kFlagOutStage) && (a.chDelayMs[0] != b.chDelayMs[0] || a.chDelayMs[1] != b.chDelayMs[1])) return true;
         if (magicActive(a) != magicActive(b)) return true;
         if (b.has(kFlagMono) && a.subsonicHz != b.subsonicHz) return true;
         if (b.has(kFlagEq) && (a.eqMode != b.eqMode || a.eqDecramp != b.eqDecramp)) return true;
+        if (b.has(kFlagLoudness) && (a.loudMode != b.loudMode || a.loudStd != b.loudStd || a.loudApprox != b.loudApprox)) return true;
         if (b.has(kFlagLimiter) && (a.limOversampling != b.limOversampling || a.limLookaheadMs != b.limLookaheadMs))
             return true;
         return false;
@@ -249,6 +257,9 @@ private:
         eqWasReset_ = current_.has(kFlagEq) &&
                       (!old.has(kFlagEq) || old.eqMode != current_.eqMode || old.eqDecramp != current_.eqDecramp);
         if (eqWasReset_) eq_.reset();
+        loudnessWasReset_ = current_.has(kFlagLoudness) &&
+                            (!old.has(kFlagLoudness) || old.loudMode != current_.loudMode || old.loudStd != current_.loudStd || old.loudApprox != current_.loudApprox);
+        if (loudnessWasReset_) loudness_.reset();
         if (current_.has(kFlagLimiter)) limiter_.reset();
         if (current_.has(kFlagBass) && !old.has(kFlagBass)) bass_.reset();
         if (current_.has(kFlagMono) && !old.has(kFlagMono)) monoBass_.reset();
@@ -267,6 +278,7 @@ private:
      */
     size_t chainLatency() const {
         return (eqWasReset_ && current_.has(kFlagEq) ? eq_.latency() : 0) +
+               (loudnessWasReset_ && current_.has(kFlagLoudness) ? loudness_.latency() : 0) +
                (current_.has(kFlagLimiter) ? limiter_.latency() : 0);
     }
 
@@ -313,6 +325,7 @@ private:
         preampStep_ = (preampTarget_ - preampCur_) / fadeSamples_;
         magic_.setControl(d.magicAmount, d.magicCompare != 0, d.has(kFlagCrossfeed), d.magicCharacter, d.magicContent);
         eq_.update(d);
+        loudness_.update(d);
         bass_.update(d);
         monoBass_.update(d);
         autogain_.update(d);
@@ -406,6 +419,8 @@ private:
 
         if (d.has(kFlagEq)) abEq_.process(L, R, m, eq_.latency(), d.eqCompare != 0,
                                           [this](float* a, float* b, size_t n) { eq_.process(a, b, n); });
+        if (d.has(kFlagLoudness)) abLoud_.process(L, R, m, loudness_.latency(), d.loudCompare != 0,
+                                                  [this](float* a, float* b, size_t n) { loudness_.process(a, b, n); });
         // A Bass Enhancer és a Mono nem késleltet: az A/B eredeti ága késleltetés nélkül illeszkedik
         if (d.has(kFlagBass)) abBass_.process(L, R, m, 0, d.bassCompare != 0,
                                               [this](float* a, float* b, size_t n) { bass_.process(a, b, n); });
@@ -569,10 +584,11 @@ private:
     // valós idejű állapot
     magic::MagicTouch magic_;
     ee::Equalizer eq_;
+    ee::Loudness loudness_;
     ee::BassEnhancer bass_;
     mono::MonoBass monoBass_;
     agc::Autogain autogain_;
-    abcmp::AbCompare abEq_, abConv_, abBass_, abMono_;
+    abcmp::AbCompare abEq_, abLoud_, abConv_, abBass_, abMono_;
     ee::Crossfeed crossfeed_;
     ee::Limiter limiter_;
     outstage::OutStage outStage_;
@@ -584,6 +600,7 @@ private:
     size_t fadeLen_ = 240, fadePos_ = 240;   // úsztatás hossza mintában; pillanatnyi erősítés = fadePos_ / fadeLen_
     size_t sinceSwitch_ = 0;
     bool eqWasReset_ = false;           // a legutóbbi váltásnál újraindult-e az EQ (üres késleltető vonal)
+    bool loudnessWasReset_ = false;     // a legutóbbi váltásnál újraindult-e a Loudness
     float preampCur_ = 1.0f, preampTarget_ = 1.0f, preampStep_ = 0.0f;
     float convIn_ = 1.0f, convOut_ = 1.0f, convDry_ = 0.0f, convWet_ = 1.0f;
     float outGainCur_ = 1.0f;           // a kimeneti hangerő pillanatnyi értéke (setOutputGain)

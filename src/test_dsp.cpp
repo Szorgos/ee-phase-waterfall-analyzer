@@ -12,6 +12,13 @@
 #include "aether_chain.hpp"
 #include "ebur128.h"
 #include "pcm_convert.hpp"
+#include <chrono>
+
+#include <generated/iso226/defs.h>
+#include <generated/iso226/iso226-2003.h>
+#include <generated/iso226/iso226-2023.h>
+#include <generated/iso226/fletcher_munson.h>
+#include <generated/iso226/robinson_dadson.h>
 
 using namespace ee_analyzer;
 
@@ -1769,6 +1776,568 @@ static void testPcmConvert() {
     CHECK(!lossy, "24 bites hang → 16 bit: nem bitpontosként jelezve (a jelút ezt mutatja)");
 }
 
+static double computeVendorRefDb(const lsp::freq_curve_t& c, double volumeDb, double freqHz) {
+    const double PHONS_MIN = -83.0;
+    const double vol = std::clamp(volumeDb - PHONS_MIN, static_cast<double>(c.amin), static_cast<double>(c.amax)) - c.amin;
+    const double range = c.amax - c.amin;
+    const double step = range / (c.curves - 1);
+    int nc = static_cast<int>(vol / step);
+    if (nc >= static_cast<int>(c.curves - 1)) nc = static_cast<int>(c.curves - 2);
+    const double frac = (vol / step - nc);
+
+    const double rfmin = 1.0 / c.fmin;
+    const double df = std::log(c.fmax * rfmin);
+    const double kdf = (c.hdots - 1) / df;
+
+    const int16_t* a = c.data[nc];
+    const int16_t* b = c.data[nc + 1];
+
+    if (freqHz <= c.fmin) {
+        return ((1.0 - frac) * a[0] + frac * b[0]) / 100.0;
+    }
+    if (freqHz >= c.fmax) {
+        return ((1.0 - frac) * a[c.hdots - 1] + frac * b[c.hdots - 1]) / 100.0;
+    }
+
+    const double fpos = std::log(freqHz * rfmin) * kdf;
+    int idx = static_cast<int>(fpos);
+    if (idx < 0) idx = 0;
+    if (idx >= static_cast<int>(c.hdots - 1)) idx = static_cast<int>(c.hdots - 2);
+    const double ffrac = fpos - idx;
+
+    const double valA = (1.0 - frac) * a[idx] + frac * b[idx];
+    const double valB = (1.0 - frac) * a[idx + 1] + frac * b[idx + 1];
+    const double valCentibels = (1.0 - ffrac) * valA + ffrac * valB;
+    return valCentibels / 100.0;
+}
+
+static void testLoudness() {
+    std::printf("\n--- Loudness Compensator (ISO 226, LSP loud_comp) ---\n");
+    const double sr = 48000.0;
+
+    // 1. Késleltetés ellenőrzése minden módban
+    {
+        ee::Loudness loud;
+        loud.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagLoudness, true);
+
+        // IIR mód: 0 minta késleltetés
+        d.loudMode = 0;
+        loud.update(d);
+        CHECK(loud.latency() == 0, "IIR mód késleltetése pontosan 0 minta (Zero Latency)");
+
+        // FFT módok (256, 512, 1024, 2048, 4096, 8192, 16384)
+        const size_t expectedRanks[7] = { 256, 512, 1024, 2048, 4096, 8192, 16384 };
+        for (int m = 1; m <= 7; ++m) {
+            d.loudMode = m;
+            loud.update(d);
+            CHECK(loud.latency() == expectedRanks[m - 1],
+                  "FFT mód %d (%zu minta) késleltetése pontosan %zu minta", m, expectedRanks[m - 1], loud.latency());
+        }
+    }
+
+    // 2. Referencia-egyezés teszt: a várt érték ugyanazokból a vendorolt LSP-táblákból jön (include/generated/iso226/*.h)
+    {
+        struct StdRef {
+            int stdIdx;
+            const char* name;
+            const lsp::freq_curve_t* curve;
+        };
+        const StdRef standards[4] = {
+            { 1, "ISO 226:2003", &lsp::iso226_2003_curve },
+            { 2, "Fletcher-Munson", &lsp::fletcher_munson_curve },
+            { 3, "Robinson-Dadson", &lsp::robinson_dadson_curve },
+            { 4, "ISO 226:2023", &lsp::iso226_2023_curve }
+        };
+        const double testFreqs[4] = { 50.0, 100.0, 1000.0, 10000.0 };
+        const double testVols[2] = { -30.0, -10.0 };
+
+        for (const auto& s : standards) {
+            for (double vol : testVols) {
+                for (double f : testFreqs) {
+                    const double expectedDb = computeVendorRefDb(*s.curve, vol, f);
+
+                    // A) FFT 4096 mód mérése (szigorú ±0.10 dB tűrés)
+                    double fftMeasuredDb = 0.0;
+                    {
+                        ee::Loudness loudFft;
+                        loudFft.setSampleRate(48000);
+                        ParamData d = transparentParams();
+                        d.set(kFlagLoudness, true);
+                        d.loudStd = s.stdIdx;
+                        d.loudMode = 7; // FFT 16384 (maximális felbontás a vendor referencia összevetéshez)
+                        d.loudVolumeDb = static_cast<float>(vol);
+                        loudFft.update(d);
+
+                        std::vector<float> L = sine(f, 0.1, 96000, sr), R = L;
+                        runBlocks([&](float* l, float* r, size_t m) { loudFft.process(l, r, m); }, L, R, 512);
+                        fftMeasuredDb = 20.0 * std::log10(toneAmp(L, 48000, f, sr) / 0.1);
+                    }
+                    const double fftDiff = std::abs(fftMeasuredDb - expectedDb);
+                    CHECK(fftDiff <= 0.10,
+                          "Vendor ref FFT [%s, vol %.0f dB, %.0f Hz]: várt %+.2f dB, mért %+.2f dB (eltérés %.2f dB <= 0.10 dB)",
+                          s.name, vol, f, expectedDb, fftMeasuredDb, fftDiff);
+
+                    // B) IIR mód mérése (64 sávos Linkwitz-Riley átfedési ripple miatt indokolt ±1.50 dB tűrés)
+                    double iirMeasuredDb = 0.0;
+                    {
+                        ee::Loudness loudIir;
+                        loudIir.setSampleRate(48000);
+                        ParamData d = transparentParams();
+                        d.set(kFlagLoudness, true);
+                        d.loudStd = s.stdIdx;
+                        d.loudMode = 0; // IIR mód
+                        d.loudApprox = 2; // Normal (32 szűrő, alapérték)
+                        d.loudVolumeDb = static_cast<float>(vol);
+                        loudIir.update(d);
+
+                        std::vector<float> L = sine(f, 0.1, 96000, sr), R = L;
+                        runBlocks([&](float* l, float* r, size_t m) { loudIir.process(l, r, m); }, L, R, 512);
+                        iirMeasuredDb = 20.0 * std::log10(toneAmp(L, 48000, f, sr) / 0.1);
+                    }
+                    const double iirDiff = std::abs(iirMeasuredDb - expectedDb);
+                    CHECK(iirDiff <= 1.00,
+                          "Vendor ref IIR Normal [%s, vol %.0f dB, %.0f Hz]: várt %+.2f dB, mért %+.2f dB (eltérés %.2f dB <= 1.00 dB)",
+                          s.name, vol, f, expectedDb, iirMeasuredDb, iirDiff);
+                }
+            }
+        }
+
+        // Flat szabvány (loudStd = 0): minden frekvencián a várt szint a beállított hangerő (volumeDb)
+        for (double vol : { -30.0, -10.0 }) {
+            for (double f : testFreqs) {
+                ee::Loudness loudFlat;
+                loudFlat.setSampleRate(48000);
+                ParamData d = transparentParams();
+                d.set(kFlagLoudness, true);
+                d.loudStd = 0; // Flat
+                d.loudMode = 5; // FFT 4096 (alapérték)
+                d.loudVolumeDb = static_cast<float>(vol);
+                loudFlat.update(d);
+
+                std::vector<float> L = sine(f, 0.1, 96000, sr), R = L;
+                runBlocks([&](float* l, float* r, size_t m) { loudFlat.process(l, r, m); }, L, R, 512);
+                const double g = 20.0 * std::log10(toneAmp(L, 48000, f, sr) / 0.1);
+                CHECK(std::abs(g - vol) <= 0.05,
+                      "Flat szabvány [vol %.0f dB, %.0f Hz]: várt %+.2f dB, mért %+.2f dB (eltérés %.2f dB <= 0.05 dB)",
+                      vol, f, vol, g, std::abs(g - vol));
+            }
+        }
+    }
+
+    // 3. Kattanásmentesség és késleltetésváltás időbeli illeszkedése
+    {
+        for (size_t blk : { 256, 480, 1024 }) {
+            AetherChain chain;
+            chain.setSampleRate(sr);
+            const size_t seg = 12000;
+            std::vector<float> L = sine(1000.0, 0.5, seg * 24, sr), R = L;
+            ParamData d = transparentParams();
+            size_t pos = 0;
+            double worstJump = 0.0;
+            const char* worstStep = "";
+
+            auto step = [&](const char* name) {
+                std::vector<float> l(L.begin() + pos, L.begin() + pos + seg);
+                std::vector<float> r(R.begin() + pos, R.begin() + pos + seg);
+                chain.applyParamsRT(d);
+                runBlocks([&](float* a, float* b, size_t m) { chain.process(a, b, m); }, l, r, blk);
+                const double j = maxJump(l, 0, seg);
+                if (j > worstJump) { worstJump = j; worstStep = name; }
+                std::copy(l.begin(), l.end(), L.begin() + pos);
+                pos += seg;
+            };
+
+            step("Alap állapot");
+            d.set(kFlagLoudness, true); d.loudVolumeDb = -20.0f; d.loudStd = 1; d.loudMode = 0; d.loudApprox = 2; step("Loudness be (IIR Normal)");
+            d.loudStd = 4; step("Szabvány -> ISO 226:2023");
+            d.loudStd = 2; step("Szabvány -> Fletcher-Munson");
+            d.loudStd = 3; step("Szabvány -> Robinson-Dadson");
+            d.loudStd = 0; step("Szabvány -> Flat");
+            d.loudStd = 1; d.loudMode = 1; step("Mód -> FFT 256");
+            d.loudMode = 2; step("Mód -> FFT 512");
+            d.loudMode = 3; step("Mód -> FFT 1024");
+            d.loudMode = 4; step("Mód -> FFT 2048");
+            d.loudMode = 5; step("Mód -> FFT 4096");
+            d.loudMode = 6; step("Mód -> FFT 8192");
+            d.loudMode = 7; step("Mód -> FFT 16384");
+            d.loudMode = 5; step("Mód -> FFT 4096");
+            d.loudMode = 0; d.loudApprox = 0; step("Mód -> IIR Fastest");
+            d.loudApprox = 4; step("IIR -> Best");
+            d.set(kFlagLoudness, false); step("Loudness ki");
+
+            CHECK(worstJump < 0.03,
+                  "Kattanásmentesség (blokk %zu): modul- és módváltások ugrás nélkül (legnagyobb ugrás %.4f @ %s)",
+                  blk, worstJump, worstStep);
+        }
+
+        // Késleltetésváltás időbeli illeszkedése (IIR [0] -> FFT 4096 [4096]):
+        {
+            AetherChain chain;
+            chain.setSampleRate(sr);
+            ParamData d = transparentParams();
+            d.set(kFlagLoudness, true);
+            d.loudVolumeDb = -10.0f;
+            d.loudStd = 4;
+            d.loudMode = 0; // IIR (0 latency)
+            chain.applyParamsRT(d);
+
+            std::vector<float> a = sine(1000.0, 0.5, 48000, sr), b = a;
+            runBlocks([&](float* x, float* y, size_t m) { chain.process(x, y, m); }, a, b, 512);
+
+            // Váltás FFT 4096-ra (késleltetés 4096 minta)
+            d.loudMode = 5;
+            chain.applyParamsRT(d);
+            std::vector<float> a2 = sine(1000.0, 0.5, 48000, sr), b2 = a2;
+            runBlocks([&](float* x, float* y, size_t m) { chain.process(x, y, m); }, a2, b2, 512);
+
+            const double j = maxJump(a2, 0, a2.size());
+            CHECK(j < 0.03, "Loudness késleltetésváltás (IIR -> FFT 4096) időben illeszkedik, ugrás nélkül (legnagyobb ugrás %.4f)", j);
+        }
+    }
+
+    // 4. Szélsőértékek tesztelése (sanitizeParams, néma és túlvezérelt jel)
+    {
+        ParamData d{};
+        d.loudVolumeDb = std::numeric_limits<float>::quiet_NaN();
+        d.loudInputDb = std::numeric_limits<float>::infinity();
+        d.loudOutputDb = -std::numeric_limits<float>::infinity();
+        d.loudStd = 999;
+        d.loudMode = -100;
+        d.loudHclip = 42;
+        d.loudHclipRangeDb = std::numeric_limits<float>::quiet_NaN();
+        d.loudCompare = -5;
+        d.loudApprox = 99;
+        sanitizeParams(d);
+
+        CHECK(d.loudVolumeDb == 0.0f, "sanitizeParams: NaN hangerő -> alapérték (0.0 dB)");
+        CHECK(d.loudInputDb == 36.0f, "sanitizeParams: +Inf bemeneti szint -> plafon (+36.0 dB)");
+        CHECK(d.loudOutputDb == -36.0f, "sanitizeParams: -Inf kimeneti szint -> padló (-36.0 dB)");
+        CHECK(d.loudStd == 4, "sanitizeParams: túl nagy szabvány-index -> 4 (ISO 226:2023)");
+        CHECK(d.loudMode == 0, "sanitizeParams: negatív mód-index -> 0 (IIR)");
+        CHECK(d.loudHclip == 1, "sanitizeParams: 42 hclip -> 1");
+        CHECK(d.loudHclipRangeDb == 6.0f, "sanitizeParams: NaN hclip range -> alapérték (6.0 dB)");
+        CHECK(d.loudCompare == 0, "sanitizeParams: negatív compare -> 0");
+        CHECK(d.loudApprox == 4, "sanitizeParams: túl nagy approx -> 4 (Best)");
+        d.loudMode = 99; sanitizeParams(d);
+        CHECK(d.loudMode == 7, "sanitizeParams: túl nagy mode -> 7 (FFT 16384)");
+
+        // Néma jel feldolgozása: kimenet bit-pontosan 0
+        {
+            ee::Loudness loud;
+            loud.setSampleRate(48000);
+            ParamData p = transparentParams();
+            p.set(kFlagLoudness, true);
+            loud.update(p);
+
+            std::vector<float> L(4800, 0.0f), R(4800, 0.0f);
+            runBlocks([&](float* l, float* r, size_t m) { loud.process(l, r, m); }, L, R, 256);
+            bool allZero = true;
+            for (float v : L) if (v != 0.0f) { allZero = false; break; }
+            for (float v : R) if (v != 0.0f) { allZero = false; break; }
+            CHECK(allZero, "Extrém teszt: néma bemenetre a kimenet bit-pontosan 0 marad");
+        }
+
+        // Túlvezérelt jel (amplitúdó = 10.0) clipping védelemmel
+        {
+            ee::Loudness loud;
+            loud.setSampleRate(48000);
+            ParamData p = transparentParams();
+            p.set(kFlagLoudness, true);
+            p.loudVolumeDb = 0.0f;
+            p.loudHclip = 1;
+            p.loudHclipRangeDb = 0.0f; // 0 dB térköz
+            loud.update(p);
+
+            std::vector<float> L = sine(200.0, 10.0, 9600, sr), R = L;
+            runBlocks([&](float* l, float* r, size_t m) { loud.process(l, r, m); }, L, R, 256);
+            float maxVal = 0.0f;
+            bool finite = true;
+            for (float v : L) {
+                if (!std::isfinite(v)) finite = false;
+                maxVal = std::max(maxVal, std::abs(v));
+            }
+            CHECK(finite && loud.isClipping() && maxVal <= 1.05f * loud.outputGain(),
+                  "Extrém teszt: túlvezérelt jel (10.0) hard-clipping korlátban marad (csúcs %.2f <= %.2f)",
+                  maxVal, loud.outputGain());
+        }
+
+        // 4b. Specifikus teszt A: Feldolgozási sorrend - hard-clipping az outGain ELŐTT (EasyEffects modell)
+        {
+            ee::Loudness loud;
+            loud.setSampleRate(48000);
+            ParamData p = transparentParams();
+            p.set(kFlagLoudness, true);
+            p.loudMode = 0;              // IIR mód (azonnali lecsengés)
+            p.loudVolumeDb = 0.0f;       // Flat görbe (0 dB kompenzáció)
+            p.loudHclip = 1;             // Hard-clipping aktív
+            p.loudHclipRangeDb = 0.0f;   // 0 dB térköz -> küszöb = 1.0
+            p.loudOutputDb = 6.0206f;    // +6 dB kimeneti erősítés (szorzó = 2.0)
+            loud.update(p);
+
+            // Bemenet: 10.0 amplitúdójú szinusz.
+            // Helyes EasyEffects sorrend (DSP -> hclip -> outGain):
+            // 1) DSP kimenet = 10.0
+            // 2) Hard-clip levágja 1.0-ra
+            // 3) outGain megszorozza 2.0-val -> kimeneti csúcs = 2.00!
+            // Hibás korábbi sorrend (DSP -> outGain -> hclip):
+            // outGain után 20.0, amit a hclip a végén 1.0-ra vágott volna -> csúcs = 1.00!
+            std::vector<float> L = sine(1000.0, 10.0, 9600, sr), R = L;
+            runBlocks([&](float* l, float* r, size_t m) { loud.process(l, r, m); }, L, R, 256);
+
+            float maxVal = 0.0f;
+            for (float v : L) maxVal = std::max(maxVal, std::abs(v));
+
+            CHECK(std::abs(maxVal - 2.0f) <= 0.05f && loud.isClipping(),
+                  "Specifikus teszt A [Sorrend]: mért csúcs %.2f ~= 2.00 (helyes: hclip -> outGain; javítás előtt 1.00 lett volna)",
+                  maxVal);
+
+            loud.reset(); // Kiüríti a szűrő puffereit és törli a latching flaget
+            CHECK(!loud.isClipping(), "Specifikus teszt A [clearClipping]: reset() után inaktív");
+
+            // Túlvezérlés újra egy rövid blokkal:
+            std::vector<float> Lov = sine(1000.0, 5.0, 512, sr), Rov = Lov;
+            runBlocks([&](float* l, float* r, size_t m) { loud.process(l, r, m); }, Lov, Rov, 256);
+            CHECK(loud.isClipping(), "Specifikus teszt A [clearClipping]: túlvezérlésre bekapcsol");
+            loud.clearClipping();
+            CHECK(!loud.isClipping(), "Specifikus teszt A [clearClipping]: clearClipping() törli a latching jelzést");
+
+            std::vector<float> Lnorm = sine(1000.0, 0.2, 4800, sr), Rnorm = Lnorm;
+            runBlocks([&](float* l, float* r, size_t m) { loud.process(l, r, m); }, Lnorm, Rnorm, 256);
+            CHECK(!loud.isClipping(), "Specifikus teszt A [clearClipping]: normál jelnél inaktív marad");
+        }
+
+        // 4c. Specifikus teszt B: Hard-clip küszöb FFT módban az LSP sqrt(min*max) képlete alapján
+        {
+            ee::Loudness loud;
+            loud.setSampleRate(48000);
+            ParamData p = transparentParams();
+            p.set(kFlagLoudness, true);
+            p.loudStd = 0;               // Flat mód (vFreqApply_ minden ponton = vol)
+            p.loudMode = 5;              // FFT 4096
+            p.loudVolumeDb = 6.0206f;    // +6 dB erősítés -> min = 2.0, max = 2.0, sqrt(min*max) = 2.0
+            p.loudHclip = 1;             // Hard-clipping aktív
+            p.loudHclipRangeDb = 0.0f;   // 0 dB térköz -> küszöb = 1.0 * sqrt(min*max) = 2.0
+            p.loudInputDb = 0.0f;
+            p.loudOutputDb = 0.0f;
+            loud.update(p);
+
+            // Bemenet: 10.0 amplitúdójú szinusz.
+            // A kimenet le lesz vágva a küszöbre: 2.0!
+            std::vector<float> L = sine(1000.0, 10.0, 19200, sr), R = L;
+            runBlocks([&](float* l, float* r, size_t m) { loud.process(l, r, m); }, L, R, 256);
+
+            float maxVal = 0.0f;
+            for (size_t i = 8192; i < L.size(); ++i) maxVal = std::max(maxVal, std::abs(L[i]));
+
+            CHECK(loud.isClipping() && std::abs(maxVal - 2.0f) <= 0.05f,
+                  "Specifikus teszt B [FFT clip küszöb Flat]: mért csúcs %.2f levágva pontosan 2.00-ra",
+                  maxVal);
+
+            // ISO 226:2003 görbe -30 dB mellett:
+            // -30 dB hangerőnél az erősítés 50 Hz-en -17.87 dB (~0.128), a minimum pedig ~0.042 (-27.5 dB).
+            // Régi küszöb: maxVal ~ 0.128.
+            // Új küszöb: sqrt(min * max) = sqrt(0.042 * 0.128) = 0.0733.
+            p.loudStd = 1;               // ISO 226:2003
+            p.loudVolumeDb = -30.0f;     // -30 dB
+            p.loudHclip = 1;
+            p.loudHclipRangeDb = 0.0f;   // 0 dB térköz -> küszöb = sqrt(min*max) = 0.0733
+            loud.update(p);
+
+            // Bemenet: 50 Hz-es szinusz 0.80 amplitúdóval.
+            // 50 Hz-en a kompenzáció erősítése ~0.128 -> vágás nélkül a kimeneti csúcs: 0.80 * 0.128 = 0.102.
+            // A régi kódnál (küszöb = max ~0.128): 0.102 < 0.128 -> NINCS vágás, kimenet csúcsa = 0.102, isClipping() = false!
+            // Az új kódnál (küszöb = sqrt(min*max) = 0.0733): 0.102 > 0.0733 -> VAN vágás, kimenet csúcsa = 0.0733, isClipping() = true!
+            std::vector<float> L2 = sine(50.0, 0.8, 38400, sr), R2 = L2;
+            runBlocks([&](float* l, float* r, size_t m) { loud.process(l, r, m); }, L2, R2, 256);
+
+            float maxVal2 = 0.0f;
+            for (size_t i = 8192; i < L2.size(); ++i) maxVal2 = std::max(maxVal2, std::abs(L2[i]));
+
+            CHECK(loud.isClipping() && maxVal2 <= 0.076f && maxVal2 >= 0.071f,
+                  "Specifikus teszt B [FFT clip küszöb sqrt(min*max)]: mért csúcs %.4f levágva sqrt(min*max)=0.0733-ra (javítás előtt 0.102 maradt volna)",
+                  maxVal2);
+        }
+
+        // 4d. Specifikus teszt C: Felső polc (HISHELF) tartományának válasza IIR módban (freqs_[n-2] felett, az fmax-on belül)
+        {
+            ee::Loudness loudIir;
+            loudIir.setSampleRate(48000);
+            ParamData p = transparentParams();
+            p.set(kFlagLoudness, true);
+            p.loudStd = 1;               // ISO 226:2003
+            p.loudMode = 0;              // IIR mód
+            p.loudApprox = 2;            // Normal (32 szűrő, alapérték: freqs_[30] ~ 11459 Hz, fmax = 12719 Hz)
+            p.loudVolumeDb = -30.0f;
+            loudIir.update(p);
+
+            // A legfelső (HISHELF) szűrő sávja (12000 Hz: freqs_[30] ~ 11459 Hz felett, fmax = 12719 Hz alatt)
+            const double exp12k = computeVendorRefDb(lsp::iso226_2003_curve, -30.0, 12000.0);
+            std::vector<float> L = sine(12000.0, 0.1, 96000, sr), R = L;
+            runBlocks([&](float* l, float* r, size_t m) { loudIir.process(l, r, m); }, L, R, 512);
+            const double meas12k = 20.0 * std::log10(toneAmp(L, 48000, 12000.0, sr) / 0.1);
+            const double diff12k = std::abs(meas12k - exp12k);
+
+            CHECK(diff12k <= 1.00,
+                  "Specifikus teszt C [Felső polc sáv, ISO 226:2003, 12 kHz]: várt %+.2f dB, mért %+.2f dB (eltérés %.2f dB <= 1.00 dB)",
+                  exp12k, meas12k, diff12k);
+        }
+    }
+
+    // 5. CPU-mérés: 48 kHz, 128 mintás blokk, IIR, FFT 4096 és FFT 16384 (10 másodperc sztereó hang)
+    {
+        const size_t totalSamples = 480000; // 10.0 másodperc
+        const size_t blk = 128;
+        const double durationSec = static_cast<double>(totalSamples) / sr;
+
+        struct CpuCase {
+            int mode;
+            int approx;
+            const char* name;
+        };
+        const CpuCase cases[] = {
+            { 0, 0, "IIR Fastest (16 szűrő, slope 1)" },
+            { 0, 1, "IIR Low (24 szűrő, slope 2)" },
+            { 0, 2, "IIR Normal (32 szűrő, slope 3, alapérték)" },
+            { 0, 3, "IIR High (48 szűrő, slope 4)" },
+            { 0, 4, "IIR Best (64 szűrő, slope 5)" },
+            { 1, 0, "FFT 256" },
+            { 2, 0, "FFT 512" },
+            { 3, 0, "FFT 1024" },
+            { 4, 0, "FFT 2048" },
+            { 5, 0, "FFT 4096 (EasyEffects alapérték)" },
+            { 6, 0, "FFT 8192" },
+            { 7, 0, "FFT 16384 (Maximális felbontás)" }
+        };
+
+        std::vector<float> origL = sine(440.0, 0.2, totalSamples, sr);
+        std::vector<float> origR = origL;
+
+        for (const auto& c : cases) {
+            ee::Loudness loud;
+            loud.setSampleRate(48000);
+            ParamData d = transparentParams();
+            d.set(kFlagLoudness, true);
+            d.loudMode = c.mode;
+            d.loudApprox = c.approx;
+            d.loudStd = 1;
+            d.loudVolumeDb = -20.0f;
+            loud.update(d);
+
+            std::vector<float> L = origL, R = origR;
+            runBlocks([&](float* l, float* r, size_t m) { loud.process(l, r, m); }, L, R, blk);
+
+            L = origL; R = origR;
+            const auto t0 = std::chrono::high_resolution_clock::now();
+            runBlocks([&](float* l, float* r, size_t m) { loud.process(l, r, m); }, L, R, blk);
+            const auto t1 = std::chrono::high_resolution_clock::now();
+
+            const double elapsedUs = std::chrono::duration<double, std::micro>(t1 - t0).count();
+            const double elapsedSec = elapsedUs / 1e6;
+            const double cpuPercent = (elapsedSec / durationSec) * 100.0;
+
+            CHECK(cpuPercent < 20.0,
+                  "CPU-mérés [48 kHz, blokk 128, %s]: %.2f ms / %.1f s -> %.2f %% RT",
+                  c.name, elapsedSec * 1000.0, durationSec, cpuPercent);
+        }
+    }
+
+    // 6. Bemeneti és kimeneti hangerő kioltás
+    {
+        ee::Loudness loud;
+        loud.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagLoudness, true);
+        d.loudVolumeDb = 0.0f;
+        d.loudInputDb = 3.0f;
+        d.loudOutputDb = -3.0f;
+        loud.update(d);
+
+        std::vector<float> L = sine(1000.0, 0.2, 96000, sr), R = L;
+        runBlocks([&](float* l, float* r, size_t m) { loud.process(l, r, m); }, L, R, 512);
+        const double g = 20.0 * std::log10(toneAmp(L, 48000, 1000.0, sr) / 0.2);
+        CHECK(std::abs(g) < 0.2, "Input +3 dB és Output -3 dB kioltja egymást: eredő %.2f dB", g);
+    }
+
+    // 7. Mintavételi frekvenciák (44.1, 48, 88.2, 96, 192 kHz)
+    {
+        const uint32_t rates[5] = { 44100, 48000, 88200, 96000, 192000 };
+        bool allOk = true;
+        for (uint32_t testSr : rates) {
+            ee::Loudness loud;
+            loud.setSampleRate(testSr);
+            ParamData d = transparentParams();
+            d.set(kFlagLoudness, true);
+            d.loudVolumeDb = -20.0f;
+            loud.update(d);
+
+            std::vector<float> L = sine(100.0, 0.2, testSr, static_cast<double>(testSr)), R = L;
+            runBlocks([&](float* l, float* r, size_t m) { loud.process(l, r, m); }, L, R, 256);
+            for (float v : L) {
+                if (!std::isfinite(v)) { allOk = false; break; }
+            }
+        }
+        CHECK(allOk, "Mintavételi frekvenciák (44.1 / 48 / 88.2 / 96 / 192 kHz) stabilak, véges kimenet");
+    }
+
+    // 8. Teljes lánc integráció: kikapcsolva bitpontos regresszió
+    {
+        AetherChain chain;
+        chain.setSampleRate(48000);
+        ParamData d = transparentParams();
+        chain.applyParamsRT(d);
+
+        std::vector<float> L = sine(440.0, 0.5, 96000, sr), R = L;
+        std::vector<float> L0 = L, R0 = R;
+        runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 512);
+        CHECK(L == L0 && R == R0, "Loudness kikapcsolva: a teljes lánc bitpontosan érintetlen marad");
+    }
+
+    // 9. Teljes lánc A/B teszt késleltetés-illesztéssel
+    {
+        AetherChain chain;
+        chain.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagLoudness, true);
+        d.loudMode = 7; // FFT 16384 mód
+        d.loudVolumeDb = -20.0f;
+        d.loudCompare = 1; // A/B összehasonlítás: az eredeti ág szól
+        chain.applyParamsRT(d);
+
+        std::vector<float> L = sine(1000.0, 0.3, 96000, sr), R = L;
+        runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 512);
+
+        const double g = 20.0 * std::log10(toneAmp(L, 48000, 1000.0, sr) / 0.3);
+        CHECK(std::abs(g - (-20.0)) < 1.0, "Loudness A/B összehasonlítás: a feldolgozott szinthez (-20 dB) kiegyenlített eredeti jel szól (%.2f dB)", g);
+    }
+
+    // 10. Paraméterblokk v12 -> v13 visszafelé kompatibilitás (loadParamBytes)
+    {
+        std::vector<uint8_t> v12Bytes(kParamSizeV12, 0);
+        ParamData v12Origin{};
+        v12Origin.preampDb = 4.25f;
+        v12Origin.set(kFlagEq, true);
+        v12Origin.set(kFlagLimiter, true);
+        v12Origin.limThresholdDb = -3.5f;
+        v12Origin.ditherMode = 1;
+        v12Origin.chDelayMs[0] = 1.2f;
+        std::memcpy(v12Bytes.data(), &v12Origin, kParamSizeV12);
+
+        ParamData loaded{};
+        const bool ok = loadParamBytes(reinterpret_cast<const char*>(v12Bytes.data()), v12Bytes.size(), 12, kParamSizeV12, loaded);
+        CHECK(ok, "loadParamBytes sikeresen betöltötte a valódi v12-es paraméterblokkot");
+        CHECK(loaded.preampDb == 4.25f && loaded.has(kFlagEq) && loaded.has(kFlagLimiter) &&
+              loaded.limThresholdDb == -3.5f && loaded.ditherMode == 1 && loaded.chDelayMs[0] == 1.2f,
+              "v12 régi mezők épek és változatlanok maradtak a betöltés után");
+        CHECK(!loaded.has(kFlagLoudness) && loaded.loudVolumeDb == 0.0f && loaded.loudInputDb == 0.0f &&
+              loaded.loudOutputDb == 0.0f && loaded.loudStd == 1 && loaded.loudMode == 5 &&
+              loaded.loudApprox == 2 &&
+              loaded.loudHclip == 0 && loaded.loudHclipRangeDb == 6.0f && loaded.loudCompare == 0,
+              "v12 betöltésekor az új Loudness mezők alapértéken vannak (Loudness kikapcsolva, std=1, mode=5, approx=2, hclipRange=6)");
+    }
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify DSP modulteszt (EasyEffects könyvtárak)\n");
@@ -1792,6 +2361,7 @@ int main() {
     testOutStage();
     testOutputGain();
     testPcmConvert();
+    testLoudness();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }
