@@ -189,6 +189,7 @@ public:
         abBass_.reset();
         abStereoTools_.reset();
         abMono_.reset();
+        abSub_.reset();
         crossfeed_.reset();
         limiter_.reset();
         outStage_.reset();
@@ -221,6 +222,7 @@ private:
         abBass_.setSampleRate(sr, kChunk);
         abStereoTools_.setSampleRate(sr, kChunk);
         abMono_.setSampleRate(sr, kChunk);
+        abSub_.setSampleRate(sr, kChunk);
         crossfeed_.setSampleRate(sr);
         outStage_.setSampleRate(sr);
         sampleRate_.store(sr);
@@ -425,6 +427,11 @@ private:
             for (size_t i = 0; i < m; ++i) { L[i] *= preampCur_; R[i] *= preampCur_; }
         }
 
+        // Mélyvágás (a Mono modul része) a Bass Enhancer előtt: a hallható tartomány alatti zörejből így nem keletkezik
+        // hallható felharmonikus. A mono-keverés a helyén marad (a Stereo Tools után). Az A/B a Mono modulé.
+        if (d.has(kFlagMono) && d.subsonicHz > 0)
+            abSub_.process(L, R, m, 0, d.monoCompare != 0, [this](float* a, float* b, size_t n) { monoBass_.processSubsonic(a, b, n); });
+
         if (d.has(kFlagEq)) abEq_.process(L, R, m, eq_.latency(), d.eqCompare != 0,
                                           [this](float* a, float* b, size_t n) { eq_.process(a, b, n); });
         if (d.has(kFlagLoudness)) abLoud_.process(L, R, m, loudness_.latency(), d.loudCompare != 0,
@@ -435,7 +442,7 @@ private:
         if (d.has(kFlagStereoTools)) abStereoTools_.process(L, R, m, 0, d.stCompare != 0,
                                                             [this](float* a, float* b, size_t n) { stereoTools_.process(a, b, n); });
         if (d.has(kFlagMono)) abMono_.process(L, R, m, 0, d.monoCompare != 0,
-                                              [this](float* a, float* b, size_t n) { monoBass_.process(a, b, n); });
+                                              [this](float* a, float* b, size_t n) { monoBass_.processMix(a, b, n); });
         if (d.has(kFlagCrossfeed)) crossfeed_.process(L, R, m);
         if (d.has(kFlagConvolver)) {
             // A konvolver saját késleltetése (blokkméret-illesztés): ugyanannyival késlelteti az eredeti ágat
@@ -599,7 +606,7 @@ private:
     ee::StereoTools stereoTools_;
     mono::MonoBass monoBass_;
     agc::Autogain autogain_;
-    abcmp::AbCompare abEq_, abLoud_, abConv_, abBass_, abStereoTools_, abMono_;
+    abcmp::AbCompare abEq_, abLoud_, abConv_, abBass_, abStereoTools_, abMono_, abSub_;
     ee::Crossfeed crossfeed_;
     ee::Limiter limiter_;
     outstage::OutStage outStage_;
