@@ -575,6 +575,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .library-view { flex: 1; padding: 20px 24px 32px 24px; background: var(--aq-bg); }
   .library-view[hidden], .main-content[hidden] { display: none; }
   .preset-lbl { font-size: var(--aq-fs-body); color: var(--aq-text-2); font-weight: 500; }
+  .preset-sep { width: 1px; align-self: stretch; margin: 2px 4px; background: var(--aq-line); }
+  .preset-eq-only { display: inline-flex; align-items: center; gap: 8px; }
+  .preset-eq-only[hidden] { display: none; }
+  /* A Profil sor keskeny ablakban tördelődik (nem lóg ki): a végén lévő EQ-vezérlők új sorba kerülnek */
+  #presetBar { flex-wrap: wrap; row-gap: 6px; max-width: 100%; box-sizing: border-box; }
+  #presetBar .preset-eq-only { flex-wrap: wrap; row-gap: 6px; }
+  #presetBar .preset-select { flex: 0 1 auto; min-width: 200px; }   /* a profilnév olvasható marad, inkább a gombok tördelődnek */
   .preset-select { min-width: 140px; max-width: 320px; }
   /* Keskeny ablakban (a legkisebb ablak 1000 px) a fejléc tömörebb: a Támogatás gombból csak a szív marad (a felirat
      a buborékban), a jobb oldal pedig a Kimenet választónál rövidül, nem csúszik a név és a profil fölé */
@@ -4118,13 +4125,22 @@ var qrcode = function() {
     --hf-sheen: 0.16;                          /* az átlós csillanás */
     --hf-rim: 0.30;                            /* a felső él fénye */
     --hf-led-off: #2A2E35;
+    --hf-sh: 1;                                /* a vetett árnyék erőssége */
+    --hf-mix-plain: 16%;                       /* a sima (nem kiemelt) gomb színezése */
+    --hf-mix-accent: 55%;                      /* a kiemelt gomb eloxálása: visszafogott, hogy illjen a csiszolt fémhez */
+    --hf-accent-text: var(--aq-accent-ink);
     --aq-led: var(--aq-accent);
   }
   :root[data-mode="light"], :root[data-theme$="-light"], :root[data-theme="light"] {
-    --hf-metal: #D3D8DF;
-    --hf-hi-p: 45%; --hf-lo-p: 22%;
-    --hf-bz-hi-p: 10%; --hf-bz-lo-p: 40%;
-    --hf-line: 0.09;
+    /* Világos témán visszafogottabb fém: világosabb alumínium, halványabb keret és árnyék (ne üssön el a háttértől) */
+    --hf-metal: #E2E6EB;
+    --hf-hi-p: 50%; --hf-lo-p: 10%;
+    --hf-bz-hi-p: 5%; --hf-bz-lo-p: 22%;
+    --hf-line: 0.06;
+    --hf-sh: 0.4;
+    --hf-mix-plain: 8%;
+    --hf-mix-accent: 30%;
+    --hf-accent-text: var(--aq-text);
     --hf-sheen: 0.26;
     --hf-rim: 0.65;
     --hf-led-off: #9EA5AF;
@@ -4133,7 +4149,7 @@ var qrcode = function() {
   [data-theme="sapphire-dark"], [data-concept="sapphire"][data-mode="dark"] { --aq-led: #FFB020; }
 
   .adw-btn, .aq-switch {
-    --hf-mix: 16%;                                                     /* sima gomb: finoman színezett alumínium */
+    --hf-mix: var(--hf-mix-plain);                                                     /* sima gomb: finoman színezett alumínium */
     --hf-anod: color-mix(in srgb, var(--aq-accent) var(--hf-mix), var(--hf-metal));
     --hf-face-hi: color-mix(in srgb, var(--hf-anod), #fff var(--hf-hi-p));
     --hf-face-lo: color-mix(in srgb, var(--hf-anod), #000 var(--hf-lo-p));
@@ -4147,13 +4163,13 @@ var qrcode = function() {
       linear-gradient(180deg, var(--hf-bz-hi), var(--hf-bz-lo)) border-box;
     border: 2px solid transparent;
     color: var(--aq-text);
-    box-shadow: 0 3px 7px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.28);
+    box-shadow: 0 3px 7px rgba(0,0,0,calc(0.35 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.28);
     transition: transform 90ms ease-out, box-shadow 90ms ease-out, filter 120ms ease-out;
   }
   .adw-btn { border-radius: 8px; }
   .adw-btn:hover, .aq-switch:hover { filter: brightness(1.06); }
   /* Kiemelt gomb: a téma kiemelőszínére erősen eloxált (pl. „Hangzás”, „Betöltés”) */
-  .adw-btn.primary { --hf-mix: 82%; color: var(--aq-accent-ink); }
+  .adw-btn.primary { --hf-mix: var(--hf-mix-accent); color: var(--hf-accent-text); }
   .adw-btn.danger-solid { --aq-accent: var(--aq-danger); --hf-mix: 82%; }
   /* A fémfelület minden állapotban marad (a régi, sima háttérszíneket felülírja) */
   .adw-btn, .adw-btn:hover, .adw-btn.selected, .adw-btn.primary, .adw-btn.primary:hover,
@@ -4165,13 +4181,13 @@ var qrcode = function() {
   .adw-btn:active:not(:disabled), .aq-switch:active {
     transform: translateY(1px) scale(0.965);
     filter: brightness(0.86);
-    box-shadow: 0 1px 2px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.5)), inset 0 -1px 0 rgba(0,0,0,0.22);
+    box-shadow: 0 1px 2px rgba(0,0,0,calc(0.30 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.5)), inset 0 -1px 0 rgba(0,0,0,0.22);
   }
   /* Reteszelő állapot (kiválasztott gomb, bekapcsolt kapcsoló): félig benn marad */
   .adw-btn.selected, .aq-switch.on {
     transform: translateY(0.6px) scale(0.98);
     filter: brightness(0.93);
-    box-shadow: 0 1.5px 3px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.7)), inset 0 -1px 0 rgba(0,0,0,0.25);
+    box-shadow: 0 1.5px 3px rgba(0,0,0,calc(0.32 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.7)), inset 0 -1px 0 rgba(0,0,0,0.25);
     color: var(--aq-text);
   }
   .adw-btn:disabled, .adw-btn:disabled:hover { opacity: 0.45; filter: none; transform: none; box-shadow: none; }
@@ -4230,7 +4246,7 @@ var qrcode = function() {
   .aqnp button.aqnp-btn,
   body .aqlib button.lib-btn,
   button.dsp-warn-btn {
-    --hf-mix: 16%;
+    --hf-mix: var(--hf-mix-plain);
     --hf-anod: color-mix(in srgb, var(--aq-accent) var(--hf-mix), var(--hf-metal));
     --hf-face-hi: color-mix(in srgb, var(--hf-anod), #fff var(--hf-hi-p));
     --hf-face-lo: color-mix(in srgb, var(--hf-anod), #000 var(--hf-lo-p));
@@ -4245,7 +4261,7 @@ var qrcode = function() {
     border: 2px solid transparent;
     background: var(--hf-bg);
     color: var(--aq-text);
-    box-shadow: 0 3px 7px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.28);
+    box-shadow: 0 3px 7px rgba(0,0,0,calc(0.35 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.28);
     transition: transform 90ms ease-out, box-shadow 90ms ease-out, filter 120ms ease-out;
   }
 
@@ -4330,14 +4346,14 @@ var qrcode = function() {
   .aqnp button.aqnp-btn.aqnp-play {
     width: 40px;
     height: 40px;
-    --hf-mix: 82%;
-    color: var(--aq-accent-ink);
+    --hf-mix: var(--hf-mix-accent);
+    color: var(--hf-accent-text);
   }
   .aqnp button.aqnp-btn.aqnp-play:hover:not(:active):not(:disabled),
   :root[data-mode="light"] .aqnp button.aqnp-btn.aqnp-play:hover:not(:active):not(:disabled),
   :root[data-theme$="-light"] .aqnp button.aqnp-btn.aqnp-play:hover:not(:active):not(:disabled),
   :root[data-theme="light"] .aqnp button.aqnp-btn.aqnp-play:hover:not(:active):not(:disabled) {
-    color: var(--aq-accent-ink);
+    color: var(--hf-accent-text);
     transform: none;
   }
   .aqnp button.aqnp-btn.on {
@@ -4352,8 +4368,8 @@ var qrcode = function() {
     gap: 6px;
   }
   body .aqlib button.lib-btn.accent {
-    --hf-mix: 82%;
-    color: var(--aq-accent-ink);
+    --hf-mix: var(--hf-mix-accent);
+    color: var(--hf-accent-text);
   }
   body .aqlib button.lib-btn.danger {
     color: var(--aq-danger);
@@ -4398,7 +4414,7 @@ var qrcode = function() {
   button.dsp-warn-btn:active:not(:disabled) {
     transform: translateY(1px) scale(0.965);
     filter: brightness(0.86);
-    box-shadow: 0 1px 2px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.5)), inset 0 -1px 0 rgba(0,0,0,0.22);
+    box-shadow: 0 1px 2px rgba(0,0,0,calc(0.30 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.5)), inset 0 -1px 0 rgba(0,0,0,0.22);
   }
 
   /* 3. button.adw-btn.active és az összes új reteszelő gomb állapota */
@@ -4414,7 +4430,7 @@ var qrcode = function() {
   button.adw-btn[data-curve].active-opt {
     transform: translateY(0.6px) scale(0.98);
     filter: brightness(0.93);
-    box-shadow: 0 1.5px 3px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.7)), inset 0 -1px 0 rgba(0,0,0,0.25);
+    box-shadow: 0 1.5px 3px rgba(0,0,0,calc(0.32 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.7)), inset 0 -1px 0 rgba(0,0,0,0.25);
     background: var(--hf-bg);
     border-color: transparent;
   }
@@ -4431,12 +4447,12 @@ var qrcode = function() {
   }
   /* A .primary.active reteszelő toggle gombok (pl. Auto, modul kapcsolók) sima 16% fém + LED-del */
   button.adw-btn.primary.active {
-    --hf-mix: 16%;
+    --hf-mix: var(--hf-mix-plain);
     color: var(--aq-text);
   }
-  /* A 82%-os NEM reteszelő .adw-btn.primary szövege mindig --aq-accent-ink */
+  /* A kiemelt (NEM reteszelő) .adw-btn.primary szövege a kiemelés erősségéhez illő szín (--hf-accent-text) */
   button.adw-btn.primary:not(.active):not(.selected) {
-    color: var(--aq-accent-ink);
+    color: var(--hf-accent-text);
   }
   /* A görbekapcsolók (data-curve) csíkja bekapcsolva világít, kikapcsolva marad */
   button.adw-btn[data-curve]:not(.active-opt) {
@@ -4520,7 +4536,7 @@ var qrcode = function() {
     border-bottom-color: color-mix(in srgb, var(--hf-metal), #fff calc(var(--hf-hi-p) * 0.45)) !important;
     background-color: var(--aq-input) !important;
     color: var(--aq-text) !important;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.42), inset 0 -1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.35)), 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.30));
+    box-shadow: inset 0 2px 4px rgba(0,0,0,calc(0.42 * var(--hf-sh))), inset 0 -1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.35)), 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.30));
   }
   header.app-header select.mini-select,
   .sink-popover select.mini-select,
@@ -4551,7 +4567,7 @@ var qrcode = function() {
   input.ee-input:focus,
   textarea.ee-input:focus {
     border-color: var(--aq-accent) !important;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.35), 0 0 0 3px var(--aq-accent-soft) !important;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,calc(0.35 * var(--hf-sh))), 0 0 0 3px var(--aq-accent-soft) !important;
   }
   header.app-header select.mini-select:disabled,
   .sink-popover select.mini-select:disabled,
@@ -4567,7 +4583,7 @@ var qrcode = function() {
 
   /* 7. Csúszkák fém forgatógombja / tolókája (sáv változatlan) */
   input[type="range"] {
-    --hf-mix: 16%;
+    --hf-mix: var(--hf-mix-plain);
     --hf-anod: color-mix(in srgb, var(--aq-accent) var(--hf-mix), var(--hf-metal));
     --hf-face-hi: color-mix(in srgb, var(--hf-anod), #fff var(--hf-hi-p));
     --hf-face-lo: color-mix(in srgb, var(--hf-anod), #000 var(--hf-lo-p));
@@ -4587,7 +4603,7 @@ var qrcode = function() {
     border-radius: 50%;
     border: 2px solid transparent;
     background: var(--hf-thumb-bg);
-    box-shadow: 0 2px 5px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.30);
+    box-shadow: 0 2px 5px rgba(0,0,0,calc(0.48 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.30);
     transition: transform 90ms ease-out, filter 120ms ease-out, box-shadow 90ms ease-out;
   }
   input[type="range"]:hover:not(:disabled)::-webkit-slider-thumb { filter: brightness(1.08); }
@@ -4599,7 +4615,7 @@ var qrcode = function() {
     border-radius: 50%;
     border: 2px solid transparent;
     background: var(--hf-thumb-bg);
-    box-shadow: 0 2px 5px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.30);
+    box-shadow: 0 2px 5px rgba(0,0,0,calc(0.48 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.30);
     transition: transform 90ms ease-out, filter 120ms ease-out, box-shadow 90ms ease-out;
   }
   input[type="range"]:hover:not(:disabled)::-moz-range-thumb { filter: brightness(1.08); }
@@ -4635,7 +4651,7 @@ var qrcode = function() {
     border: 2px solid transparent;
     cursor: pointer;
     vertical-align: middle;
-    --hf-mix: 16%;
+    --hf-mix: var(--hf-mix-plain);
     --hf-anod: color-mix(in srgb, var(--aq-accent) var(--hf-mix), var(--hf-metal));
     --hf-face-hi: color-mix(in srgb, var(--hf-anod), #fff var(--hf-hi-p));
     --hf-face-lo: color-mix(in srgb, var(--hf-anod), #000 var(--hf-lo-p));
@@ -4648,7 +4664,7 @@ var qrcode = function() {
       linear-gradient(180deg, var(--hf-face-hi), var(--hf-anod) 52%, var(--hf-face-lo)) padding-box,
       linear-gradient(180deg, var(--hf-bz-hi), var(--hf-bz-lo)) border-box;
     background: var(--hf-bg);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.28);
+    box-shadow: 0 2px 4px rgba(0,0,0,calc(0.32 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,var(--hf-rim)), inset 0 -1px 0 rgba(0,0,0,0.28);
     transition: transform 90ms ease-out, box-shadow 90ms ease-out, filter 120ms ease-out;
   }
   body input[type="checkbox"].aq-checkbox:checked::after,
@@ -4691,13 +4707,13 @@ var qrcode = function() {
   body input[type="checkbox"]:active:not(:disabled) {
     transform: translateY(1px) scale(0.965);
     filter: brightness(0.86);
-    box-shadow: 0 1px 2px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.5)), inset 0 -1px 0 rgba(0,0,0,0.22);
+    box-shadow: 0 1px 2px rgba(0,0,0,calc(0.30 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.5)), inset 0 -1px 0 rgba(0,0,0,0.22);
   }
   body input[type="checkbox"]:checked,
   body input[type="checkbox"]:indeterminate {
     transform: translateY(0.6px) scale(0.98);
     filter: brightness(0.93);
-    box-shadow: 0 1.5px 3px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.7)), inset 0 -1px 0 rgba(0,0,0,0.25);
+    box-shadow: 0 1.5px 3px rgba(0,0,0,calc(0.32 * var(--hf-sh))), inset 0 1px 0 rgba(255,255,255,calc(var(--hf-rim) * 0.7)), inset 0 -1px 0 rgba(0,0,0,0.25);
     background: var(--hf-bg);
     border-color: transparent;
   }
@@ -5039,6 +5055,33 @@ var qrcode = function() {
         <button class="mini-btn" onclick="savePresetAs()" title="Mentés új profilként" data-i18n-title="preset.saveAs" data-i18n-aria-label="preset.saveAs"><svg class="aq-icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
         <button class="mini-btn" id="btnPresetRename" onclick="renamePreset()" title="Aktív profil átnevezése" data-i18n-title="preset.rename" data-i18n-aria-label="preset.rename"><svg class="aq-icon" aria-hidden="true"><use href="#i-pencil"/></svg></button>
         <button class="mini-btn" id="btnPresetDelete" onclick="deletePreset()" title="Aktív profil törlése" data-i18n-title="preset.delete" data-i18n-aria-label="preset.delete"><svg class="aq-icon" aria-hidden="true"><use href="#i-trash"/></svg></button>
+        <!-- A fejhallgató-EQ betöltése a profilválasztó mellett, minden fülön (felhasználói visszajelzés: „sokáig
+             keresgéltem, hol lehet a fejhallgató EQ-t betölteni”); az EQ BE/KI és az A/B csak az Equalizer fülön látszik -->
+        <span class="preset-sep" aria-hidden="true"></span>
+        <button class="adw-btn primary" id="btnImportAutoEq" title="AutoEq kereső és fájl / szöveges profil importáló" data-i18n-title="eq.importTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-headphones"/></svg><span data-i18n="eq.importBtn">AutoEq Kereső & Import</span></button>
+        <span class="preset-eq-only" id="presetEqOnly">
+          <button class="adw-btn" id="btnEqBypassTab">EQ: KI (Bypass)</button>
+          <button class="adw-btn" id="btnEqAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
+          <span class="preset-sep" aria-hidden="true"></span>
+          <div class="stat-group">
+            <span class="lbl" data-i18n="strip.eqMode">EQ Mód:</span>
+            <select id="selectEqMode" class="ee-select">
+              <option value="0" selected>IIR</option>
+              <option value="1">FIR</option>
+              <option value="2">FFT</option>
+              <option value="3">SPM</option>
+            </select>
+          </div>
+          <div class="stat-group">
+            <span class="lbl" data-i18n="eq.decramp">Decramp:</span>
+            <select id="selectDecramp" class="ee-select" title="Decramping: túlmintavételezés IIR és FIR módban (44,1 kHz-hez viszonyítva)" data-i18n-title="strip.decrampTitle">
+              <option value="0" selected>Off</option>
+              <option value="1">x2</option>
+              <option value="2">x3</option>
+              <option value="3">x4</option>
+            </select>
+          </div>
+        </span>
       </div>
       <!-- Több kimenet (független zónák): melyik kimenet beállításait szerkeszti a felület -->
       <div id="zoneBar" class="zone-bar" hidden>
@@ -5091,28 +5134,7 @@ var qrcode = function() {
         <!-- 1. SÁV: GLOBÁLIS EQ-LÁNC VEZÉRLŐK (Balra: AutoEq, EQ BE/KI, A/B, EQ Mód, Decramp; Jobbra: Preamp) -->
         <div class="actions-group eq-global-row" id="eqGlobalRow">
           <div class="eq-global-left">
-            <button class="adw-btn primary" id="btnImportAutoEq" title="AutoEq kereső és fájl / szöveges profil importáló" data-i18n-title="eq.importTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-headphones"/></svg><span data-i18n="eq.importBtn">AutoEq Kereső & Import</span></button>
-            <button class="adw-btn" id="btnEqBypassTab">EQ: KI (Bypass)</button>
-            <button class="adw-btn" id="btnEqAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
-            <span class="eq-bar-sep" aria-hidden="true"></span>
-            <div class="stat-group">
-              <span class="lbl" data-i18n="strip.eqMode">EQ Mód:</span>
-              <select id="selectEqMode" class="ee-select">
-                <option value="0" selected>IIR</option>
-                <option value="1">FIR</option>
-                <option value="2">FFT</option>
-                <option value="3">SPM</option>
-              </select>
-            </div>
-            <div class="stat-group">
-              <span class="lbl" data-i18n="eq.decramp">Decramp:</span>
-              <select id="selectDecramp" class="ee-select" title="Decramping: túlmintavételezés IIR és FIR módban (44,1 kHz-hez viszonyítva)" data-i18n-title="strip.decrampTitle">
-                <option value="0" selected>Off</option>
-                <option value="1">x2</option>
-                <option value="2">x3</option>
-                <option value="3">x4</option>
-              </select>
-            </div>
+            <!-- Az AutoEq-import, az EQ BE/KI, az A/B, az EQ mód és a Decramp a Profil sorba került (presetBar) -->
           </div>
 
           <div class="eq-global-right">
@@ -6268,6 +6290,9 @@ function switchTab(tabId, el) {
 
   const oldTabId = currentActiveTab;
   currentActiveTab = tabId;
+  // A Profil sorban az EQ BE/KI és az A/B csak az Equalizer fülön látszik (az import gomb mindig)
+  const eqOnly = document.getElementById('presetEqOnly');
+  if (eqOnly) eqOnly.hidden = tabId !== 'eq';
 
   // 1. Gombsor kijelölés és a finoman átcsúszó glider animálása
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
