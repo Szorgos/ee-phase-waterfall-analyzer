@@ -4306,9 +4306,7 @@ var qrcode = function() {
           <option value="1" data-i18n="wf.lv1">1 · 2D</option>
           <option value="2" data-i18n="wf.lv2">2 · 3D takarékos</option>
           <option value="3" data-i18n="wf.lv3">3 · 3D</option>
-          <option value="4" data-i18n="wf.lv4">4 · 3D 60 kép/s</option>
-          <option value="5" data-i18n="wf.lv5">5 · 3D éles</option>
-          <option value="6" data-i18n="wf.lv6">6 · 3D legszebb</option>
+          <option value="4" data-i18n="wf.lv4">4 · 3D legszebb</option>
         </select></span>
         <!-- Időlépcsők állítása -->
         <span class="ctrl-group" data-wf3d><span class="ctrl-label" data-i18n="strip.time">Idő:</span>
@@ -5350,7 +5348,7 @@ function applyTheme() {
     if (typeof buildGrid === "function") buildGrid();
     if (typeof wireMesh !== "undefined" && wireMesh && wireMesh.material) {
       wireMesh.material.color.set(line2);
-      wireMesh.material.opacity = isLight ? 0.35 : 0.22;
+      wireMesh.material.opacity = wfWireOpacity();
     }
   }
 
@@ -5917,6 +5915,21 @@ function wfRowFactor(r, now) {
   return tau <= 0 ? 0 : 1 + c3 * Math.pow(tau - 1, 3) + c1 * Math.pow(tau - 1, 2);
 }
 
+/**
+ * A rács átlátszósága a rajzolási felbontáshoz igazítva. A rács vonalai a rajzolás felbontásában mindig 1 képpont
+ * vastagok, ezért kisebb felbontásnál a képernyőn vastagabbak, és jobban eltakarják a színeket (a kép fakóbb), nagyobb
+ * felbontásnál vékonyabbak (a kép élénkebb). Az átlátszóságot a felbontással arányosan állítjuk, így a rács minden
+ * fokozatban ugyanannyira takar, mint a kijelző saját felbontásán: a fokozat csak az élességet változtatja, a színeket nem.
+ */
+function wfWireOpacity() {
+  const root = document.documentElement;
+  const light = root.getAttribute("data-mode") === "light" || (root.getAttribute("data-theme") || "").endsWith("-light");
+  const base = light ? 0.35 : 0.22;
+  if (typeof renderer === "undefined" || !renderer) return base;
+  const ref = Math.min(window.devicePixelRatio || 1, 2);   // a kijelző felbontása (a 3. fokozat) a viszonyítás
+  return Math.min(0.9, base * renderer.getPixelRatio() / ref);
+}
+
 function rebuildMesh() {
   if (mesh) scene.remove(mesh);
   if (wireMesh) scene.remove(wireMesh);
@@ -5935,7 +5948,7 @@ function rebuildMesh() {
     color: wireLineCol ? new THREE.Color(wireLineCol) : (isLightMesh ? 0x94a3b8 : 0x1f2c3a),
     wireframe: true,
     transparent: true,
-    opacity: isLightMesh ? 0.35 : 0.22
+    opacity: wfWireOpacity()
   });
 
   mesh = new THREE.Mesh(geometry, material);
@@ -6514,25 +6527,32 @@ let wfLastDraw = 0, wfWorkEma = 0, wfLagEma = 0, wfLoadSince = 0;
 let wfLastRaf = 0, wfRafBase = 1000 / 60;   // a kijelző képfrissítési ideje (lassan felejtő minimum)
 
 // =========================================================================
-// VIZUALIZÁCIÓ: ki-be kapcsoló és 6 minőségi fokozat. Kikapcsolva semmi nem rajzolódik.
-// A pixelsűrűség a kijelző sajátjához (devicePixelRatio) mért szorzó: 0,75 = kisebb felbontás (lágyabb kép),
-// 1 = a kijelző felbontása (legfeljebb 2), 2 = túlmintavételezés (simább vonalak, kevesebb moiré; legfeljebb 3).
+// VIZUALIZÁCIÓ: ki-be kapcsoló és 4 minőségi fokozat. Kikapcsolva semmi nem rajzolódik.
+// Minden fokozat szemmel is különbözik az előzőtől: 2D; 3D takarékos (30 kép/s, kisebb felbontás, lágyabb kép);
+// 3D (60 kép/s, a kijelző felbontása, legfeljebb 2); 3D legszebb (60 kép/s, kétszeres túlmintavételezés: simább
+// vonalak, kevesebb moiré; legfeljebb 3). A színek és a fényesség minden fokozatban azonosak (wfWireOpacity).
 // =========================================================================
 const WF_LEVELS = {
   1: { view: "2d", ms: WF_FRAME_ECO_MS },
   2: { view: "3d", ms: WF_FRAME_ECO_MS, scale: 0.75, max: 2 },
-  3: { view: "3d", ms: WF_FRAME_ECO_MS, scale: 1, max: 2 },
-  4: { view: "3d", ms: WF_FRAME_FULL_MS, scale: 0.75, max: 2 },
-  5: { view: "3d", ms: WF_FRAME_FULL_MS, scale: 1, max: 2 },
-  6: { view: "3d", ms: WF_FRAME_FULL_MS, scale: 2, max: 3 }
+  3: { view: "3d", ms: WF_FRAME_FULL_MS, scale: 1, max: 2 },
+  4: { view: "3d", ms: WF_FRAME_FULL_MS, scale: 2, max: 3 }
 };
+const WF_LEVEL_MAX = 4;
 const WF_LEVEL_DEFAULT = 3;
 let wfOn = true, wfLevel = WF_LEVEL_DEFAULT;
 let wfAutoEco = false;   // gyenge gépen az adott futásra 30 kép/s (wfNoteFrame); kézi fokozatváltás visszaállítja
 try {
   wfOn = localStorage.getItem("aqulify_wf_on") !== "0";
-  const lv = parseInt(localStorage.getItem("aqulify_wf_level"), 10);
-  if (lv >= 1 && lv <= 6) wfLevel = lv;
+  const lv = parseInt(localStorage.getItem("aqulify_wf_level4"), 10);
+  if (lv >= 1 && lv <= WF_LEVEL_MAX) wfLevel = lv;
+  else {
+    // A korábbi 6 fokozatú beállítás átváltása a legközelebbi újra (a 3. és az 5. képe azonos volt a 2. és a 4.-ével)
+    const old = parseInt(localStorage.getItem("aqulify_wf_level"), 10);
+    const map = { 1: 1, 2: 2, 3: 3, 4: 3, 5: 3, 6: 4 };
+    if (map[old]) wfLevel = map[old];
+  }
+  localStorage.removeItem("aqulify_wf_level");
   // Az 1.8.4 előtti 2D/3D és takarékos választás nem számít: első induláskor mindig a 3. fokozat
   localStorage.removeItem("aqulify_wf_view");
   localStorage.removeItem("aqulify_wf_eco");
@@ -6635,6 +6655,7 @@ function applyWfView(resize) {
   if (renderer && !is2d) {
     const L = WF_LEVELS[wfLevel];
     renderer.setPixelRatio(Math.min((window.devicePixelRatio || 1) * L.scale, L.max));
+    if (typeof wireMesh !== "undefined" && wireMesh && wireMesh.material) wireMesh.material.opacity = wfWireOpacity();
   }
   wfLastDraw = 0;
   wfLoadSince = 0; wfWorkEma = 0; wfLagEma = 0;   // váltásnál a terhelésmérés újrakezdődik
@@ -6644,7 +6665,7 @@ function applyWfView(resize) {
 function saveWfView() {
   try {
     localStorage.setItem("aqulify_wf_on", wfOn ? "1" : "0");
-    localStorage.setItem("aqulify_wf_level", String(wfLevel));
+    localStorage.setItem("aqulify_wf_level4", String(wfLevel));
   } catch (e) {}
 }
 function toggleWfOn() {
@@ -6654,7 +6675,7 @@ function toggleWfOn() {
 }
 function setWfLevel(v) {
   const lv = parseInt(v, 10);
-  if (!(lv >= 1 && lv <= 6) || (!renderer && lv !== 1)) return;
+  if (!(lv >= 1 && lv <= WF_LEVEL_MAX) || (!renderer && lv !== 1)) return;
   wfLevel = lv;
   wfAutoEco = false;   // kézi választás: a gyenge gép miatti visszaváltás újra mérődik
   saveWfView();
@@ -6665,7 +6686,7 @@ const spec2dCtx = spec2dCanvas ? spec2dCanvas.getContext("2d") : null;
 applyWfView();
 
 // =========================================================================
-// GYENGE GÉP: a 60 kép/s-os fokozatokban (4–6) a rajzolás idejét és az ütemtartást figyeli: ha a gép tartósan nem
+// GYENGE GÉP: a 60 kép/s-os fokozatokban (3–4) a rajzolás idejét és az ütemtartást figyeli: ha a gép tartósan nem
 // bírja, erre a futásra 30 kép/s-ra vált (nem marad meg: a következő indításkor újra mér). Kézi fokozatváltás után is.
 // =========================================================================
 /**
