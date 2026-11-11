@@ -33,10 +33,7 @@ jobs:
 
       - name: RNNoise modell (az Ubuntu forráscsomagjából)
         run: |
-          for i in 1 2 3; do curl -fsSL -o /tmp/rnnoise.tar.xz http://archive.ubuntu.com/ubuntu/pool/universe/r/rnnoise/rnnoise_0.2+ds.orig.tar.xz && break; sleep 15; done
-          got=$(sha256sum < /tmp/rnnoise.tar.xz | cut -d' ' -f1)
-          want=db2718ee4a0b294bfbbe198fe94aabfdc8cd0d77cb9cd95d76c7a818ad805f0b
-          if [ "$got" != "$want" ]; then echo "::error title=RNNoise::sha256 eltérés: $got"; exit 1; fi
+          bash tools/fetch_rnnoise.sh /tmp/rnnoise.tar.xz || { echo "::error title=RNNoise::a letöltés egyik tükörről sem sikerült"; exit 1; }
           mkdir -p "$RUNNER_TEMP/rnnoise-model"
           tar -xJf /tmp/rnnoise.tar.xz -C "$RUNNER_TEMP/rnnoise-model" --strip-components=2 rnnoise-0.2/src/rnnoise_data.c rnnoise-0.2/src/rnnoise_data.h
 
