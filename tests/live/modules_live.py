@@ -121,9 +121,11 @@ def main():
     send({"type": "set_eq_mode", "mode": 0})
 
     print("[4] EQ kikapcsolva (Bypass): az eredeti jel")
+    # Közvetlenül az SPM -> IIR módváltás után: ugyanannyi idő kell, mint a [3]-ban a módváltásnak,
+    # különben a lassú CI-gépen a felvétel eleje még a váltás csendjébe eshet
     send({"type": "set_module_eq", "val": 0})
-    time.sleep(0.6)
-    s = seg(record("eq_off", tone))
+    time.sleep(1.2)
+    s = seg(record("eq_off", tone), start=0.8)
     check(abs(level(s[:, 0], 4000) + 12) < 0.2, f"4 kHz {level(s[:, 0], 4000):.2f} dBFS (elvárt −12,0)")
     all_off()
 
