@@ -537,14 +537,14 @@ static net::socket_t wsConnectLive(int port, const std::string& path, std::strin
                             "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n";
     ::send(s, req.data(), static_cast<int>(req.size()), 0);
     std::string resp;
-    char buf[512];
-    for (int i = 0; i < 40 && resp.find("\r\n\r\n") == std::string::npos; ++i) {
-        const int n = static_cast<int>(::recv(s, buf, sizeof(buf), 0));
+    char c = 0;
+    while (resp.size() < 4096 && resp.find("\r\n\r\n") == std::string::npos) {
+        const int n = static_cast<int>(::recv(s, &c, 1, 0));
         if (n <= 0) break;
-        resp.append(buf, static_cast<size_t>(n));
+        resp.push_back(c);
     }
     if (resp.rfind("HTTP/1.1 101", 0) != 0) { net::closeSocket(s); return net::kInvalidSocket; }
-    if (leftover) leftover->assign(resp, resp.find("\r\n\r\n") + 4, std::string::npos);   // a kézfogással együtt érkezett keretek
+    if (leftover) leftover->clear();
     return s;
 }
 
@@ -561,11 +561,11 @@ static std::string wsHandshakeLive(int port, const std::string& path) {
                             "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n";
     ::send(s, req.data(), static_cast<int>(req.size()), 0);
     std::string resp;
-    char buf[512];
-    for (int i = 0; i < 40 && resp.find("\r\n\r\n") == std::string::npos; ++i) {
-        const int n = static_cast<int>(::recv(s, buf, sizeof(buf), 0));
+    char c = 0;
+    while (resp.size() < 4096 && resp.find("\r\n\r\n") == std::string::npos) {
+        const int n = static_cast<int>(::recv(s, &c, 1, 0));
         if (n <= 0) break;
-        resp.append(buf, static_cast<size_t>(n));
+        resp.push_back(c);
     }
     net::closeSocket(s);
     return resp;
@@ -575,7 +575,13 @@ static std::string wsHandshakeLive(int port, const std::string& path) {
 static void wsSendText(net::socket_t s, const std::string& text) {
     std::string f;
     f.push_back(static_cast<char>(0x81));
-    f.push_back(static_cast<char>(0x80 | text.size()));   // rövid üzenet (< 126 bájt)
+    if (text.size() < 126) {
+        f.push_back(static_cast<char>(0x80 | text.size()));
+    } else {
+        f.push_back(static_cast<char>(0x80 | 126));
+        f.push_back(static_cast<char>((text.size() >> 8) & 0xFF));
+        f.push_back(static_cast<char>(text.size() & 0xFF));
+    }
     const unsigned char mask[4] = { 0x12, 0x34, 0x56, 0x78 };
     for (unsigned char m : mask) f.push_back(static_cast<char>(m));
     for (size_t i = 0; i < text.size(); ++i) f.push_back(static_cast<char>(text[i] ^ mask[i % 4]));
@@ -674,6 +680,42 @@ static std::string wsReadText(net::socket_t s, int ms) {
 
 /** A szöveges keretek közül az első, amelyik tartalmazza a mintát (ms-en belül). */
 static std::string wsWaitFor(net::socket_t s, const std::string& needle, int ms) {
+#ifdef _WIN32
+    DWORD tv = 100;
+#else
+    timeval tv{ 0, 100000 };
+#endif
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+    std::string buf;
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+    while (std::chrono::steady_clock::now() < end) {
+        char tmp[4096];
+        const int r = static_cast<int>(::recv(s, tmp, sizeof(tmp), 0));
+        if (r > 0) buf.append(tmp, static_cast<size_t>(r));
+        while (buf.size() >= 2) {
+            const int op = static_cast<unsigned char>(buf[0]) & 0x0F;
+            size_t len = static_cast<unsigned char>(buf[1]) & 0x7F, off = 2;
+            if (len == 126) {
+                if (buf.size() < 4) break;
+                len = (static_cast<unsigned char>(buf[2]) << 8) | static_cast<unsigned char>(buf[3]);
+                off = 4;
+            } else if (len == 127) {
+                if (buf.size() < 10) break;
+                len = 0;
+                for (int i = 2; i < 10; ++i) len = (len << 8) | static_cast<unsigned char>(buf[i]);
+                off = 10;
+            }
+            if (buf.size() < off + len) break;
+            std::string payload = buf.substr(off, len);
+            buf.erase(0, off + len);
+            if (op == 1 && payload.find(needle) != std::string::npos) return payload;
+        }
+        if (r == 0) break;
+    }
+    return "";
+}
+
+[[maybe_unused]] static std::string orig_wsWaitFor(net::socket_t s, const std::string& needle, int ms) {
     const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
     while (std::chrono::steady_clock::now() < end) {
         const std::string t = wsReadText(s, 300);
@@ -1416,6 +1458,109 @@ static void testBluetoothLine() {
     bridge.stop();
 }
 
+static void testBridgeLoudnessStereo() {
+    std::printf("[16] Híd: Loudness és Stereo Tools üzenetek, állapot, A/B és érvényesítés\n");
+    std::mutex mu;
+    ParamData cur = transparentParams();
+    BridgeCallbacks cb;
+    cb.pullAudio = [](float*, size_t) -> size_t { return 0; };
+    cb.sampleRate = [] { return 48000.0; };
+    cb.getParams = [&] { std::lock_guard<std::mutex> lk(mu); return cur; };
+    cb.setParams = [&](const ParamData& p) { std::lock_guard<std::mutex> lk(mu); cur = p; };
+
+    WebSocketBridge bridge(47898);
+    const bool started = bridge.start(cb);
+    CHECK(started, "a híd elindul a 47898-as porton");
+    if (!started) return;
+
+    std::string first;
+    net::socket_t s = wsConnectLive(47898, "/", &first);
+    CHECK(s != net::kInvalidSocket, "helyi kliens csatlakozik a hídhoz");
+    if (s == net::kInvalidSocket) {
+        bridge.stop();
+        return;
+    }
+
+    // 1. Kezdeti állapotüzenet ellenőrzése
+    std::string state = wsWaitFor(s, "\"modules\"", 2000);
+    CHECK(state.find("\"loudness\":0") != std::string::npos, "állapot: modules.loudness = 0");
+    CHECK(state.find("\"stereo\":0") != std::string::npos, "állapot: modules.stereo = 0");
+    CHECK(state.find("\"loudness\":{\"volume\":") != std::string::npos, "állapot: loudness blokk jelen van");
+    CHECK(state.find("\"stereo\":{\"inputGain\":") != std::string::npos, "állapot: stereo blokk jelen van");
+
+    auto getCur = [&] { std::lock_guard<std::mutex> lk(mu); return cur; };
+
+    // 2. Loudness bekapcsolása (set_module_loudness)
+    wsSendText(s, "{\"type\":\"set_module_loudness\",\"val\":1}");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    CHECK(getCur().has(kFlagLoudness), "set_module_loudness: kFlagLoudness aktív");
+
+    // 3. Loudness paraméterek beállítása és sanitizeParams (határértékek levágása)
+    wsSendText(s, "{\"type\":\"set_loudness\",\"volume\":-99.0,\"inputGain\":45.0,\"outputGain\":-40.0,\"std\":9,\"mode\":12,\"hclip\":1,\"hclipRange\":50.0,\"approx\":7}");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    ParamData p = getCur();
+    CHECK(p.loudVolumeDb == -83.0f, "loudVolumeDb határértékekre levágva (-83 dB)");
+    CHECK(p.loudInputDb == 36.0f, "loudInputDb határértékekre levágva (+36 dB)");
+    CHECK(p.loudOutputDb == -36.0f, "loudOutputDb határértékekre levágva (-36 dB)");
+    CHECK(p.loudStd == 4, "loudStd határértékekre levágva (4: ISO 226:2023)");
+    CHECK(p.loudMode == 7, "loudMode határértékekre levágva (7: FFT 16384)");
+    CHECK(p.loudHclip == 1, "loudHclip beállítva (1)");
+    CHECK(p.loudHclipRangeDb == 24.0f, "loudHclipRangeDb határértékekre levágva (24 dB)");
+    CHECK(p.loudApprox == 4, "loudApprox határértékekre levágva (4: Best)");
+
+    // 4. Loudness A/B összehasonlítás (set_loudness_compare)
+    wsSendText(s, "{\"type\":\"set_loudness_compare\",\"compare\":1}");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    CHECK(getCur().loudCompare == 1, "set_loudness_compare: loudCompare = 1");
+
+    // 5. Loudness kikapcsolása: az A/B-nek is ki kell kapcsolnia!
+    wsSendText(s, "{\"type\":\"set_module_loudness\",\"val\":0}");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    CHECK(!getCur().has(kFlagLoudness), "set_module_loudness: kFlagLoudness inaktív");
+    CHECK(getCur().loudCompare == 0, "modul kikapcsolásakor loudCompare = 0 (A/B törlődött)");
+
+    // 6. Stereo Tools bekapcsolása (set_module_stereo)
+    wsSendText(s, "{\"type\":\"set_module_stereo\",\"val\":1}");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    CHECK(getCur().has(kFlagStereoTools), "set_module_stereo: kFlagStereoTools aktív");
+
+    // 7. Stereo Tools paraméterek és sanitizeParams
+    wsSendText(s, "{\"type\":\"set_stereo\",\"inputGain\":-10.0,\"outputGain\":3.0,\"balanceIn\":-2.5,\"balanceOut\":1.8,"
+                  "\"softclip\":1,\"mutel\":1,\"muter\":0,\"phasel\":0,\"phaser\":1,\"mode\":8,"
+                  "\"slev\":-5.0,\"sbal\":0.2,\"mlev\":2.0,\"mpan\":-0.4,\"stereoBase\":-1.5,"
+                  "\"delay\":25.0,\"scLevel\":150.0,\"stereoPhase\":400.0,\"dry\":-50.0,\"wet\":-120.0}");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    p = getCur();
+    CHECK(p.stInputGainDb == -10.0f, "stInputGainDb érvényesült (-10 dB)");
+    CHECK(p.stOutputGainDb == 3.0f, "stOutputGainDb érvényesült (+3 dB)");
+    CHECK(p.stBalanceIn == -1.0f, "stBalanceIn határértékekre levágva (-1.0)");
+    CHECK(p.stBalanceOut == 1.0f, "stBalanceOut határértékekre levágva (+1.0)");
+    CHECK(p.stSoftclip == 1 && p.stMutel == 1 && p.stMuter == 0 && p.stPhasel == 0 && p.stPhaser == 1,
+          "logikai kapcsolók (softclip, mutel, muter, phasel, phaser) helyesek");
+    CHECK(p.stMode == 6, "stMode határértékekre levágva (6)");
+    CHECK(p.stSlevDb == -5.0f && p.stMlevDb == 2.0f, "slev és mlev érvényesült");
+    CHECK(p.stStereoBase == -1.0f, "stStereoBase határértékekre levágva (-1.0)");
+    CHECK(p.stDelayMs == 20.0f, "stDelayMs határértékekre levágva (+20 ms)");
+    CHECK(p.stScLevel == 100.0f, "stScLevel határértékekre levágva (100.0)");
+    CHECK(p.stStereoPhase == 360.0f, "stStereoPhase határértékekre levágva (360.0)");
+    CHECK(p.stDryDb == -50.0f, "stDryDb érvényesült (-50 dB)");
+    CHECK(p.stWetDb == -100.0f, "stWetDb határértékekre levágva (-100 dB)");
+
+    // 8. Stereo Tools A/B összehasonlítás (set_stereo_compare)
+    wsSendText(s, "{\"type\":\"set_stereo_compare\",\"compare\":1}");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    CHECK(getCur().stCompare == 1, "set_stereo_compare: stCompare = 1");
+
+    // 9. Stereo Tools kikapcsolása: az A/B-nek is ki kell kapcsolnia!
+    wsSendText(s, "{\"type\":\"set_module_stereo\",\"val\":0}");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    CHECK(!getCur().has(kFlagStereoTools), "set_module_stereo: kFlagStereoTools inaktív");
+    CHECK(getCur().stCompare == 0, "modul kikapcsolásakor stCompare = 0 (A/B törlődött)");
+
+    net::closeSocket(s);
+    bridge.stop();
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
@@ -1435,6 +1580,7 @@ int main() {
     testUpdate();
     testOpenUrl();
     testBluetoothLine();
+    testBridgeLoudnessStereo();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

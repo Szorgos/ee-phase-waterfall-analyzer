@@ -1869,6 +1869,8 @@ private:
             else if (mod == "mono") p.set(kFlagMono, on);
             else if (mod == "autogain") p.set(kFlagAutogain, on);
             else if (mod == "outstage") p.set(kFlagOutStage, on);
+            else if (mod == "loudness") p.set(kFlagLoudness, on);
+            else if (mod == "stereo") p.set(kFlagStereoTools, on);
             else changed = false;
             // Az EQ és a Konvolver egymást kizárja: a másik kikapcsolódik
             if (on && mod == "eq") p.set(kFlagConvolver, false);
@@ -1877,6 +1879,8 @@ private:
             if (!on && mod == "convolver") p.convCompare = 0;
             if (!on && mod == "bass") p.bassCompare = 0;
             if (!on && mod == "mono") p.monoCompare = 0;
+            if (!on && mod == "loudness") p.loudCompare = 0;
+            if (!on && mod == "stereo") p.stCompare = 0;
         } else if (type == "set_eq_compare") {
             p.eqCompare = num(msg, "compare", p.eqCompare) != 0.0 ? 1 : 0;
         } else if (type == "set_conv_compare") {
@@ -1885,6 +1889,10 @@ private:
             p.bassCompare = num(msg, "compare", p.bassCompare) != 0.0 ? 1 : 0;
         } else if (type == "set_mono_compare") {
             p.monoCompare = num(msg, "compare", p.monoCompare) != 0.0 ? 1 : 0;
+        } else if (type == "set_loudness_compare") {
+            p.loudCompare = num(msg, "compare", p.loudCompare) != 0.0 ? 1 : 0;
+        } else if (type == "set_stereo_compare") {
+            p.stCompare = num(msg, "compare", p.stCompare) != 0.0 ? 1 : 0;
         } else if (type == "set_mono") {
             p.subsonicHz = static_cast<int32_t>(num(msg, "subsonic", p.subsonicHz));
             p.monoAmount = static_cast<float>(num(msg, "amount", p.monoAmount));
@@ -1941,6 +1949,36 @@ private:
             p.bassListen = num(msg, "listen", p.bassListen) != 0.0 ? 1 : 0;
             p.bassInputGainDb = static_cast<float>(num(msg, "inputGain", p.bassInputGainDb));
             p.bassOutputGainDb = static_cast<float>(num(msg, "outputGain", p.bassOutputGainDb));
+        } else if (type == "set_loudness") {
+            p.loudVolumeDb = static_cast<float>(num(msg, "volume", p.loudVolumeDb));
+            p.loudInputDb = static_cast<float>(num(msg, "inputGain", p.loudInputDb));
+            p.loudOutputDb = static_cast<float>(num(msg, "outputGain", p.loudOutputDb));
+            p.loudStd = static_cast<int32_t>(num(msg, "std", p.loudStd));
+            p.loudMode = static_cast<int32_t>(num(msg, "mode", p.loudMode));
+            p.loudHclip = num(msg, "hclip", p.loudHclip) != 0.0 ? 1 : 0;
+            p.loudHclipRangeDb = static_cast<float>(num(msg, "hclipRange", p.loudHclipRangeDb));
+            p.loudApprox = static_cast<int32_t>(num(msg, "approx", p.loudApprox));
+        } else if (type == "set_stereo") {
+            p.stInputGainDb = static_cast<float>(num(msg, "inputGain", p.stInputGainDb));
+            p.stOutputGainDb = static_cast<float>(num(msg, "outputGain", p.stOutputGainDb));
+            p.stBalanceIn = static_cast<float>(num(msg, "balanceIn", p.stBalanceIn));
+            p.stBalanceOut = static_cast<float>(num(msg, "balanceOut", p.stBalanceOut));
+            p.stSoftclip = num(msg, "softclip", p.stSoftclip) != 0.0 ? 1 : 0;
+            p.stMutel = num(msg, "mutel", p.stMutel) != 0.0 ? 1 : 0;
+            p.stMuter = num(msg, "muter", p.stMuter) != 0.0 ? 1 : 0;
+            p.stPhasel = num(msg, "phasel", p.stPhasel) != 0.0 ? 1 : 0;
+            p.stPhaser = num(msg, "phaser", p.stPhaser) != 0.0 ? 1 : 0;
+            p.stMode = static_cast<int32_t>(num(msg, "mode", p.stMode));
+            p.stSlevDb = static_cast<float>(num(msg, "slev", p.stSlevDb));
+            p.stSbal = static_cast<float>(num(msg, "sbal", p.stSbal));
+            p.stMlevDb = static_cast<float>(num(msg, "mlev", p.stMlevDb));
+            p.stMpan = static_cast<float>(num(msg, "mpan", p.stMpan));
+            p.stStereoBase = static_cast<float>(num(msg, "stereoBase", p.stStereoBase));
+            p.stDelayMs = static_cast<float>(num(msg, "delay", p.stDelayMs));
+            p.stScLevel = static_cast<float>(num(msg, "scLevel", p.stScLevel));
+            p.stStereoPhase = static_cast<float>(num(msg, "stereoPhase", p.stStereoPhase));
+            p.stDryDb = static_cast<float>(num(msg, "dry", p.stDryDb));
+            p.stWetDb = static_cast<float>(num(msg, "wet", p.stWetDb));
         } else if (type == "set_magic") {
             p.magicAmount = static_cast<float>(num(msg, "amount", p.magicAmount));
             p.magicCompare = num(msg, "compare", p.magicCompare) != 0.0 ? 1 : 0;
@@ -2186,6 +2224,8 @@ public:
         s += ",\"mono\":"; s += p.has(kFlagMono) ? "1" : "0";
         s += ",\"autogain\":"; s += p.has(kFlagAutogain) ? "1" : "0";
         s += ",\"outstage\":"; s += p.has(kFlagOutStage) ? "1" : "0";
+        s += ",\"loudness\":"; s += p.has(kFlagLoudness) ? "1" : "0";
+        s += ",\"stereo\":"; s += p.has(kFlagStereoTools) ? "1" : "0";
         s += "},\"crossfeedPreset\":" + std::to_string(p.crossfeedPreset);
         s += ",\"eqMode\":" + std::to_string(p.eqMode);
         s += ",\"decramp\":" + std::to_string(p.eqDecramp);
@@ -2227,7 +2267,36 @@ public:
         s += ",\"character\":" + std::to_string(p.magicCharacter);
         s += ",\"content\":" + std::to_string(p.magicContent) + '}';
         s += ",\"ab\":{\"eq\":" + std::to_string(p.eqCompare) + ",\"conv\":" + std::to_string(p.convCompare) +
-             ",\"bass\":" + std::to_string(p.bassCompare) + ",\"mono\":" + std::to_string(p.monoCompare) + '}';
+             ",\"bass\":" + std::to_string(p.bassCompare) + ",\"mono\":" + std::to_string(p.monoCompare) +
+             ",\"loudness\":" + std::to_string(p.loudCompare) + ",\"stereo\":" + std::to_string(p.stCompare) + '}';
+        s += ",\"loudness\":{\"volume\":"; appendFloat(s, p.loudVolumeDb, 2);
+        s += ",\"inputGain\":"; appendFloat(s, p.loudInputDb, 2);
+        s += ",\"outputGain\":"; appendFloat(s, p.loudOutputDb, 2);
+        s += ",\"std\":" + std::to_string(p.loudStd);
+        s += ",\"mode\":" + std::to_string(p.loudMode);
+        s += ",\"hclip\":" + std::to_string(p.loudHclip);
+        s += ",\"hclipRange\":"; appendFloat(s, p.loudHclipRangeDb, 1);
+        s += ",\"approx\":" + std::to_string(p.loudApprox) + '}';
+        s += ",\"stereo\":{\"inputGain\":"; appendFloat(s, p.stInputGainDb, 2);
+        s += ",\"outputGain\":"; appendFloat(s, p.stOutputGainDb, 2);
+        s += ",\"balanceIn\":"; appendFloat(s, p.stBalanceIn, 2);
+        s += ",\"balanceOut\":"; appendFloat(s, p.stBalanceOut, 2);
+        s += ",\"softclip\":" + std::to_string(p.stSoftclip);
+        s += ",\"mutel\":" + std::to_string(p.stMutel);
+        s += ",\"muter\":" + std::to_string(p.stMuter);
+        s += ",\"phasel\":" + std::to_string(p.stPhasel);
+        s += ",\"phaser\":" + std::to_string(p.stPhaser);
+        s += ",\"mode\":" + std::to_string(p.stMode);
+        s += ",\"slev\":"; appendFloat(s, p.stSlevDb, 2);
+        s += ",\"sbal\":"; appendFloat(s, p.stSbal, 2);
+        s += ",\"mlev\":"; appendFloat(s, p.stMlevDb, 2);
+        s += ",\"mpan\":"; appendFloat(s, p.stMpan, 2);
+        s += ",\"stereoBase\":"; appendFloat(s, p.stStereoBase, 2);
+        s += ",\"delay\":"; appendFloat(s, p.stDelayMs, 2);
+        s += ",\"scLevel\":"; appendFloat(s, p.stScLevel, 1);
+        s += ",\"stereoPhase\":"; appendFloat(s, p.stStereoPhase, 1);
+        s += ",\"dry\":"; appendFloat(s, p.stDryDb, 2);
+        s += ",\"wet\":"; appendFloat(s, p.stWetDb, 2); s += '}';
         s += ",\"monoBass\":{\"subsonicHz\":" + std::to_string(p.subsonicHz);
         s += ",\"amount\":"; appendFloat(s, p.monoAmount, 1);
         s += ",\"freqHz\":"; appendFloat(s, p.monoFreqHz, 0); s += '}';
