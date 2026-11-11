@@ -81,7 +81,8 @@ endif()
 add_library(aq_lsp STATIC ${AQ_LSP_COMMON} ${AQ_LSP_LLTL} ${AQ_LSP_RUNTIME} ${AQ_LSP_UNITS} ${AQ_LSP_DSP})
 target_include_directories(aq_lsp SYSTEM PUBLIC
     ${LSP}/lsp-common-lib/include ${LSP}/lsp-dsp-lib/include ${LSP}/lsp-lltl-lib/include
-    ${LSP}/lsp-runtime-lib/include ${LSP}/lsp-dsp-units/include)
+    ${LSP}/lsp-runtime-lib/include ${LSP}/lsp-dsp-units/include
+    ${LSP}/lsp-plugins-loud-comp/include)
 target_compile_definitions(aq_lsp PUBLIC
     LSP_COMMON_LIB_BUILTIN LSP_DSP_LIB_BUILTIN LSP_LLTL_LIB_BUILTIN LSP_RUNTIME_LIB_BUILTIN LSP_DSP_UNITS_BUILTIN
     USE_LSP_COMMON_LIB USE_LSP_DSP_LIB USE_LSP_LLTL_LIB USE_LSP_RUNTIME_LIB)

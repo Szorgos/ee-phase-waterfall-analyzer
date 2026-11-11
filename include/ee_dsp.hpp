@@ -11,6 +11,7 @@
  *   - BassEnhancer:  Calf Bass Enhancer (tap_distortion + RBJ biquadok)
  *   - Crossfeed:     libbs2b
  *   - Convolver:     zita-convolver (FFTW3), IR újramintavételezés SpeexDSP-vel, EasyEffects kernel-előkészítés
+ *   - Loudness:      LSP Loudness Compensator (lsp-plugins-loud-comp loud_comp), ISO 226 görbék, IIR vagy FFT mód
  *
  * A process() függvények valós idejű szálból hívhatók (nem foglalnak memóriát, nem várnak zárra).
  * A konvolver példányokat (FFTW tervek, zita szálak) kizárólag a háttérszál hozza létre és szabadítja fel.
@@ -181,6 +182,35 @@ private:
     std::unique_ptr<Impl> p_;
     uint32_t quantum_ = 0;
     std::atomic<bool> failed_{false};
+};
+
+// ============================================================ Loudness (LSP loud_comp)
+class Loudness {
+public:
+    Loudness();
+    ~Loudness();
+    Loudness(const Loudness&) = delete;
+    Loudness& operator=(const Loudness&) = delete;
+
+    /** Nem valós idejű: mintavételi frekvencia beállítása. */
+    void setSampleRate(uint32_t sr);
+    /** Beállítások átvétele (valós idejű szálból is hívható). */
+    void update(const ParamData& d);
+    /** Helyben végzett sztereó feldolgozás. */
+    void process(float* L, float* R, size_t n);
+    /** Késleltetés mintában (IIR: 0, FFT: FFT méret). */
+    size_t latency() const;
+    void reset();
+    /** A görbe számított kimeneti maximális erősítése lineárisan (EasyEffects outGain). */
+    float outputGain() const;
+    /** Hard-clipping határolás történt-e (a jelzés bekapcsolva marad, amíg nem törlik, mint az LSP-ben). */
+    bool isClipping() const;
+    /** Hard-clipping jelzés törlése (LSP hcclean megfelelője). */
+    void clearClipping();
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> p_;
 };
 
 } // namespace ee_analyzer::ee

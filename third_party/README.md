@@ -10,6 +10,7 @@ kivéve ahol jelölve van; mindegyik a saját licencével.
 | `lsp/lsp-lltl-lib` | https://github.com/lsp-plugins/lsp-lltl-lib | 1.0.33 | LGPL-3.0-or-later |
 | `lsp/lsp-runtime-lib` | https://github.com/lsp-plugins/lsp-runtime-lib | 1.0.36 | LGPL-3.0-or-later |
 | `lsp/lsp-dsp-units` | https://github.com/lsp-plugins/lsp-dsp-units | 1.0.38 | LGPL-3.0-or-later |
+| `lsp/lsp-plugins-loud-comp` | https://github.com/lsp-plugins/lsp-plugins-loud-comp (62fcd91): csak az ISO 226 görbetáblázatok (`include/generated/iso226/`) és a licencek (`COPYING`, `COPYING.LESSER`); a `plug-fw` keretrendszer, a felületi kód, a build szkriptek és az Eclipse fájlok kimaradtak | 1.0.36 | LGPL-3.0-or-later |
 | `calf` | https://github.com/calf-studio-gear/calf (a1f87a4): `biquad.h`, `primitives.h`; a Bass Enhancer kódja `calf_bass_enhancer.h`-ban (LV2 port- és mérőkód nélkül) | | LGPL-2.1-or-later |
 | `libbs2b` | https://github.com/alexmarsev/libbs2b | 3.1.0 | MIT |
 | `libebur128` | https://github.com/jiixyj/libebur128 (67b33ab): EBU R128 / ITU-R BS.1770 hangosságmérés (Autogain); a `queue/sys/queue.h` a mingw-hez kell | 1.2.6 | MIT (`libebur128/COPYING`) |
@@ -38,3 +39,6 @@ https://www.fftw.org/fftw-3.3.10.tar.gz forrás épül be (`-DAQULIFY_FFTW_SOURC
 
 Az LSP pluginok (para_equalizer 1.0.40, limiter 1.0.37) beállítás-feldolgozó kódjának átvett részei:
 `src/ee_dsp_lsp.cpp`.
+
+Az LSP loud_comp (1.0.36) beállítás- és görbe-feldolgozó kódjának átvett részei:
+`src/ee_dsp_loudness.cpp` (az `include/private/meta/loud_comp.h` 32-62. soraiból a tartományok és konstansok, az `src/main/plug/loud_comp.cpp` 437-713. és 815-912. soraiból a görbeinterpoláció, a 64 Linkwitz-Riley sáv frekvencia- és jelszint-számítása, valamint a spektrális konvolúció és a hard-clipping; a `plug-fw` keretrendszer nélkül).

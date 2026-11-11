@@ -24,7 +24,7 @@ namespace ee_analyzer {
 constexpr uint32_t kMaxEqBands = 32;
 
 /** A params.bin fájl és a közös memória paraméter-formátumának verziója. */
-constexpr uint32_t kParamLayoutVersion = 12;
+constexpr uint32_t kParamLayoutVersion = 13;
 
 enum ParamFlags : uint32_t {
     kFlagEq        = 1u << 0,
@@ -36,6 +36,7 @@ enum ParamFlags : uint32_t {
     kFlagMono      = 1u << 6,   // Mono és mélyvágás (mono_bass.hpp)
     kFlagAutogain  = 1u << 7,   // Autogain (autogain.hpp)
     kFlagOutStage  = 1u << 8,   // Kimeneti fokozat: csatornánkénti késleltetés / szint / polaritás és dither (out_stage.hpp)
+    kFlagLoudness  = 1u << 9,   // Loudness (ISO 226, LSP loud_comp)
     kFlagInitialized = 1u << 31, // a GUI legalább egyszer beállította
 };
 
@@ -149,6 +150,17 @@ struct ParamData {
     int32_t chInvert[2] = { 0, 0 };        // polaritásfordítás csatornánként
     int32_t ditherMode = 0;                // 0 = ki, 1 = TPDF, 2 = zajformált (TPDF + hibavisszacsatolás)
     int32_t ditherBits = 24;               // 16 vagy 24: a hangkártya bitmélysége
+
+    // --- Loudness (LSP loud_comp, a v13-ban került a végére) ---
+    float loudVolumeDb = 0.0f;             // -83.0 .. 7.0 dB: hangerőszint (EasyEffects "volume")
+    float loudInputDb = 0.0f;              // -36.0 .. 36.0 dB: bemeneti erősítés (EasyEffects "input-gain")
+    float loudOutputDb = 0.0f;             // -36.0 .. 36.0 dB: kimeneti erősítés (EasyEffects "output-gain")
+    int32_t loudStd = 1;                   // 0..4: görbeszabvány (0 = Flat, 1 = ISO 226:2003 [alapérték], 2 = Fletcher-Munson, 3 = Robinson-Dadson, 4 = ISO 226:2023)
+    int32_t loudMode = 5;                  // 0..7: üzemmód (0 = IIR [Zero Latency], 1 = FFT 256, 2 = FFT 512, 3 = FFT 1024, 4 = FFT 2048, 5 = FFT 4096 [alapérték], 6 = FFT 8192, 7 = FFT 16384)
+    int32_t loudHclip = 0;                 // 0..1: hard-clipping védelem (0 = ki, 1 = be)
+    float loudHclipRangeDb = 6.0f;         // 0.0 .. 24.0 dB: clipping térköz (EasyEffects "clipping-range", alapérték: 6 dB)
+    int32_t loudCompare = 0;               // 0..1: A/B összehasonlítás (1 = az eredeti jel szól, a loudness késleltetésével kiegyenlítve)
+    int32_t loudApprox = 2;                // 0..4: IIR közelítési fokozat (0 = Fastest [16], 1 = Low [24], 2 = Normal [32, alapérték], 3 = High [48], 4 = Best [64 szűrő])
 
     bool has(uint32_t f) const { return (flags & f) != 0; }
     void set(uint32_t f, bool on) { flags = on ? (flags | f) : (flags & ~f); }
@@ -267,6 +279,15 @@ inline void sanitizeParams(ParamData& d) {
     }
     ci(d.ditherMode, 0, 2);
     d.ditherBits = d.ditherBits == 16 ? 16 : 24;
+    cl(d.loudVolumeDb, -83.0f, 7.0f, 0.0f);
+    cl(d.loudInputDb, -36.0f, 36.0f, 0.0f);
+    cl(d.loudOutputDb, -36.0f, 36.0f, 0.0f);
+    ci(d.loudStd, 0, 4);
+    ci(d.loudMode, 0, 7);
+    ci(d.loudHclip, 0, 1);
+    cl(d.loudHclipRangeDb, 0.0f, 24.0f, 6.0f);
+    ci(d.loudCompare, 0, 1);
+    ci(d.loudApprox, 0, 4);
 }
 
 /** A params.bin v4 mérete: a Magic Touch mezői előtti rész (v5-ben ezek a végére kerültek). */
@@ -285,6 +306,8 @@ constexpr size_t kParamSizeV9 = offsetof(ParamData, agcTargetLufs);
 constexpr size_t kParamSizeV10 = offsetof(ParamData, monoFreqHz);
 /** A params.bin v11 mérete: a kimeneti fokozat (v12-ben) mezői előtti rész. */
 constexpr size_t kParamSizeV11 = offsetof(ParamData, chDelayMs);
+/** A params.bin v12 mérete: a Loudness mezői (v13-ban) előtti rész. */
+constexpr size_t kParamSizeV12 = offsetof(ParamData, loudVolumeDb);
 
 // ------------------------------------------------------------------ régi (v2/v3) params.bin átvétele
 
@@ -309,9 +332,10 @@ struct ParamDataV3 {
  */
 inline bool loadParamBytes(const char* bytes, size_t len, uint32_t version, uint32_t size, ParamData& out) {
     if (size > len) return false;
-    if (version == kParamLayoutVersion || version == 11 || version == 10 || version == 9 || version == 8 || version == 7 || version == 6 ||
+    if (version == kParamLayoutVersion || version == 12 || version == 11 || version == 10 || version == 9 || version == 8 || version == 7 || version == 6 ||
         version == 5 || version == 4) {
-        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : version == 11 ? kParamSizeV11
+        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : version == 12 ? kParamSizeV12
+                          : version == 11 ? kParamSizeV11
                           : version == 10 ? kParamSizeV10
                           : version == 9 ? kParamSizeV9 : version == 8 ? kParamSizeV8
                           : version == 7 ? kParamSizeV7 : version == 6 ? kParamSizeV6 : version == 5 ? kParamSizeV5 : kParamSizeV4;
@@ -319,6 +343,7 @@ inline bool loadParamBytes(const char* bytes, size_t len, uint32_t version, uint
         ParamData d{};
         std::memcpy(static_cast<void*>(&d), bytes, want);
         d.magicCompare = 0;   // az A/B összehasonlítás nem marad bekapcsolva újraindítás után
+        d.loudCompare = 0;
         sanitizeParams(d);
         out = d;
         return true;
