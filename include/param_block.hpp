@@ -24,7 +24,7 @@ namespace ee_analyzer {
 constexpr uint32_t kMaxEqBands = 32;
 
 /** A params.bin fájl és a közös memória paraméter-formátumának verziója. */
-constexpr uint32_t kParamLayoutVersion = 13;
+constexpr uint32_t kParamLayoutVersion = 14;
 
 enum ParamFlags : uint32_t {
     kFlagEq        = 1u << 0,
@@ -37,6 +37,7 @@ enum ParamFlags : uint32_t {
     kFlagAutogain  = 1u << 7,   // Autogain (autogain.hpp)
     kFlagOutStage  = 1u << 8,   // Kimeneti fokozat: csatornánkénti késleltetés / szint / polaritás és dither (out_stage.hpp)
     kFlagLoudness  = 1u << 9,   // Loudness (ISO 226, LSP loud_comp)
+    kFlagStereoTools = 1u << 10, // Stereo Tools (Calf Stereo Tools)
     kFlagInitialized = 1u << 31, // a GUI legalább egyszer beállította
 };
 
@@ -161,6 +162,29 @@ struct ParamData {
     float loudHclipRangeDb = 6.0f;         // 0.0 .. 24.0 dB: clipping térköz (EasyEffects "clipping-range", alapérték: 6 dB)
     int32_t loudCompare = 0;               // 0..1: A/B összehasonlítás (1 = az eredeti jel szól, a loudness késleltetésével kiegyenlítve)
     int32_t loudApprox = 2;                // 0..4: IIR közelítési fokozat (0 = Fastest [16], 1 = Low [24], 2 = Normal [32, alapérték], 3 = High [48], 4 = Best [64 szűrő])
+
+    // --- Stereo Tools (Calf Stereo Tools, a v14-ben került a végére) ---
+    float stInputGainDb = 0.0f;            // -36.0 .. 36.0 dB (EasyEffects "input-gain", alap: 0.0 dB)
+    float stOutputGainDb = 0.0f;           // -36.0 .. 36.0 dB (EasyEffects "output-gain", alap: 0.0 dB)
+    float stBalanceIn = 0.0f;              // -1.0 .. 1.0 (EasyEffects / Calf "balance-in", alap: 0.0)
+    float stBalanceOut = 0.0f;             // -1.0 .. 1.0 (EasyEffects / Calf "balance-out", alap: 0.0)
+    int32_t stSoftclip = 0;                // 0..1 (EasyEffects / Calf "softclip", alap: 0)
+    int32_t stMutel = 0;                   // 0..1 (EasyEffects / Calf "mutel", alap: 0)
+    int32_t stMuter = 0;                   // 0..1 (EasyEffects / Calf "muter", alap: 0)
+    int32_t stPhasel = 0;                  // 0..1 (EasyEffects / Calf "phasel", alap: 0)
+    int32_t stPhaser = 0;                  // 0..1 (EasyEffects / Calf "phaser", alap: 0)
+    int32_t stMode = 0;                    // 0..6 (EasyEffects / Calf "mode", 0 = "LR > LR", alap: 0)
+    float stSlevDb = 0.0f;                 // -36.0 .. 36.0 dB (EasyEffects "slev", alap: 0.0 dB)
+    float stSbal = 0.0f;                   // -1.0 .. 1.0 (EasyEffects / Calf "sbal", alap: 0.0)
+    float stMlevDb = 0.0f;                 // -36.0 .. 36.0 dB (EasyEffects "mlev", alap: 0.0 dB)
+    float stMpan = 0.0f;                   // -1.0 .. 1.0 (EasyEffects / Calf "mpan", alap: 0.0)
+    float stStereoBase = 0.0f;             // -1.0 .. 1.0 (EasyEffects / Calf "stereo-base", alap: 0.0)
+    float stDelayMs = 0.0f;                // -20.0 .. 20.0 ms (EasyEffects / Calf "delay", alap: 0.0 ms)
+    float stScLevel = 1.0f;                // 1.0 .. 100.0 (EasyEffects / Calf "sc-level", alap: 1.0)
+    float stStereoPhase = 0.0f;            // 0.0 .. 360.0 deg (EasyEffects / Calf "stereo-phase", alap: 0.0 deg)
+    float stDryDb = -100.0f;               // -100.0 .. 20.0 dB (EasyEffects "dry", alap: -100.0 dB)
+    float stWetDb = 0.0f;                  // -100.0 .. 20.0 dB (EasyEffects "wet", alap: 0.0 dB)
+    int32_t stCompare = 0;                 // 0..1: A/B összehasonlítás (1 = az eredeti jel szól kiegyenlítve)
 
     bool has(uint32_t f) const { return (flags & f) != 0; }
     void set(uint32_t f, bool on) { flags = on ? (flags | f) : (flags & ~f); }
@@ -288,6 +312,27 @@ inline void sanitizeParams(ParamData& d) {
     cl(d.loudHclipRangeDb, 0.0f, 24.0f, 6.0f);
     ci(d.loudCompare, 0, 1);
     ci(d.loudApprox, 0, 4);
+    cl(d.stInputGainDb, -36.0f, 36.0f, 0.0f);
+    cl(d.stOutputGainDb, -36.0f, 36.0f, 0.0f);
+    cl(d.stBalanceIn, -1.0f, 1.0f, 0.0f);
+    cl(d.stBalanceOut, -1.0f, 1.0f, 0.0f);
+    ci(d.stSoftclip, 0, 1);
+    ci(d.stMutel, 0, 1);
+    ci(d.stMuter, 0, 1);
+    ci(d.stPhasel, 0, 1);
+    ci(d.stPhaser, 0, 1);
+    ci(d.stMode, 0, 6);
+    cl(d.stSlevDb, -36.0f, 36.0f, 0.0f);
+    cl(d.stSbal, -1.0f, 1.0f, 0.0f);
+    cl(d.stMlevDb, -36.0f, 36.0f, 0.0f);
+    cl(d.stMpan, -1.0f, 1.0f, 0.0f);
+    cl(d.stStereoBase, -1.0f, 1.0f, 0.0f);
+    cl(d.stDelayMs, -20.0f, 20.0f, 0.0f);
+    cl(d.stScLevel, 1.0f, 100.0f, 1.0f);
+    cl(d.stStereoPhase, 0.0f, 360.0f, 0.0f);
+    cl(d.stDryDb, -100.0f, 20.0f, -100.0f);
+    cl(d.stWetDb, -100.0f, 20.0f, 0.0f);
+    ci(d.stCompare, 0, 1);
 }
 
 /** A params.bin v4 mérete: a Magic Touch mezői előtti rész (v5-ben ezek a végére kerültek). */
@@ -308,6 +353,8 @@ constexpr size_t kParamSizeV10 = offsetof(ParamData, monoFreqHz);
 constexpr size_t kParamSizeV11 = offsetof(ParamData, chDelayMs);
 /** A params.bin v12 mérete: a Loudness mezői (v13-ban) előtti rész. */
 constexpr size_t kParamSizeV12 = offsetof(ParamData, loudVolumeDb);
+/** A params.bin v13 mérete: a Stereo Tools mezői (v14-ben) előtti rész. */
+constexpr size_t kParamSizeV13 = offsetof(ParamData, stInputGainDb);
 
 // ------------------------------------------------------------------ régi (v2/v3) params.bin átvétele
 
@@ -332,9 +379,9 @@ struct ParamDataV3 {
  */
 inline bool loadParamBytes(const char* bytes, size_t len, uint32_t version, uint32_t size, ParamData& out) {
     if (size > len) return false;
-    if (version == kParamLayoutVersion || version == 12 || version == 11 || version == 10 || version == 9 || version == 8 || version == 7 || version == 6 ||
+    if (version == kParamLayoutVersion || version == 13 || version == 12 || version == 11 || version == 10 || version == 9 || version == 8 || version == 7 || version == 6 ||
         version == 5 || version == 4) {
-        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : version == 12 ? kParamSizeV12
+        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : version == 13 ? kParamSizeV13 : version == 12 ? kParamSizeV12
                           : version == 11 ? kParamSizeV11
                           : version == 10 ? kParamSizeV10
                           : version == 9 ? kParamSizeV9 : version == 8 ? kParamSizeV8
@@ -344,6 +391,7 @@ inline bool loadParamBytes(const char* bytes, size_t len, uint32_t version, uint
         std::memcpy(static_cast<void*>(&d), bytes, want);
         d.magicCompare = 0;   // az A/B összehasonlítás nem marad bekapcsolva újraindítás után
         d.loudCompare = 0;
+        d.stCompare = 0;
         sanitizeParams(d);
         out = d;
         return true;

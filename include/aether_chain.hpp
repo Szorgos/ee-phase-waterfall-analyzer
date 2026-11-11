@@ -153,6 +153,8 @@ public:
     double gainReductionDb() const { return current_.has(kFlagLimiter) ? -limiter_.gainReductionDb() : 0.0; }
     /** A Bass Enhancer által keltett felharmonikusok szintje dB-ben (a Calf "meter_drive"; kikapcsolva -100). */
     double bassHarmonicsDb() const { return current_.has(kFlagBass) ? bass_.harmonicsDb() : -100.0; }
+    float stereoToolsPhaseCorrelation() const { return current_.has(kFlagStereoTools) ? stereoTools_.phaseCorrelation() : 0.0f; }
+    size_t stereoToolsLatencySamples() const { return current_.has(kFlagStereoTools) ? stereoTools_.latency() : 0; }
     size_t limiterLatencySamples() const { return current_.has(kFlagLimiter) ? limiter_.latency() : 0; }
     /** Az Autogain pillanatnyi erősítése dB-ben (0 = nincs változtatás). A valós idejű szál írja, ezért csak leállított láncnál olvasd. */
     double autogainDb() const { return autogain_.gainDb(); }
@@ -169,7 +171,7 @@ public:
 
     /** Módosítja-e a lánc a jelet (ha nem, a kimenet bitpontos, és a dither sem fut). */
     static bool modifiesSignal(const ParamData& d) {
-        const uint32_t mods = kFlagEq | kFlagLoudness | kFlagBass | kFlagMono | kFlagCrossfeed | kFlagConvolver | kFlagLimiter | kFlagAutogain;
+        const uint32_t mods = kFlagEq | kFlagLoudness | kFlagBass | kFlagStereoTools | kFlagMono | kFlagCrossfeed | kFlagConvolver | kFlagLimiter | kFlagAutogain;
         return (d.flags & mods) != 0 || magicActive(d) || (d.has(kFlagOutStage) && !outstage::OutStage::neutral(d));
     }
 
@@ -178,12 +180,14 @@ public:
         eq_.reset();
         loudness_.reset();
         bass_.reset();
+        stereoTools_.reset();
         monoBass_.reset();
         autogain_.reset();
         abEq_.reset();
         abLoud_.reset();
         abConv_.reset();
         abBass_.reset();
+        abStereoTools_.reset();
         abMono_.reset();
         crossfeed_.reset();
         limiter_.reset();
@@ -208,12 +212,14 @@ private:
         loudness_.setSampleRate(sr);
         limiter_.setSampleRate(sr);
         bass_.setSampleRate(sr);
+        stereoTools_.setSampleRate(sr);
         monoBass_.setSampleRate(sr);
         autogain_.setSampleRate(sr);
         abEq_.setSampleRate(sr, kChunk);
         abLoud_.setSampleRate(sr, kChunk);
         abConv_.setSampleRate(sr, kChunk);
         abBass_.setSampleRate(sr, kChunk);
+        abStereoTools_.setSampleRate(sr, kChunk);
         abMono_.setSampleRate(sr, kChunk);
         crossfeed_.setSampleRate(sr);
         outStage_.setSampleRate(sr);
@@ -234,7 +240,7 @@ private:
 
     /** Kell-e kattanásmentes (le-fel úsztatott) váltás a két beállítás között. */
     static bool needsDeclick(const ParamData& a, const ParamData& b) {
-        const uint32_t mods = kFlagEq | kFlagLoudness | kFlagBass | kFlagMono | kFlagCrossfeed | kFlagConvolver | kFlagLimiter | kFlagAutogain |
+        const uint32_t mods = kFlagEq | kFlagLoudness | kFlagBass | kFlagStereoTools | kFlagMono | kFlagCrossfeed | kFlagConvolver | kFlagLimiter | kFlagAutogain |
                               kFlagOutStage;
         if ((a.flags & mods) != (b.flags & mods)) return true;
         if (b.has(kFlagOutStage) && (a.chDelayMs[0] != b.chDelayMs[0] || a.chDelayMs[1] != b.chDelayMs[1])) return true;
@@ -262,6 +268,7 @@ private:
         if (loudnessWasReset_) loudness_.reset();
         if (current_.has(kFlagLimiter)) limiter_.reset();
         if (current_.has(kFlagBass) && !old.has(kFlagBass)) bass_.reset();
+        if (current_.has(kFlagStereoTools) && !old.has(kFlagStereoTools)) stereoTools_.reset();
         if (current_.has(kFlagMono) && !old.has(kFlagMono)) monoBass_.reset();
         if (current_.has(kFlagAutogain) && !old.has(kFlagAutogain)) autogain_.reset();
         if (current_.has(kFlagCrossfeed) && !old.has(kFlagCrossfeed)) crossfeed_.reset();
@@ -327,6 +334,7 @@ private:
         eq_.update(d);
         loudness_.update(d);
         bass_.update(d);
+        stereoTools_.update(d);
         monoBass_.update(d);
         autogain_.update(d);
         crossfeed_.update(d);
@@ -424,6 +432,8 @@ private:
         // A Bass Enhancer és a Mono nem késleltet: az A/B eredeti ága késleltetés nélkül illeszkedik
         if (d.has(kFlagBass)) abBass_.process(L, R, m, 0, d.bassCompare != 0,
                                               [this](float* a, float* b, size_t n) { bass_.process(a, b, n); });
+        if (d.has(kFlagStereoTools)) abStereoTools_.process(L, R, m, 0, d.stCompare != 0,
+                                                            [this](float* a, float* b, size_t n) { stereoTools_.process(a, b, n); });
         if (d.has(kFlagMono)) abMono_.process(L, R, m, 0, d.monoCompare != 0,
                                               [this](float* a, float* b, size_t n) { monoBass_.process(a, b, n); });
         if (d.has(kFlagCrossfeed)) crossfeed_.process(L, R, m);
@@ -586,9 +596,10 @@ private:
     ee::Equalizer eq_;
     ee::Loudness loudness_;
     ee::BassEnhancer bass_;
+    ee::StereoTools stereoTools_;
     mono::MonoBass monoBass_;
     agc::Autogain autogain_;
-    abcmp::AbCompare abEq_, abLoud_, abConv_, abBass_, abMono_;
+    abcmp::AbCompare abEq_, abLoud_, abConv_, abBass_, abStereoTools_, abMono_;
     ee::Crossfeed crossfeed_;
     ee::Limiter limiter_;
     outstage::OutStage outStage_;

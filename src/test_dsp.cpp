@@ -2340,6 +2340,709 @@ static void testLoudness() {
     }
 }
 
+
+static void testStereoTools() {
+    std::printf("\n--- Stereo Tools (Calf stereo_audio_module, EasyEffects modell) ---\n");
+    const double sr = 48000.0;
+
+    // 1. Késleltetés ellenőrzése (Zero Latency)
+    {
+        ee::StereoTools st;
+        st.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagStereoTools, true);
+        st.update(d);
+        CHECK(st.latency() == 0, "Stereo Tools statikus késleltetése pontosan 0 minta (Zero Latency)");
+    }
+
+    // 2. Balansz tesztek: balance-in és balance-out (-1, -0.5, +0.5, +1)
+    {
+        ee::StereoTools st;
+        st.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagStereoTools, true);
+
+        // balance-in (-1, -0.5, +0.5, +1)
+        // formula: L *= (1 - max(0, b_in)), R *= (1 + min(0, b_in))
+        const float inVals[] = { -1.0f, -0.5f, 0.5f, 1.0f };
+        const float expInL[] = {  1.0f,  1.0f, 0.5f, 0.0f };
+        const float expInR[] = {  0.0f,  0.5f, 1.0f, 1.0f };
+        for (int i = 0; i < 4; ++i) {
+            d.stBalanceIn = inVals[i];
+            d.stBalanceOut = 0.0f;
+            st.update(d);
+            std::vector<float> L = { 1.0f }, R = { 1.0f };
+            st.process(L.data(), R.data(), 1);
+            CHECK(std::abs(L[0] - expInL[i]) < 1e-5f && std::abs(R[0] - expInR[i]) < 1e-5f,
+                  "balance-in = %+.1f: L = %.2f, R = %.2f (várt %.2f, %.2f)",
+                  inVals[i], L[0], R[0], expInL[i], expInR[i]);
+        }
+
+        // balance-out (-1, -0.5, +0.5, +1)
+        // formula: L *= (1 - max(0, b_out)), R *= (1 + min(0, b_out))
+        d.stBalanceIn = 0.0f;
+        const float outVals[] = { -1.0f, -0.5f, 0.5f, 1.0f };
+        const float expOutL[] = {  1.0f,  1.0f, 0.5f, 0.0f };
+        const float expOutR[] = {  0.0f,  0.5f, 1.0f, 1.0f };
+        for (int i = 0; i < 4; ++i) {
+            d.stBalanceOut = outVals[i];
+            st.update(d);
+            std::vector<float> L = { 1.0f }, R = { 1.0f };
+            st.process(L.data(), R.data(), 1);
+            CHECK(std::abs(L[0] - expOutL[i]) < 1e-5f && std::abs(R[0] - expOutR[i]) < 1e-5f,
+                  "balance-out = %+.1f: L = %.2f, R = %.2f (várt %.2f, %.2f)",
+                  outVals[i], L[0], R[0], expOutL[i], expOutR[i]);
+        }
+    }
+
+    // 3. sbal és mpan tesztek (-1, -0.5, +0.5, +1)
+    {
+        ee::StereoTools st;
+        st.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagStereoTools, true);
+        d.stMode = 0; // LR > LR
+
+        // sbal vizsgálata tiszta Side jelen: L = 1.0, R = -1.0 -> m = 0, s = 1.0
+        // formula: l = s * min(1, 2 - (1+sbal)), r = -s * min(1, 1+sbal)
+        const float sbalVals[] = { -1.0f, -0.5f,  0.5f,  1.0f };
+        const float expSbL[]   = {  1.0f,  1.0f,  0.5f,  0.0f };
+        const float expSbR[]   = {  0.0f, -0.5f, -1.0f, -1.0f };
+        for (int i = 0; i < 4; ++i) {
+            d.stSbal = sbalVals[i];
+            d.stMpan = 0.0f;
+            st.update(d);
+            std::vector<float> L = { 1.0f }, R = { -1.0f };
+            st.process(L.data(), R.data(), 1);
+            CHECK(std::abs(L[0] - expSbL[i]) < 1e-5f && std::abs(R[0] - expSbR[i]) < 1e-5f,
+                  "sbal = %+.1f (tiszta Side bemenet): L = %.2f, R = %.2f (várt %.2f, %.2f)",
+                  sbalVals[i], L[0], R[0], expSbL[i], expSbR[i]);
+        }
+
+        // mpan vizsgálata tiszta Mid jelen: L = 1.0, R = 1.0 -> m = 1.0, s = 0
+        // formula: l = m * min(1, 2 - (1+mpan)), r = m * min(1, 1+mpan)
+        d.stSbal = 0.0f;
+        const float mpanVals[] = { -1.0f, -0.5f, 0.5f, 1.0f };
+        const float expMpL[]   = {  1.0f,  1.0f, 0.5f, 0.0f };
+        const float expMpR[]   = {  0.0f,  0.5f, 1.0f, 1.0f };
+        for (int i = 0; i < 4; ++i) {
+            d.stMpan = mpanVals[i];
+            st.update(d);
+            std::vector<float> L = { 1.0f }, R = { 1.0f };
+            st.process(L.data(), R.data(), 1);
+            CHECK(std::abs(L[0] - expMpL[i]) < 1e-5f && std::abs(R[0] - expMpR[i]) < 1e-5f,
+                  "mpan = %+.1f (tiszta Mid bemenet): L = %.2f, R = %.2f (várt %.2f, %.2f)",
+                  mpanVals[i], L[0], R[0], expMpL[i], expMpR[i]);
+        }
+    }
+
+    // 4. slev és mlev tesztek (±6.02 dB -> x2.0 / x0.5)
+    {
+        ee::StereoTools st;
+        st.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagStereoTools, true);
+        d.stMode = 0; // LR > LR
+
+        // mlev +6 dB (x2.0) és -6 dB (x0.5) tiszta Mid jelen (L=1.0, R=1.0)
+        d.stMlevDb = 6.0205999f;
+        st.update(d);
+        std::vector<float> L = { 1.0f }, R = { 1.0f };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 2.0f) < 1e-4f && std::abs(R[0] - 2.0f) < 1e-4f,
+              "mlev = +6 dB: Mid szint megduplázva (L = %.2f, R = %.2f, várt 2.00)", L[0], R[0]);
+
+        d.stMlevDb = -6.0205999f;
+        st.update(d);
+        L = { 1.0f }; R = { 1.0f };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 0.5f) < 1e-4f && std::abs(R[0] - 0.5f) < 1e-4f,
+              "mlev = -6 dB: Mid szint felezve (L = %.2f, R = %.2f, várt 0.50)", L[0], R[0]);
+
+        d.stMlevDb = 0.0f;
+
+        // slev +6 dB (x2.0) és -6 dB (x0.5) tiszta Side jelen (L=1.0, R=-1.0)
+        d.stSlevDb = 6.0205999f;
+        st.update(d);
+        L = { 1.0f }; R = { -1.0f };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 2.0f) < 1e-4f && std::abs(R[0] - (-2.0f)) < 1e-4f,
+              "slev = +6 dB: Side szint megduplázva (L = %.2f, R = %.2f, várt 2.00, -2.00)", L[0], R[0]);
+
+        d.stSlevDb = -6.0205999f;
+        st.update(d);
+        L = { 1.0f }; R = { -1.0f };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 0.5f) < 1e-4f && std::abs(R[0] - (-0.5f)) < 1e-4f,
+              "slev = -6 dB: Side szint felezve (L = %.2f, R = %.2f, várt 0.50, -0.50)", L[0], R[0]);
+    }
+
+    // 5. Mind a 7 mód (0..6) ismert bemenetekkel és Calf-képlet szerinti várt értékekkel
+    {
+        ee::StereoTools st;
+        st.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagStereoTools, true);
+
+        // Bemenet minden módhoz: L = 0.80, R = 0.20
+        const float inL = 0.80f, inR = 0.20f;
+
+        // Mode 0: LR > LR -> m = 0.5, s = 0.3 -> l = m + s = 0.80, r = m - s = 0.20
+        d.stMode = 0;
+        st.update(d);
+        std::vector<float> L = { inL }, R = { inR };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 0.80f) < 1e-5f && std::abs(R[0] - 0.20f) < 1e-5f,
+              "Mode 0 (LR > LR): átmenő sztereó (L = 0.80, R = 0.20)");
+
+        // Mode 1: LR > MS -> L' = (L+R)*0.5 = 0.50 (Mid), R' = (L-R)*0.5 = 0.30 (Side)
+        d.stMode = 1;
+        st.update(d);
+        L = { inL }; R = { inR };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 0.50f) < 1e-5f && std::abs(R[0] - 0.30f) < 1e-5f,
+              "Mode 1 (LR > MS): Mid = 0.50, Side = 0.30 (várt 0.50, 0.30)");
+
+        // Mode 2: MS > LR -> bemenet Mid = 0.50, Side = 0.30 -> L' = M+S = 0.80, R' = M-S = 0.20
+        d.stMode = 2;
+        st.update(d);
+        L = { 0.50f }; R = { 0.30f };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 0.80f) < 1e-5f && std::abs(R[0] - 0.20f) < 1e-5f,
+              "Mode 2 (MS > LR): visszaállítás L = 0.80, R = 0.20 (várt 0.80, 0.20)");
+
+        // Mode 3: LR > LL -> mindkét kimeneten L (0.80, 0.80)
+        d.stMode = 3;
+        st.update(d);
+        L = { inL }; R = { inR };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 0.80f) < 1e-5f && std::abs(R[0] - 0.80f) < 1e-5f,
+              "Mode 3 (LR > LL): mindkét kimeneten L (várt 0.80, 0.80)");
+
+        // Mode 4: LR > RR -> mindkét kimeneten R (0.20, 0.20)
+        d.stMode = 4;
+        st.update(d);
+        L = { inL }; R = { inR };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 0.20f) < 1e-5f && std::abs(R[0] - 0.20f) < 1e-5f,
+              "Mode 4 (LR > RR): mindkét kimeneten R (várt 0.20, 0.20)");
+
+        // Mode 5: LR > L+R -> monó összeg L' = R' = (0.80 + 0.20)*0.5 = 0.50
+        d.stMode = 5;
+        st.update(d);
+        L = { inL }; R = { inR };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 0.50f) < 1e-5f && std::abs(R[0] - 0.50f) < 1e-5f,
+              "Mode 5 (LR > L+R): monó összeg (várt 0.50, 0.50)");
+
+        // Mode 6: LR > RL -> felcserélt csatornák: L' = 0.20, R' = 0.80
+        d.stMode = 6;
+        st.update(d);
+        L = { inL }; R = { inR };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 0.20f) < 1e-5f && std::abs(R[0] - 0.80f) < 1e-5f,
+              "Mode 6 (LR > RL): csatornacsere (várt 0.20, 0.80)");
+
+        // LR > MS majd MS > LR oda-vissza láncolás (tetszőleges aszimmetrikus jelekre)
+        ee::StereoTools stEnc, stDec;
+        stEnc.setSampleRate(48000);
+        stDec.setSampleRate(48000);
+        ParamData dEnc = transparentParams();
+        dEnc.set(kFlagStereoTools, true);
+        dEnc.stMode = 1; // LR > MS
+        stEnc.update(dEnc);
+        ParamData dDec = transparentParams();
+        dDec.set(kFlagStereoTools, true);
+        dDec.stMode = 2; // MS > LR
+        stDec.update(dDec);
+
+        std::vector<float> origL = { 0.7314f, -0.4289f, 0.1234f, -0.9876f };
+        std::vector<float> origR = { -0.1982f, 0.6543f, -0.5678f, 0.4321f };
+        std::vector<float> chainL = origL, chainR = origR;
+        stEnc.process(chainL.data(), chainR.data(), chainL.size());
+        stDec.process(chainL.data(), chainR.data(), chainL.size());
+        float maxErr = 0.0f;
+        for (size_t i = 0; i < origL.size(); ++i) {
+            maxErr = std::max(maxErr, std::abs(chainL[i] - origL[i]));
+            maxErr = std::max(maxErr, std::abs(chainR[i] - origR[i]));
+        }
+        CHECK(maxErr < 1e-6f,
+              "LR > MS -> MS > LR oda-vissza: bitre visszaadja az eredeti sztereó jelet (max hiba %e)", maxErr);
+    }
+
+    // 6. mutel, muter, phasel, phaser külön-külön vizsgálva
+    {
+        ee::StereoTools st;
+        st.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagStereoTools, true);
+
+        const float inL = 0.60f, inR = 0.80f;
+
+        // mutel külön
+        d.stMutel = 1; d.stMuter = 0; d.stPhasel = 0; d.stPhaser = 0;
+        st.update(d);
+        std::vector<float> L = { inL }, R = { inR };
+        st.process(L.data(), R.data(), 1);
+        CHECK(L[0] == 0.0f && std::abs(R[0] - inR) < 1e-5f, "mutel külön: L = 0.00, R = 0.80 változatlan");
+
+        // muter külön
+        d.stMutel = 0; d.stMuter = 1; d.stPhasel = 0; d.stPhaser = 0;
+        st.update(d);
+        L = { inL }; R = { inR };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - inL) < 1e-5f && R[0] == 0.0f, "muter külön: L = 0.60 változatlan, R = 0.00");
+
+        // phasel külön
+        d.stMutel = 0; d.stMuter = 0; d.stPhasel = 1; d.stPhaser = 0;
+        st.update(d);
+        L = { inL }; R = { inR };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - (-inL)) < 1e-5f && std::abs(R[0] - inR) < 1e-5f,
+              "phasel külön: L = -0.60 fordított, R = +0.80 változatlan");
+
+        // phaser külön
+        d.stMutel = 0; d.stMuter = 0; d.stPhasel = 0; d.stPhaser = 1;
+        st.update(d);
+        L = { inL }; R = { inR };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - inL) < 1e-5f && std::abs(R[0] - (-inR)) < 1e-5f,
+              "phaser külön: L = +0.60 változatlan, R = -0.80 fordított");
+    }
+
+    // 7. Softclip: sc-level 1 és 10 mellett túlvezérelt jelre a Calf atan-képlet szerinti érték
+    // Calf: _inv_atan_shape = 1.0f / std::atan(sc_level); out = _inv_atan_shape * std::atan(in * sc_level);
+    {
+        ee::StereoTools st;
+        st.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagStereoTools, true);
+        d.stSoftclip = 1;
+
+        const float testIn = 10.0f;
+
+        // sc_level = 1.0f
+        d.stScLevel = 1.0f;
+        st.update(d);
+        const float exp1 = (1.0f / std::atan(1.0f)) * std::atan(testIn * 1.0f);
+        std::vector<float> L = { testIn }, R = { testIn };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - exp1) < 1e-4f && std::abs(R[0] - exp1) < 1e-4f,
+              "Softclip (sc-level = 1): in=%.1f -> várt %.4f, mért %.4f", testIn, exp1, L[0]);
+
+        // sc_level = 10.0f
+        d.stScLevel = 10.0f;
+        st.update(d);
+        const float exp10 = (1.0f / std::atan(10.0f)) * std::atan(testIn * 10.0f);
+        L = { testIn }; R = { testIn };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - exp10) < 1e-4f && std::abs(R[0] - exp10) < 1e-4f,
+              "Softclip (sc-level = 10): in=%.1f -> várt %.4f, mért %.4f", testIn, exp10, L[0]);
+    }
+
+    // 8. Dry / Wet esetek: dry -100 dB -> pontosan 0; dry 0 dB + wet -100 dB -> eredeti; vegyes
+    {
+        ee::StereoTools st;
+        st.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagStereoTools, true);
+        d.stMode = 6; // Flip: L és R felcserélése
+
+        // A) dry <= -100 dB -> pontosan 0.0f dry ág, csak a wet szól
+        d.stWetDb = 0.0f;
+        d.stDryDb = -100.0f;
+        st.update(d);
+        std::vector<float> L = { 1.0f }, R = { 0.0f };
+        st.process(L.data(), R.data(), 1);
+        CHECK(L[0] == 0.0f && std::abs(R[0] - 1.0f) < 1e-5f,
+              "Dry <= -100 dB: dry ág szigorúan 0.00, csak wet szól (mért L=%.2f, R=%.2f)", L[0], R[0]);
+
+        // B) dry = 0 dB + wet <= -100 dB -> pontosan a bemeneti erősítés utáni eredeti jel
+        d.stWetDb = -100.0f;
+        d.stDryDb = 0.0f;
+        d.stInputGainDb = 0.0f;
+        st.update(d);
+        L = { 0.70f }; R = { 0.30f };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 0.70f) < 1e-5f && std::abs(R[0] - 0.30f) < 1e-5f,
+              "Dry 0 dB + Wet -100 dB: flip ellenére pontosan az eredeti jel jelenik meg (L=%.2f, R=%.2f)", L[0], R[0]);
+
+        // B2) dry 0 dB + wet <= -100 dB bemeneti erősítéssel (+6.02 dB -> x2.0)
+        d.stInputGainDb = 6.0205999f;
+        st.update(d);
+        L = { 0.70f }; R = { 0.30f };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 1.40f) < 1e-4f && std::abs(R[0] - 0.60f) < 1e-4f,
+              "Dry 0 dB + Wet -100 dB + inGain (+6 dB): a dry ág megkapja az inGain-t (L=%.2f, R=%.2f, várt 1.40, 0.60)", L[0], R[0]);
+        d.stInputGainDb = 0.0f;
+
+        // C) Vegyes eset: dry = -6.02 dB (0.5), wet = -6.02 dB (0.5)
+        d.stWetDb = -6.0205999f;
+        d.stDryDb = -6.0205999f;
+        st.update(d);
+        L = { 1.0f }; R = { 0.0f };
+        st.process(L.data(), R.data(), 1);
+        // L = wet*0 + dry*1 = 0.5, R = wet*1 + dry*0 = 0.5
+        CHECK(std::abs(L[0] - 0.50f) < 1e-4f && std::abs(R[0] - 0.50f) < 1e-4f,
+              "Vegyes Dry/Wet (50%% dry + 50%% wet): L = 0.50, R = 0.50 (mért %.2f, %.2f)", L[0], R[0]);
+    }
+
+    // 9. Erősítések sorrendje: input-gain hat a dry ágra, output-gain a keverés után
+    {
+        ee::StereoTools st;
+        st.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagStereoTools, true);
+        d.stMode = 6; // Flip (L <-> R)
+        d.stInputGainDb = 6.0205999f;   // inGain = 2.0
+        d.stDryDb = -6.0205999f;        // dry = 0.5
+        d.stWetDb = -6.0205999f;        // wet = 0.5
+        d.stOutputGainDb = 9.542425f;   // outGain = 3.0 (20*log10(3) ~ 9.542425 dB)
+        st.update(d);
+
+        // Bemenet: L = 1.0, R = 0.0
+        // inGain után: L = 2.0, R = 0.0
+        // Calf flip: L_wet = 0.0, R_wet = 2.0
+        // Dry ág: L_dry = 2.0, R_dry = 0.0
+        // Mix: L_mix = 0.5*0.0 + 0.5*2.0 = 1.0; R_mix = 0.5*2.0 + 0.5*0.0 = 1.0
+        // outGain után: L_out = 1.0 * 3.0 = 3.0; R_out = 1.0 * 3.0 = 3.0
+        std::vector<float> L = { 1.0f }, R = { 0.0f };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 3.0f) < 1e-4f && std::abs(R[0] - 3.0f) < 1e-4f,
+              "Erősítési sorrend (inGain x2 -> dry/wet 50/50 -> outGain x3): L = %.2f, R = %.2f (várt 3.00, 3.00)", L[0], R[0]);
+    }
+
+    // 10. Sztereó bázis (Stereo Base)
+    {
+        ee::StereoTools st;
+        st.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagStereoTools, true);
+
+        // stereo_base = +1.0: L' = L + sb*L - sb*R, R' = R + sb*R - sb*L
+        // L=1, R=0 esetén: L' = 2.0, R' = -1.0
+        d.stStereoBase = 1.0f;
+        st.update(d);
+        std::vector<float> L = { 1.0f }, R = { 0.0f };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 2.0f) < 1e-5f && std::abs(R[0] - (-1.0f)) < 1e-5f,
+              "stereo-base = +1.0: szélesítés (L: 2.00, R: -1.00)");
+
+        // stereo_base = -1.0: sb < 0 -> sb *= 0.5 (-0.5) -> L' = 0.5, R' = 0.5 (monó)
+        d.stStereoBase = -1.0f;
+        st.update(d);
+        L = { 1.0f }; R = { 0.0f };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - 0.5f) < 1e-5f && std::abs(R[0] - 0.5f) < 1e-5f,
+              "stereo-base = -1.0: monóba húzás (L = 0.50, R = 0.50)");
+    }
+
+    // 11. Sztereó fáziselforgatás (Stereo Phase) sin/cos forgatás
+    {
+        ee::StereoTools st;
+        st.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagStereoTools, true);
+
+        // 90 fok: cos(90) = 0, sin(90) = 1 -> L' = -R, R' = L
+        d.stStereoPhase = 90.0f;
+        st.update(d);
+        std::vector<float> L = { 0.6f }, R = { 0.4f };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - (-0.4f)) < 1e-4f && std::abs(R[0] - 0.6f) < 1e-4f,
+              "stereo-phase = 90 fok: L' = -R (-0.40), R' = L (+0.60)");
+
+        // 180 fok: cos(180) = -1, sin(180) = 0 -> L' = -L, R' = -R
+        d.stStereoPhase = 180.0f;
+        st.update(d);
+        L = { 0.6f }; R = { 0.4f };
+        st.process(L.data(), R.data(), 1);
+        CHECK(std::abs(L[0] - (-0.6f)) < 1e-4f && std::abs(R[0] - (-0.4f)) < 1e-4f,
+              "stereo-phase = 180 fok: mindkét csatorna megfordítva (L' = -0.60, R' = -0.40)");
+    }
+
+    // 12. NaN és ±Inf minden új mezőre a sanitizeParams-ban
+    {
+        const float qnan = std::numeric_limits<float>::quiet_NaN();
+        const float pinf = std::numeric_limits<float>::infinity();
+        const float ninf = -std::numeric_limits<float>::infinity();
+
+        // Teszt A: NaN minden lebegőpontos mezőre -> visszaállnak az alapértékre
+        {
+            ParamData d{};
+            d.stInputGainDb = qnan;
+            d.stOutputGainDb = qnan;
+            d.stBalanceIn = qnan;
+            d.stBalanceOut = qnan;
+            d.stSlevDb = qnan;
+            d.stSbal = qnan;
+            d.stMlevDb = qnan;
+            d.stMpan = qnan;
+            d.stStereoBase = qnan;
+            d.stDelayMs = qnan;
+            d.stScLevel = qnan;
+            d.stStereoPhase = qnan;
+            d.stDryDb = qnan;
+            d.stWetDb = qnan;
+
+            sanitizeParams(d);
+
+            CHECK(d.stInputGainDb == 0.0f && d.stOutputGainDb == 0.0f &&
+                  d.stBalanceIn == 0.0f && d.stBalanceOut == 0.0f &&
+                  d.stSlevDb == 0.0f && d.stSbal == 0.0f &&
+                  d.stMlevDb == 0.0f && d.stMpan == 0.0f &&
+                  d.stStereoBase == 0.0f && d.stDelayMs == 0.0f &&
+                  d.stScLevel == 1.0f && d.stStereoPhase == 0.0f &&
+                  d.stDryDb == -100.0f && d.stWetDb == 0.0f,
+                  "sanitizeParams: NaN minden új float mezőre -> pontos alapértékek");
+        }
+
+        // Teszt B: +Inf minden lebegőpontos mezőre -> felső korlátra zárulnak
+        {
+            ParamData d{};
+            d.stInputGainDb = pinf;
+            d.stOutputGainDb = pinf;
+            d.stBalanceIn = pinf;
+            d.stBalanceOut = pinf;
+            d.stSlevDb = pinf;
+            d.stSbal = pinf;
+            d.stMlevDb = pinf;
+            d.stMpan = pinf;
+            d.stStereoBase = pinf;
+            d.stDelayMs = pinf;
+            d.stScLevel = pinf;
+            d.stStereoPhase = pinf;
+            d.stDryDb = pinf;
+            d.stWetDb = pinf;
+
+            sanitizeParams(d);
+
+            CHECK(d.stInputGainDb == 36.0f && d.stOutputGainDb == 36.0f &&
+                  d.stBalanceIn == 1.0f && d.stBalanceOut == 1.0f &&
+                  d.stSlevDb == 36.0f && d.stSbal == 1.0f &&
+                  d.stMlevDb == 36.0f && d.stMpan == 1.0f &&
+                  d.stStereoBase == 1.0f && d.stDelayMs == 20.0f &&
+                  d.stScLevel == 100.0f && d.stStereoPhase == 360.0f &&
+                  d.stDryDb == 20.0f && d.stWetDb == 20.0f,
+                  "sanitizeParams: +Inf minden új float mezőre -> felső határokra vágva");
+        }
+
+        // Teszt C: -Inf minden lebegőpontos mezőre -> alsó korlátra zárulnak
+        {
+            ParamData d{};
+            d.stInputGainDb = ninf;
+            d.stOutputGainDb = ninf;
+            d.stBalanceIn = ninf;
+            d.stBalanceOut = ninf;
+            d.stSlevDb = ninf;
+            d.stSbal = ninf;
+            d.stMlevDb = ninf;
+            d.stMpan = ninf;
+            d.stStereoBase = ninf;
+            d.stDelayMs = ninf;
+            d.stScLevel = ninf;
+            d.stStereoPhase = ninf;
+            d.stDryDb = ninf;
+            d.stWetDb = ninf;
+
+            sanitizeParams(d);
+
+            CHECK(d.stInputGainDb == -36.0f && d.stOutputGainDb == -36.0f &&
+                  d.stBalanceIn == -1.0f && d.stBalanceOut == -1.0f &&
+                  d.stSlevDb == -36.0f && d.stSbal == -1.0f &&
+                  d.stMlevDb == -36.0f && d.stMpan == -1.0f &&
+                  d.stStereoBase == -1.0f && d.stDelayMs == -20.0f &&
+                  d.stScLevel == 1.0f && d.stStereoPhase == 0.0f &&
+                  d.stDryDb == -100.0f && d.stWetDb == -100.0f,
+                  "sanitizeParams: -Inf minden új float mezőre -> alsó határokra vágva");
+        }
+
+        // Teszt D: Egész típusú mezők (int32_t) határai: softclip, mute, phase, mode, compare
+        {
+            ParamData d{};
+            d.stSoftclip = 42;
+            d.stMutel = -5;
+            d.stMuter = 10;
+            d.stPhasel = -100;
+            d.stPhaser = 99;
+            d.stMode = 77;
+            d.stCompare = 12;
+
+            sanitizeParams(d);
+
+            CHECK(d.stSoftclip == 1 && d.stMutel == 0 && d.stMuter == 1 &&
+                  d.stPhasel == 0 && d.stPhaser == 1 && d.stMode == 6 && d.stCompare == 1,
+                  "sanitizeParams: out-of-range int32 mezők helyesen [0, 1] és [0, 6] tartományra korlátozva");
+        }
+    }
+
+    // 13. Mintavételi frekvenciák (44.1, 48, 88.2, 96, 192 kHz): véges kimenet ÉS Calf delay helyessége
+    {
+        const uint32_t rates[] = { 44100, 48000, 88200, 96000, 192000 };
+        for (uint32_t r : rates) {
+            ee::StereoTools st;
+            st.setSampleRate(r);
+            ParamData d = transparentParams();
+            d.set(kFlagStereoTools, true);
+            d.stDelayMs = 10.0f; // +10.0 ms delay a jobb csatornára
+            st.update(d);
+
+            // Calf delay képlet:
+            // nbuf = (int)(r * 0.010); nbuf -= nbuf % 2;
+            // tényleges késleltetés a jobb csatornán: nbuf / 2 minta
+            int nbuf = static_cast<int>(r * (10.0f / 1000.0f));
+            nbuf -= nbuf % 2;
+            const size_t expectedDelay = static_cast<size_t>(nbuf / 2);
+
+            const size_t bufferLen = 2500;
+            std::vector<float> L(bufferLen, 0.0f), R(bufferLen, 0.0f);
+            L[0] = 1.0f;
+            R[0] = 1.0f;
+            st.process(L.data(), R.data(), bufferLen);
+
+            bool allFinite = true;
+            for (size_t i = 0; i < bufferLen; ++i) {
+                if (!std::isfinite(L[i]) || !std::isfinite(R[i])) allFinite = false;
+            }
+            CHECK(allFinite, "Mintavételi frekvencia %u Hz: minden minta véges", r);
+
+            // Bal csatorna azonnal kimegy a 0. mintán
+            CHECK(std::abs(L[0] - 1.0f) < 1e-5f, "Mintavételi frekvencia %u Hz: bal csatorna L[0] = 1.00", r);
+
+            // Jobb csatorna csúcsa pontosan expectedDelay indexnél van
+            size_t rPeakIdx = 0;
+            float rPeakVal = 0.0f;
+            for (size_t i = 0; i < bufferLen; ++i) {
+                if (R[i] > rPeakVal) {
+                    rPeakVal = R[i];
+                    rPeakIdx = i;
+                }
+            }
+            CHECK(rPeakIdx == expectedDelay && std::abs(rPeakVal - 1.0f) < 1e-5f,
+                  "Mintavételi frekvencia %u Hz: Calf delay várt %zu minta (mért %zu minta, érték %.2f)",
+                  r, expectedDelay, rPeakIdx, rPeakVal);
+        }
+    }
+
+    // 14. Kikapcsolva bitpontos átlátszóság és néma bemenetre csend
+    {
+        AetherChain chain;
+        chain.applyParamsRT(transparentParams());
+        std::vector<float> L = sine(1000.0, 0.5, 4800, sr), R = L;
+        std::vector<float> L0 = L, R0 = R;
+        chain.process(L.data(), R.data(), L.size());
+        CHECK(L == L0 && R == R0, "Stereo Tools kikapcsolva: a teljes lánc bitpontosan érintetlen marad");
+
+        ParamData d = transparentParams();
+        d.set(kFlagStereoTools, true);
+        chain.applyParamsRT(d);
+        std::vector<float> Lsilent(512, 0.0f), Rsilent(512, 0.0f);
+        chain.process(Lsilent.data(), Rsilent.data(), 512);
+        float maxSilent = 0.0f;
+        for (size_t i = 0; i < 512; ++i) {
+            maxSilent = std::max(maxSilent, std::max(std::abs(Lsilent[i]), std::abs(Rsilent[i])));
+        }
+        CHECK(maxSilent == 0.0f, "Stereo Tools bekapcsolva néma bemenetre a kimenet bit-pontosan 0 marad");
+    }
+
+    // 15. Túlvezérelt bemenet stabilitás
+    {
+        ee::StereoTools st;
+        st.setSampleRate(48000);
+        ParamData d = transparentParams();
+        d.set(kFlagStereoTools, true);
+        st.update(d);
+        std::vector<float> Lov = sine(100.0, 50.0, 4800, sr), Rov = Lov;
+        st.process(Lov.data(), Rov.data(), Lov.size());
+        bool allFinite = true;
+        for (size_t i = 0; i < Lov.size(); ++i) {
+            if (!std::isfinite(Lov[i]) || !std::isfinite(Rov[i])) allFinite = false;
+        }
+        CHECK(allFinite, "Túlvezérelt jelre (50.0) a kimenet véges és stabil marad");
+    }
+
+    // 16. Kattanásmentesség (256, 480 és 1024 blokkméretekkel)
+    {
+        for (size_t blk : { 256, 480, 1024 }) {
+            AetherChain chain;
+            chain.setSampleRate(sr);
+            const size_t seg = 12000;
+            std::vector<float> L = sine(1000.0, 0.5, seg * 12, sr), R = L;
+            ParamData d = transparentParams();
+            size_t pos = 0;
+            double worstJump = 0.0;
+            const char* worstStep = "";
+
+            auto step = [&](const char* name) {
+                std::vector<float> l(L.begin() + pos, L.begin() + pos + seg);
+                std::vector<float> r(R.begin() + pos, R.begin() + pos + seg);
+                chain.applyParamsRT(d);
+                runBlocks([&](float* a, float* b, size_t m) { chain.process(a, b, m); }, l, r, blk);
+                const double j = maxJump(l, 0, seg);
+                if (j > worstJump) { worstJump = j; worstStep = name; }
+                std::copy(l.begin(), l.end(), L.begin() + pos);
+                pos += seg;
+            };
+
+            step("Alap állapot");
+            d.set(kFlagStereoTools, true); d.stMode = 0; step("Stereo Tools be");
+            d.stStereoBase = 0.8f; step("Stereo base -> 0.8");
+            d.stBalanceIn = 0.5f; step("Balance-in -> 0.5");
+            d.stMode = 6; step("Mode -> Flip");
+            d.stDelayMs = 10.0f; step("Delay -> 10 ms");
+            d.stDryDb = -6.0f; d.stWetDb = -6.0f; step("Dry/Wet -> 50/50");
+            d.set(kFlagStereoTools, false); step("Stereo Tools ki");
+
+            CHECK(worstJump < 0.03, "Kattanásmentesség (blokk %zu): modul- és módváltások ugrás nélkül (legnagyobb ugrás %.4f @ %s)", blk, worstJump, worstStep);
+        }
+    }
+
+    // 17. A/B összehasonlítás (stCompare)
+    {
+        AetherChain chain;
+        ParamData d = transparentParams();
+        d.set(kFlagStereoTools, true);
+        d.stMutel = 1; // Némítás beállítva
+        d.stCompare = 1; // A/B aktív: az eredeti ág szól!
+        chain.applyParamsRT(d);
+
+        std::vector<float> L = sine(1000.0, 0.4, 4800, sr), R = L;
+        chain.process(L.data(), R.data(), L.size());
+        float maxL = 0.0f;
+        for (float s : L) maxL = std::max(maxL, std::abs(s));
+        CHECK(std::abs(maxL - 0.4f) < 0.01f,
+              "Stereo Tools A/B összehasonlítás: stMutel mellett stCompare=1 esetén az eredeti jel szól (csúcs %.2f)", maxL);
+    }
+
+    // 18. v13 -> v14 paraméterblokk migráció (loadParamBytes)
+    {
+        std::vector<uint8_t> v13Bytes(kParamSizeV13, 0);
+        ParamData v13Origin{};
+        v13Origin.preampDb = 3.5f;
+        v13Origin.set(kFlagEq, true);
+        v13Origin.set(kFlagLoudness, true);
+        v13Origin.loudVolumeDb = -18.0f;
+        v13Origin.loudStd = 2; // Fletcher-Munson
+        v13Origin.loudMode = 4; // FFT 2048
+        std::memcpy(v13Bytes.data(), &v13Origin, kParamSizeV13);
+
+        ParamData loaded{};
+        const bool ok = loadParamBytes(reinterpret_cast<const char*>(v13Bytes.data()), v13Bytes.size(), 13, kParamSizeV13, loaded);
+        CHECK(ok, "loadParamBytes sikeresen betöltötte a valódi v13-as paraméterblokkot");
+        CHECK(loaded.preampDb == 3.5f && loaded.has(kFlagEq) && loaded.has(kFlagLoudness) &&
+              loaded.loudVolumeDb == -18.0f && loaded.loudStd == 2 && loaded.loudMode == 4,
+              "v13 régi mezők épek és változatlanok maradtak a betöltés után");
+        CHECK(!loaded.has(kFlagStereoTools) && loaded.stInputGainDb == 0.0f && loaded.stOutputGainDb == 0.0f &&
+              loaded.stBalanceIn == 0.0f && loaded.stBalanceOut == 0.0f && loaded.stSoftclip == 0 &&
+              loaded.stMutel == 0 && loaded.stMuter == 0 && loaded.stPhasel == 0 && loaded.stPhaser == 0 &&
+              loaded.stMode == 0 && loaded.stSlevDb == 0.0f && loaded.stSbal == 0.0f && loaded.stMlevDb == 0.0f &&
+              loaded.stMpan == 0.0f && loaded.stStereoBase == 0.0f && loaded.stDelayMs == 0.0f &&
+              loaded.stScLevel == 1.0f && loaded.stStereoPhase == 0.0f && loaded.stDryDb == -100.0f &&
+              loaded.stWetDb == 0.0f && loaded.stCompare == 0,
+              "v13 betöltésekor az új Stereo Tools mezők alapértéken vannak (Stereo Tools kikapcsolva, alap beállítások)");
+    }
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify DSP modulteszt (EasyEffects könyvtárak)\n");
@@ -2364,6 +3067,7 @@ int main() {
     testOutputGain();
     testPcmConvert();
     testLoudness();
+    testStereoTools();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

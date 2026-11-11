@@ -13,17 +13,17 @@
 namespace ee_analyzer {
 
 constexpr uint32_t kSharedMagic = 0x41455448;   // 'AETH'
-constexpr uint32_t kSharedVersion = 14;           // 14: Loudness (params v13)
+constexpr uint32_t kSharedVersion = 15;           // 15: Stereo Tools (params v14)
 
 // A közös memória a ParamData-t tartalmazza: ha az elrendezése változik, a régi plugin és az új motor nem
 // használhatja ugyanazt a memóriát. Ezért a paraméterverzió léptetésekor ezt is léptetni kell (a nevével együtt).
-static_assert(kParamLayoutVersion == 13,"A ParamData elrendezése változott: léptesd a kSharedVersion-t és a nevet, "
+static_assert(kParamLayoutVersion == 14,"A ParamData elrendezése változott: léptesd a kSharedVersion-t és a nevet, "
                                          "majd igazítsd ezt az ellenőrzést");
 
 // A plugin (szolgáltatásként futó audiodg) a Global\ névtérben hozza létre;
 // ha erre nincs joga (pl. DAW-ban vagy az EQ APO szerkesztőben), a Local\ névtérbe esik vissza.
-constexpr const wchar_t* kSharedNameGlobal = L"Global\\AqulifyShared_v14";
-constexpr const wchar_t* kSharedNameLocal = L"Local\\AqulifyShared_v14";
+constexpr const wchar_t* kSharedNameGlobal = L"Global\\AqulifyShared_v15";
+constexpr const wchar_t* kSharedNameLocal = L"Local\\AqulifyShared_v15";
 
 using SharedTapRing = StereoTapRing<65536>; // ~1,4 s 48 kHz-en
 

@@ -11,7 +11,7 @@ kivéve ahol jelölve van; mindegyik a saját licencével.
 | `lsp/lsp-runtime-lib` | https://github.com/lsp-plugins/lsp-runtime-lib | 1.0.36 | LGPL-3.0-or-later |
 | `lsp/lsp-dsp-units` | https://github.com/lsp-plugins/lsp-dsp-units | 1.0.38 | LGPL-3.0-or-later |
 | `lsp/lsp-plugins-loud-comp` | https://github.com/lsp-plugins/lsp-plugins-loud-comp (62fcd91): csak az ISO 226 görbetáblázatok (`include/generated/iso226/`) és a licencek (`COPYING`, `COPYING.LESSER`); a `plug-fw` keretrendszer, a felületi kód, a build szkriptek és az Eclipse fájlok kimaradtak | 1.0.36 | LGPL-3.0-or-later |
-| `calf` | https://github.com/calf-studio-gear/calf (a1f87a4): `biquad.h`, `primitives.h`; a Bass Enhancer kódja `calf_bass_enhancer.h`-ban (LV2 port- és mérőkód nélkül) | | LGPL-2.1-or-later |
+| `calf` | https://github.com/calf-studio-gear/calf (a1f87a4): `biquad.h`, `primitives.h`; a Bass Enhancer kódja `calf_bass_enhancer.h`-ban, a Stereo Tools kódja `calf_stereo_tools.h`-ban (LV2 port- és mérőkód nélkül) | | LGPL-2.1-or-later |
 | `libbs2b` | https://github.com/alexmarsev/libbs2b | 3.1.0 | MIT |
 | `libebur128` | https://github.com/jiixyj/libebur128 (67b33ab): EBU R128 / ITU-R BS.1770 hangosságmérés (Autogain); a `queue/sys/queue.h` a mingw-hez kell | 1.2.6 | MIT (`libebur128/COPYING`) |
 | `speexdsp` | https://github.com/xiph/speexdsp (7a15878): resampler; `speexdsp_config_types.h` a configure kimenete helyett | | BSD-3-Clause |
@@ -42,3 +42,6 @@ Az LSP pluginok (para_equalizer 1.0.40, limiter 1.0.37) beállítás-feldolgozó
 
 Az LSP loud_comp (1.0.36) beállítás- és görbe-feldolgozó kódjának átvett részei:
 `src/ee_dsp_loudness.cpp` (az `include/private/meta/loud_comp.h` 32-62. soraiból a tartományok és konstansok, az `src/main/plug/loud_comp.cpp` 437-713. és 815-912. soraiból a görbeinterpoláció, a 64 Linkwitz-Riley sáv frekvencia- és jelszint-számítása, valamint a spektrális konvolúció és a hard-clipping; a `plug-fw` keretrendszer nélkül).
+
+A Calf Stereo Tools (a1f87a4) beállítás- és jelfeldolgozó kódjának átvett részei:
+`third_party/calf/calf_stereo_tools.h` és `src/ee_dsp_stereo_tools.cpp` (az `src/calf/modules_tools.h`, `src/modules_tools.cpp` és `src/metadata.cpp` soraiból a sztereó fázisforgatás, csatornák közötti késleltetés, M/S mátrixolás, sztereó szélesség [stereo base], balansz és softclip; az LV2 keretrendszer és mérőkód nélkül).
