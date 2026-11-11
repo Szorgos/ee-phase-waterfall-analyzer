@@ -1175,6 +1175,247 @@ static void testOpenUrl() {
     }
 }
 
+/** Sima TCP-kapcsolat a 127.0.0.1-re (a soros tesztporthoz). */
+static net::socket_t tcpConnectLive(int port) {
+    net::socket_t s = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (s == net::kInvalidSocket) return s;
+    sockaddr_in a{};
+    a.sin_family = AF_INET;
+    a.sin_port = htons(static_cast<uint16_t>(port));
+    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)) != 0) { net::closeSocket(s); return net::kInvalidSocket; }
+    return s;
+}
+
+static void rawSend(net::socket_t s, const std::string& data) {
+    size_t off = 0;
+    while (off < data.size()) {
+        const long long n = net::sendSome(s, data.data() + off, data.size() - off);   // bontott kapcsolatnál nincs SIGPIPE
+        if (n <= 0) return;
+        off += static_cast<size_t>(n);
+    }
+}
+
+/** A géptől érkező sorok ms ideig; closed: a gép közben bontotta a kapcsolatot (ekkor az olvasás leáll). */
+static std::vector<std::string> lineReadFor(net::socket_t s, int ms, bool* closed = nullptr) {
+    std::vector<std::string> lines;
+    std::string buf;
+    if (closed) *closed = false;
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+    while (std::chrono::steady_clock::now() < end) {
+#ifdef _WIN32
+        DWORD tv = 100;
+#else
+        timeval tv{ 0, 100000 };
+#endif
+        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+        char tmp[4096];
+        const int r = static_cast<int>(::recv(s, tmp, sizeof(tmp), 0));
+        if (r > 0) {
+            buf.append(tmp, static_cast<size_t>(r));
+            for (size_t nl; (nl = buf.find('\n')) != std::string::npos;) {
+                lines.push_back(buf.substr(0, nl));
+                buf.erase(0, nl + 1);
+            }
+        } else if (r == 0) {
+            if (closed) *closed = true;
+            break;
+        } else if (!net::wouldBlock()) {
+#ifdef _WIN32
+            if (WSAGetLastError() == WSAETIMEDOUT) continue;
+#endif
+            if (closed) *closed = true;   // pl. a gép bontott (connection reset)
+            break;
+        }
+    }
+    return lines;
+}
+
+static bool hasType(const std::vector<std::string>& lines, const std::string& type) {
+    return std::any_of(lines.begin(), lines.end(), [&](const std::string& l) { return jsonField(l, "type") == type; });
+}
+
+static void testBluetoothLine() {
+    std::printf("[14] Bluetooth-tartalék: soros keretezés, első soros token, ugyanazok az üzenetek (bt_link.hpp)\n");
+
+    // 1. Sorokra bontás (a valódi LineSplitter)
+    {
+        btlink::LineSplitter sp;
+        std::vector<std::string> out;
+        const std::string a = "{\"a\":1}\n{\"b\":2}\r\n\n{\"c\":";
+        CHECK(sp.push(a.data(), a.size(), out) && out.size() == 2 && out[0] == "{\"a\":1}" && out[1] == "{\"b\":2}",
+              "két teljes sor kijön, a \\r lekerül, az üres sor kimarad");
+        const std::string b = "3}\n";
+        CHECK(sp.push(b.data(), b.size(), out) && out.size() == 3 && out[2] == "{\"c\":3}",
+              "a két részletben érkező sor egyben jön ki");
+        btlink::LineSplitter big;
+        std::vector<std::string> o2;
+        const std::string max(btlink::kMaxLineBytes, 'x');
+        CHECK(big.push(max.data(), max.size(), o2), "pontosan 1 MiB-os sor még elfogadható");
+        CHECK(!big.push("y", 1, o2), "1 MiB-nál hosszabb sor: hiba (a kapcsolat bomlik)");
+    }
+    // 2. Kimenő sor: nyers sortörés nem maradhat benne, a JSON ugyanaz marad
+    {
+        const std::string payload = "{\"type\":\"state\",\n\"name\":\"a\\nb\"}";
+        const std::string line = btlink::toLine(payload);
+        json::Value v;
+        CHECK(line.back() == '\n' && line.find('\n') == line.size() - 1, "a kimenő üzenet pontosan egy sor");
+        CHECK(json::parse(line.substr(0, line.size() - 1), v) && jsonField(line.substr(0, line.size() - 1), "name") == "a\nb",
+              "a sorrá alakított üzenet ugyanazt a JSON-t adja (a szövegbeli sortörés megmarad)");
+    }
+    // 3. Az első sor értelmezése
+    {
+        const auto ok = btlink::parseHello("{\"type\":\"hello\",\"token\":\"abc\",\"app\":\"x\"}");
+        CHECK(ok.ok && ok.token == "abc" && ok.app == "x", "hello tokennel: elfogadható alak");
+        CHECK(!btlink::parseHello("{\"type\":\"ping\",\"token\":\"abc\"}").ok, "nem hello: elutasítva");
+        CHECK(!btlink::parseHello("{\"type\":\"hello\"}").ok, "hello token nélkül: elutasítva");
+        CHECK(!btlink::parseHello("nem json").ok, "nem JSON: elutasítva");
+    }
+    // 4. Tokenpróbálgatás elleni zár
+    {
+        btlink::AuthGate g;
+        const auto t0 = std::chrono::steady_clock::now();
+        bool started = false;
+        for (int i = 0; i < btlink::kMaxAuthFails - 1; ++i) started = g.fail(t0) || started;
+        CHECK(!started && !g.locked(t0), "%d hibás próbálkozás után még nincs zárolás", btlink::kMaxAuthFails - 1);
+        CHECK(g.fail(t0) && g.locked(t0 + std::chrono::seconds(btlink::kAuthLockSeconds - 1)),
+              "%d. hibás próbálkozás: zárolás %d másodpercig", btlink::kMaxAuthFails, btlink::kAuthLockSeconds);
+        CHECK(!g.locked(t0 + std::chrono::seconds(btlink::kAuthLockSeconds + 1)), "a zárolás lejár");
+    }
+    CHECK(btlink::formatAddress(0x001A7DDA7113ULL) == "00:1A:7D:DA:71:13", "Bluetooth-cím szövegként");
+
+    // 5. Élő próba a valódi híddal: a soros tesztporton ugyanaz a kód fut, mint a Bluetoothról jövő kapcsolatnál
+    const std::string token = bridge_detail::randomHex(32);
+    const std::string remoteDoc = "{\"enabled\":true,\"port\":47897,\"devices\":[{\"id\":\"0b0c0d0e\",\"name\":\"BT-teszt\",\"hash\":\"" +
+                                  bridge_detail::sha1Hex(token) + "\",\"created\":0,\"last\":0}]}";
+    BridgeCallbacks cb;
+    double phase = 0.0;
+    bool give = false;
+    cb.pullAudio = [&](float* lr, size_t maxFrames) -> size_t {   // folyamatos hang: legyen mit spektrumként küldeni
+        give = !give;   // a híd addig húz, amíg kap: minden második hívás üres, így egy körben egy adag jön
+        if (!give) return 0;
+        const size_t n = std::min<size_t>(maxFrames, 480);
+        for (size_t i = 0; i < n; ++i) {
+            lr[2 * i] = lr[2 * i + 1] = static_cast<float>(0.3 * std::sin(phase));
+            phase += 2.0 * 3.14159265358979 * 1000.0 / 48000.0;
+        }
+        return n;
+    };
+    cb.sampleRate = [] { return 48000.0; };
+    cb.getParams = [] { return transparentParams(); };
+    cb.setParams = [](const ParamData&) {};
+    cb.loadRemote = [&] { return remoteDoc; };
+    cb.saveRemote = [](const std::string&) { return true; };
+    WebSocketBridge bridge(47896);
+    bridge.setLineTestPort(47902);
+    const bool started = bridge.start(cb);
+    CHECK(started, "a híd elindul (127.0.0.1:47896, soros tesztport: 47902)");
+    if (!started) return;
+
+    // Jó token: az első sor után "machine" és "state", a rögtön utána küldött ping is választ kap
+    net::socket_t s = tcpConnectLive(47902);
+    CHECK(s != net::kInvalidSocket, "soros kapcsolat a tesztportra");
+    if (s != net::kInvalidSocket) {
+        rawSend(s, "{\"type\":\"hello\",\"client\":\"aqulify-remote\",\"token\":\"" + token + "\"}\n{\"type\":\"ping\",\"t\":7}\n");
+        const auto lines = lineReadFor(s, 800);
+        CHECK(hasType(lines, "machine") && hasType(lines, "state"), "jó token: megjön a machine és a state üzenet");
+        const auto m = std::find_if(lines.begin(), lines.end(), [](const std::string& l) { return jsonField(l, "type") == "machine"; });
+        CHECK(m != lines.end() && jsonField(*m, "machine").size() == 16 &&
+                  jsonField(*m, "computer") == MdnsAnnouncer::computerName(),
+              "a machine üzenetben a gép azonosítója és neve (computer) is megvan, mint a WebSocketen");
+        const bool pong = std::any_of(lines.begin(), lines.end(), [](const std::string& l) {
+            json::Value v;
+            return json::parse(l, v) && jsonField(l, "type") == "pong" && v.get("t") && v.get("t")->numberOr(0) == 7.0;
+        });
+        CHECK(pong, "a hello után azonnal küldött ping: pong ugyanazzal a t-vel");
+        CHECK(std::all_of(lines.begin(), lines.end(), [](const std::string& l) { json::Value v; return json::parse(l, v); }),
+              "minden beérkező sor önálló, érvényes JSON");
+
+        rawSend(s, "{\"type\":\"get_bt_info\"}\n{\"type\":\"subscribe\",\"spectrum\":1,\"fps\":60}\n");
+        const auto more = lineReadFor(s, 1200);
+        const auto info = std::find_if(more.begin(), more.end(), [](const std::string& l) { return jsonField(l, "type") == "bt_info"; });
+        json::Value iv;
+        CHECK(info != more.end() && json::parse(*info, iv) && iv.get("available") &&
+                  iv.get("available")->type == json::Value::Type::Bool && iv.get("addr"),
+              "get_bt_info: bt_info válasz available és addr mezővel");
+        if (info != more.end() && iv.get("available") && iv.get("available")->b) {
+            // Van Bluetooth-rádió (pl. Windowson): a cím "AA:BB:CC:DD:EE:FF" alakú, és nem csupa nulla
+            const std::string addr = jsonField(*info, "addr");
+            bool shape = addr.size() == 17;
+            for (size_t i = 0; shape && i < addr.size(); ++i)
+                shape = (i % 3 == 2) ? addr[i] == ':' : std::isxdigit(static_cast<unsigned char>(addr[i])) != 0;
+            CHECK(shape && addr != "00:00:00:00:00:00", "a Bluetooth-csatorna fut: a gép Bluetooth-címe érvényes alakú");
+        } else {
+            std::printf("  [--]   ezen a gépen nincs Bluetooth-csatorna (available:false): a cím nem ellenőrizhető\n");
+        }
+        CHECK(!hasType(more, "spectrum"), "Bluetoothon nincs spektrum (subscribe után sem)");
+        CHECK(hasType(more, "status"), "az állapotüzenet (status) Bluetoothon is megy");
+    }
+    // Ellenőrzés: ugyanekkor a helyi WebSocket-felület kap spektrumot (vagyis a spektrum ténylegesen készül)
+    {
+        net::socket_t l = wsConnectLive(47896, "/");
+        CHECK(l != net::kInvalidSocket && !wsWaitFor(l, "\"type\":\"spectrum\"", 1500).empty(),
+              "összevetés: a helyi felület ugyanekkor kap spektrumot");
+        // A párosítás visszavonása a gépen: a Bluetoothon csatlakozott telefon is lekapcsolódik
+        if (l != net::kInvalidSocket) {
+            wsSendText(l, "{\"type\":\"remote_revoke\",\"id\":\"0b0c0d0e\"}");
+            bool closed = false;
+            if (s != net::kInvalidSocket) lineReadFor(s, 1500, &closed);
+            CHECK(closed, "a párosítás visszavonása után a gép bontja a soros kapcsolatot");
+            net::closeSocket(l);
+        }
+    }
+    if (s != net::kInvalidSocket) net::closeSocket(s);
+
+    // Rossz esetek: rossz token, nem hello első sor, túl hosszú sor, hiányzó első sor
+    auto refused = [&](const std::string& first, const char* what) {
+        net::socket_t r = tcpConnectLive(47902);
+        if (r == net::kInvalidSocket) { CHECK(false, "%s: nem sikerült kapcsolódni", what); return; }
+        rawSend(r, first);
+        bool closed = false;
+        const auto lines = lineReadFor(r, 1500, &closed);
+        CHECK(lines.size() == 1 && jsonField(lines[0], "type") == "auth" && lines[0].find("\"ok\":false") != std::string::npos && closed,
+              "%s: {\"type\":\"auth\",\"ok\":false}, majd bontás", what);
+        net::closeSocket(r);
+    };
+    refused("{\"type\":\"hello\",\"token\":\"" + token + "\"}\n", "visszavont token");
+    refused("{\"type\":\"hello\",\"token\":\"" + std::string(64, 'f') + "\"}\n", "ismeretlen token");
+    refused("{\"type\":\"get_state\"}\n", "nem hello az első sor");
+    {
+        net::socket_t r = tcpConnectLive(47902);
+        bool closed = false;
+        if (r != net::kInvalidSocket) {
+            rawSend(r, std::string(btlink::kMaxLineBytes + 16, 'x'));
+            const auto lines = lineReadFor(r, 2000, &closed);
+            CHECK(lines.empty() && closed, "túl hosszú első sor: válasz nélküli bontás");
+            net::closeSocket(r);
+        }
+    }
+    {
+        net::socket_t r = tcpConnectLive(47902);
+        bool closed = false;
+        if (r != net::kInvalidSocket) {
+            const auto lines = lineReadFor(r, (btlink::kHelloTimeoutSeconds + 2) * 1000, &closed);
+            CHECK(lines.empty() && closed, "ha %d mp alatt nem jön első sor: bontás", btlink::kHelloTimeoutSeconds);
+            net::closeSocket(r);
+        }
+    }
+    // Eddig 3 hibás próbálkozás; még kettő, és a következő kapcsolat válasz nélkül, azonnal bomlik (zárolás)
+    refused("{\"type\":\"hello\",\"token\":\"" + std::string(64, 'e') + "\"}\n", "4. hibás token");
+    refused("{\"type\":\"hello\",\"token\":\"" + std::string(64, 'd') + "\"}\n", "5. hibás token");
+    {
+        net::socket_t r = tcpConnectLive(47902);
+        bool closed = false;
+        if (r != net::kInvalidSocket) {
+            rawSend(r, "{\"type\":\"hello\",\"token\":\"" + std::string(64, 'c') + "\"}\n");
+            const auto lines = lineReadFor(r, 1000, &closed);
+            CHECK(lines.empty() && closed, "zárolás alatt: a kapcsolat válasz nélkül, azonnal bomlik");
+            net::closeSocket(r);
+        }
+    }
+    bridge.stop();
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
@@ -1193,6 +1434,7 @@ int main() {
     testRepairReplacesDevice();
     testUpdate();
     testOpenUrl();
+    testBluetoothLine();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

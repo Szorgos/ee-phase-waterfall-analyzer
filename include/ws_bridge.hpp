@@ -46,6 +46,7 @@
 #include "mdns_announcer.hpp"
 #include "multi_output_config.hpp"
 #include "media_url.hpp"
+#include "bt_link.hpp"
 #include <fstream>
 
 namespace ee_analyzer {
@@ -364,6 +365,7 @@ public:
             return false;
         }
         std::cout << "[WS Bridge] Élő WebSocket híd: ws://127.0.0.1:" << port_ << "\n";
+        if (lineTestPort_ > 0) lineTestListener_ = openListener(INADDR_LOOPBACK, lineTestPort_);
         loadRemoteConfig();
         running_ = true;
         thread_ = std::thread(&WebSocketBridge::run, this);
@@ -378,6 +380,8 @@ public:
         for (auto& p : pending_) net::closeSocket(p.sock);
         pending_.clear();
         closeRemoteListener(true);
+        net::closeSocket(lineTestListener_);
+        lineTestListener_ = net::kInvalidSocket;
         net::closeSocket(listener_);
         listener_ = net::kInvalidSocket;
         net::cleanup();
@@ -401,6 +405,13 @@ public:
     bool remoteEnabled() const { return remoteEnabled_; }
     std::string currentPairCode() const { return pairCode_; }
 
+    /**
+     * CSAK TESZTHEZ (a motor nem hívja): a start() a 127.0.0.1:port TCP-porton is fogad soros (Bluetooth-protokollú)
+     * kapcsolatot. Ezeket pontosan ugyanaz a kód kezeli, mint a Bluetoothról érkezőket (első soros token, soronkénti
+     * üzenetek), így a protokoll Bluetooth-rádió nélkül is ellenőrizhető. A start() előtt hívandó.
+     */
+    void setLineTestPort(int port) { lineTestPort_ = port; }
+
 private:
     using clock = std::chrono::steady_clock;
 
@@ -420,6 +431,16 @@ private:
         uint64_t spectrumSeq = 0;
         bool dead = false;
         const char* why = "";
+        // Soros (Bluetooth) kliens: WebSocket-keretek helyett soronként egy JSON-üzenet (bt_link.hpp)
+        bool line = false;
+        btlink::LineSplitter lines;
+    };
+
+    /** Soros (Bluetooth) kapcsolat, amely még nem küldte el a hitelesítő első sort. */
+    struct LinePending {
+        net::socket_t sock = net::kInvalidSocket;
+        btlink::LineSplitter lines;
+        clock::time_point deadline;
     };
 
     /** Kézfogásra váró kapcsolat (a fejléc nem blokkolva, legfeljebb néhány másodpercig érkezik). */
@@ -532,6 +553,8 @@ private:
             if (remoteListener_ != net::kInvalidSocket) acceptNew(remoteListener_, true);
             progressPending();
             progressPendingPairRequests();
+            acceptLineConnections();
+            progressLinePending();
 
             // 1. Hang lehúzása a motorból (akkor is, ha nincs kliens, hogy ne torlódjon fel)
             if (cb_.pullAudio) {
@@ -631,6 +654,148 @@ private:
                 ++i;
             }
         }
+    }
+
+    // ------------------------------------------------------------------ Bluetooth (soros) csatorna
+    /** Új soros kapcsolatok: a Bluetooth-szerverről (és tesztben a 127.0.0.1-es tesztportról). */
+    void acceptLineConnections() {
+        for (int k = 0; k < 4; ++k) {
+            net::socket_t s = bt_.acceptOne();
+            if (s == net::kInvalidSocket && lineTestListener_ != net::kInvalidSocket) {
+                s = ::accept(lineTestListener_, nullptr, nullptr);
+                if (s != net::kInvalidSocket) net::setNonBlocking(s, true);
+            }
+            if (s == net::kInvalidSocket) return;
+            // Zárolás alatt (túl sok hibás token) és túl sok várakozó kapcsolatnál azonnal bont
+            if (linePending_.size() >= 4 || btGate_.locked(clock::now())) {
+                net::closeSocket(s);
+                continue;
+            }
+            LinePending p;
+            p.sock = s;
+            p.deadline = clock::now() + std::chrono::seconds(btlink::kHelloTimeoutSeconds);
+            linePending_.push_back(std::move(p));
+        }
+    }
+
+    /** A hitelesítő első sorra váró soros kapcsolatok: határidő, túl hosszú sor, bontás. */
+    void progressLinePending() {
+        const auto now = clock::now();
+        for (size_t i = 0; i < linePending_.size();) {
+            LinePending& p = linePending_[i];
+            std::vector<std::string> got;
+            bool done = false;
+            char buf[2048];
+            while (!done && got.empty()) {
+                const long long n = net::recvSome(p.sock, buf, sizeof(buf));
+                if (n > 0) {
+                    if (!p.lines.push(buf, static_cast<size_t>(n), got)) done = true;   // túl hosszú sor
+                    continue;
+                }
+                if (n == 0 || !net::wouldBlock()) done = true;
+                break;
+            }
+            if (!done && !got.empty()) {
+                finishLineHello(p, got);   // sikernél a socket a klienshez kerül (p.sock érvénytelen lesz)
+                done = true;
+            } else if (!done && now > p.deadline) {
+                done = true;
+            }
+            if (done) {
+                net::closeSocket(p.sock);
+                linePending_.erase(linePending_.begin() + static_cast<std::ptrdiff_t>(i));
+            } else {
+                ++i;
+            }
+        }
+    }
+
+    /**
+     * Az első sor: {"type":"hello","token":…}. Jó tokennél a kapcsolat távoli kliens lesz (ugyanaz jár neki, mint a
+     * WebSocketen: "machine", majd "state"); minden más esetben {"type":"auth","ok":false}, és a hívó bontja.
+     */
+    void finishLineHello(LinePending& p, const std::vector<std::string>& lines) {
+        const auto now = clock::now();
+        auto refuse = [&](const char* body) {
+            const std::string r = btlink::toLine(body);
+            net::sendSome(p.sock, r.data(), r.size());
+        };
+        if (btGate_.locked(now)) { refuse("{\"type\":\"auth\",\"ok\":false}"); return; }
+        const btlink::Hello h = btlink::parseHello(lines.front());
+        const std::string deviceId = h.ok ? deviceForToken(h.token) : std::string();
+        if (deviceId.empty()) {
+            refuse("{\"type\":\"auth\",\"ok\":false}");
+            if (btGate_.fail(now))
+                std::cout << "[WS Bridge] Túl sok hibás token Bluetoothon: " << btlink::kAuthLockSeconds
+                          << " másodpercig nem fogad kapcsolatot.\n";
+            return;
+        }
+        if (clients_.size() >= kBridgeMaxClients) { refuse("{\"type\":\"auth\",\"ok\":false,\"error\":\"busy\"}"); return; }
+        btGate_.success();
+
+        auto c = std::make_unique<Client>();
+        c->sock = p.sock;
+        p.sock = net::kInvalidSocket;
+        c->remote = true;
+        c->line = true;
+        c->spectrum = false;   // a spektrum nem megy Bluetoothon
+        c->deviceId = deviceId;
+        c->deviceName = deviceName(deviceId);
+        c->lines = std::move(p.lines);
+        Client& cl = *c;
+        clients_.push_back(std::move(c));
+        updateClientCountsLocked();
+        std::cout << "[WS Bridge] Távoli eszköz csatlakozott Bluetoothon: " << cl.deviceName << "\n";
+
+        cur_ = &cl;
+        sendText("{\"type\":\"machine\",\"machine\":\"" + machineId() + "\",\"computer\":\"" +
+                 jsonEscape(MdnsAnnouncer::computerName()) + "\"}");   // a gép neve, mint a WebSocketen
+        sendText(buildStateMessage());
+        for (size_t k = 1; k < lines.size() && !cl.dead; ++k) handleMessage(lines[k]);   // a hello után rögtön jöttek
+        cur_ = nullptr;
+        broadcastRemoteState();
+    }
+
+    void openBt() {
+        if (!btEnabled_ || bt_.isOpen()) return;
+        if (bt_.open())
+            std::cout << "[WS Bridge] Bluetooth-csatorna bekapcsolva (RFCOMM, " << btlink::kServiceUuid << ").\n";
+        else
+            std::cout << "[WS Bridge] Bluetooth-csatorna nem érhető el ezen a gépen.\n";
+    }
+
+    void closeBt() {
+        for (auto& p : linePending_) net::closeSocket(p.sock);
+        linePending_.clear();
+        for (auto& c : clients_)
+            if (c->line) kill(*c, "Bluetooth-csatorna kikapcsolva");
+        bt_.close();
+    }
+
+    /** Beérkező sorok egy soros (Bluetooth) kliensről: minden sor egy JSON-üzenet. */
+    void pumpLines(Client& c) {
+        char buf[4096];
+        std::vector<std::string> got;
+        size_t total = 0;
+        while (!c.dead) {
+            const long long n = net::recvSome(c.sock, buf, sizeof(buf));
+            if (n > 0) {
+                total += static_cast<size_t>(n);
+                if (!c.lines.push(buf, static_cast<size_t>(n), got)) { kill(c, "túl hosszú sor"); return; }
+                if (total > (24u << 20)) { kill(c, "túl sok adat"); return; }
+                continue;
+            }
+            if (n == 0) { kill(c, "kapcsolat bontva"); return; }
+            if (net::wouldBlock()) break;
+            kill(c, "olvasási hiba");
+            return;
+        }
+        cur_ = &c;
+        for (const auto& l : got) {
+            if (c.dead) break;
+            handleMessage(l);
+        }
+        cur_ = nullptr;
     }
 
     /**
@@ -888,6 +1053,14 @@ private:
     void queueFrame(Client& c, uint8_t opcode, const std::string& payload, bool droppable = false) {
         if (c.dead) return;
         if (droppable && c.outPos < c.out.size()) return;
+        if (c.line) {
+            // Soros (Bluetooth) kliens: csak szöveges üzenet megy, soronként egy (bináris, ping- és close-keret nincs)
+            if (opcode != 0x1) return;
+            c.out += btlink::toLine(payload);
+            if (c.out.size() - c.outPos > kBridgeMaxQueuedBytes) { kill(c, "a kliens nem olvas"); return; }
+            flush(c);
+            return;
+        }
         std::string& f = c.out;
         f.push_back(static_cast<char>(0x80 | opcode));
         const uint64_t len = payload.size();
@@ -946,6 +1119,7 @@ private:
 
     /** Beérkező WebSocket keretek feldolgozása (töredezett TCP olvasással is). */
     void pumpIncoming(Client& c) {
+        if (c.line) { pumpLines(c); return; }
         char buf[4096];
         while (!c.dead) {
             const long long n = net::recvSome(c.sock, buf, sizeof(buf));
@@ -1092,6 +1266,7 @@ private:
             remoteListenPort_ = port;
             std::cout << "[WS Bridge] Hálózati elérés bekapcsolva: 0.0.0.0:" << port << "\n";
             mdnsAnnouncer_.start(port, "", bridge_detail::localAddresses());
+            openBt();   // a Bluetooth-csatorna csak bekapcsolt hálózati elérésnél fut
             return true;
         }
         std::cerr << "[WS Bridge] A hálózati elérés portjai (" << remotePort_ << "–" << remotePort_ + kRemotePortCount - 1
@@ -1106,6 +1281,7 @@ private:
             net::closeSocket(pr.sock);
         }
         pendingPairRequests_.clear();
+        closeBt();
         if (remoteListener_ == net::kInvalidSocket) return;
         net::closeSocket(remoteListener_);
         remoteListener_ = net::kInvalidSocket;
@@ -1121,6 +1297,7 @@ private:
         const std::string doc = cb_.loadRemote();
         if (doc.empty() || !json::parse(doc, v) || v.type != json::Value::Type::Object) return;
         remoteEnabled_ = num(v, "enabled", 0.0) != 0.0;
+        btEnabled_ = num(v, "bluetooth", 1.0) != 0.0;
         if (const json::Value* m = v.get("machine")) {
             const std::string id = m->stringOr("");
             if (id.size() == 16 && bridge_detail::isHex(id)) machineId_ = id;
@@ -1149,6 +1326,8 @@ private:
         if (!cb_.saveRemote) return;
         std::string s = "{\"enabled\":";
         s += remoteEnabled_ ? "true" : "false";
+        s += ",\"bluetooth\":";
+        s += btEnabled_ ? "true" : "false";
         s += ",\"port\":" + std::to_string(remotePort_) + ",\"machine\":\"" + machineId() + "\",\"devices\":[";
         for (size_t i = 0; i < devices_.size(); ++i) {
             const auto& d = devices_[i];
@@ -1176,6 +1355,11 @@ private:
              std::to_string(open ? std::chrono::duration_cast<std::chrono::seconds>(pairUntil_ - now).count() : 0);
         s += ",\"locked\":";
         s += now < pairLockUntil_ ? "true" : "false";
+        s += ",\"bluetooth\":{\"enabled\":";
+        s += btEnabled_ ? "true" : "false";
+        s += ",\"listening\":";
+        s += bt_.isOpen() ? "true" : "false";
+        s += '}';
         s += ",\"addresses\":[";
         const auto addrs = bridge_detail::localAddresses();
         for (size_t i = 0; i < addrs.size(); ++i) s += (i ? ",\"" : "\"") + addrs[i] + "\"";
@@ -1205,7 +1389,15 @@ private:
     bool handleRemoteControl(const std::string& type, const json::Value& msg) {
         if (type == "get_remote") {
             sendText(buildRemoteMessage());
+        } else if (type == "set_remote" && msg.get("bluetooth") && !msg.get("enabled") && !msg.get("port")) {
+            // Csak a Bluetooth-tartalék kapcsolója: a hálózati elérés (és a csatlakozott telefonok) nem változik
+            btEnabled_ = num(msg, "bluetooth", 1.0) != 0.0;
+            if (btEnabled_ && remoteListener_ != net::kInvalidSocket) openBt();
+            else if (!btEnabled_) closeBt();
+            saveRemoteConfig();
+            broadcastRemoteState();
         } else if (type == "set_remote") {
+            if (msg.get("bluetooth")) btEnabled_ = num(msg, "bluetooth", 1.0) != 0.0;
             const bool on = num(msg, "enabled", remoteEnabled_ ? 1.0 : 0.0) != 0.0;
             if (const json::Value* p = msg.get("port"))
                 remotePort_ = std::clamp(static_cast<int>(p->numberOr(remotePort_)), 1024, 65535 - kRemotePortCount);
@@ -1515,7 +1707,7 @@ private:
         }
         if (type == "subscribe" && cur_) {
             // A kliens maga kéri, kap-e spektrumot, és legfeljebb milyen gyakran (pl. a telefon kímélete)
-            cur_->spectrum = num(msg, "spectrum", 1.0) != 0.0;
+            cur_->spectrum = !cur_->line && num(msg, "spectrum", 1.0) != 0.0;   // Bluetoothon nincs spektrum
             cur_->spectrumMs = 1000 / std::clamp(static_cast<int>(num(msg, "fps", 60.0)), 1, 60);
             return;
         }
@@ -1585,6 +1777,12 @@ private:
             } else {
                 sendText("{\"type\":\"media_art\",\"id\":\"" + jsonEscape(id) + "\"}");
             }
+            return;
+        }
+        if (type == "get_bt_info") {
+            // A Bluetooth-tartalékhoz: fut-e a gép Bluetooth-csatornája, és mi a gép Bluetooth-címe
+            sendText(std::string("{\"type\":\"bt_info\",\"available\":") + (bt_.isOpen() ? "true" : "false") +
+                     ",\"addr\":\"" + jsonEscape(bt_.address()) + "\"}");
             return;
         }
         if (type == "hello" || type == "get_state") {
@@ -2140,6 +2338,13 @@ private:
     clock::time_point pairUntil_{};     // eddig párosítható
     int pairFails_ = 0;
     clock::time_point pairLockUntil_{};
+    // Bluetooth (soros) csatorna: a távirányító tartaléka, ha a Wi-Fi nem stabil (bt_link.hpp)
+    bool btEnabled_ = true;
+    btlink::RfcommListener bt_;
+    btlink::AuthGate btGate_;
+    std::vector<LinePending> linePending_;
+    int lineTestPort_ = 0;
+    net::socket_t lineTestListener_ = net::kInvalidSocket;
 };
 
 } // namespace ee_analyzer
