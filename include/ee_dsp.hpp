@@ -119,6 +119,28 @@ private:
     std::atomic<float> harmonicsDb_{-100.0f};
 };
 
+// ============================================================ Stereo Tools (Calf)
+class StereoTools {
+public:
+    StereoTools();
+    ~StereoTools();
+    StereoTools(const StereoTools&) = delete;
+    StereoTools& operator=(const StereoTools&) = delete;
+
+    void setSampleRate(uint32_t sr);
+    void update(const ParamData& d);
+    void process(float* L, float* R, size_t n);
+    void reset();
+    size_t latency() const { return 0; }
+    /** A Calf "meter_phase" kimenete (fáziskorreláció, 0..1). */
+    float phaseCorrelation() const { return phaseCorrelation_.load(std::memory_order_relaxed); }
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> p_;
+    std::atomic<float> phaseCorrelation_{0.0f};
+};
+
 // ============================================================ Crossfeed (libbs2b)
 class Crossfeed {
 public:
