@@ -26,12 +26,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Függőségek
+        timeout-minutes: 15
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q build-essential cmake pkg-config libpipewire-0.3-dev libfftw3-dev libsystemd-dev \
             pipewire wireplumber pipewire-pulse pulseaudio-utils dbus python3-numpy
 
       - name: RNNoise modell (az Ubuntu forráscsomagjából)
+        timeout-minutes: 10
         run: |
           bash tools/fetch_rnnoise.sh /tmp/rnnoise.tar.xz || { echo "::error title=RNNoise::a letöltés egyik tükörről sem sikerült"; exit 1; }
           mkdir -p "$RUNNER_TEMP/rnnoise-model"

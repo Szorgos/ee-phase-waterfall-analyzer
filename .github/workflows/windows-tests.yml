@@ -27,6 +27,7 @@ jobs:
           echo "TEMP_MIXED=$(cygpath -m "$RUNNER_TEMP")" >> "$GITHUB_ENV"
 
       - name: llvm-mingw letöltése (Windows-os változat)
+        timeout-minutes: 10
         shell: bash
         run: |
           curl -sSL -o "$TEMP_POSIX/llvm-mingw.zip" \
@@ -41,6 +42,7 @@ jobs:
 
       # A sha256sum a stdin-ről olvas (a fájlnévvel a Windows-os útvonal visszaperjelet tenne a hash elé)
       - name: FFTW 3.3.10 forrás (ellenőrzött)
+        timeout-minutes: 10
         shell: bash
         run: |
           for i in 1 2 3; do curl -fsSL -o "$TEMP_POSIX/fftw.tar.gz" https://www.fftw.org/fftw-3.3.10.tar.gz && break; sleep 15; done
@@ -51,6 +53,7 @@ jobs:
           echo "FFTW_DIR=$TEMP_MIXED/fftw-3.3.10" >> "$GITHUB_ENV"
 
       - name: RNNoise modell (az Ubuntu forráscsomagjából)
+        timeout-minutes: 10
         shell: bash
         run: |
           bash tools/fetch_rnnoise.sh "$TEMP_POSIX/rnnoise.tar.xz" || { echo "::error title=RNNoise::a letöltés egyik tükörről sem sikerült"; exit 1; }
