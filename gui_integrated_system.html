@@ -5617,6 +5617,11 @@ var qrcode = function() {
       </div>
       <label class="ao-row ao-check"><input type="checkbox" id="chkRemoteEnable" onchange="remoteSetEnabled(this.checked)"> <span data-i18n="remote.enable">Hálózati elérés a telefonos távirányítóhoz</span></label>
       <div class="ao-hint" style="margin:0;" data-i18n="remote.enableHint">Csak megbízható otthoni hálózaton kapcsold be: a kapcsolat a helyi hálózaton titkosítatlan. Párosítás nélkül senki nem vezérelheti a gépet.</div>
+      <div id="remoteBtRow" style="display:none; flex-direction:column; gap:6px;">
+        <label class="ao-row ao-check"><input type="checkbox" id="chkRemoteBt" onchange="remoteSetBluetooth(this.checked)"> <span data-i18n="remote.bluetooth">Bluetooth-tartalék: ha a Wi-Fi nem éri el a gépet, a telefon Bluetoothon folytatja</span></label>
+        <div id="remoteBtHint" class="ao-hint" style="margin:0;" data-i18n="remote.bluetoothHint">A telefont egyszer párosítsd a géppel a Bluetooth-beállításokban. A zene átküldéséhez Wi-Fi kell.</div>
+        <div id="remoteBtUnavailable" class="ao-hint" hidden style="margin:0;" data-i18n="remote.bluetoothUnavailable">Ezen a gépen most nem érhető el Bluetooth.</div>
+      </div>
       <div id="remotePairBox" style="display:none; gap:16px; align-items:center; flex-wrap:wrap;">
         <div id="remoteQr" style="background:#fff; padding:10px; border-radius:8px; line-height:0;"></div>
         <div style="display:flex; flex-direction:column; gap:8px; min-width:200px; flex:1;">
@@ -12378,6 +12383,7 @@ function closeRemotePanel() {
 }
 
 function remoteSetEnabled(on) { sendEngine({ type: "set_remote", enabled: on ? 1 : 0 }); }
+function remoteSetBluetooth(on) { sendEngine({ type: "set_remote", bluetooth: on ? 1 : 0 }); }
 function remoteNewCode() { sendEngine({ type: "remote_new_code" }); }
 function remoteRevoke(id) { sendEngine({ type: "remote_revoke", id }); }
 
@@ -12404,6 +12410,16 @@ function renderRemotePanel() {
   const show = !!(st.enabled && st.listening);
   document.getElementById("remotePairBox").style.display = show ? "flex" : "none";
   document.getElementById("remoteNotListening").hidden = !(st.enabled && !st.listening);
+  const btRow = document.getElementById("remoteBtRow");
+  if (!st.bluetooth) {
+    btRow.style.display = "none";
+  } else {
+    btRow.style.display = "flex";
+    const btChk = document.getElementById("chkRemoteBt");
+    btChk.checked = !!st.bluetooth.enabled;
+    btChk.disabled = !engineWsOpen();
+    document.getElementById("remoteBtUnavailable").hidden = !(st.enabled && st.bluetooth.enabled && !st.bluetooth.listening);
+  }
   if (show) {
     const addrs = remoteAddresses(st);
     document.getElementById("remoteAddr").textContent = addrs.map(a => a + ":" + st.port).join(", ");
