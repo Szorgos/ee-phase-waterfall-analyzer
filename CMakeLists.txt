@@ -143,6 +143,10 @@ if(WIN32)
 endif()
 target_compile_definitions(test_player PRIVATE AQ_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
 
+# 9b. Tesztalkalmazás: DSD (.dsf/.dff) fejléc, FIR szűrő, PCM dekódolás, tekerés, ID3v2, DST elutasítás, DoP 1.1
+add_executable(test_dsd src/test_dsd.cpp)
+target_link_libraries(test_dsd PRIVATE aq_player Threads::Threads)
+
 if(WIN32)
     # ------------------------------------------------------------------
     # Windows: Aqulify.exe motor + Aqulify.dll (Equalizer APO plugin, VST 2.4 ABI)
