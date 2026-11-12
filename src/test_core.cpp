@@ -1326,6 +1326,24 @@ static void testBluetoothLine() {
     }
     CHECK(btlink::formatAddress(0x001A7DDA7113ULL) == "00:1A:7D:DA:71:13", "Bluetooth-cím szövegként");
 
+    // 4b. Az SDP-bejegyzés megújítása (a gép alvása után a Windows elfelejtheti): valódi rádióval, ha van
+    {
+        net::startup();   // a hidak leálláskor lezárják a Winsockot; ez a próba híd nélkül nyit socketet
+        btlink::RfcommListener l;
+        if (l.open()) {
+            const std::string addr = l.address();
+            CHECK(l.refresh() && l.refresh(), "SDP-bejegyzés kétszer egymás után megújítható");
+            CHECK(l.isOpen() && l.address() == addr, "megújítás után ugyanaz a figyelő és cím");
+            CHECK(l.acceptOne() == net::kInvalidSocket && !l.broken(), "várakozó kapcsolat nélkül nem számít hibának");
+            l.close();
+            CHECK(!l.isOpen() && !l.refresh(), "bezárás után nincs megújítás");
+        } else {
+            std::printf("  (nincs Bluetooth-rádió / nem Windows: a megújítás csak false-t ad)\n");
+            CHECK(!l.refresh() && !l.broken(), "rádió nélkül a megújítás false, hiba nincs");
+        }
+        net::cleanup();
+    }
+
     // 5. Élő próba a valódi híddal: a soros tesztporton ugyanaz a kód fut, mint a Bluetoothról jövő kapcsolatnál
     const std::string token = bridge_detail::randomHex(32);
     const std::string remoteDoc = "{\"enabled\":true,\"port\":47897,\"devices\":[{\"id\":\"0b0c0d0e\",\"name\":\"BT-teszt\",\"hash\":\"" +

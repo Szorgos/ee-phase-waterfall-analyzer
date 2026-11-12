@@ -553,6 +553,7 @@ private:
             if (remoteListener_ != net::kInvalidSocket) acceptNew(remoteListener_, true);
             progressPending();
             progressPendingPairRequests();
+            maintainBt();
             acceptLineConnections();
             progressLinePending();
 
@@ -758,10 +759,36 @@ private:
 
     void openBt() {
         if (!btEnabled_ || bt_.isOpen()) return;
-        if (bt_.open())
+        btNextCheck_ = clock::now() + std::chrono::seconds(kBtRefreshSeconds);
+        if (bt_.open()) {
             std::cout << "[WS Bridge] Bluetooth-csatorna bekapcsolva (RFCOMM, " << btlink::kServiceUuid << ").\n";
-        else
+            btReported_ = true;
+        } else if (btReported_) {
+            // Csak állapotváltáskor írjuk ki (a karbantartás 30 mp-enként újra próbálja)
             std::cout << "[WS Bridge] Bluetooth-csatorna nem érhető el ezen a gépen.\n";
+            btReported_ = false;
+        }
+    }
+
+    /**
+     * A Bluetooth-csatorna karbantartása (a hálózati elérés bekapcsolt állapotában, 30 mp-enként): a Windows a gép
+     * alvása után elfelejtheti az SDP-bejegyzést, vagy a figyelő socket elromlik, miközben a motor tovább „figyel”.
+     * Ilyenkor a telefon nem talál rá. Ezért a bejegyzés időnként megújul; ha az nem sikerül, vagy a socket hibát
+     * adott, a csatorna újranyílik (a már csatlakozott telefonok kapcsolata ettől nem bomlik). Ha a rádió nem volt
+     * elérhető (pl. kikapcsolt Bluetooth), itt nyílik meg, amikor elérhetővé válik.
+     */
+    void maintainBt() {
+        if (!btEnabled_ || remoteListener_ == net::kInvalidSocket) return;
+        const auto now = clock::now();
+        const bool broken = bt_.broken();
+        if (!broken && now < btNextCheck_) return;
+        btNextCheck_ = now + std::chrono::seconds(kBtRefreshSeconds);
+        if (!bt_.isOpen()) { openBt(); return; }
+        if (!broken && bt_.refresh()) return;
+        std::cout << "[WS Bridge] Bluetooth-csatorna újranyitása (" << (broken ? "a figyelő socket hibát adott"
+                                                                           : "az SDP-bejegyzés nem újult meg") << ").\n";
+        bt_.close();
+        openBt();
     }
 
     void closeBt() {
@@ -2409,6 +2436,9 @@ private:
     clock::time_point pairLockUntil_{};
     // Bluetooth (soros) csatorna: a távirányító tartaléka, ha a Wi-Fi nem stabil (bt_link.hpp)
     bool btEnabled_ = true;
+    static constexpr int kBtRefreshSeconds = 30;
+    clock::time_point btNextCheck_{};
+    bool btReported_ = true;   // az utoljára kiírt állapot: így a sikertelen újrapróbák nem töltik tele a naplót
     btlink::RfcommListener bt_;
     btlink::AuthGate btGate_;
     std::vector<LinePending> linePending_;

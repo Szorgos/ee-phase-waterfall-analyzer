@@ -173,19 +173,33 @@ public:
     void close() {
         if (registered_) setService(RNRSERVICE_DELETE);
         registered_ = false;
+        broken_ = false;
         net::closeSocket(sock_);
         sock_ = net::kInvalidSocket;
         addr_.clear();
     }
 
-    /** Egy várakozó kapcsolat (nem blokkoló); kInvalidSocket, ha nincs. */
+    /** Egy várakozó kapcsolat (nem blokkoló); kInvalidSocket, ha nincs. Valódi hibánál a broken() igaz lesz. */
     net::socket_t acceptOne() {
         if (!isOpen()) return net::kInvalidSocket;
         SOCKADDR_BTH ca{};
         int len = sizeof(ca);
         net::socket_t c = ::accept(sock_, reinterpret_cast<sockaddr*>(&ca), &len);
         if (c != net::kInvalidSocket) net::setNonBlocking(c, true);
+        else if (!net::wouldBlock()) broken_ = true;   // pl. a Bluetooth-verem újraindult (alvás után)
         return c;
+    }
+
+    /**
+     * Az SDP-bejegyzés megújítása (törlés + új bejegyzés). A Windows a gép alvása után elfelejtheti a bejegyzést,
+     * miközben a socket látszólag tovább figyel: a telefon ilyenkor nem találja a szolgáltatást. false, ha nem sikerült
+     * (ilyenkor a hívó nyissa újra az egészet).
+     */
+    bool refresh() {
+        if (!isOpen()) return false;
+        if (registered_) setService(RNRSERVICE_DELETE);
+        registered_ = setService(RNRSERVICE_REGISTER);
+        return registered_;
     }
 
 private:
@@ -244,9 +258,15 @@ private:
     bool open() { return false; }
     void close() {}
     net::socket_t acceptOne() { return net::kInvalidSocket; }
+    bool refresh() { return false; }
 #endif
 
+public:
+    /** A figyelő socket hibát adott (nem csak „nincs várakozó kapcsolat”): újra kell nyitni. */
+    bool broken() const { return broken_; }
+
 private:
+    bool broken_ = false;
     net::socket_t sock_ = net::kInvalidSocket;
     std::string addr_;
 };
