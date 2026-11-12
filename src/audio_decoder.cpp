@@ -4,6 +4,7 @@
  *        PICTURE) feldolgozása. A könyvtárak megvalósítását a src/decoders_impl.c fordítja.
  */
 #include "audio_decoder.hpp"
+#include "dsd.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -958,6 +959,213 @@ private:
     std::vector<int32_t> rawBuf_;
 };
 
+// ---------------------------------------------------------------- DSD (.dsf / .dff)
+
+class FileDsdRawSource final : public dsd::DsdRawSource {
+public:
+    ~FileDsdRawSource() override {
+        if (fp_) std::fclose(fp_);
+    }
+
+    bool open(const std::string& path, std::string& error) {
+#ifdef _WIN32
+        fp_ = _wfopen(widePath(path).c_str(), L"rb");
+#else
+        fp_ = std::fopen(path.c_str(), "rb");
+#endif
+        if (!fp_) {
+            error = "A DSD fájl nem nyitható meg.";
+            return false;
+        }
+        if (!seekAbs(0) || seekEnd() < 0) {
+            error = "A DSD fájlméret nem kérdezhető le.";
+            return false;
+        }
+        const uint64_t fsize = fileSize_;
+        const std::string ext = lowerExt(path);
+        dsd::DsdFileInfo info{};
+        const bool ok = (ext == "dff")
+                            ? dsd::parseDsdiffHeader(&FileDsdRawSource::readAtCb, this, fsize, info, error)
+                            : dsd::parseDsfHeader(&FileDsdRawSource::readAtCb, this, fsize, info, error);
+        if (!ok) return false;
+        if (!stream_.init(info, &FileDsdRawSource::readAtCb, this)) {
+            error = "A DSD folyam nem inicializálható.";
+            return false;
+        }
+        return true;
+    }
+
+    bool readBytesAt(uint64_t offset, void* dst, size_t len) {
+        if (!fp_) return false;
+        if (!seekAbs(offset)) return false;
+        return len == 0 || std::fread(dst, 1, len, fp_) == len;
+    }
+
+    const dsd::DsdFileInfo& info() const override { return stream_.info(); }
+    uint64_t totalChannelBytes() const override { return stream_.totalChannelBytes(); }
+    size_t read(uint8_t* dstInterleavedMsb, size_t channelBytes) override {
+        return stream_.readChannelBytes(dstInterleavedMsb, channelBytes);
+    }
+    bool seekByte(uint64_t chByteOffset) override { return stream_.seekByte(chByteOffset); }
+
+private:
+    static bool readAtCb(void* ctx, uint64_t offset, void* dst, size_t len) {
+        return static_cast<FileDsdRawSource*>(ctx)->readBytesAt(offset, dst, len);
+    }
+
+    bool seekAbs(uint64_t off) {
+#ifdef _WIN32
+        return _fseeki64(fp_, static_cast<__int64>(off), SEEK_SET) == 0;
+#else
+        return fseeko(fp_, static_cast<off_t>(off), SEEK_SET) == 0;
+#endif
+    }
+
+    int64_t seekEnd() {
+#ifdef _WIN32
+        if (_fseeki64(fp_, 0, SEEK_END) != 0) return -1;
+        const __int64 sz = _ftelli64(fp_);
+        if (sz < 0) return -1;
+        fileSize_ = static_cast<uint64_t>(sz);
+        _fseeki64(fp_, 0, SEEK_SET);
+        return static_cast<int64_t>(sz);
+#else
+        if (fseeko(fp_, 0, SEEK_END) != 0) return -1;
+        const off_t sz = ftello(fp_);
+        if (sz < 0) return -1;
+        fileSize_ = static_cast<uint64_t>(sz);
+        fseeko(fp_, 0, SEEK_SET);
+        return static_cast<int64_t>(sz);
+#endif
+    }
+
+    FILE* fp_ = nullptr;
+    uint64_t fileSize_ = 0;
+    dsd::DsdRawStream stream_;
+};
+
+} // namespace
+
+namespace detail {
+void parseId3v2(const uint8_t* data, size_t size, TrackTags& out);
+void finalizeTags(TrackTags& t);
+} // namespace detail
+
+namespace {
+
+class DsdDecoder final : public AudioDecoder {
+public:
+    bool open(const std::string& path, std::string& error, bool probe = false) {
+        auto src = std::make_unique<FileDsdRawSource>();
+        if (!src->open(path, error)) return false;
+
+        const dsd::DsdFileInfo info = src->info();
+        if (info.channels == 0 || info.pcmSampleRate == 0 || info.dsdSampleRate < info.pcmSampleRate) {
+            error = "Érvénytelen DSD folyamparaméterek.";
+            return false;
+        }
+        const uint32_t decim = info.dsdSampleRate / info.pcmSampleRate;
+        totalFrames_ = info.sampleCount / decim;
+
+        // DSF-nél a fájl végi ID3v2 blokk beolvasása a meglévő parseId3v2 segéddel [DSF Section 2.4]
+        if (info.container == dsd::ContainerType::Dsf && info.metadataOffset > 0 && info.metadataMaxBytes >= 10) {
+            const size_t metaLen = static_cast<size_t>(std::min<uint64_t>(info.metadataMaxBytes, 16u << 20));
+            std::vector<uint8_t> id3(metaLen);
+            if (src->readBytesAt(info.metadataOffset, id3.data(), metaLen)) {
+                detail::parseId3v2(id3.data(), id3.size(), tags_);
+                detail::finalizeTags(tags_);
+            }
+        }
+
+        raw_ = std::move(src);
+        if (!probe) {
+            if (!conv_.init(info.dsdSampleRate, info.pcmSampleRate, info.channels)) {
+                error = "A DSD→PCM szűrő inicializálása sikertelen.";
+                return false;
+            }
+            seek(0);
+        }
+        return true;
+    }
+
+    uint32_t sampleRate() const override { return raw_ ? raw_->info().pcmSampleRate : 0; }
+    uint32_t channels() const override { return raw_ ? raw_->info().channels : 0; }
+    uint64_t totalFrames() const override { return totalFrames_; }
+
+    size_t read(float* interleaved, size_t frames) override {
+        if (!raw_ || pcmPos_ >= totalFrames_ || frames == 0) return 0;
+        const uint32_t ch = raw_->info().channels;
+        const size_t step = conv_.bytesPerPcmFrame();
+        const uint64_t totalRaw = raw_->totalChannelBytes();
+        const size_t todo = static_cast<size_t>(std::min<uint64_t>(frames, totalFrames_ - pcmPos_));
+
+        size_t done = 0;
+        while (done < todo) {
+            const size_t chunk = std::min<size_t>(todo - done, 2048u);
+            const size_t needBytes = chunk * step;
+            tmpBytes_.resize(needBytes * ch);
+            size_t got = 0;
+            if (rawReadPos_ < totalRaw) {
+                const size_t canRead = static_cast<size_t>(std::min<uint64_t>(needBytes, totalRaw - rawReadPos_));
+                got = raw_->read(tmpBytes_.data(), canRead);
+            }
+            if (got < needBytes) {
+                std::memset(tmpBytes_.data() + got * ch, dsd::kDsdSilenceByte, (needBytes - got) * ch);
+            }
+            rawReadPos_ += needBytes;
+            conv_.process(tmpBytes_.data(), chunk, interleaved + done * ch);
+            done += chunk;
+            pcmPos_ += chunk;
+        }
+        return done;
+    }
+
+    bool seek(uint64_t frame) override {
+        if (!raw_ || frame > totalFrames_) return false;
+        const uint32_t ch = raw_->info().channels;
+        const uint32_t step = conv_.bytesPerPcmFrame();
+        const uint32_t half = conv_.halfFilterBytes(); // 14 * step (előnézés = utónézés)
+        const uint64_t totalRaw = raw_->totalChannelBytes();
+
+        conv_.reset();
+        const int64_t centerByte = static_cast<int64_t>(frame) * static_cast<int64_t>(step);
+        const int64_t winStart = centerByte - static_cast<int64_t>(half);
+        const int64_t winEnd = centerByte + static_cast<int64_t>(half);
+
+        if (winStart < 0) {
+            conv_.pushSilenceBytes(static_cast<uint32_t>(-winStart));
+        }
+        const uint64_t fileStart = (winStart > 0) ? static_cast<uint64_t>(winStart) : 0ULL;
+        const uint64_t fileWantEnd = static_cast<uint64_t>(winEnd);
+        const uint64_t availEnd = std::min(fileWantEnd, totalRaw);
+
+        if (availEnd > fileStart) {
+            const size_t toRead = static_cast<size_t>(availEnd - fileStart);
+            tmpBytes_.resize(toRead * ch);
+            raw_->seekByte(fileStart);
+            const size_t got = raw_->read(tmpBytes_.data(), toRead);
+            if (got > 0) conv_.pushBytesOnly(tmpBytes_.data(), got);
+            if (got < toRead) conv_.pushSilenceBytes(static_cast<uint32_t>(toRead - got));
+        }
+        if (fileWantEnd > availEnd) {
+            conv_.pushSilenceBytes(static_cast<uint32_t>(fileWantEnd - availEnd));
+        }
+
+        raw_->seekByte(std::min(fileWantEnd, totalRaw));
+        rawReadPos_ = fileWantEnd;
+        pcmPos_ = frame;
+        return true;
+    }
+
+private:
+    std::unique_ptr<FileDsdRawSource> raw_;
+    dsd::DsdToPcmConverter conv_;
+    uint64_t totalFrames_ = 0;
+    uint64_t pcmPos_ = 0;
+    uint64_t rawReadPos_ = 0;
+    std::vector<uint8_t> tmpBytes_;
+};
+
 } // namespace
 
 namespace detail {
@@ -1162,7 +1370,8 @@ void parseId3v2(const uint8_t* data, size_t size, TrackTags& t) {
 bool isSupportedFile(const std::string& path) {
     const std::string e = lowerExt(path);
     return e == "flac" || e == "wav" || e == "mp3" || e == "ogg" || e == "oga" ||
-           e == "m4a" || e == "alac" || e == "caf" || e == "opus" || e == "wv";
+           e == "m4a" || e == "alac" || e == "caf" || e == "opus" || e == "wv" ||
+           e == "dsf" || e == "dff";
 }
 
 std::unique_ptr<AudioDecoder> openDecoder(const std::string& path, std::string* error, bool probe) {
@@ -1181,7 +1390,27 @@ std::unique_ptr<AudioDecoder> openDecoder(const std::string& path, std::string* 
     if (e == "m4a" || e == "alac" || e == "caf") { auto d = std::make_unique<AlacDecoder>(); if (d->open(path, probe)) return d; return fail("Az ALAC (M4A) fájl nem nyitható meg."); }
     if (e == "opus") { auto d = std::make_unique<OpusDecoder>(); if (d->open(path)) return d; return fail("Az Opus fájl nem nyitható meg."); }
     if (e == "wv") { auto d = std::make_unique<WavpackDecoder>(); if (d->open(path, probe)) return d; return fail("A WavPack (.wv) fájl nem nyitható meg."); }
-    return fail("Nem támogatott formátum (FLAC, WAV, MP3, Ogg Vorbis, ALAC, Opus, WavPack).");
+    if (e == "dsf" || e == "dff") {
+        auto d = std::make_unique<DsdDecoder>();
+        std::string dsdErr;
+        if (d->open(path, dsdErr, probe)) return d;
+        return fail(dsdErr.empty() ? "A DSD fájl nem nyitható meg." : dsdErr.c_str());
+    }
+    return fail("Nem támogatott formátum (FLAC, WAV, MP3, Ogg Vorbis, ALAC, Opus, WavPack, DSF, DFF).");
 }
 
 } // namespace ee_analyzer::player
+
+namespace ee_analyzer::dsd {
+
+std::unique_ptr<DsdRawSource> openDsdRawFile(const std::string& path, std::string* error) {
+    auto src = std::make_unique<ee_analyzer::player::FileDsdRawSource>();
+    std::string err;
+    if (!src->open(path, err)) {
+        if (error) *error = err;
+        return nullptr;
+    }
+    return src;
+}
+
+} // namespace ee_analyzer::dsd
