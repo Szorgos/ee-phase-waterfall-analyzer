@@ -153,6 +153,27 @@ int main() {
         CHECK(!sel3->exclusiveActive() && shared3->opens == 1 && sel3->fallback().empty(),
               "kizárólagos mód kérése nélkül a megosztott kimenet szól, visszalépés nélkül");
     }
+    std::printf("[4] Valós idejű prioritás nélküli futás (RLIMIT_RTPRIO = 0)\n");
+    {
+        struct rlimit rlOrig{};
+        const bool hadLimit = (getrlimit(RLIMIT_RTPRIO, &rlOrig) == 0);
+        if (hadLimit) {
+            struct rlimit rlZero = rlOrig;
+            rlZero.rlim_cur = 0;
+            setrlimit(RLIMIT_RTPRIO, &rlZero);
+        }
+        auto* alsa4 = new AlsaPlayerOutput("null");
+        auto* shared4 = new NullShared;
+        auto* sel4 = new SelectablePlayerOutput(std::unique_ptr<PlayerOutput>(shared4), std::unique_ptr<PlayerOutput>(alsa4));
+        sel4->setExclusive(true);
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(sel4) };
+        const bool opened = p.open(wav.string());
+        const bool progressed = opened && waitUntil([&] { return alsa4->consumedFrames() > 0; });
+        CHECK(opened && progressed, "RT-jog nélkül is elindul és halad a közvetlen lejátszás (RT prioritás: %d)",
+              alsa4->realtimePriority());
+        p.stop();
+        if (hadLimit) setrlimit(RLIMIT_RTPRIO, &rlOrig);
+    }
     fs::remove(wav);
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
