@@ -40,7 +40,7 @@ struct AudioOptions {
     float rgPreampDb = 0.0f;     // -15 .. +15 dB
     bool rgPreventClip = true;   // a csúcs-címke szerint nem vezérel túl
     bool preload = false;        // a fájl lejátszás előtt a memóriába kerül
-    bool exclusive = false;      // Windows: kizárólagos mód (WASAPI exclusive; a DSP a motorban fut)
+    bool exclusive = false;      // kizárólagos mód (Windows: WASAPI exclusive; Linux: közvetlen ALSA); a DSP a motorban fut
     bool exclHwVolume = false;   // Windows, kizárólagos módban: a DAC hardveres hangereje (false: digitális, a lánc végén)
 
     bool operator==(const AudioOptions& o) const {

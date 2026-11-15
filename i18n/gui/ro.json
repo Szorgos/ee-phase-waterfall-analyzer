@@ -614,6 +614,8 @@
   "ao.preloadHint": "Fără citire de pe disc sau rețea în timpul redării (ex. disc extern în repaus, NAS).",
   "ao.exclusive": "Mod exclusiv (WASAPI exclusive)",
   "ao.exclusiveHint": "Playerul utilizează placa de sunet în mod exclusiv: mixerul Windows și Equalizer APO sunt ocolite, fișierul redă la propria rată de eșantionare, iar lanțul DSP rulează în program. Alte aplicații nu pot reda sunet pe acest dispozitiv. Comutarea în timpul redării întrerupe scurt sunetul.",
+  "ao.exclusiveAlsa": "Mod exclusiv (ALSA direct)",
+  "ao.exclusiveAlsaHint": "Playerul folosește DAC-ul în mod exclusiv: PipeWire îl eliberează, fișierul redă la propria rată de eșantionare fără conversie, lanțul DSP rulează în program, iar volumul este digital. Între timp, alte programe nu pot reda pe acest dispozitiv. Se aplică de la piesa următoare.",
   "ao.exclVol": "Volum în mod exclusiv",
   "ao.exclVolDigital": "Digital (implicit)",
   "ao.exclVolHw": "Volum hardware al DAC-ului",

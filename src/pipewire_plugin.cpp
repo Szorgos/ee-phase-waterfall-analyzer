@@ -27,6 +27,11 @@
 #include "linux_store.hpp"
 #include "media_mpris.hpp"
 #include "pair_cli.hpp"
+#if defined(AQ_HAVE_ALSA)
+#include "chain_player_dsp.hpp"
+#include "player_output_alsa.hpp"
+#include "player_output_select.hpp"
+#endif
 #include "pipewire_sink_node.hpp"
 #include "player_output_pw.hpp"
 #include "self_path.hpp"
@@ -421,9 +426,29 @@ int main(int argc, char* argv[]) {
     }
 
     uint64_t readPos = 0;
+#if defined(AQ_HAVE_ALSA)
+    // A beépített lejátszó közvetlen ALSA-kimenete (kizárólagos mód): ilyenkor a DSP a lejátszó saját láncában fut,
+    // és a mérők / a vízesés ebből kapják a jelet (a PipeWire „Aqulify” eszközén nem szól semmi)
+    std::unique_ptr<player::ChainPlayerDsp> playerDsp;
+    player::SelectablePlayerOutput* playerSel = nullptr;
+    uint64_t playerReadPos = 0;
+    auto playerExclusive = [&]() { return playerSel && playerSel->exclusiveActive(); };
+#else
+    auto playerExclusive = []() { return false; };
+#endif
     BridgeCallbacks cb;
-    cb.pullAudio = [&](float* lr, size_t maxFrames) { return readTapRing(node.visualizerTap, readPos, lr, maxFrames); };
-    cb.sampleRate = [&]() { return static_cast<double>(node.sampleRate.load()); };
+    cb.pullAudio = [&](float* lr, size_t maxFrames) {
+#if defined(AQ_HAVE_ALSA)
+        if (playerExclusive()) return readTapRing(playerDsp->tap(), playerReadPos, lr, maxFrames);
+#endif
+        return readTapRing(node.visualizerTap, readPos, lr, maxFrames);
+    };
+    cb.sampleRate = [&]() {
+#if defined(AQ_HAVE_ALSA)
+        if (playerExclusive()) return static_cast<double>(playerDsp->sampleRate());
+#endif
+        return static_cast<double>(node.sampleRate.load());
+    };
     cb.getParams = [&]() { std::lock_guard<std::mutex> lk(paramMutex); return current; };
     cb.setParams = [&](const ParamData& p) {
         {
@@ -433,8 +458,16 @@ int main(int argc, char* argv[]) {
             lastChange = std::chrono::steady_clock::now();
         }
         node.params.write(p);
+#if defined(AQ_HAVE_ALSA)
+        if (playerDsp) playerDsp->setParams(p);
+#endif
     };
-    cb.gainReduction = [&]() { return node.chain.gainReductionDb(); };
+    cb.gainReduction = [&]() {
+#if defined(AQ_HAVE_ALSA)
+        if (playerExclusive()) return playerDsp->gainReductionDb();
+#endif
+        return node.chain.gainReductionDb();
+    };
     cb.bassHarmonics = [&]() { return node.chain.bassHarmonicsDb(); };
 
     std::string cachedSinksJson = "[]";
@@ -468,14 +501,28 @@ int main(int argc, char* argv[]) {
             updateSinksCache();
         }
         char buf[256];
-        std::snprintf(buf, sizeof(buf),
-                      "\"platform\":\"linux\",\"source\":\"PipeWire – Aqulify\",\"dspActive\":%s,\"sr\":%u,\"gr\":%.2f",
-                      node.playbackStreaming.load() ? "true" : "false", node.sampleRate.load(),
-                      node.chain.gainReductionDb());
+        if (playerExclusive()) {
+#if defined(AQ_HAVE_ALSA)
+            std::snprintf(buf, sizeof(buf),
+                          "\"platform\":\"linux\",\"source\":\"ALSA (kizárólagos)\",\"dspActive\":true,\"sr\":%u,\"gr\":%.2f",
+                          playerDsp->sampleRate(), playerDsp->gainReductionDb());
+#endif
+        } else {
+            std::snprintf(buf, sizeof(buf),
+                          "\"platform\":\"linux\",\"source\":\"PipeWire – Aqulify\",\"dspActive\":%s,\"sr\":%u,\"gr\":%.2f",
+                          node.playbackStreaming.load() ? "true" : "false", node.sampleRate.load(),
+                          node.chain.gainReductionDb());
+        }
         std::string s = buf;
         s += ",\"currentSink\":\"" + jsonEscape(cachedCurrentSink) + "\"";
         s += ",\"outputSinks\":" + cachedSinksJson;
-        s += cachedVolumeJson;
+#if defined(AQ_HAVE_ALSA)
+        if (playerExclusive())   // kizárólagos módban a lejátszó digitális hangereje (a PipeWire-eszközé itt nem hat)
+            s += ",\"volume\":{\"level\":" + std::to_string(playerDsp->volumeLevel()) + ",\"muted\":" +
+                 (playerDsp->volumeMuted() ? "true" : "false") + ",\"digital\":true}";
+        else
+#endif
+            s += cachedVolumeJson;
         s += installJson;
 #if defined(AQ_HAVE_SYSTEMD)
         s += std::string(",\"tray\":") + (tray.registered() ? "true" : "false");
@@ -483,11 +530,17 @@ int main(int argc, char* argv[]) {
         return s;
     };
     cb.setVolume = [&](double level, int mute) {
+#if defined(AQ_HAVE_ALSA)
+        if (playerExclusive()) { playerDsp->setVolume(level, mute); return; }
+#endif
         setSinkVolume(cachedCurrentSink, level, mute);
         lastSinkQuery = std::chrono::steady_clock::time_point{};   // a következő állapotüzenet már az új értéket mutatja
     };
     cb.setIr = [&](IrData&& ir) {
         if (!linux_store::saveIr(ir)) std::cerr << "[Konvolver] Figyelem: az IR nem menthető.\n";
+#if defined(AQ_HAVE_ALSA)
+        if (playerDsp) playerDsp->submitIr(IrData(ir));
+#endif
         node.chain.submitIr(std::move(ir));
     };
     cb.getIr = [&]() { return node.chain.irCopy(); };
@@ -515,7 +568,21 @@ int main(int argc, char* argv[]) {
     mediaSession.start();
     // A beépített lejátszó (2.x): az „Aqulify” eszközre játszik, így a hang a DSP-láncon át szól. Amíg van betöltött
     // szám, a „most szól” és a vezérlés ezt mutatja; utána ismét a gépen futó lejátszót (MPRIS).
+#if defined(AQ_HAVE_ALSA)
+    // Kizárólagos módban (beállítás: exclusive) közvetlenül az ALSA-eszközre, a lejátszó saját DSP-láncán át
+    {
+        std::lock_guard<std::mutex> lk(paramMutex);
+        playerDsp = std::make_unique<player::ChainPlayerDsp>(current);
+    }
+    auto alsaOut = std::make_unique<player::AlsaPlayerOutput>();
+    alsaOut->setExclusiveDsp(playerDsp.get());
+    auto selOut = std::make_unique<player::SelectablePlayerOutput>(std::make_unique<player::PwPlayerOutput>("aqulify_sink"),
+                                                                   std::move(alsaOut));
+    playerSel = selOut.get();
+    player::FilePlayer filePlayer(std::move(selOut));
+#else
     player::FilePlayer filePlayer(std::make_unique<player::PwPlayerOutput>("aqulify_sink"));
+#endif
     // Zenetár (2.x): a mentett zenei mappák, különben a Zene mappa; a bejárás a háttérben indul
     library::MusicLibrary musicLibrary;
     // A lejátszási napló (3c2, stats.json): a sor előtt, mert a sor mérőszála a megszűnéséig hívhatja
@@ -721,6 +788,13 @@ int main(int argc, char* argv[]) {
         audioopt::resampleQuality().store(o.resampleQuality);
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         filePlayer.setPreload(o.preload);
+#if defined(AQ_HAVE_ALSA)
+        if (playerSel && playerSel->wantExclusive() != o.exclusive) {
+            playerSel->setExclusive(o.exclusive);   // a következő számtól
+            std::cout << "[Lejátszó] Közvetlen ALSA-kimenet (kizárólagos mód): " << (o.exclusive ? "be" : "ki")
+                      << " (a következő számtól).\n";
+        }
+#endif
         const int autoQ = std::atoi(pwSetting("clock.quantum").c_str());
         const bool pauseForPlayer = o.rateMode == audioopt::RateMode::Follow && playerStreamOpen();
         node.setAudioOptions(o.bufferFrames, o.keepAwake && !pauseForPlayer, autoQ > 0 ? autoQ : 1024);
@@ -747,10 +821,16 @@ int main(int argc, char* argv[]) {
                 std::lock_guard<std::mutex> lk(paramMutex);
                 current = savedChain;
                 node.params.write(current);
+#if defined(AQ_HAVE_ALSA)
+                if (playerDsp) playerDsp->setParams(current);
+#endif
             }
             if (hasIr) {
                 std::cout << "[Konvolver] Mentett impulzusválasz visszaállítva: " << savedIr.name << "\n";
                 node.chain.submitIr(IrData(savedIr));
+#if defined(AQ_HAVE_ALSA)
+                if (playerDsp) playerDsp->submitIr(IrData(savedIr));
+#endif
             }
         }
         if (want.multi && hasMulti) {
@@ -836,8 +916,13 @@ int main(int argc, char* argv[]) {
     };
     cb.audioOptionsJson = [&]() -> std::string {
         std::lock_guard<std::mutex> lk(audioMutex);
+#if defined(AQ_HAVE_ALSA)
+        const char* exclCap = ",\"exclusive\":true,\"exclusiveKind\":\"alsa\"";   // közvetlen ALSA-kimenet (hardveres hangerő nincs)
+#else
+        const char* exclCap = "";
+#endif
         return "{\"opts\":" + audioopt::toJson(audioOpts) +
-               ",\"caps\":{\"buffer\":true,\"keepAwake\":true,\"rate\":true,\"resample\":true,\"player\":true}}";
+               ",\"caps\":{\"buffer\":true,\"keepAwake\":true,\"rate\":true,\"resample\":true,\"player\":true" + exclCap + "}}";
     };
     cb.setAudioOptions = [&](const json::Value& v) {
         std::lock_guard<std::mutex> lk(audioMutex);

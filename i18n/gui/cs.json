@@ -541,6 +541,8 @@
   "ao.preloadHint": "Žádné čtení z disku ani sítě během přehrávání (např. spící externí disk, NAS).",
   "ao.exclusive": "Exkluzivní režim (WASAPI exclusive)",
   "ao.exclusiveHint": "Přehrávač používá zvukovou kartu výhradně pro sebe: směšovač Windows a Equalizer APO jsou vynechány, soubor hraje s vlastní vzorkovací frekvencí a řetězec DSP běží uvnitř programu. Jiné programy mezitím nemohou na toto zařízení přehrávat zvuk. Přepnutí během přehrávání krátce přeruší zvuk.",
+  "ao.exclusiveAlsa": "Výhradní režim (přímé ALSA)",
+  "ao.exclusiveAlsaHint": "Přehrávač používá DAC výhradně pro sebe: PipeWire jej uvolní, soubor hraje s vlastní vzorkovací frekvencí bez převodu, řetězec DSP běží v programu a hlasitost je digitální. Jiné programy mezitím nemohou na toto zařízení přehrávat. Platí od další skladby.",
   "ao.exclVol": "Hlasitost v exkluzivním režimu",
   "ao.exclVolDigital": "Digitální (výchozí)",
   "ao.exclVolHw": "Hardwarová hlasitost DAC",

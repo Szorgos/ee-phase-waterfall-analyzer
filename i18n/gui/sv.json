@@ -476,6 +476,8 @@
   "ao.exclVolHw": "DAC:ens hårdvaruvolym",
   "ao.exclusive": "Exklusivt läge (WASAPI exclusive)",
   "ao.exclusiveHint": "Spelaren använder ljudkortet ensam: Windows-mixern och Equalizer APO förbikopplas, filen spelas upp med sin egen samplingsfrekvens och DSP-kedjan körs inuti programmet. Andra program kan inte spela upp på denna enhet under tiden. Att byta under uppspelning avbryter ljudet kortvarigt.",
+  "ao.exclusiveAlsa": "Exklusivt läge (direkt ALSA)",
+  "ao.exclusiveAlsaHint": "Spelaren använder DAC:n ensam: PipeWire släpper den, filen spelas upp med sin egen samplingsfrekvens utan konvertering, DSP-kedjan körs i programmet och volymen är digital. Under tiden kan andra program inte spela upp på denna enhet. Gäller från nästa spår.",
   "ao.frames": "{n} samplingar ({ms} ms)",
   "ao.keepAwake": "Håll ljudkortet vaket",
   "ao.keepAwakeHint": "Det sover inte under tystnad: inga knäppningar, och början av spår klipps inte av.",

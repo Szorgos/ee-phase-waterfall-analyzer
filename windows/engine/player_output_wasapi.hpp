@@ -37,26 +37,12 @@
 #include <thread>
 #include <vector>
 
+#include "exclusive_dsp.hpp"
 #include "file_player.hpp"
 #include "pcm_convert.hpp"
 #include "wasapi_loopback.hpp"   // GUID-ok és ComPtr
 
 namespace ee_analyzer::player {
-
-/** A kizárólagos mód DSP-je (a motor adja): a kimenet szála hívja. */
-class ExclusiveDsp {
-public:
-    virtual ~ExclusiveDsp() = default;
-    /**
-     * Új kizárólagos hangfolyam, a feldolgozás előtt: mintavétel, blokkméret (keret), és a kimenet bitmélysége a
-     * ditherhez (16 vagy 24; 0: lebegőpontos kimenet, a beállított érték marad).
-     */
-    virtual void prepare(uint32_t rate, uint32_t blockFrames, int ditherBits) = 0;
-    /** Helyben, sztereó (váltakozó L, R) keretek; a blokk mindig a prepare blockFrames értéke. */
-    virtual void process(float* stereo, size_t frames) = 0;
-    /** A DSP késleltetése mintában (a jelút kijelzéséhez; bármely szálról). */
-    virtual size_t latencySamples() const { return 0; }
-};
 
 /** A kimenet formátuma (kizárólagos módban az eszközé). */
 struct WasapiFormat {

@@ -4879,14 +4879,16 @@ var qrcode = function() {
               <label class="ao-row ao-check"><input type="checkbox" id="aoPreload" onchange="aoSend()"> <span data-i18n="ao.preload">Fájl betöltése memóriába</span></label>
               <div class="ao-hint" data-i18n="ao.preloadHint">Lejátszás közben nincs lemez- vagy hálózati olvasás (pl. elalvó külső lemez, NAS).</div>
               <div id="aoExclWrap" hidden>
-                <label class="ao-row ao-check"><input type="checkbox" id="aoExclusive" onchange="aoSend()"> <span data-i18n="ao.exclusive">Kizárólagos mód (WASAPI exclusive)</span></label>
-                <div class="ao-hint" data-i18n="ao.exclusiveHint">A lejátszó egyedül használja a hangkártyát: a Windows keverője és az Equalizer APO kimarad, a fájl saját mintavételén szól, a DSP-lánc a programban fut. Közben más programok nem szólnak ezen az eszközön. Lejátszás közbeni váltáskor a hang egy pillanatra megszakad.</div>
+                <label class="ao-row ao-check"><input type="checkbox" id="aoExclusive" onchange="aoSend()"> <span id="aoExclLabel" data-i18n="ao.exclusive">Kizárólagos mód (WASAPI exclusive)</span></label>
+                <div class="ao-hint" id="aoExclHint" data-i18n="ao.exclusiveHint">A lejátszó egyedül használja a hangkártyát: a Windows keverője és az Equalizer APO kimarad, a fájl saját mintavételén szól, a DSP-lánc a programban fut. Közben más programok nem szólnak ezen az eszközön. Lejátszás közbeni váltáskor a hang egy pillanatra megszakad.</div>
+                <div id="aoExclVolWrap">
                 <label class="ao-row" id="aoRowExclVol"><span data-i18n="ao.exclVol">Hangerő kizárólagos módban</span>
                   <select id="aoExclVol" class="mini-select" onchange="aoSend()">
                     <option value="digital" data-i18n="ao.exclVolDigital">Digitális (alapértelmezett)</option>
                     <option value="hardware" data-i18n="ao.exclVolHw">A DAC hardveres hangereje</option>
                   </select></label>
                 <div class="ao-hint" data-i18n="ao.exclVolHint">Digitális: a csúszka a program végén szabályoz, a DAC hangereje nem változik. 100%-nál bitpontos, alatta nem. Hardveres: a DAC saját hangerejét állítja, bitpontos, de csak akkor működik, ha a driver kizárólagos módban is alkalmazza; ha nem, a csúszka hatástalan. A következő számtól érvényes.</div>
+                </div>
               </div>
             </div>
             <div class="ao-path" id="aoPath"></div>
@@ -9309,6 +9311,14 @@ function aoOnMessage(m) {
   document.getElementById("aoRgClip").checked = o.rgClip !== false;
   document.getElementById("aoPreload").checked = !!o.preload;
   document.getElementById("aoExclWrap").hidden = cp.exclusive !== true;
+  // Linuxon a kizárólagos mód a közvetlen ALSA-kimenet: saját felirat, és nincs hardveres hangerő-választás
+  const exclAlsa = cp.exclusiveKind === "alsa";
+  for (const [id, key] of [["aoExclLabel", exclAlsa ? "ao.exclusiveAlsa" : "ao.exclusive"],
+                           ["aoExclHint", exclAlsa ? "ao.exclusiveAlsaHint" : "ao.exclusiveHint"]]) {
+    const el = document.getElementById(id);
+    if (el.getAttribute("data-i18n") !== key) { el.setAttribute("data-i18n", key); el.textContent = t(key); }
+  }
+  document.getElementById("aoExclVolWrap").hidden = exclAlsa;
   document.getElementById("aoExclusive").checked = !!o.exclusive;
   document.getElementById("aoExclVol").value = o.exclHwVolume ? "hardware" : "digital";
   const rgOn = (o.replayGain || "off") !== "off";

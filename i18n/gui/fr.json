@@ -614,6 +614,8 @@
   "ao.preloadHint": "Aucune lecture disque ou réseau pendant la lecture (ex. disque externe en veille, NAS).",
   "ao.exclusive": "Mode exclusif (WASAPI exclusive)",
   "ao.exclusiveHint": "Le lecteur utilise seul la carte son : le mélangeur de Windows et Equalizer APO sont contournés, le fichier est lu à sa propre fréquence d'échantillonnage et la chaîne DSP tourne dans le programme. Pendant ce temps, les autres programmes ne peuvent pas jouer sur ce périphérique. Le changer pendant la lecture interrompt brièvement le son.",
+  "ao.exclusiveAlsa": "Mode exclusif (ALSA direct)",
+  "ao.exclusiveAlsaHint": "Le lecteur utilise seul le DAC : PipeWire le libère, le fichier est lu à sa propre fréquence d'échantillonnage sans conversion, la chaîne DSP tourne dans le programme et le volume est numérique. Pendant ce temps, les autres programmes ne peuvent pas jouer sur ce périphérique. Prend effet à partir du morceau suivant.",
   "ao.exclVol": "Volume en mode exclusif",
   "ao.exclVolDigital": "Numérique (par défaut)",
   "ao.exclVolHw": "Volume matériel du DAC",

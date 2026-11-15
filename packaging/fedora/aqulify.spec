@@ -17,6 +17,7 @@ BuildRequires:  ninja-build
 BuildRequires:  pkgconfig(libpipewire-0.3)
 BuildRequires:  pkgconfig(fftw3f)
 BuildRequires:  pkgconfig(libsystemd)
+BuildRequires:  pkgconfig(alsa)
 BuildRequires:  pkgconfig(gtk+-3.0)
 BuildRequires:  pkgconfig(webkit2gtk-4.1)
 BuildRequires:  systemd-rpm-macros

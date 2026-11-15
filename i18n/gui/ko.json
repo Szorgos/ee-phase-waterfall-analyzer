@@ -476,6 +476,8 @@
   "ao.exclVolHw": "DAC 하드웨어 볼륨",
   "ao.exclusive": "단독 모드 (WASAPI 단독)",
   "ao.exclusiveHint": "플레이어가 사운드 카드를 단독으로 사용합니다: Windows 믹서와 Equalizer APO가 우회되고 파일이 고유 샘플 레이트로 재생되며 DSP 체인이 프로그램 내부에서 실행됩니다. 다른 프로그램은 동시에 이 장치에서 재생할 수 없습니다. 재생 중 전환 시 소리가 잠시 끊깁니다.",
+  "ao.exclusiveAlsa": "독점 모드(직접 ALSA)",
+  "ao.exclusiveAlsaHint": "플레이어가 DAC를 단독으로 사용합니다: PipeWire가 DAC를 해제하고, 파일은 변환 없이 고유 샘플 레이트로 재생되며, DSP 체인은 프로그램 안에서 실행되고 볼륨은 디지털입니다. 그동안 다른 프로그램은 이 장치에서 재생할 수 없습니다. 다음 곡부터 적용됩니다.",
   "ao.frames": "{n} 샘플 ({ms} ms)",
   "ao.keepAwake": "사운드 카드 절전 방지",
   "ao.keepAwakeHint": "무음 시 절전 모드로 전환되지 않음: 팝 노이즈를 방지하고 트랙 앞부분 잘림을 방지합니다.",

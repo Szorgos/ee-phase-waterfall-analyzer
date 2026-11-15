@@ -614,6 +614,8 @@
   "ao.preloadHint": "Sem leitura de disco ou rede durante a reprodução (ex.: disco externo em repouso, NAS).",
   "ao.exclusive": "Modo exclusivo (WASAPI exclusive)",
   "ao.exclusiveHint": "O reprodutor usa a placa de som com exclusividade: o mixer do Windows e o Equalizer APO são contornados, o arquivo toca na sua taxa de amostragem nativa e a cadeia DSP roda no programa. Outros aplicativos não tocarão áudio neste dispositivo. A alternância durante a reprodução causa uma breve interrupção no som.",
+  "ao.exclusiveAlsa": "Modo exclusivo (ALSA direto)",
+  "ao.exclusiveAlsaHint": "O reprodutor usa o DAC com exclusividade: o PipeWire o libera, o arquivo toca na sua taxa de amostragem nativa sem conversão, a cadeia DSP roda no programa e o volume é digital. Enquanto isso, outros programas não tocam neste dispositivo. Vale a partir da próxima faixa.",
   "ao.exclVol": "Volume no modo exclusivo",
   "ao.exclVolDigital": "Digital (padrão)",
   "ao.exclVolHw": "Volume de hardware do DAC",

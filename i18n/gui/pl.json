@@ -614,6 +614,8 @@
   "ao.preloadHint": "Brak odczytu z dysku lub sieci podczas odtwarzania (np. uśpiony dysk zewnętrzny, NAS).",
   "ao.exclusive": "Tryb wyłączny (WASAPI exclusive)",
   "ao.exclusiveHint": "Odtwarzacz używa karty dźwiękowej na wyłączność: mikser Windows i Equalizer APO są pomijane, plik gra z własną częstotliwością, a tor DSP działa wewnątrz programu. Inne programy nie mogą w tym czasie odtwarzać dźwięku przez to urządzenie.",
+  "ao.exclusiveAlsa": "Tryb wyłączny (bezpośrednie ALSA)",
+  "ao.exclusiveAlsaHint": "Odtwarzacz używa przetwornika DAC na wyłączność: PipeWire go zwalnia, plik gra z własną częstotliwością próbkowania bez konwersji, tor DSP działa w programie, a głośność jest cyfrowa. W tym czasie inne programy nie mogą odtwarzać przez to urządzenie. Obowiązuje od następnego utworu.",
   "ao.exclVol": "Głośność w trybie wyłącznym",
   "ao.exclVolDigital": "Cyfrowa (domyślna)",
   "ao.exclVolHw": "Sprzętowa głośność DAC-a",

@@ -45,7 +45,7 @@ jobs:
         timeout-minutes: 15
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config libpipewire-0.3-dev libsystemd-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y ninja-build pkg-config libpipewire-0.3-dev libsystemd-dev libasound2-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Fordítások ellenőrzése (i18n/ és az előállított fájlok egyeznek)
         run: python3 tools/i18n_build.py --check
@@ -64,7 +64,7 @@ jobs:
           cmake --build build -j"$(nproc)"
           test -x build/aqulify-engine
           test -x build/aqulify-gui
-          for t in test_ringbuffer test_core test_dsp test_matrix test_multiout test_dsd; do ./build/$t; done
+          for t in test_ringbuffer test_core test_dsp test_matrix test_multiout test_dsd test_alsa; do ./build/$t; done
 
       - name: A telepítő szkriptek futtathatók (a csomagban megmaradó fájlmód)
         run: |
@@ -142,7 +142,7 @@ jobs:
         timeout-minutes: 15
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential dpkg-dev fakeroot cmake ninja-build pkg-config g++ xz-utils libpipewire-0.3-dev libsystemd-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y build-essential dpkg-dev fakeroot cmake ninja-build pkg-config g++ xz-utils libpipewire-0.3-dev libsystemd-dev libasound2-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
       - name: RNNoise modell (az Ubuntu forráscsomagjából)
         timeout-minutes: 10
         run: |

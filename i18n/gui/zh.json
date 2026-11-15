@@ -614,6 +614,8 @@
   "ao.preloadHint": "播放期间无磁盘或网络读取（例如休眠的外置硬盘、NAS）。",
   "ao.exclusive": "独占模式（WASAPI exclusive）",
   "ao.exclusiveHint": "播放器独占声卡：绕过 Windows 混音器和 Equalizer APO，文件以其原始采样率播放，DSP 链在程序内运行。在此期间，其他程序无法在此设备上发声。播放中切换时，声音会短暂中断。",
+  "ao.exclusiveAlsa": "独占模式（直接 ALSA）",
+  "ao.exclusiveAlsaHint": "播放器独占 DAC：PipeWire 释放该设备，文件以其原始采样率播放、不做转换，DSP 链在程序内运行，音量为数字音量。在此期间，其他程序无法在此设备上发声。从下一首曲目起生效。",
   "ao.exclVol": "独占模式下的音量",
   "ao.exclVolDigital": "数字（默认）",
   "ao.exclVolHw": "DAC 硬件音量",

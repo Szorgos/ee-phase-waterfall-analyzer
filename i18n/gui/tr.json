@@ -614,6 +614,8 @@
   "ao.preloadHint": "Oynatma sırasında disk veya ağ okuması olmaz (örn. uyku modundaki harici disk, NAS).",
   "ao.exclusive": "Özel mod (WASAPI exclusive)",
   "ao.exclusiveHint": "Oynatıcı ses kartını tek başına kullanır: Windows mikseri ve Equalizer APO atlanır, dosya kendi örnekleme hızında çalar ve DSP zinciri program içinde çalışır. Bu sırada diğer uygulamalar bu aygıttan ses çalamaz. Oynatma sırasında geçiş yapmak sesi kısa süreliğine keser.",
+  "ao.exclusiveAlsa": "Özel mod (doğrudan ALSA)",
+  "ao.exclusiveAlsaHint": "Oynatıcı DAC'yi tek başına kullanır: PipeWire onu serbest bırakır, dosya kendi örnekleme hızında dönüştürme olmadan çalar, DSP zinciri program içinde çalışır ve ses düzeyi dijitaldir. Bu sırada diğer programlar bu aygıttan ses çalamaz. Bir sonraki parçadan itibaren geçerlidir.",
   "ao.exclVol": "Özel modda ses seviyesi",
   "ao.exclVolDigital": "Dijital (varsayılan)",
   "ao.exclVolHw": "DAC donanım ses seviyesi",
