@@ -25,6 +25,9 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <pthread.h>
+#include <sched.h>
+#include <sys/resource.h>
 #include <unistd.h>
 
 #if defined(AQ_HAVE_SYSTEMD)
@@ -224,6 +227,7 @@ public:
         consumed_ = 0;
         initState_ = 0;
         quantLoss_ = false;
+        rtPriority_ = 0;
         thread_ = std::thread([this] { run(); });
         std::unique_lock<std::mutex> lk(initMutex_);
         initCv_.wait(lk, [this] { return initState_ != 0; });
@@ -265,6 +269,8 @@ public:
     std::string lastError() const { std::lock_guard<std::mutex> lk(infoMutex_); return error_; }
     std::string device() const { std::lock_guard<std::mutex> lk(infoMutex_); return openedDevice_; }
     uint32_t overruns() const { return overruns_.load(); }
+    /** A kimeneti szál valós idejű (SCHED_FIFO) prioritása, vagy 0, ha normál prioritással fut. */
+    int realtimePriority() const { return rtPriority_.load(); }
 
 private:
     void setError(const std::string& e) { std::lock_guard<std::mutex> lk(infoMutex_); error_ = e; }
@@ -343,6 +349,32 @@ private:
     }
 
     void run() {
+        // Valós idejű prioritás (SCHED_FIFO, 70, vagy az RLIMIT_RTPRIO által engedett legnagyobb) kérése a kimeneti szálra.
+        // Források (ellenőrizve: 2026-11-15):
+        //   - pthread_setschedparam(3): https://man7.org/linux/man-pages/man3/pthread_setschedparam.3.html
+        //   - sched(7):                 https://man7.org/linux/man-pages/man7/sched.7.html
+        //   - getrlimit(2):             https://man7.org/linux/man-pages/man2/getrlimit.2.html
+        {
+            int prio = 70;
+            struct rlimit rl{};
+            if (getrlimit(RLIMIT_RTPRIO, &rl) == 0 && rl.rlim_cur != RLIM_INFINITY && rl.rlim_cur > 0 && rl.rlim_cur < 70) {
+                prio = static_cast<int>(rl.rlim_cur);
+            }
+            const int pmin = sched_get_priority_min(SCHED_FIFO);
+            const int pmax = sched_get_priority_max(SCHED_FIFO);
+            if (pmin >= 0 && pmax >= pmin) prio = std::clamp(prio, pmin, pmax);
+            sched_param sp{};
+            sp.sched_priority = prio;
+            if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp) == 0) {
+                rtPriority_ = prio;
+            } else {
+                rtPriority_ = 0;
+                static std::atomic<bool> rtFallbackLogged{false};
+                if (!rtFallbackLogged.exchange(true)) {
+                    std::cout << "[Lejátszó] Közvetlen ALSA-kimenet: valós idejű prioritás (SCHED_FIFO) nem érhető el, normál prioritással fut.\n";
+                }
+            }
+        }
         snd_pcm_t* pcm = nullptr;
         AlsaFormat f;
         snd_pcm_uframes_t period = 0;
@@ -421,6 +453,7 @@ private:
     std::thread thread_;
     std::atomic<uint32_t> rate_{0};
     std::atomic<bool> active_{false}, quit_{false}, flushReq_{false}, open_{false}, quantLoss_{false};
+    std::atomic<int> rtPriority_{0};
     std::atomic<uint64_t> written_{0}, consumed_{0};
     std::atomic<uint32_t> overruns_{0};
     std::mutex initMutex_, wakeMutex_;
