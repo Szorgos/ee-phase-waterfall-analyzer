@@ -73,6 +73,23 @@ def level(x, f):
     return 20 * math.log10(max(2 * abs(c) / (n * 0.5), 1e-9))
 
 
+def level_parts(x, f, parts=5):
+    """A szint `parts` egyenlő szeletben mérve: (medián, a szeletek terjedelme dB-ben). A megosztott CI-gépen a felvételbe
+    néha időugrás (néhány minta kiesése / ismétlődése) kerül; az csak egy szeletet ront el, és a két hang szintjét eltérően
+    (fázisfüggően) csökkenti. A valódi szinthiba minden szeletben látszik, így a medián azt méri; a terjedelem jelzi az ugrást."""
+    n = len(x) // parts
+    v = sorted(level(x[i * n:(i + 1) * n], f) for i in range(parts))
+    return v[parts // 2], v[-1] - v[0]
+
+
+def engine_state():
+    """A motor állapota egy külön kapcsolaton (mint a get_state.py)."""
+    q = WS(PORT)
+    q.send({"type": "hello", "client": "modules_live_state"})
+    q.send({"type": "subscribe", "spectrum": 0})
+    return q.wait_type("state", limit=5000) or {}
+
+
 def peak_db(x):
     return 20 * math.log10(max(np.abs(x).max(), 1e-9))
 
@@ -113,14 +130,18 @@ def main():
     send({"type": "set_module_eq", "val": 1})
     send({"type": "set_eq", "bands": [{"type": 1, "mode": 0, "freq": 4000, "gain": 6, "q": 1.0}], "preamp": 0})
     for mode, name in ((0, "IIR"), (1, "FIR"), (2, "FFT"), (3, "SPM")):
-        send({"type": "set_eq_mode", "mode": mode})
-        # Az FFT-alapú módok (FIR, FFT, SPM) az átváltás után lassabban állnak be (a CI-gépen 1,2 s néha kevés volt:
-        # 100 Hz −12,67 dBFS −12 helyett, 2026-11-15); a mérés csak utána kezdődik
-        time.sleep(1.2 if mode == 0 else 2.5)
+        # A motor a módot a "val" mezőben várja (mint a felülettől); korábban itt "mode" ment, így mind a négy mérés
+        # IIR-ben futott (2026-11-15). Most a motor állapotából is ellenőrizzük, hogy tényleg átváltott.
+        send({"type": "set_eq_mode", "val": mode})
+        time.sleep(1.2)
+        got = engine_state().get("eqMode")
+        check(got == mode, f"{name}: a motor EQ-módja {got} (elvárt {mode})")
         s = seg(record("eq_" + name, tone), start=0.8)
-        a, b = level(s[:, 0], 100), level(s[:, 0], 4000)
-        check(abs(b + 6) < 0.5 and abs(a + 12) < 0.4, f"{name}: 4 kHz {b:.2f} dBFS (elvárt −6), 100 Hz {a:.2f} dBFS (elvárt −12)")
-    send({"type": "set_eq_mode", "mode": 0})
+        (a, sa), (b, sb) = level_parts(s[:, 0], 100), level_parts(s[:, 0], 4000)
+        jump = f"; időugrás a felvételben (szeletek terjedelme {max(sa, sb):.2f} dB)" if max(sa, sb) > 0.3 else ""
+        check(abs(b + 6) < 0.5 and abs(a + 12) < 0.4,
+              f"{name}: 4 kHz {b:.2f} dBFS (elvárt −6), 100 Hz {a:.2f} dBFS (elvárt −12){jump}")
+    send({"type": "set_eq_mode", "val": 0})
 
     print("[4] EQ kikapcsolva (Bypass): az eredeti jel")
     # Közvetlenül az SPM -> IIR módváltás után: ugyanannyi idő kell, mint a [3]-ban a módváltásnak,
