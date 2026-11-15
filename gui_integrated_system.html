@@ -9312,13 +9312,15 @@ function aoOnMessage(m) {
   document.getElementById("aoPreload").checked = !!o.preload;
   document.getElementById("aoExclWrap").hidden = cp.exclusive !== true;
   // Linuxon a kizárólagos mód a közvetlen ALSA-kimenet: saját felirat, és nincs hardveres hangerő-választás
-  const exclAlsa = cp.exclusiveKind === "alsa";
-  for (const [id, key] of [["aoExclLabel", exclAlsa ? "ao.exclusiveAlsa" : "ao.exclusive"],
-                           ["aoExclHint", exclAlsa ? "ao.exclusiveAlsaHint" : "ao.exclusiveHint"]]) {
+  const exclAlsa = cp.exclusiveKind === "alsa", exclHog = cp.exclusiveKind === "hog";
+  const exclLabelKey = exclAlsa ? "ao.exclusiveAlsa" : exclHog ? "ao.exclusiveHog" : "ao.exclusive";
+  const exclHintKey = exclAlsa ? "ao.exclusiveAlsaHint" : exclHog ? "ao.exclusiveHogHint" : "ao.exclusiveHint";
+  for (const [id, key] of [["aoExclLabel", exclLabelKey],
+                           ["aoExclHint", exclHintKey]]) {
     const el = document.getElementById(id);
     if (el.getAttribute("data-i18n") !== key) { el.setAttribute("data-i18n", key); el.textContent = t(key); }
   }
-  document.getElementById("aoExclVolWrap").hidden = exclAlsa;
+  document.getElementById("aoExclVolWrap").hidden = exclAlsa || exclHog;
   document.getElementById("aoExclusive").checked = !!o.exclusive;
   document.getElementById("aoExclVol").value = o.exclHwVolume ? "hardware" : "digital";
   const rgOn = (o.replayGain || "off") !== "off";

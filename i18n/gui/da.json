@@ -478,6 +478,8 @@
   "ao.exclusiveHint": "Afspilleren bruger lydkortet alene: Windows-mixeren og Equalizer APO forbigås, filen afspilles ved sin egen samplefrekvens, og DSP-kæden kører inde i programmet. Andre programmer kan ikke afspille på denne enhed imens. Skift under afspilning afbryder lyden kortvarigt.",
   "ao.exclusiveAlsa": "Eksklusiv tilstand (direkte ALSA)",
   "ao.exclusiveAlsaHint": "Afspilleren bruger DAC'en alene: PipeWire frigiver den, filen afspilles ved sin egen samplefrekvens uden konvertering, DSP-kæden kører i programmet, og lydstyrken er digital. Imens kan andre programmer ikke afspille på denne enhed. Gælder fra næste nummer.",
+  "ao.exclusiveHog": "Eksklusiv tilstand (hog mode)",
+  "ao.exclusiveHogHint": "Afspilleren bruger DAC'en alene: macOS-lydsystemet overlader den, filen afspilles ved sin egen samplefrekvens uden konvertering, DSP-kæden kører i programmet, og lydstyrken er digital. Imens kan andre programmer ikke afspille på denne enhed. Gælder fra næste nummer.",
   "ao.frames": "{n} samples ({ms} ms)",
   "ao.keepAwake": "Hold lydkortet vågent",
   "ao.keepAwakeHint": "Det sover ikke under stilhed: ingen smæld, og starten af spor afskæres ikke.",

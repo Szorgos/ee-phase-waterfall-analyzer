@@ -616,6 +616,8 @@
   "ao.exclusiveHint": "El reproductor usa la tarjeta de sonido en exclusiva: se omiten el mezclador de Windows y Equalizer APO, el archivo suena a su propia frecuencia de muestreo y la cadena DSP se ejecuta en el programa. Mientras tanto, otros programas no suenan en este dispositivo. Al cambiarlo durante la reproducción, el sonido se interrumpe un instante.",
   "ao.exclusiveAlsa": "Modo exclusivo (ALSA directo)",
   "ao.exclusiveAlsaHint": "El reproductor usa el DAC en exclusiva: PipeWire lo libera, el archivo suena a su propia frecuencia de muestreo sin conversión, la cadena DSP se ejecuta en el programa y el volumen es digital. Mientras tanto, otros programas no suenan en este dispositivo. Se aplica a partir de la siguiente pista.",
+  "ao.exclusiveHog": "Modo exclusivo (hog mode)",
+  "ao.exclusiveHogHint": "El reproductor usa el DAC en exclusiva: el sistema de audio de macOS lo cede, el archivo suena a su propia frecuencia de muestreo sin conversión, la cadena DSP se ejecuta en el programa y el volumen es digital. Mientras tanto, otros programas no suenan en este dispositivo. Se aplica a partir de la siguiente pista.",
   "ao.exclVol": "Volumen en modo exclusivo",
   "ao.exclVolDigital": "Digital (predeterminado)",
   "ao.exclVolHw": "Volumen hardware del DAC",

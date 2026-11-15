@@ -616,6 +616,8 @@
   "ao.exclusiveHint": "Soitin käyttää äänikorttia yksinään: Windowsin mikseri ja Equalizer APO ohitetaan, tiedosto soi omalla näytetaajuudellaan ja DSP-ketju pyörii ohjelmassa. Muut sovellukset eivät voi soittaa tällä laitteella. Vaihtaminen toiston aikana katkaisee äänen hetkeksi.",
   "ao.exclusiveAlsa": "Yksinoikeustila (suora ALSA)",
   "ao.exclusiveAlsaHint": "Soitin käyttää DAC:ia yksinään: PipeWire vapauttaa sen, tiedosto soi omalla näytetaajuudellaan ilman muunnosta, DSP-ketju toimii ohjelmassa ja äänenvoimakkuus on digitaalinen. Sillä välin muut ohjelmat eivät voi soittaa tällä laitteella. Tulee voimaan seuraavasta kappaleesta.",
+  "ao.exclusiveHog": "Yksinoikeustila (hog mode)",
+  "ao.exclusiveHogHint": "Soitin käyttää DAC:ia yksinään: macOS:n äänijärjestelmä luovuttaa sen, tiedosto soi omalla näytetaajuudellaan ilman muunnosta, DSP-ketju toimii ohjelmassa ja äänenvoimakkuus on digitaalinen. Sillä välin muut ohjelmat eivät voi soittaa tällä laitteella. Tulee voimaan seuraavasta kappaleesta.",
   "ao.exclVol": "Äänenvoimakkuus yksinoikeustilassa",
   "ao.exclVolDigital": "Digitaalinen (oletus)",
   "ao.exclVolHw": "DAC:n laitteistoäänenvoimakkuus",

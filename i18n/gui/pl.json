@@ -616,6 +616,8 @@
   "ao.exclusiveHint": "Odtwarzacz używa karty dźwiękowej na wyłączność: mikser Windows i Equalizer APO są pomijane, plik gra z własną częstotliwością, a tor DSP działa wewnątrz programu. Inne programy nie mogą w tym czasie odtwarzać dźwięku przez to urządzenie.",
   "ao.exclusiveAlsa": "Tryb wyłączny (bezpośrednie ALSA)",
   "ao.exclusiveAlsaHint": "Odtwarzacz używa przetwornika DAC na wyłączność: PipeWire go zwalnia, plik gra z własną częstotliwością próbkowania bez konwersji, tor DSP działa w programie, a głośność jest cyfrowa. W tym czasie inne programy nie mogą odtwarzać przez to urządzenie. Obowiązuje od następnego utworu.",
+  "ao.exclusiveHog": "Tryb wyłączny (hog mode)",
+  "ao.exclusiveHogHint": "Odtwarzacz używa przetwornika DAC na wyłączność: system dźwięku macOS go udostępnia, plik gra z własną częstotliwością próbkowania bez konwersji, tor DSP działa w programie, a głośność jest cyfrowa. W tym czasie inne programy nie mogą odtwarzać przez to urządzenie. Obowiązuje od następnego utworu.",
   "ao.exclVol": "Głośność w trybie wyłącznym",
   "ao.exclVolDigital": "Cyfrowa (domyślna)",
   "ao.exclVolHw": "Sprzętowa głośność DAC-a",

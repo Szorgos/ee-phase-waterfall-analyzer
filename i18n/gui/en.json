@@ -616,6 +616,8 @@
   "ao.exclusiveHint": "The player uses the sound card on its own: the Windows mixer and Equalizer APO are bypassed, the file plays at its own sample rate, and the DSP chain runs inside the program. Other programs can't play on this device meanwhile. Switching during playback briefly interrupts the sound.",
   "ao.exclusiveAlsa": "Exclusive mode (direct ALSA)",
   "ao.exclusiveAlsaHint": "The player uses the DAC on its own: PipeWire releases it, the file plays at its own sample rate without conversion, the DSP chain runs inside the program and the volume is digital. Other programs can't play on this device meanwhile. Takes effect from the next track.",
+  "ao.exclusiveHog": "Exclusive mode (hog mode)",
+  "ao.exclusiveHogHint": "The player uses the DAC on its own: the macOS audio system yields it, the file plays at its own sample rate without conversion, the DSP chain runs inside the program and the volume is digital. Other programs can't play on this device meanwhile. Takes effect from the next track.",
   "ao.exclVol": "Volume in exclusive mode",
   "ao.exclVolDigital": "Digital (default)",
   "ao.exclVolHw": "The DAC's hardware volume",

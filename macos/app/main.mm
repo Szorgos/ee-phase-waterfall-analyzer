@@ -33,7 +33,10 @@
 #include "ws_bridge.hpp"
 #include "startup_restore.hpp"
 #include "file_player.hpp"
+#include "chain_player_dsp.hpp"
 #include "player_output_coreaudio.hpp"
+#include "player_output_coreaudio_exclusive.hpp"
+#include "player_output_select.hpp"
 #include "music_library.hpp"
 #include "library_bridge.hpp"
 #include "play_queue.hpp"
@@ -150,8 +153,12 @@ struct Core {
                 std::lock_guard<std::mutex> lk(paramMutex);
                 current = savedChain;
                 engine.params.write(current);
+                playerDsp.setParams(current);
             }
-            if (hasIr) engine.chain.submitIr(IrData(savedIr));
+            if (hasIr) {
+                engine.chain.submitIr(IrData(savedIr));
+                playerDsp.submitIr(IrData(savedIr));
+            }
         }
         if (want.multi && hasMulti) {
             std::lock_guard<std::mutex> lk(multiMutex);
@@ -171,6 +178,11 @@ struct Core {
             engine.setBufferFrames(static_cast<uint32_t>(audioOpts.bufferFrames));
             filePlayer.setReplayGain(audioOpts.replayGain, audioOpts.rgPreampDb, audioOpts.rgPreventClip);
             filePlayer.setPreload(audioOpts.preload);
+            if (playerSel && playerSel->wantExclusive() != audioOpts.exclusive) {
+                playerSel->setExclusive(audioOpts.exclusive);
+                std::cout << "[Lejátszó] Core Audio kizárólagos kimenet (hog mode): " << (audioOpts.exclusive ? "be" : "ki")
+                          << " (a következő számtól).\n";
+            }
         }
     }
 
@@ -185,8 +197,20 @@ struct Core {
     std::function<void(const std::string&)> broadcast;
     mac::Updater updater;   // frissítés a felület „Frissítés” gombjára: a DMG letöltése, ellenőrzése, megnyitása
 
-    // Beépített lejátszó és zenetár (2.x)
-    player::FilePlayer filePlayer{std::make_unique<player::CoreAudioPlayerOutput>()};
+
+    // Beépített lejátszó és zenetár (2.x): megosztott (CoreAudio) vagy kizárólagos (hog mode + saját DSP-lánc)
+    uint64_t playerReadPos = 0;
+    player::ChainPlayerDsp playerDsp{transparentParams()};
+    player::SelectablePlayerOutput* playerSel = nullptr;
+    bool playerExclusive() const { return playerSel && playerSel->exclusiveActive(); }
+    player::FilePlayer filePlayer{[this] {
+        auto exclOut = std::make_unique<player::CoreAudioExclusiveOutput>();
+        exclOut->setExclusiveDsp(&playerDsp);
+        auto selOut = std::make_unique<player::SelectablePlayerOutput>(
+            std::make_unique<player::CoreAudioPlayerOutput>(), std::move(exclOut));
+        playerSel = selOut.get();
+        return selOut;
+    }()};
     library::MusicLibrary musicLibrary;
     player::PlayStats playStats{[](const std::string& doc) {
         if (!linux_store::saveStats(doc)) std::cerr << "[Lejátszó] Figyelem: a stats.json nem írható.\n";
@@ -251,12 +275,20 @@ struct Core {
             stale = std::chrono::steady_clock::now() - lastSinkQuery > std::chrono::seconds(1);
         }
         if (stale) refreshSinks();
-        char buf[160];
-        std::snprintf(buf, sizeof(buf), "\"platform\":\"macos\",\"dspActive\":%s,\"sr\":%u,\"gr\":%.2f",
-                      engine.processing() ? "true" : "false", engine.sampleRate(), engine.chain.gainReductionDb());
+
+        char buf[220];
+        if (playerExclusive()) {
+            std::snprintf(buf, sizeof(buf),
+                          "\"platform\":\"macos\",\"dspActive\":true,\"sr\":%u,\"gr\":%.2f,\"source\":\"Core Audio (hog mode)\"",
+                          playerDsp.sampleRate(), playerDsp.gainReductionDb());
+        } else {
+            std::snprintf(buf, sizeof(buf), "\"platform\":\"macos\",\"dspActive\":%s,\"sr\":%u,\"gr\":%.2f",
+                          engine.processing() ? "true" : "false", engine.sampleRate(), engine.chain.gainReductionDb());
+        }
+
         std::string s = buf;
         const std::string src = engine.sourceName();
-        s += ",\"source\":\"" + jsonEscape(src.empty() ? "Core Audio" : src) + "\"";
+        if (!playerExclusive()) s += ",\"source\":\"" + jsonEscape(src.empty() ? "Core Audio" : src) + "\"";
         switch (engine.problem()) {
         case mac::Problem::Permission: s += ",\"problem\":\"permission\""; break;
         case mac::Problem::NoSource: s += ",\"problem\":\"nosource\""; break;
@@ -270,7 +302,10 @@ struct Core {
         {
             float lv = 0.0f;
             bool mu = false;
-            if (engine.outputVolume(lv, mu))
+            if (playerExclusive()) {
+                s += ",\"volume\":{\"level\":" + std::to_string(playerDsp.volumeLevel()) + ",\"muted\":" +
+                     (playerDsp.volumeMuted() ? "true" : "false") + ",\"digital\":true}";
+            } else if (engine.outputVolume(lv, mu))
                 s += ",\"volume\":{\"level\":" + std::to_string(lv) + ",\"muted\":" + (mu ? "true" : "false") + "}";
         }
         // Jelút és késleltetés: az IO-puffer, a DSP saját késleltetése, terhelés, bitpontosság
@@ -440,8 +475,15 @@ struct Core {
 - (BOOL)startBridge {
     Core* c = core_.get();
     BridgeCallbacks cb;
-    cb.pullAudio = [c](float* lr, size_t maxFrames) { return readTapRing(c->engine.visualizerTap, c->readPos, lr, maxFrames); };
-    cb.sampleRate = [c]() { return static_cast<double>(c->engine.sampleRate()); };
+    cb.pullAudio = [c](float* lr, size_t maxFrames) {
+        if (c->playerExclusive()) return readTapRing(c->playerDsp.tap(), c->playerReadPos, lr, maxFrames);
+        return readTapRing(c->engine.visualizerTap, c->readPos, lr, maxFrames);
+    };
+    cb.sampleRate = [c]() {
+        if (c->playerExclusive()) return static_cast<double>(c->playerDsp.sampleRate());
+        return static_cast<double>(c->engine.sampleRate());
+    };
+
     cb.getParams = [c]() {
         std::lock_guard<std::mutex> lk(c->paramMutex);
         return c->current;
@@ -454,14 +496,19 @@ struct Core {
             c->lastChange = std::chrono::steady_clock::now();
         }
         c->engine.params.write(p);
+        c->playerDsp.setParams(p);
     };
-    cb.gainReduction = [c]() { return c->engine.chain.gainReductionDb(); };
+    cb.gainReduction = [c]() {
+        if (c->playerExclusive()) return c->playerDsp.gainReductionDb();
+        return c->engine.chain.gainReductionDb();
+    };
     cb.bassHarmonics = [c]() { return c->engine.chain.bassHarmonicsDb(); };
     cb.setOutputSink = [c](const std::string& target) { c->setOutput(target); };
     cb.statusFields = [c]() { return c->statusFields() + c->updater.statusJson(); };
     cb.updateInstall = [c](const std::string& version, std::string& error) { return c->updater.start(version, error); };
     cb.setIr = [c](IrData&& ir) {
         if (!linux_store::saveIr(ir)) std::cerr << "[Konvolver] Figyelem: az IR nem menthető.\n";
+        c->playerDsp.submitIr(IrData(ir));
         c->engine.chain.submitIr(std::move(ir));
     };
     cb.getIr = [c]() { return c->engine.chain.irCopy(); };
@@ -546,11 +593,15 @@ struct Core {
     // Ablak bezárása „Bezárás” választással: az alkalmazás kilép (a motor vele áll le, a hang nem változik)
     cb.quitEngine = [] { dispatch_async(dispatch_get_main_queue(), ^{ [NSApp terminate:nil]; }); };
 
-    cb.setVolume = [c](double level, int mute) { c->engine.setOutputVolume(static_cast<float>(level), mute); };
+    cb.setVolume = [c](double level, int mute) {
+        if (c->playerExclusive()) { c->playerDsp.setVolume(level, mute); return; }
+        c->engine.setOutputVolume(static_cast<float>(level), mute);
+    };
     cb.audioOptionsJson = [c]() -> std::string {
         std::lock_guard<std::mutex> lk(c->audioMutex);
         return "{\"opts\":" + audioopt::toJson(c->audioOpts) +
-               ",\"caps\":{\"buffer\":true,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true}}";
+               ",\"caps\":{\"buffer\":true,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true,"
+               "\"exclusive\":true,\"exclusiveKind\":\"hog\"}}";
     };
     cb.setAudioOptions = [c](const json::Value& v) {
         std::lock_guard<std::mutex> lk(c->audioMutex);
@@ -563,6 +614,11 @@ struct Core {
         c->engine.setBufferFrames(static_cast<uint32_t>(o.bufferFrames));
         c->filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         c->filePlayer.setPreload(o.preload);
+        if (c->playerSel && c->playerSel->wantExclusive() != o.exclusive) {
+            c->playerSel->setExclusive(o.exclusive);   // a következő számtól
+            std::cout << "[Lejátszó] Core Audio kizárólagos kimenet (hog mode): " << (o.exclusive ? "be" : "ki")
+                      << " (a következő számtól).\n";
+        }
         if (!linux_store::saveAudioOptions(audioopt::toJson(o))) std::cerr << "[Hangkimenet] Figyelem: az audio.json nem írható.\n";
     };
 
