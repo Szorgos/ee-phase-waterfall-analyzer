@@ -1,7 +1,7 @@
 Source: aqulify
 Section: sound
 Priority: optional
-Maintainer: Szorgos <noreply@anthropic.com>
+Maintainer: Szorgos <291709182+Szorgos@users.noreply.github.com>
 Build-Depends: cmake, ninja-build, pkg-config, g++, xz-utils, libpipewire-0.3-dev, libfftw3-dev, libsystemd-dev, libasound2-dev, libgtk-3-dev, libwebkit2gtk-4.1-dev
 Standards-Version: 4.7.0
 Homepage: https://github.com/Szorgos/ee-phase-waterfall-analyzer
