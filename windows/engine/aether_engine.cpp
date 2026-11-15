@@ -46,6 +46,7 @@
 #include <cstring>
 
 #include "ws_bridge.hpp"
+#include "pair_cli.hpp"
 #include "startup_restore.hpp"
 #include "param_block.hpp"
 #include "aether_chain.hpp"
@@ -693,6 +694,17 @@ private:
 } // namespace
 
 int main(int argc, char** argv) {
+    // Párosítás kijelző nélkül: a már futó motortól kér kódot, és kilép (pair_cli.hpp). A program ablakos
+    // alkalmazás, ezért a kimenet a hívó parancssor konzoljára megy (ha nincs ilyen, saját konzol nyílik).
+    if (hasArg(argc, argv, "--pair")) {
+        if (!AttachConsole(ATTACH_PARENT_PROCESS)) AllocConsole();
+        SetConsoleOutputCP(CP_UTF8);
+        std::FILE* out = std::freopen("CONOUT$", "w", stdout);
+        std::vector<int> pairPorts(std::begin(kEnginePorts), std::end(kEnginePorts));
+        for (int i = 1; i + 1 < argc; ++i)
+            if (std::strcmp(argv[i], "--port") == 0) pairPorts = { std::atoi(argv[i + 1]) };
+        return paircli::run(pairPorts, "Indítsd el az Aqulify-t.", out ? out : stdout);
+    }
     const bool console = hasArg(argc, argv, "--console");
     win::LogSink log(console);
 
@@ -701,10 +713,11 @@ int main(int argc, char** argv) {
     std::cout << "========================================================\n\n";
 
     if (hasArg(argc, argv, "--help") || hasArg(argc, argv, "-h")) {
-        std::cout << "Használat: Aqulify.exe [--background] [--console] [--port N]\n"
+        std::cout << "Használat: Aqulify.exe [--background] [--console] [--port N] [--pair]\n"
                      "  --background  indításkor ne nyissa meg a felületet (automatikus indításhoz)\n"
                      "  --console     naplózás konzolablakba a napló fájl helyett\n"
-                     "  --port N      csak ezt a WebSocket portot próbálja (alapból: 47810-47814, majd 8080)\n";
+                     "  --port N      csak ezt a WebSocket portot próbálja (alapból: 47810-47814, majd 8080)\n"
+                     "  --pair        párosító kód a telefonhoz a már futó motortól (konzolba írva)\n";
         return 0;
     }
     std::vector<int> ports(std::begin(kEnginePorts), std::end(kEnginePorts));

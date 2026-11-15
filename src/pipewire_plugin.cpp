@@ -26,6 +26,7 @@
 #include "library_bridge.hpp"
 #include "linux_store.hpp"
 #include "media_mpris.hpp"
+#include "pair_cli.hpp"
 #include "pipewire_sink_node.hpp"
 #include "player_output_pw.hpp"
 #include "self_path.hpp"
@@ -338,6 +339,13 @@ void openGuiFromTray() {
 }
 #endif
 int main(int argc, char* argv[]) {
+    // Párosítás kijelző nélkül (pl. SSH-n): a már futó motortól kér kódot, és kilép (pair_cli.hpp)
+    if (hasArg(argc, argv, "--pair")) {
+        std::vector<int> pairPorts(std::begin(kEnginePorts), std::end(kEnginePorts));
+        for (int i = 1; i + 1 < argc; ++i)
+            if (std::strcmp(argv[i], "--port") == 0) pairPorts = { std::atoi(argv[i + 1]) };
+        return paircli::run(pairPorts, "Indítsd el: systemctl --user start aqulify");
+    }
     PwDeinitGuard pwDeinit;   // utoljára szűnik meg: a PipeWire lezárása minden más objektum után
     std::cout << "========================================================\n";
     std::cout << " Aqulify • Fázis & Akusztikai Vízesés – Linux motor (PipeWire)\n";
@@ -347,6 +355,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Használat: aqulify-engine [opciók]\n"
                      "  --port N         csak ezt a WebSocket portot próbálja (alapból: 47810-47814, majd 8080)\n"
                      "  --listen lan     hálózati távvezérlés bekapcsolása (47820-as port és mDNS hirdető)\n"
+                     "  --pair           párosító kód a telefonhoz a már futó motortól (kijelző nélkül, pl. SSH-n)\n"
                      "A motor egy \"Aqulify\" nevű kimeneti hangeszközt hoz létre. Válaszd ki a hangbeállításokban\n"
                      "(vagy: pactl set-default-sink aqulify_sink), és minden hang a DSP láncon át szól.\n";
         return 0;

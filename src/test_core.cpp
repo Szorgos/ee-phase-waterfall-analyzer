@@ -21,6 +21,7 @@
 #include "dsp_state.hpp"
 #include "self_path.hpp"
 #include "ws_bridge.hpp"
+#include "pair_cli.hpp"
 #include "sha256.hpp"
 #include "update_logic.hpp"
 #include "media_url.hpp"
@@ -1277,6 +1278,111 @@ static bool hasType(const std::vector<std::string>& lines, const std::string& ty
     return std::any_of(lines.begin(), lines.end(), [&](const std::string& l) { return jsonField(l, "type") == type; });
 }
 
+/** A tmpfile teljes tartalma. */
+static std::string readAllFile(std::FILE* f) {
+    std::string s;
+    std::rewind(f);
+    char b[512];
+    size_t n;
+    while ((n = std::fread(b, 1, sizeof(b), f)) > 0) s.append(b, n);
+    return s;
+}
+
+static void testPairCli() {
+    std::printf("[15] Párosítás kijelző nélkül (--pair, pair_cli.hpp)\n");
+    using namespace paircli;
+    // 1. Keretezés: a kliens kerete maszkolt, a szerverét a FrameReader darabokban is összerakja
+    {
+        const uint8_t mask[4] = { 1, 2, 3, 4 };
+        const std::string f = encodeClientText("ab", mask);
+        CHECK(f.size() == 8 && static_cast<unsigned char>(f[0]) == 0x81 && static_cast<unsigned char>(f[1]) == (0x80 | 2) &&
+              f[6] == ('a' ^ 1) && f[7] == ('b' ^ 2), "rövid kliens keret: FIN+szöveg, maszkbit, maszkolt adat");
+        const std::string big(70000, 'x');
+        const std::string fb = encodeClientText(big, mask);
+        CHECK(static_cast<unsigned char>(fb[1]) == (0x80 | 127) && fb.size() == 2 + 8 + 4 + big.size(), "64 bites hossz 65535 fölött");
+        auto server = [](int op, const std::string& p) {
+            std::string s;
+            s.push_back(static_cast<char>(0x80 | op));
+            if (p.size() < 126) s.push_back(static_cast<char>(p.size()));
+            else { s.push_back(126); s.push_back(static_cast<char>(p.size() >> 8)); s.push_back(static_cast<char>(p.size() & 0xFF)); }
+            return s + p;
+        };
+        const std::string payload(300, 'y');
+        const std::string stream = server(0x9, "") + server(0x2, "bin") + server(0x1, payload) + server(0x1, "{}") + server(0x8, "");
+        FrameReader r;
+        std::string out;
+        bool closed = false;
+        std::vector<std::string> got;
+        for (size_t i = 0; i < stream.size(); i += 7) {          // 7 bájtos darabokban érkezik
+            r.push(stream.data() + i, std::min<size_t>(7, stream.size() - i));
+            while (r.next(out, &closed)) got.push_back(out);
+        }
+        CHECK(got.size() == 2 && got[0] == payload && got[1] == "{}", "szerver keretei darabokban: a ping és a bináris kimarad");
+        CHECK(closed, "a záró keretet jelzi");
+    }
+    // 2. A "remote" üzenet értelmezése és a kiírás
+    {
+        PairInfo p;
+        CHECK(parseRemote("{\"type\":\"remote\",\"enabled\":true,\"listening\":true,\"port\":47820,\"code\":\"123456\","
+                          "\"codeSeconds\":290,\"addresses\":[\"192.168.1.20\",\"10.0.0.5\"]}", p) &&
+              p.enabled && p.listening && p.port == 47820 && p.code == "123456" && p.codeSeconds == 290 && p.addresses.size() == 2,
+              "remote üzenet: kapcsolók, port, kód, címek");
+        CHECK(!parseRemote("{\"type\":\"state\"}", p) && !parseRemote("nem json", p), "más üzenet / hibás JSON: nem remote");
+        PairInfo v = p;
+        v.addresses = { "172.18.48.1", "192.168.1.50" };
+        const std::string vt = formatPairInfo(v, false);
+        CHECK(vt.find("192.168.1.50:47820, 172.18.48.1:47820") != std::string::npos,
+              "címsorrend: az otthoni hálózat elöl, a virtuális (172.16–31.) hátul");
+        const std::string txt = formatPairInfo(p, true);
+        CHECK(txt.find("Párosító kód: 123456") != std::string::npos && txt.find("192.168.1.20:47820") != std::string::npos &&
+              txt.find("5 percig") != std::string::npos && txt.find("most bekapcsoltam") != std::string::npos,
+              "kiírás: kód, cím:port, érvényesség percben, a bekapcsolás jelzése");
+    }
+    // 3. Élő próba a valódi híddal: a hálózati elérés ki van kapcsolva, a --pair bekapcsolja és kódot kér
+    {
+        BridgeCallbacks cb;
+        cb.pullAudio = [](float*, size_t) -> size_t { return 0; };
+        cb.sampleRate = [] { return 48000.0; };
+        cb.getParams = [] { return transparentParams(); };
+        cb.setParams = [](const ParamData&) {};
+        std::string saved;
+        cb.loadRemote = [] { return std::string("{\"enabled\":false,\"port\":47911,\"bluetooth\":false,\"devices\":[]}"); };
+        cb.saveRemote = [&](const std::string& s) { saved = s; return true; };
+        WebSocketBridge bridge(47910);
+        const bool started = bridge.start(cb);
+        CHECK(started, "a híd elindul (127.0.0.1:47910)");
+        if (started) {
+            std::FILE* out = std::tmpfile();
+            const int rc = run({ 47910 }, "indítsd el", out);
+            const std::string txt = out ? readAllFile(out) : "";
+            if (out) std::fclose(out);
+            std::printf("  --pair kimenete:\n%s", txt.c_str());
+            CHECK(rc == 0, "--pair: 0-s kilépési kód");
+            const char* label = "Párosító kód: ";
+            const size_t at = txt.find(label);
+            const std::string code = at == std::string::npos ? "" : txt.substr(at + std::strlen(label), 6);
+            CHECK(code.size() == 6 && std::all_of(code.begin(), code.end(), ::isdigit), "6 jegyű kód kiírva");
+            CHECK(txt.find("most bekapcsoltam") != std::string::npos, "jelzi, hogy a hálózati elérést bekapcsolta");
+            CHECK(saved.find("\"enabled\":true") != std::string::npos, "a hálózati elérés bekapcsolva és elmentve");
+            // A kiírt kóddal a telefon párosodhat a hálózati porton (kódos párosítás)
+            std::string resp;
+            for (int i = 0; i < 20 && resp.empty(); ++i) {
+                resp = wsHandshakeLive(47911, "/?pair=" + code + "&client=aqulify_remote&tier=paid&name=PairCli");
+                if (resp.empty()) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
+            CHECK(resp.rfind("HTTP/1.1 101", 0) == 0, "a kiírt kóddal a párosítás elfogadva (101)");
+            bridge.stop();
+        }
+        // Nincs futó motor ezen a porton: 1-es kód és útmutatás
+        std::FILE* out2 = std::tmpfile();
+        const int rc2 = run({ 47912 }, "Indítsd el a motort.", out2);
+        const std::string txt2 = out2 ? readAllFile(out2) : "";
+        if (out2) std::fclose(out2);
+        CHECK(rc2 == 1 && txt2.find("A motor nem fut") != std::string::npos && txt2.find("Indítsd el a motort.") != std::string::npos,
+              "nem futó motor: 1-es kód és útmutatás");
+    }
+}
+
 static void testBluetoothLine() {
     std::printf("[14] Bluetooth-tartalék: soros keretezés, első soros token, ugyanazok az üzenetek (bt_link.hpp)\n");
 
@@ -1598,6 +1704,7 @@ int main() {
     testUpdate();
     testOpenUrl();
     testBluetoothLine();
+    testPairCli();
     testBridgeLoudnessStereo();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
