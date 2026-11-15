@@ -616,6 +616,8 @@
   "ao.exclusiveHint": "De speler gebruikt de geluidskaart zelfstandig: de Windows-mixer en Equalizer APO worden omzeild, het bestand speelt op zijn eigen samplefrequentie en de DSP-keten draait intern. Andere programma's kunnen het apparaat niet tegelijk gebruiken.",
   "ao.exclusiveAlsa": "Exclusieve modus (direct ALSA)",
   "ao.exclusiveAlsaHint": "De speler gebruikt de DAC exclusief: PipeWire geeft hem vrij, het bestand speelt op zijn eigen samplefrequentie zonder conversie, de DSP-keten draait in het programma en het volume is digitaal. Andere programma's kunnen intussen niet via dit apparaat afspelen. Geldt vanaf het volgende nummer.",
+  "ao.exclusiveHog": "Exclusieve modus (hog mode)",
+  "ao.exclusiveHogHint": "De speler gebruikt de DAC exclusief: het macOS-audiosysteem staat hem af, het bestand speelt op zijn eigen samplefrequentie zonder conversie, de DSP-keten draait in het programma en het volume is digitaal. Andere programma's kunnen intussen niet via dit apparaat afspelen. Geldt vanaf het volgende nummer.",
   "ao.exclVol": "Volume in exclusieve modus",
   "ao.exclVolDigital": "Digitaal (standaard)",
   "ao.exclVolHw": "Hardwarevolume van de DAC",

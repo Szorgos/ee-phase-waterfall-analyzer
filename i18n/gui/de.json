@@ -616,6 +616,8 @@
   "ao.exclusiveHint": "Der Player nutzt die Soundkarte exklusiv: Windows-Mixer und Equalizer APO werden umgangen, die Datei wird mit nativer Abtastrate abgespielt und die DSP-Kette läuft intern. Andere Programme können währenddessen keinen Ton über dieses Gerät ausgeben.",
   "ao.exclusiveAlsa": "Exklusiver Modus (direktes ALSA)",
   "ao.exclusiveAlsaHint": "Der Player nutzt den DAC exklusiv: PipeWire gibt ihn frei, die Datei wird mit ihrer eigenen Abtastrate ohne Umwandlung abgespielt, die DSP-Kette läuft im Programm und die Lautstärke ist digital. Andere Programme können währenddessen nicht über dieses Gerät abspielen. Gilt ab dem nächsten Titel.",
+  "ao.exclusiveHog": "Exklusiver Modus (hog mode)",
+  "ao.exclusiveHogHint": "Der Player nutzt den DAC exklusiv: Das macOS-Audiosystem gibt ihn frei, die Datei wird mit ihrer eigenen Abtastrate ohne Umwandlung abgespielt, die DSP-Kette läuft im Programm und die Lautstärke ist digital. Andere Programme können währenddessen nicht über dieses Gerät abspielen. Gilt ab dem nächsten Titel.",
   "ao.exclVol": "Lautstärke im Exklusivmodus",
   "ao.exclVolDigital": "Digital (Standard)",
   "ao.exclVolHw": "Hardware-Lautstärke des DAC",

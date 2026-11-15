@@ -616,6 +616,8 @@
   "ao.exclusiveHint": "A lejátszó egyedül használja a hangkártyát: a Windows keverője és az Equalizer APO kimarad, a fájl saját mintavételén szól, a DSP-lánc a programban fut. Közben más programok nem szólnak ezen az eszközön. Lejátszás közbeni váltáskor a hang egy pillanatra megszakad.",
   "ao.exclusiveAlsa": "Kizárólagos mód (közvetlen ALSA)",
   "ao.exclusiveAlsaHint": "A lejátszó egyedül használja a DAC-ot: a PipeWire elengedi, a fájl saját mintavételén, átalakítás nélkül szól, a DSP-lánc a programban fut, a hangerő digitális. Közben más programok nem szólnak ezen az eszközön. A következő számtól érvényes.",
+  "ao.exclusiveHog": "Kizárólagos mód (hog mode)",
+  "ao.exclusiveHogHint": "A lejátszó egyedül használja a DAC-ot: a macOS hangrendszere átengedi, a fájl saját mintavételén, átalakítás nélkül szól, a DSP-lánc a programban fut, a hangerő digitális. Közben más programok nem szólnak ezen az eszközön. A következő számtól érvényes.",
   "ao.exclVol": "Hangerő kizárólagos módban",
   "ao.exclVolDigital": "Digitális (alapértelmezett)",
   "ao.exclVolHw": "A DAC hardveres hangereje",
