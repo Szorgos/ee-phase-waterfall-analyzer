@@ -114,7 +114,9 @@ def main():
     send({"type": "set_eq", "bands": [{"type": 1, "mode": 0, "freq": 4000, "gain": 6, "q": 1.0}], "preamp": 0})
     for mode, name in ((0, "IIR"), (1, "FIR"), (2, "FFT"), (3, "SPM")):
         send({"type": "set_eq_mode", "mode": mode})
-        time.sleep(1.2)
+        # Az FFT-alapú módok (FIR, FFT, SPM) az átváltás után lassabban állnak be (a CI-gépen 1,2 s néha kevés volt:
+        # 100 Hz −12,67 dBFS −12 helyett, 2026-11-15); a mérés csak utána kezdődik
+        time.sleep(1.2 if mode == 0 else 2.5)
         s = seg(record("eq_" + name, tone), start=0.8)
         a, b = level(s[:, 0], 100), level(s[:, 0], 4000)
         check(abs(b + 6) < 0.5 and abs(a + 12) < 0.4, f"{name}: 4 kHz {b:.2f} dBFS (elvárt −6), 100 Hz {a:.2f} dBFS (elvárt −12)")
