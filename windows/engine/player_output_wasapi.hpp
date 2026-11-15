@@ -82,6 +82,8 @@ public:
     bool wantExclusive() const { return wantExclusive_.load(); }
     /** Most kizárólagos módban szól-e (nyitott hangfolyam). */
     bool exclusiveActive() const { return exclusiveOn_.load(); }
+    /** Kizárólagos módban a DAC a mintavétel váltásakor új órajelre áll: a lejátszó rövid csenddel kezd. */
+    bool settlesOnRateChange() const override { return exclusiveOn_.load(); }
     /** A legutóbbi kizárólagos megnyitás bitpontos volt-e eddig (nem veszett el bit a kimenet formátumára alakításkor). */
     bool quantExact() const { return !quantLoss_.load(); }
 

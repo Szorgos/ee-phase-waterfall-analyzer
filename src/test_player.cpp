@@ -91,6 +91,9 @@ public:
     void unlock() override { m.unlock(); }
     void flush() override { ++flushes; }
     uint64_t consumedFrames() const override { return consumed.load(); }
+    /** Kizárólagos módot játszik el (a lejátszó mintavétel-váltáskor csenddel kezd). */
+    bool settle = false;
+    bool settlesOnRateChange() const override { return settle; }
     /** A „hangeszköz” által már megszólaltatott keretek (UINT64_MAX: nem ismert, mint a PipeWire-nél). */
     std::atomic<uint64_t> consumed{UINT64_MAX};
     int flushes = 0;
@@ -710,6 +713,81 @@ static void testQueue() {
         const std::vector<float> c = pullFrames(p, *out, nC);
         CHECK(reopened && out->opens == 2 && c == f.stereo["tc"] && p.info().title == "aq_queue_tc",
               "D (48 kHz) -> C (44,1 kHz): új hangfolyam %u Hz-en (%d megnyitás), a C bitpontosan", out->rate, out->opens.load());
+    }
+
+    {   // kattanásmentes váltás kizárólagos módban: a hangfolyam elején csend, amíg a DAC az új órajelre áll
+        auto* out = new FakeOutput;
+        out->settle = true;
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        PlayQueue q(p, f.resolve());
+        q.play(f.items({ "td", "tc" }), 0);
+        const size_t leadD = 48000u * FilePlayer::kRateSettleMs / 1000, leadC = 44100u * FilePlayer::kRateSettleMs / 1000;
+        const double posInLead = p.position();
+        const std::vector<float> first = pullFrames(p, *out, leadD + nD);
+        const bool zerosD = first.size() == (leadD + nD) * 2 &&
+                            std::all_of(first.begin(), first.begin() + leadD * 2, [](float v) { return v == 0.0f; });
+        const bool exactD = zerosD && std::equal(first.begin() + leadD * 2, first.end(), f.stereo["td"].begin());
+        CHECK(zerosD && exactD && posInLead == 0.0,
+              "kizárólagos mód, első hangfolyam: %zu keret (%u ms) csend, utána a D bitpontosan; a pozíció a csend alatt 0",
+              leadD, FilePlayer::kRateSettleMs);
+        float tmp[1024];
+        out->pull(tmp, 512);
+        const bool reopened = waitUntil([&] { return out->rate == 44100 && out->active && q.currentIndex() == 1; });
+        const uint64_t leadLeft = p.leadInFrames();
+        const std::vector<float> second = pullFrames(p, *out, leadC + nC);
+        const bool zerosC = second.size() == (leadC + nC) * 2 &&
+                            std::all_of(second.begin(), second.begin() + leadC * 2, [](float v) { return v == 0.0f; });
+        const bool exactC = zerosC && std::equal(second.begin() + leadC * 2, second.end(), f.stereo["tc"].begin());
+        CHECK(reopened && leadLeft == leadC && zerosC && exactC,
+              "eltérő mintavétel (48 -> 44,1 kHz): az új hangfolyam %zu keret csenddel kezd, utána a C bitpontosan", leadC);
+    }
+    {   // azonos mintavétel kizárólagos módban: a szünetmentes váltásnál nincs csend (csak a legelső indításkor)
+        auto* out = new FakeOutput;
+        out->settle = true;
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        PlayQueue q(p, f.resolve());
+        q.play(f.items({ "ta", "tb" }), 0);
+        const size_t lead = 48000u * FilePlayer::kRateSettleMs / 1000;
+        const std::vector<float> got = pullFrames(p, *out, lead + nA + nB);
+        std::vector<float> want(lead * 2, 0.0f);
+        want.insert(want.end(), f.stereo["ta"].begin(), f.stereo["ta"].end());
+        want.insert(want.end(), f.stereo["tb"].begin(), f.stereo["tb"].end());
+        CHECK(got == want && out->opens == 1, "azonos mintavétel: csak az indításkor csend, A -> B között nincs (egy hangfolyam)");
+    }
+    {   // kizárólagos mód, kézi számváltás azonos mintavételen: a hangfolyam marad (nincs újranyitás)
+        auto* out = new FakeOutput;
+        out->settle = true;
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        const size_t lead = 48000u * FilePlayer::kRateSettleMs / 1000;
+        p.open(f.path["ta"]);
+        pullFrames(p, *out, lead + 1000);                     // az indítási csend és a szám eleje elszól
+        p.open(f.path["td"]);                                // szóló zene közben: azonnal, csend nélkül
+        const uint64_t leadPlaying = p.leadInFrames();
+        const std::vector<float> d = pullFrames(p, *out, nD);
+        CHECK(out->opens == 1 && leadPlaying == 0 && d == f.stereo["td"],
+              "szóló zene közbeni számváltás azonos mintavételen: ugyanaz a hangfolyam (%d megnyitás), csend nélkül, a D "
+              "bitpontosan", out->opens.load());
+        float tmp[1024];
+        out->pull(tmp, 512);
+        const bool ended = waitState(p, FilePlayer::State::Ended);
+        p.open(f.path["tb"]);                                // a leállt kimenet újraindul: csenddel
+        const uint64_t leadAfterEnd = p.leadInFrames();
+        const std::vector<float> b = pullFrames(p, *out, lead + nB);
+        const bool zeros = b.size() == (lead + nB) * 2 &&
+                           std::all_of(b.begin(), b.begin() + lead * 2, [](float v) { return v == 0.0f; });
+        CHECK(ended && out->opens == 1 && leadAfterEnd == lead && zeros &&
+              std::equal(b.begin() + lead * 2, b.end(), f.stereo["tb"].begin()),
+              "a szám vége után új szám azonos mintavételen: a hangfolyam marad, az újrainduláskor %zu keret csend", lead);
+        p.open(f.path["tc"]);                                // eltérő mintavétel: új hangfolyam, csenddel
+        CHECK(out->opens == 2 && out->rate == 44100 && p.leadInFrames() == 44100u * FilePlayer::kRateSettleMs / 1000,
+              "eltérő mintavételű kézi váltás: új hangfolyam (%d megnyitás), csenddel", out->opens.load());
+    }
+    {   // megosztott mód (nem kizárólagos): soha nincs csend
+        auto* out = new FakeOutput;
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        PlayQueue q(p, f.resolve());
+        q.play(f.items({ "td" }), 0);
+        CHECK(p.leadInFrames() == 0, "megosztott módban nincs eleji csend");
     }
 
     std::string savedDoc;

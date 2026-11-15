@@ -147,8 +147,35 @@ bool FilePlayer::open(const std::string& path, std::string* error, uint64_t toke
         return false;
     }
     std::lock_guard<std::mutex> lk(m_);
+    // Kizárólagos módban azonos mintavételnél a hangfolyam marad: a DAC-nak nem kell leállnia és újraindulnia
+    // (egyes DAC-oknál már az újranyitás is hallható zajt ad), és a számváltás azonnali
+    const State st = state_.load();
+    if (st != State::Idle && !segs_.empty() && seg->dec->sampleRate() == rate_ && out_->settlesOnRateChange()) {
+        replaceTrackLocked(std::move(seg), st != State::Playing);
+        return true;
+    }
     stopLocked();
     return startStreamLocked(std::move(seg), error);
+}
+
+void FilePlayer::replaceTrackLocked(std::unique_ptr<Segment> seg, bool streamStopped) {
+    out_->lock();                       // a render most nem fut: a puffer biztonságosan üríthető
+    seg->start = 0;
+    seg->end = UINT64_MAX;
+    segs_.clear();
+    segs_.push_back(std::move(*seg));
+    pending_.reset();
+    wr_ = rd_ = played_ = base_ = 0;
+    eof_ = finished_ = false;
+    out_->flush();                      // az előző szám pufferben maradt része ne szóljon
+    // Ha a kimenet állt (szünet / a szám vége), az újrainduláskor a DAC újra szinkronizál: csenddel kezd
+    leadTotal_ = streamStopped ? static_cast<uint64_t>(rate_) * kRateSettleMs / 1000 : 0;
+    leadIn_ = leadTotal_.load();
+    out_->unlock();
+    fillLocked();
+    state_ = State::Playing;
+    out_->setActive(true);
+    cv_.notify_all();
 }
 
 bool FilePlayer::startStreamLocked(std::unique_ptr<Segment> seg, std::string* error) {
@@ -163,11 +190,19 @@ bool FilePlayer::startStreamLocked(std::unique_ptr<Segment> seg, std::string* er
     wr_ = rd_ = played_ = base_ = 0;
     eof_ = finished_ = false;
     std::string err;
+    leadIn_ = 0;
+    leadTotal_ = 0;
     if (!out_->open(rate_, [this](float* s, size_t n) { render(s, n); }, &err)) {
         segs_.clear();
         state_ = State::Idle;
         if (error) *error = err.empty() ? "A hangkimenet nem nyitható meg." : err;
         return false;
+    }
+    // Kattanásmentes indulás: kizárólagos módban minden új hangfolyam rövid csenddel kezd, amíg a DAC az (esetleg
+    // új) órajelre áll és elnémítását feloldja (a kimenet még inaktív, a render nem fut)
+    if (out_->settlesOnRateChange()) {
+        leadTotal_ = static_cast<uint64_t>(rate_) * kRateSettleMs / 1000;
+        leadIn_ = leadTotal_.load();
     }
     fillLocked();                     // az első adag már az indítás előtt a pufferben van
     state_ = State::Playing;
@@ -269,6 +304,8 @@ void FilePlayer::seekLocked(uint64_t frame) {
     played_ = base_ = frame;
     eof_ = finished_ = false;
     out_->flush();                      // a kimenet pufferében várakozó régi minták se szóljanak
+    leadIn_ = 0;                        // tekeréskor az eleji csend elmarad (a flush a számlálót is nullázza)
+    leadTotal_ = 0;
     out_->unlock();
     fillLocked();
 }
@@ -276,7 +313,12 @@ void FilePlayer::seekLocked(uint64_t frame) {
 uint64_t FilePlayer::audibleFrame() const {
     const uint64_t base = base_.load(), played = played_.load();
     const uint64_t given = played > base ? played - base : 0;
-    return base + std::min(given, out_->consumedFrames());
+    uint64_t consumed = out_->consumedFrames();
+    if (consumed != UINT64_MAX) {   // a hangfolyam eleji csend nem része a számnak
+        const uint64_t lead = leadTotal_.load();
+        consumed = consumed > lead ? consumed - lead : 0;
+    }
+    return base + std::min(given, consumed);
 }
 
 size_t FilePlayer::audibleIndexLocked() const {
@@ -426,6 +468,15 @@ void FilePlayer::render(float* stereo, size_t frames) {
     if (state_.load() != State::Playing) {
         std::memset(stereo, 0, frames * 2 * sizeof(float));
         return;
+    }
+    // A hangfolyam eleji csend (kattanásmentes váltás): a DAC ez alatt áll az új órajelre; a pozíciót nem lépteti
+    if (const uint64_t lead = leadIn_.load()) {
+        const size_t z = static_cast<size_t>(std::min<uint64_t>(frames, lead));
+        std::memset(stereo, 0, z * 2 * sizeof(float));
+        leadIn_.store(lead - z);
+        if (z == frames) return;
+        stereo += 2 * z;
+        frames -= z;
     }
     const uint64_t r = rd_.load(), w = wr_.load(std::memory_order_acquire);
     const size_t n = std::min<size_t>(frames, static_cast<size_t>(w - r));

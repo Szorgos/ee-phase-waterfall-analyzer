@@ -60,6 +60,12 @@ public:
      * várakozók nélkül); UINT64_MAX: nem ismert (ilyenkor a pozíció a kimenetnek átadott keretekből számol).
      */
     virtual uint64_t consumedFrames() const { return UINT64_MAX; }
+    /**
+     * Kizárólagos (bitpontos) hangfolyam szól-e: ilyenkor a DAC a mintavétel váltásakor új órajelre áll (relék, PLL),
+     * és ez alatt a szám eleje csattanhat vagy levágódhat. Ha igaz, a lejátszó az új hangfolyamot rövid csenddel
+     * kezdi (FilePlayer::kRateSettleMs). Megosztott módban a rendszer keverője igazít, a DAC nem vált: false.
+     */
+    virtual bool settlesOnRateChange() const { return false; }
 };
 
 class FilePlayer {
@@ -126,6 +132,16 @@ public:
     /** A dekóder elérte-e a fájl végét (a puffer ettől még tartalmazhat adatot). */
     bool decodeAtEnd() const { return eof_.load(); }
 
+    /**
+     * Kattanásmentes váltás kizárólagos módban: minden új hangfolyam (első indítás, eltérő mintavételű szám) és a
+     * leállt kimenet újraindítása (a szám vége után új szám) kRateSettleMs ezredmásodperc csenddel kezd, amíg a DAC
+     * az órajelre áll és elnémítását feloldja. Azonos mintavételű új számnál a hangfolyam nem zárul be (open() a
+     * meglévőn folytatja), így a szóló zene közbeni számváltás azonnali és csend nélküli; a szünetmentes váltás is.
+     */
+    static constexpr uint32_t kRateSettleMs = 800;
+    /** Az új hangfolyam elején még hátralévő csend kerete (tesztekhez). */
+    uint64_t leadInFrames() const { return leadIn_.load(); }
+
 private:
     /** Egy szám az idővonalon (az idővonal a tekerés / megnyitás óta folyamatos, az első szám kereteiben indul). */
     /** Az előbetöltött fájl ideiglenes másolata (megszűnéskor törlődik). */
@@ -138,8 +154,10 @@ private:
         ~TempCopy();
     };
     struct Segment {
-        std::unique_ptr<AudioDecoder> dec;
+        // A sorrend számít: a tagok fordított sorrendben szűnnek meg, így előbb a dekóder zárja be a fájlt, és csak
+        // utána törlődik az előbetöltött másolat (Windowson nyitott fájl nem törölhető)
         std::unique_ptr<TempCopy> temp;     // előbetöltésnél a memóriába másolt fájl
+        std::unique_ptr<AudioDecoder> dec;
         float gain = 1.0f;                  // ReplayGain (lineáris)
         std::string path, title, artId;
         std::string coverMime, cover;       // a mappa képe, ha a fájlba nincs borító ágyazva
@@ -157,6 +175,8 @@ private:
     void seekLocked(uint64_t frame);
     /** Új hangfolyam az első szakasszal (megnyitás, illetve eltérő mintavételű következő szám). */
     bool startStreamLocked(std::unique_ptr<Segment> seg, std::string* error);
+    /** Új szám a meglévő hangfolyamon (azonos mintavétel, kizárólagos mód); streamStopped: a kimenet állt. */
+    void replaceTrackLocked(std::unique_ptr<Segment> seg, bool streamStopped);
     /** Dekódolás a puffer szabad részébe; false: az idővonal vége (nincs több azonos mintavételű szám). */
     bool fillLocked();
     /** A fájl végén: a következő szám a sorból (azonos mintavételnél a szakaszok végére, különben a pending_-be). */
@@ -191,6 +211,8 @@ private:
     std::atomic<float> rgPreampDb_{0.0f};
     std::atomic<bool> rgPreventClip_{true};
     std::atomic<bool> preload_{false};
+    // kattanásmentes váltás (lásd kRateSettleMs): a hátralévő és az összes csend a hangfolyam elején
+    std::atomic<uint64_t> leadIn_{0}, leadTotal_{0};
 };
 
 } // namespace ee_analyzer::player
