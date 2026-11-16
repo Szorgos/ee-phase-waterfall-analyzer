@@ -1,3 +1,19 @@
+### Újdonságok (2.4.0)
+
+**Letöltés (2.4.0):**
+- Windows 11: [Aqulify-Setup-2.4.0.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.4.0/Aqulify-Setup-2.4.0.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.4.0/Aqulify-Setup-2.4.0.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.4.0-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.4.0/Aqulify-2.4.0-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.4.0/Aqulify-2.4.0-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.4.0.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.4.0/Aqulify-Linux-2.4.0.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.4.0/Aqulify-Linux-2.4.0.tar.gz.sha256))
+- Fedora: [aqulify-2.4.0-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.4.0/aqulify-2.4.0-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.4.0-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.4.0/aqulify_2.4.0-1_amd64.deb) · Arch: [aqulify-2.4.0-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.4.0/aqulify-2.4.0-1-x86_64.pkg.tar.zst)
+- Raspberry Pi 4 / 5 (Raspberry Pi OS, 64 bit): [aqulify_2.4.0-1.pi1_arm64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.4.0/aqulify_2.4.0-1.pi1_arm64.deb) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.4.0/aqulify_2.4.0-1.pi1_arm64.deb.sha256)) · útmutató: `docs/pi.md`
+- Android-távirányító (Android 8+): [Aqulify-Remote-1.1.0.apk](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.4.0/Aqulify-Remote-1.1.0.apk) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.4.0/Aqulify-Remote-1.1.0.apk.sha256)); aláíró tanúsítvány SHA-256 (ugyanaz, mint eddig, így frissítésként települ, a párosítás megmarad): `cf97c16a47e3ea1486f901c818e8478d724fba6f8d4af52e223112c171e3b1f5`
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Verzióellenőrzés minden eszközön.** A gép (a monitor nélküli Raspberry Pi is) 6 óránként maga megnézi, van-e frissebb Aqulify, és ezt a telefonnak és a vezérlő gépnek is jelzi; a `aqulify-engine --pair` kiírja. A telefon és a vezérlő gép látja a párosított társ verzióját, és szól, ha valamelyik oldalon van frissebb. A jelzés egy elrejthető sáv, felugró ablak nincs; hálózat nélkül az ellenőrzés csendben kimarad. Kikapcsolható: `AQULIFY_NO_UPDATE_CHECK=1`.
+- **Android-távirányító 1.1.0.** Elküldi a gépnek a verzióját; a kezdőoldalon szól, ha frissebb app érhető el (a kiadás oldalára visz), és a gép kártyáján, ha a gépen régebbi Aqulify fut.
+- **Raspberry Pi-csomag RNNoise-modellel.** A beszéd-zajcsökkentés betanított modellje a Pi-csomagba is bekerül (a 2.3.0-2 csomagtól), és a Pi-csomag natív arm64-es gépen, a közös tesztekkel együtt épül.
+- **Javítás:** a zenetár a „bejárás kész” jelzést csak a gyorsítótár mentése után adja.
+
 ### Újdonságok (2.3.0)
 
 **Letöltés (2.3.0):**

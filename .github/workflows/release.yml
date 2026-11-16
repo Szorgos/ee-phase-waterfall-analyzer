@@ -14,6 +14,10 @@ on:
         description: "Verzió kiadáshoz (pl. 1.3.0). Üresen hagyva csak letölthető munkatermék készül."
         required: false
         default: ""
+      android_version:
+        description: "Az ezzel a kiadással megjelenő Android-távirányító verziója (üres: a korábbi kiadások APK-jából)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -491,7 +495,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           VER: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
-        run: python3 tools/versions_json.py --desktop "${VER#v}" --out aqulify-versions.json
+          ANDROID_VER: ${{ inputs.android_version }}
+        run: python3 tools/versions_json.py --desktop "${VER#v}" --android "$ANDROID_VER" --out aqulify-versions.json
       - name: Feltöltés a kiadáshoz
         uses: softprops/action-gh-release@v2
         with:
