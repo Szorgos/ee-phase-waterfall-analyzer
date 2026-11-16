@@ -1,3 +1,18 @@
+### Újdonságok (2.3.0)
+
+**Letöltés (2.3.0):**
+- Windows 11: [Aqulify-Setup-2.3.0.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.3.0/Aqulify-Setup-2.3.0.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.3.0/Aqulify-Setup-2.3.0.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.3.0-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.3.0/Aqulify-2.3.0-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.3.0/Aqulify-2.3.0-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.3.0.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.3.0/Aqulify-Linux-2.3.0.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.3.0/Aqulify-Linux-2.3.0.tar.gz.sha256))
+- Fedora: [aqulify-2.3.0-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.3.0/aqulify-2.3.0-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.3.0-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.3.0/aqulify_2.3.0-1_amd64.deb) · Arch: [aqulify-2.3.0-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.3.0/aqulify-2.3.0-1-x86_64.pkg.tar.zst)
+- Raspberry Pi 4 / 5 (Raspberry Pi OS, 64 bit): [aqulify_2.3.0-1.pi1_arm64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.3.0/aqulify_2.3.0-1.pi1_arm64.deb) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.3.0/aqulify_2.3.0-1.pi1_arm64.deb.sha256)) · útmutató: `docs/pi.md`
+- Android-távirányító (Android 8+): változatlan, [Aqulify-Remote-1.0.1.apk](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.1/Aqulify-Remote-1.0.1.apk) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.1/Aqulify-Remote-1.0.1.apk.sha256))
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Másik gép vezérlése a gépről.** Az asztali Aqulify egy másik gépet is vezérelhet (PC → laptop, laptop → Raspberry Pi): a fejlécben választható ki a vezérelt gép. A helyi hálózaton futó Aqulify-gépeket a program magától megkeresi; a párosítás a másik gép 6 jegyű kódjával megy (Távirányító panel, fej nélküli gépen `aqulify-engine --pair`). A kapcsolat titka a saját gépen marad.
+- **Teljes jogú távirányító.** A gazdagépen eszközönként megadható, hogy egy párosított gép a zenei mappákat és a hangbeállításokat is kezelhesse; fej nélküli Pi-n: `aqulify-engine --pair --admin`. Így egy monitor nélküli Pi is beállítható egy másik gépről.
+- **Mappák tallózása, zene NAS-ról.** A Zenei mappák ablakban „Tallózás” gomb: a mappát a vezérelt gépen lehet kiválasztani, távolról is. Hálózati megosztás (NAS) is lehet zenei mappa; ehhez előbb a rendszerben kell felcsatolni (Windows: hálózati meghajtó vagy `\\gép\mappa`; Pi: `docs/pi.md`, „Zene NAS-ról”).
+
 ### Újdonságok (2.2.1)
 
 **Letöltés (2.2.1):**

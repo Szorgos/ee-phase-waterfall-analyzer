@@ -23,7 +23,7 @@ sudo apt install --no-install-recommends build-essential cmake ninja-build pkg-c
 bash tools/pi/pi_deb_build.sh [a motor forrásmappája, alap: a tároló gyökere] [git-ref, alap: HEAD] [kimeneti mappa, alap: ./pi-deb]
 ```
 
-- A szkript a megadott git-hivatkozás tiszta másolatából (`git archive`) dolgozik, a csomag verzióját a `CMakeLists.txt` verziójához igazítja `-1~pi1` utótaggal (pl. `aqulify_2.2.1-1~pi1_arm64.deb`), lefordítja a programot, és lefuttatja az egységteszteket (`debian/rules`).
+- A szkript a megadott git-hivatkozás tiszta másolatából (`git archive`) dolgozik, a csomag verzióját a `CMakeLists.txt` verziójához igazítja `-1~pi1` utótaggal (pl. `aqulify_2.3.0-1~pi1_arm64.deb`), lefordítja a programot, és lefuttatja az egységteszteket (`debian/rules`).
 - Az elkészült `.deb` csomag és a `build.log` az `[kimeneti mappa]` könyvtárba (alapértelmezetten `./pi-deb`) kerül.
 - Ha az RNNoise-modell (`debian/rnnoise_0.2+ds.orig.tar.xz`) nincs letöltve a forrásban, a csomag a beszéd-zajcsökkentés nélküli változattal épül.
 - **Csak emulált (QEMU) környezetben:** `AQ_EMULALT=1 bash tools/pi/pi_deb_build.sh ...` megadásával a valós idejű CPU-terhelést mérő `test_dsp` kihagyható. Valódi Pi-n ezt **ne** add meg, hogy a teszt lemérje a hardvert.
@@ -35,7 +35,7 @@ bash tools/pi/pi_deb_build.sh [a motor forrásmappája, alap: a tároló gyöker
 A kész csomagot a Debian csomagkezelőjével (`apt`) telepítsd, hogy a futásidejű függőségeket (`pipewire`, `hicolor-icon-theme` és a szükséges megosztott könyvtárak – `debian/control` 12. sor) automatikusan feloldja:
 
 ```bash
-sudo apt install ./aqulify_2.2.1-1~pi1_arm64.deb
+sudo apt install ./aqulify_2.3.0-1~pi1_arm64.deb
 ```
 
 ### Telepített fájlok (`debian/rules`)
