@@ -1894,14 +1894,20 @@ static void testRemoteAdmin() {
 
     net::closeSocket(sRemote1);
 
+    // Egyetlen kódkérés, majd várakozás az új, érvényes kódra. Újra kérni nem szabad: minden kérés új kódot nyit, és
+    // az előzőt érvényteleníti (a régi állapotüzenetek üres vagy régi kódja miatt különben a régebbi kódot kapnánk).
+    auto requestNewCode = [&](const char* request, const std::string& previous) -> std::string {
+        wsSendText(sLocal, request);
+        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(3000);
+        while (std::chrono::steady_clock::now() < until) {
+            const std::string c = jsonField(wsWaitFor(sLocal, "\"code\":\"", 500), "code");
+            if (c.size() == 6 && c != previous) return c;
+        }
+        return {};
+    };
+
     // 5. Párosítás fej nélkül --admin flaggel
-    std::string code2;
-    for (int i = 0; i < 10 && code2.empty(); ++i) {
-        wsSendText(sLocal, "{\"type\":\"remote_new_code\",\"admin\":true}");
-        std::string m = wsWaitFor(sLocal, "\"code\":\"", 1000);
-        std::string c = jsonField(m, "code");
-        if (c.size() == 6 && c != code1) code2 = c;
-    }
+    const std::string code2 = requestNewCode("{\"type\":\"remote_new_code\",\"admin\":true}", code1);
     CHECK(code2.size() == 6, "párosító kód admin flaggel: %s", code2.c_str());
 
     net::socket_t sRemote2 = wsConnectLive(remPort, "/?pair=" + code2 + "&client=aqulify_desktop&name=RemoteDesktopAdmin");
@@ -1920,23 +1926,11 @@ static void testRemoteAdmin() {
     }
 
     // 6. nextPairAdmin_ nem ragad be: admin kód kérése után normál kód nyitása nem ad admin jogot
-    std::string codeAdmin;
-    for (int i = 0; i < 10 && codeAdmin.empty(); ++i) {
-        wsSendText(sLocal, "{\"type\":\"remote_new_code\",\"admin\":true}");
-        std::string m = wsWaitFor(sLocal, "\"code\":\"", 1000);
-        std::string c = jsonField(m, "code");
-        if (c.size() == 6 && c != code2) codeAdmin = c;
-    }
+    const std::string codeAdmin = requestNewCode("{\"type\":\"remote_new_code\",\"admin\":true}", code2);
     CHECK(codeAdmin.size() == 6, "új admin párosító kód: %s", codeAdmin.c_str());
 
     // Most felülírjuk egy normál kóddal
-    std::string cNorm;
-    for (int i = 0; i < 10 && cNorm.empty(); ++i) {
-        wsSendText(sLocal, "{\"type\":\"remote_new_code\"}");
-        std::string m = wsWaitFor(sLocal, "\"code\":\"", 1000);
-        std::string c = jsonField(m, "code");
-        if (c.size() == 6 && c != codeAdmin) cNorm = c;
-    }
+    const std::string cNorm = requestNewCode("{\"type\":\"remote_new_code\"}", codeAdmin);
     CHECK(cNorm.size() == 6, "új normál párosító kód: %s", cNorm.c_str());
 
     net::socket_t sRemoteNorm = wsConnectLive(remPort, "/?pair=" + cNorm + "&client=aqulify_desktop&name=RemoteNorm");
