@@ -4,12 +4,16 @@
 #
 # Használat (a Pi-n, a tároló gyökeréből):
 #   sudo apt install --no-install-recommends build-essential cmake ninja-build pkg-config xz-utils dpkg-dev \
-#        fakeroot git python3 libpipewire-0.3-dev libfftw3-dev libsystemd-dev libasound2-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+#        fakeroot git python3 curl ca-certificates libpipewire-0.3-dev libfftw3-dev libsystemd-dev libasound2-dev \
+#        libgtk-3-dev libwebkit2gtk-4.1-dev
 #   bash tools/pi/pi_deb_build.sh [a motor forrásmappája, alap: a tároló gyökere] [git-ref, alap: HEAD] [kimeneti mappa]
 #
 # Mit csinál: a megadott ref tiszta másolatából (git archive) a meglévő debian/ csomagolással épít
-# (dpkg-buildpackage -b: fordítás, a közös tesztek, telepítés, .deb). Az RNNoise-modell nélkül épül, ha nincs
-# letöltve (a csomag akkor a beszéd-zajcsökkentés nélküli változat).
+# (dpkg-buildpackage -b: fordítás, a közös tesztek, telepítés, .deb). A beszéd-zajcsökkentés betanított
+# RNNoise-modellje nincs a tárolóban: a szkript a tools/fetch_rnnoise.sh-val tölti le (rögzített sha256), mint az
+# asztali csomagok. Ha a gépen nincs curl / wget, AQ_RNNOISE_TAR=<előre letöltött rnnoise_0.2+ds.orig.tar.xz>;
+# a modell nélküli csomag csak AQ_NO_RNNOISE=1 megadásával épül.
+# Csomagrevízió (ugyanannak a verziónak az újraépítése, hogy az apt frissítésnek lássa): AQ_PI_REV=2 → 2.3.0-2~pi1.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -23,13 +27,28 @@ trap 'rm -rf "$WORK"' EXIT
 git -C "$SRC" archive --format=tar "$REF" | tar -x -C "$WORK"
 echo "Forrás: $(git -C "$SRC" rev-parse --short "$REF") -> $WORK"
 cd "$WORK"
+# RNNoise-modell (a debian/rules a debian/rnnoise_0.2+ds.orig.tar.xz-ből bontja ki)
+RNN_TAR="debian/rnnoise_0.2+ds.orig.tar.xz"
+if [ "${AQ_NO_RNNOISE:-0}" = "1" ]; then
+  echo "FIGYELEM: AQ_NO_RNNOISE=1 – a csomag RNNoise-modell (beszéd-zajcsökkentés) nélkül épül"
+elif [ -n "${AQ_RNNOISE_TAR:-}" ]; then
+  [ "$(sha256sum < "$AQ_RNNOISE_TAR" | cut -d' ' -f1)" = "db2718ee4a0b294bfbbe198fe94aabfdc8cd0d77cb9cd95d76c7a818ad805f0b" ] \
+    || { echo "HIBA: az AQ_RNNOISE_TAR sha256-ja nem a várt"; exit 1; }
+  cp "$AQ_RNNOISE_TAR" "$RNN_TAR"
+  echo "RNNoise: $AQ_RNNOISE_TAR"
+else
+  bash "$SCRIPT_DIR/../fetch_rnnoise.sh" "$RNN_TAR" \
+    || { echo "HIBA: az RNNoise-modell nem tölthető le (AQ_RNNOISE_TAR=<fájl> vagy AQ_NO_RNNOISE=1)"; exit 1; }
+fi
 # A nyilvános debian/changelog lemaradhat a motor verziójától (a debian/rules ellenőrzi az egyezést):
 # a munkamásolatban a csomag verziója a CMakeLists.txt verziója lesz, „~pi1” utótaggal, a mostani szerzőcímmel.
 AUTHOR="Szorgos <291709182+Szorgos@users.noreply.github.com>"
 CMV="$(sed -n '1,10s/^ *VERSION \([0-9][0-9.]*\)$/\1/p' CMakeLists.txt | head -1)"
 [ -n "$CMV" ] || { echo "HIBA: a CMakeLists.txt verziója nem olvasható"; exit 1; }
-{ printf 'aqulify (%s-1~pi1) unstable; urgency=medium\n\n  * Raspberry Pi (arm64) csomag a %s forrásból.\n\n -- %s  %s\n\n' \
-    "$CMV" "$(git -C "$SRC" rev-parse --short "$REF")" "$AUTHOR" "$(date -R)"; cat debian/changelog; } > debian/changelog.new
+REV="${AQ_PI_REV:-1}"
+[[ "$REV" =~ ^[1-9][0-9]*$ ]] || { echo "HIBA: az AQ_PI_REV pozitív egész legyen"; exit 1; }
+{ printf 'aqulify (%s-%s~pi1) unstable; urgency=medium\n\n  * Raspberry Pi (arm64) csomag a %s forrásból.\n\n -- %s  %s\n\n' \
+    "$CMV" "$REV" "$(git -C "$SRC" rev-parse --short "$REF")" "$AUTHOR" "$(date -R)"; cat debian/changelog; } > debian/changelog.new
 mv debian/changelog.new debian/changelog
 sed -i "s|^Maintainer: .*|Maintainer: $AUTHOR|" debian/control
 # Emulált (QEMU) környezetben a test_dsp valós idejű CPU-mérése értelmetlen (az emuláció sokszor lassabb):
@@ -64,6 +83,9 @@ rc=0
 dpkg-buildpackage -us -uc -b > "$OUT/build.log" 2>&1 || rc=$?
 grep -E "FIGYELEM|MINDEN TESZT|sikertelen|HIBA|error:" "$OUT/build.log" | tail -20 || true
 [ "$rc" -eq 0 ] || { echo "HIBA: a csomagkészítés nem sikerült (kód: $rc, napló: $OUT/build.log)"; exit 1; }
+if [ "${AQ_NO_RNNOISE:-0}" != "1" ] && grep -q "^FIGYELEM: nincs RNNoise-modell" "$OUT/build.log"; then
+  echo "HIBA: a modell megvolt, mégis RNNoise nélkül épült (napló: $OUT/build.log)"; exit 1
+fi
 # a dpkg-deb a munkamappa szülőjébe teszi a csomagot
 VER="$(dpkg-parsechangelog -S Version)"
 mv "$(dirname "$WORK")/aqulify_${VER}_arm64.deb" "$OUT/"

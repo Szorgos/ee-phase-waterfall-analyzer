@@ -14,7 +14,8 @@ A `tools/pi/pi_deb_build.sh` fejléce és a `debian/control` (`Build-Depends`) a
 
 ```bash
 sudo apt install --no-install-recommends build-essential cmake ninja-build pkg-config xz-utils dpkg-dev \
-     fakeroot git python3 libpipewire-0.3-dev libfftw3-dev libsystemd-dev libasound2-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+     fakeroot git python3 curl ca-certificates libpipewire-0.3-dev libfftw3-dev libsystemd-dev libasound2-dev \
+     libgtk-3-dev libwebkit2gtk-4.1-dev
 ```
 
 ### A csomag felépítése
@@ -25,7 +26,8 @@ bash tools/pi/pi_deb_build.sh [a motor forrásmappája, alap: a tároló gyöker
 
 - A szkript a megadott git-hivatkozás tiszta másolatából (`git archive`) dolgozik, a csomag verzióját a `CMakeLists.txt` verziójához igazítja `-1~pi1` utótaggal (pl. `aqulify_2.3.0-1~pi1_arm64.deb`), lefordítja a programot, és lefuttatja az egységteszteket (`debian/rules`).
 - Az elkészült `.deb` csomag és a `build.log` az `[kimeneti mappa]` könyvtárba (alapértelmezetten `./pi-deb`) kerül.
-- Ha az RNNoise-modell (`debian/rnnoise_0.2+ds.orig.tar.xz`) nincs letöltve a forrásban, a csomag a beszéd-zajcsökkentés nélküli változattal épül.
+- A beszéd-zajcsökkentés betanított RNNoise-modelljét (nincs a tárolóban) a szkript a `tools/fetch_rnnoise.sh`-val tölti le, rögzített sha256-tal, ugyanúgy, mint az asztali csomagoknál. Ha a gépen nincs `curl` / `wget`: `AQ_RNNOISE_TAR=<előre letöltött rnnoise_0.2+ds.orig.tar.xz>`. Modell nélkül csak `AQ_NO_RNNOISE=1` megadásával épül (akkor a beszéd-zajcsökkentés egyszerűbb módszerrel működik).
+- Ugyanannak a verziónak az újraépítése új csomagrevízióval (hogy az `apt` frissítésnek lássa): `AQ_PI_REV=2` → `aqulify_2.3.0-2~pi1_arm64.deb`.
 - **Csak emulált (QEMU) környezetben:** `AQ_EMULALT=1 bash tools/pi/pi_deb_build.sh ...` megadásával a valós idejű CPU-terhelést mérő `test_dsp` kihagyható. Valódi Pi-n ezt **ne** add meg, hogy a teszt lemérje a hardvert.
 
 ---
@@ -35,7 +37,7 @@ bash tools/pi/pi_deb_build.sh [a motor forrásmappája, alap: a tároló gyöker
 A kész csomagot a Debian csomagkezelőjével (`apt`) telepítsd, hogy a futásidejű függőségeket (`pipewire`, `hicolor-icon-theme` és a szükséges megosztott könyvtárak – `debian/control` 12. sor) automatikusan feloldja:
 
 ```bash
-sudo apt install ./aqulify_2.3.0-1~pi1_arm64.deb
+sudo apt install ./aqulify_2.3.0-2~pi1_arm64.deb
 ```
 
 ### Telepített fájlok (`debian/rules`)
