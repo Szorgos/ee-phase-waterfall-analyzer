@@ -1,6 +1,173 @@
 {
   "versions": [
     {
+      "version": "2.2.0",
+      "date": "2026-11-16",
+      "notes": {
+        "hu": [
+          "DSD-fájlok (.dsf, .dff) lejátszása; kizárólagos módban natívan, DoP-pal is a DAC-ra küldhetők (Windows, Linux), bekapcsoláskor figyelmeztetéssel.",
+          "Kizárólagos mód Linuxon (közvetlen ALSA-kimenet) és macOS-en (hog mode), a DSP-lánccal; kattanásmentes váltás számok között.",
+          "Telefonos távirányító: panel QR-kódos párosítással, Bluetooth-tartalék Windowson, párosítás kijelző nélkül (aqulify-engine --pair).",
+          "Új DSP-modulok: Loudness és Stereo Tools; a mélyvágás a Bass Enhancer előtt fut.",
+          "Raspberry Pi: arm64 csomag és választható, visszavonható rendszerhangoló (aqulify-tune)."
+        ],
+        "en": [
+          "DSD files (.dsf, .dff) can be played; in exclusive mode they can also be sent natively to the DAC via DoP (Windows, Linux), with a warning when enabled.",
+          "Exclusive mode on Linux (direct ALSA output) and macOS (hog mode), with the DSP chain; click-free switching between tracks.",
+          "Phone remote: panel with QR-code pairing, Bluetooth fallback on Windows, pairing without a display (aqulify-engine --pair).",
+          "New DSP modules: Loudness and Stereo Tools; the subsonic cut now runs before the Bass Enhancer.",
+          "Raspberry Pi: arm64 package and an optional, reversible system tuner (aqulify-tune)."
+        ],
+        "es": [
+          "Reproducción de archivos DSD (.dsf, .dff); en modo exclusivo también pueden enviarse de forma nativa al DAC mediante DoP (Windows, Linux), con un aviso al activarlo.",
+          "Modo exclusivo en Linux (salida ALSA directa) y macOS (hog mode), con la cadena DSP; cambio entre pistas sin chasquidos.",
+          "Control remoto en el teléfono: panel con emparejamiento por código QR, respaldo por Bluetooth en Windows, emparejamiento sin pantalla (aqulify-engine --pair).",
+          "Nuevos módulos DSP: Loudness y Stereo Tools; el corte de subgraves actúa antes del Bass Enhancer.",
+          "Raspberry Pi: paquete arm64 y un ajuste del sistema opcional y reversible (aqulify-tune)."
+        ],
+        "fr": [
+          "Lecture des fichiers DSD (.dsf, .dff) ; en mode exclusif, ils peuvent aussi être envoyés nativement au DAC via DoP (Windows, Linux), avec un avertissement à l'activation.",
+          "Mode exclusif sous Linux (sortie ALSA directe) et macOS (hog mode), avec la chaîne DSP ; changement de piste sans clic.",
+          "Télécommande sur téléphone : panneau avec appairage par QR code, secours Bluetooth sous Windows, appairage sans écran (aqulify-engine --pair).",
+          "Nouveaux modules DSP : Loudness et Stereo Tools ; le filtre subsonique agit avant le Bass Enhancer.",
+          "Raspberry Pi : paquet arm64 et réglage système facultatif et réversible (aqulify-tune)."
+        ],
+        "zh": [
+          "可播放 DSD 文件（.dsf、.dff）；在独占模式下还可通过 DoP 原生发送到 DAC（Windows、Linux），启用时会显示警告。",
+          "Linux（直接 ALSA 输出）和 macOS（hog mode）支持独占模式，并带 DSP 处理链；切换曲目无爆音。",
+          "手机遥控：带二维码配对的面板，Windows 上的蓝牙备用连接，无显示器配对（aqulify-engine --pair）。",
+          "新增 DSP 模块：Loudness 和 Stereo Tools；超低频切除现在位于 Bass Enhancer 之前。",
+          "Raspberry Pi：arm64 软件包，以及可选、可撤销的系统调优工具（aqulify-tune）。"
+        ],
+        "de": [
+          "DSD-Dateien (.dsf, .dff) werden abgespielt; im exklusiven Modus können sie auch nativ per DoP an den DAC gesendet werden (Windows, Linux), mit Warnung beim Einschalten.",
+          "Exklusiver Modus unter Linux (direkte ALSA-Ausgabe) und macOS (hog mode), mit der DSP-Kette; knackfreier Wechsel zwischen Titeln.",
+          "Handy-Fernbedienung: Bereich mit QR-Code-Kopplung, Bluetooth-Reserve unter Windows, Kopplung ohne Bildschirm (aqulify-engine --pair).",
+          "Neue DSP-Module: Loudness und Stereo Tools; der Subsonic-Filter arbeitet jetzt vor dem Bass Enhancer.",
+          "Raspberry Pi: arm64-Paket und ein optionales, rückgängig machbares System-Tuning (aqulify-tune)."
+        ],
+        "it": [
+          "Riproduzione di file DSD (.dsf, .dff); in modalità esclusiva possono anche essere inviati nativamente al DAC tramite DoP (Windows, Linux), con un avviso all'attivazione.",
+          "Modalità esclusiva su Linux (uscita ALSA diretta) e macOS (hog mode), con la catena DSP; cambio brano senza clic.",
+          "Telecomando sul telefono: pannello con abbinamento tramite codice QR, riserva Bluetooth su Windows, abbinamento senza schermo (aqulify-engine --pair).",
+          "Nuovi moduli DSP: Loudness e Stereo Tools; il taglio subsonico agisce prima del Bass Enhancer.",
+          "Raspberry Pi: pacchetto arm64 e una regolazione di sistema facoltativa e reversibile (aqulify-tune)."
+        ],
+        "nl": [
+          "DSD-bestanden (.dsf, .dff) kunnen worden afgespeeld; in exclusieve modus kunnen ze ook native via DoP naar de DAC (Windows, Linux), met een waarschuwing bij inschakelen.",
+          "Exclusieve modus op Linux (directe ALSA-uitvoer) en macOS (hog mode), met de DSP-keten; klikvrij wisselen tussen nummers.",
+          "Telefoonafstandsbediening: paneel met koppelen via QR-code, Bluetooth-reserve op Windows, koppelen zonder scherm (aqulify-engine --pair).",
+          "Nieuwe DSP-modules: Loudness en Stereo Tools; het subsonische filter werkt nu vóór de Bass Enhancer.",
+          "Raspberry Pi: arm64-pakket en een optionele, omkeerbare systeemafstemming (aqulify-tune)."
+        ],
+        "pl": [
+          "Odtwarzanie plików DSD (.dsf, .dff); w trybie wyłącznym można je też wysyłać natywnie do DAC przez DoP (Windows, Linux), z ostrzeżeniem przy włączaniu.",
+          "Tryb wyłączny w systemie Linux (bezpośrednie wyjście ALSA) i macOS (hog mode), z łańcuchem DSP; zmiana utworów bez trzasków.",
+          "Pilot w telefonie: panel z parowaniem kodem QR, zapasowe połączenie Bluetooth w Windows, parowanie bez ekranu (aqulify-engine --pair).",
+          "Nowe moduły DSP: Loudness i Stereo Tools; filtr subsoniczny działa teraz przed Bass Enhancer.",
+          "Raspberry Pi: pakiet arm64 oraz opcjonalne, odwracalne strojenie systemu (aqulify-tune)."
+        ],
+        "ru": [
+          "Воспроизведение файлов DSD (.dsf, .dff); в эксклюзивном режиме их можно передавать на ЦАП напрямую через DoP (Windows, Linux), с предупреждением при включении.",
+          "Эксклюзивный режим в Linux (прямой вывод ALSA) и macOS (hog mode) с цепочкой DSP; переключение треков без щелчков.",
+          "Пульт на телефоне: панель с сопряжением по QR-коду, резервный Bluetooth в Windows, сопряжение без дисплея (aqulify-engine --pair).",
+          "Новые модули DSP: Loudness и Stereo Tools; инфразвуковой срез теперь работает перед Bass Enhancer.",
+          "Raspberry Pi: пакет arm64 и необязательная, обратимая настройка системы (aqulify-tune)."
+        ],
+        "pt": [
+          "Reprodução de ficheiros DSD (.dsf, .dff); no modo exclusivo também podem ser enviados nativamente ao DAC via DoP (Windows, Linux), com um aviso ao ativar.",
+          "Modo exclusivo no Linux (saída ALSA direta) e no macOS (hog mode), com a cadeia DSP; mudança de faixa sem estalidos.",
+          "Controlo remoto no telemóvel: painel com emparelhamento por código QR, recurso Bluetooth no Windows, emparelhamento sem ecrã (aqulify-engine --pair).",
+          "Novos módulos DSP: Loudness e Stereo Tools; o corte subsónico atua antes do Bass Enhancer.",
+          "Raspberry Pi: pacote arm64 e um ajuste do sistema opcional e reversível (aqulify-tune)."
+        ],
+        "ro": [
+          "Redarea fișierelor DSD (.dsf, .dff); în modul exclusiv pot fi trimise și nativ către DAC prin DoP (Windows, Linux), cu avertisment la activare.",
+          "Mod exclusiv pe Linux (ieșire ALSA directă) și macOS (hog mode), cu lanțul DSP; schimbarea pieselor fără clicuri.",
+          "Telecomandă pe telefon: panou cu asociere prin cod QR, rezervă Bluetooth pe Windows, asociere fără ecran (aqulify-engine --pair).",
+          "Module DSP noi: Loudness și Stereo Tools; tăierea subsonică acționează înaintea Bass Enhancer.",
+          "Raspberry Pi: pachet arm64 și o reglare opțională și reversibilă a sistemului (aqulify-tune)."
+        ],
+        "el": [
+          "Αναπαραγωγή αρχείων DSD (.dsf, .dff)· σε αποκλειστική λειτουργία μπορούν επίσης να σταλούν εγγενώς στον DAC μέσω DoP (Windows, Linux), με προειδοποίηση κατά την ενεργοποίηση.",
+          "Αποκλειστική λειτουργία σε Linux (απευθείας έξοδος ALSA) και macOS (hog mode), με την αλυσίδα DSP· αλλαγή κομματιών χωρίς κλικ.",
+          "Τηλεχειριστήριο στο κινητό: πίνακας με σύζευξη μέσω κωδικού QR, εφεδρικό Bluetooth στα Windows, σύζευξη χωρίς οθόνη (aqulify-engine --pair).",
+          "Νέα modules DSP: Loudness και Stereo Tools· η αποκοπή υποηχητικών εφαρμόζεται πριν από το Bass Enhancer.",
+          "Raspberry Pi: πακέτο arm64 και προαιρετική, αναστρέψιμη ρύθμιση συστήματος (aqulify-tune)."
+        ],
+        "tr": [
+          "DSD dosyaları (.dsf, .dff) çalınabilir; özel modda DoP ile DAC'a doğrudan da gönderilebilir (Windows, Linux), etkinleştirirken uyarı gösterilir.",
+          "Linux'ta (doğrudan ALSA çıkışı) ve macOS'ta (hog mode) DSP zinciriyle özel mod; parçalar arasında tıklamasız geçiş.",
+          "Telefon uzaktan kumandası: QR kodla eşleştirmeli panel, Windows'ta Bluetooth yedeği, ekransız eşleştirme (aqulify-engine --pair).",
+          "Yeni DSP modülleri: Loudness ve Stereo Tools; ses altı kesim artık Bass Enhancer'dan önce çalışır.",
+          "Raspberry Pi: arm64 paketi ve isteğe bağlı, geri alınabilir sistem ayarı (aqulify-tune)."
+        ],
+        "fi": [
+          "DSD-tiedostojen (.dsf, .dff) toisto; yksinoikeustilassa ne voi myös lähettää natiivisti DAC:lle DoP:n avulla (Windows, Linux), käyttöönotossa näytetään varoitus.",
+          "Yksinoikeustila Linuxissa (suora ALSA-ulostulo) ja macOS:ssä (hog mode) DSP-ketjun kanssa; kappaleiden vaihto ilman napsahduksia.",
+          "Puhelinkaukosäädin: paneeli QR-koodiparituksella, Bluetooth-varayhteys Windowsissa, paritus ilman näyttöä (aqulify-engine --pair).",
+          "Uudet DSP-moduulit: Loudness ja Stereo Tools; infraäänileikkuri toimii nyt ennen Bass Enhanceria.",
+          "Raspberry Pi: arm64-paketti ja valinnainen, peruttava järjestelmän viritys (aqulify-tune)."
+        ],
+        "da": [
+          "DSD-filer (.dsf, .dff) kan afspilles; i eksklusiv tilstand kan de også sendes direkte til DAC'en via DoP (Windows, Linux), med en advarsel ved aktivering.",
+          "Eksklusiv tilstand på Linux (direkte ALSA-udgang) og macOS (hog mode) med DSP-kæden; klikfrit skift mellem numre.",
+          "Fjernbetjening på telefonen: panel med parring via QR-kode, Bluetooth-reserve på Windows, parring uden skærm (aqulify-engine --pair).",
+          "Nye DSP-moduler: Loudness og Stereo Tools; subsonisk filter kører nu før Bass Enhancer.",
+          "Raspberry Pi: arm64-pakke og en valgfri, omkørbar systemtuning (aqulify-tune)."
+        ],
+        "nb": [
+          "DSD-filer (.dsf, .dff) kan spilles av; i eksklusiv modus kan de også sendes direkte til DAC-en via DoP (Windows, Linux), med advarsel når det slås på.",
+          "Eksklusiv modus på Linux (direkte ALSA-utgang) og macOS (hog mode) med DSP-kjeden; klikkfritt bytte mellom spor.",
+          "Fjernkontroll på telefonen: panel med paring via QR-kode, Bluetooth-reserve på Windows, paring uten skjerm (aqulify-engine --pair).",
+          "Nye DSP-moduler: Loudness og Stereo Tools; subsonisk filter kjører nå før Bass Enhancer.",
+          "Raspberry Pi: arm64-pakke og en valgfri, reversibel systemjustering (aqulify-tune)."
+        ],
+        "sv": [
+          "DSD-filer (.dsf, .dff) kan spelas upp; i exklusivt läge kan de också skickas direkt till DAC:n via DoP (Windows, Linux), med en varning när det slås på.",
+          "Exklusivt läge på Linux (direkt ALSA-utgång) och macOS (hog mode) med DSP-kedjan; klickfritt byte mellan spår.",
+          "Fjärrkontroll i telefonen: panel med parkoppling via QR-kod, Bluetooth-reserv på Windows, parkoppling utan skärm (aqulify-engine --pair).",
+          "Nya DSP-moduler: Loudness och Stereo Tools; subsonisk filtrering körs nu före Bass Enhancer.",
+          "Raspberry Pi: arm64-paket och en valfri, återställbar systemjustering (aqulify-tune)."
+        ],
+        "he": [
+          "ניגון קובצי DSD‏ (.dsf, .dff); במצב בלעדי אפשר גם לשלוח אותם ישירות ל-DAC באמצעות DoP‏ (Windows, Linux), עם אזהרה בעת ההפעלה.",
+          "מצב בלעדי ב-Linux (פלט ALSA ישיר) וב-macOS‏ (hog mode), עם שרשרת ה-DSP; מעבר בין רצועות ללא נקישות.",
+          "שלט רחוק בטלפון: לוח עם צימוד באמצעות קוד QR, גיבוי Bluetooth ב-Windows, צימוד ללא מסך (aqulify-engine --pair).",
+          "מודולי DSP חדשים: Loudness ו-Stereo Tools; חיתוך התת-קולי פועל כעת לפני Bass Enhancer.",
+          "Raspberry Pi: חבילת arm64 וכוונון מערכת אופציונלי והפיך (aqulify-tune)."
+        ],
+        "ja": [
+          "DSD ファイル（.dsf、.dff）を再生できます。排他モードでは DoP で DAC へネイティブに送ることもできます（Windows、Linux）。有効にする際に警告が表示されます。",
+          "Linux（直接 ALSA 出力）と macOS（hog mode）で DSP チェーン付きの排他モードに対応。曲間の切り替えでクリック音が出ません。",
+          "スマートフォンのリモコン：QR コードでペアリングできるパネル、Windows での Bluetooth 予備接続、ディスプレイなしでのペアリング（aqulify-engine --pair）。",
+          "新しい DSP モジュール：Loudness と Stereo Tools。超低域カットは Bass Enhancer の前で動作します。",
+          "Raspberry Pi：arm64 パッケージと、任意で元に戻せるシステム調整（aqulify-tune）。"
+        ],
+        "ko": [
+          "DSD 파일(.dsf, .dff)을 재생할 수 있으며, 독점 모드에서는 DoP로 DAC에 네이티브로 보낼 수도 있습니다(Windows, Linux). 켤 때 경고가 표시됩니다.",
+          "Linux(직접 ALSA 출력)와 macOS(hog mode)에서 DSP 체인과 함께 독점 모드를 지원하며, 곡 전환 시 클릭음이 없습니다.",
+          "휴대폰 리모컨: QR 코드 페어링 패널, Windows의 Bluetooth 예비 연결, 디스플레이 없는 페어링(aqulify-engine --pair).",
+          "새 DSP 모듈: Loudness와 Stereo Tools. 초저역 컷이 이제 Bass Enhancer 앞에서 동작합니다.",
+          "Raspberry Pi: arm64 패키지와 선택적이며 되돌릴 수 있는 시스템 튜닝(aqulify-tune)."
+        ],
+        "cs": [
+          "Přehrávání souborů DSD (.dsf, .dff); ve výhradním režimu je lze také posílat do DAC nativně přes DoP (Windows, Linux), při zapnutí se zobrazí varování.",
+          "Výhradní režim v Linuxu (přímý výstup ALSA) a macOS (hog mode) s řetězcem DSP; přepínání skladeb bez cvaknutí.",
+          "Dálkové ovládání v telefonu: panel s párováním pomocí QR kódu, záložní Bluetooth ve Windows, párování bez displeje (aqulify-engine --pair).",
+          "Nové moduly DSP: Loudness a Stereo Tools; subsonický filtr nyní pracuje před Bass Enhancerem.",
+          "Raspberry Pi: balíček arm64 a volitelné, vratné ladění systému (aqulify-tune)."
+        ],
+        "uk": [
+          "Відтворення файлів DSD (.dsf, .dff); в ексклюзивному режимі їх також можна надсилати на ЦАП напряму через DoP (Windows, Linux), з попередженням під час увімкнення.",
+          "Ексклюзивний режим у Linux (прямий вивід ALSA) і macOS (hog mode) з ланцюгом DSP; перемикання треків без клацань.",
+          "Пульт на телефоні: панель зі сполученням за QR-кодом, резервний Bluetooth у Windows, сполучення без дисплея (aqulify-engine --pair).",
+          "Нові модулі DSP: Loudness і Stereo Tools; інфразвуковий зріз тепер працює перед Bass Enhancer.",
+          "Raspberry Pi: пакет arm64 та необов'язкове, зворотне налаштування системи (aqulify-tune)."
+        ]
+      }
+    },
+    {
       "version": "2.1.7",
       "date": "2026-11-09",
       "notes": {

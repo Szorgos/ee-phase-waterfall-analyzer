@@ -1,3 +1,18 @@
+### Újdonságok (2.2.0)
+
+**Letöltés (2.2.0):**
+- Windows 11: [Aqulify-Setup-2.2.0.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/Aqulify-Setup-2.2.0.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/Aqulify-Setup-2.2.0.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.2.0-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/Aqulify-2.2.0-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/Aqulify-2.2.0-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.2.0.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/Aqulify-Linux-2.2.0.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/Aqulify-Linux-2.2.0.tar.gz.sha256))
+- Fedora: [aqulify-2.2.0-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/aqulify-2.2.0-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.2.0-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/aqulify_2.2.0-1_amd64.deb) · Arch: [aqulify-2.2.0-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/aqulify-2.2.0-1-x86_64.pkg.tar.zst)
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **DSD.** A DSD-fájlok (.dsf, .dff) lejátszhatók. Kizárólagos módban natívan, DoP-pal is a DAC-ra küldhetők (Windows, Linux); a beállítás alapból ki van kapcsolva, bekapcsoláskor figyelmeztet. Ha a DAC nem fogadja el, a lejátszás PCM-re alakítva szól.
+- **Kizárólagos mód Linuxon és macOS-en.** Linuxon közvetlen ALSA-kimenet, macOS-en hog mode, mindkettő a DSP-lánccal. Kizárólagos módban a számok közti váltás kattanásmentes.
+- **Telefonos távirányító.** Új Távirányító panel QR-kódos párosítással; Bluetooth-tartalék Windowson, ha a Wi-Fi nem éri el a gépet; párosítás kijelző nélkül: `aqulify-engine --pair`.
+- **Új DSP-modulok.** Loudness és Stereo Tools; a mélyvágás a Bass Enhancer előtt fut, így a hallható tartomány alatti zörejből nem keletkezik felharmonikus.
+- **Raspberry Pi.** arm64 csomag (`tools/pi/pi_deb_build.sh`) és választható, visszavonható rendszerhangoló (`aqulify-tune`); útmutató: `docs/pi.md`.
+- **Felület.** Hifi-előlap stílusú vezérlők, egyszerűbb vízesés-fokozatok.
 ### Újdonságok (2.1.7)
 
 **Letöltés (2.1.7):**
