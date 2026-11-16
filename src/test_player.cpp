@@ -659,6 +659,92 @@ static void testLibrary() {
     fs::remove_all(root, ec);
 }
 
+
+static void testLibraryBrowse() {
+    std::printf("[8b] Zenetár tallózás (library_browse): mappák, fájlok és szimlinkek szűrése, path traversal védelem\n");
+    const fs::path root = fs::temp_directory_path() / "aq_browse_test";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    fs::create_directories(root / "Mappa1" / "Almappa1");
+    fs::create_directories(root / "Mappa2");
+    fs::create_directories(root / "Live... 1999");
+    fs::create_directories(root / ".rejtett_mappa");
+    { std::ofstream f(root / "zene.flac"); f << "test"; }
+    { std::ofstream f(root / "Mappa1" / "teszt.mp3"); f << "test"; }
+    bool symlinkCreated = false;
+    try {
+        fs::create_directory_symlink(root / "Mappa2", root / "SzimlinkMappa", ec);
+        if (!ec) symlinkCreated = true;
+    } catch (...) {}
+
+    library::MusicLibrary lib;
+    player::FilePlayer fp{ std::unique_ptr<PlayerOutput>(new FakeOutput) };
+    player::PlayQueue pq(fp, [&](const std::string&, std::string&) { return false; });
+    player::PlaylistStore pls([](const std::string&) {});
+    player::PlayStats pstats;
+    BridgeCallbacks cb;
+    library::attachLibrary(cb, lib, pq, pls, pstats, [](const std::string&) {});
+
+    const auto u8s = [](const fs::path& p) { const auto s = p.u8string(); return std::string(s.begin(), s.end()); };
+
+    // 1. Üres útvonal (gyökér listázása)
+    json::Value reqEmpty;
+    json::parse("{\"type\":\"library_browse\",\"path\":\"\"}", reqEmpty);
+    std::string resEmpty = cb.libraryRequest("library_browse", reqEmpty, false);
+    CHECK(resEmpty.find("\"type\":\"library_browse\"") != std::string::npos &&
+          resEmpty.find("\"folders\":[") != std::string::npos,
+          "library_browse üres útvonalra visszaadja a gyökér elérési pontokat");
+
+    // 2. Távoli (nem admin) kliens: err("remote")
+    std::string resRemote = cb.libraryRequest("library_browse", reqEmpty, true);
+    CHECK(resRemote.find("\"error\":\"remote\"") != std::string::npos,
+          "library_browse távoli (nem admin) klienstől elutasítva");
+
+    // 3. Valódi mappa tallózása
+    json::Value reqRoot;
+    json::parse("{\"type\":\"library_browse\",\"path\":\"" + media::jsonEscape(u8s(root)) + "\"}", reqRoot);
+    std::string resRoot = cb.libraryRequest("library_browse", reqRoot, false);
+    CHECK(resRoot.find("\"name\":\"Mappa1\"") != std::string::npos &&
+          resRoot.find("\"name\":\"Mappa2\"") != std::string::npos &&
+          resRoot.find("\"name\":\"Live... 1999\"") != std::string::npos &&
+          resRoot.find("zene.flac") == std::string::npos &&
+          resRoot.find(".rejtett_mappa") == std::string::npos &&
+          resRoot.find("Almappa1") == std::string::npos,
+          "library_browse: csak közvetlen mappák jelennek meg, fájlok és rejtett mappa kiszűrve, mélyebb almappa nem szerepel");
+    if (symlinkCreated) {
+        CHECK(resRoot.find("SzimlinkMappa") == std::string::npos,
+              "library_browse: a szimlink mappa kiszűrve");
+    }
+
+    // 4. Path traversal: '..' és '%2e' elutasítva, de a 'Live... 1999' engedélyezve
+    json::Value reqLive;
+    json::parse("{\"type\":\"library_browse\",\"path\":\"" + media::jsonEscape(u8s(root / "Live... 1999")) + "\"}", reqLive);
+    std::string resLive = cb.libraryRequest("library_browse", reqLive, false);
+    CHECK(resLive.find("\"error\":\"denied\"") == std::string::npos && resLive.find("\"type\":\"library_browse\"") != std::string::npos,
+          "library_browse: 'Live... 1999' név nem traversal, megnyitható (nem denied)");
+
+    json::Value reqDotDot;
+    json::parse("{\"type\":\"library_browse\",\"path\":\"" + media::jsonEscape(u8s(root / "Mappa1" / "..")) + "\"}", reqDotDot);
+    std::string resDotDot = cb.libraryRequest("library_browse", reqDotDot, false);
+    CHECK(resDotDot.find("\"error\":\"denied\"") != std::string::npos,
+          "library_browse: '..' útvonal elutasítva (denied)");
+
+    json::Value reqUrlDot;
+    json::parse("{\"type\":\"library_browse\",\"path\":\"" + media::jsonEscape(u8s(root / "Mappa1") + "/%2e%2e/Mappa2") + "\"}", reqUrlDot);
+    std::string resUrlDot = cb.libraryRequest("library_browse", reqUrlDot, false);
+    CHECK(resUrlDot.find("\"error\":\"denied\"") != std::string::npos,
+          "library_browse: '%%2e' útvonal elutasítva (denied)");
+
+    // 5. Nem létező mappa
+    json::Value reqNotFound;
+    json::parse("{\"type\":\"library_browse\",\"path\":\"" + media::jsonEscape(u8s(root / "nemletezo")) + "\"}", reqNotFound);
+    std::string resNotFound = cb.libraryRequest("library_browse", reqNotFound, false);
+    CHECK(resNotFound.find("\"error\":\"notfound\"") != std::string::npos,
+          "library_browse: nem létező útvonal hiba (notfound)");
+
+    fs::remove_all(root, ec);
+}
+
 static bool waitUntil(const std::function<bool()>& pred, int ms = 2000) {
     for (int i = 0; i < ms && !pred(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(1));
     return pred();
@@ -1863,6 +1949,7 @@ int main() {
     testDownmix();
     testOutputLatency();
     testLibrary();
+    testLibraryBrowse();
     testLibraryCache();
     testQueue();
     testQueueEdits();

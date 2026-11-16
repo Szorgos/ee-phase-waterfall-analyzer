@@ -3415,7 +3415,41 @@ var qrcode = function() {
     display: flex;
     align-items: center;
   }
-  header.app-header .header-right {
+      .remote-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 6px 16px;
+      background: rgba(56, 139, 253, 0.15);
+      border-bottom: 1px solid var(--aq-accent);
+      color: var(--aq-text);
+      font-size: var(--aq-fs-sub);
+      z-index: 100;
+    }
+    .remote-banner[hidden] { display: none !important; }
+    .machine-select {
+      max-width: 140px;
+      font-weight: 500;
+      color: var(--aq-text);
+      background: var(--aq-input);
+      border: 1px solid var(--aq-line-2);
+    }
+    .discovered-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: var(--aq-surface);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .discovered-item:hover {
+      background: var(--aq-surface-2);
+    }
+
+    header.app-header .header-right {
     flex: 0 1 auto;
     display: flex;
     align-items: center;
@@ -4818,6 +4852,10 @@ var qrcode = function() {
 
     <!-- JOBB ZÓNA: KIMENET GOMB, BURN-IN, TÁMOGATÁS, 8 AUDIOFIL TÉMA, NYELV ÉS MOTOR ÁLLAPOT -->
     <div class="header-right">
+      <select id="selectTargetMachine" class="mini-select machine-select" title="Vezérelt gép" data-i18n-title="target.modalTitle" onchange="onTargetMachineSelected(this.value)">
+        <option value="" data-i18n="target.thisMachine">Ez a gép</option>
+        <option value="__add__" data-i18n="target.addMachine">+ Gép hozzáadása…</option>
+      </select>
       <div class="sink-menu-wrap" id="sinkMenuWrap">
         <button type="button" class="mini-btn" id="btnSinkMenu" onclick="toggleSinkMenu(event)" title="Kimeneti eszköz (DAC) és fejhallgató-profil" data-i18n-title="dev.title" aria-haspopup="true">
           <svg class="aq-icon" aria-hidden="true"><use href="#i-headphones"/></svg>
@@ -4961,7 +4999,14 @@ var qrcode = function() {
       <span id="pipewireLiveBadge" class="status-badge optimal">Élő • 48.0 kHz</span>
     </div>
   </header>
-  <div id="dspWarn" class="dsp-warn" hidden><span id="dspWarnText"></span><button type="button" id="btnApoConfigurator" class="dsp-warn-btn" hidden data-i18n="engine.apoConfigurator">Equalizer APO Configurator megnyitása</button></div>
+  <div id="remoteControlBanner" class="remote-banner" hidden>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <svg class="aq-icon aq-icon-sm" aria-hidden="true" style="color:var(--aq-accent);"><use href="#i-network"/></svg>
+      <span id="remoteBannerText" style="font-weight:600;">Vezérelt gép: Távoli Gép</span>
+    </div>
+    <button type="button" class="mini-btn" onclick="switchControlledMachine('')" data-i18n="target.switchBack">Vissza a saját géphez</button>
+  </div>
+  <div id="dspWarn"  class="dsp-warn" hidden><span id="dspWarnText"></span><button type="button" id="btnApoConfigurator" class="dsp-warn-btn" hidden data-i18n="engine.apoConfigurator">Equalizer APO Configurator megnyitása</button></div>
 
   <!-- KÖZÉPSŐ MUNKATÉR: HANGZÁS / ZENETÁR / BORÍTÓ+LISTA NÉZET -->
   <div class="workspace-stage" id="workspaceStage">
@@ -5597,6 +5642,7 @@ var qrcode = function() {
           </button>
         </div>
       </div>
+      <div class="ao-hint" style="font-size:0.75rem; color:var(--aq-text-3); margin-top:4px;" data-i18n="library.nasHint">A hálózati megosztást (NAS) előbb a rendszerben (Windows: hálózati meghajtó vagy UNC út, Linux/Pi: /etc/fstab CIFS/NFS csatolás) kell felcsatolni.</div>
       <div class="aq-note" style="font-size:var(--aq-fs-micro); color:var(--aq-text-2); padding:8px 12px;" data-i18n="library.defaultNote">Ha a lista üres, a rendszer alapértelmezett Zene mappa van érvényben.</div>
 
       <!-- Alsó gombok -->
@@ -5610,7 +5656,102 @@ var qrcode = function() {
     </div>
   </div>
 
+  <!-- ZENETÁR MAPPATALLÓZÓ MODAL (D feladat) -->
+  <div id="modalLibraryBrowser" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:10010; align-items:center; justify-content:center;" onclick="if(event.target===this)closeLibraryBrowser()">
+    <div class="aq-modal" style="width:520px; max-width:calc(100vw - 32px); max-height:85vh; display:flex; flex-direction:column; gap:12px; overflow:hidden;" onclick="event.stopPropagation()">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <svg class="aq-icon" aria-hidden="true" style="color:var(--aq-accent);"><use href="#i-folder"/></svg>
+          <span style="font-size:1.05rem; font-weight:600; color:var(--aq-text);" data-i18n="library.browseTitle">Mappa tallózása</span>
+        </div>
+        <button class="icon-btn" onclick="closeLibraryBrowser()" title="Bezárás" data-i18n-title="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+
+      <!-- Útvonal navigációs sáv -->
+      <div style="display:flex; gap:6px; align-items:center;">
+        <button type="button" class="mini-btn" onclick="browseGoUp()" title="Egy szinttel feljebb" data-i18n-title="library.browseUp">
+          <svg class="aq-icon aq-icon-sm" aria-hidden="true"><use href="#i-arrow-up"/></svg>
+          <span data-i18n="library.browseUp">Feljebb</span>
+        </button>
+        <input type="text" id="browseCurrentPath" class="ee-input" style="flex:1; font-family:monospace; font-size:0.85rem;" readonly>
+      </div>
+
+      <!-- Mappák listája -->
+      <div id="browseFolderList" style="flex:1; min-height:180px; max-height:300px; overflow-y:auto; border:1px solid var(--aq-line); border-radius:6px; padding:6px; display:flex; flex-direction:column; gap:4px; background:var(--aq-bg);">
+      </div>
+
+      <!-- Alsó gombok -->
+      <div style="display:flex; justify-content:flex-end; gap:8px; border-top:1px solid var(--aq-line); padding-top:10px;">
+        <button type="button" class="adw-btn" onclick="closeLibraryBrowser()" data-i18n="wn.cancel">Mégse</button>
+        <button type="button" class="adw-btn primary" onclick="selectCurrentBrowsedFolder()" data-i18n="library.browseSelect">Kiválasztás</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ESZKÖZPÁROSÍTÁSI JÓVÁHAGYÁS MODAL (2.X - 8c) -->
+  <!-- TÁVOLI GÉP PÁROSÍTÁSA ÉS VÁLASZTÁSA MODAL -->
+  <div id="modalTargetPair" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:9990; align-items:center; justify-content:center;" onclick="if(event.target===this)closeTargetPairModal()">
+    <div class="aq-modal" style="width:480px; max-width:calc(100vw - 32px); max-height:calc(100vh - 48px); overflow:auto; display:flex; flex-direction:column; gap:14px;" onclick="event.stopPropagation()">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <svg class="aq-icon" aria-hidden="true" style="color:var(--aq-accent);"><use href="#i-network"/></svg>
+          <span style="font-size:1.1rem; font-weight:600; color:var(--aq-text);" data-i18n="target.modalTitle">Távoli gép vezérlése</span>
+        </div>
+        <button class="icon-btn" onclick="closeTargetPairModal()" title="Bezárás" data-i18n-title="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+
+      <div class="ao-hint" style="margin:0;" data-i18n="target.pairHint">
+        A távoli gépen nyisd meg a Távirányító menüt, vagy fej nélküli gépen futtasd az aqulify-engine --pair parancsot.
+      </div>
+
+      <!-- Hálózaton talált gépek -->
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:0.9rem; font-weight:600; color:var(--aq-text);" data-i18n="target.discoveredEngines">Hálózaton talált Aqulify motorok</span>
+        <button type="button" class="mini-btn" onclick="startTargetDiscovery()" style="font-size:0.75rem;" title="Keresés újra">
+          <span data-i18n="target.discovering">Keresés a helyi hálózaton…</span>
+        </button>
+      </div>
+      <div id="targetDiscoveredList" style="min-height:56px; max-height:140px; overflow-y:auto; border:1px solid var(--aq-line); border-radius:6px; padding:6px; display:flex; flex-direction:column; gap:4px; background:var(--aq-bg);">
+        <div id="targetDiscoveredEmpty" style="font-size:0.8rem; color:var(--aq-text-3); text-align:center; padding:12px;" data-i18n="target.noEngines">Nem található másik Aqulify motor a helyi hálózaton.</div>
+      </div>
+
+      <!-- Kézi beállítás -->
+      <div style="display:flex; gap:8px;">
+        <div style="flex:2;">
+          <label style="font-size:0.75rem; color:var(--aq-text-3);" data-i18n="target.hostLabel">Cím (IP vagy gépnév):</label>
+          <input type="text" id="targetHostInput" class="adw-input" placeholder="192.168.1.50" style="width:100%; box-sizing:border-box;">
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:0.75rem; color:var(--aq-text-3);" data-i18n="target.portLabel">Port:</label>
+          <input type="number" id="targetPortInput" class="adw-input" value="47820" style="width:100%; box-sizing:border-box;">
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.75rem; color:var(--aq-text-3);" data-i18n="target.codeLabel">6 jegyű párosító kód:</label>
+        <input type="text" id="targetCodeInput" class="adw-input" placeholder="123456" maxlength="6" style="width:100%; box-sizing:border-box; font-size:1.3rem; letter-spacing:6px; text-align:center; font-family:monospace; font-weight:700;">
+      </div>
+
+      <div>
+        <label style="font-size:0.75rem; color:var(--aq-text-3);" data-i18n="target.nameLabel">Gép elnevezése (opcionális):</label>
+        <input type="text" id="targetNameInput" class="adw-input" placeholder="Pl. Nappali Pi" style="width:100%; box-sizing:border-box;">
+      </div>
+
+      <div id="targetPairError" style="font-size:0.85rem; color:var(--aq-err); font-weight:500;" hidden></div>
+
+      <!-- Mentett gépek kezelése -->
+      <div id="targetSavedSection" style="display:flex; flex-direction:column; gap:4px; border-top:1px solid var(--aq-line); padding-top:10px;">
+        <div style="font-size:0.85rem; font-weight:600; color:var(--aq-text);">Mentett célgépek</div>
+        <div id="targetSavedList" style="display:flex; flex-direction:column; gap:4px; max-height:100px; overflow-y:auto;"></div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:8px; border-top:1px solid var(--aq-line); padding-top:12px;">
+        <button type="button" class="adw-btn" onclick="closeTargetPairModal()" data-i18n="wn.cancel">Mégse</button>
+        <button type="button" class="adw-btn primary" id="btnDoPairTarget" onclick="submitTargetPair()" data-i18n="target.btnPair">Párosítás és vezérlés</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Telefonos távirányító: hálózati elérés, párosítás QR-kóddal vagy kóddal, párosított eszközök -->
   <div id="modalRemote" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:9990; align-items:center; justify-content:center;" onclick="if(event.target===this)closeRemotePanel()">
     <div class="aq-modal" style="width:540px; max-width:calc(100vw - 32px); max-height:calc(100vh - 48px); overflow:auto; display:flex; flex-direction:column; gap:14px;">
@@ -11357,11 +11498,341 @@ function syncLanguageWithEngine(engLang) {
   }
 }
 
+let controlledTargetId = "";
+let controlledTargetName = "";
+let cachedRemoteTargets = [];
+try {
+  controlledTargetId = localStorage.getItem("aq_controlled_target") || "";
+  controlledTargetName = localStorage.getItem("aq_controlled_target_name") || "";
+  const sTgts = localStorage.getItem("aq_cached_targets");
+  if (sTgts) cachedRemoteTargets = JSON.parse(sTgts);
+} catch (e) {}
+
+function onTargetMachineSelected(val) {
+  if (val === "__add__") {
+    // Visszaállítjuk a selectet az aktuálisra, és megnyitjuk a modált
+    updateTargetMachineSelect();
+    openTargetPairModal();
+    return;
+  }
+  const tgt = cachedRemoteTargets.find(t => t.id === val);
+  switchControlledMachine(val, tgt ? tgt.name : "");
+}
+
+function switchControlledMachine(targetId, targetName) {
+  controlledTargetId = targetId || "";
+  window.remoteIsAdmin = !controlledTargetId; // Saját gépen mindig admin, távolin az állapotüzenetből derül ki
+  updateRemoteForbiddenControls();
+  controlledTargetName = targetName || "";
+  try {
+    if (controlledTargetId) {
+      localStorage.setItem("aq_controlled_target", controlledTargetId);
+      localStorage.setItem("aq_controlled_target_name", controlledTargetName);
+    } else {
+      localStorage.removeItem("aq_controlled_target");
+      localStorage.removeItem("aq_controlled_target_name");
+    }
+  } catch (e) {}
+  updateTargetMachineSelect();
+  updateRemoteBanner();
+  updateRemoteForbiddenControls();
+  if (pipewireWs) {
+    try { pipewireWs.close(); } catch (e) {}
+  }
+  setTimeout(initPipewireBridge, 100);
+}
+
+function updateTargetMachineSelect() {
+  const sel = document.getElementById("selectTargetMachine");
+  if (!sel) return;
+  sel.innerHTML = "";
+  const optThis = document.createElement("option");
+  optThis.value = "";
+  optThis.textContent = t("target.thisMachine") || "Ez a gép";
+  sel.appendChild(optThis);
+
+  cachedRemoteTargets.forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t.id;
+    opt.textContent = (t.name || "Gép") + " (" + t.host + ")";
+    sel.appendChild(opt);
+  });
+
+  const optAdd = document.createElement("option");
+  optAdd.value = "__add__";
+  optAdd.textContent = t("target.addMachine") || "+ Gép hozzáadása…";
+  sel.appendChild(optAdd);
+
+  sel.value = controlledTargetId;
+}
+
+function updateRemoteBanner() {
+  const banner = document.getElementById("remoteControlBanner");
+  const text = document.getElementById("remoteBannerText");
+  if (!banner || !text) return;
+  if (controlledTargetId) {
+    banner.hidden = false;
+    text.textContent = t("target.controlledBanner", { name: controlledTargetName || "Távoli gép" });
+  } else {
+    banner.hidden = true;
+  }
+}
+
+function updateRemoteForbiddenControls() {
+  const isRemote = !!controlledTargetId;
+  const tip = t("target.remoteForbiddenTooltip") || "Ez a funkció csak a saját gépről vezérelhető (távolról letiltva).";
+
+  // Frissítés
+  const btnUpd = document.getElementById("btnUpdGo");
+  if (btnUpd) {
+    btnUpd.disabled = isRemote;
+    if (isRemote) btnUpd.title = tip; else btnUpd.removeAttribute("title");
+  }
+
+  // Visszaállítás mód
+  const selRestore = document.getElementById("selectRestoreMode");
+  if (selRestore) {
+    selRestore.disabled = isRemote;
+    if (isRemote) selRestore.title = tip; else selRestore.removeAttribute("title");
+  }
+
+  // Kizárólagos kimenet
+  const chkExcl = document.getElementById("aoExclusive");
+  if (chkExcl) {
+    chkExcl.disabled = isRemote;
+    if (isRemote) chkExcl.title = tip; else chkExcl.removeAttribute("title");
+  }
+
+  // Zenei mappa hozzáadás
+  const btnAddFolder = document.getElementById("btnLibAddFolder");
+  if (btnAddFolder) {
+    // E feladatban admin távoli engedélyezheti, alapból távolról tiltott
+    btnAddFolder.disabled = isRemote && !window.remoteIsAdmin;
+    if (isRemote && !window.remoteIsAdmin) btnAddFolder.title = tip; else btnAddFolder.removeAttribute("title");
+  }
+}
+
+function openTargetPairModal() {
+  const modal = document.getElementById("modalTargetPair");
+  if (!modal) return;
+  modal.style.display = "flex";
+  document.getElementById("targetCodeInput").value = "";
+  document.getElementById("targetPairError").hidden = true;
+  renderTargetSavedList();
+  startTargetDiscovery();
+}
+
+function closeTargetPairModal() {
+  const modal = document.getElementById("modalTargetPair");
+  if (modal) modal.style.display = "none";
+}
+
+function startTargetDiscovery() {
+  const list = document.getElementById("targetDiscoveredList");
+  if (!list) return;
+  list.innerHTML = `<div id="targetDiscoveredEmpty" style="font-size:0.8rem; color:var(--aq-text-3); text-align:center; padding:12px;">${t("target.discovering") || "Keresés a helyi hálózaton…"}</div>`;
+  // Ha nem távoli módban vagyunk, a közvetlen WebSocketen kérjük a felderítést
+  if (pipewireWs && pipewireWs.readyState === WebSocket.OPEN && !controlledTargetId) {
+    pipewireWs.send(JSON.stringify({ type: "discover" }));
+  } else {
+    // Ha relay-en voltunk, a helyi portra egy rövid kérést indítunk
+    const localPort = ENGINE_PORTS[enginePortIdx];
+    try {
+      const tempWs = new WebSocket("ws://127.0.0.1:" + localPort);
+      tempWs.onopen = () => { tempWs.send(JSON.stringify({ type: "discover" })); };
+      tempWs.onmessage = (evt) => {
+        try {
+          const d = JSON.parse(evt.data);
+          if (d && d.type === "discovered") {
+            onDiscoveredEngines(d);
+            tempWs.close();
+          }
+        } catch (e) {}
+      };
+      setTimeout(() => { if (tempWs.readyState !== WebSocket.CLOSED) tempWs.close(); }, 3500);
+    } catch (e) {}
+  }
+}
+
+function onDiscoveredEngines(data) {
+  const list = document.getElementById("targetDiscoveredList");
+  if (!list) return;
+  const engines = (data && data.engines) || [];
+  if (!engines.length) {
+    list.innerHTML = "";
+    const emptyDiv = document.createElement("div");
+    emptyDiv.id = "targetDiscoveredEmpty";
+    emptyDiv.style.cssText = "font-size:0.8rem; color:var(--aq-text-3); text-align:center; padding:12px;";
+    emptyDiv.textContent = t("target.noEngines") || "Nem található másik Aqulify motor a helyi hálózaton.";
+    list.appendChild(emptyDiv);
+    return;
+  }
+  list.innerHTML = "";
+  engines.forEach(eng => {
+    const item = document.createElement("div");
+    item.className = "discovered-item";
+    const host = (eng.addrs && eng.addrs.length) ? eng.addrs[0] : (eng.host || "127.0.0.1");
+    const port = eng.port || 47820;
+    const name = eng.name || "Aqulify";
+
+    const col = document.createElement("div");
+    col.style.cssText = "display:flex; flex-direction:column;";
+    const nameSpan = document.createElement("span");
+    nameSpan.style.cssText = "font-weight:600; font-size:0.85rem; color:var(--aq-text);";
+    nameSpan.textContent = name;
+    const addrSpan = document.createElement("span");
+    addrSpan.style.cssText = "font-size:0.75rem; color:var(--aq-text-3); font-family:monospace;";
+    addrSpan.textContent = host + ":" + port;
+    col.append(nameSpan, addrSpan);
+
+    const btnSpan = document.createElement("span");
+    btnSpan.className = "mini-btn";
+    btnSpan.style.fontSize = "0.75rem";
+    btnSpan.textContent = t("target.select") || "Kiválasztás";
+
+    item.append(col, btnSpan);
+    item.onclick = () => {
+      document.getElementById("targetHostInput").value = host;
+      document.getElementById("targetPortInput").value = port;
+      document.getElementById("targetNameInput").value = name;
+      document.getElementById("targetCodeInput").focus();
+    };
+    list.appendChild(item);
+  });
+}
+
+function submitTargetPair() {
+  const host = (document.getElementById("targetHostInput").value || "").trim();
+  const port = parseInt(document.getElementById("targetPortInput").value || "47820", 10);
+  const code = (document.getElementById("targetCodeInput").value || "").trim();
+  const name = (document.getElementById("targetNameInput").value || "").trim();
+  const errEl = document.getElementById("targetPairError");
+
+  if (!host || !code || code.length !== 6) {
+    errEl.hidden = false;
+    errEl.textContent = t("target.errEnterHostCode") || "Kérjük add meg a címet és a pontos 6 jegyű kódot!";
+    return;
+  }
+  errEl.hidden = true;
+
+  const pairPayload = JSON.stringify({
+    type: "target_pair",
+    host: host,
+    port: port,
+    code: code,
+    name: name
+  });
+
+  if (pipewireWs && pipewireWs.readyState === WebSocket.OPEN && !controlledTargetId) {
+    pipewireWs.send(pairPayload);
+  } else {
+    // Helyi portra küldjük a párosítást
+    const localPort = ENGINE_PORTS[enginePortIdx];
+    try {
+      const tempWs = new WebSocket("ws://127.0.0.1:" + localPort);
+      tempWs.onopen = () => { tempWs.send(pairPayload); };
+      tempWs.onmessage = (evt) => {
+        try {
+          const d = JSON.parse(evt.data);
+          if (d && d.type === "target_pair_result") {
+            onTargetPairResult(d);
+            tempWs.close();
+          }
+        } catch (e) {}
+      };
+      setTimeout(() => { if (tempWs.readyState !== WebSocket.CLOSED) tempWs.close(); }, 5000);
+    } catch (e) {
+      errEl.hidden = false;
+      errEl.textContent = t("target.errLocalConnect") || "Nem sikerült kapcsolódni a helyi motorhoz.";
+    }
+  }
+}
+
+function onTargetPairResult(data) {
+  const errEl = document.getElementById("targetPairError");
+  if (data.ok && data.target) {
+    closeTargetPairModal();
+    if (!cachedRemoteTargets.find(t => t.id === data.target.id)) {
+      cachedRemoteTargets.push(data.target);
+      try { localStorage.setItem("aq_cached_targets", JSON.stringify(cachedRemoteTargets)); } catch (e) {}
+    }
+    switchControlledMachine(data.target.id, data.target.name);
+    showToast(t("target.controlledBanner", { name: data.target.name }));
+  } else {
+    if (errEl) {
+      errEl.hidden = false;
+      errEl.textContent = t("target.pairingFailed", { reason: data.error || "error" });
+    }
+  }
+}
+
+function forgetControlledTarget(targetId) {
+  if (!targetId) return;
+  const req = JSON.stringify({ type: "target_forget", id: targetId });
+  if (pipewireWs && pipewireWs.readyState === WebSocket.OPEN && !controlledTargetId) {
+    pipewireWs.send(req);
+  } else {
+    const localPort = ENGINE_PORTS[enginePortIdx];
+    try {
+      const tempWs = new WebSocket("ws://127.0.0.1:" + localPort);
+      tempWs.onopen = () => { tempWs.send(req); };
+      setTimeout(() => { if (tempWs.readyState !== WebSocket.CLOSED) tempWs.close(); }, 2000);
+    } catch (e) {}
+  }
+  cachedRemoteTargets = cachedRemoteTargets.filter(t => t.id !== targetId);
+  try { localStorage.setItem("aq_cached_targets", JSON.stringify(cachedRemoteTargets)); } catch (e) {}
+  if (controlledTargetId === targetId) {
+    switchControlledMachine("");
+  } else {
+    updateTargetMachineSelect();
+    renderTargetSavedList();
+  }
+}
+
+function renderTargetSavedList() {
+  const list = document.getElementById("targetSavedList");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!cachedRemoteTargets.length) {
+    const emptyDiv = document.createElement("div");
+    emptyDiv.style.cssText = "font-size:0.8rem; color:var(--aq-text-3); text-align:center;";
+    emptyDiv.textContent = t("target.noSavedTargets") || "Nincs mentett célgép.";
+    list.appendChild(emptyDiv);
+    return;
+  }
+  cachedRemoteTargets.forEach(tgt => {
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.justifyContent = "space-between";
+    row.style.alignItems = "center";
+    row.style.padding = "4px 8px";
+    row.style.background = "var(--aq-surface)";
+    row.style.borderRadius = "4px";
+
+    const labelSpan = document.createElement("span");
+    labelSpan.style.cssText = "font-size:0.85rem; font-weight:500;";
+    labelSpan.textContent = (tgt.name || "") + " (" + (tgt.host || "") + ")";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "mini-btn";
+    btn.textContent = t("target.forget") || "Elfelejtés";
+    btn.onclick = () => forgetControlledTarget(tgt.id);
+
+    row.append(labelSpan, btn);
+    list.appendChild(row);
+  });
+}
+
 function initPipewireBridge() {
   try {
     const port = ENGINE_PORTS[enginePortIdx];
     engineVerified = false;
-    pipewireWs = new WebSocket("ws://127.0.0.1:" + port);
+    let wsUrl = "ws://127.0.0.1:" + port;
+    if (controlledTargetId) {
+      wsUrl += "/relay?target=" + encodeURIComponent(controlledTargetId);
+    }
+    pipewireWs = new WebSocket(wsUrl);
     const thisWs = pipewireWs;
     // Ha 2,5 s alatt nem jön motor-üzenet (vagy a kézfogás beragad), ez nem az Aqulify motor: továbblépünk
     setTimeout(() => { if (thisWs === pipewireWs && !engineVerified && thisWs.readyState !== WebSocket.CLOSED) thisWs.close(); }, 2500);
@@ -11370,6 +11841,12 @@ function initPipewireBridge() {
       isPipewireConnected = true;
       lastSentEqSig = null;
       updateEngineBadge();
+      updateRemoteBanner();
+      updateRemoteForbiddenControls();
+      updateTargetMachineSelect();
+      if (!controlledTargetId) {
+        try { pipewireWs.send(JSON.stringify({ type: "targets" })); } catch (e) {}
+      }
       // Új kapcsolaton a motor a fő láncot tekinti szerkesztettnek: a felület is visszaáll rá, és a motor
       // állapotát veszi át (a zóna nézetét nem tolja rá a fő láncra)
       if (aqEditZone !== 0) {
@@ -11388,6 +11865,41 @@ function initPipewireBridge() {
     pipewireWs.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data);
+        if (data && data.type === "library_browse") {
+          onLibraryBrowseResult(data);
+        }
+        if (data && data.type === "targets" && Array.isArray(data.targets)) {
+          cachedRemoteTargets = data.targets;
+          try { localStorage.setItem("aq_cached_targets", JSON.stringify(cachedRemoteTargets)); } catch (e) {}
+          updateTargetMachineSelect();
+          renderTargetSavedList();
+        }
+        if (data && data.type === "target_pair_result") {
+          onTargetPairResult(data);
+        }
+        if (data && data.type === "target_forget_result") {
+          if (!controlledTargetId) {
+            try { pipewireWs.send(JSON.stringify({ type: "targets" })); } catch (e) {}
+          }
+        }
+        if (data && (data.type === "machine" || data.type === "state" || data.type === "restore")) {
+          if (typeof data.admin === "boolean") {
+            window.remoteIsAdmin = data.admin;
+            updateRemoteForbiddenControls();
+          }
+        }
+        if (data && data.type === "discovered") {
+          onDiscoveredEngines(data);
+        }
+        if (data && data.type === "relay_error") {
+          const reason = data.reason || "unknown";
+          showToast(t("target.pairingFailed", { reason: reason }));
+          switchControlledMachine("");
+          return;
+        }
+        if (data && data.error === "remote") {
+          showToast(t("target.remoteForbiddenToast") || "Ez a művelet távolról nem engedélyezett.");
+        }
         if (data && data.type === "restore") { engineRestoreSeen = true; onRestoreState(data); return; }
         if (data && (data.type === "state" || data.type === "status" || data.type === "spectrum")) engineVerified = true;
         if (aqNowPlaying && data) {
@@ -12435,6 +12947,7 @@ function remoteSetEnabled(on) { sendEngine({ type: "set_remote", enabled: on ? 1
 function remoteSetBluetooth(on) { sendEngine({ type: "set_remote", bluetooth: on ? 1 : 0 }); }
 function remoteNewCode() { sendEngine({ type: "remote_new_code" }); }
 function remoteRevoke(id) { sendEngine({ type: "remote_revoke", id }); }
+function remoteSetAdmin(id, admin) { sendEngine({ type: "remote_set_admin", id, admin: admin ? 1 : 0 }); }
 
 function onRemoteState(st) {
   remoteState = st;
@@ -12511,12 +13024,22 @@ function renderRemotePanel() {
     sub.textContent = dv.online ? t("remote.online")
       : t("remote.lastSeen", { when: new Date((dv.last || 0) * 1000).toLocaleString(AQ_LOCALES[aqLang] || undefined) });
     info.append(name, sub);
+    const adminLabel = document.createElement("label");
+    adminLabel.style.cssText = "display:flex; align-items:center; gap:6px; font-size:0.8rem; color:var(--aq-text-2); cursor:pointer; user-select:none;";
+    const adminChk = document.createElement("input");
+    adminChk.type = "checkbox";
+    adminChk.checked = !!dv.admin;
+    adminChk.onchange = () => remoteSetAdmin(dv.id, adminChk.checked);
+    const adminSpan = document.createElement("span");
+    adminSpan.textContent = t("remote.admin") || "Admin";
+    adminLabel.append(adminChk, adminSpan);
+
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "adw-btn";
     btn.textContent = t("remote.revoke");
     btn.onclick = () => remoteRevoke(dv.id);
-    row.append(info, btn);
+    row.append(info, adminLabel, btn);
     list.appendChild(row);
   });
 }
@@ -12834,7 +13357,103 @@ async function pasteLibraryRootPath() {
   }
 }
 
+let currentBrowsePath = "";
+
+function openLibraryBrowser() {
+  const modal = document.getElementById("modalLibraryBrowser");
+  if (!modal) return;
+  modal.style.display = "flex";
+  browseNavigateTo("");
+}
+
+function closeLibraryBrowser() {
+  const modal = document.getElementById("modalLibraryBrowser");
+  if (modal) modal.style.display = "none";
+}
+
+function browseNavigateTo(path) {
+  currentBrowsePath = path || "";
+  const input = document.getElementById("browseCurrentPath");
+  if (input) input.value = currentBrowsePath;
+  const list = document.getElementById("browseFolderList");
+  if (list) {
+    list.innerHTML = "";
+    const ld = document.createElement("div");
+    ld.style.cssText = "font-size:0.8rem; color:var(--aq-text-3); text-align:center; padding:12px;";
+    ld.textContent = t("common.loading") || "Betöltés…";
+    list.appendChild(ld);
+  }
+  if (pipewireWs && pipewireWs.readyState === WebSocket.OPEN) {
+    pipewireWs.send(JSON.stringify({ type: "library_browse", path: currentBrowsePath }));
+  }
+}
+
+function onLibraryBrowseResult(data) {
+  const list = document.getElementById("browseFolderList");
+  if (!list) return;
+  list.innerHTML = "";
+  currentBrowsePath = data.path || "";
+  const input = document.getElementById("browseCurrentPath");
+  if (input) input.value = currentBrowsePath;
+  const folders = data.folders || [];
+  if (!folders.length) {
+    const emptyDiv = document.createElement("div");
+    emptyDiv.style.cssText = "font-size:0.8rem; color:var(--aq-text-3); text-align:center; padding:12px;";
+    emptyDiv.textContent = t("library.noSubfolders") || "Nincsenek almappák.";
+    list.appendChild(emptyDiv);
+    return;
+  }
+  folders.forEach(f => {
+    const item = document.createElement("div");
+    item.className = "discovered-item";
+    item.style.padding = "6px 8px";
+
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex; align-items:center; gap:8px;";
+
+    const svgNs = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNs, "svg");
+    svg.setAttribute("class", "aq-icon aq-icon-sm");
+    svg.style.color = "var(--aq-accent)";
+    const use = document.createElementNS(svgNs, "use");
+    use.setAttribute("href", "#i-folder");
+    svg.appendChild(use);
+
+    const nameSpan = document.createElement("span");
+    nameSpan.style.cssText = "font-size:0.85rem; font-weight:500;";
+    nameSpan.textContent = f.name;
+
+    wrap.append(svg, nameSpan);
+    item.appendChild(wrap);
+    item.onclick = () => browseNavigateTo(f.path);
+    list.appendChild(item);
+  });
+}
+
+function browseGoUp() {
+  if (!currentBrowsePath) return;
+  let p = currentBrowsePath.replace(/[\\\/]+$/, "");
+  const lastSlash = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  if (lastSlash > 0) {
+    browseNavigateTo(p.substring(0, lastSlash));
+  } else if (lastSlash === 0) {
+    browseNavigateTo("/");
+  } else {
+    browseNavigateTo("");
+  }
+}
+
+function selectCurrentBrowsedFolder() {
+  if (currentBrowsePath) {
+    addAndSaveLibraryRootPath(currentBrowsePath, false);
+    closeLibraryBrowser();
+  }
+}
+
 async function browseLibraryFolder() {
+  openLibraryBrowser();
+  return;
+
   try {
     if (typeof window.aetherPickFolder === "function") {
       const picked = await window.aetherPickFolder();

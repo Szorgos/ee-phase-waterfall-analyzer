@@ -332,6 +332,20 @@ inline std::string loadRemote() {
     return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
 }
 
+/** A mentett távoli célgépek (remote-targets.json, 0600 jogosultság). */
+inline bool saveRemoteTargets(const std::string& doc) {
+    const std::string path = configDir(true) + "/remote-targets.json";
+    if (!writeAtomic(path, std::vector<char>(doc.begin(), doc.end()))) return false;
+    chmod(path.c_str(), 0600);
+    return true;
+}
+
+inline std::string loadRemoteTargets() {
+    std::ifstream f(configDir(false) + "/remote-targets.json", std::ios::binary);
+    if (!f) return "";
+    return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+}
+
 inline bool saveOutputSink(const std::string& sinkName) {
     const std::string path = configDir(true) + "/output_sink.txt";
     std::ofstream f(path, std::ios::trunc);

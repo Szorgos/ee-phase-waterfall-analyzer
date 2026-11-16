@@ -37,6 +37,8 @@
  *   száma: ha nő, az okos listák tartalma változhatott.
  */
 #include <algorithm>
+#include <chrono>
+#include <filesystem>
 #include <cstdio>
 #include <ctime>
 #include <functional>
@@ -54,6 +56,49 @@
 #include "ws_bridge.hpp"
 
 namespace ee_analyzer::library {
+
+inline std::string utf8(const std::filesystem::path& p) {
+    const auto s = p.u8string();
+    return std::string(s.begin(), s.end());
+}
+inline std::filesystem::path fromUtf8(const std::string& s) {
+    return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(s.data()), s.size()));
+}
+inline bool isTraversalSegment(const std::string& seg) {
+    std::string dec;
+    for (size_t i = 0; i < seg.size(); ++i) {
+        if (seg[i] == '%' && i + 2 < seg.size()) {
+            char h1 = seg[i + 1], h2 = seg[i + 2];
+            auto hexVal = [](char c) -> int {
+                if (c >= '0' && c <= '9') return c - '0';
+                if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+                return -1;
+            };
+            int v1 = hexVal(h1), v2 = hexVal(h2);
+            if (v1 >= 0 && v2 >= 0) {
+                dec += static_cast<char>((v1 << 4) | v2);
+                i += 2;
+                continue;
+            }
+        }
+        dec += seg[i];
+    }
+    return dec == ".." || dec == "." || seg == ".." || seg == ".";
+}
+
+inline bool hasPathTraversal(const std::string& path) {
+    size_t start = 0;
+    while (start < path.size()) {
+        while (start < path.size() && (path[start] == '/' || path[start] == '\\')) ++start;
+        if (start >= path.size()) break;
+        size_t end = start;
+        while (end < path.size() && path[end] != '/' && path[end] != '\\') ++end;
+        if (isTraversalSegment(path.substr(start, end - start))) return true;
+        start = end;
+    }
+    return false;
+}
 
 /** A mentett mappalista ({"roots":[…]}) olvasása; üres: nincs mentve. */
 inline std::vector<std::string> parseRootsDoc(const std::string& doc) {
@@ -438,6 +483,91 @@ inline void attachLibrary(BridgeCallbacks& cb, MusicLibrary& lib, player::PlayQu
             lib.setRoots(roots);
             if (saveRoots) saveRoots(rootsDoc(lib.roots()));
             return lib.infoJson(true);
+        }
+                if (type == "library_browse") {
+            if (remote) return err("remote");
+            const std::string rawPath = str("path");
+            // Path traversal védelem: útvonal-elemként '..' vagy '%2e' nem engedélyezett
+            if (hasPathTraversal(rawPath)) {
+                return err("denied");
+            }
+
+            struct BrowseEntry {
+                std::string name;
+                std::string path;
+            };
+            std::vector<BrowseEntry> list;
+
+            if (rawPath.empty()) {
+#ifdef _WIN32
+                char driveBuf[512] = {0};
+                DWORD dLen = GetLogicalDriveStringsA(sizeof(driveBuf) - 1, driveBuf);
+                for (DWORD i = 0; i < dLen; ) {
+                    std::string drv = driveBuf + i;
+                    if (!drv.empty()) {
+                        std::string clean = drv;
+                        if (clean.back() == '\\') clean.pop_back();
+                        list.push_back({ clean, drv });
+                    }
+                    i += static_cast<DWORD>(drv.size() + 1);
+                }
+#else
+                const char* home = std::getenv("HOME");
+                if (home && *home) {
+                    std::error_code ec;
+                    if (std::filesystem::is_directory(home, ec)) list.push_back({ "Home", home });
+                }
+                for (const char* p : { "/mnt", "/media" }) {
+                    std::error_code ec;
+                    if (std::filesystem::is_directory(p, ec)) list.push_back({ p + 1, p });
+                }
+                const char* user = std::getenv("USER");
+                if (user && *user) {
+                    std::string mediaUser = std::string("/media/") + user;
+                    std::error_code ec;
+                    if (std::filesystem::is_directory(mediaUser, ec)) list.push_back({ std::string("media/") + user, mediaUser });
+                }
+#ifdef __APPLE__
+                if (std::filesystem::is_directory("/Volumes")) list.push_back({ "Volumes", "/Volumes" });
+#endif
+#endif
+            } else {
+                std::error_code ec;
+                std::filesystem::path p = fromUtf8(rawPath);
+                if (!std::filesystem::exists(p, ec) || ec || !std::filesystem::is_directory(p, ec)) {
+                    return err("notfound");
+                }
+
+                auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+                std::filesystem::directory_iterator it(p, std::filesystem::directory_options::skip_permission_denied, ec);
+                if (ec) return err("denied");
+
+                std::filesystem::directory_iterator end;
+                while (!ec && it != end) {
+                    if (std::chrono::steady_clock::now() > deadline) return err("timeout");
+                    std::error_code sec;
+                    auto status = it->symlink_status(sec);
+                    if (!sec && !std::filesystem::is_symlink(status) && std::filesystem::is_directory(status)) {
+                        std::string fname = utf8(it->path().filename());
+                        if (!fname.empty() && fname[0] != '.') {
+                            list.push_back({ fname, utf8(it->path()) });
+                        }
+                    }
+                    it.increment(ec);
+                    if (ec) { ec.clear(); }
+                }
+                std::sort(list.begin(), list.end(), [](const BrowseEntry& a, const BrowseEntry& b) {
+                    return a.name < b.name;
+                });
+            }
+
+            std::string res = "{\"type\":\"library_browse\",\"path\":\"" + media::jsonEscape(rawPath) + "\",\"folders\":[";
+            for (size_t i = 0; i < list.size(); ++i) {
+                if (i) res += ",";
+                res += "{\"name\":\"" + media::jsonEscape(list[i].name) + "\",\"path\":\"" + media::jsonEscape(list[i].path) + "\"}";
+            }
+            res += "]}";
+            return res;
         }
         if (type == "library_rescan") {
             if (remote) return err("remote");

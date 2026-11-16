@@ -110,7 +110,7 @@ inline bool parseRemote(const std::string& text, PairInfo& out) {
 }
 
 /** A kiírandó szöveg (a felhasználónak, magyarul). */
-inline std::string formatPairInfo(const PairInfo& p, bool enabledNow) {
+inline std::string formatPairInfo(const PairInfo& p, bool enabledNow, bool admin = false) {
     std::string s;
     if (enabledNow) s += "A hálózati elérés ki volt kapcsolva: most bekapcsoltam (enélkül a telefon nem éri el a gépet).\n";
     s += "Párosító kód: " + p.code + "\n";
@@ -129,6 +129,7 @@ inline std::string formatPairInfo(const PairInfo& p, bool enabledNow) {
         for (size_t i = 0; i < addrs.size() && i < 4; ++i) s += (i ? ", " : " ") + addrs[i] + ":" + std::to_string(p.port);
         s += "\n";
     }
+    if (admin) s += "Adminisztrátori jogosultsággal: az eszköz a zenetárat és a beállításokat is kezelheti.\n";
     s += "A telefonon: Aqulify Remote → Új gép párosítása: a gép címe, a port, a 6 jegyű kód → Párosítás kóddal.\n";
     return s;
 }
@@ -223,7 +224,7 @@ inline bool waitRemote(LocalClient& c, PairInfo& info, int ms, Pred ok) {
  * A `--pair` parancs. Visszatérés: 0 kész (a kód kiírva), 1 a motor nem fut / nem érhető el, 2 a hálózati elérés
  * nem indult el (pl. foglalt port), 3 a motor nem adott kódot. A kimenet a megadott fájlba (alapból stdout).
  */
-inline int run(const std::vector<int>& ports, const char* startHint, std::FILE* out = stdout) {
+inline int run(const std::vector<int>& ports, const char* startHint, std::FILE* out = stdout, bool admin = false) {
     if (!net::startup()) { std::fprintf(out, "A hálózat nem indítható.\n"); return 1; }
     LocalClient c;
     bool ok = false;
@@ -256,13 +257,13 @@ inline int run(const std::vector<int>& ports, const char* startHint, std::FILE* 
         net::cleanup();
         return 2;
     }
-    c.sendText("{\"type\":\"remote_new_code\"}");
+    c.sendText(admin ? "{\"type\":\"remote_new_code\",\"admin\":true}" : "{\"type\":\"remote_new_code\"}");
     if (!waitRemote(c, info, 5000, [](const PairInfo& p) { return !p.code.empty(); })) {
         std::fprintf(out, "A motor nem adott párosító kódot.\n");
         net::cleanup();
         return 3;
     }
-    const std::string text = formatPairInfo(info, enabledNow);
+    const std::string text = formatPairInfo(info, enabledNow, admin);
     std::fputs(text.c_str(), out);
     std::fflush(out);
     c.close();

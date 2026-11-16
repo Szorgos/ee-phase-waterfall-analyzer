@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "net_compat.hpp"
+#include "dns_packet.hpp"
 
 #ifndef AQULIFY_VERSION
 #define AQULIFY_VERSION "0.0.0"   // a CMake adja; enélkül a fejléc önmagában is fordul
@@ -44,10 +45,11 @@ public:
      *        tartozó hálózati kártyán kiküldjük a csomagot (különben csak az alapértelmezett kártyán – több
      *        kártyánál, pl. virtuális hálózat mellett, a Wi-Fi-re nem jutna ki).
      */
-    bool start(int servicePort, const std::string& customName = "", std::vector<std::string> addresses = {}) {
+    bool start(int servicePort, const std::string& customName = "", std::vector<std::string> addresses = {}, const std::string& machineId = "") {
         if (running_) stop();
 
         servicePort_ = servicePort;
+        machineId_ = machineId;
         addresses_.clear();
         for (auto& a : addresses) {
             in_addr tmp{};
@@ -148,6 +150,7 @@ public:
             "platform=linux"
 #endif
         };
+        if (!machineId_.empty()) txtEntries.push_back("id=" + machineId_);
         if (!addresses_.empty()) {
             std::string addr = "addr=";
             for (size_t i = 0; i < addresses_.size(); ++i) addr += (i ? "," : "") + addresses_[i];
@@ -204,6 +207,7 @@ private:
     int servicePort_{47820};
     std::string hostname_;
     std::string instanceName_;
+    std::string machineId_;
     std::vector<std::string> addresses_;
     std::thread worker_;
 
