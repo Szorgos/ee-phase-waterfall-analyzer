@@ -2,13 +2,16 @@
  * @file firewall.hpp
  * @brief A telefonos távirányító tűzfal-engedélyei (Windows Defender tűzfal, INetFwPolicy2).
  *
- * A telepítő (rendszergazdaként) két bejövő engedélyt vesz fel, csak az Aqulify.exe-re és csak a magán- és tartományi
- * hálózatra (nyilvános Wi-Fi-re nem):
+ * A telepítő (rendszergazdaként) két bejövő engedélyt vesz fel, csak az Aqulify.exe-re, minden hálózattípusra
+ * (tartományi, magán és nyilvános), de csak a helyi alhálózatról (LocalSubnet), az internet felől nem:
  *  - TCP 47820–47824: a telefon WebSocket-kapcsolata (ws_bridge.hpp: kRemotePortFirst, kRemotePortCount),
  *  - UDP 5353: a gépkeresés (mDNS, mdns_announcer.hpp).
+ * A nyilvános profil azért kell, mert a Windows sok otthoni Wi-Fit is nyilvánosnak vesz fel; ilyenkor a csak magán-
+ * hálózatra szóló szabállyal a telefon nem érte el a gépet. A távoli porton a motor csak párosított eszközt (token)
+ * vagy érvényes, próbálkozásszámban korlátozott párosító kódot fogad el (ws_bridge.hpp:
+ * finishHandshake), és a port csak bekapcsolt távirányítónál figyel.
  * Enélkül a Windows csak az első indításkor kérdez, és csak arra a hálózattípusra ad engedélyt, amelyiken a gép épp
- * van; ha az nyilvános volt, otthon (magánhálózaton) a telefon nem éri el a gépet. Az eltávolító a szabályokat törli.
- * A felhasználó által korábban kifejezetten tiltott (Block) szabályokhoz nem nyúl.
+ * van. Az eltávolító a szabályokat törli. A felhasználó által korábban kifejezetten tiltott (Block) szabályokhoz nem nyúl.
  */
 #pragma once
 
@@ -63,12 +66,14 @@ inline bool addRule(INetFwRules* rules, const wchar_t* name, const std::wstring&
     INetFwRule* r = nullptr;
     if (FAILED(CoCreateInstance(kClsidRule, nullptr, CLSCTX_INPROC_SERVER, kIidRule, reinterpret_cast<void**>(&r))) || !r)
         return false;
-    Bstr n(name), app(exe.c_str()), port(ports), group(kGroup), desc(description);
+    Bstr n(name), app(exe.c_str()), port(ports), group(kGroup), desc(description), remote(L"LocalSubnet");
+    // A protokollt a portok előtt kell beállítani (port csak TCP/UDP szabályon adható meg)
     bool ok = SUCCEEDED(r->put_Name(n.s)) && SUCCEEDED(r->put_Description(desc.s)) &&
               SUCCEEDED(r->put_ApplicationName(app.s)) && SUCCEEDED(r->put_Protocol(protocol)) &&
-              SUCCEEDED(r->put_LocalPorts(port.s)) && SUCCEEDED(r->put_Direction(NET_FW_RULE_DIR_IN)) &&
-              SUCCEEDED(r->put_Action(NET_FW_ACTION_ALLOW)) && SUCCEEDED(r->put_Grouping(group.s)) &&
-              SUCCEEDED(r->put_Profiles(NET_FW_PROFILE2_PRIVATE | NET_FW_PROFILE2_DOMAIN)) &&
+              SUCCEEDED(r->put_LocalPorts(port.s)) && SUCCEEDED(r->put_RemoteAddresses(remote.s)) &&
+              SUCCEEDED(r->put_Direction(NET_FW_RULE_DIR_IN)) && SUCCEEDED(r->put_Action(NET_FW_ACTION_ALLOW)) &&
+              SUCCEEDED(r->put_Grouping(group.s)) &&
+              SUCCEEDED(r->put_Profiles(NET_FW_PROFILE2_DOMAIN | NET_FW_PROFILE2_PRIVATE | NET_FW_PROFILE2_PUBLIC)) &&
               SUCCEEDED(r->put_Enabled(VARIANT_TRUE));
     ok = ok && SUCCEEDED(rules->Add(r));
     r->Release();
@@ -89,9 +94,9 @@ inline bool addRemoteFirewallRules(const std::wstring& exe) {
         fw_detail::removeByName(rules, fw_detail::kRuleTcp);
         fw_detail::removeByName(rules, fw_detail::kRuleMdns);
         const bool tcp = fw_detail::addRule(rules, fw_detail::kRuleTcp, exe, NET_FW_IP_PROTOCOL_TCP, L"47820-47824",
-                                            L"Aqulify: connection of the Aqulify Remote phone app (private and domain networks only)");
+                                            L"Aqulify: connection of the Aqulify Remote phone app (local subnet only)");
         const bool udp = fw_detail::addRule(rules, fw_detail::kRuleMdns, exe, NET_FW_IP_PROTOCOL_UDP, L"5353",
-                                            L"Aqulify: the phone app finds this computer on the local network (mDNS)");
+                                            L"Aqulify: the phone app finds this computer on the local network (mDNS, local subnet only)");
         ok = tcp && udp;
         rules->Release();
     }
