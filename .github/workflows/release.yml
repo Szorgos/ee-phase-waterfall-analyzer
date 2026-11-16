@@ -185,7 +185,7 @@ jobs:
     steps:
       - name: Eszközök
         timeout-minutes: 15
-        run: for i in 1 2 3; do pacman -Syu --noconfirm --needed base-devel git cmake ninja pipewire fftw gtk3 webkit2gtk-4.1 hicolor-icon-theme && break; sleep 20; done
+        run: for i in 1 2 3; do pacman -Syu --noconfirm --needed base-devel git cmake ninja pipewire alsa-lib fftw gtk3 webkit2gtk-4.1 hicolor-icon-theme && break; sleep 20; done
       - uses: actions/checkout@v4
       - name: Csomag építése
         id: arch
