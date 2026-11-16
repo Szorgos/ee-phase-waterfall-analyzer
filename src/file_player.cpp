@@ -706,10 +706,13 @@ void FilePlayer::renderDop(int32_t* stereoDop24, size_t frames) {
     }
     const uint64_t r = rd_.load(), w = wr_.load(std::memory_order_acquire);
     const size_t n = std::min<size_t>(frames, static_cast<size_t>(w - r));
+    // A jelölőt (0x05 / 0xFA) itt, a kimenet saját fázisszámlálója szerint írjuk a szavakba: így a váltakozás akkor sem
+    // törik meg, ha előtte páratlan számú csendkeret ment ki (pl. alulcsordulás), és a DAC nem esik ki a DoP-módból
     for (size_t i = 0; i < n; ++i) {
         const size_t idx = static_cast<size_t>((r + i) % ringFrames_) * 2;
-        stereoDop24[2 * i] = dopRing_[idx];
-        stereoDop24[2 * i + 1] = dopRing_[idx + 1];
+        const uint32_t marker = ((dopRenderPhase_ + i) & 1u) ? 0xFAu : 0x05u;
+        stereoDop24[2 * i] = static_cast<int32_t>((static_cast<uint32_t>(dopRing_[idx]) & 0xFFFFu) | (marker << 16));
+        stereoDop24[2 * i + 1] = static_cast<int32_t>((static_cast<uint32_t>(dopRing_[idx + 1]) & 0xFFFFu) | (marker << 16));
     }
     dopRenderPhase_ = static_cast<uint8_t>((dopRenderPhase_ + n) & 1u);
     if (n < frames) {

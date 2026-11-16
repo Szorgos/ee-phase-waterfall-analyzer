@@ -1762,6 +1762,30 @@ static void testDsdDop() {
         }
         CHECK(seekOk, "DoP tekerés az 1024. keretre: a 2048. DSD-bájttól folytatódik bitpontosan, folyamatos markerrel");
 
+        // Páratlan számú csendkeret a hangfolyamban (mint egy alulcsordulásnál): utána is folytonos a jelölő-váltakozás,
+        // különben a DAC egy pillanatra kiesne a DoP-módból (hallható reccsenés)
+        p.pause();
+        std::vector<int32_t> gap(3 * 2);
+        {
+            std::lock_guard<std::mutex> l(out->m);
+            out->renderDop(gap.data(), 3);
+        }
+        p.play();
+        const std::vector<int32_t> afterGap = pullDopFrames(p, *out, 64);
+        bool gapOk = afterGap.size() == 64 * 2;
+        uint8_t prev = static_cast<uint8_t>((static_cast<uint32_t>(gap[4]) >> 16) & 0xFFu);
+        for (size_t f = 0; gapOk && f < 64; ++f) {
+            uint8_t l0 = 0, l1 = 0, r0 = 0, r1 = 0, ml = 0, mr = 0;
+            dsd::unpackDopSample(afterGap[f * 2], ml, l0, l1);
+            dsd::unpackDopSample(afterGap[f * 2 + 1], mr, r0, r1);
+            if ((ml != 0x05u && ml != 0xFAu) || ml != mr || ml == prev) gapOk = false;
+            prev = ml;
+            const size_t bIdx = (1024 + 256 + f) * 2;
+            if (l0 != leftMsb[bIdx] || l1 != leftMsb[bIdx + 1] || r0 != rightMsb[bIdx] || r1 != rightMsb[bIdx + 1])
+                gapOk = false;
+        }
+        CHECK(gapOk, "DoP: 3 csendkeret (alulcsordulás) után is folytonos a 0x05/0xFA váltakozás, az adat bitpontos");
+
         // DoP -> PCM váltás: új PCM hangfolyam nyílik csenddel
         CHECK(p.open(wavPath, &err) && !p.isDopActive() && !out->dopMode && out->rate == 48000,
               "DoP -> PCM váltás: 48 kHz-es PCM kimenetre vált");
