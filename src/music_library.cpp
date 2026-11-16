@@ -258,11 +258,12 @@ void MusicLibrary::startScan() {
                 index_ = std::move(idx);
                 cached_ = false;
             }
-            scanning_ = false;
+            // A gyorsítótár mentése a „kész” jelzés előtt: aki a bejárás végére vár (waitIdle), már a mentett állapotot látja
             if (saveCache_ && !cancel_.load()) {
                 const auto snap = snapshot();
                 saveCache_(serializeCache(*snap, roots()));
             }
+            scanning_ = false;
 
             // Időszakos ellenőrzés (10 perc) vagy kézi újrabejárás jelzése
             std::unique_lock<std::mutex> lk(cvMutex_);
