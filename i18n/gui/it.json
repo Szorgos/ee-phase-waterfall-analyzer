@@ -733,5 +733,8 @@
   "dev.importBtn": "Cerca e importa un profilo EQ",
   "dev.irBtn": "Carica risposta all’impulso (Convolver)",
   "dev.profileHint": "Il profilo scelto si applica subito. Un profilo EQ attiva l’Equalizer, una risposta all’impulso il Convolver.",
-  "dev.multiBtn": "Configura le uscite"
+  "dev.multiBtn": "Configura le uscite",
+  "ao.dsdDop": "DSD nativo (DoP)",
+  "ao.dsdDopHint": "I file DSD vengono inviati al DAC senza conversione PCM, impacchettati in DoP 1.1. La catena DSP, ReplayGain e il volume digitale vengono esclusi (regola il volume sul DAC).",
+  "ao.dsdDopWarn": "Se il DAC non supporta il DoP, la riproduzione DSD nativa può generare un forte rumore. Prova prima a basso volume! Vuoi davvero attivarlo?"
 }

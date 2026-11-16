@@ -468,10 +468,11 @@ public:
                 lastPlayerData_ = now;
                 return n;
             }
-            // szünetben nincs feldolgozás: csend, hogy a vízesés lecsengjen
+            // szünetben (vagy DoP módban, ahol a DSP kimarad) nincs feldolgozás: csend, hogy a vízesés és a mérők lecsengjenek
             if (now - player_.lastDataMs() > 100 && now - lastPlayerData_ > 20) {
                 const uint64_t ms = std::min<uint64_t>(now - lastPlayerData_, 100);
-                const size_t frames = std::min<size_t>(maxFrames, static_cast<size_t>(ms * player_.sampleRate() / 1000));
+                const uint32_t sr = playerOut_.dopActive() ? playerOut_.currentRate() : player_.sampleRate();
+                const size_t frames = std::min<size_t>(maxFrames, static_cast<size_t>(ms * (sr ? sr : 48000) / 1000));
                 std::fill(lr, lr + frames * 2, 0.0f);
                 lastPlayerData_ = now;
                 return frames;
@@ -504,7 +505,7 @@ public:
 
     double sampleRate() {
         std::lock_guard<std::mutex> lk(mutex_);
-        if (playerActive_) return player_.sampleRate();
+        if (playerActive_) return playerOut_.dopActive() ? playerOut_.currentRate() : player_.sampleRate();
         if (pluginActive_ && mapping_.state()) return mapping_.state()->sampleRate.load();
         return loopback_.sampleRate();
     }
@@ -512,7 +513,7 @@ public:
     /** A Bass Enhancer felharmonikus-szintje (dB) a pluginból; plugin nélkül nincs feldolgozás (-100). */
     double bassHarmonicsDb() {
         std::lock_guard<std::mutex> lk(mutex_);
-        if (playerActive_) return player_.bassHarmonicsDb();
+        if (playerActive_) return playerOut_.dopActive() ? -100.0 : player_.bassHarmonicsDb();
         if (pluginActive_ && mapping_.state()) return mapping_.state()->bassHarmonicsDb.load();
         return -100.0;
     }
@@ -564,7 +565,11 @@ public:
         std::lock_guard<std::mutex> lk(mutex_);
         if (playerActive_) {
             wchar_t buf[96];
-            swprintf(buf, 96, L"WASAPI exclusive (%.1f kHz)", player_.sampleRate() / 1000.0);
+            if (playerOut_.dopActive()) {
+                swprintf(buf, 96, L"WASAPI exclusive DoP (%.1f kHz)", playerOut_.currentRate() / 1000.0);
+            } else {
+                swprintf(buf, 96, L"WASAPI exclusive (%.1f kHz)", player_.sampleRate() / 1000.0);
+            }
             return buf;
         }
         if (pluginActive_ && mapping_.state()) {
@@ -580,8 +585,11 @@ public:
         std::string s = "\"platform\":\"windows\"";
         char buf[160];
         if (playerActive_) {
-            std::snprintf(buf, sizeof(buf), ",\"source\":\"WASAPI exclusive\",\"dspActive\":true,\"sr\":%u,\"gr\":%.2f",
-                          player_.sampleRate(), player_.gainReductionDb());
+            const bool dop = playerOut_.dopActive();
+            const uint32_t sr = dop ? playerOut_.currentRate() : player_.sampleRate();
+            std::snprintf(buf, sizeof(buf), ",\"source\":\"%s\",\"dspActive\":%s,\"sr\":%u,\"gr\":%.2f",
+                          dop ? "WASAPI exclusive (DoP)" : "WASAPI exclusive",
+                          dop ? "false" : "true", sr, dop ? 0.0 : player_.gainReductionDb());
             s += buf;
             s += ",\"dspState\":\"active\"";
         } else if (pluginActive_ && mapping_.state()) {
@@ -625,7 +633,7 @@ public:
     /** A Magic Touch mérései (csak a pluginból: WASAPI loopbacknél nincs DSP). Üres, ha nincs adat. */
     std::string magicDiagJson() {
         std::lock_guard<std::mutex> lk(mutex_);
-        if (playerActive_) return player_.magicDiagJson();
+        if (playerActive_) return playerOut_.dopActive() ? std::string{} : player_.magicDiagJson();
         if (!pluginActive_ || !mapping_.state()) return {};
         magic::MagicDiag d;
         if (!mapping_.state()->magicDiag.read(d)) return {};
@@ -953,23 +961,29 @@ int main(int argc, char** argv) {
     };
     cb.statusFields = [&]() {
         std::string s = sources.statusFields() + updater.statusJson();
-        const bool digitalVolume = playerOut.exclusiveActive() && !playerDsp.hardwareVolume();
+        const bool excl = playerOut.exclusiveActive();
+        const bool dop = playerOut.dopActive() || filePlayer.isDopActive();
+        const bool digitalVolume = excl && !dop && !playerDsp.hardwareVolume();
         s += digitalVolume ? playerDsp.volumeJson() : endpointVolumeJson();
         if (!filePlayer.hasTrack()) return s;
         // A jelút (Hangkimenet, haladó): megosztott módban a Windows hangmotorja keveri a jelet (nem bitpontos);
         // kizárólagos módban bitpontos, ha sem a lánc, sem a ReplayGain, sem a hangerő, sem a formátum nem változtat rajta
-        const bool excl = playerOut.exclusiveActive();
         const uint32_t rate = filePlayer.streamRate();
         const float rg = filePlayer.currentGainDb();
-        const double dspMs = excl && rate ? 1000.0 * static_cast<double>(playerDsp.latencySamples()) / rate : 0.0;
-        const bool transparent = excl && playerDsp.transparent() && !playerDsp.volumeTouches() && rg == 0.0f &&
-                                 playerOut.quantExact();
+        const double dspMs = excl && !dop && rate ? 1000.0 * static_cast<double>(playerDsp.latencySamples()) / rate : 0.0;
+        const bool transparent = dop || (excl && playerDsp.transparent() && !playerDsp.volumeTouches() && rg == 0.0f &&
+                                         playerOut.quantExact());
         std::string out = playerOut.statusJson(dspMs);
-        char pb[256];
-        std::snprintf(pb, sizeof(pb), ",\"dspMs\":%.2f,\"transparent\":%s,\"mixer\":%s,\"keepAwake\":false,\"playerRate\":%u,"
+        const std::string dopFb = filePlayer.dopFallbackReason();
+        char pb[384];
+        std::snprintf(pb, sizeof(pb),
+                      ",\"dop\":{\"want\":%s,\"active\":%s,\"dsdRate\":%u,\"fallback\":\"%s\"},"
+                      "\"dspMs\":%.2f,\"transparent\":%s,\"mixer\":%s,\"keepAwake\":false,\"playerRate\":%u,"
                       "\"playerGain\":%.2f,\"digitalVolume\":%s,\"dspTransparent\":%s,\"volTouch\":%s",
+                      filePlayer.dsdDop() ? "true" : "false", dop ? "true" : "false",
+                      filePlayer.dopDsdRate(), dopFb.c_str(),
                       dspMs, transparent ? "true" : "false", excl ? "false" : "true", rate, rg,
-                      digitalVolume ? "true" : "false", playerDsp.transparent() ? "true" : "false",
+                      digitalVolume ? "true" : "false", (dop || playerDsp.transparent()) ? "true" : "false",
                       digitalVolume && playerDsp.volumeTouches() ? "true" : "false");
         out += pb;
         return s + ",\"path\":{" + out + "}";
@@ -998,6 +1012,7 @@ int main(int argc, char** argv) {
     // módban a fájl mintavétele szól.
     std::mutex audioMutex;
     audioopt::AudioOptions audioOpts;
+    bool dsdDop = false;
     auto playerOnly = [](audioopt::AudioOptions o) {
         o.bufferFrames = 0;
         o.keepAwake = false;
@@ -1005,26 +1020,42 @@ int main(int argc, char** argv) {
         o.resampleQuality = -1;
         return o;
     };
+    auto optsToJsonWithDop = [](const audioopt::AudioOptions& o, bool dop) {
+        std::string j = audioopt::toJson(o);
+        if (!j.empty() && j.back() == '}') {
+            j.pop_back();
+            j += std::string(",\"dsdDop\":") + (dop ? "true}" : "false}");
+        }
+        return j;
+    };
     {
         const std::string doc = readSmallFile(userFilePath(L"audio.json", false), 64 * 1024);
         json::Value v;
-        if (!doc.empty() && json::parse(doc, v)) audioOpts = playerOnly(audioopt::fromJson(v));
+        if (!doc.empty() && json::parse(doc, v)) {
+            audioOpts = playerOnly(audioopt::fromJson(v));
+            if (const json::Value* d = v.get("dsdDop"); d && d->type == json::Value::Type::Bool) dsdDop = d->b;
+        }
         filePlayer.setReplayGain(audioOpts.replayGain, audioOpts.rgPreampDb, audioOpts.rgPreventClip);
         filePlayer.setPreload(audioOpts.preload);
         playerOut.setExclusive(audioOpts.exclusive);
+        playerOut.setWantDop(audioOpts.exclusive && dsdDop);
+        filePlayer.setDsdDop(audioOpts.exclusive && dsdDop);
         playerDsp.setHardwarePref(audioOpts.exclHwVolume);
     }
     cb.audioOptionsJson = [&]() -> std::string {
         std::lock_guard<std::mutex> lk(audioMutex);
-        return "{\"opts\":" + audioopt::toJson(audioOpts) +
+        return "{\"opts\":" + optsToJsonWithDop(audioOpts, dsdDop) +
                ",\"caps\":{\"buffer\":false,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true,"
-               "\"exclusive\":true}}";
+               "\"exclusive\":true,\"dop\":true}}";
     };
     cb.setAudioOptions = [&](const json::Value& v) {
         std::lock_guard<std::mutex> lk(audioMutex);
         const audioopt::AudioOptions o = playerOnly(audioopt::fromJson(v, audioOpts));
-        if (o == audioOpts) return;
+        bool wantDop = dsdDop;
+        if (const json::Value* d = v.get("dsdDop"); d && d->type == json::Value::Type::Bool) wantDop = d->b;
+        if (o == audioOpts && wantDop == dsdDop) return;
         audioOpts = o;
+        dsdDop = wantDop;
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         filePlayer.setPreload(o.preload);
         playerDsp.setHardwarePref(o.exclHwVolume);
@@ -1032,7 +1063,13 @@ int main(int argc, char** argv) {
             playerOut.setExclusive(o.exclusive);
             std::cout << "[Lejátszó] Kizárólagos mód: " << (o.exclusive ? "be" : "ki") << ".\n";
         }
-        writeFileAtomic(userFilePath(L"audio.json", true), audioopt::toJson(o));
+        const bool effDop = o.exclusive && dsdDop;
+        if (effDop != filePlayer.dsdDop()) {
+            playerOut.setWantDop(effDop);
+            filePlayer.setDsdDop(effDop);
+            std::cout << "[Lejátszó] DSD natívan (DoP): " << (effDop ? "be" : "ki") << ".\n";
+        }
+        writeFileAtomic(userFilePath(L"audio.json", true), optsToJsonWithDop(o, dsdDop));
     };
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     cb.setLanguage = [](const std::string& l) {

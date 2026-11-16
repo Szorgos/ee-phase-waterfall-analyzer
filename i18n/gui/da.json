@@ -733,5 +733,8 @@
   "dev.importBtn": "Find og importér en EQ-profil",
   "dev.irBtn": "Indlæs impulsrespons (Convolver)",
   "dev.profileHint": "Den valgte profil virker med det samme. En EQ-profil tænder Equalizer, en impulsrespons Convolver.",
-  "dev.multiBtn": "Indstil udgange"
+  "dev.multiBtn": "Indstil udgange",
+  "ao.dsdDop": "Nativ DSD (DoP)",
+  "ao.dsdDopHint": "DSD-filer sendes til DAC’en uden PCM-konvertering, pakket som DoP 1.1. DSP-kæden, ReplayGain og digital lydstyrke springes over (justér lydstyrken på DAC’en).",
+  "ao.dsdDopWarn": "Hvis DAC’en ikke understøtter DoP, kan nativ DSD-afspilning give høj støj. Prøv først ved lav lydstyrke! Vil du slå det til?"
 }

@@ -733,5 +733,8 @@
   "dev.importBtn": "Etsi ja tuo EQ-profiili",
   "dev.irBtn": "Lataa impulssivaste (Convolver)",
   "dev.profileHint": "Valittu profiili tulee voimaan heti. EQ-profiili kytkee Equalizerin päälle, impulssivaste Convolverin.",
-  "dev.multiBtn": "Määritä lähdöt"
+  "dev.multiBtn": "Määritä lähdöt",
+  "ao.dsdDop": "Natiivi DSD (DoP)",
+  "ao.dsdDopHint": "DSD-tiedostot lähetetään DACille ilman PCM-muunnosta DoP 1.1 -paketoituna. DSP-ketju, ReplayGain ja digitaalinen äänenvoimakkuus ohitetaan (säädä voimakkuus DACista).",
+  "ao.dsdDopWarn": "Jos DAC ei tue DoP-muotoa, natiivi DSD-toisto voi aiheuttaa voimakasta kohinaa. Kokeile ensin pienellä äänenvoimakkuudella! Otetaanko silti käyttöön?"
 }

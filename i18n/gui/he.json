@@ -733,5 +733,8 @@
   "dev.importBtn": "חיפוש וייבוא פרופיל EQ",
   "dev.irBtn": "טעינת תגובת הלם (Convolver)",
   "dev.profileHint": "הפרופיל שנבחר פועל מיד. פרופיל EQ מפעיל את ה‑Equalizer, ותגובת הלם את ה‑Convolver.",
-  "dev.multiBtn": "הגדרת יציאות"
+  "dev.multiBtn": "הגדרת יציאות",
+  "ao.dsdDop": "DSD טבעי (DoP)",
+  "ao.dsdDopHint": "קובצי DSD נשלחים ל-DAC ללא המרה ל-PCM, באריזת DoP 1.1. שרשרת ה-DSP, ה-ReplayGain והווליום הדיגיטלי נעקפים (כוונן את העוצמה ב-DAC).",
+  "ao.dsdDopWarn": "אם ה-DAC אינו תומך ב-DoP, ניגון DSD טבעי עלול להפיק רעש חזק. נסה תחילה בעוצמה נמוכה! להפעיל בכל זאת?"
 }

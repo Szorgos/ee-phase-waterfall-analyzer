@@ -733,5 +733,8 @@
   "dev.importBtn": "EQ-profil keresése és importálása",
   "dev.irBtn": "Impulzusválasz (Konvolver) betöltése",
   "dev.profileHint": "A kiválasztott profil azonnal szól. EQ-profilnál az Equalizer, impulzusválasznál a Konvolver kapcsol be.",
-  "dev.multiBtn": "Kimenetek beállítása"
+  "dev.multiBtn": "Kimenetek beállítása",
+  "ao.dsdDop": "DSD natívan (DoP)",
+  "ao.dsdDopHint": "A DSD-fájlok PCM-átalakítás nélkül, DoP 1.1 csomagolásban mennek a DAC-ra. Ilyenkor a DSP-lánc, a ReplayGain és a digitális hangerő kimarad (a hangerőt a DAC-on szabályozd).",
+  "ao.dsdDopWarn": "Ha a DAC nem ismeri a DoP formátumot, a natív DSD-lejátszás hangos zajt adhat. Előbb kis hangerőn próbáld ki! Biztosan bekapcsolod?"
 }

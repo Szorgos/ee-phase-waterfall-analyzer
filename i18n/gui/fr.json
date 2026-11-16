@@ -733,5 +733,8 @@
   "dev.importBtn": "Rechercher et importer un profil d’égaliseur",
   "dev.irBtn": "Charger une réponse impulsionnelle (Convolver)",
   "dev.profileHint": "Le profil choisi s’applique immédiatement. Un profil d’égaliseur active l’Equalizer, une réponse impulsionnelle le Convolver.",
-  "dev.multiBtn": "Configurer les sorties"
+  "dev.multiBtn": "Configurer les sorties",
+  "ao.dsdDop": "DSD natif (DoP)",
+  "ao.dsdDopHint": "Les fichiers DSD sont envoyés au DAC sans conversion PCM, encapsulés en DoP 1.1. La chaîne DSP, ReplayGain et le volume numérique sont contournés (réglez le volume sur le DAC).",
+  "ao.dsdDopWarn": "Si votre DAC ne prend pas en charge le DoP, la lecture DSD native peut produire un bruit fort. Essayez d’abord à faible volume ! Voulez-vous vraiment l’activer ?"
 }

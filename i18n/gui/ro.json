@@ -733,5 +733,8 @@
   "dev.importBtn": "Caută și importă un profil EQ",
   "dev.irBtn": "Încarcă răspunsul la impuls (Convolver)",
   "dev.profileHint": "Profilul ales se aplică imediat. Un profil EQ pornește Equalizer-ul, un răspuns la impuls pornește Convolver-ul.",
-  "dev.multiBtn": "Configurează ieșirile"
+  "dev.multiBtn": "Configurează ieșirile",
+  "ao.dsdDop": "DSD nativ (DoP)",
+  "ao.dsdDopHint": "Fișierele DSD sunt trimise la DAC fără conversie PCM, împachetate în DoP 1.1. Lanțul DSP, ReplayGain și volumul digital sunt ocolite (reglează volumul pe DAC).",
+  "ao.dsdDopWarn": "Dacă DAC-ul nu cunoaște formatul DoP, redarea DSD nativă poate produce zgomot puternic. Încearcă mai întâi la volum mic! Sigur îl activezi?"
 }

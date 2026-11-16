@@ -733,5 +733,8 @@
   "dev.importBtn": "EQ profili bul ve içe aktar",
   "dev.irBtn": "Dürtü yanıtı yükle (Convolver)",
   "dev.profileHint": "Seçilen profil hemen etkinleşir. EQ profili Equalizer'ı, dürtü yanıtı Convolver'ı açar.",
-  "dev.multiBtn": "Çıkışları ayarla"
+  "dev.multiBtn": "Çıkışları ayarla",
+  "ao.dsdDop": "Doğal DSD (DoP)",
+  "ao.dsdDopHint": "DSD dosyaları PCM dönüşümü olmadan, DoP 1.1 paketinde DAC’a gönderilir. DSP zinciri, ReplayGain ve dijital ses düzeyi devre dışı kalır (sesi DAC üzerinden ayarlayın).",
+  "ao.dsdDopWarn": "DAC’ınız DoP biçimini tanımıyorsa doğal DSD çalma yüksek sesli gürültü üretebilir. Önce düşük ses düzeyinde deneyin! Etkinleştirmek istediğinize emin misiniz?"
 }
