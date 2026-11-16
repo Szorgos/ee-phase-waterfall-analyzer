@@ -768,5 +768,10 @@
   "target.noSavedTargets": "Geen opgeslagen apparaten.",
   "target.forget": "Vergeten",
   "target.select": "Selecteren",
-  "library.noSubfolders": "Geen submappen."
+  "library.noSubfolders": "Geen submappen.",
+  "target.remoteVersion": "versie: {ver}",
+  "target.remoteUpdate": "Er is een nieuwere Aqulify beschikbaar voor deze computer: {ver}",
+  "target.hideUpdate": "Niet meer melden voor deze versie",
+  "remote.deviceVersion": "app: {ver}",
+  "remote.appUpdate": "Nieuwere app beschikbaar: {ver}"
 }

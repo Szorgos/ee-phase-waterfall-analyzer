@@ -768,5 +768,10 @@
   "target.noSavedTargets": "Niciun dispozitiv salvat.",
   "target.forget": "Uită",
   "target.select": "Selectează",
-  "library.noSubfolders": "Nu există subdosare."
+  "library.noSubfolders": "Nu există subdosare.",
+  "target.remoteVersion": "versiune: {ver}",
+  "target.remoteUpdate": "Pentru acest computer este disponibil un Aqulify mai nou: {ver}",
+  "target.hideUpdate": "Nu-mi mai aminti de această versiune",
+  "remote.deviceVersion": "aplicație: {ver}",
+  "remote.appUpdate": "Aplicație mai nouă disponibilă: {ver}"
 }

@@ -768,5 +768,10 @@
   "target.noSavedTargets": "Nincs mentett célgép.",
   "target.forget": "Elfelejtés",
   "target.select": "Kiválasztás",
-  "library.noSubfolders": "Nincsenek almappák."
+  "library.noSubfolders": "Nincsenek almappák.",
+  "target.remoteVersion": "verzió: {ver}",
+  "target.remoteUpdate": "Ezen a gépen elérhető egy frissebb Aqulify: {ver}",
+  "target.hideUpdate": "Ne szólj erről a verzióról",
+  "remote.deviceVersion": "app: {ver}",
+  "remote.appUpdate": "Elérhető frissebb app: {ver}"
 }

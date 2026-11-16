@@ -768,5 +768,10 @@
   "target.noSavedTargets": "Nenhum dispositivo guardado.",
   "target.forget": "Esquecer",
   "target.select": "Selecionar",
-  "library.noSubfolders": "Nenhuma subpasta."
+  "library.noSubfolders": "Nenhuma subpasta.",
+  "target.remoteVersion": "versão: {ver}",
+  "target.remoteUpdate": "Há uma versão mais recente do Aqulify para este computador: {ver}",
+  "target.hideUpdate": "Não avisar sobre esta versão",
+  "remote.deviceVersion": "app: {ver}",
+  "remote.appUpdate": "App mais recente disponível: {ver}"
 }

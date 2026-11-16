@@ -768,5 +768,10 @@
   "target.noSavedTargets": "没有已保存的目标设备。",
   "target.forget": "忽略",
   "target.select": "选择",
-  "library.noSubfolders": "没有子文件夹。"
+  "library.noSubfolders": "没有子文件夹。",
+  "target.remoteVersion": "版本：{ver}",
+  "target.remoteUpdate": "此电脑有更新的 Aqulify 可用：{ver}",
+  "target.hideUpdate": "不再提示此版本",
+  "remote.deviceVersion": "应用：{ver}",
+  "remote.appUpdate": "有更新的应用：{ver}"
 }

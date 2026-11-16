@@ -768,5 +768,10 @@
   "target.noSavedTargets": "Kayıtlı hedef cihaz yok.",
   "target.forget": "Unut",
   "target.select": "Seç",
-  "library.noSubfolders": "Alt klasör yok."
+  "library.noSubfolders": "Alt klasör yok.",
+  "target.remoteVersion": "sürüm: {ver}",
+  "target.remoteUpdate": "Bu bilgisayar için daha yeni bir Aqulify var: {ver}",
+  "target.hideUpdate": "Bu sürümü bir daha hatırlatma",
+  "remote.deviceVersion": "uygulama: {ver}",
+  "remote.appUpdate": "Daha yeni uygulama var: {ver}"
 }

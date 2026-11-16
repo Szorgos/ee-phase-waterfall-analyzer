@@ -768,5 +768,10 @@
   "target.noSavedTargets": "אין מכשירי יעד שמורים.",
   "target.forget": "שכח",
   "target.select": "בחר",
-  "library.noSubfolders": "אין תת-תיקיות."
+  "library.noSubfolders": "אין תת-תיקיות.",
+  "target.remoteVersion": "גרסה: {ver}",
+  "target.remoteUpdate": "קיימת גרסה חדשה יותר של Aqulify למחשב זה: {ver}",
+  "target.hideUpdate": "אל תזכיר לי על גרסה זו",
+  "remote.deviceVersion": "אפליקציה: {ver}",
+  "remote.appUpdate": "קיימת אפליקציה חדשה יותר: {ver}"
 }

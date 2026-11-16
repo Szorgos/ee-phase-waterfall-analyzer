@@ -768,5 +768,10 @@
   "target.noSavedTargets": "Немає збережених пристроїв.",
   "target.forget": "Забути",
   "target.select": "Вибрати",
-  "library.noSubfolders": "Немає підпапок."
+  "library.noSubfolders": "Немає підпапок.",
+  "target.remoteVersion": "версія: {ver}",
+  "target.remoteUpdate": "Для цього комп'ютера доступна новіша версія Aqulify: {ver}",
+  "target.hideUpdate": "Не нагадувати про цю версію",
+  "remote.deviceVersion": "застосунок: {ver}",
+  "remote.appUpdate": "Доступний новіший застосунок: {ver}"
 }

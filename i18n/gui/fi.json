@@ -768,5 +768,10 @@
   "target.noSavedTargets": "Ei tallennettuja laitteita.",
   "target.forget": "Unohda",
   "target.select": "Valitse",
-  "library.noSubfolders": "Ei alikansioita."
+  "library.noSubfolders": "Ei alikansioita.",
+  "target.remoteVersion": "versio: {ver}",
+  "target.remoteUpdate": "Tälle tietokoneelle on saatavilla uudempi Aqulify: {ver}",
+  "target.hideUpdate": "Älä muistuta tästä versiosta",
+  "remote.deviceVersion": "sovellus: {ver}",
+  "remote.appUpdate": "Uudempi sovellus saatavilla: {ver}"
 }

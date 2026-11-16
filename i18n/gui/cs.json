@@ -768,5 +768,10 @@
   "target.noSavedTargets": "Žádná uložená zařízení.",
   "target.forget": "Zapomenout",
   "target.select": "Vybrat",
-  "library.noSubfolders": "Žádné podsložky."
+  "library.noSubfolders": "Žádné podsložky.",
+  "target.remoteVersion": "verze: {ver}",
+  "target.remoteUpdate": "Pro tento počítač je k dispozici novější Aqulify: {ver}",
+  "target.hideUpdate": "Na tuto verzi už neupozorňovat",
+  "remote.deviceVersion": "aplikace: {ver}",
+  "remote.appUpdate": "K dispozici je novější aplikace: {ver}"
 }

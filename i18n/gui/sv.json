@@ -768,5 +768,10 @@
   "target.noSavedTargets": "Inga sparade enheter.",
   "target.forget": "Glöm",
   "target.select": "Välj",
-  "library.noSubfolders": "Inga undermappar."
+  "library.noSubfolders": "Inga undermappar.",
+  "target.remoteVersion": "version: {ver}",
+  "target.remoteUpdate": "En nyare Aqulify finns för den här datorn: {ver}",
+  "target.hideUpdate": "Påminn inte om den här versionen",
+  "remote.deviceVersion": "app: {ver}",
+  "remote.appUpdate": "Nyare app finns: {ver}"
 }

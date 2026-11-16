@@ -768,5 +768,10 @@
   "target.noSavedTargets": "保存された接続先はありません。",
   "target.forget": "解除",
   "target.select": "選択",
-  "library.noSubfolders": "サブフォルダーはありません。"
+  "library.noSubfolders": "サブフォルダーはありません。",
+  "target.remoteVersion": "バージョン：{ver}",
+  "target.remoteUpdate": "このコンピューター用の新しい Aqulify があります：{ver}",
+  "target.hideUpdate": "このバージョンは通知しない",
+  "remote.deviceVersion": "アプリ：{ver}",
+  "remote.appUpdate": "新しいアプリがあります：{ver}"
 }

@@ -768,5 +768,10 @@
   "target.noSavedTargets": "Ingen gemte målenheder.",
   "target.forget": "Glem",
   "target.select": "Vælg",
-  "library.noSubfolders": "Ingen undermapper."
+  "library.noSubfolders": "Ingen undermapper.",
+  "target.remoteVersion": "version: {ver}",
+  "target.remoteUpdate": "Der findes en nyere Aqulify til denne computer: {ver}",
+  "target.hideUpdate": "Mind mig ikke om denne version",
+  "remote.deviceVersion": "app: {ver}",
+  "remote.appUpdate": "Nyere app tilgængelig: {ver}"
 }

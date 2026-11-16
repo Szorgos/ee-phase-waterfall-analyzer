@@ -768,5 +768,10 @@
   "target.noSavedTargets": "Δεν υπάρχουν αποθηκευμένες συσκευές.",
   "target.forget": "Διαγραφή",
   "target.select": "Επιλογή",
-  "library.noSubfolders": "Δεν υπάρχουν υποφάκελοι."
+  "library.noSubfolders": "Δεν υπάρχουν υποφάκελοι.",
+  "target.remoteVersion": "έκδοση: {ver}",
+  "target.remoteUpdate": "Υπάρχει νεότερο Aqulify για αυτόν τον υπολογιστή: {ver}",
+  "target.hideUpdate": "Να μη γίνει υπενθύμιση για αυτήν την έκδοση",
+  "remote.deviceVersion": "εφαρμογή: {ver}",
+  "remote.appUpdate": "Υπάρχει νεότερη εφαρμογή: {ver}"
 }

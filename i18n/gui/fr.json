@@ -768,5 +768,10 @@
   "target.noSavedTargets": "Aucun appareil enregistré.",
   "target.forget": "Oublier",
   "target.select": "Sélectionner",
-  "library.noSubfolders": "Aucun sous-dossier."
+  "library.noSubfolders": "Aucun sous-dossier.",
+  "target.remoteVersion": "version : {ver}",
+  "target.remoteUpdate": "Une version plus récente d'Aqulify est disponible pour cet ordinateur : {ver}",
+  "target.hideUpdate": "Ne plus me signaler cette version",
+  "remote.deviceVersion": "app : {ver}",
+  "remote.appUpdate": "Application plus récente disponible : {ver}"
 }

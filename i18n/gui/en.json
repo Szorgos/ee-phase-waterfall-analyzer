@@ -768,5 +768,10 @@
   "target.noSavedTargets": "No saved target machines.",
   "target.forget": "Forget",
   "target.select": "Select",
-  "library.noSubfolders": "No subfolders."
+  "library.noSubfolders": "No subfolders.",
+  "target.remoteVersion": "version: {ver}",
+  "target.remoteUpdate": "A newer Aqulify is available for this computer: {ver}",
+  "target.hideUpdate": "Don't remind me about this version",
+  "remote.deviceVersion": "app: {ver}",
+  "remote.appUpdate": "Newer app available: {ver}"
 }

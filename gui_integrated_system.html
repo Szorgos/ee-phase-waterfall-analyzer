@@ -5003,6 +5003,9 @@ var qrcode = function() {
     <div style="display:flex; align-items:center; gap:8px;">
       <svg class="aq-icon aq-icon-sm" aria-hidden="true" style="color:var(--aq-accent);"><use href="#i-network"/></svg>
       <span id="remoteBannerText" style="font-weight:600;">Vezérelt gép: Távoli Gép</span>
+      <span id="remoteBannerVer" class="ao-hint" style="margin:0;"></span>
+      <span id="remoteBannerUpd" class="ao-hint" style="margin:0; color:var(--aq-accent);" hidden></span>
+      <button type="button" id="btnRemoteUpdHide" class="mini-btn" hidden data-i18n="target.hideUpdate" onclick="hideRemoteUpdate()">Ne szólj erről a verzióról</button>
     </div>
     <button type="button" class="mini-btn" onclick="switchControlledMachine('')" data-i18n="target.switchBack">Vissza a saját géphez</button>
   </div>
@@ -11566,16 +11569,57 @@ function updateTargetMachineSelect() {
   sel.value = controlledTargetId;
 }
 
+/** Igaz, ha az a verzió (X.Y.Z) frissebb a b-nél; érvénytelen értéknél hamis. */
+function aqVerNewer(a, b) {
+  const re = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/;
+  if (typeof a !== "string" || typeof b !== "string" || !re.test(a) || !re.test(b)) return false;
+  const x = a.split(".").map(Number), y = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+  return false;
+}
+
+/** A vezérelt (távoli) gép verziója és a gép saját ellenőrzése szerinti frissebb kiadás (a "status" üzenetből). */
+let remoteEngineVer = "", remoteEngineUpd = "";
+
+function remoteUpdHideKey() { return "aq_upd_hide_" + controlledTargetId + "_" + remoteEngineUpd; }
+
+function hideRemoteUpdate() {
+  try { localStorage.setItem(remoteUpdHideKey(), "1"); } catch (e) {}
+  updateRemoteBanner();
+}
+
 function updateRemoteBanner() {
   const banner = document.getElementById("remoteControlBanner");
   const text = document.getElementById("remoteBannerText");
   if (!banner || !text) return;
+  const verEl = document.getElementById("remoteBannerVer");
+  const updEl = document.getElementById("remoteBannerUpd");
+  const hideBtn = document.getElementById("btnRemoteUpdHide");
   if (controlledTargetId) {
     banner.hidden = false;
     text.textContent = t("target.controlledBanner", { name: controlledTargetName || "Távoli gép" });
+    if (verEl) verEl.textContent = remoteEngineVer ? t("target.remoteVersion", { ver: remoteEngineVer }) : "";
+    let hidden = false;
+    try { hidden = !!remoteEngineUpd && localStorage.getItem(remoteUpdHideKey()) === "1"; } catch (e) {}
+    const showUpd = !!remoteEngineUpd && !hidden;
+    if (updEl) { updEl.hidden = !showUpd; updEl.textContent = showUpd ? t("target.remoteUpdate", { ver: remoteEngineUpd }) : ""; }
+    if (hideBtn) hideBtn.hidden = !showUpd;
   } else {
     banner.hidden = true;
+    remoteEngineVer = remoteEngineUpd = "";
   }
+}
+
+/** A "status" üzenetből: relay módban a távoli gép verziója és a frissítési jelzése a sávba kerül. */
+function onRemoteEngineVersion(data) {
+  if (!controlledTargetId || !data) return;
+  const ver = typeof data.version === "string" ? data.version : "";
+  const upd = data.update_available && typeof data.update_available.ver === "string" && aqVerNewer(data.update_available.ver, ver)
+    ? data.update_available.ver : "";
+  if (ver === remoteEngineVer && upd === remoteEngineUpd) return;
+  remoteEngineVer = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(ver) ? ver : "";
+  remoteEngineUpd = upd;
+  updateRemoteBanner();
 }
 
 function updateRemoteForbiddenControls() {
@@ -11856,7 +11900,9 @@ function initPipewireBridge() {
         guiStateSynced = false;
         renderZoneBar();
       }
-      pipewireWs.send(JSON.stringify({ type: "hello", client: "gui_integrated_system" }));
+      // A saját verzió: relay módban a távoli gép a párosított asztali gépnél ebből mutatja (a helyi motor nem használja)
+      const guiVer = (document.getElementById("lblAppVersion") || {}).dataset ? document.getElementById("lblAppVersion").dataset.guiVersion : "";
+      pipewireWs.send(JSON.stringify({ type: "hello", client: "gui_integrated_system", app_version: guiVer || "", platform: "desktop" }));
       pipewireWs.send(JSON.stringify({ type: "get_multiout" }));
       // A választott kimenetet a motor maga jegyzi meg (~/.config/aqulify/output_sink.txt)
       console.log("[Motor Bridge] Élő C++ hangmotorhoz csatlakozva!");
@@ -11902,6 +11948,7 @@ function initPipewireBridge() {
         }
         if (data && data.type === "restore") { engineRestoreSeen = true; onRestoreState(data); return; }
         if (data && (data.type === "state" || data.type === "status" || data.type === "spectrum")) engineVerified = true;
+        if (data && data.type === "status") onRemoteEngineVersion(data);
         if (aqNowPlaying && data) {
           // a "state" részüzenetei (ir, sync) nem hordoznak képességeket: csak a caps-os állapot számít
           if (data.type === "state" && Array.isArray(data.caps)) aqNowPlaying.onState(data);
@@ -13023,7 +13070,17 @@ function renderRemotePanel() {
     sub.style.margin = "0";
     sub.textContent = dv.online ? t("remote.online")
       : t("remote.lastSeen", { when: new Date((dv.last || 0) * 1000).toLocaleString(AQ_LOCALES[aqLang] || undefined) });
+    if (typeof dv.ver === "string" && dv.ver) sub.textContent += " · " + t("remote.deviceVersion", { ver: dv.ver });
     info.append(name, sub);
+    // A párosított telefon régebbi appot futtat, mint a legújabb kiadás (a gép saját ellenőrzése szerint)
+    const latestApp = st && st.latest && st.latest.android;
+    if (dv.platform === "android" && aqVerNewer(latestApp, dv.ver)) {
+      const upd = document.createElement("div");
+      upd.className = "ao-hint";
+      upd.style.cssText = "margin:0; color:var(--aq-accent);";
+      upd.textContent = t("remote.appUpdate", { ver: latestApp });
+      info.append(upd);
+    }
     const adminLabel = document.createElement("label");
     adminLabel.style.cssText = "display:flex; align-items:center; gap:6px; font-size:0.8rem; color:var(--aq-text-2); cursor:pointer; user-select:none;";
     const adminChk = document.createElement("input");

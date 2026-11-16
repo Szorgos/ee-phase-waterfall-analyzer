@@ -768,5 +768,10 @@
   "target.noSavedTargets": "저장된 대상 기기가 없습니다.",
   "target.forget": "삭제",
   "target.select": "선택",
-  "library.noSubfolders": "하위 폴더가 없습니다."
+  "library.noSubfolders": "하위 폴더가 없습니다.",
+  "target.remoteVersion": "버전: {ver}",
+  "target.remoteUpdate": "이 컴퓨터용 최신 Aqulify가 있습니다: {ver}",
+  "target.hideUpdate": "이 버전은 다시 알리지 않기",
+  "remote.deviceVersion": "앱: {ver}",
+  "remote.appUpdate": "최신 앱이 있습니다: {ver}"
 }

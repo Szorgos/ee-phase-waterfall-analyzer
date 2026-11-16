@@ -768,5 +768,10 @@
   "target.noSavedTargets": "Keine gespeicherten Zielgeräte.",
   "target.forget": "Vergessen",
   "target.select": "Auswählen",
-  "library.noSubfolders": "Keine Unterordner."
+  "library.noSubfolders": "Keine Unterordner.",
+  "target.remoteVersion": "Version: {ver}",
+  "target.remoteUpdate": "Für diesen Computer ist ein neueres Aqulify verfügbar: {ver}",
+  "target.hideUpdate": "Für diese Version nicht mehr erinnern",
+  "remote.deviceVersion": "App: {ver}",
+  "remote.appUpdate": "Neuere App verfügbar: {ver}"
 }
