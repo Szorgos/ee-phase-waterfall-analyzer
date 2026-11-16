@@ -34,6 +34,7 @@
 #include <systemd/sd-bus.h>
 #endif
 
+#include "dsd.hpp"
 #include "exclusive_dsp.hpp"
 #include "file_player.hpp"
 #include "pcm_convert.hpp"
@@ -218,7 +219,10 @@ public:
         {
             std::lock_guard<std::mutex> lk(renderMutex_);
             render_ = std::move(render);
+            renderDop_ = nullptr;
         }
+        dopMode_ = false;
+        dopError_.clear();
         rate_ = sampleRate;
         active_ = false;
         quit_ = false;
@@ -248,8 +252,49 @@ public:
             thread_.join();
         }
         open_ = false;
+        dopMode_ = false;
         std::lock_guard<std::mutex> lk(renderMutex_);
         render_ = nullptr;
+        renderDop_ = nullptr;
+    }
+
+    /**
+     * Natív DSD (DoP 1.1) hangfolyam megnyitása közvetlen ALSA kimeneten.
+     * Formátum: SND_PCM_FORMAT_S32_LE (24 bit az int32 felső 24 bitjén, MSB-igazítva) vagy SND_PCM_FORMAT_S24_3LE.
+     * Ha a hardver nem fogadja el a mintavételt vagy formátumot, false-szal tér vissza ("format", "busy").
+     * Források (ellenőrizve: 2026-11-16):
+     *   https://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m.html
+     *   https://www.alsa-project.org/alsa-doc/alsa-lib/group___p_c_m___h_w___params.html
+     */
+    bool openDop(uint32_t dopSampleRate, RenderDopFn render, std::string* error) override {
+        close();
+        {
+            std::lock_guard<std::mutex> lk(renderMutex_);
+            render_ = nullptr;
+            renderDop_ = std::move(render);
+        }
+        dopMode_ = true;
+        dopError_.clear();
+        rate_ = dopSampleRate;
+        active_ = false;
+        quit_ = false;
+        flushReq_ = false;
+        written_ = 0;
+        consumed_ = 0;
+        initState_ = 0;
+        quantLoss_ = false;
+        rtPriority_ = 0;
+        thread_ = std::thread([this] { run(); });
+        std::unique_lock<std::mutex> lk(initMutex_);
+        initCv_.wait(lk, [this] { return initState_ != 0; });
+        if (initState_ < 0) {
+            lk.unlock();
+            const std::string why = dopError_.empty() ? "format" : dopError_;
+            close();
+            if (error) *error = why;
+            return false;
+        }
+        return true;
     }
 
     void setActive(bool active) override {
@@ -271,21 +316,55 @@ public:
     uint32_t overruns() const { return overruns_.load(); }
     /** A kimeneti szál valós idejű (SCHED_FIFO) prioritása, vagy 0, ha normál prioritással fut. */
     int realtimePriority() const { return rtPriority_.load(); }
+    bool isDopMode() const { return dopMode_.load(); }
+    void setDopTap(std::function<void(const int32_t*, size_t)> fn) { dopTap_ = std::move(fn); }
+    void setRawTap(std::function<void(const uint8_t*, size_t, const AlsaFormat&)> fn) { rawTap_ = std::move(fn); }
 
 private:
     void setError(const std::string& e) { std::lock_guard<std::mutex> lk(infoMutex_); error_ = e; }
+
+    /**
+     * 24 bites DoP szó (az int32_t alsó 24 bitjén: [23:16]=marker, [15:8]=b0, [7:0]=b1) bitpontos átadása az ALSA
+     * kizárólagos pufferébe: 32 bites keretben (SND_PCM_FORMAT_S32_LE) a felső 24 biten (8 bittel balra tolva:
+     * [31:24]=marker, [23:16]=b0, [15:8]=b1, [7:0]=0, MSB-igazítva), 24 bites tömörített keretben (SND_PCM_FORMAT_S24_3LE)
+     * 3 kis-endián bájton (b1, b0, marker).
+     */
+    static void convertDop(const int32_t* in, uint8_t* out, size_t samples, const AlsaFormat& f) {
+        if (f.bits == 32) {
+            for (size_t i = 0; i < samples; ++i) {
+                const uint32_t w = (static_cast<uint32_t>(in[i]) & 0x00FFFFFFu) << 8;
+                std::memcpy(out + i * 4, &w, 4);
+            }
+        } else if (f.bits == 24) {
+            for (size_t i = 0; i < samples; ++i) {
+                const uint32_t u = static_cast<uint32_t>(in[i]);
+                out[i * 3]     = static_cast<uint8_t>(u & 0xFFu);
+                out[i * 3 + 1] = static_cast<uint8_t>((u >> 8) & 0xFFu);
+                out[i * 3 + 2] = static_cast<uint8_t>((u >> 16) & 0xFFu);
+            }
+        }
+    }
 
     /** A hangkártya megnyitása és beállítása a szálon; false: a hiba oka a lastError()-ban. */
     bool openDevice(snd_pcm_t*& pcm, AlsaFormat& f, snd_pcm_uframes_t& period, bool& canPause) {
         std::string dev;
         { std::lock_guard<std::mutex> lk(infoMutex_); dev = device_; }
         if (dev.empty()) dev = defaultAlsaDevice();
-        if (dev.empty()) { setError("nincs hangkártya"); return false; }
+        if (dev.empty()) {
+            setError("nincs hangkártya");
+            if (dopMode_) dopError_ = "format";
+            return false;
+        }
         std::string why;
-        if (!reservation_.acquire(alsaCardIndex(dev), &why)) { setError(why); return false; }
+        if (!reservation_.acquire(alsaCardIndex(dev), &why)) {
+            setError(why);
+            if (dopMode_) dopError_ = "busy";
+            return false;
+        }
         int r = snd_pcm_open(&pcm, dev.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
         if (r < 0) {
             setError(std::string("a hangkártya nem nyitható meg (") + dev + "): " + snd_strerror(r));
+            if (dopMode_) dopError_ = (r == -EBUSY) ? "busy" : "format";
             reservation_.release();
             pcm = nullptr;
             return false;
@@ -295,31 +374,49 @@ private:
         snd_pcm_hw_params_any(pcm, hw);
         snd_pcm_hw_params_set_rate_resample(pcm, hw, 0);                 // átalakítás nélkül
         snd_pcm_hw_params_set_access(pcm, hw, SND_PCM_ACCESS_RW_INTERLEAVED);
-        const AlsaFormat formats[] = {
+        const AlsaFormat pcmFormats[] = {
             { SND_PCM_FORMAT_S32_LE, 32, 32, 0, "32 bit" },
             { SND_PCM_FORMAT_S24_3LE, 24, 24, 24, "24 bit" },
             { SND_PCM_FORMAT_S16_LE, 16, 16, 16, "16 bit" },
         };
+        const AlsaFormat dopFormats[] = {
+            { SND_PCM_FORMAT_S32_LE, 32, 24, 0, "24/32 bit DoP" },
+            { SND_PCM_FORMAT_S24_3LE, 24, 24, 24, "24 bit DoP" },
+        };
         bool fmtOk = false;
-        for (const auto& c : formats) {
-            if (snd_pcm_hw_params_test_format(pcm, hw, c.fmt) == 0 && snd_pcm_hw_params_set_format(pcm, hw, c.fmt) == 0) {
-                f = c;
-                fmtOk = true;
-                break;
+        if (dopMode_) {
+            for (const auto& c : dopFormats) {
+                if (snd_pcm_hw_params_test_format(pcm, hw, c.fmt) == 0 && snd_pcm_hw_params_set_format(pcm, hw, c.fmt) == 0) {
+                    f = c;
+                    fmtOk = true;
+                    break;
+                }
+            }
+        } else {
+            for (const auto& c : pcmFormats) {
+                if (snd_pcm_hw_params_test_format(pcm, hw, c.fmt) == 0 && snd_pcm_hw_params_set_format(pcm, hw, c.fmt) == 0) {
+                    f = c;
+                    fmtOk = true;
+                    break;
+                }
             }
         }
         const unsigned rate = rate_;
-        auto fail = [&](const std::string& e) {
+        auto fail = [&](const std::string& e, const char* dopCode = "format") {
             setError(e);
+            if (dopMode_) dopError_ = dopCode;
             snd_pcm_close(pcm);
             pcm = nullptr;
             reservation_.release();
             return false;
         };
-        if (!fmtOk) return fail("a hangkártya nem fogad 32, 24 vagy 16 bites egész mintát");
-        if (snd_pcm_hw_params_set_channels(pcm, hw, 2) < 0) return fail("a hangkártya nem fogad sztereó jelet");
+        if (!fmtOk) {
+            return fail(dopMode_ ? "a hangkártya nem fogad 32 vagy 24 bites egész mintát DoP-hoz"
+                                 : "a hangkártya nem fogad 32, 24 vagy 16 bites egész mintát", "format");
+        }
+        if (snd_pcm_hw_params_set_channels(pcm, hw, 2) < 0) return fail("a hangkártya nem fogad sztereó jelet", "format");
         if (snd_pcm_hw_params_set_rate(pcm, hw, rate, 0) < 0)
-            return fail("a hangkártya nem tudja ezt a mintavételt: " + std::to_string(rate) + " Hz");
+            return fail("a hangkártya nem tudja ezt a mintavételt: " + std::to_string(rate) + " Hz", "format");
         period = std::max<snd_pcm_uframes_t>(64, rate / 100);              // kb. 10 ms
         int dir = 0;
         snd_pcm_hw_params_set_period_size_near(pcm, hw, &period, &dir);
@@ -380,7 +477,7 @@ private:
         snd_pcm_uframes_t period = 0;
         bool canPause = false;
         const bool ok = openDevice(pcm, f, period, canPause);
-        if (ok && dsp_) dsp_->prepare(rate_, static_cast<uint32_t>(period), f.ditherBits);
+        if (ok && dsp_ && !dopMode_) dsp_->prepare(rate_, static_cast<uint32_t>(period), f.ditherBits);
         open_ = ok;
         {
             std::lock_guard<std::mutex> lk(initMutex_);
@@ -388,9 +485,12 @@ private:
         }
         initCv_.notify_all();
         if (!ok) return;
-        std::cout << "[Lejátszó] Közvetlen ALSA-kimenet (kizárólagos): " << describe() << ".\n";
+        std::cout << "[Lejátszó] Közvetlen ALSA-kimenet (kizárólagos" << (dopMode_ ? ", DoP" : "") << "): " << describe() << ".\n";
 
-        std::vector<float> buf(period * 2);
+        std::vector<float> buf;
+        std::vector<int32_t> dopBuf;
+        if (dopMode_) dopBuf.resize(period * 2);
+        else buf.resize(period * 2);
         std::vector<uint8_t> out(period * 2 * static_cast<size_t>(f.bits / 8));
         bool running = false, paused = false;
         uint64_t sinceFlush = 0;
@@ -412,13 +512,32 @@ private:
                 continue;
             }
             if (paused) { snd_pcm_pause(pcm, 0); paused = false; }
-            {
-                std::lock_guard<std::mutex> lk(renderMutex_);
-                if (render_) render_(buf.data(), period);
-                else std::fill(buf.begin(), buf.end(), 0.0f);
+            if (dopMode_) {
+                {
+                    std::lock_guard<std::mutex> lk(renderMutex_);
+                    if (renderDop_) renderDop_(dopBuf.data(), period);
+                    else {
+                        for (size_t i = 0; i < period; ++i) {
+                            const uint8_t marker = ((written_ + i) & 1u) ? 0xFAu : 0x05u;
+                            const int32_t w = dsd::packDopSample(dsd::kDsdSilenceByte, dsd::kDsdSilenceByte, marker);
+                            dopBuf[2 * i] = w;
+                            dopBuf[2 * i + 1] = w;
+                        }
+                    }
+                }
+                if (dopTap_) dopTap_(dopBuf.data(), period);
+                // DoP módban a DSP-lánc, a digitális hangerő és a mérők/tap teljesen kimaradnak
+                convertDop(dopBuf.data(), out.data(), period * 2, f);
+                if (rawTap_) rawTap_(out.data(), period * 2 * static_cast<size_t>(f.bits / 8), f);
+            } else {
+                {
+                    std::lock_guard<std::mutex> lk(renderMutex_);
+                    if (render_) render_(buf.data(), period);
+                    else std::fill(buf.begin(), buf.end(), 0.0f);
+                }
+                if (dsp_) dsp_->process(buf.data(), period);
+                if (!pcm::floatToInt(buf.data(), out.data(), period * 2, f.bits, f.valid)) quantLoss_ = true;
             }
-            if (dsp_) dsp_->process(buf.data(), period);
-            if (!pcm::floatToInt(buf.data(), out.data(), period * 2, f.bits, f.valid)) quantLoss_ = true;
             const uint8_t* p = out.data();
             snd_pcm_uframes_t left = period;
             while (left > 0 && !quit_) {
@@ -432,6 +551,7 @@ private:
                 p += static_cast<size_t>(n) * 2 * static_cast<size_t>(f.bits / 8);
                 left -= static_cast<snd_pcm_uframes_t>(n);
                 sinceFlush += static_cast<uint64_t>(n);
+                written_ += static_cast<uint64_t>(n);
             }
             running = true;
             snd_pcm_sframes_t delay = 0;
@@ -449,18 +569,21 @@ private:
     ExclusiveDsp* dsp_ = nullptr;
     AudioDeviceReservation reservation_;
     RenderFn render_;
+    RenderDopFn renderDop_;
     std::mutex renderMutex_;
     std::thread thread_;
     std::atomic<uint32_t> rate_{0};
-    std::atomic<bool> active_{false}, quit_{false}, flushReq_{false}, open_{false}, quantLoss_{false};
+    std::atomic<bool> active_{false}, quit_{false}, flushReq_{false}, open_{false}, quantLoss_{false}, dopMode_{false};
     std::atomic<int> rtPriority_{0};
     std::atomic<uint64_t> written_{0}, consumed_{0};
     std::atomic<uint32_t> overruns_{0};
+    std::function<void(const int32_t*, size_t)> dopTap_;
+    std::function<void(const uint8_t*, size_t, const AlsaFormat&)> rawTap_;
     std::mutex initMutex_, wakeMutex_;
     std::condition_variable initCv_, wakeCv_;
     int initState_ = 0;
     mutable std::mutex infoMutex_;
-    std::string info_, error_, openedDevice_;
+    std::string info_, error_, openedDevice_, dopError_;
 };
 
 } // namespace ee_analyzer::player
