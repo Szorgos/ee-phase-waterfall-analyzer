@@ -1983,6 +1983,128 @@ static void testRemoteAdmin() {
     bridge2.stop();
 }
 
+static void testVersionCheck() {
+    std::printf("[20] Verzióellenőrzés (aqulify-versions.json, a kliens verziója, frissítési jelzés)\n");
+    using namespace vercheck;
+
+    // 1. A verziófájl értelmezése
+    Latest l = parseVersions("{\"desktop\":\"2.3.0\",\"android\":\"1.0.1\",\"protocol\":2,\"min_client_protocol\":2}");
+    CHECK(l.ok && l.desktop == "2.3.0" && l.android == "1.0.1" && l.protocol == 2 && l.minClientProtocol == 2,
+          "érvényes verziófájl: minden mező beolvasva");
+    CHECK(!parseVersions("").ok, "üres válasz: nem érvényes");
+    CHECK(!parseVersions("<html>404</html>").ok, "nem JSON (pl. hibaoldal): nem érvényes");
+    CHECK(!parseVersions("{\"desktop\":\"2.3\"}").ok, "hibás asztali verzió (X.Y): nem érvényes");
+    CHECK(!parseVersions("{\"desktop\":\"2.3.0-beta\"}").ok, "hibás asztali verzió (utótag): nem érvényes");
+    CHECK(!parseVersions("{\"android\":\"1.0.1\"}").ok, "asztali verzió nélkül: nem érvényes");
+    l = parseVersions("{\"desktop\":\"2.3.0\",\"android\":\"<script>\",\"protocol\":-5}");
+    CHECK(l.ok && l.android.empty() && l.protocol == 0, "hibás android-verzió és negatív protokoll: kimarad, a többi érvényes");
+    CHECK(!parseVersions("{\"desktop\":\"2.3.0\",\"x\":\"" + std::string(kMaxBytes, 'a') + "\"}").ok,
+          "64 KB-nál nagyobb válasz: nem érvényes");
+
+    // 2. Összevetés, kliensadatok tisztítása
+    CHECK(isNewer("2.3.0", "2.2.1") && isNewer("2.10.0", "2.9.9") && !isNewer("2.3.0", "2.3.0") && !isNewer("2.2.9", "2.3.0"),
+          "verzió-összevetés (számonként, nem szövegként)");
+    CHECK(!isNewer("abc", "2.3.0") && !isNewer("2.3.0", ""), "érvénytelen verzió: nem frissebb");
+    CHECK(cleanClientVersion("1.0.1") == "1.0.1" && cleanClientVersion("1.0.1\"x").empty() &&
+              cleanClientVersion(std::string(100, '1')).empty(),
+          "kliensverzió: csak X.Y.Z marad meg");
+    CHECK(cleanPlatform("android") == "android" && cleanPlatform("desktop") == "desktop" && cleanPlatform("ios").empty(),
+          "platform: csak android / desktop");
+    CHECK(fetchWithCurl("http://example.invalid/x").empty() && fetchWithCurl("https://x'; rm -rf /'").empty(),
+          "curl-letöltés: nem https vagy idézőjeles cím el sem indul");
+
+    // 3. Az ellenőrző állapota
+    Checker chk;
+    CHECK(chk.statusJson().empty(), "adat nélkül nincs latest / update_available mező");
+    chk.setCurrentForTest("2.2.1");
+    chk.apply(parseVersions("{\"desktop\":\"2.3.0\",\"android\":\"1.0.1\",\"protocol\":2,\"min_client_protocol\":2}"));
+    std::string st = chk.statusJson();
+    CHECK(st.find("\"update_available\":{\"ver\":\"2.3.0\"}") != std::string::npos && st.find("\"android\":\"1.0.1\"") != std::string::npos,
+          "régebbi saját verziónál update_available: 2.3.0 (%s)", st.c_str());
+    chk.setCurrentForTest("2.3.0");
+    st = chk.statusJson();
+    CHECK(st.find("update_available") == std::string::npos && st.find("\"latest\"") != std::string::npos,
+          "azonos verziónál nincs update_available, a latest megmarad");
+
+    // 4. A híd: a kliens verziója a párosított eszköznél, mentés, a gép saját ellenőrzése a remote üzenetben
+    std::string savedRemote;
+    BridgeCallbacks cb;
+    cb.pullAudio = [](float*, size_t) -> size_t { return 0; };
+    cb.sampleRate = [] { return 48000.0; };
+    cb.saveRemote = [&](const std::string& j) { savedRemote = j; return true; };
+    cb.loadRemote = [&] { return savedRemote; };
+    Checker chk2;
+    chk2.setCurrentForTest("2.2.1");
+    chk2.apply(parseVersions("{\"desktop\":\"2.3.0\",\"protocol\":2,\"min_client_protocol\":2}"));
+    cb.versionStatus = [&chk2] { return chk2.statusJson(); };
+
+    WebSocketBridge bridge(47897);
+    const bool started = bridge.start(cb);
+    CHECK(started, "a híd elindul a 47897-es porton");
+    if (!started) return;
+    net::socket_t sLocal = wsConnectLive(47897, "/");
+    CHECK(sLocal != net::kInvalidSocket, "helyi kliens csatlakozik");
+    if (sLocal == net::kInvalidSocket) { bridge.stop(); return; }
+
+    wsSendText(sLocal, "{\"type\":\"hello\",\"client\":\"t\"}");
+    const std::string state = wsWaitFor(sLocal, "\"type\":\"state\"", 2000);
+    CHECK(state.find("\"min_client_protocol\":2") != std::string::npos, "a state üzenetben min_client_protocol: 2");
+
+    wsSendText(sLocal, "{\"type\":\"set_remote\",\"enabled\":true,\"port\":47918}");
+    std::string rem = wsWaitFor(sLocal, "\"enabled\":true", 2000);
+    int remPort = 47918;
+    if (json::Value rv; json::parse(rem, rv) && rv.get("port")) remPort = static_cast<int>(rv.get("port")->numberOr(47918));
+    CHECK(rem.find("\"update_available\":{\"ver\":\"2.3.0\"}") != std::string::npos,
+          "a remote üzenetben a gép saját ellenőrzése: update_available 2.3.0");
+
+    wsSendText(sLocal, "{\"type\":\"remote_new_code\"}");
+    std::string code;
+    for (int i = 0; i < 6 && code.size() != 6; ++i) code = jsonField(wsWaitFor(sLocal, "\"code\":\"", 500), "code");
+    CHECK(code.size() == 6, "párosító kód: %s", code.c_str());
+    net::socket_t sPhone = wsConnectLive(remPort, "/?pair=" + code + "&client=aqulify_remote&name=Telefon");
+    CHECK(sPhone != net::kInvalidSocket, "a telefon párosodik");
+    if (sPhone != net::kInvalidSocket) {
+        CHECK(!wsWaitFor(sPhone, "\"type\":\"paired\"", 2000).empty(), "paired üzenet");
+        // hibás verzió: nem tárolja
+        wsSendText(sPhone, "{\"type\":\"hello\",\"client\":\"aqulify-remote\",\"app_version\":\"1.0\\\"x\",\"platform\":\"android\"}");
+        wsWaitFor(sPhone, "\"type\":\"state\"", 2000);
+        wsSendText(sLocal, "{\"type\":\"get_remote\"}");
+        std::string r1 = wsWaitFor(sLocal, "\"devices\":[{", 2000);
+        CHECK(!r1.empty() && r1.find("\"ver\":\"1.0") == std::string::npos && r1.find("\"platform\"") == std::string::npos,
+              "hibás app_version: nem kerül az eszközlistába");
+        // érvényes verzió
+        wsSendText(sPhone, "{\"type\":\"hello\",\"client\":\"aqulify-remote\",\"app_version\":\"1.0.1\",\"platform\":\"android\"}");
+        wsWaitFor(sPhone, "\"type\":\"state\"", 2000);
+        wsSendText(sLocal, "{\"type\":\"get_remote\"}");
+        std::string r2 = wsWaitFor(sLocal, "\"ver\":\"1.0.1\"", 2000);
+        CHECK(!r2.empty() && r2.find("\"platform\":\"android\"") != std::string::npos,
+              "érvényes app_version és platform: az eszközlistában ver 1.0.1, android");
+        CHECK(savedRemote.find("\"ver\":\"1.0.1\"") != std::string::npos, "a verzió a mentett beállításba is bekerül");
+        net::closeSocket(sPhone);
+    }
+    net::closeSocket(sLocal);
+    bridge.stop();
+
+    // 5. Újraindítás után is megvan
+    WebSocketBridge bridge2(47897);
+    CHECK(bridge2.start(cb), "a 2. híd elindul a mentett beállítással");
+    net::socket_t s2 = wsConnectLive(47897, "/");
+    if (s2 != net::kInvalidSocket) {
+        wsSendText(s2, "{\"type\":\"get_remote\"}");
+        CHECK(!wsWaitFor(s2, "\"ver\":\"1.0.1\"", 2000).empty(), "újraindítás után az eszköz verziója megmaradt");
+        net::closeSocket(s2);
+    }
+    bridge2.stop();
+
+    // 6. A --pair kiírja a frissebb verziót
+    paircli::PairInfo pi;
+    CHECK(paircli::parseRemote("{\"type\":\"remote\",\"code\":\"123456\",\"update_available\":{\"ver\":\"2.3.0\"}}", pi) &&
+              pi.updateVer == "2.3.0" && paircli::formatPairInfo(pi, false).find("frissebb Aqulify: 2.3.0") != std::string::npos,
+          "--pair: a frissebb verzió a kiírásban");
+    CHECK(paircli::parseRemote("{\"type\":\"remote\",\"update_available\":{\"ver\":\"x;y\"}}", pi) && pi.updateVer.empty(),
+          "--pair: hibás verziót nem ír ki");
+}
+
 static void testBridgeLoudnessStereo() {
     std::printf("[16] Híd: Loudness és Stereo Tools üzenetek, állapot, A/B és érvényesítés\n");
     std::mutex mu;
@@ -2110,6 +2232,7 @@ int main() {
     testMdnsBrowser();
     testRemoteRelay();
     testRemoteAdmin();
+    testVersionCheck();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

@@ -21,6 +21,7 @@
 
 #include "mini_json.hpp"
 #include "net_compat.hpp"
+#include "update_logic.hpp"
 
 namespace ee_analyzer::paircli {
 
@@ -89,6 +90,7 @@ struct PairInfo {
     std::string code;
     int codeSeconds = 0;
     std::vector<std::string> addresses;
+    std::string updateVer;   // a motor saját ellenőrzése szerint elérhető frissebb kiadás (üres: nincs, vagy nem tudni)
 };
 
 /** A "remote" üzenet értelmezése; false, ha nem ilyen üzenet. */
@@ -106,6 +108,9 @@ inline bool parseRemote(const std::string& text, PairInfo& out) {
     out.addresses.clear();
     if (const json::Value* a = v.get("addresses"); a && a->type == json::Value::Type::Array)
         for (const auto& e : a->arr) if (e.type == json::Value::Type::String && !e.str.empty()) out.addresses.push_back(e.str);
+    out.updateVer.clear();
+    if (const json::Value* u = v.get("update_available"); u && u->type == json::Value::Type::Object)
+        if (const json::Value* ver = u->get("ver")) out.updateVer = update::validVersion(ver->stringOr("")) ? ver->stringOr("") : "";
     return true;
 }
 
@@ -130,6 +135,7 @@ inline std::string formatPairInfo(const PairInfo& p, bool enabledNow, bool admin
         s += "\n";
     }
     if (admin) s += "Adminisztrátori jogosultsággal: az eszköz a zenetárat és a beállításokat is kezelheti.\n";
+    if (!p.updateVer.empty()) s += "Elérhető egy frissebb Aqulify: " + p.updateVer + ".\n";
     s += "A telefonon: Aqulify Remote → Új gép párosítása: a gép címe, a port, a 6 jegyű kód → Párosítás kóddal.\n";
     return s;
 }

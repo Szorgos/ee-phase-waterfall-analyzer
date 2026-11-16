@@ -1032,6 +1032,13 @@ int main(int argc, char* argv[]) {
     cb.setLanguage = [](const std::string& l) {
         if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cerr << "[Nyelv] Figyelem: a language.txt nem írható.\n";
     };
+    // A legújabb kiadás ellenőrzése (6 óránként, a rendszer curl programjával; AQULIFY_NO_UPDATE_CHECK=1: kikapcsolva).
+    // A híd előtt jön létre, így utána szűnik meg (a híd a statusJson-t hívja).
+    vercheck::Checker versionChecker;
+    if (!std::getenv("AQULIFY_NO_UPDATE_CHECK")) {
+        versionChecker.start(vercheck::fetchWithCurl, AQULIFY_VERSION);
+        cb.versionStatus = [&versionChecker] { return versionChecker.statusJson(); };
+    }
 
     std::unique_ptr<WebSocketBridge> bridge;
     for (int p : ports) {

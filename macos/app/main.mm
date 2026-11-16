@@ -19,6 +19,7 @@
 #include <chrono>
 #include <csignal>
 #include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -193,6 +194,7 @@ struct Core {
 
     uint64_t readPos = 0;
     media::MacMediaSession media;   // a gépen szóló lejátszó („most szól”, vezérlés)
+    vercheck::Checker versionChecker;   // a legújabb kiadás ellenőrzése (a híd előtt: utána szűnik meg)
     std::unique_ptr<WebSocketBridge> bridge;
     std::function<void(const std::string&)> broadcast;
     mac::Updater updater;   // frissítés a felület „Frissítés” gombjára: a DMG letöltése, ellenőrzése, megnyitása
@@ -720,6 +722,11 @@ struct Core {
         if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cerr << "[Nyelv] Figyelem: a language.txt nem írható.\n";
         dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf languageChanged]; });
     };
+    // A legújabb kiadás ellenőrzése (6 óránként, a rendszer curl programjával; AQULIFY_NO_UPDATE_CHECK=1: kikapcsolva)
+    if (!std::getenv("AQULIFY_NO_UPDATE_CHECK")) {
+        c->versionChecker.start(vercheck::fetchWithCurl, AQULIFY_VERSION);
+        cb.versionStatus = [c] { return c->versionChecker.statusJson(); };
+    }
 
     for (int p : kEnginePorts) {
         auto b = std::make_unique<WebSocketBridge>(p);

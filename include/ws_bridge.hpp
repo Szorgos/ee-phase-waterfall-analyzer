@@ -46,6 +46,7 @@
 #include "mdns_announcer.hpp"
 #include "mdns_browser.hpp"
 #include "remote_relay.hpp"
+#include "version_check.hpp"
 #include "multi_output_config.hpp"
 #include "media_url.hpp"
 #include "bt_link.hpp"
@@ -179,6 +180,12 @@ struct BridgeCallbacks {
      * meg, különben a webes lejátszóban (media_url.hpp, mediaOpenTarget). Opcionális; nélküle mindig a web.
      */
     std::function<bool(const std::string& scheme)> hasUrlHandler;
+    /**
+     * A legújabb kiadás ellenőrzésének eredménye (version_check.hpp, Checker::statusJson): vesszővel kezdődő JSON-rész
+     * ("latest", és ha van frissebb: "update_available"), üres, ha még nincs adat. Az állapot- és a "remote" üzenetbe
+     * kerül, így a vezérlő eszközök a gép saját ellenőrzését is látják.
+     */
+    std::function<std::string()> versionStatus;
 };
 
 /**
@@ -200,6 +207,9 @@ constexpr size_t kBridgeMaxClients = 8;
 
 /** A vezérlési protokoll verziója (a "state" üzenet "protocol" mezője). 2: több kliens, "sync", távoli elérés. */
 constexpr int kBridgeProtocol = 2;
+
+/** A legrégebbi kliensprotokoll, amellyel a motor minden funkciója működik ("state": "min_client_protocol"). */
+constexpr int kBridgeMinClientProtocol = 2;
 
 /** Hálózati (LAN) elérés: alapból kikapcsolva; bekapcsolva ezen a porton (foglaltság esetén a következőkön) figyel. */
 constexpr int kRemotePortFirst = 47820;
@@ -496,6 +506,7 @@ private:
         std::string app;
         long long created = 0, last = 0;
         bool admin = false;
+        std::string ver, platform;      // a kliens legutóbb közölt verziója (X.Y.Z) és platformja (android / desktop)
     };
 
     bool nextPairAdmin_ = false;
@@ -1425,6 +1436,8 @@ private:
                 d.created = static_cast<long long>(num(e, "created", 0.0));
                 d.last = static_cast<long long>(num(e, "last", 0.0));
                 d.admin = num(e, "admin", 0.0) != 0.0;
+                d.ver = vercheck::cleanClientVersion(e.get("ver") ? e.get("ver")->stringOr("") : "");
+                d.platform = vercheck::cleanPlatform(e.get("platform") ? e.get("platform")->stringOr("") : "");
                 if (bridge_detail::isHex(d.id) && d.hash.size() == 40 && bridge_detail::isHex(d.hash)) devices_.push_back(d);
             }
         }
@@ -1448,6 +1461,8 @@ private:
             s += "{\"id\":\"" + d.id + "\",\"name\":\"" + jsonEscape(d.name) + "\",\"hash\":\"" + d.hash + "\"";
             if (!d.app.empty()) s += ",\"app\":\"" + d.app + "\"";
             if (d.admin) s += ",\"admin\":true";
+            if (!d.ver.empty()) s += ",\"ver\":\"" + d.ver + "\"";
+            if (!d.platform.empty()) s += ",\"platform\":\"" + d.platform + "\"";
             s += ",\"created\":" + std::to_string(d.created) + ",\"last\":" + std::to_string(d.last) + "}";
         }
         s += "]}";
@@ -1485,10 +1500,36 @@ private:
             if (i) s += ',';
             s += "{\"id\":\"" + d.id + "\",\"name\":\"" + jsonEscape(d.name) + "\",\"created\":" + std::to_string(d.created) +
                  ",\"last\":" + std::to_string(d.last) + ",\"admin\":" + (d.admin ? "true" : "false") +
-                 ",\"online\":" + (online ? "true" : "false") + "}";
+                 ",\"online\":" + (online ? "true" : "false");
+            if (!d.ver.empty()) s += ",\"ver\":\"" + d.ver + "\"";
+            if (!d.platform.empty()) s += ",\"platform\":\"" + d.platform + "\"";
+            s += '}';
         }
-        s += "]}";
+        s += ']';
+        if (cb_.versionStatus) s += cb_.versionStatus();   // a gép saját ellenőrzése (pl. az --pair kiírja)
+        s += '}';
         return s;
+    }
+
+    /**
+     * A kapcsolódó távoli kliens a "hello"-ban közli az alkalmazása verzióját és platformját ("app_version",
+     * "platform"); a motor a párosított eszköz bejegyzésében tárolja (a Távirányító panel mutatja). Hibás vagy
+     * hiányzó értéket nem tárol (a régi app verziót nem küld: "ismeretlen").
+     */
+    void recordClientVersion(const json::Value& msg) {
+        if (!cur_ || !cur_->remote || cur_->deviceId.empty()) return;
+        const std::string ver = vercheck::cleanClientVersion(msg.get("app_version") ? msg.get("app_version")->stringOr("") : "");
+        const std::string plat = vercheck::cleanPlatform(msg.get("platform") ? msg.get("platform")->stringOr("") : "");
+        if (ver.empty()) return;
+        for (auto& d : devices_) {
+            if (d.id != cur_->deviceId) continue;
+            if (d.ver == ver && d.platform == plat) return;
+            d.ver = ver;
+            d.platform = plat;
+            saveRemoteConfig();
+            broadcastRemoteState();
+            return;
+        }
     }
 
     void broadcastRemoteState() {
@@ -1971,6 +2012,7 @@ private:
             return;
         }
         if (type == "hello" || type == "get_state") {
+            if (type == "hello") recordClientVersion(msg);
             // a visszaállítás állapota ELŐBB megy: a felület így tudja, hogy a motor állapotát nem tolja vissza
             if (!remote && cb_.restoreStatus) {
                 const std::string r = cb_.restoreStatus();
@@ -2309,6 +2351,7 @@ private:
 #ifdef AQULIFY_VERSION
         s += ",\"version\":\"" AQULIFY_VERSION "\"";   // a felület ebből látja, ha a motor más verziójú
 #endif
+        if (cb_.versionStatus) s += cb_.versionStatus();   // a legújabb kiadás (a gép saját ellenőrzése)
         // A motor elérési útja: verzióeltérésnél a felület megnevezi a futó (régi) motort
         static const std::string exe = selfExePath();
         if (!exe.empty()) s += ",\"exe\":\"" + jsonEscape(exe) + "\"";
@@ -2348,6 +2391,7 @@ public:
         std::string s = "{\"type\":\"state\",\"reason\":\"";
         s += reason;
         s += "\",\"protocol\":" + std::to_string(kBridgeProtocol);
+        s += ",\"min_client_protocol\":" + std::to_string(kBridgeMinClientProtocol);
         s += ",\"admin\":" + std::string(curIsAdmin() ? "true" : "false");
         if (zoned) s += ",\"zone\":" + std::to_string(zone);   // a 2–4. kimenet lánca (a fő állapotot nem írja felül)
         // 2.x: zenetár (a telefon Zenetár füle), lejátszási sor, telefonos zeneátvitel

@@ -1078,6 +1078,20 @@ int main(int argc, char** argv) {
     cb.setLanguage = [](const std::string& l) {
         if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cout << "[Nyelv] Figyelem: a language.txt nem írható.\n";
     };
+    // A legújabb kiadás ellenőrzése (6 óránként, WinHTTP-vel; AQULIFY_NO_UPDATE_CHECK=1: kikapcsolva). A híd előtt
+    // jön létre, így utána szűnik meg (a híd a statusJson-t hívja).
+    vercheck::Checker versionChecker;
+    if (!std::getenv("AQULIFY_NO_UPDATE_CHECK")) {
+        versionChecker.start([](const std::string& url) -> std::string {
+            const std::wstring tmp = userFilePath(L"latest-versions.json", true);
+            const std::wstring wurl(url.begin(), url.end());   // a cím rögzített, csak ASCII
+            std::string text;
+            if (win::downloadFile(wurl, tmp, nullptr, nullptr)) text = readSmallFile(tmp, vercheck::kMaxBytes);
+            DeleteFileW(tmp.c_str());
+            return text;
+        }, AQULIFY_VERSION);
+        cb.versionStatus = [&versionChecker] { return versionChecker.statusJson(); };
+    }
 
     std::unique_ptr<WebSocketBridge> bridge;
     for (int p : ports) {
