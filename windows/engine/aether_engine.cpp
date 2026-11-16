@@ -711,7 +711,8 @@ int main(int argc, char** argv) {
         std::vector<int> pairPorts(std::begin(kEnginePorts), std::end(kEnginePorts));
         for (int i = 1; i + 1 < argc; ++i)
             if (std::strcmp(argv[i], "--port") == 0) pairPorts = { std::atoi(argv[i + 1]) };
-        return paircli::run(pairPorts, "Indítsd el az Aqulify-t.", out ? out : stdout);
+        const bool admin = hasArg(argc, argv, "--admin");
+        return paircli::run(pairPorts, "Indítsd el az Aqulify-t.", out ? out : stdout, admin);
     }
     const bool console = hasArg(argc, argv, "--console");
     win::LogSink log(console);
@@ -1003,6 +1004,8 @@ int main(int argc, char** argv) {
     }, &phoneCache);
     cb.loadRemote = [] { return readSmallFile(userFilePath(L"remote.json", false), 256 * 1024); };
     cb.saveRemote = [](const std::string& doc) { return writeFileAtomic(userFilePath(L"remote.json", true), doc); };
+    cb.loadTargets = [] { return readSmallFile(userFilePath(L"remote-targets.json", false), 256 * 1024); };
+    cb.saveTargets = [](const std::string& doc) { return writeFileAtomic(userFilePath(L"remote-targets.json", true), doc); };
     // Ablak bezárása „Bezárás” választással: ugyanaz, mint a tálcamenü „Kilépés” pontja (rendes leállás)
     static std::atomic<win::TrayApp*> s_tray{ nullptr };
     cb.quitEngine = [] { if (win::TrayApp* t = s_tray.load()) t->quit(); };

@@ -44,6 +44,8 @@
 #include "self_path.hpp"
 #include "media_session.hpp"
 #include "mdns_announcer.hpp"
+#include "mdns_browser.hpp"
+#include "remote_relay.hpp"
 #include "multi_output_config.hpp"
 #include "media_url.hpp"
 #include "bt_link.hpp"
@@ -90,6 +92,9 @@ struct BridgeCallbacks {
     /** A hálózati elérés beállításai és a párosított eszközök JSON-ban (opcionális; nélküle a beállítás nem marad meg). */
     std::function<std::string()> loadRemote;
     std::function<bool(const std::string&)> saveRemote;
+    /** A mentett távoli célgépek (remote-targets.json) olvasása / mentése (opcionális). */
+    std::function<std::string()> loadTargets;
+    std::function<bool(const std::string&)> saveTargets;
     /** A gépen szóló lejátszó ("most szól") JSON objektumként (media::toJson); üres: nincs ilyen szolgáltatás (opcionális). */
     std::function<std::string()> mediaJson;
     /** Lejátszásvezérlés: play / pause / toggle / next / previous / seek (value: pozíció másodpercben). */
@@ -287,6 +292,17 @@ inline std::string queryParam(const std::string& request, const char* name) {
     return {};
 }
 
+/** A kérés sorából a kért útvonal (pl. GET /relay?target=... -> "/relay"). */
+inline std::string requestPath(const std::string& request) {
+    const size_t sp1 = request.find(' ');
+    if (sp1 == std::string::npos) return {};
+    const size_t sp2 = request.find(' ', sp1 + 1);
+    if (sp2 == std::string::npos) return {};
+    std::string pathAndQuery = request.substr(sp1 + 1, sp2 - sp1 - 1);
+    const size_t q = pathAndQuery.find('?');
+    return q == std::string::npos ? pathAndQuery : pathAndQuery.substr(0, q);
+}
+
 /** Eszköznév a felületnek: vezérlőkarakterek nélkül, legfeljebb 40 bájt, egész UTF-8 karakterekkel. */
 inline std::string cleanName(const std::string& in) {
     std::string out;
@@ -345,7 +361,7 @@ inline std::vector<std::string> localAddresses() {
 class WebSocketBridge {
 public:
     explicit WebSocketBridge(int port = 8080) : port_(port) {}
-    ~WebSocketBridge() { stop(); }
+    ~WebSocketBridge() { stop(); if (discoveryWorker_.joinable()) discoveryWorker_.join(); }
 
     WebSocketBridge(const WebSocketBridge&) = delete;
     WebSocketBridge& operator=(const WebSocketBridge&) = delete;
@@ -367,6 +383,10 @@ public:
         std::cout << "[WS Bridge] Élő WebSocket híd: ws://127.0.0.1:" << port_ << "\n";
         if (lineTestPort_ > 0) lineTestListener_ = openListener(INADDR_LOOPBACK, lineTestPort_);
         loadRemoteConfig();
+        relayManager_.setStorage(
+            [this]() { return cb_.loadTargets ? cb_.loadTargets() : std::string(); },
+            [this](const std::string& j) { return cb_.saveTargets ? cb_.saveTargets(j) : false; }
+        );
         running_ = true;
         thread_ = std::thread(&WebSocketBridge::run, this);
         return true;
@@ -375,6 +395,9 @@ public:
     void stop() {
         if (!running_.exchange(false)) return;
         if (thread_.joinable()) thread_.join();
+        if (discoveryWorker_.joinable()) discoveryWorker_.join();
+        joinAsync();
+        relayManager_.closeAll();
         for (auto& c : clients_) net::closeSocket(c->sock);
         clients_.clear();
         for (auto& p : pending_) net::closeSocket(p.sock);
@@ -404,6 +427,7 @@ public:
     }
     bool remoteEnabled() const { return remoteEnabled_; }
     std::string currentPairCode() const { return pairCode_; }
+    bool pairingOpen() const { return remoteListener_ != net::kInvalidSocket && !pairCode_.empty() && clock::now() < pairUntil_; }
 
     /**
      * CSAK TESZTHEZ (a motor nem hívja): a start() a 127.0.0.1:port TCP-porton is fogad soros (Bluetooth-protokollú)
@@ -471,7 +495,19 @@ private:
         // telepítés újra párosodik (pl. megváltozott a gép címe), a régi bejegyzés helyére kerül, nem gyűlnek.
         std::string app;
         long long created = 0, last = 0;
+        bool admin = false;
     };
+
+    bool nextPairAdmin_ = false;
+
+    bool isClientAdmin(const Client& c) const {
+        if (!c.remote) return true;
+        if (c.deviceId.empty()) return false;
+        for (const auto& d : devices_) if (d.id == c.deviceId) return d.admin;
+        return false;
+    }
+    bool curIsAdmin() const { return !cur_ || isClientAdmin(*cur_); }
+
 
     /**
      * A gép állandó, véletlen azonosítója (a távoli elérés beállításaiban tárolva, nem hardverazonosító): a telefon
@@ -556,6 +592,11 @@ private:
             maintainBt();
             acceptLineConnections();
             progressLinePending();
+            relayManager_.pumpRelays(kBridgeMaxQueuedBytes);
+            progressAsyncDiscovery();
+            progressAsyncPairing();
+            progressAsyncRelayConnect();
+            reapAsync();
 
             // 1. Hang lehúzása a motorból (akkor is, ha nincs kliens, hogy ne torlódjon fel)
             if (cb_.pullAudio) {
@@ -750,7 +791,7 @@ private:
 
         cur_ = &cl;
         sendText("{\"type\":\"machine\",\"machine\":\"" + machineId() + "\",\"computer\":\"" +
-                 jsonEscape(MdnsAnnouncer::computerName()) + "\"}");   // a gép neve, mint a WebSocketen
+                 jsonEscape(MdnsAnnouncer::computerName()) + "\",\"admin\":" + (curIsAdmin() ? "true" : "false") + "}");   // a gép neve, mint a WebSocketen
         sendText(buildStateMessage());
         for (size_t k = 1; k < lines.size() && !cl.dead; ++k) handleMessage(lines[k]);   // a hello után rögtön jöttek
         cur_ = nullptr;
@@ -841,7 +882,7 @@ private:
     bool handlePushPairRequest(Pending& p, const std::string& key, const std::string& request) {
         // Harmadik féltől származó távirányítók kizárása: csak a hitelesített Aqulify Remote kliens párosítható
         const std::string clientType = bridge_detail::cleanName(bridge_detail::queryParam(request, "client"));
-        if (clientType != "aqulify_remote") {
+        if (clientType != "aqulify_remote" && clientType != "aqulify_desktop") {
             reply(p.sock, "403 Forbidden", "client");
             return false;
         }
@@ -941,7 +982,7 @@ private:
             } else if (!code.empty()) {
                 // Harmadik féltől származó távirányítók kizárása: csak a hitelesített Aqulify Remote kliens párosítható
                 const std::string clientType = bridge_detail::cleanName(bridge_detail::queryParam(request, "client"));
-                if (clientType != "aqulify_remote") {
+                if (clientType != "aqulify_remote" && clientType != "aqulify_desktop") {
                     reply(p.sock, "403 Forbidden", "client");
                     return false;
                 }
@@ -959,6 +1000,43 @@ private:
             // Csak a saját felület csatlakozhat: egy tetszőleges weboldal a böngészőből ne vezérelhesse a motort
             reply(p.sock, "403 Forbidden");
             return false;
+        }
+
+        const std::string reqPath = bridge_detail::requestPath(request);
+        if (!p.remote && reqPath == "/relay") {
+            const std::string targetId = bridge_detail::queryParam(request, "target");
+            const std::string magicGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+            const std::string acceptKey = Base64::encode(Sha1::hash(key + magicGuid));
+            std::string acceptResponse = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                                         "Sec-WebSocket-Accept: " + acceptKey + "\r\n\r\n";
+            net::sendSome(p.sock, acceptResponse.data(), acceptResponse.size());
+
+            // Másolat a zár alatt: egy közben futó párosítás átrendezheti a céllistát
+            RemoteTarget targetCopy;
+            if (!relayManager_.findTarget(targetId, targetCopy)) {
+                relay_detail::sendWsTextFrame(p.sock, "{\"type\":\"relay_error\",\"reason\":\"not_found\"}");
+                net::closeSocket(p.sock);
+                p.sock = net::kInvalidSocket;
+                return true;
+            }
+
+            net::socket_t localSock = p.sock;
+            p.sock = net::kInvalidSocket;
+
+            startAsync([this, localSock, targetCopy]() {
+                std::string leftover, err;
+                net::socket_t remSock = relayManager_.connectTarget(targetCopy, leftover, err);
+                if (remSock == net::kInvalidSocket) {
+                    std::string reason = (err == "unauthorized") ? "unauthorized" : "failed";
+                    relay_detail::sendWsTextFrame(localSock, "{\"type\":\"relay_error\",\"reason\":\"" + reason + "\"}");
+                    net::closeSocket(localSock);
+                } else {
+                    std::lock_guard<std::mutex> lk(asyncRelayMtx_);
+                    pendingRelayBridges_.push_back({localSock, remSock, targetCopy.id, leftover});
+                }
+            });
+
+            return true;
         }
 
         if (clients_.size() >= kBridgeMaxClients) {
@@ -992,7 +1070,7 @@ private:
             sendText("{\"type\":\"paired\",\"id\":\"" + cl.deviceId + "\",\"token\":\"" + issuedToken +
                      "\",\"machine\":\"" + machineId() + "\",\"computer\":\"" + computer + "\"}");
         else if (cl.remote)
-            sendText("{\"type\":\"machine\",\"machine\":\"" + machineId() + "\",\"computer\":\"" + computer + "\"}");
+            sendText("{\"type\":\"machine\",\"machine\":\"" + machineId() + "\",\"computer\":\"" + computer + "\",\"admin\":" + (curIsAdmin() ? "true" : "false") + "}");
         sendText(buildStateMessage());
         cur_ = nullptr;
         if (cl.remote) broadcastRemoteState();   // a helyi felület látja, hogy az eszköz csatlakozott
@@ -1246,7 +1324,11 @@ private:
                 const std::string& app = "") {
         const auto now = clock::now();
         if (now < pairLockUntil_) return 429;
-        if (now >= pairUntil_) return 401;   // párosítani csak a kód megjelenítése után néhány percig lehet
+        if (now >= pairUntil_) {
+            nextPairAdmin_ = false;
+            pairCode_.clear();
+            return 401;   // párosítani csak a kód megjelenítése után néhány percig lehet
+        }
         if (pairCode_.empty() || !bridge_detail::sameSecret(code, pairCode_)) {
             if (++pairFails_ >= 5) {
                 // Kódpróbálgatás ellen: új kód, és egy percig nincs párosítás
@@ -1265,6 +1347,8 @@ private:
         d.app = app;
         outToken = bridge_detail::randomHex(32);
         d.hash = bridge_detail::sha1Hex(outToken);
+        d.admin = nextPairAdmin_;
+        nextPairAdmin_ = false;
         d.created = d.last = static_cast<long long>(std::time(nullptr));
         outId = d.id;
         pairFails_ = 0;
@@ -1276,13 +1360,12 @@ private:
     }
 
     /** Új párosító kód, amely a következő néhány percben használható. */
-    void newPairCode() {
+    void newPairCode(bool admin = false) {
+        nextPairAdmin_ = admin;
         pairCode_ = bridge_detail::randomDigits(6);
         pairUntil_ = clock::now() + std::chrono::seconds(kPairWindowSeconds);
         std::cout << "[WS Bridge] Párosító kód: " << pairCode_ << " (" << kPairWindowSeconds / 60 << " percig érvényes)\n";
     }
-
-    bool pairingOpen() const { return remoteListener_ != net::kInvalidSocket && !pairCode_.empty() && clock::now() < pairUntil_; }
 
     bool openRemoteListener() {
         closeRemoteListener();
@@ -1292,7 +1375,7 @@ private:
             if (remoteListener_ == net::kInvalidSocket) continue;
             remoteListenPort_ = port;
             std::cout << "[WS Bridge] Hálózati elérés bekapcsolva: 0.0.0.0:" << port << "\n";
-            mdnsAnnouncer_.start(port, "", bridge_detail::localAddresses());
+            mdnsAnnouncer_.start(port, "", bridge_detail::localAddresses(), machineId());
             openBt();   // a Bluetooth-csatorna csak bekapcsolt hálózati elérésnél fut
             return true;
         }
@@ -1308,6 +1391,8 @@ private:
             net::closeSocket(pr.sock);
         }
         pendingPairRequests_.clear();
+        nextPairAdmin_ = false;
+        pairCode_.clear();
         closeBt();
         if (remoteListener_ == net::kInvalidSocket) return;
         net::closeSocket(remoteListener_);
@@ -1339,6 +1424,7 @@ private:
                 d.app = cleanAppId(e.get("app") ? e.get("app")->stringOr("") : "");
                 d.created = static_cast<long long>(num(e, "created", 0.0));
                 d.last = static_cast<long long>(num(e, "last", 0.0));
+                d.admin = num(e, "admin", 0.0) != 0.0;
                 if (bridge_detail::isHex(d.id) && d.hash.size() == 40 && bridge_detail::isHex(d.hash)) devices_.push_back(d);
             }
         }
@@ -1361,6 +1447,7 @@ private:
             if (i) s += ',';
             s += "{\"id\":\"" + d.id + "\",\"name\":\"" + jsonEscape(d.name) + "\",\"hash\":\"" + d.hash + "\"";
             if (!d.app.empty()) s += ",\"app\":\"" + d.app + "\"";
+            if (d.admin) s += ",\"admin\":true";
             s += ",\"created\":" + std::to_string(d.created) + ",\"last\":" + std::to_string(d.last) + "}";
         }
         s += "]}";
@@ -1397,7 +1484,8 @@ private:
                                             [&](const auto& c) { return !c->dead && c->remote && c->deviceId == d.id; });
             if (i) s += ',';
             s += "{\"id\":\"" + d.id + "\",\"name\":\"" + jsonEscape(d.name) + "\",\"created\":" + std::to_string(d.created) +
-                 ",\"last\":" + std::to_string(d.last) + ",\"online\":" + (online ? "true" : "false") + "}";
+                 ",\"last\":" + std::to_string(d.last) + ",\"admin\":" + (d.admin ? "true" : "false") +
+                 ",\"online\":" + (online ? "true" : "false") + "}";
         }
         s += "]}";
         return s;
@@ -1438,7 +1526,19 @@ private:
             saveRemoteConfig();
             broadcastRemoteState();
         } else if (type == "remote_new_code") {
-            if (remoteListener_ != net::kInvalidSocket) newPairCode();
+            const bool adm = msg.get("admin") ? (num(msg, "admin", 0.0) != 0.0) : false;
+            if (remoteListener_ != net::kInvalidSocket) newPairCode(adm);
+            broadcastRemoteState();
+        } else if (type == "remote_set_admin") {
+            const std::string id = msg.get("id") ? msg.get("id")->stringOr("") : "";
+            const bool adm = num(msg, "admin", 0.0) != 0.0;
+            for (auto& d : devices_) {
+                if (d.id == id) {
+                    d.admin = adm;
+                    saveRemoteConfig();
+                    break;
+                }
+            }
             broadcastRemoteState();
         } else if (type == "remote_revoke") {
             const std::string id = msg.get("id") ? msg.get("id")->stringOr("") : "";
@@ -1623,6 +1723,44 @@ private:
         const json::Value* val = msg.get("val");
         const bool remote = cur_ && cur_->remote;
 
+        // Helyi felderítés (mDNS)
+        if (type == "discover") {
+            if (remote) {
+                sendText("{\"type\":\"discover_error\",\"error\":\"remote\"}");
+                return;
+            }
+            handleDiscover(msg);
+            return;
+        }
+
+        // Távvezérelt célgépek kezelése (csak a saját gépről)
+        if (type == "target_pair") {
+            if (remote) {
+                sendText("{\"type\":\"target_pair_result\",\"ok\":false,\"error\":\"remote\"}");
+                return;
+            }
+            handleTargetPair(msg);
+            return;
+        }
+        if (type == "targets") {
+            if (remote) {
+                sendText("{\"type\":\"targets\",\"targets\":[]}");
+                return;
+            }
+            sendText(relay_detail::targetsToJson(relayManager_.targets(), false));
+            return;
+        }
+        if (type == "target_forget") {
+            if (remote) {
+                sendText("{\"type\":\"target_forget_result\",\"ok\":false,\"error\":\"remote\"}");
+                return;
+            }
+            std::string id = msg.get("id") ? msg.get("id")->stringOr("") : "";
+            bool ok = relayManager_.forgetTarget(id);
+            sendText("{\"type\":\"target_forget_result\",\"ok\":" + std::string(ok ? "true" : "false") + ",\"id\":\"" + media::jsonEscape(id) + "\"}");
+            return;
+        }
+
         // A telefon a saját párosítását törli (a telefonon a gép törlésekor), hogy ne maradjon a gép listájában
         if (type == "unpair_self") {
             if (remote && !cur_->deviceId.empty()) {
@@ -1712,8 +1850,14 @@ private:
         }
         if (type == "set_audio_opts" || type == "get_audio_opts") {
             if (!cb_.audioOptionsJson) return;
-            if (type == "set_audio_opts" && !remote && cb_.setAudioOptions) {
+            if (type == "set_audio_opts") {
+            if (remote && !curIsAdmin()) {
+                sendText("{\"type\":\"error\",\"error\":\"remote\"}");
+                return;
+            }
+            if (cb_.setAudioOptions) {
                 if (const json::Value* o = msg.get("opts"); o && o->type == json::Value::Type::Object) cb_.setAudioOptions(*o);
+            }
             }
             sendText("{\"type\":\"audio_opts\"," + cb_.audioOptionsJson().substr(1));
             return;
@@ -1776,7 +1920,7 @@ private:
             return;
         }
         if ((type == "library" || type.rfind("library_", 0) == 0) && cb_.libraryRequest) {
-            const std::string reply = cb_.libraryRequest(type, msg, remote);
+            const std::string reply = cb_.libraryRequest(type, msg, remote && !curIsAdmin());
             if (!reply.empty()) sendText(reply);
             return;
         }
@@ -1810,6 +1954,20 @@ private:
             // A Bluetooth-tartalékhoz: fut-e a gép Bluetooth-csatornája, és mi a gép Bluetooth-címe
             sendText(std::string("{\"type\":\"bt_info\",\"available\":") + (bt_.isOpen() ? "true" : "false") +
                      ",\"addr\":\"" + jsonEscape(bt_.address()) + "\"}");
+            return;
+        }
+        if (type == "ping") {
+            std::string pong = "{\"type\":\"pong\"";
+            const json::Value* tVal = msg.get("t");
+            if (tVal) {
+                if (tVal->type == json::Value::Type::Number) {
+                    pong += ",\"t\":" + std::to_string(static_cast<int64_t>(tVal->numberOr(0.0)));
+                } else if (tVal->type == json::Value::Type::String) {
+                    pong += ",\"t\":\"" + jsonEscape(tVal->str) + "\"";
+                }
+            }
+            pong += "}";
+            sendText(pong);
             return;
         }
         if (type == "hello" || type == "get_state") {
@@ -2032,19 +2190,6 @@ private:
         } else if (type == "get_eq_response") {
             sendText(buildEqResponseMessage(p, reqSeq));
             return;
-        } else if (type == "ping") {
-            std::string pong = "{\"type\":\"pong\"";
-            const json::Value* tVal = msg.get("t");
-            if (tVal) {
-                if (tVal->type == json::Value::Type::Number) {
-                    pong += ",\"t\":" + std::to_string(static_cast<int64_t>(tVal->numberOr(0.0)));
-                } else if (tVal->type == json::Value::Type::String) {
-                    pong += ",\"t\":\"" + jsonEscape(tVal->str) + "\"";
-                }
-            }
-            pong += "}";
-            sendText(pong);
-            return;
         } else if (type == "set_eq") {
             const json::Value* bands = msg.get("bands");
             if (!bands || bands->type != json::Value::Type::Array) return;
@@ -2203,6 +2348,7 @@ public:
         std::string s = "{\"type\":\"state\",\"reason\":\"";
         s += reason;
         s += "\",\"protocol\":" + std::to_string(kBridgeProtocol);
+        s += ",\"admin\":" + std::string(curIsAdmin() ? "true" : "false");
         if (zoned) s += ",\"zone\":" + std::to_string(zone);   // a 2–4. kimenet lánca (a fő állapotot nem írja felül)
         // 2.x: zenetár (a telefon Zenetár füle), lejátszási sor, telefonos zeneátvitel
         std::string caps = "[";
@@ -2424,6 +2570,224 @@ private:
     int remotePort_ = kRemotePortFirst;
     int remoteListenPort_ = 0;
     net::socket_t remoteListener_ = net::kInvalidSocket;
+    void handleDiscover(const json::Value& msg) {
+        if (!cur_) return;
+        net::socket_t s = cur_->sock;
+        int timeoutMs = static_cast<int>(num(msg, "timeoutMs", 2800.0));
+        timeoutMs = std::clamp(timeoutMs, 200, 5000);
+
+        std::lock_guard<std::mutex> lk(discoveryMtx_);
+        discoveryWaiters_.push_back(s);
+        if (!discoveryRunning_.exchange(true)) {
+            if (discoveryWorker_.joinable()) discoveryWorker_.join();
+            discoveryWorker_ = std::thread([this, timeoutMs]() {
+                auto res = MdnsBrowser::browse(std::chrono::milliseconds(timeoutMs), machineId(), port_);
+                std::string j = "{\"type\":\"discovered\",\"engines\":[";
+                for (size_t i = 0; i < res.engines.size(); ++i) {
+                    if (i) j += ",";
+                    const auto& e = res.engines[i];
+                    j += "{\"name\":\"" + media::jsonEscape(e.name) +
+                         "\",\"host\":\"" + media::jsonEscape(e.host) +
+                         "\",\"port\":" + std::to_string(e.port) +
+                         ",\"platform\":\"" + (e.txt.count("platform") ? media::jsonEscape(e.txt.at("platform")) : "") +
+                         "\",\"addrs\":[";
+                    for (size_t a = 0; a < e.addrs.size(); ++a) {
+                        if (a) j += ",";
+                        j += "\"" + media::jsonEscape(e.addrs[a]) + "\"";
+                    }
+                    j += "],\"txt\":{";
+                    size_t kIdx = 0;
+                    for (const auto& kv : e.txt) {
+                        if (kIdx++) j += ",";
+                        j += "\"" + media::jsonEscape(kv.first) + "\":\"" + media::jsonEscape(kv.second) + "\"";
+                    }
+                    j += "}}";
+                }
+                j += "],\"shares\":[";
+                for (size_t i = 0; i < res.shares.size(); ++i) {
+                    if (i) j += ",";
+                    const auto& sh = res.shares[i];
+                    j += "{\"kind\":\"" + media::jsonEscape(sh.kind) +
+                         "\",\"name\":\"" + media::jsonEscape(sh.name) +
+                         "\",\"host\":\"" + media::jsonEscape(sh.host) +
+                         "\",\"port\":" + std::to_string(sh.port) +
+                         ",\"addrs\":[";
+                    for (size_t a = 0; a < sh.addrs.size(); ++a) {
+                        if (a) j += ",";
+                        j += "\"" + media::jsonEscape(sh.addrs[a]) + "\"";
+                    }
+                    j += "],\"txt\":{";
+                    size_t kIdx = 0;
+                    for (const auto& kv : sh.txt) {
+                        if (kIdx++) j += ",";
+                        j += "\"" + media::jsonEscape(kv.first) + "\":\"" + media::jsonEscape(kv.second) + "\"";
+                    }
+                    j += "}}";
+                }
+                j += "]}";
+
+                {
+                    std::lock_guard<std::mutex> lk2(discoveryMtx_);
+                    discoveryResult_ = std::move(j);
+                    discoveryDone_ = true;
+                }
+            });
+        }
+    }
+
+    void handleTargetPair(const json::Value& msg) {
+        std::string host = msg.get("host") ? msg.get("host")->stringOr("") : "";
+        int port = static_cast<int>(num(msg, "port", 47820.0));
+        std::string code = msg.get("code") ? msg.get("code")->stringOr("") : "";
+        std::string name = msg.get("name") ? msg.get("name")->stringOr("") : "";
+        if (host.empty() || code.empty() || port <= 0 || port > 65535) {
+            sendText("{\"type\":\"target_pair_result\",\"ok\":false,\"error\":\"invalid_params\"}");
+            return;
+        }
+
+        net::socket_t clientSock = cur_ ? cur_->sock : net::kInvalidSocket;
+        std::string myMachine = machineId();
+        std::string myComputer = MdnsAnnouncer::computerName();
+
+        startAsync([this, clientSock, host, port, code, name, myMachine, myComputer]() {
+            RemoteTarget outTarget;
+            std::string outError;
+            bool ok = relayManager_.pairTarget(host, port, code, name, myMachine, outTarget, outError, myComputer);
+            std::string res;
+            if (ok) {
+                res = "{\"type\":\"target_pair_result\",\"ok\":true,\"target\":{\"id\":\"" +
+                      media::jsonEscape(outTarget.id) + "\",\"name\":\"" + media::jsonEscape(outTarget.name) +
+                      "\",\"host\":\"" + media::jsonEscape(outTarget.host) + "\",\"port\":" +
+                      std::to_string(outTarget.port) + ",\"machine\":\"" + media::jsonEscape(outTarget.machine) + "\"}}";
+            } else {
+                res = "{\"type\":\"target_pair_result\",\"ok\":false,\"error\":\"" + media::jsonEscape(outError) + "\"}";
+            }
+            std::lock_guard<std::mutex> lk(asyncPairMtx_);
+            asyncPairResults_.push_back({clientSock, res});
+        });
+    }
+
+    void progressAsyncDiscovery() {
+        if (!discoveryDone_.load()) return;
+        std::string res;
+        std::vector<net::socket_t> waiters;
+        {
+            std::lock_guard<std::mutex> lk(discoveryMtx_);
+            res = std::move(discoveryResult_);
+            waiters = std::move(discoveryWaiters_);
+            discoveryWaiters_.clear();
+            discoveryDone_ = false;
+            discoveryRunning_ = false;
+        }
+        for (net::socket_t s : waiters) {
+            for (auto& c : clients_) {
+                if (c->sock == s && !c->dead) {
+                    queueText(*c, res);
+                }
+            }
+        }
+    }
+
+    void progressAsyncPairing() {
+        std::vector<AsyncPairResult> ready;
+        {
+            std::lock_guard<std::mutex> lk(asyncPairMtx_);
+            if (asyncPairResults_.empty()) return;
+            ready.swap(asyncPairResults_);
+        }
+        for (const auto& r : ready) {
+            for (auto& c : clients_) {
+                if (c->sock == r.sock && !c->dead) {
+                    queueText(*c, r.json);
+                }
+            }
+        }
+    }
+
+    void progressAsyncRelayConnect() {
+        std::vector<AsyncRelayBridge> ready;
+        {
+            std::lock_guard<std::mutex> lk(asyncRelayMtx_);
+            if (pendingRelayBridges_.empty()) return;
+            ready.swap(pendingRelayBridges_);
+        }
+        for (auto& b : ready) {
+            relayManager_.addRelayBridge(b.localSock, b.remoteSock, b.targetId, b.leftover);
+        }
+    }
+
+    RemoteRelayManager relayManager_;
+    std::mutex discoveryMtx_;
+    std::atomic<bool> discoveryRunning_{false};
+    std::atomic<bool> discoveryDone_{false};
+    std::vector<net::socket_t> discoveryWaiters_;
+    std::string discoveryResult_;
+    std::thread discoveryWorker_;
+
+    struct AsyncPairResult {
+        net::socket_t sock;
+        std::string json;
+    };
+    std::mutex asyncPairMtx_;
+    std::vector<AsyncPairResult> asyncPairResults_;
+
+    struct AsyncRelayBridge {
+        net::socket_t localSock;
+        net::socket_t remoteSock;
+        std::string targetId;
+        std::string leftover;
+    };
+    std::mutex asyncRelayMtx_;
+    std::vector<AsyncRelayBridge> pendingRelayBridges_;
+
+    /**
+     * Háttérmunkák (párosítás és relay-kapcsolódás egy másik géppel): a híd szála indítja és takarítja őket, a
+     * leállítás megvárja mindet, így egyik sem érheti el a hidat a megszűnése után.
+     */
+    struct AsyncWorker {
+        std::thread th;
+        std::shared_ptr<std::atomic<bool>> done;
+    };
+    std::vector<AsyncWorker> asyncWorkers_;
+
+    template <class F>
+    void startAsync(F&& fn) {
+        auto done = std::make_shared<std::atomic<bool>>(false);
+        asyncWorkers_.push_back({ std::thread([f = std::forward<F>(fn), done]() mutable {
+                                      f();
+                                      done->store(true);
+                                  }),
+                                  done });
+    }
+
+    /** A már végzett háttérmunkák szálainak lezárása (a híd szálán). */
+    void reapAsync() {
+        for (size_t i = 0; i < asyncWorkers_.size();) {
+            if (asyncWorkers_[i].done->load()) {
+                if (asyncWorkers_[i].th.joinable()) asyncWorkers_[i].th.join();
+                asyncWorkers_.erase(asyncWorkers_.begin() + static_cast<std::ptrdiff_t>(i));
+            } else {
+                ++i;
+            }
+        }
+    }
+
+    /** Leállításkor: minden háttérmunka megvárása, a már kész, de át nem adott relay-kapcsolatok bontása. */
+    void joinAsync() {
+        for (auto& w : asyncWorkers_)
+            if (w.th.joinable()) w.th.join();
+        asyncWorkers_.clear();
+        {
+            std::lock_guard<std::mutex> lk(asyncRelayMtx_);
+            for (auto& b : pendingRelayBridges_) {
+                net::closeSocket(b.localSock);
+                net::closeSocket(b.remoteSock);
+            }
+            pendingRelayBridges_.clear();
+        }
+        std::lock_guard<std::mutex> lk(asyncPairMtx_);
+        asyncPairResults_.clear();
+    }
     MdnsAnnouncer mdnsAnnouncer_;
     static constexpr size_t kMaxPendingPairRequests = 4;
     static constexpr int kPairRequestTimeoutSeconds = 45;

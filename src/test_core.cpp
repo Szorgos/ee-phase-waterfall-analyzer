@@ -1582,6 +1582,413 @@ static void testBluetoothLine() {
     bridge.stop();
 }
 
+
+static void testMdnsBrowser() {
+    std::printf("[17] mDNS szolgáltatás-felderítő és csomag-értelmező (MdnsBrowser)\n");
+    // 1. Cím-szűrés: RFC 1918, link-local és loopback elfogadva, publikus és kívüli eldobva
+    CHECK(MdnsBrowser::isPrivateOrLinkLocal("192.168.1.1"), "192.168.x privát cím elfogadva");
+    CHECK(MdnsBrowser::isPrivateOrLinkLocal("10.0.0.5"), "10.x privát cím elfogadva");
+    CHECK(MdnsBrowser::isPrivateOrLinkLocal("172.16.0.1"), "172.16.x privát cím elfogadva");
+    CHECK(MdnsBrowser::isPrivateOrLinkLocal("172.31.255.254"), "172.31.x privát cím elfogadva");
+    CHECK(MdnsBrowser::isPrivateOrLinkLocal("169.254.10.20"), "169.254.x link-local elfogadva");
+    CHECK(MdnsBrowser::isPrivateOrLinkLocal("127.0.0.1"), "127.0.0.1 loopback elfogadva");
+    CHECK(!MdnsBrowser::isPrivateOrLinkLocal("8.8.8.8"), "8.8.8.8 nyilvános cím eldobva");
+    CHECK(!MdnsBrowser::isPrivateOrLinkLocal("1.1.1.1"), "1.1.1.1 nyilvános cím eldobva");
+    CHECK(!MdnsBrowser::isPrivateOrLinkLocal("172.15.255.255"), "172.15.x ablakon kívüli cím eldobva");
+    CHECK(!MdnsBrowser::isPrivateOrLinkLocal("172.32.0.1"), "172.32.x ablakon kívüli cím eldobva");
+
+    // 2. Query csomag felépítése
+    auto q = MdnsBrowser::buildQuery("_aqulify._tcp.local");
+    CHECK(q.size() > 20, "query csomag létrejött (%zu bájt)", q.size());
+    std::string qs(q.begin(), q.end());
+    CHECK(qs.find("_aqulify") != std::string::npos, "query tartalmazza a szolgáltatásnevet");
+
+    // 3. Valódi MdnsAnnouncer által generált csomag értelmezése
+    MdnsAnnouncer an;
+    an.start(47820, "Aqulify Teszt PC", { "192.168.1.25", "10.0.0.8" }, "mach_test_1234");
+    auto pkt = an.buildPacket(120);
+    an.stop();
+
+    auto list = MdnsBrowser::parsePacket(pkt.data(), pkt.size());
+    CHECK(list.size() == 1, "egy szolgáltatás felderítve (találatok száma: %zu)", list.size());
+    if (!list.empty()) {
+        const auto& s = list[0];
+        CHECK(s.kind == "engine", "szolgáltatás fajtája engine");
+        CHECK(s.name == "Aqulify Teszt PC", "szolgáltatás neve egyezik: %s", s.name.c_str());
+        CHECK(s.port == 47820, "port 47820");
+        CHECK(s.addrs.size() == 2, "2 cím felderítve");
+        CHECK(s.txt.count("proto") && s.txt.at("proto") == "2", "TXT proto=2");
+        CHECK(s.txt.count("id") && s.txt.at("id") == "mach_test_1234", "TXT machineId megvan");
+    }
+
+    // 4. Sérült és csonka csomagok ellenőrzése: nem dobhat kivételt, nem olvas túl
+    for (size_t len = 0; len < pkt.size(); ++len) {
+        auto trList = MdnsBrowser::parsePacket(pkt.data(), len);
+        (void)trList;
+    }
+    CHECK(true, "csonka csomagok minden bájthosszon (0-%zu) biztonságosan lekezelve", pkt.size() - 1);
+
+    std::vector<uint8_t> corrupted = pkt;
+    if (corrupted.size() > 20) {
+        corrupted[14] = 0xC0;
+        corrupted[15] = 14; // önmagára mutató pointer
+        auto cList = MdnsBrowser::parsePacket(corrupted.data(), corrupted.size());
+        (void)cList;
+        CHECK(true, "ciklikus DNS mutató nem okoz végtelen ciklust");
+    }
+
+    // 5. Élő próbája két elszigetelt motorral: az egyik discover kérése megtalálja a másikat
+    BridgeCallbacks cbA, cbB;
+    cbA.pullAudio = [](float*, size_t) -> size_t { return 0; };
+    cbA.sampleRate = [] { return 48000.0; };
+    cbB.pullAudio = [](float*, size_t) -> size_t { return 0; };
+    cbB.sampleRate = [] { return 48000.0; };
+
+    WebSocketBridge bridgeA(47891);
+    WebSocketBridge bridgeB(47892);
+    bridgeA.start(cbA);
+    bridgeB.start(cbB);
+
+    net::socket_t sb = wsConnectLive(47892, "/");
+    if (sb != net::kInvalidSocket) {
+        wsSendText(sb, "{\"type\":\"set_remote\",\"enabled\":true,\"name\":\"Távoli Aqulify\"}");
+        wsWaitFor(sb, "\"enabled\":true", 1000);
+    }
+
+    net::socket_t sa = wsConnectLive(47891, "/");
+    if (sa != net::kInvalidSocket) {
+        wsSendText(sa, "{\"type\":\"discover\",\"timeoutMs\":600}");
+        std::string discResp = wsWaitFor(sa, "\"type\":\"discovered\"", 2500);
+        CHECK(!discResp.empty(), "discover válasz megérkezett a helyi klienshez");
+        CHECK(discResp.find("\"engines\"") != std::string::npos, "válasz tartalmaz engines listát");
+        CHECK(discResp.find("\"shares\"") != std::string::npos, "válasz tartalmaz shares listát");
+        net::closeSocket(sa);
+    }
+    if (sb != net::kInvalidSocket) net::closeSocket(sb);
+
+    bridgeA.stop();
+    bridgeB.stop();
+}
+
+static void testRemoteRelay() {
+    std::printf("[18] Távvezérlés és átjátszó (relay) réteg (RemoteRelayManager)\n");
+
+    // 1. Célok tárolása és JSON szerializáció: token soha nem szivárog ki
+    std::vector<RemoteTarget> tgts = {
+        {"t_pi", "Pi Nappali", "127.0.0.1", 47925, "1122334455667788112233445566778811223344556677881122334455667788", "mach_pi", 1000}
+    };
+    std::string pubJson = relay_detail::targetsToJson(tgts, false);
+    CHECK(pubJson.find("token") == std::string::npos, "kimenő targets üzenetben SOHA nincs token");
+    CHECK(pubJson.find("Pi Nappali") != std::string::npos, "targets üzenet tartalmazza a nevet");
+    CHECK(pubJson.find("t_pi") != std::string::npos, "targets üzenet tartalmazza az id-t");
+
+    std::string privJson = relay_detail::targetsToJson(tgts, true);
+    CHECK(privJson.find("1122334455667788") != std::string::npos, "belső mentés tartalmazza a tokent");
+    auto parsedTgts = relay_detail::targetsFromJson(privJson);
+    CHECK(parsedTgts.size() == 1 && parsedTgts[0].token == tgts[0].token, "targetsFromJson visszaolvassa a tokent");
+
+    // 2. Két motor példány valódi socketekkel: Host B (távoli) és Host A (helyi)
+    std::string aTargetsDoc = "";
+
+    BridgeCallbacks cbA, cbB;
+    cbA.pullAudio = [](float*, size_t) -> size_t { return 0; };
+    cbA.sampleRate = [] { return 48000.0; };
+    cbA.loadTargets = [&] { return aTargetsDoc; };
+    cbA.saveTargets = [&](const std::string& j) { aTargetsDoc = j; return true; };
+
+    cbB.pullAudio = [](float*, size_t) -> size_t { return 0; };
+    cbB.sampleRate = [] { return 48000.0; };
+
+    WebSocketBridge bridgeA(47893);
+    WebSocketBridge bridgeB(47894);
+    bridgeA.start(cbA);
+    bridgeB.start(cbB);
+
+    net::socket_t sB = wsConnectLive(47894, "/");
+    int bPort = 47915;
+    if (sB != net::kInvalidSocket) {
+        wsSendText(sB, "{\"type\":\"set_remote\",\"enabled\":true,\"port\":47915}");
+        std::string remMsg = wsWaitFor(sB, "\"enabled\":true", 2000);
+        json::Value rVal;
+        if (json::parse(remMsg, rVal) && rVal.get("port")) {
+            bPort = static_cast<int>(rVal.get("port")->numberOr(47915));
+        }
+    }
+
+    net::socket_t sA = wsConnectLive(47893, "/");
+    CHECK(sA != net::kInvalidSocket, "helyi kliens csatlakozik Host A-hoz");
+
+    if (sA != net::kInvalidSocket && sB != net::kInvalidSocket) {
+        // Hibás kód tesztje
+        wsSendText(sA, "{\"type\":\"target_pair\",\"host\":\"127.0.0.1\",\"port\":" + std::to_string(bPort) + ",\"code\":\"000000\",\"name\":\"Rossz\"}");
+        std::string errResp = wsWaitFor(sA, "\"target_pair_result\"", 2000);
+        CHECK(errResp.find("\"ok\":false") != std::string::npos, "hibás kód elutasítva (401 unauthorized)");
+
+        // Kérjünk új kódot Host B-től és olvassuk ki
+        wsSendText(sB, "{\"type\":\"remote_new_code\"}");
+        std::string codeMsg = wsWaitFor(sB, "\"code\":\"", 2000);
+        std::string code = jsonField(codeMsg, "code");
+        CHECK(code.size() == 6, "Host B adott párosító kódot: %s", code.c_str());
+
+        // Sikeres párosítás Host A-ból
+        wsSendText(sA, "{\"type\":\"target_pair\",\"host\":\"127.0.0.1\",\"port\":" + std::to_string(bPort) + ",\"code\":\"" + code + "\",\"name\":\"Távoli Gép\"}");
+        std::string pairResp = wsWaitFor(sA, "\"target_pair_result\"", 3000);
+        CHECK(pairResp.find("\"ok\":true") != std::string::npos, "sikeres párosítás Host B-vel");
+        CHECK(pairResp.find("token") == std::string::npos, "a párosítási válaszban SOHA nem szerepel token");
+
+        std::string targetId;
+        json::Value prDoc;
+        if (json::parse(pairResp, prDoc) && prDoc.get("target")) {
+            const auto* tid = prDoc.get("target")->get("id");
+            if (tid) targetId = tid->stringOr("");
+        }
+        CHECK(!targetId.empty(), "targetId megérkezett: %s", targetId.c_str());
+
+        // Mentett célok lekérdezése
+        wsSendText(sA, "{\"type\":\"targets\"}");
+        std::string tgtsResp = wsWaitFor(sA, "\"type\":\"targets\"", 2000);
+        CHECK(tgtsResp.find("Távoli Gép") != std::string::npos, "targets listában szerepel a célgép");
+        CHECK(tgtsResp.find("token") == std::string::npos, "targets válaszban SOHA nincs token");
+
+        // Átjátszó (relay) teszt: kapcsolódás GET /relay?target=<targetId>
+        net::socket_t rly = wsConnectLive(47893, "/relay?target=" + targetId);
+        CHECK(rly != net::kInvalidSocket, "kapcsolódás a relay végponthoz sikeres");
+        if (rly != net::kInvalidSocket) {
+            std::string st = wsWaitFor(rly, "\"type\":", 2000);
+            CHECK(!st.empty(), "átjátszón keresztül megérkezett a távoli üzenet");
+
+            wsSendText(rly, "{\"type\":\"get_state\"}");
+            std::string stateResp = wsWaitFor(rly, "\"type\":\"state\"", 2000);
+            CHECK(!stateResp.empty(), "átjátszón küldött get_state kérésre válaszolt a távoli motor");
+
+            net::closeSocket(rly);
+        }
+
+        // Ismeretlen target-id tesztje
+        net::socket_t unkSock = wsConnectLive(47893, "/relay?target=non_existent");
+        if (unkSock != net::kInvalidSocket) {
+            std::string rerr = wsWaitFor(unkSock, "\"relay_error\"", 1000);
+            CHECK(rerr.find("not_found") != std::string::npos, "ismeretlen célra relay_error not_found érkezik");
+            net::closeSocket(unkSock);
+        }
+
+        // Cél elfelejtése
+        wsSendText(sA, "{\"type\":\"target_forget\",\"id\":\"" + targetId + "\"}");
+        std::string fgtResp = wsWaitFor(sA, "\"target_forget_result\"", 2000);
+        CHECK(fgtResp.find("\"ok\":true") != std::string::npos, "cél elfelejtve");
+
+        // Elfelejtett cél után a relay már nem csatlakozik
+        net::socket_t deadRly = wsConnectLive(47893, "/relay?target=" + targetId);
+        if (deadRly != net::kInvalidSocket) {
+            std::string rerr = wsWaitFor(deadRly, "\"relay_error\"", 1000);
+            CHECK(rerr.find("not_found") != std::string::npos, "elfelejtett célra nem csatlakozik, not_found");
+            net::closeSocket(deadRly);
+        }
+
+        net::closeSocket(sA);
+    }
+    if (sB != net::kInvalidSocket) net::closeSocket(sB);
+
+    bridgeA.stop();
+    bridgeB.stop();
+}
+
+
+static void testRemoteAdmin() {
+    std::printf("[19] Teljes jogú távirányító (admin jogosultságok, visszavonás és fej nélküli párosítás)\n");
+
+    std::string savedRemote = "";
+    BridgeCallbacks cb;
+    cb.pullAudio = [](float*, size_t) -> size_t { return 0; };
+    cb.sampleRate = [] { return 48000.0; };
+    cb.audioOptionsJson = [] { return "{\"volume\":1.0}"; };
+    cb.setAudioOptions = [](const json::Value&) {};
+    cb.libraryRequest = [](const std::string& type, const json::Value&, bool remote) -> std::string {
+        if (remote && (type == "library_set_roots" || type == "library_browse" || type == "library_rescan")) {
+            return "{\"error\":\"remote\"}";
+        }
+        return "{\"ok\":true,\"type\":\"" + type + "\"}";
+    };
+    cb.saveRemote = [&](const std::string& j) { savedRemote = j; return true; };
+    cb.loadRemote = [&] { return savedRemote; };
+
+    WebSocketBridge bridge(47895);
+    const bool started = bridge.start(cb);
+    CHECK(started, "a híd elindul a 47895-ös porton");
+    if (!started) return;
+
+    net::socket_t sLocal = wsConnectLive(47895, "/");
+    CHECK(sLocal != net::kInvalidSocket, "helyi kliens csatlakozik a 47895-ös hídhoz");
+    if (sLocal == net::kInvalidSocket) {
+        bridge.stop();
+        return;
+    }
+
+    // Távoli elérés bekapcsolása a helyi vezérlőcsatornán
+    int remPort = 47916;
+    wsSendText(sLocal, "{\"type\":\"set_remote\",\"enabled\":true,\"port\":47916}");
+    std::string remMsg = wsWaitFor(sLocal, "\"enabled\":true", 2000);
+    json::Value rVal;
+    if (json::parse(remMsg, rVal) && rVal.get("port")) {
+        remPort = static_cast<int>(rVal.get("port")->numberOr(47916));
+    }
+
+    // 1. Normál (nem admin) távoli kliens párosítása
+    wsSendText(sLocal, "{\"type\":\"remote_new_code\"}");
+    std::string code1Msg = wsWaitFor(sLocal, "\"code\":\"", 2000);
+    std::string code1 = jsonField(code1Msg, "code");
+    CHECK(code1.size() == 6, "párosító kód normál távoli kliensnek: %s", code1.c_str());
+
+    net::socket_t sRemote1 = wsConnectLive(remPort, "/?pair=" + code1 + "&client=aqulify_desktop&name=RemoteDesktop1");
+    CHECK(sRemote1 != net::kInvalidSocket, "RemoteDesktop1 sikeresen csatlakozott");
+
+    std::string paired1 = wsWaitFor(sRemote1, "\"type\":\"paired\"", 2000);
+    std::string dev1Id = jsonField(paired1, "id");
+    CHECK(!dev1Id.empty(), "RemoteDesktop1 eszköz azonosító: %s", dev1Id.c_str());
+
+    // 2. Nem-admin távoli kérések: tiltva
+    wsSendText(sRemote1, "{\"type\":\"library_set_roots\",\"roots\":[\"/mnt/zene\"]}");
+    std::string r1 = wsWaitFor(sRemote1, "\"remote\"", 2000);
+    CHECK(!r1.empty() && r1.find("\"error\":\"remote\"") != std::string::npos,
+          "nem-admin távoli kliens nem állíthat zenetár gyökereket (remote)");
+
+    wsSendText(sRemote1, "{\"type\":\"set_audio_opts\",\"opts\":{}}");
+    std::string r2 = wsWaitFor(sRemote1, "\"remote\"", 2000);
+    CHECK(!r2.empty() && r2.find("\"error\":\"remote\"") != std::string::npos,
+          "nem-admin távoli kliens nem állíthat hangopciókat (remote)");
+
+    // Hamis admin mező a kérésben: nem ad jogot
+    wsSendText(sRemote1, "{\"type\":\"library_set_roots\",\"admin\":true,\"roots\":[\"/mnt/zene\"]}");
+    std::string r3 = wsWaitFor(sRemote1, "\"remote\"", 2000);
+    CHECK(!r3.empty() && r3.find("\"error\":\"remote\"") != std::string::npos,
+          "hamis 'admin':true a kérés JSON-ben nem ad admin jogot");
+
+    // 3. Admin jog megadása a gazdagépről a már élő kapcsolaton
+    wsSendText(sLocal, "{\"type\":\"remote_set_admin\",\"id\":\"" + dev1Id + "\",\"admin\":true}");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    CHECK(!bridge.pairingOpen(), "az admin kapcsoló után a párosítási ablak nem nyílik meg (pairingOpen hamis)");
+
+    wsSendText(sRemote1, "{\"type\":\"library_set_roots\",\"roots\":[\"/mnt/zene\"]}");
+    std::string rAdmin1 = wsWaitFor(sRemote1, "\"type\":\"library_set_roots\"", 2000);
+    CHECK(!rAdmin1.empty() && rAdmin1.find("\"type\":\"library_set_roots\"") != std::string::npos,
+          "admin távoli kliens sikeresen beállíthat zenetár gyökereket");
+
+    wsSendText(sRemote1, "{\"type\":\"set_audio_opts\",\"opts\":{}}");
+    std::string rAdmin2 = wsWaitFor(sRemote1, "\"audio_opts\"", 2000);
+    CHECK(!rAdmin2.empty() && rAdmin2.find("\"audio_opts\"") != std::string::npos,
+          "admin távoli kliens sikeresen beállíthat hangopciókat");
+
+    // 4. Admin jog azonnali visszavonása a gazdagépről
+    wsSendText(sLocal, "{\"type\":\"remote_set_admin\",\"id\":\"" + dev1Id + "\",\"admin\":false}");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    wsSendText(sRemote1, "{\"type\":\"library_set_roots\",\"roots\":[\"/mnt/zene\"]}");
+    std::string rRevoked1 = wsWaitFor(sRemote1, "\"remote\"", 2000);
+    CHECK(!rRevoked1.empty() && rRevoked1.find("\"error\":\"remote\"") != std::string::npos,
+          "admin visszavonása után azonnal tiltva a már élő kapcsolaton (library)");
+
+    wsSendText(sRemote1, "{\"type\":\"set_audio_opts\",\"opts\":{}}");
+    std::string rRevoked2 = wsWaitFor(sRemote1, "\"remote\"", 2000);
+    CHECK(!rRevoked2.empty() && rRevoked2.find("\"error\":\"remote\"") != std::string::npos,
+          "admin visszavonása után azonnal tiltva a már élő kapcsolaton (audio_opts)");
+
+    net::closeSocket(sRemote1);
+
+    // 5. Párosítás fej nélkül --admin flaggel
+    std::string code2;
+    for (int i = 0; i < 10 && code2.empty(); ++i) {
+        wsSendText(sLocal, "{\"type\":\"remote_new_code\",\"admin\":true}");
+        std::string m = wsWaitFor(sLocal, "\"code\":\"", 1000);
+        std::string c = jsonField(m, "code");
+        if (c.size() == 6 && c != code1) code2 = c;
+    }
+    CHECK(code2.size() == 6, "párosító kód admin flaggel: %s", code2.c_str());
+
+    net::socket_t sRemote2 = wsConnectLive(remPort, "/?pair=" + code2 + "&client=aqulify_desktop&name=RemoteDesktopAdmin");
+    CHECK(sRemote2 != net::kInvalidSocket, "RemoteDesktopAdmin sikeresen csatlakozott");
+
+    if (sRemote2 != net::kInvalidSocket) {
+        std::string paired2 = wsWaitFor(sRemote2, "\"type\":\"paired\"", 2000);
+        CHECK(!paired2.empty(), "RemoteDesktopAdmin párosítás sikeres");
+
+        wsSendText(sRemote2, "{\"type\":\"library_set_roots\",\"roots\":[\"/mnt/zene\"]}");
+        std::string rHeadless = wsWaitFor(sRemote2, "\"type\":\"library_set_roots\"", 2000);
+        CHECK(!rHeadless.empty() && rHeadless.find("\"type\":\"library_set_roots\"") != std::string::npos,
+              "fej nélküli --admin párosítással az eszköz azonnal teljes jogú");
+
+        net::closeSocket(sRemote2);
+    }
+
+    // 6. nextPairAdmin_ nem ragad be: admin kód kérése után normál kód nyitása nem ad admin jogot
+    std::string codeAdmin;
+    for (int i = 0; i < 10 && codeAdmin.empty(); ++i) {
+        wsSendText(sLocal, "{\"type\":\"remote_new_code\",\"admin\":true}");
+        std::string m = wsWaitFor(sLocal, "\"code\":\"", 1000);
+        std::string c = jsonField(m, "code");
+        if (c.size() == 6 && c != code2) codeAdmin = c;
+    }
+    CHECK(codeAdmin.size() == 6, "új admin párosító kód: %s", codeAdmin.c_str());
+
+    // Most felülírjuk egy normál kóddal
+    std::string cNorm;
+    for (int i = 0; i < 10 && cNorm.empty(); ++i) {
+        wsSendText(sLocal, "{\"type\":\"remote_new_code\"}");
+        std::string m = wsWaitFor(sLocal, "\"code\":\"", 1000);
+        std::string c = jsonField(m, "code");
+        if (c.size() == 6 && c != codeAdmin) cNorm = c;
+    }
+    CHECK(cNorm.size() == 6, "új normál párosító kód: %s", cNorm.c_str());
+
+    net::socket_t sRemoteNorm = wsConnectLive(remPort, "/?pair=" + cNorm + "&client=aqulify_desktop&name=RemoteNorm");
+    if (sRemoteNorm != net::kInvalidSocket) {
+        std::string pNorm = wsWaitFor(sRemoteNorm, "\"type\":\"paired\"", 2000);
+        CHECK(!pNorm.empty(), "RemoteNorm párosítás sikeres");
+        wsSendText(sRemoteNorm, "{\"type\":\"library_set_roots\",\"roots\":[\"/mnt/zene\"]}");
+        std::string rNorm = wsWaitFor(sRemoteNorm, "\"remote\"", 2000);
+        CHECK(!rNorm.empty() && rNorm.find("\"error\":\"remote\"") != std::string::npos,
+              "normál kód után az eszköz nem kap admin jogot (nextPairAdmin_ nem ragadt be)");
+        net::closeSocket(sRemoteNorm);
+    }
+
+    // 7. Admin jog megmarad újraindítás után (saveRemoteConfig kiírja az admin mezőt)
+    CHECK(savedRemote.find("\"admin\":true") != std::string::npos, "a mentett konfiguráció tartalmazza az admin:true mezőt");
+    net::closeSocket(sLocal);
+    bridge.stop();
+
+    // Újraindítás ugyanazzal a perzisztens tárolóval
+    WebSocketBridge bridge2(47895);
+    const bool started2 = bridge2.start(cb);
+    CHECK(started2, "a 2. híd elindul a mentett konfigurációval");
+
+    net::socket_t sLocal2 = wsConnectLive(47895, "/");
+    CHECK(sLocal2 != net::kInvalidSocket, "helyi kliens csatlakozik az újraindított hídhoz");
+
+    std::string remMsg2;
+    wsSendText(sLocal2, "{\"type\":\"get_remote\"}");
+    remMsg2 = wsWaitFor(sLocal2, "\"devices\":", 2000);
+    CHECK(remMsg2.find("\"admin\":true") != std::string::npos, "újraindítás után az admin eszköz megőrizte az admin jogát");
+
+    // 8. Híd szála nem blokkol: elérhetetlen célra (192.0.2.1) indított párosítás közben a híd egy másik klienst <0.5s alatt kiszolgál
+    wsSendText(sLocal2, "{\"type\":\"target_pair\",\"host\":\"192.0.2.1\",\"port\":47820,\"code\":\"123456\",\"name\":\"Unreachable\"}");
+
+    auto tConnStart = std::chrono::steady_clock::now();
+    net::socket_t sOther = wsConnectLive(47895, "/");
+    auto tConnMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - tConnStart).count();
+    CHECK(sOther != net::kInvalidSocket && tConnMs < 500, "új kliens azonnal csatlakozhat háttérbeli kapcsolódás alatt (csatlakozás: %ld ms)", (long)tConnMs);
+    if (sOther != net::kInvalidSocket) {
+        auto tPingStart = std::chrono::steady_clock::now();
+        wsSendText(sOther, "{\"type\":\"ping\",\"t\":99}");
+        std::string pong = wsWaitFor(sOther, "\"pong\"", 500);
+        auto tPingMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - tPingStart).count();
+        CHECK(!pong.empty() && tPingMs < 500,
+              "elérhetetlen címre párosítás közben a másik kliens <0.5s alatt választ kap (eltelt: %ld ms)", (long)tPingMs);
+        net::closeSocket(sOther);
+    }
+
+    net::closeSocket(sLocal2);
+    bridge2.stop();
+}
+
 static void testBridgeLoudnessStereo() {
     std::printf("[16] Híd: Loudness és Stereo Tools üzenetek, állapot, A/B és érvényesítés\n");
     std::mutex mu;
@@ -1706,6 +2113,9 @@ int main() {
     testBluetoothLine();
     testPairCli();
     testBridgeLoudnessStereo();
+    testMdnsBrowser();
+    testRemoteRelay();
+    testRemoteAdmin();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

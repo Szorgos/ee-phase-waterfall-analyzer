@@ -349,7 +349,8 @@ int main(int argc, char* argv[]) {
         std::vector<int> pairPorts(std::begin(kEnginePorts), std::end(kEnginePorts));
         for (int i = 1; i + 1 < argc; ++i)
             if (std::strcmp(argv[i], "--port") == 0) pairPorts = { std::atoi(argv[i + 1]) };
-        return paircli::run(pairPorts, "Indítsd el: systemctl --user start aqulify");
+        const bool admin = hasArg(argc, argv, "--admin");
+        return paircli::run(pairPorts, "Indítsd el: systemctl --user start aqulify", stdout, admin);
     }
     PwDeinitGuard pwDeinit;   // utoljára szűnik meg: a PipeWire lezárása minden más objektum után
     std::cout << "========================================================\n";
@@ -706,6 +707,8 @@ int main(int argc, char* argv[]) {
     }, &phoneCache);
     cb.loadRemote = [] { return linux_store::loadRemote(); };
     cb.saveRemote = [](const std::string& doc) { return linux_store::saveRemote(doc); };
+    cb.loadTargets = [] { return linux_store::loadRemoteTargets(); };
+    cb.saveTargets = [](const std::string& doc) { return linux_store::saveRemoteTargets(doc); };
     // Ablak bezárása „Bezárás” választással: rendes leállás (0-s kilépési kód, a systemd nem indítja újra)
     cb.quitEngine = [] { if (g_node) g_node->quit(); };
 

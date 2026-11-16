@@ -590,6 +590,8 @@ struct Core {
     }, &c->phoneCache);
     cb.loadRemote = [] { return linux_store::loadRemote(); };
     cb.saveRemote = [](const std::string& doc) { return linux_store::saveRemote(doc); };
+    cb.loadTargets = [] { return linux_store::loadRemoteTargets(); };
+    cb.saveTargets = [](const std::string& doc) { return linux_store::saveRemoteTargets(doc); };
     // Ablak bezárása „Bezárás” választással: az alkalmazás kilép (a motor vele áll le, a hang nem változik)
     cb.quitEngine = [] { dispatch_async(dispatch_get_main_queue(), ^{ [NSApp terminate:nil]; }); };
 

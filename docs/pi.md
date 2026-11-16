@@ -82,7 +82,59 @@ sudo apt install ./aqulify_2.2.1-1~pi1_arm64.deb
 
 ---
 
-## 6. Eltávolítás
+## 6. Zene NAS-ról (hálózati megosztás csatolása)
+
+A hálózati meghajtókon (NAS) tárolt zenetár eléréséhez a megosztást a gazdarendszer szintjén kell felcsatolni (az Aqulify biztonsági okokból nem kér be és nem tárol NAS-jelszavakat). Raspberry Pi OS alatt javasolt a megosztást a `/etc/fstab` fájlban beállítani az automatikus csatoláshoz (`systemd.automount`).
+
+### CIFS / SMB megosztás felcsatolása
+
+1. Telepítsd a CIFS klienscsomagot:
+   ```bash
+   sudo apt install --no-install-recommends cifs-utils
+   ```
+2. Hozz létre egy csatolási pontot (pl. `/mnt/zene`):
+   ```bash
+   sudo mkdir -p /mnt/zene
+   ```
+3. Készíts egy védett hitelesítő fájlt (pl. `/etc/aqulify-nas-credentials`), és állítsd be a szigorú hozzáférési jogosultságot (`0600`):
+   ```bash
+   sudo sh -c 'cat > /etc/aqulify-nas-credentials << EOF
+   username=nasfelhasznalo
+   password=nasjelszo
+   EOF'
+   sudo chmod 0600 /etc/aqulify-nas-credentials
+   ```
+4. Add hozzá az alábbi sort a `/etc/fstab` fájlhoz:
+   ```text
+   //192.0.2.10/zene /mnt/zene cifs credentials=/etc/aqulify-nas-credentials,iocharset=utf8,uid=1000,gid=1000,_netdev,nofail,x-systemd.automount 0 0
+   ```
+   Az opciók magyarázata:
+   - `_netdev`: a rendszer megvárja a hálózat felállását a csatolás előtt.
+   - `nofail`: a rendszer akkor is hiba nélkül indul, ha a NAS épp nem érhető el.
+   - `x-systemd.automount`: a mappa csak akkor csatolódik ténylegesen, amikor egy folyamat (pl. az Aqulify) megnyitja.
+
+### NFS megosztás felcsatolása
+
+NFS v4 megosztás esetén:
+1. Telepítsd az NFS segédprogramokat:
+   ```bash
+   sudo apt install --no-install-recommends nfs-common
+   ```
+2. Add hozzá a `/etc/fstab` fájlhoz:
+   ```text
+   192.0.2.10:/zene /mnt/zene nfs ro,_netdev,nofail,x-systemd.automount 0 0
+   ```
+
+A csatolás után a felcsatolt mappa (`/mnt/zene`) a grafikus felületen vagy a távirányító felületén a **Zenei mappák** menüpontban a „Tallózás” gombbal (vagy kézi útvonal-megadással) hozzáadható a gyökérkönyvtárakhoz.
+
+Hivatalos rendszerdokumentáció:
+- `mount.cifs(8)`: [https://manpages.debian.org/testing/cifs-utils/mount.cifs.8.en.html](https://manpages.debian.org/testing/cifs-utils/mount.cifs.8.en.html)
+- `fstab(5)`: [https://manpages.debian.org/testing/mount/fstab.5.en.html](https://manpages.debian.org/testing/mount/fstab.5.en.html)
+- `systemd.mount(5)`: [https://manpages.debian.org/testing/systemd/systemd.mount.5.en.html](https://manpages.debian.org/testing/systemd/systemd.mount.5.en.html)
+
+---
+
+## 7. Eltávolítás
 
 ```bash
 sudo apt remove aqulify
@@ -90,7 +142,7 @@ sudo apt remove aqulify
 
 ---
 
-## 7. Nem ellenőrizve
+## 8. Nem ellenőrizve
 
 Az alábbi pontok valódi Raspberry Pi hiányában (eddig emulált környezetben vagy virtuális eszközökkel vizsgálva) **még nincsenek teljes körűen ellenőrizve**:
 
