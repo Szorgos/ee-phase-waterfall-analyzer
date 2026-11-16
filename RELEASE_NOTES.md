@@ -1,3 +1,16 @@
+### Újdonságok (2.2.1)
+
+**Letöltés (2.2.1):**
+- Windows 11: [Aqulify-Setup-2.2.1.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.1/Aqulify-Setup-2.2.1.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.1/Aqulify-Setup-2.2.1.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.2.1-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.1/Aqulify-2.2.1-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.1/Aqulify-2.2.1-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.2.1.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.1/Aqulify-Linux-2.2.1.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.1/Aqulify-Linux-2.2.1.tar.gz.sha256))
+- Fedora: [aqulify-2.2.1-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.1/aqulify-2.2.1-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.2.1-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.1/aqulify_2.2.1-1_amd64.deb) · Arch: [aqulify-2.2.1-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.1/aqulify-2.2.1-1-x86_64.pkg.tar.zst)
+- Raspberry Pi 4 / 5 és Android-távirányító: változatlanok, a [2.2.0 kiadásnál](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/tag/v2.2.0) ([Pi-csomag](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/aqulify_2.2.0-1.pi1_arm64.deb), [Android APK](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.2.0/Aqulify-Remote-1.0.0.apk))
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Windows: telefonos távirányító nyilvános Wi-Fi-n is.** A Windows sok otthoni Wi-Fit nyilvánosnak vesz fel, és ilyenkor a telefon nem érte el a gépet. A telepítő tűzfal-engedélye (TCP 47820–47824 és mDNS) most minden hálózattípusra érvényes, de csak a helyi hálózatról, az internet felől nem. A gép továbbra is csak párosított telefont vagy érvényes párosító kódot fogad el. A javítás a 2.2.1 telepítésekor (vagy a programon belüli frissítéskor) lép életbe.
+- A többi rendszeren a 2.2.1 tartalma azonos a 2.2.0-val.
+
 ### Újdonságok (2.2.0)
 
 **Letöltés (2.2.0):**

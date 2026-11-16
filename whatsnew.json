@@ -1,6 +1,35 @@
 {
   "versions": [
     {
+      "version": "2.2.1",
+      "date": "2026-11-16",
+      "notes": {
+        "hu": ["Windows: a telefonos távirányító nyilvánosnak jelölt Wi-Fi-hálózaton is eléri a gépet. A tűzfal-engedély most minden hálózattípusra érvényes, de csak a helyi hálózatról, az internet felől nem."],
+        "en": ["Windows: the phone remote now reaches the computer on Wi-Fi networks marked as public. The firewall permission now applies to every network type, but only from the local network, not from the internet."],
+        "es": ["Windows: el control remoto del teléfono ahora llega al equipo también en redes Wi-Fi marcadas como públicas. El permiso del firewall se aplica a todos los tipos de red, pero solo desde la red local, no desde internet."],
+        "fr": ["Windows : la télécommande sur téléphone atteint désormais l'ordinateur aussi sur les réseaux Wi-Fi marqués comme publics. L'autorisation du pare-feu s'applique à tous les types de réseau, mais uniquement depuis le réseau local, pas depuis Internet."],
+        "zh": ["Windows：手机遥控现在也能在标记为公用的 Wi-Fi 网络上连接到电脑。防火墙许可现适用于所有网络类型，但仅限本地网络，不接受来自互联网的连接。"],
+        "de": ["Windows: Die Handy-Fernbedienung erreicht den Computer jetzt auch in WLANs, die als öffentlich eingestuft sind. Die Firewall-Freigabe gilt für alle Netzwerktypen, aber nur aus dem lokalen Netzwerk, nicht aus dem Internet."],
+        "it": ["Windows: il telecomando sul telefono ora raggiunge il computer anche sulle reti Wi-Fi contrassegnate come pubbliche. L'autorizzazione del firewall vale per tutti i tipi di rete, ma solo dalla rete locale, non da Internet."],
+        "nl": ["Windows: de telefoonafstandsbediening bereikt de computer nu ook op wifi-netwerken die als openbaar zijn gemarkeerd. De firewalltoestemming geldt voor alle netwerktypen, maar alleen vanaf het lokale netwerk, niet vanaf internet."],
+        "pl": ["Windows: pilot w telefonie łączy się teraz z komputerem także w sieciach Wi-Fi oznaczonych jako publiczne. Zezwolenie zapory obejmuje wszystkie typy sieci, ale tylko z sieci lokalnej, nie z internetu."],
+        "ru": ["Windows: пульт на телефоне теперь подключается к компьютеру и в сетях Wi-Fi, отмеченных как общественные. Разрешение брандмауэра действует для всех типов сетей, но только из локальной сети, не из интернета."],
+        "pt": ["Windows: o controle remoto no telefone agora alcança o computador também em redes Wi-Fi marcadas como públicas. A permissão do firewall vale para todos os tipos de rede, mas apenas a partir da rede local, não da internet."],
+        "ro": ["Windows: telecomanda de pe telefon ajunge acum la computer și în rețelele Wi-Fi marcate ca publice. Permisiunea din firewall se aplică tuturor tipurilor de rețea, dar numai din rețeaua locală, nu din internet."],
+        "el": ["Windows: το τηλεχειριστήριο στο τηλέφωνο συνδέεται πλέον με τον υπολογιστή και σε δίκτυα Wi-Fi που έχουν χαρακτηριστεί δημόσια. Η άδεια του τείχους προστασίας ισχύει για όλους τους τύπους δικτύου, αλλά μόνο από το τοπικό δίκτυο, όχι από το διαδίκτυο."],
+        "tr": ["Windows: telefon uzaktan kumandası artık genel olarak işaretlenmiş Wi-Fi ağlarında da bilgisayara ulaşıyor. Güvenlik duvarı izni tüm ağ türleri için geçerli, ancak yalnızca yerel ağdan; internetten değil."],
+        "fi": ["Windows: puhelimen kaukosäädin tavoittaa nyt tietokoneen myös julkisiksi merkityissä Wi-Fi-verkoissa. Palomuurin lupa koskee kaikkia verkkotyyppejä, mutta vain paikallisesta verkosta, ei internetistä."],
+        "da": ["Windows: telefonens fjernbetjening når nu også computeren på Wi-Fi-netværk, der er markeret som offentlige. Firewalltilladelsen gælder alle netværkstyper, men kun fra det lokale netværk, ikke fra internettet."],
+        "nb": ["Windows: fjernkontrollen på telefonen når nå datamaskinen også på Wi-Fi-nettverk som er merket som offentlige. Brannmurtillatelsen gjelder alle nettverkstyper, men bare fra det lokale nettverket, ikke fra internett."],
+        "sv": ["Windows: fjärrkontrollen i telefonen når nu datorn även på Wi-Fi-nätverk som är markerade som offentliga. Brandväggsbehörigheten gäller alla nätverkstyper, men bara från det lokala nätverket, inte från internet."],
+        "he": ["Windows: השלט בטלפון מגיע עכשיו למחשב גם ברשתות Wi-Fi שמסומנות כציבוריות. הרשאת חומת האש חלה על כל סוגי הרשתות, אבל רק מהרשת המקומית, לא מהאינטרנט."],
+        "ja": ["Windows：パブリックに設定された Wi-Fi ネットワークでも、スマートフォンのリモコンがコンピューターに接続できるようになりました。ファイアウォールの許可はすべてのネットワークの種類に適用されますが、ローカルネットワークからのみで、インターネットからは接続できません。"],
+        "ko": ["Windows: 공용으로 설정된 Wi-Fi 네트워크에서도 휴대폰 리모컨이 컴퓨터에 연결됩니다. 방화벽 허용은 모든 네트워크 유형에 적용되지만 로컬 네트워크에서만 가능하며 인터넷에서는 연결할 수 없습니다."],
+        "cs": ["Windows: dálkové ovládání v telefonu se nyní připojí k počítači i v sítích Wi-Fi označených jako veřejné. Povolení brány firewall platí pro všechny typy sítí, ale jen z místní sítě, ne z internetu."],
+        "uk": ["Windows: пульт на телефоні тепер підключається до комп'ютера й у мережах Wi-Fi, позначених як загальнодоступні. Дозвіл брандмауера діє для всіх типів мереж, але лише з локальної мережі, не з інтернету."]
+      }
+    },
+    {
       "version": "2.2.0",
       "date": "2026-11-16",
       "notes": {
