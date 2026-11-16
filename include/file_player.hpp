@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "audio_decoder.hpp"
+#include "dsd.hpp"
 #include "media_session.hpp"
 
 namespace ee_analyzer::player {
@@ -44,9 +45,21 @@ namespace ee_analyzer::player {
 class PlayerOutput {
 public:
     using RenderFn = std::function<void(float* stereo, size_t frames)>;
+    using RenderDopFn = std::function<void(int32_t* stereoDop24, size_t frames)>;
     virtual ~PlayerOutput() = default;
     /** Új hangfolyam a megadott mintavételi frekvenciával (2 csatorna, float); inaktív állapotban indul. */
     virtual bool open(uint32_t sampleRate, RenderFn render, std::string* error) = 0;
+    /**
+     * Natív DSD (DoP 1.1) hangfolyam megnyitása (2 csatorna, 24 bites DoP szavak 32 bites egészben az alsó 24 biten:
+     * [23:16]=0x05/0xFA marker, [15:8]=b0, [7:0]=b1; a kimenet 24-in-32 MSB-igazítottan adja át az eszköznek).
+     * Ha a kimenet nem támogatja vagy az eszköz elutasítja a formátumot, false (error: az ok), és a lejátszó PCM-re lép vissza.
+     */
+    virtual bool openDop(uint32_t dopSampleRate, RenderDopFn render, std::string* error) {
+        (void)dopSampleRate;
+        (void)render;
+        if (error) *error = "format";
+        return false;
+    }
     virtual void close() = 0;
     /** false: szünet; a kimenet a már átvett, még meg nem szólalt mintákat megtartja (folytatáskor azok szólnak). */
     virtual void setActive(bool active) = 0;
@@ -115,6 +128,15 @@ public:
     /** Előbetöltés a memóriába (a következő megnyitott számtól; legfeljebb kPreloadMaxBytes méretű fájlnál). */
     void setPreload(bool on) { preload_ = on; }
     static constexpr uint64_t kPreloadMaxBytes = 400ull << 20;
+    /** Natív DSD (DoP 1.1) kérése (csak kizárólagos kimeneten; elutasításkor a lejátszó PCM-re lép vissza). */
+    void setDsdDop(bool on);
+    bool dsdDop() const { return dsdDop_.load(); }
+    /** Most ténylegesen DoP-kereteket ad-e a lejátszó. */
+    bool isDopActive() const { return dopActive_.load(); }
+    /** A szóló DSD-fájl eredeti 1 bites mintavétele (pl. 2822400 DSD64-nél; 0, ha nem DSD). */
+    uint32_t dopDsdRate() const { return dopDsdRate_.load(); }
+    /** Ha a DoP nem indult el és a lejátszó PCM-re lépett vissza, az elutasítás oka (pl. "format", "busy"). */
+    std::string dopFallbackReason() const;
     /** A hallott szám ReplayGain-erősítése dB-ben (0: nincs változtatás). */
     float currentGainDb() const;
 
@@ -127,6 +149,8 @@ public:
 
     /** A kimenet szála hívja: frames sztereó keret; ha nincs elég adat, csenddel tölt. */
     void render(float* stereo, size_t frames);
+    /** A kimenet szála hívja DoP módban: frames sztereó 24 bites DoP szó; csendnél kDsdSilenceByte (0xAA) csomagolva. */
+    void renderDop(int32_t* stereoDop24, size_t frames);
     /** A pufferben lévő, még meg nem szólaltatott keretek (diagnosztika, tesztek). */
     size_t bufferedFrames() const { return static_cast<size_t>(wr_.load() - rd_.load()); }
     /** A dekóder elérte-e a fájl végét (a puffer ettől még tartalmazhat adatot). */
@@ -158,6 +182,11 @@ private:
         // utána törlődik az előbetöltött másolat (Windowson nyitott fájl nem törölhető)
         std::unique_ptr<TempCopy> temp;     // előbetöltésnél a memóriába másolt fájl
         std::unique_ptr<AudioDecoder> dec;
+        std::unique_ptr<dsd::DsdRawSource> dopRaw; // natív DSD (DoP) módban a nyers MSB-first DSD bájtforrás
+        uint32_t dopRate = 0;               // DoP keret-mintavétel (pl. 176400 DSD64-nél)
+        uint32_t dsdRate = 0;               // eredeti 1 bites DSD mintavétel (pl. 2822400)
+        uint64_t dopTotal = 0;              // a fájl hossza DoP keretben (1 keret = 2 DSD bájt / csatorna)
+        std::string dopFallback;            // ha a DoP nem nyitható, a visszalépés oka
         float gain = 1.0f;                  // ReplayGain (lineáris)
         std::string path, title, artId;
         std::string coverMime, cover;       // a mappa képe, ha a fájlba nincs borító ágyazva
@@ -173,8 +202,8 @@ private:
     void decodeLoop();
     void stopLocked();
     void seekLocked(uint64_t frame);
-    /** Új hangfolyam az első szakasszal (megnyitás, illetve eltérő mintavételű következő szám). */
-    bool startStreamLocked(std::unique_ptr<Segment> seg, std::string* error);
+    /** Új hangfolyam az első szakasszal (megnyitás, illetve eltérő mintavételű / módú következő szám). */
+    bool startStreamLocked(std::unique_ptr<Segment> seg, std::string* error, bool modeChanged = false);
     /** Új szám a meglévő hangfolyamon (azonos mintavétel, kizárólagos mód); streamStopped: a kimenet állt. */
     void replaceTrackLocked(std::unique_ptr<Segment> seg, bool streamStopped);
     /** Dekódolás a puffer szabad részébe; false: az idővonal vége (nincs több azonos mintavételű szám). */
@@ -201,6 +230,12 @@ private:
 
     // gyűrűpuffer (sztereó keretek); írás: dekódoló szál, olvasás: kimenet szála
     std::vector<float> ring_;
+    std::vector<int32_t> dopRing_;          // DoP módban: sztereó 24 bites DoP szavak (32 bites egészben)
+    std::vector<uint8_t> dopRawBuf_;        // nyers DSD bájtok (interleaved)
+    std::vector<uint8_t> dopPackBuf_;       // csatornánként 2 egymást követő DSD bájt a packDopFrames számára
+    std::vector<int32_t> dopFrameBuf_;      // ideiglenes DoP keretpuffer
+    uint8_t dopPhase_ = 0;                  // a dekóder DoP-jelölő fázisa (0 -> 0x05, 1 -> 0xFA)
+    uint8_t dopRenderPhase_ = 0;            // a kimeneti szál DoP-jelölő fázisa (folytonos csend/keret váltakozás)
     size_t ringFrames_ = 0;
     std::atomic<uint64_t> wr_{0}, rd_{0};
     std::atomic<bool> eof_{false}, finished_{false};
@@ -211,6 +246,10 @@ private:
     std::atomic<float> rgPreampDb_{0.0f};
     std::atomic<bool> rgPreventClip_{true};
     std::atomic<bool> preload_{false};
+    std::atomic<bool> dsdDop_{false};
+    std::atomic<bool> dopActive_{false};
+    std::atomic<uint32_t> dopDsdRate_{0};
+    std::string dopFallback_;
     // kattanásmentes váltás (lásd kRateSettleMs): a hátralévő és az összes csend a hangfolyam elején
     std::atomic<uint64_t> leadIn_{0}, leadTotal_{0};
 };

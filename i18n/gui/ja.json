@@ -733,5 +733,8 @@
   "dev.importBtn": "EQ プロファイルを検索してインポート",
   "dev.irBtn": "インパルス応答を読み込む（Convolver）",
   "dev.profileHint": "選んだプロファイルはすぐに反映されます。EQ プロファイルでは Equalizer、インパルス応答では Convolver がオンになります。",
-  "dev.multiBtn": "出力を設定"
+  "dev.multiBtn": "出力を設定",
+  "ao.dsdDop": "ネイティブ DSD (DoP)",
+  "ao.dsdDopHint": "DSD ファイルは PCM 変換を行わず、DoP 1.1 形式で DAC へ送られます。DSP チェーン、ReplayGain、デジタル音量はバイパスされます（音量は DAC 側で調整してください）。",
+  "ao.dsdDopWarn": "DAC が DoP に対応していない場合、ネイティブ DSD 再生で大きなノイズが出ることがあります。まず小音量でお試しください。有効にしますか？"
 }

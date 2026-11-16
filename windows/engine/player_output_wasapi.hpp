@@ -68,6 +68,13 @@ public:
     bool wantExclusive() const { return wantExclusive_.load(); }
     /** Most kizárólagos módban szól-e (nyitott hangfolyam). */
     bool exclusiveActive() const { return exclusiveOn_.load(); }
+    /** Natív DSD (DoP 1.1) kérése (a jelút-állapot számára). */
+    void setWantDop(bool on) { wantDop_.store(on); }
+    bool wantDop() const { return wantDop_.load(); }
+    /** Most natív DSD (DoP 1.1) hangfolyam szól-e kizárólagos módban. */
+    bool dopActive() const { return dopOn_.load(); }
+    /** Az éppen nyitott hangfolyam mintavételi frekvenciája (Hz). */
+    uint32_t currentRate() const { return rate_; }
     /** Kizárólagos módban a DAC a mintavétel váltásakor új órajelre áll: a lejátszó rövid csenddel kezd. */
     bool settlesOnRateChange() const override { return exclusiveOn_.load(); }
     /** A legutóbbi kizárólagos megnyitás bitpontos volt-e eddig (nem veszett el bit a kimenet formátumára alakításkor). */
@@ -83,7 +90,7 @@ public:
         const double bufMs = 1000.0 * static_cast<double>(infoBuffer_) / rate;
         // kizárólagos módban két periódus van úton (az egyiket az eszköz játssza, a másikat töltjük)
         const double totalMs = (exclusiveOn_.load() ? 2.0 * bufMs : bufMs) + dspMs;
-        char buf[512];
+        char buf[640];
         std::snprintf(buf, sizeof(buf),
                       "\"quantum\":%u,\"bufReq\":0,\"bufMs\":%.2f,\"totalMs\":%.1f,\"load\":%.1f,\"peak\":%.1f,\"overruns\":%u,"
                       "\"exclusive\":{\"want\":%s,\"active\":%s,\"fallback\":\"%s\",\"hr\":\"0x%08lX\",\"format\":\"%s\","
@@ -100,7 +107,9 @@ public:
         {
             std::lock_guard<std::mutex> lk(renderMutex_);
             render_ = std::move(render);
+            renderDop_ = nullptr;
         }
+        dopMode_ = false;
         rate_ = sampleRate;
         active_ = false;
         quit_ = false;
@@ -127,6 +136,53 @@ public:
         return true;
     }
 
+    /**
+     * Natív DSD (DoP 1.1) hangfolyam megnyitása kizárólagos WASAPI kimeneten (24 bit 32 bites tárolóban, MSB-igazítva).
+     * Ha a kizárólagos mód nincs bekapcsolva vagy a hangeszköz nem fogadja el a DoP-mintavételt / formátumot, false-szal
+     * tér vissza (error: "format", "busy", "notAllowed", "error"), és a FilePlayer a DSD->PCM átalakításra lép vissza.
+     */
+    bool openDop(uint32_t dopSampleRate, RenderDopFn render, std::string* error) override {
+        close();
+        if (!wantExclusive_.load() || !dsp_) {
+            if (error) *error = "notAllowed";
+            return false;
+        }
+        {
+            std::lock_guard<std::mutex> lk(renderMutex_);
+            render_ = nullptr;
+            renderDop_ = std::move(render);
+        }
+        dopMode_ = true;
+        rate_ = dopSampleRate;
+        active_ = false;
+        quit_ = false;
+        flushReq_ = false;
+        written_ = 0;
+        consumed_ = 0;
+        initState_ = 0;
+        quantLoss_ = false;
+        reopenReq_ = false;
+        overruns_ = 0;
+        loadAvg_ = 0.0f;
+        loadPeak_ = 0.0f;
+        wake_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        thread_ = std::thread([this] { run(); });
+        std::unique_lock<std::mutex> lk(initMutex_);
+        initCv_.wait(lk, [this] { return initState_ != 0; });
+        if (initState_ < 0) {
+            lk.unlock();
+            std::string fb;
+            {
+                std::lock_guard<std::mutex> ik(infoMutex_);
+                fb = infoDopFallback_;
+            }
+            close();
+            if (error) *error = fb.empty() ? "format" : fb;
+            return false;
+        }
+        return true;
+    }
+
     void close() override {
         if (thread_.joinable()) {
             quit_ = true;
@@ -135,8 +191,11 @@ public:
         }
         if (wake_) { CloseHandle(wake_); wake_ = nullptr; }
         exclusiveOn_ = false;
+        dopOn_ = false;
+        dopMode_ = false;
         std::lock_guard<std::mutex> lk(renderMutex_);
         render_ = nullptr;
+        renderDop_ = nullptr;
     }
 
     void setActive(bool active) override {
@@ -165,6 +224,28 @@ public:
         return pcm::floatToInt(in, out, samples, f.bits, f.valid);
     }
 
+    /**
+     * 24 bites DoP szó (az int32_t alsó 24 bitjén: [23:16]=marker, [15:8]=b0, [7:0]=b1) bitpontos átadása a WASAPI
+     * kizárólagos pufferébe: 32 bites keretben (24/32 vagy 32/32) a WAVEFORMATEXTENSIBLE előírása szerint MSB-igazítva
+     * (8 bittel balra tolva, a felső 24 biten: [31:24]=marker, [23:16]=b0, [15:8]=b1, [7:0]=0), 24 bites tömörített
+     * keretben 3 kis-endián bájton (b1, b0, marker).
+     */
+    static void convertDop(const int32_t* in, BYTE* out, size_t samples, const WasapiFormat& f) {
+        if (f.bits == 32) {
+            for (size_t i = 0; i < samples; ++i) {
+                const uint32_t w = (static_cast<uint32_t>(in[i]) & 0x00FFFFFFu) << 8;
+                std::memcpy(out + i * 4, &w, 4);
+            }
+        } else if (f.bits == 24) {
+            for (size_t i = 0; i < samples; ++i) {
+                const uint32_t u = static_cast<uint32_t>(in[i]);
+                out[i * 3]     = static_cast<uint8_t>(u & 0xFFu);
+                out[i * 3 + 1] = static_cast<uint8_t>((u >> 8) & 0xFFu);
+                out[i * 3 + 2] = static_cast<uint8_t>((u >> 16) & 0xFFu);
+            }
+        }
+    }
+
 private:
     static constexpr IID kIID_IAudioRenderClient = {0xF294ACFC, 0x3146, 0x4483, {0xA7, 0xBF, 0xAD, 0xDC, 0xA7, 0xC2, 0x60, 0xE2}};
 
@@ -175,8 +256,10 @@ private:
         UINT32 bufferFrames = 0;
         bool started = false;
         bool exclusive = false;
+        bool dop = false;
         WasapiFormat fmt;
-        std::vector<float> tmp;    // kizárólagos módban: a lejátszó és a lánc puffere (float, sztereó)
+        std::vector<float> tmp;       // kizárólagos PCM módban: a lejátszó és a lánc puffere (float, sztereó)
+        std::vector<int32_t> tmpDop;  // kizárólagos DoP módban: 24 bites DoP szavak puffere (int32_t, sztereó)
         ~Stream() {
             if (client && started) client->Stop();
             render.reset();
@@ -283,6 +366,57 @@ private:
         return false;
     }
 
+    /**
+     * Kizárólagos DoP 1.1 hangfolyam megnyitása: előnyben a 24 bit 32 bites keretben (WAVEFORMATEXTENSIBLE
+     * wBitsPerSample = 32, wValidBitsPerSample = 24, KSDATAFORMAT_SUBTYPE_PCM), majd a 32/32 és a 24/24 egész PCM.
+     * 16 bites vagy lebegőpontos formátumon a DoP nem működik.
+     */
+    bool openDopExclusive(Stream& s, IMMDevice* dev, HRESULT& hr) {
+        static const WasapiFormat kDopFormats[] = {
+            { 32, 24, false, 0, "24/32 bit DoP" },
+            { 32, 32, false, 0, "32 bit DoP" },
+            { 24, 24, false, 0, "24 bit DoP" },
+        };
+        hr = AUDCLNT_E_UNSUPPORTED_FORMAT;
+        for (const WasapiFormat& f : kDopFormats) {
+            WAVEFORMATEXTENSIBLE wf = makeFormat(rate_, f);
+            REFERENCE_TIME period = 0;
+            for (int attempt = 0; attempt < 3; ++attempt) {
+                s.render.reset();
+                s.client.reset();
+                if (FAILED(hr = dev->Activate(win::kIID_IAudioClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(s.client.put()))))
+                    return false;
+                hr = s.client->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, reinterpret_cast<WAVEFORMATEX*>(&wf), nullptr);
+                if (FAILED(hr)) break;
+                if (period == 0) {
+                    REFERENCE_TIME def = 0, minimum = 0;
+                    if (FAILED(s.client->GetDevicePeriod(&def, &minimum))) def = 100000;
+                    period = std::max<REFERENCE_TIME>({ def, minimum, 100000 });
+                }
+                hr = s.client->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, period, period,
+                                          reinterpret_cast<WAVEFORMATEX*>(&wf), nullptr);
+                if (hr == AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED) {
+                    UINT32 frames = 0;
+                    if (FAILED(s.client->GetBufferSize(&frames)) || frames == 0) break;
+                    period = static_cast<REFERENCE_TIME>(10000000.0 * frames / rate_ + 0.5);
+                    continue;
+                }
+                break;
+            }
+            if (SUCCEEDED(hr)) {
+                s.fmt = f;
+                s.exclusive = true;
+                s.dop = true;
+                if (!finishStream(s)) { hr = E_FAIL; return false; }
+                s.tmpDop.assign(static_cast<size_t>(s.bufferFrames) * 2, 0);
+                return true;
+            }
+            if (hr == AUDCLNT_E_DEVICE_IN_USE || hr == AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED || hr == AUDCLNT_E_DEVICE_INVALIDATED)
+                return false;
+        }
+        return false;
+    }
+
     static const char* fallbackName(HRESULT hr) {
         if (hr == AUDCLNT_E_DEVICE_IN_USE) return "busy";
         if (hr == AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED) return "notAllowed";
@@ -294,6 +428,39 @@ private:
     bool openStream(Stream& s) {
         win::ComPtr<IMMDevice> dev;
         if (!defaultDevice(dev)) return false;
+        if (dopMode_) {
+            if (!wantExclusive_ || !dsp_) return false;
+            HRESULT why = S_OK;
+            if (!openDopExclusive(s, dev.p, why)) {
+                const std::string fb = fallbackName(why);
+                char hx[16];
+                std::snprintf(hx, sizeof(hx), "0x%08lX", static_cast<unsigned long>(why));
+                std::cout << "[Lejátszó] A natív DSD (DoP) nem indult el (" << fb << ", " << hx
+                          << "); PCM-re alakítva szól.\n";
+                {
+                    std::lock_guard<std::mutex> lk(infoMutex_);
+                    infoDopFallback_ = fb;
+                    infoDopHr_ = why;
+                }
+                s.render.reset();
+                s.client.reset();
+                return false;
+            }
+            std::cout << "[Lejátszó] Natív DSD (DoP, WASAPI exclusive): " << s.fmt.name << ", " << rate_ << " Hz, "
+                      << s.bufferFrames << " keret periódusonként (DSP és digitális hangerő kihagyva).\n";
+            {
+                std::lock_guard<std::mutex> lk(infoMutex_);
+                infoFallback_.clear();
+                infoHr_ = S_OK;
+                infoDopFallback_.clear();
+                infoDopHr_ = S_OK;
+                infoFormat_ = s.fmt.name;
+                infoBuffer_ = s.bufferFrames;
+            }
+            exclusiveOn_ = true;
+            dopOn_ = true;
+            return true;
+        }
         std::string fallback;
         HRESULT why = S_OK;
         if (wantExclusive_ && dsp_) {
@@ -320,6 +487,7 @@ private:
             infoBuffer_ = s.bufferFrames;
         }
         exclusiveOn_ = s.exclusive;
+        dopOn_ = false;
         return true;
     }
 
@@ -353,7 +521,21 @@ private:
         const HRESULT hr = s.render->GetBuffer(n, &data);
         if (hr == AUDCLNT_E_BUFFER_TOO_LARGE) return true;   // kizárólagos módban: az eszköz még nem kérte (pl. folytatás)
         if (FAILED(hr) || !data) return false;
-        if (s.exclusive) {
+        if (s.dop) {
+            int32_t* d = s.tmpDop.data();
+            if (renderDop_) {
+                renderDop_(d, n);
+            } else {
+                for (UINT32 i = 0; i < n; ++i) {
+                    const uint8_t marker = ((written_ + i) & 1u) ? 0xFAu : 0x05u;
+                    const int32_t w = dsd::packDopSample(dsd::kDsdSilenceByte, dsd::kDsdSilenceByte, marker);
+                    d[2 * i] = w;
+                    d[2 * i + 1] = w;
+                }
+            }
+            // DoP módban a DSP-lánc, a digitális hangerő és a mérők (dsp_->process) teljesen kimaradnak
+            convertDop(d, data, static_cast<size_t>(n) * 2, s.fmt);
+        } else if (s.exclusive) {
             float* f = s.tmp.data();
             if (render_) render_(f, n);
             else std::fill(f, f + static_cast<size_t>(n) * 2, 0.0f);
@@ -389,6 +571,7 @@ private:
             }
             if (!stream) {                              // újranyitás (eszközváltás után), kis szünetekkel
                 exclusiveOn_ = false;
+                dopOn_ = false;
                 if (WaitForSingleObject(wake_, 300) == WAIT_OBJECT_0 && quit_) break;
                 stream = std::make_unique<Stream>();
                 if (!openStream(*stream)) { stream.reset(); continue; }
@@ -429,12 +612,14 @@ private:
         }
         stream.reset();
         exclusiveOn_ = false;
+        dopOn_ = false;
         if (mmcss) AvRevertMmThreadCharacteristics(mmcss);
         CoUninitialize();
     }
 
     uint32_t rate_ = 48000;
     RenderFn render_;
+    RenderDopFn renderDop_;
     std::mutex renderMutex_;
     std::thread thread_;
     HANDLE wake_ = nullptr;
@@ -445,13 +630,15 @@ private:
     std::condition_variable initCv_;
     int initState_ = 0;
 
-    // kizárólagos mód
+    // kizárólagos mód és natív DSD (DoP 1.1)
     ExclusiveDsp* dsp_ = nullptr;
-    std::atomic<bool> wantExclusive_{false}, exclusiveOn_{false}, quantLoss_{false}, reopenReq_{false};
+    bool dopMode_ = false;
+    std::atomic<bool> wantExclusive_{false}, exclusiveOn_{false}, wantDop_{false}, dopOn_{false};
+    std::atomic<bool> quantLoss_{false}, reopenReq_{false};
     // a felületnek
     mutable std::mutex infoMutex_;
-    std::string infoFallback_, infoFormat_;
-    HRESULT infoHr_ = S_OK;
+    std::string infoFallback_, infoFormat_, infoDopFallback_;
+    HRESULT infoHr_ = S_OK, infoDopHr_ = S_OK;
     UINT32 infoBuffer_ = 0;
     mutable std::atomic<float> loadAvg_{0.0f}, loadPeak_{0.0f};
     std::atomic<uint32_t> overruns_{0};

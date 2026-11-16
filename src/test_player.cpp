@@ -25,6 +25,9 @@
 #include "play_stats.hpp"
 #include "playlists.hpp"
 #include "smart_lists.hpp"
+#ifdef _WIN32
+#include "../windows/engine/player_output_wasapi.hpp"
+#endif
 
 using namespace ee_analyzer;
 using namespace ee_analyzer::player;
@@ -81,11 +84,20 @@ class FakeOutput : public PlayerOutput {
 public:
     bool open(uint32_t sr, RenderFn r, std::string*) override {
         std::lock_guard<std::mutex> l(m);
-        rate = sr; render = std::move(r); opened = true; active = false; ++opens;
+        rate = sr; render = std::move(r); renderDop = nullptr; dopMode = false; opened = true; active = false; ++opens;
+        return true;
+    }
+    bool openDop(uint32_t sr, RenderDopFn r, std::string* err) override {
+        if (!allowDop) {
+            if (err) *err = dopFailReason;
+            return false;
+        }
+        std::lock_guard<std::mutex> l(m);
+        rate = sr; render = nullptr; renderDop = std::move(r); dopMode = true; opened = true; active = false; ++opens;
         return true;
     }
     std::atomic<int> opens{0};   // hányszor nyílt új hangfolyam (szünetmentes váltásnál nem nő)
-    void close() override { std::lock_guard<std::mutex> l(m); render = nullptr; opened = false; active = false; }
+    void close() override { std::lock_guard<std::mutex> l(m); render = nullptr; renderDop = nullptr; dopMode = false; opened = false; active = false; }
     void setActive(bool a) override { std::lock_guard<std::mutex> l(m); active = a; }
     void lock() override { m.lock(); }
     void unlock() override { m.unlock(); }
@@ -94,20 +106,30 @@ public:
     /** Kizárólagos módot játszik el (a lejátszó mintavétel-váltáskor csenddel kezd). */
     bool settle = false;
     bool settlesOnRateChange() const override { return settle; }
+    bool allowDop = false;
+    std::string dopFailReason = "format";
+    bool dopMode = false;
     /** A „hangeszköz” által már megszólaltatott keretek (UINT64_MAX: nem ismert, mint a PipeWire-nél). */
     std::atomic<uint64_t> consumed{UINT64_MAX};
     int flushes = 0;
     /** false: a hangfolyam nem fut (szünet / leállítva), ilyenkor a render nem hívódik. */
     bool pull(float* s, size_t n) {
         std::lock_guard<std::mutex> l(m);
-        if (!opened || !active || !render) return false;
+        if (!opened || !active || dopMode || !render) return false;
         render(s, n);
+        return true;
+    }
+    bool pullDop(int32_t* s, size_t n) {
+        std::lock_guard<std::mutex> l(m);
+        if (!opened || !active || !dopMode || !renderDop) return false;
+        renderDop(s, n);
         return true;
     }
     std::mutex m;
     uint32_t rate = 0;
     bool opened = false, active = false;
     RenderFn render;
+    RenderDopFn renderDop;
 };
 
 /** Megvárja, amíg legalább n keret van a pufferben (vagy a fájl végét). */
@@ -129,6 +151,19 @@ static std::vector<float> pullFrames(FilePlayer& p, FakeOutput& o, size_t n) {
         const size_t k = std::min<size_t>(512, n - out.size() / 2);
         waitBuffered(p, k);
         if (!o.pull(blk.data(), k)) break;
+        out.insert(out.end(), blk.begin(), blk.begin() + k * 2);
+    }
+    return out;
+}
+
+/** n DoP-keret kivétele 512-es blokkokban (sztereó 24 bites szavak). */
+static std::vector<int32_t> pullDopFrames(FilePlayer& p, FakeOutput& o, size_t n) {
+    std::vector<int32_t> out;
+    std::vector<int32_t> blk(512 * 2);
+    while (out.size() < n * 2) {
+        const size_t k = std::min<size_t>(512, n - out.size() / 2);
+        waitBuffered(p, k);
+        if (!o.pullDop(blk.data(), k)) break;
         out.insert(out.end(), blk.begin(), blk.begin() + k * 2);
     }
     return out;
@@ -1582,6 +1617,213 @@ static void testReplayGain() {
         for (auto it = fs::directory_iterator(dir, ec); !ec && it != fs::directory_iterator(); ++it) ++left;
         CHECK(left == 0, "leállítás után a másolat törlődött (%zu maradt)", left);
     }
+    std::error_code ec;
+    fs::remove(path, ec);
+    fs::remove(wav, ec);
+}
+
+/** Sony DSF v1.01 fájl összeállítása MSB-first csatornánkénti bájtokból + opcionális ID3v2 címkével. */
+static void writeDsfTestFile(const std::string& path, uint32_t dsdRate, uint32_t channels,
+                             const std::vector<std::vector<uint8_t>>& chBytesMsb,
+                             const std::vector<uint8_t>& id3Tag) {
+    constexpr uint32_t kBlockSize = 4096;
+    const size_t rawPerCh = chBytesMsb[0].size();
+    const uint64_t sampleCount = static_cast<uint64_t>(rawPerCh) * 8ULL;
+    const size_t numBlocks = (rawPerCh + kBlockSize - 1) / kBlockSize;
+    const uint64_t dataPayloadBytes = static_cast<uint64_t>(numBlocks) * kBlockSize * channels;
+    const uint64_t dataChunkSize = 12ULL + dataPayloadBytes;
+    const uint64_t metaOffset = id3Tag.empty() ? 0ULL : (28ULL + 52ULL + dataChunkSize);
+    const uint64_t totalFileSize = 28ULL + 52ULL + dataChunkSize + id3Tag.size();
+
+    std::vector<uint8_t> out;
+    out.reserve(static_cast<size_t>(totalFileSize));
+    auto w4 = [&](const char* id4) { out.insert(out.end(), id4, id4 + 4); };
+    auto le32 = [&](uint32_t v) {
+        out.push_back(static_cast<uint8_t>(v & 0xFFu));
+        out.push_back(static_cast<uint8_t>((v >> 8) & 0xFFu));
+        out.push_back(static_cast<uint8_t>((v >> 16) & 0xFFu));
+        out.push_back(static_cast<uint8_t>((v >> 24) & 0xFFu));
+    };
+    auto le64 = [&](uint64_t v) {
+        le32(static_cast<uint32_t>(v & 0xFFFFFFFFULL));
+        le32(static_cast<uint32_t>(v >> 32));
+    };
+    w4("DSD "); le64(28); le64(totalFileSize); le64(metaOffset);
+    w4("fmt "); le64(52); le32(1); le32(0); le32(channels == 1 ? 1u : 2u); le32(channels);
+    le32(dsdRate); le32(1); le64(sampleCount); le32(kBlockSize); le32(0);
+    w4("data"); le64(dataChunkSize);
+    for (size_t blk = 0; blk < numBlocks; ++blk) {
+        for (uint32_t c = 0; c < channels; ++c) {
+            for (uint32_t i = 0; i < kBlockSize; ++i) {
+                const size_t idx = blk * kBlockSize + i;
+                const uint8_t b = (idx < rawPerCh) ? dsd::reverseBits8(chBytesMsb[c][idx]) : 0x00u;
+                out.push_back(b);
+            }
+        }
+    }
+    out.insert(out.end(), id3Tag.begin(), id3Tag.end());
+    std::ofstream f(path, std::ios::binary);
+    f.write(reinterpret_cast<const char*>(out.data()), static_cast<std::streamsize>(out.size()));
+}
+
+static void testDsdDop() {
+    std::printf("[DoP] Natív DSD-lejátszás (DoP 1.1): 24 bites szavak, marker, bájtsorrend, csend a váltáskor, ReplayGain kimarad, PCM visszalépés\n");
+    constexpr uint32_t kDsd64Rate = 2822400;
+    constexpr uint32_t kDopRate = 176400;
+    constexpr size_t kDopFrames = 4096;
+    constexpr size_t kBytesPerCh = kDopFrames * 2;
+
+    std::vector<uint8_t> leftMsb(kBytesPerCh), rightMsb(kBytesPerCh);
+    for (size_t i = 0; i < kBytesPerCh; ++i) {
+        leftMsb[i] = static_cast<uint8_t>((i * 37u + 0x12u) & 0xFFu);
+        rightMsb[i] = static_cast<uint8_t>((i * 73u + 0xA5u) & 0xFFu);
+    }
+    const std::vector<uint8_t> rgTag = id3Tag23({
+        id3Frame23("TXXX", txxx("REPLAYGAIN_TRACK_GAIN", "-9.50 dB")),
+        id3Frame23("TXXX", txxx("REPLAYGAIN_TRACK_PEAK", "0.950000"))
+    });
+    const std::string dsfPath = tmpPath("aq_dop_test.dsf");
+    writeDsfTestFile(dsfPath, kDsd64Rate, 2, { leftMsb, rightMsb }, rgTag);
+
+    const std::string wavPath = tmpPath("aq_dop_pcm48.wav");
+    std::vector<float> wavSrc(4800 * 2, 0.25f);
+    writeWavFloat(wavPath, 48000, 2, wavSrc);
+
+    // 1. DoP engedélyezve, kizárólagos kimenet (settle = true, allowDop = true), ReplayGain bekapcsolva (-9,5 dB + -6 dB előerősítés):
+    //    a kimenetre pontosan a várt 24 bites DoP-szavak jutnak, a ReplayGain nem módosít rajtuk, a váltási csend 0xAA (nem 0).
+    {
+        auto* out = new FakeOutput;
+        out->settle = true;
+        out->allowDop = true;
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        p.setDsdDop(true);
+        p.setReplayGain(1, -6.0f, true);
+
+        std::string err;
+        const bool opened = p.open(dsfPath, &err);
+        CHECK(opened && p.isDopActive() && out->dopMode && out->rate == kDopRate &&
+              p.dopDsdRate() == kDsd64Rate && p.currentGainDb() == 0.0f && p.dopFallbackReason().empty(),
+              "DoP megnyitás: %u Hz DoP (DSD %u Hz), ReplayGain erősítés %.1f dB (kimarad)",
+              out->rate, p.dopDsdRate(), p.currentGainDb());
+
+        const size_t lead = static_cast<size_t>(p.leadInFrames());
+        const size_t expectedLead = ((kDopRate * FilePlayer::kRateSettleMs / 1000) + 1u) & ~uint64_t{1};
+        CHECK(lead == expectedLead && (lead % 2) == 0,
+              "DoP indítási csend: %zu keret (%u ms, páros keretszám a markerfázishoz)", lead, FilePlayer::kRateSettleMs);
+
+        const std::vector<int32_t> all = pullDopFrames(p, *out, lead + kDopFrames);
+        CHECK(all.size() == (lead + kDopFrames) * 2, "DoP keretek hiánytalanul kiolvasva (%zu minta)", all.size());
+
+        bool silenceOk = all.size() >= lead * 2;
+        bool nonZeroSilence = true;
+        for (size_t f = 0; silenceOk && f < lead; ++f) {
+            const uint8_t wantMarker = (f % 2 == 0) ? 0x05u : 0xFAu;
+            const int32_t wantWord = dsd::packDopSample(dsd::kDsdSilenceByte, dsd::kDsdSilenceByte, wantMarker);
+            const int32_t wl = all[f * 2], wr = all[f * 2 + 1];
+            if (wl == 0 || wr == 0) nonZeroSilence = false;
+            if (wl != wantWord || wr != wantWord) silenceOk = false;
+        }
+        CHECK(silenceOk && nonZeroSilence,
+              "DoP indítási csend: minden keret csomagolt 0x%02X (0x05AAAA / 0xFAAAAA), soha nem nulla PCM",
+              dsd::kDsdSilenceByte);
+
+        bool payloadOk = all.size() == (lead + kDopFrames) * 2;
+        for (size_t f = 0; payloadOk && f < kDopFrames; ++f) {
+            const size_t idx = (lead + f) * 2;
+            const int32_t wl = all[idx], wr = all[idx + 1];
+            const uint8_t wantMarker = ((lead + f) % 2 == 0) ? 0x05u : 0xFAu;
+            uint8_t l0 = 0, l1 = 0, r0 = 0, r1 = 0, ml = 0, mr = 0;
+            dsd::unpackDopSample(wl, ml, l0, l1);
+            dsd::unpackDopSample(wr, mr, r0, r1);
+            if (ml != wantMarker || mr != wantMarker ||
+                l0 != leftMsb[f * 2] || l1 != leftMsb[f * 2 + 1] ||
+                r0 != rightMsb[f * 2] || r1 != rightMsb[f * 2 + 1]) {
+                payloadOk = false;
+            }
+        }
+        CHECK(payloadOk, "DoP szavak: váltakozó 0x05/0xFA marker mindkét csatornán, pontos MSB-first bájtsorrend, ReplayGain nem változtat rajtuk");
+
+        // Tekerés DoP módban az 1024. DoP-keretre (2048. DSD-bájtra)
+        p.seek(1024.0 / static_cast<double>(kDopRate));
+        const std::vector<int32_t> afterSeek = pullDopFrames(p, *out, 256);
+        bool seekOk = afterSeek.size() == 256 * 2;
+        uint8_t prevMarker = 0;
+        for (size_t f = 0; seekOk && f < 256; ++f) {
+            uint8_t l0 = 0, l1 = 0, r0 = 0, r1 = 0, ml = 0, mr = 0;
+            dsd::unpackDopSample(afterSeek[f * 2], ml, l0, l1);
+            dsd::unpackDopSample(afterSeek[f * 2 + 1], mr, r0, r1);
+            if ((ml != 0x05u && ml != 0xFAu) || ml != mr || (f > 0 && ml == prevMarker)) seekOk = false;
+            prevMarker = ml;
+            const size_t bIdx = (1024 + f) * 2;
+            if (l0 != leftMsb[bIdx] || l1 != leftMsb[bIdx + 1] ||
+                r0 != rightMsb[bIdx] || r1 != rightMsb[bIdx + 1]) {
+                seekOk = false;
+            }
+        }
+        CHECK(seekOk, "DoP tekerés az 1024. keretre: a 2048. DSD-bájttól folytatódik bitpontosan, folyamatos markerrel");
+
+        // DoP -> PCM váltás: új PCM hangfolyam nyílik csenddel
+        CHECK(p.open(wavPath, &err) && !p.isDopActive() && !out->dopMode && out->rate == 48000,
+              "DoP -> PCM váltás: 48 kHz-es PCM kimenetre vált");
+        const size_t pcmLead = static_cast<size_t>(p.leadInFrames());
+        const std::vector<float> pcmGot = pullFrames(p, *out, pcmLead + 256);
+        const bool pcmZeros = pcmGot.size() == (pcmLead + 256) * 2 &&
+                              std::all_of(pcmGot.begin(), pcmGot.begin() + pcmLead * 2, [](float v) { return v == 0.0f; });
+        const bool pcmExact = pcmZeros && std::all_of(pcmGot.begin() + pcmLead * 2, pcmGot.end(), [](float v) { return v == 0.25f; });
+        CHECK(pcmLead == 48000u * FilePlayer::kRateSettleMs / 1000 && pcmExact,
+              "DoP -> PCM váltás: %zu keret PCM-csend, utána a PCM minta", pcmLead);
+
+        // PCM -> DoP váltás: újra DoP-csenddel (0xAA) indul
+        CHECK(p.open(dsfPath, &err) && p.isDopActive() && out->dopMode && out->rate == kDopRate && p.leadInFrames() == expectedLead,
+              "PCM -> DoP váltás: újra %u Hz DoP kimenet %zu keret DoP-csenddel", out->rate, expectedLead);
+        p.stop();
+    }
+
+    // 2. Visszalépés PCM-re, ha a kimenet nem fogadja el a DoP-ot (allowDop = false):
+    {
+        auto* out = new FakeOutput;
+        out->settle = true;
+        out->allowDop = false;
+        out->dopFailReason = "format";
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        p.setDsdDop(true);
+
+        std::string err;
+        const bool opened = p.open(dsfPath, &err);
+        CHECK(opened && !p.isDopActive() && !out->dopMode && out->rate == 88200 && p.dopFallbackReason() == "format",
+              "DoP elutasítva (\"%s\"): automatikus visszalépés %u Hz PCM-re", p.dopFallbackReason().c_str(), out->rate);
+        const size_t pcmLead = static_cast<size_t>(p.leadInFrames());
+        const std::vector<float> pcmFallback = pullFrames(p, *out, pcmLead + 512);
+        CHECK(pcmFallback.size() == (pcmLead + 512) * 2,
+              "PCM visszalépés: %zu csendkeret + 512 dekódolt PCM-keret", pcmLead);
+        p.stop();
+    }
+
+#ifdef _WIN32
+    // 3. WASAPI 24-in-32 (WAVEFORMATEXTENSIBLE wBitsPerSample=32, wValidBitsPerSample=24) és 24/24 bitpontos átadás:
+    {
+        const int32_t dopWords[2] = { 0x0005A1B2, 0x00FAA3B4 };
+        uint8_t buf32[8] = {};
+        const WasapiFormat fmt24in32{ 32, 24, false, 0, "24/32 bit DoP" };
+        WasapiPlayerOutput::convertDop(dopWords, buf32, 2, fmt24in32);
+        uint32_t w0 = 0, w1 = 0;
+        std::memcpy(&w0, buf32, 4);
+        std::memcpy(&w1, buf32 + 4, 4);
+        CHECK(w0 == 0x05A1B200u && w1 == 0xFAA3B400u && buf32[0] == 0x00 && buf32[3] == 0x05 && buf32[7] == 0xFA,
+              "WASAPI 24/32 bit DoP: MSB-igazított (<< 8) 32 bites keret (0x%08X, 0x%08X)", w0, w1);
+
+        uint8_t buf24[6] = {};
+        const WasapiFormat fmt24{ 24, 24, false, 0, "24 bit DoP" };
+        WasapiPlayerOutput::convertDop(dopWords, buf24, 2, fmt24);
+        CHECK(buf24[0] == 0xB2 && buf24[1] == 0xA1 && buf24[2] == 0x05 &&
+              buf24[3] == 0xB4 && buf24[4] == 0xA3 && buf24[5] == 0xFA,
+              "WASAPI 24 bit DoP: 3 bájtos kis-endián csomagolás");
+    }
+#endif
+
+    std::error_code ec;
+    fs::remove(dsfPath, ec);
+    fs::remove(wavPath, ec);
 }
 
 int main() {
@@ -1603,6 +1845,7 @@ int main() {
     testSmart();
     testPhoneStream();
     testErrors();
+    testDsdDop();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

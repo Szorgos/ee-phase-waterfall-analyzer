@@ -733,5 +733,8 @@
   "dev.importBtn": "查找并导入 EQ 配置",
   "dev.irBtn": "载入脉冲响应（Convolver）",
   "dev.profileHint": "所选配置立即生效。EQ 配置会开启 Equalizer，脉冲响应会开启 Convolver。",
-  "dev.multiBtn": "设置输出"
+  "dev.multiBtn": "设置输出",
+  "ao.dsdDop": "原生 DSD (DoP)",
+  "ao.dsdDopHint": "DSD 文件不经 PCM 转换，直接以 DoP 1.1 封装发送至 DAC。此时将跳过 DSP 链、ReplayGain 和数字音量（请在 DAC 上调节音量）。",
+  "ao.dsdDopWarn": "如果 DAC 不支持 DoP，原生 DSD 播放可能会产生较大噪音。请先在低音量下尝试！确定要启用吗？"
 }

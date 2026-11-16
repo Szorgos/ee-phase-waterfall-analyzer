@@ -733,5 +733,8 @@
   "dev.importBtn": "Najít a importovat profil EQ",
   "dev.irBtn": "Načíst impulzní odezvu (Convolver)",
   "dev.profileHint": "Zvolený profil platí okamžitě. Profil EQ zapne Equalizer, impulzní odezva Convolver.",
-  "dev.multiBtn": "Nastavit výstupy"
+  "dev.multiBtn": "Nastavit výstupy",
+  "ao.dsdDop": "Nativní DSD (DoP)",
+  "ao.dsdDopHint": "Soubory DSD jdou do DACu bez převodu na PCM, zabalené v DoP 1.1. Řetězec DSP, ReplayGain i digitální hlasitost se vynechají (hlasitost ovládejte na DACu).",
+  "ao.dsdDopWarn": "Pokud DAC nepodporuje DoP, nativní přehrávání DSD může způsobit hlasitý šum. Nejprve vyzkoušejte při nízké hlasitosti! Opravdu zapnout?"
 }

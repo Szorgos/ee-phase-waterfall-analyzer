@@ -29,6 +29,28 @@ std::string fileStem(const std::string& path) {
     if (dot != std::string::npos && dot > 0) s.resize(dot);
     return s;
 }
+
+bool isDsdFilePath(const std::string& path) {
+    const size_t slash = path.find_last_of("/\\");
+    const size_t dot = path.find_last_of('.');
+    if (dot == std::string::npos || (slash != std::string::npos && dot < slash)) return false;
+    std::string ext = path.substr(dot + 1);
+    for (char& c : ext) if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+    return ext == "dsf" || ext == "dff";
+}
+
+/** DoP 1.1 csend (kDsdSilenceByte = 0xAA, váltakozó 0x05/0xFA jelölővel, soha nem nulla PCM minta). */
+uint8_t fillDopSilenceFrames(int32_t* outStereo, size_t frames, uint8_t startPhase) {
+    static constexpr uint8_t kSilenceBytes[4] = {
+        dsd::kDsdSilenceByte, dsd::kDsdSilenceByte,
+        dsd::kDsdSilenceByte, dsd::kDsdSilenceByte
+    };
+    uint8_t phase = startPhase & 1u;
+    for (size_t i = 0; i < frames; ++i) {
+        phase = dsd::packDopFrames(kSilenceBytes, 1, 2, phase, outStereo + 2 * i);
+    }
+    return phase;
+}
 } // namespace
 
 FilePlayer::FilePlayer(std::unique_ptr<PlayerOutput> out) : out_(std::move(out)) {
@@ -112,9 +134,41 @@ void FilePlayer::setReplayGain(int mode, float preampDb, bool preventClip) {
 }
 
 float FilePlayer::currentGainDb() const {
+    if (dopActive_.load()) return 0.0f;   // DoP módban a ReplayGain és minden mintamódosítás kimarad
     std::lock_guard<std::mutex> lk(m_);
     const Segment* a = audibleLocked();
     return a && a->gain > 0.0f ? 20.0f * std::log10(a->gain) : 0.0f;
+}
+
+std::string FilePlayer::dopFallbackReason() const {
+    std::lock_guard<std::mutex> lk(m_);
+    return dopFallback_;
+}
+
+void FilePlayer::setDsdDop(bool on) {
+    if (dsdDop_.exchange(on) == on) return;
+    dropPrefetched();
+    std::string reopenPath;
+    uint64_t reopenToken = 0;
+    double reopenPos = 0.0;
+    State prevState = State::Idle;
+    {
+        std::lock_guard<std::mutex> lk(m_);
+        prevState = state_.load();
+        const Segment* a = audibleLocked();
+        if (prevState != State::Idle && a && isDsdFilePath(a->path)) {
+            reopenPath = a->path;
+            reopenToken = a->token;
+            const uint64_t t = audibleFrame();
+            reopenPos = rate_ ? static_cast<double>(t > a->start ? t - a->start : 0) / rate_ : 0.0;
+        }
+    }
+    if (!reopenPath.empty()) {
+        if (open(reopenPath, nullptr, reopenToken)) {
+            if (reopenPos > 0.0) seek(reopenPos);
+            if (prevState == State::Paused) pause();
+        }
+    }
 }
 
 std::unique_ptr<FilePlayer::Segment> FilePlayer::makeSegment(const std::string& path, std::string* error, uint64_t token) {
@@ -123,7 +177,8 @@ std::unique_ptr<FilePlayer::Segment> FilePlayer::makeSegment(const std::string& 
         std::string copy = copyForPreload(path, kPreloadMaxBytes);
         if (!copy.empty()) temp = std::make_unique<TempCopy>(std::move(copy));
     }
-    auto dec = openDecoder(temp ? temp->path : path, error);
+    const std::string actualPath = temp ? temp->path : path;
+    auto dec = openDecoder(actualPath, error);
     if (!dec) return nullptr;
     auto s = std::make_unique<Segment>();
     s->temp = std::move(temp);
@@ -135,6 +190,22 @@ std::unique_ptr<FilePlayer::Segment> FilePlayer::makeSegment(const std::string& 
     if (!dec->tags().art.empty()) s->artId = media::hashId(dec->tags().art);
     else if (library::folderCover(path, s->coverMime, s->cover)) s->artId = media::hashId(s->cover);   // a mappa képe
     s->token = token;
+    if (dsdDop_.load() && isDsdFilePath(path)) {
+        std::string rawErr;
+        auto raw = dsd::openDsdRawFile(actualPath, &rawErr);
+        if (raw) {
+            s->dsdRate = raw->info().dsdSampleRate;
+            if (raw->info().channels >= 1 && raw->info().channels <= 2 && raw->info().dopSampleRate > 0) {
+                s->dopRate = raw->info().dopSampleRate;
+                s->dopTotal = (raw->totalChannelBytes() + 1ULL) / 2ULL;
+                s->dopRaw = std::move(raw);
+            } else {
+                s->dopFallback = "format";
+            }
+        } else {
+            s->dopFallback = "format";
+        }
+    }
     s->dec = std::move(dec);
     return s;
 }
@@ -147,19 +218,32 @@ bool FilePlayer::open(const std::string& path, std::string* error, uint64_t toke
         return false;
     }
     std::lock_guard<std::mutex> lk(m_);
-    // Kizárólagos módban azonos mintavételnél a hangfolyam marad: a DAC-nak nem kell leállnia és újraindulnia
-    // (egyes DAC-oknál már az újranyitás is hallható zajt ad), és a számváltás azonnali
+    // Kizárólagos módban azonos mintavételnél és azonos módban (PCM->PCM vagy DoP->DoP) a hangfolyam marad:
+    // a DAC-nak nem kell leállnia és újraindulnia, és a számváltás azonnali
     const State st = state_.load();
-    if (st != State::Idle && !segs_.empty() && seg->dec->sampleRate() == rate_ && out_->settlesOnRateChange()) {
+    const bool curDop = dopActive_.load();
+    const bool nextDop = seg->dopRaw != nullptr;
+    const uint32_t nextRate = nextDop ? seg->dopRate : seg->dec->sampleRate();
+    if (st != State::Idle && !segs_.empty() && curDop == nextDop && nextRate == rate_ && out_->settlesOnRateChange()) {
         replaceTrackLocked(std::move(seg), st != State::Playing);
         return true;
     }
+    const bool modeChanged = (st != State::Idle && curDop != nextDop);
     stopLocked();
-    return startStreamLocked(std::move(seg), error);
+    return startStreamLocked(std::move(seg), error, modeChanged);
 }
 
 void FilePlayer::replaceTrackLocked(std::unique_ptr<Segment> seg, bool streamStopped) {
     out_->lock();                       // a render most nem fut: a puffer biztonságosan üríthető
+    const bool dop = dopActive_.load() && seg->dopRaw != nullptr;
+    if (dop) {
+        seg->total = seg->dopTotal;
+        dopDsdRate_ = seg->dsdRate;
+        dopFallback_.clear();
+    } else {
+        dopDsdRate_ = seg->dsdRate;
+        dopFallback_ = seg->dopFallback;
+    }
     seg->start = 0;
     seg->end = UINT64_MAX;
     segs_.clear();
@@ -169,8 +253,10 @@ void FilePlayer::replaceTrackLocked(std::unique_ptr<Segment> seg, bool streamSto
     eof_ = finished_ = false;
     out_->flush();                      // az előző szám pufferben maradt része ne szóljon
     // Ha a kimenet állt (szünet / a szám vége), az újrainduláskor a DAC újra szinkronizál: csenddel kezd
-    leadTotal_ = streamStopped ? static_cast<uint64_t>(rate_) * kRateSettleMs / 1000 : 0;
+    const uint64_t settleFrames = static_cast<uint64_t>(rate_) * kRateSettleMs / 1000;
+    leadTotal_ = streamStopped ? (dop ? (settleFrames & ~uint64_t(1)) : settleFrames) : 0;
     leadIn_ = leadTotal_.load();
+    if (dop) dopPhase_ = dopRenderPhase_;
     out_->unlock();
     fillLocked();
     state_ = State::Playing;
@@ -178,7 +264,47 @@ void FilePlayer::replaceTrackLocked(std::unique_ptr<Segment> seg, bool streamSto
     cv_.notify_all();
 }
 
-bool FilePlayer::startStreamLocked(std::unique_ptr<Segment> seg, std::string* error) {
+bool FilePlayer::startStreamLocked(std::unique_ptr<Segment> seg, std::string* error, bool modeChanged) {
+    if (seg->dopRaw) {
+        std::string dopErr;
+        if (out_->openDop(seg->dopRate, [this](int32_t* d, size_t n) { renderDop(d, n); }, &dopErr)) {
+            dopActive_ = true;
+            dopDsdRate_ = seg->dsdRate;
+            dopFallback_.clear();
+            rate_ = seg->dopRate;
+            seg->total = seg->dopTotal;
+            seg->start = 0;
+            seg->end = UINT64_MAX;
+            segs_.clear();
+            segs_.push_back(std::move(*seg));
+            pending_.reset();
+            ringFrames_ = std::max<size_t>(rate_, kChunkFrames * 2);
+            dopRing_.assign(ringFrames_ * 2, 0);
+            wr_ = rd_ = played_ = base_ = 0;
+            eof_ = finished_ = false;
+            dopPhase_ = 0;
+            dopRenderPhase_ = 0;
+            leadIn_ = 0;
+            leadTotal_ = 0;
+            if (out_->settlesOnRateChange() || modeChanged) {
+                // DoP-indítás és PCM<->DoP váltás: kRateSettleMs DoP-csend (kDsdSilenceByte = 0xAA csomagolva,
+                // páros keretszámmal, hogy a csend után az első DoP adatkeret is 0x05 jelölővel induljon).
+                leadTotal_ = (static_cast<uint64_t>(rate_) * kRateSettleMs / 1000) & ~uint64_t(1);
+                leadIn_ = leadTotal_.load();
+            }
+            fillLocked();
+            state_ = State::Playing;
+            out_->setActive(true);
+            cv_.notify_all();
+            return true;
+        }
+        // A hangeszköz nem fogadta el a DoP formátumot / mintavételt: visszalépés PCM-átalakításra
+        seg->dopRaw.reset();
+        seg->dopFallback = dopErr.empty() ? "format" : dopErr;
+    }
+    dopActive_ = false;
+    dopDsdRate_ = seg->dsdRate;
+    dopFallback_ = seg->dopFallback;
     rate_ = seg->dec->sampleRate();
     seg->start = 0;
     seg->end = UINT64_MAX;
@@ -198,9 +324,9 @@ bool FilePlayer::startStreamLocked(std::unique_ptr<Segment> seg, std::string* er
         if (error) *error = err.empty() ? "A hangkimenet nem nyitható meg." : err;
         return false;
     }
-    // Kattanásmentes indulás: kizárólagos módban minden új hangfolyam rövid csenddel kezd, amíg a DAC az (esetleg
-    // új) órajelre áll és elnémítását feloldja (a kimenet még inaktív, a render nem fut)
-    if (out_->settlesOnRateChange()) {
+    // Kattanásmentes indulás: kizárólagos módban (és DoP<->PCM váltáskor) minden új hangfolyam rövid csenddel kezd,
+    // amíg a DAC az új órajelre és üzemmódra áll és elnémítását feloldja
+    if (out_->settlesOnRateChange() || modeChanged) {
         leadTotal_ = static_cast<uint64_t>(rate_) * kRateSettleMs / 1000;
         leadIn_ = leadTotal_.load();
     }
@@ -241,6 +367,9 @@ void FilePlayer::dropPrefetched() {
 
 void FilePlayer::stopLocked() {
     pending_.reset();
+    dopActive_ = false;
+    dopDsdRate_ = 0;
+    dopFallback_.clear();
     if (state_.load() == State::Idle) return;
     state_ = State::Idle;
     out_->close();
@@ -294,7 +423,12 @@ void FilePlayer::seekLocked(uint64_t frame) {
     while (segs_.size() > 1) segs_.pop_back();
     pending_.reset();
     Segment& s = segs_.front();
-    if (!s.dec->seek(frame)) {
+    if (dopActive_.load() && s.dopRaw) {
+        if (!s.dopRaw->seekByte(frame * 2ULL)) {
+            s.dopRaw->seekByte(0);
+            frame = 0;
+        }
+    } else if (!s.dec->seek(frame)) {
         s.dec->seek(0);
         frame = 0;
     }
@@ -306,6 +440,7 @@ void FilePlayer::seekLocked(uint64_t frame) {
     out_->flush();                      // a kimenet pufferében várakozó régi minták se szóljanak
     leadIn_ = 0;                        // tekeréskor az eleji csend elmarad (a flush a számlálót is nullázza)
     leadTotal_ = 0;
+    if (dopActive_.load()) dopPhase_ = dopRenderPhase_;
     out_->unlock();
     fillLocked();
 }
@@ -407,16 +542,20 @@ bool FilePlayer::art(const std::string& id, std::string& mime, std::string& byte
 bool FilePlayer::appendNextLocked() {
     if (!next_ || segs_.empty()) return false;
     uint64_t after = segs_.back().token;
+    const bool curDop = dopActive_.load();
     for (int i = 0; i < kMaxSkip; ++i) {
         std::string path;
         uint64_t token = 0;
         if (!next_(after, path, token)) return false;
         auto seg = makeSegment(path, nullptr, token);
         if (!seg) { after = token; continue; }   // nem nyitható: a sor következő száma
-        if (seg->dec->sampleRate() != rate_) {
-            pending_ = std::move(seg);           // eltérő mintavétel: a mostani vége után, új hangfolyamon
+        const bool nextDop = seg->dopRaw != nullptr;
+        const uint32_t nextRate = nextDop ? seg->dopRate : seg->dec->sampleRate();
+        if (nextDop != curDop || nextRate != rate_) {
+            pending_ = std::move(seg);           // eltérő mód (DoP <-> PCM) vagy mintavétel: új hangfolyamon
             return false;
         }
+        if (nextDop) seg->total = seg->dopTotal;
         seg->start = segs_.back().end;
         seg->end = UINT64_MAX;
         segs_.push_back(std::move(*seg));
@@ -426,6 +565,61 @@ bool FilePlayer::appendNextLocked() {
 }
 
 bool FilePlayer::fillLocked() {
+    if (dopActive_.load()) {
+        while (!eof_.load() && !segs_.empty()) {
+            Segment& s = segs_.back();
+            const uint64_t w = wr_.load(), r = rd_.load(std::memory_order_acquire);
+            const size_t free = ringFrames_ - static_cast<size_t>(w - r);
+            if (free < kChunkFrames) return true;
+            const uint32_t srcCh = s.dopRaw ? s.dopRaw->info().channels : 0;
+            if (!s.dopRaw || srcCh == 0 || srcCh > 2) {
+                s.end = base_.load() + w;
+                if (!appendNextLocked()) { eof_ = true; break; }
+                continue;
+            }
+            // 1 DoP keret = 2 DSD bájt csatornánként (MSB-first); ReplayGain és mintamódosítás nélkül
+            if (dopRawBuf_.size() < kChunkFrames * 2 * srcCh)
+                dopRawBuf_.assign(kChunkFrames * 2 * srcCh, dsd::kDsdSilenceByte);
+            const size_t gotBytes = s.dopRaw->read(dopRawBuf_.data(), kChunkFrames * 2);
+            if (gotBytes == 0) {
+                s.end = base_.load() + w;
+                if (!appendNextLocked()) { eof_ = true; break; }
+                continue;
+            }
+            if (gotBytes & 1u) {
+                for (uint32_t c = 0; c < srcCh; ++c)
+                    dopRawBuf_[gotBytes * srcCh + c] = dsd::kDsdSilenceByte;
+            }
+            const size_t gotFrames = (gotBytes + 1) / 2;
+            // A DsdRawSource bájtonként váltogatja a csatornákat ([L0, R0, L1, R1]); a packDopFrames
+            // csatornánként 2 egymást követő DSD bájtot vár ([L0, L1, R0, R1]).
+            if (dopPackBuf_.size() < gotFrames * 4) dopPackBuf_.resize(gotFrames * 4);
+            for (size_t f = 0; f < gotFrames; ++f) {
+                if (srcCh == 1) {
+                    const uint8_t b0 = dopRawBuf_[2 * f];
+                    const uint8_t b1 = dopRawBuf_[2 * f + 1];
+                    dopPackBuf_[4 * f + 0] = b0;
+                    dopPackBuf_[4 * f + 1] = b1;
+                    dopPackBuf_[4 * f + 2] = b0;
+                    dopPackBuf_[4 * f + 3] = b1;
+                } else {
+                    dopPackBuf_[4 * f + 0] = dopRawBuf_[(2 * f) * 2 + 0];
+                    dopPackBuf_[4 * f + 1] = dopRawBuf_[(2 * f + 1) * 2 + 0];
+                    dopPackBuf_[4 * f + 2] = dopRawBuf_[(2 * f) * 2 + 1];
+                    dopPackBuf_[4 * f + 3] = dopRawBuf_[(2 * f + 1) * 2 + 1];
+                }
+            }
+            if (dopFrameBuf_.size() < gotFrames * 2) dopFrameBuf_.resize(gotFrames * 2);
+            dopPhase_ = dsd::packDopFrames(dopPackBuf_.data(), gotFrames, 2, dopPhase_, dopFrameBuf_.data());
+            for (size_t i = 0; i < gotFrames; ++i) {
+                const size_t idx = static_cast<size_t>((w + i) % ringFrames_) * 2;
+                dopRing_[idx] = dopFrameBuf_[2 * i];
+                dopRing_[idx + 1] = dopFrameBuf_[2 * i + 1];
+            }
+            wr_.store(w + gotFrames, std::memory_order_release);
+        }
+        return false;
+    }
     while (!eof_.load() && !segs_.empty()) {
         Segment& s = segs_.back();
         const uint64_t w = wr_.load(), r = rd_.load(std::memory_order_acquire);
@@ -496,6 +690,41 @@ void FilePlayer::render(float* stereo, size_t frames) {
     }
 }
 
+void FilePlayer::renderDop(int32_t* stereoDop24, size_t frames) {
+    if (state_.load() != State::Playing) {
+        dopRenderPhase_ = fillDopSilenceFrames(stereoDop24, frames, dopRenderPhase_);
+        return;
+    }
+    // A hangfolyam eleji DoP-csend (kattanásmentes váltás): kDsdSilenceByte (0xAA) DoP-ba csomagolva, soha nem 0!
+    if (const uint64_t lead = leadIn_.load()) {
+        const size_t z = static_cast<size_t>(std::min<uint64_t>(frames, lead));
+        dopRenderPhase_ = fillDopSilenceFrames(stereoDop24, z, dopRenderPhase_);
+        leadIn_.store(lead - z);
+        if (z == frames) return;
+        stereoDop24 += 2 * z;
+        frames -= z;
+    }
+    const uint64_t r = rd_.load(), w = wr_.load(std::memory_order_acquire);
+    const size_t n = std::min<size_t>(frames, static_cast<size_t>(w - r));
+    for (size_t i = 0; i < n; ++i) {
+        const size_t idx = static_cast<size_t>((r + i) % ringFrames_) * 2;
+        stereoDop24[2 * i] = dopRing_[idx];
+        stereoDop24[2 * i + 1] = dopRing_[idx + 1];
+    }
+    dopRenderPhase_ = static_cast<uint8_t>((dopRenderPhase_ + n) & 1u);
+    if (n < frames) {
+        dopRenderPhase_ = fillDopSilenceFrames(stereoDop24 + 2 * n, frames - n, dopRenderPhase_);
+    }
+    rd_.store(r + n, std::memory_order_release);
+    played_.fetch_add(n);
+    if (n < frames && eof_.load()) {
+        finished_ = true;
+        cv_.notify_all();
+    } else if (!eof_.load() && (w - r - n) < ringFrames_ / 2) {
+        cv_.notify_all();
+    }
+}
+
 void FilePlayer::decodeLoop() {
     std::unique_lock<std::mutex> lk(m_);
     while (!quit_) {
@@ -509,10 +738,12 @@ void FilePlayer::decodeLoop() {
             // WASAPI-nál kb. 100 ms, levágódna); utána a kimenet leáll, a pozíció a végén marad
             if (audibleFrame() < played_.load()) continue;
             if (pending_) {
-                // a sor következő száma más mintavétellel: új hangfolyam (ha nem nyitható, a lejátszás leáll)
+                // a sor következő száma más mintavétellel / móddal: új hangfolyam (ha nem nyitható, a lejátszás leáll)
                 std::unique_ptr<Segment> next = std::move(pending_);
+                const bool modeChanged = (dopActive_.load() != (next->dopRaw != nullptr));
                 out_->close();
-                if (!startStreamLocked(std::move(next), nullptr)) out_->close();
+                dopActive_ = false;
+                if (!startStreamLocked(std::move(next), nullptr, modeChanged)) out_->close();
                 continue;
             }
             state_ = State::Ended;

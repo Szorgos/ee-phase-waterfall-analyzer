@@ -4889,6 +4889,10 @@ var qrcode = function() {
                   </select></label>
                 <div class="ao-hint" data-i18n="ao.exclVolHint">Digitális: a csúszka a program végén szabályoz, a DAC hangereje nem változik. 100%-nál bitpontos, alatta nem. Hardveres: a DAC saját hangerejét állítja, bitpontos, de csak akkor működik, ha a driver kizárólagos módban is alkalmazza; ha nem, a csúszka hatástalan. A következő számtól érvényes.</div>
                 </div>
+                <div id="aoDopWrap" hidden>
+                  <label class="ao-row ao-check"><input type="checkbox" id="aoDsdDop" onchange="aoDopToggle(this)"> <span data-i18n="ao.dsdDop">DSD natívan (DoP)</span></label>
+                  <div class="ao-hint" data-i18n="ao.dsdDopHint">A DSD-fájlok PCM-átalakítás nélkül, DoP 1.1 csomagolásban mennek a DAC-ra. Ilyenkor a DSP-lánc, a ReplayGain és a digitális hangerő kimarad (a hangerőt a DAC-on szabályozd).</div>
+                </div>
               </div>
             </div>
             <div class="ao-path" id="aoPath"></div>
@@ -9323,10 +9327,25 @@ function aoOnMessage(m) {
   document.getElementById("aoExclVolWrap").hidden = exclAlsa || exclHog;
   document.getElementById("aoExclusive").checked = !!o.exclusive;
   document.getElementById("aoExclVol").value = o.exclHwVolume ? "hardware" : "digital";
+  const dopWrap = document.getElementById("aoDopWrap"), dopChk = document.getElementById("aoDsdDop");
+  if (dopWrap && dopChk) {
+    dopWrap.hidden = cp.dop !== true || !o.exclusive;
+    dopChk.disabled = !o.exclusive;
+    dopChk.checked = !!o.dsdDop;
+  }
   const rgOn = (o.replayGain || "off") !== "off";
   document.getElementById("aoRowRgPreamp").hidden = !rgOn;
   document.getElementById("aoRowRgClip").hidden = !rgOn;
   aoRenderPath();
+}
+function aoDopToggle(chk) {
+  if (chk && chk.checked) {
+    if (!window.confirm(t("ao.dsdDopWarn"))) {
+      chk.checked = false;
+      return;
+    }
+  }
+  aoSend();
 }
 function aoSend() {
   const rv = document.getElementById("aoRate").value;
@@ -9344,6 +9363,12 @@ function aoSend() {
   if (aoCapsDetail && aoCapsDetail.exclusive) {
     opts.exclusive = document.getElementById("aoExclusive").checked;
     opts.exclHwVolume = document.getElementById("aoExclVol").value === "hardware";
+    const dopWrap = document.getElementById("aoDopWrap"), dopChk = document.getElementById("aoDsdDop");
+    if (dopWrap && dopChk && aoCapsDetail.dop) {
+      dopWrap.hidden = !opts.exclusive;
+      dopChk.disabled = !opts.exclusive;
+      opts.dsdDop = dopChk.checked;
+    }
   }
   moSend({ type: "set_audio_opts", opts });
 }
@@ -9363,6 +9388,14 @@ function aoRenderPath() {
     else if (ex.fallback) {
       const why = "ao.excl" + ex.fallback.charAt(0).toUpperCase() + ex.fallback.slice(1);
       lines.push(`<span class="warn">● ${t("ao.exclFallback", { reason: t(why) })}</span>`);
+    }
+  }
+  if (p.dop && p.dop.want) {
+    if (p.dop.active) {
+      lines.push(`<span class="ok">● ${t("ao.dsdDop")}</span> · ${t("ao.dsdDopHint")}`);
+    } else if (p.dop.fallback) {
+      const why = "ao.excl" + p.dop.fallback.charAt(0).toUpperCase() + p.dop.fallback.slice(1);
+      lines.push(`<span class="warn">● ${t("ao.dsdDop")}: PCM (${t(why)})</span>`);
     }
   }
   if (p.mixer) lines.push(`<span class="warn">● ${t("ao.mixed")}</span>`);
@@ -11001,7 +11034,11 @@ function updateEngineBadge() {
   updateDspWarn(st);
   const src = st.source || t("engine.src");
   const sr = st.sr ? ` • ${(st.sr / 1000).toFixed(1)} kHz` : "";
-  if (st.platform === "windows" && st.dspActive === false && st.dspState === "idle") {
+  if (st.path && st.path.dop && st.path.dop.active) {
+    badge.className = "status-badge optimal";
+    badge.textContent = t("engine.live", { src, sr });
+    badge.title = t("ao.dsdDopHint");
+  } else if (st.platform === "windows" && st.dspActive === false && st.dspState === "idle") {
     // szünet: a hangfeldolgozás a lejátszással együtt magától indul (nem hiba)
     badge.className = "status-badge info";
     badge.textContent = t("engine.idle");

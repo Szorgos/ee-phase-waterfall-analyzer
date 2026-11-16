@@ -733,5 +733,8 @@
   "dev.importBtn": "EQ-profiel zoeken en importeren",
   "dev.irBtn": "Impulsrespons laden (Convolver)",
   "dev.profileHint": "Het gekozen profiel werkt direct. Een EQ-profiel zet de Equalizer aan, een impulsrespons de Convolver.",
-  "dev.multiBtn": "Uitgangen instellen"
+  "dev.multiBtn": "Uitgangen instellen",
+  "ao.dsdDop": "Natieve DSD (DoP)",
+  "ao.dsdDopHint": "DSD-bestanden worden zonder PCM-omzetting in DoP 1.1-verpakking naar de DAC gestuurd. De DSP-keten, ReplayGain en het digitale volume worden overgeslagen (regel het volume op de DAC).",
+  "ao.dsdDopWarn": "Als de DAC geen DoP ondersteunt, kan natieve DSD-weergave harde ruis geven. Probeer het eerst op een laag volume! Weet je zeker dat je dit wilt inschakelen?"
 }
