@@ -1,0 +1,102 @@
+# Aqulify – Raspberry Pi (arm64) csomagkészítési és telepítési útmutató
+
+Ez az útmutató a 64 bites (`arm64`) **Raspberry Pi OS** (Debian-alapú) rendszerre készített Aqulify `.deb` csomag előállítását, a meglévő rendszer (és PipeWire) mellé történő telepítését, valamint a szolgáltatás működését írja le.
+
+---
+
+## 1. A `.deb` csomag elkészítése forrásból (a Pi-n)
+
+A csomagot a `tools/pi/pi_deb_build.sh` szkript állítja elő a motor forrásából, a meglévő `debian/` csomagolás (`dpkg-buildpackage -b`) használatával.
+
+### Szükséges csomagok telepítése
+
+A `tools/pi/pi_deb_build.sh` fejléce és a `debian/control` (`Build-Depends`) alapján:
+
+```bash
+sudo apt install --no-install-recommends build-essential cmake ninja-build pkg-config xz-utils dpkg-dev \
+     fakeroot git python3 libpipewire-0.3-dev libfftw3-dev libsystemd-dev libasound2-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+```
+
+### A csomag felépítése
+
+```bash
+bash tools/pi/pi_deb_build.sh [a motor forrásmappája, alap: a tároló gyökere] [git-ref, alap: HEAD] [kimeneti mappa, alap: ./pi-deb]
+```
+
+- A szkript a megadott git-hivatkozás tiszta másolatából (`git archive`) dolgozik, a csomag verzióját a `CMakeLists.txt` verziójához igazítja `-1~pi1` utótaggal (pl. `aqulify_2.1.7-1~pi1_arm64.deb`), lefordítja a programot, és lefuttatja az egységteszteket (`debian/rules`).
+- Az elkészült `.deb` csomag és a `build.log` az `[kimeneti mappa]` könyvtárba (alapértelmezetten `./pi-deb`) kerül.
+- Ha az RNNoise-modell (`debian/rnnoise_0.2+ds.orig.tar.xz`) nincs letöltve a forrásban, a csomag a beszéd-zajcsökkentés nélküli változattal épül.
+- **Csak emulált (QEMU) környezetben:** `AQ_EMULALT=1 bash tools/pi/pi_deb_build.sh ...` megadásával a valós idejű CPU-terhelést mérő `test_dsp` kihagyható. Valódi Pi-n ezt **ne** add meg, hogy a teszt lemérje a hardvert.
+
+---
+
+## 2. Telepítés a kész `.deb` csomagból
+
+A kész csomagot a Debian csomagkezelőjével (`apt`) telepítsd, hogy a futásidejű függőségeket (`pipewire`, `hicolor-icon-theme` és a szükséges megosztott könyvtárak – `debian/control` 12. sor) automatikusan feloldja:
+
+```bash
+sudo apt install ./aqulify_2.1.7-1~pi1_arm64.deb
+```
+
+### Telepített fájlok (`debian/rules`)
+
+- `/usr/bin/aqulify-engine` – az Aqulify DSP-motor
+- `/usr/bin/aqulify-gui` – asztali grafikus felület (GTK3 + WebKitGTK 4.1)
+- `/usr/bin/aqulify-play` – parancssori lejátszó
+- `/usr/bin/aqulify-tune` – választható, visszavonható rendszerhangoló szkript (`tools/pi/aqulify-tune.sh`)
+- `/usr/lib/systemd/user/aqulify.service` – felhasználói systemd-szolgáltatás (`linux/aqulify.service.in`)
+- `/usr/lib/systemd/user-preset/80-aqulify.preset` – systemd előbeállítás (`enable aqulify.service`)
+- `/usr/share/applications/io.github.szorgos.Aqulify.desktop` – asztali menübejegyzés
+
+---
+
+## 3. A motor mint felhasználói szolgáltatás és a felület
+
+- **Felhasználói szolgáltatás (`aqulify.service`):** a csomag telepítésekor a `debian/postinst` lefuttatja a `systemctl --global preset aqulify.service` parancsot, így a `80-aqulify.preset` alapján a szolgáltatás minden felhasználónál engedélyezett, és a grafikus/felhasználói munkamenetbe való bejelentkezéskor a PipeWire után (`After=pipewire.service wireplumber.service`, `WantedBy=default.target`) indul.
+- **Kézi indítás vagy újraindítás bejelentkezett felhasználóként** (`debian/postinst` 4. sor):
+  ```bash
+  systemctl --user restart aqulify
+  systemctl --user status aqulify
+  ```
+- **Grafikus felület (HDMI-monitoron):** az alkalmazásmenüből vagy terminálból az `aqulify-gui` paranccsal indítható.
+
+---
+
+## 4. Telefonos távirányító és párosítás
+
+- **Asztali felületen (HDMI-monitorral):** az `aqulify-gui` ablakában kattints a **Távirányító** gombra, és kapcsold be a **„Hálózati elérés a telefonos távirányítóhoz”** lehetőséget.
+- **Kijelző nélkül (SSH-n vagy terminálból):** a futó motor mellett kérj párosító kódot a következő paranccsal:
+  ```bash
+  aqulify-engine --pair
+  ```
+  A parancs a helyi vezérlőcsatornán csatlakozik a futó motorhoz, szükség esetén bekapcsolja a hálózati elérést, és kiírja a 6 jegyű párosító kódot, annak érvényességi idejét és a gép hálózati címeit.
+- **Hálózati elérés:** Linuxon és Raspberry Pi OS-en a telefonos távirányító és a Pi között helyi Wi-Fi / Ethernet hálózat használható.
+
+---
+
+## 5. Választható, visszavonható rendszerhangolás (`aqulify-tune`) / Optional, reversible system tuning (`aqulify-tune`)
+
+**Magyar:** A csomag telepíti a `/usr/bin/aqulify-tune` szkriptet, de a telepítés **nem** kapcsolja be magától. A `sudo aqulify-tune enable` parancs elmenti az eredeti rendszerértékeket (`/var/lib/aqulify-tune/state`), a CPU-governort `performance` üzemmódra állítja (ha elérhető), a hang osztályú (`bInterfaceClass = 01`) USB-eszközökön (`/sys/bus/usb/devices`) kikapcsolja az energiatakarékosságot (`power/control = on`), létrehozza a `/etc/security/limits.d/95-aqulify-audio.conf` fájlt (`@audio - rtprio 95`, `@audio - memlock unlimited`), és beállítja az `aqulify-tune.service` (`oneshot`) szolgáltatást az újraindítás utáni megőrzéshez. A jelenlegi állapot az `aqulify-tune status` paranccsal kérdezhető le. A hangolás bármikor maradéktalanul visszavonható a `sudo aqulify-tune disable` paranccsal (vagy a csomag eltávolításakor a `DEBIAN/prerm` automatikusan visszaállítja az eredeti állapotot).
+
+**English:** The package installs `/usr/bin/aqulify-tune`, which remains **off by default**. Running `sudo aqulify-tune enable` saves the original system settings (`/var/lib/aqulify-tune/state`), sets the CPU scaling governor to `performance` (where supported), disables USB autosuspend (`power/control = on`) for USB Audio Class (`bInterfaceClass = 01`) devices under `/sys/bus/usb/devices`, creates `/etc/security/limits.d/95-aqulify-audio.conf` (`@audio - rtprio 95`, `@audio - memlock unlimited`), and installs `aqulify-tune.service` (`oneshot`) so the settings persist across reboots. Use `aqulify-tune status` to inspect current values. All changes are completely reversible at any time via `sudo aqulify-tune disable` (and are automatically reverted by `DEBIAN/prerm` if the package is removed).
+
+---
+
+## 6. Eltávolítás
+
+```bash
+sudo apt remove aqulify
+```
+
+---
+
+## 7. Nem ellenőrizve
+
+Az alábbi pontok valódi Raspberry Pi hiányában (eddig emulált környezetben vagy virtuális eszközökkel vizsgálva) **még nincsenek teljes körűen ellenőrizve**:
+
+- **Valódi Raspberry Pi 4 / 5 hardver:** a csomag települése és hosszú távú futása valódi Pi-n.
+- **Bejelentkezés nélküli indulás (`loginctl enable-linger`) és Raspberry Pi OS Lite:** hogy a PipeWire és az `aqulify.service` felhasználói szolgáltatás bejelentkezés nélkül elindul-e és folyamatosan működik-e.
+- **PipeWire és közvetlen ALSA hangút valódi Pi-n:** USB DAC-on keresztüli folyamatos nagy felbontású és DSD (DoP) lejátszás.
+- **Valós idejű CPU-mérés (`test_dsp`) valódi hardveren.**
+- **Grafikus felület (`aqulify-gui`) és 3D vízesés HDMI-n.**
+- **Kódos párosítás SSH-n (`aqulify-engine --pair`):** valódi Pi-n SSH-n keresztül, fizikai telefonnal.
