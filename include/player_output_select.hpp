@@ -47,6 +47,26 @@ public:
         cur_ = shared_.get();
         return true;
     }
+
+    bool openDop(uint32_t dopSampleRate, RenderDopFn render, std::string* error) override {
+        close();
+        if (want_.load() && exclusive_) {
+            std::string why;
+            if (exclusive_->openDop(dopSampleRate, std::move(render), &why)) {
+                setFallback("");
+                cur_ = exclusive_.get();
+                return true;
+            }
+            // DoP esetén nincs visszalépés a megosztott kimenetre (az nem támogatja a DoP-ot)
+            const std::string fb = why.empty() ? "format" : why;
+            setFallback(fb);
+            if (error) *error = fb;
+            return false;
+        }
+        setFallback("");
+        if (error) *error = "notAllowed";
+        return false;
+    }
     void close() override {
         if (PlayerOutput* c = cur_.exchange(nullptr)) c->close();
     }

@@ -431,6 +431,7 @@ int main(int argc, char* argv[]) {
     // és a mérők / a vízesés ebből kapják a jelet (a PipeWire „Aqulify” eszközén nem szól semmi)
     std::unique_ptr<player::ChainPlayerDsp> playerDsp;
     player::SelectablePlayerOutput* playerSel = nullptr;
+    player::FilePlayer* playerFilePlayer = nullptr;
     uint64_t playerReadPos = 0;
     auto playerExclusive = [&]() { return playerSel && playerSel->exclusiveActive(); };
 #else
@@ -439,12 +440,17 @@ int main(int argc, char* argv[]) {
     BridgeCallbacks cb;
     cb.pullAudio = [&](float* lr, size_t maxFrames) {
 #if defined(AQ_HAVE_ALSA)
+        if (playerFilePlayer && playerFilePlayer->isDopActive()) {
+            std::fill_n(lr, maxFrames * 2, 0.0f);
+            return maxFrames;
+        }
         if (playerExclusive()) return readTapRing(playerDsp->tap(), playerReadPos, lr, maxFrames);
 #endif
         return readTapRing(node.visualizerTap, readPos, lr, maxFrames);
     };
     cb.sampleRate = [&]() {
 #if defined(AQ_HAVE_ALSA)
+        if (playerFilePlayer && playerFilePlayer->isDopActive()) return static_cast<double>(playerFilePlayer->streamRate());
         if (playerExclusive()) return static_cast<double>(playerDsp->sampleRate());
 #endif
         return static_cast<double>(node.sampleRate.load());
@@ -464,11 +470,17 @@ int main(int argc, char* argv[]) {
     };
     cb.gainReduction = [&]() {
 #if defined(AQ_HAVE_ALSA)
+        if (playerFilePlayer && playerFilePlayer->isDopActive()) return 0.0;
         if (playerExclusive()) return playerDsp->gainReductionDb();
 #endif
         return node.chain.gainReductionDb();
     };
-    cb.bassHarmonics = [&]() { return node.chain.bassHarmonicsDb(); };
+    cb.bassHarmonics = [&]() {
+#if defined(AQ_HAVE_ALSA)
+        if (playerFilePlayer && playerFilePlayer->isDopActive()) return -100.0;
+#endif
+        return node.chain.bassHarmonicsDb();
+    };
 
     std::string cachedSinksJson = "[]";
     std::string cachedCurrentSink = "";
@@ -501,13 +513,20 @@ int main(int argc, char* argv[]) {
             updateSinksCache();
         }
         char buf[256];
-        if (playerExclusive()) {
 #if defined(AQ_HAVE_ALSA)
+        if (playerFilePlayer && playerFilePlayer->isDopActive()) {
+            std::snprintf(buf, sizeof(buf),
+                          "\"platform\":\"linux\",\"source\":\"ALSA exclusive (DoP)\",\"dspActive\":false,\"sr\":%u,\"gr\":0.00",
+                          playerFilePlayer->streamRate());
+        } else if (playerExclusive()) {
             std::snprintf(buf, sizeof(buf),
                           "\"platform\":\"linux\",\"source\":\"ALSA (kizárólagos)\",\"dspActive\":true,\"sr\":%u,\"gr\":%.2f",
                           playerDsp->sampleRate(), playerDsp->gainReductionDb());
+        } else
+#else
+        if (false) {} else
 #endif
-        } else {
+        {
             std::snprintf(buf, sizeof(buf),
                           "\"platform\":\"linux\",\"source\":\"PipeWire – Aqulify\",\"dspActive\":%s,\"sr\":%u,\"gr\":%.2f",
                           node.playbackStreaming.load() ? "true" : "false", node.sampleRate.load(),
@@ -517,7 +536,9 @@ int main(int argc, char* argv[]) {
         s += ",\"currentSink\":\"" + jsonEscape(cachedCurrentSink) + "\"";
         s += ",\"outputSinks\":" + cachedSinksJson;
 #if defined(AQ_HAVE_ALSA)
-        if (playerExclusive())   // kizárólagos módban a lejátszó digitális hangereje (a PipeWire-eszközé itt nem hat)
+        if (playerFilePlayer && playerFilePlayer->isDopActive())
+            s += ",\"volume\":{\"level\":1.0,\"muted\":false,\"digital\":false,\"dop\":true}";
+        else if (playerExclusive())   // kizárólagos módban a lejátszó digitális hangereje (a PipeWire-eszközé itt nem hat)
             s += ",\"volume\":{\"level\":" + std::to_string(playerDsp->volumeLevel()) + ",\"muted\":" +
                  (playerDsp->volumeMuted() ? "true" : "false") + ",\"digital\":true}";
         else
@@ -580,6 +601,7 @@ int main(int argc, char* argv[]) {
                                                                    std::move(alsaOut));
     playerSel = selOut.get();
     player::FilePlayer filePlayer(std::move(selOut));
+    playerFilePlayer = &filePlayer;
 #else
     player::FilePlayer filePlayer(std::make_unique<player::PwPlayerOutput>("aqulify_sink"));
 #endif
@@ -772,13 +794,26 @@ int main(int argc, char* argv[]) {
     std::mutex audioMutex;
     audioopt::AudioOptions audioOpts;             // az élő beállítás (alap, amíg nincs visszaállítás)
     audioopt::AudioOptions savedAudio;            // a mentett (audio.json), a visszaállítás (audio rész) élesíti
+    bool dsdDop = false;
+    bool savedDsdDop = false;
     const bool hasAudio = [&] {
         const std::string doc = linux_store::loadAudioOptions();
         json::Value v;
         if (doc.empty() || !json::parse(doc, v)) return false;
         savedAudio = audioopt::fromJson(v);
+        if (const json::Value* dopVal = v.get("dsdDop"); dopVal && dopVal->type == json::Value::Type::Bool) {
+            savedDsdDop = dopVal->b;
+        }
         return true;
     }();
+    auto optsToJsonWithDop = [](const audioopt::AudioOptions& o, bool dop) {
+        std::string j = audioopt::toJson(o);
+        if (!j.empty() && j.back() == '}') {
+            j.pop_back();
+            j += std::string(",\"dsdDop\":") + (dop ? "true}" : "false}");
+        }
+        return j;
+    };
     const std::string origAllowedRates = pwSetting("clock.allowed-rates");
     const std::string origForceRate = pwSetting("clock.force-rate");
     bool ratesTouched = false;
@@ -789,11 +824,14 @@ int main(int argc, char* argv[]) {
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         filePlayer.setPreload(o.preload);
 #if defined(AQ_HAVE_ALSA)
+        filePlayer.setDsdDop(o.exclusive && dsdDop);
         if (playerSel && playerSel->wantExclusive() != o.exclusive) {
             playerSel->setExclusive(o.exclusive);   // a következő számtól
             std::cout << "[Lejátszó] Közvetlen ALSA-kimenet (kizárólagos mód): " << (o.exclusive ? "be" : "ki")
                       << " (a következő számtól).\n";
         }
+#else
+        filePlayer.setDsdDop(false);
 #endif
         const int autoQ = std::atoi(pwSetting("clock.quantum").c_str());
         const bool pauseForPlayer = o.rateMode == audioopt::RateMode::Follow && playerStreamOpen();
@@ -844,6 +882,7 @@ int main(int argc, char* argv[]) {
         if (want.audio && hasAudio) {
             std::lock_guard<std::mutex> lk(audioMutex);
             audioOpts = savedAudio;
+            dsdDop = savedDsdDop;
             applyAudio(audioOpts);
         }
     };
@@ -917,21 +956,27 @@ int main(int argc, char* argv[]) {
     cb.audioOptionsJson = [&]() -> std::string {
         std::lock_guard<std::mutex> lk(audioMutex);
 #if defined(AQ_HAVE_ALSA)
-        const char* exclCap = ",\"exclusive\":true,\"exclusiveKind\":\"alsa\"";   // közvetlen ALSA-kimenet (hardveres hangerő nincs)
+        const char* exclCap = ",\"exclusive\":true,\"exclusiveKind\":\"alsa\",\"dop\":true";   // közvetlen ALSA-kimenet (hardveres hangerő nincs, DoP támogatott)
 #else
         const char* exclCap = "";
 #endif
-        return "{\"opts\":" + audioopt::toJson(audioOpts) +
+        return "{\"opts\":" + optsToJsonWithDop(audioOpts, dsdDop) +
                ",\"caps\":{\"buffer\":true,\"keepAwake\":true,\"rate\":true,\"resample\":true,\"player\":true" + exclCap + "}}";
     };
     cb.setAudioOptions = [&](const json::Value& v) {
         std::lock_guard<std::mutex> lk(audioMutex);
         const audioopt::AudioOptions o = audioopt::fromJson(v, audioOpts);
-        if (o == audioOpts) return;
+        bool wantDop = dsdDop;
+        if (const json::Value* dopVal = v.get("dsdDop"); dopVal && dopVal->type == json::Value::Type::Bool) {
+            wantDop = dopVal->b;
+        }
+        if (o == audioOpts && wantDop == dsdDop) return;
         audioOpts = o;
+        dsdDop = wantDop;
         applyAudio(o);
-        if (!linux_store::saveAudioOptions(audioopt::toJson(o))) std::cerr << "[Hangkimenet] Figyelem: az audio.json nem írható.\n";
-        std::cout << "[Hangkimenet] " << audioopt::toJson(o) << "\n";
+        const std::string savedJson = optsToJsonWithDop(o, dsdDop);
+        if (!linux_store::saveAudioOptions(savedJson)) std::cerr << "[Hangkimenet] Figyelem: az audio.json nem írható.\n";
+        std::cout << "[Hangkimenet] " << savedJson << "\n";
     };
     // Jelút és késleltetés a felület állapotsorába: quantum, a DSP saját késleltetése, terhelés, bitpontosság
     {
@@ -952,15 +997,31 @@ int main(int argc, char* argv[]) {
             int reqBuf = 0;
             bool keep = false;
             { std::lock_guard<std::mutex> lk(audioMutex); reqBuf = audioOpts.bufferFrames; keep = audioOpts.keepAwake; }
-            char buf[512];
+            bool dopActive = false;
+            bool dopWant = false;
+            uint32_t dopDsdRate = 0;
+            std::string dopFb;
+#if defined(AQ_HAVE_ALSA)
+            dopActive = filePlayer.isDopActive();
+            dopWant = filePlayer.dsdDop();
+            dopDsdRate = filePlayer.dopDsdRate();
+            dopFb = filePlayer.dopFallbackReason();
+#endif
+            const bool transparent = dopActive || (chainTransparent(p) && !crossover);
+            const bool dspTransparent = dopActive || chainTransparent(p);
+            char buf[640];
             std::snprintf(buf, sizeof(buf),
                           ",\"path\":{\"quantum\":%u,\"bufReq\":%d,\"bufMs\":%.2f,\"eqLat\":%zu,\"limLat\":%zu,\"convLat\":%zu,"
                           "\"dspMs\":%.2f,\"totalMs\":%.1f,\"load\":%.1f,\"peak\":%.1f,\"overruns\":%u,\"transparent\":%s,"
-                          "\"keepAwake\":%s,\"playerRate\":%u,\"playerGain\":%.2f}",
+                          "\"dspTransparent\":%s,\"keepAwake\":%s,\"playerRate\":%u,\"playerGain\":%.2f,"
+                          "\"dop\":{\"want\":%s,\"active\":%s,\"dsdRate\":%u,\"fallback\":\"%s\"}}",
                           q, reqBuf, bufMs, eqLat, limLat, convLat, dspMs, 2.0 * bufMs + dspMs, 100.0 * node.dspLoad(),
-                          100.0 * node.takeDspPeak(), node.overruns(), chainTransparent(p) && !crossover ? "true" : "false",
+                          100.0 * node.takeDspPeak(), node.overruns(), transparent ? "true" : "false",
+                          dspTransparent ? "true" : "false",
                           keep && node.keepAwakeActive() ? "true" : "false", filePlayer.streamRate(),
-                          filePlayer.hasTrack() ? filePlayer.currentGainDb() : 0.0f);
+                          filePlayer.hasTrack() ? filePlayer.currentGainDb() : 0.0f,
+                          dopWant ? "true" : "false", dopActive ? "true" : "false",
+                          dopDsdRate, dopFb.c_str());
             return s + buf;
         };
     }

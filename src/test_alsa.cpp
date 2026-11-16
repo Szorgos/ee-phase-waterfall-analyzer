@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "chain_player_dsp.hpp"
+#include "dsd.hpp"
 #include "file_player.hpp"
 #include "player_output_alsa.hpp"
 #include "player_output_select.hpp"
@@ -31,6 +32,47 @@ static void CHECK(bool ok, const char* fmt, ...) {
     std::printf("\n");
     va_end(ap);
     if (!ok) ++g_fail;
+}
+
+/** Sony DSF v1.01 fájl összeállítása tesztekhez. */
+static void writeDsfTestFile(const fs::path& path, uint32_t dsdRate, uint32_t channels,
+                             const std::vector<std::vector<uint8_t>>& chBytesMsb) {
+    constexpr uint32_t kBlockSize = 4096;
+    const size_t rawPerCh = chBytesMsb[0].size();
+    const uint64_t sampleCount = static_cast<uint64_t>(rawPerCh) * 8ULL;
+    const size_t numBlocks = (rawPerCh + kBlockSize - 1) / kBlockSize;
+    const uint64_t dataPayloadBytes = static_cast<uint64_t>(numBlocks) * kBlockSize * channels;
+    const uint64_t dataChunkSize = 12ULL + dataPayloadBytes;
+    const uint64_t totalFileSize = 28ULL + 52ULL + dataChunkSize;
+
+    std::vector<uint8_t> out;
+    out.reserve(static_cast<size_t>(totalFileSize));
+    auto w4 = [&](const char* id4) { out.insert(out.end(), id4, id4 + 4); };
+    auto le32 = [&](uint32_t v) {
+        out.push_back(static_cast<uint8_t>(v & 0xFFu));
+        out.push_back(static_cast<uint8_t>((v >> 8) & 0xFFu));
+        out.push_back(static_cast<uint8_t>((v >> 16) & 0xFFu));
+        out.push_back(static_cast<uint8_t>((v >> 24) & 0xFFu));
+    };
+    auto le64 = [&](uint64_t v) {
+        le32(static_cast<uint32_t>(v & 0xFFFFFFFFULL));
+        le32(static_cast<uint32_t>(v >> 32));
+    };
+    w4("DSD "); le64(28); le64(totalFileSize); le64(0);
+    w4("fmt "); le64(52); le32(1); le32(0); le32(channels == 1 ? 1u : 2u); le32(channels);
+    le32(dsdRate); le32(1); le64(sampleCount); le32(kBlockSize); le32(0);
+    w4("data"); le64(dataChunkSize);
+    for (size_t blk = 0; blk < numBlocks; ++blk) {
+        for (uint32_t c = 0; c < channels; ++c) {
+            for (uint32_t i = 0; i < kBlockSize; ++i) {
+                const size_t idx = blk * kBlockSize + i;
+                const uint8_t b = (idx < rawPerCh) ? dsd::reverseBits8(chBytesMsb[c][idx]) : 0x00u;
+                out.push_back(b);
+            }
+        }
+    }
+    std::ofstream f(path, std::ios::binary);
+    f.write(reinterpret_cast<const char*>(out.data()), static_cast<std::streamsize>(out.size()));
 }
 
 /** 16 bites sztereó WAV; a minták float megfelelőjét (x / 32768) visszaadja. */
@@ -175,6 +217,106 @@ int main() {
         if (hadLimit) setrlimit(RLIMIT_RTPRIO, &rlOrig);
     }
     fs::remove(wav);
+
+    std::printf("[5] Natív DSD (DoP 1.1) közvetlen ALSA-kimeneten (null eszköz)\n");
+    const fs::path dsfPath = fs::temp_directory_path() / "aq_alsa_dop_test.dsf";
+    constexpr uint32_t kDsdRate = 2822400;
+    constexpr size_t kDopFrames = 4096;
+    constexpr size_t kBytesPerCh = kDopFrames * 2;
+    std::vector<uint8_t> leftDsd(kBytesPerCh), rightDsd(kBytesPerCh);
+    for (size_t i = 0; i < kBytesPerCh; ++i) {
+        leftDsd[i] = static_cast<uint8_t>((i * 37u + 0x12u) & 0xFFu);
+        rightDsd[i] = static_cast<uint8_t>((i * 73u + 0xA5u) & 0xFFu);
+    }
+    writeDsfTestFile(dsfPath, kDsdRate, 2, { leftDsd, rightDsd });
+
+    {
+        auto* alsaDop = new AlsaPlayerOutput("null");
+        std::mutex dopGotMutex;
+        std::vector<int32_t> dopGot;
+        alsaDop->setDopTap([&](const int32_t* d, size_t n) {
+            std::lock_guard<std::mutex> lk(dopGotMutex);
+            dopGot.insert(dopGot.end(), d, d + n * 2);
+        });
+        auto* sharedDop = new NullShared;
+        auto* selDop = new SelectablePlayerOutput(std::unique_ptr<PlayerOutput>(sharedDop), std::unique_ptr<PlayerOutput>(alsaDop));
+        selDop->setExclusive(true);
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(selDop) };
+        p.setDsdDop(true);
+        std::string dopErr;
+        const bool opened = p.open(dsfPath.string(), &dopErr);
+        CHECK(opened && p.isDopActive() && alsaDop->isDopMode() && selDop->exclusiveActive() && sharedDop->opens == 0,
+              "DoP megnyitás sikeres a közvetlen ALSA kimeneten (null eszköz): %s",
+              opened ? alsaDop->describe().c_str() : dopErr.c_str());
+        CHECK(p.dopDsdRate() == kDsdRate, "DoP DSD-ráta egyezik (%u Hz)", p.dopDsdRate());
+
+        const size_t lead = static_cast<size_t>(p.leadInFrames());
+        CHECK(lead > 0 && (lead % 2) == 0, "DoP indítási csend: %zu keret (páros keretszám)", lead);
+
+        const bool gotEnough = waitUntil([&] {
+            std::lock_guard<std::mutex> lk(dopGotMutex);
+            return dopGot.size() >= (lead + 512) * 2;
+        });
+        CHECK(gotEnough, "DoP keretek megérkeztek a kimenetre");
+
+        std::vector<int32_t> samples;
+        {
+            std::lock_guard<std::mutex> lk(dopGotMutex);
+            samples = dopGot;
+        }
+        bool leadSilenceOk = samples.size() >= lead * 2;
+        bool nonZeroSilence = true;
+        for (size_t f = 0; leadSilenceOk && f < lead; ++f) {
+            const uint8_t wantMarker = (f % 2 == 0) ? 0x05u : 0xFAu;
+            const int32_t wantWord = dsd::packDopSample(dsd::kDsdSilenceByte, dsd::kDsdSilenceByte, wantMarker);
+            const int32_t wl = samples[f * 2], wr = samples[f * 2 + 1];
+            if (wl == 0 || wr == 0) nonZeroSilence = false;
+            if (wl != wantWord || wr != wantWord) leadSilenceOk = false;
+        }
+        CHECK(leadSilenceOk && nonZeroSilence,
+              "DoP indítási csend: minden keret csomagolt 0xAA (0x05AAAA / 0xFAAAAA), soha nem nulla PCM");
+
+        // Csend utáni első keretek: adat a váltakozó jelölővel (fázis 0-val indul)
+        bool payloadMarkersOk = samples.size() >= (lead + 64) * 2;
+        for (size_t f = 0; payloadMarkersOk && f < 64; ++f) {
+            const uint8_t wantMarker = (f % 2 == 0) ? 0x05u : 0xFAu;
+            uint8_t ml = 0, mr = 0, b0l = 0, b1l = 0, b0r = 0, b1r = 0;
+            dsd::unpackDopSample(samples[(lead + f) * 2], ml, b0l, b1l);
+            dsd::unpackDopSample(samples[(lead + f) * 2 + 1], mr, b0r, b1r);
+            if (ml != wantMarker || mr != wantMarker) payloadMarkersOk = false;
+        }
+        CHECK(payloadMarkersOk, "DoP adatkeretek: a jelölők szabályosan váltakoznak (0x05 / 0xFA)");
+
+        p.stop();
+        CHECK(!alsaDop->isOpen(), "Leállításkor az ALSA DoP kimenet bezárult");
+    }
+
+    // Visszalépés tesztje DoP esetén: nem nyitható közvetlen eszköz -> visszalépés PCM-re
+    {
+        auto* alsaFail = new AlsaPlayerOutput("hw:99,0");
+        auto* sharedFail = new NullShared;
+        auto* selFail = new SelectablePlayerOutput(std::unique_ptr<PlayerOutput>(sharedFail), std::unique_ptr<PlayerOutput>(alsaFail));
+        selFail->setExclusive(true);
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(selFail) };
+        p.setDsdDop(true);
+        const bool opened = p.open(dsfPath.string());
+        CHECK(opened && !p.isDopActive() && !p.dopFallbackReason().empty() && sharedFail->opens == 1,
+              "Nem nyitható DoP eszköz: visszalépés PCM-re a megosztott kimeneten (ok: \"%s\")",
+              p.dopFallbackReason().c_str());
+    }
+    // Visszalépés tesztje: kizárólagos mód nincs bekapcsolva -> openDop elutasítva ("notAllowed") -> visszalépés PCM-re
+    {
+        auto* sharedNoExcl = new NullShared;
+        auto* selNoExcl = new SelectablePlayerOutput(std::unique_ptr<PlayerOutput>(sharedNoExcl), std::make_unique<AlsaPlayerOutput>("null"));
+        selNoExcl->setExclusive(false);
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(selNoExcl) };
+        p.setDsdDop(true);
+        const bool opened = p.open(dsfPath.string());
+        CHECK(opened && !p.isDopActive() && p.dopFallbackReason() == "notAllowed" && sharedNoExcl->opens == 1,
+              "Kizárólagos mód nélkül a DoP nem engedélyezett: visszalépés PCM-re (ok: \"%s\")",
+              p.dopFallbackReason().c_str());
+    }
+    fs::remove(dsfPath);
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }
