@@ -773,5 +773,8 @@
   "target.remoteUpdate": "En nyare Aqulify finns för den här datorn: {ver}",
   "target.hideUpdate": "Påminn inte om den här versionen",
   "remote.deviceVersion": "app: {ver}",
-  "remote.appUpdate": "Nyare app finns: {ver}"
+  "remote.appUpdate": "Nyare app finns: {ver}",
+  "skip.channel": "gäller bara kanal {ch} (separat vänster / höger EQ finns inte ännu)",
+  "skip.directive": "”{d}:”-rader stöds inte",
+  "cv.multiChannel": "Impulssvar med {n} kanaler: faltningen använder bara mono- eller stereo-IR (4-kanals ”true stereo” stöds inte ännu)."
 }

@@ -773,5 +773,8 @@
   "target.remoteUpdate": "Tälle tietokoneelle on saatavilla uudempi Aqulify: {ver}",
   "target.hideUpdate": "Älä muistuta tästä versiosta",
   "remote.deviceVersion": "sovellus: {ver}",
-  "remote.appUpdate": "Uudempi sovellus saatavilla: {ver}"
+  "remote.appUpdate": "Uudempi sovellus saatavilla: {ver}",
+  "skip.channel": "koskee vain kanavaa {ch} (erillistä vasemman / oikean EQ:ta ei vielä ole)",
+  "skip.directive": "”{d}:”-rivejä ei tueta",
+  "cv.multiChannel": "{n}-kanavainen impulssivaste: konvoluutio käyttää vain mono- tai stereo-IR:iä (4-kanavaista ”true stereoa” ei vielä tueta)."
 }

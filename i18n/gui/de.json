@@ -773,5 +773,8 @@
   "target.remoteUpdate": "Für diesen Computer ist ein neueres Aqulify verfügbar: {ver}",
   "target.hideUpdate": "Für diese Version nicht mehr erinnern",
   "remote.deviceVersion": "App: {ver}",
-  "remote.appUpdate": "Neuere App verfügbar: {ver}"
+  "remote.appUpdate": "Neuere App verfügbar: {ver}",
+  "skip.channel": "gilt nur für Kanal {ch} (getrennter linker / rechter EQ ist noch nicht verfügbar)",
+  "skip.directive": "„{d}:“-Zeilen werden nicht unterstützt",
+  "cv.multiChannel": "Impulsantwort mit {n} Kanälen: Der Faltungsprozessor verwendet nur Mono- oder Stereo-IRs (4-kanaliges „True Stereo“ wird noch nicht unterstützt)."
 }

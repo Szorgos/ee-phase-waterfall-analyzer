@@ -773,5 +773,8 @@
   "target.remoteUpdate": "Bu bilgisayar için daha yeni bir Aqulify var: {ver}",
   "target.hideUpdate": "Bu sürümü bir daha hatırlatma",
   "remote.deviceVersion": "uygulama: {ver}",
-  "remote.appUpdate": "Daha yeni uygulama var: {ver}"
+  "remote.appUpdate": "Daha yeni uygulama var: {ver}",
+  "skip.channel": "yalnızca {ch} kanalına uygulanır (ayrı sol / sağ EQ henüz yok)",
+  "skip.directive": "“{d}:” satırları desteklenmiyor",
+  "cv.multiChannel": "{n} kanallı darbe tepkisi: konvolüsyon yalnızca mono veya stereo IR kullanır (4 kanallı “true stereo” henüz desteklenmiyor)."
 }

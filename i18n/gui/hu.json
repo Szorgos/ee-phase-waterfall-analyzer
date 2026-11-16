@@ -773,5 +773,8 @@
   "target.remoteUpdate": "Ezen a gépen elérhető egy frissebb Aqulify: {ver}",
   "target.hideUpdate": "Ne szólj erről a verzióról",
   "remote.deviceVersion": "app: {ver}",
-  "remote.appUpdate": "Elérhető frissebb app: {ver}"
+  "remote.appUpdate": "Elérhető frissebb app: {ver}",
+  "skip.channel": "csak a(z) {ch} csatornára szól (külön bal / jobb EQ még nincs)",
+  "skip.directive": "nem támogatott sor: „{d}:”",
+  "cv.multiChannel": "{n} csatornás impulzusválasz: a konvolver csak mono vagy sztereó IR-t használ (a 4 csatornás „true stereo” még nem támogatott)."
 }

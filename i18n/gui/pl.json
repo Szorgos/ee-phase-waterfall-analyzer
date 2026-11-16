@@ -773,5 +773,8 @@
   "target.remoteUpdate": "Dla tego komputera dostępna jest nowsza wersja Aqulify: {ver}",
   "target.hideUpdate": "Nie przypominaj o tej wersji",
   "remote.deviceVersion": "aplikacja: {ver}",
-  "remote.appUpdate": "Dostępna nowsza aplikacja: {ver}"
+  "remote.appUpdate": "Dostępna nowsza aplikacja: {ver}",
+  "skip.channel": "dotyczy tylko kanału {ch} (osobny EQ lewy / prawy nie jest jeszcze dostępny)",
+  "skip.directive": "wiersze „{d}:” nie są obsługiwane",
+  "cv.multiChannel": "Odpowiedź impulsowa {n}-kanałowa: splot używa tylko IR mono lub stereo (4-kanałowe „true stereo” nie jest jeszcze obsługiwane)."
 }

@@ -773,5 +773,8 @@
   "target.remoteUpdate": "En nyere Aqulify er tilgjengelig for denne datamaskinen: {ver}",
   "target.hideUpdate": "Ikke minn meg på denne versjonen",
   "remote.deviceVersion": "app: {ver}",
-  "remote.appUpdate": "Nyere app tilgjengelig: {ver}"
+  "remote.appUpdate": "Nyere app tilgjengelig: {ver}",
+  "skip.channel": "gjelder bare kanal {ch} (egen venstre / høyre EQ finnes ikke ennå)",
+  "skip.directive": "«{d}:»-linjer støttes ikke",
+  "cv.multiChannel": "Impulsrespons med {n} kanaler: konvolveren bruker bare mono- eller stereo-IR (4-kanals «true stereo» støttes ikke ennå)."
 }

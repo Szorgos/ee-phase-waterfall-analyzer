@@ -773,5 +773,8 @@
   "target.remoteUpdate": "Hay una versión más reciente de Aqulify para este equipo: {ver}",
   "target.hideUpdate": "No avisar de esta versión",
   "remote.deviceVersion": "app: {ver}",
-  "remote.appUpdate": "Hay una app más reciente: {ver}"
+  "remote.appUpdate": "Hay una app más reciente: {ver}",
+  "skip.channel": "solo se aplica al canal {ch} (todavía no hay EQ separado izquierdo / derecho)",
+  "skip.directive": "las líneas «{d}:» no son compatibles",
+  "cv.multiChannel": "Respuesta al impulso de {n} canales: el convolucionador solo usa IR mono o estéreo (el «true stereo» de 4 canales aún no es compatible)."
 }

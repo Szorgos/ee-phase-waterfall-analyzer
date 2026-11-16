@@ -773,5 +773,8 @@
   "target.remoteUpdate": "Pro tento počítač je k dispozici novější Aqulify: {ver}",
   "target.hideUpdate": "Na tuto verzi už neupozorňovat",
   "remote.deviceVersion": "aplikace: {ver}",
-  "remote.appUpdate": "K dispozici je novější aplikace: {ver}"
+  "remote.appUpdate": "K dispozici je novější aplikace: {ver}",
+  "skip.channel": "platí jen pro kanál {ch} (samostatný levý / pravý EQ zatím není)",
+  "skip.directive": "řádky „{d}:“ nejsou podporovány",
+  "cv.multiChannel": "Impulzní odezva s {n} kanály: konvolver používá jen mono nebo stereo IR (4kanálové „true stereo“ zatím není podporováno)."
 }

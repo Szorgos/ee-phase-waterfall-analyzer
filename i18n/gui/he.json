@@ -773,5 +773,8 @@
   "target.remoteUpdate": "קיימת גרסה חדשה יותר של Aqulify למחשב זה: {ver}",
   "target.hideUpdate": "אל תזכיר לי על גרסה זו",
   "remote.deviceVersion": "אפליקציה: {ver}",
-  "remote.appUpdate": "קיימת אפליקציה חדשה יותר: {ver}"
+  "remote.appUpdate": "קיימת אפליקציה חדשה יותר: {ver}",
+  "skip.channel": "חל רק על ערוץ {ch} (EQ נפרד לשמאל / ימין עדיין אינו זמין)",
+  "skip.directive": "שורות „{d}:” אינן נתמכות",
+  "cv.multiChannel": "תגובת הלם עם {n} ערוצים: הקונבולבר משתמש רק ב-IR מונו או סטריאו („true stereo” בארבעה ערוצים עדיין אינו נתמך)."
 }

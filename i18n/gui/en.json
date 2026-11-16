@@ -773,5 +773,8 @@
   "target.remoteUpdate": "A newer Aqulify is available for this computer: {ver}",
   "target.hideUpdate": "Don't remind me about this version",
   "remote.deviceVersion": "app: {ver}",
-  "remote.appUpdate": "Newer app available: {ver}"
+  "remote.appUpdate": "Newer app available: {ver}",
+  "skip.channel": "applies to channel {ch} only (separate left / right EQ is not available yet)",
+  "skip.directive": "“{d}:” lines are not supported",
+  "cv.multiChannel": "{n}-channel impulse response: the convolver uses mono or stereo IRs only (4-channel “true stereo” is not supported yet)."
 }

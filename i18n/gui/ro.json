@@ -773,5 +773,8 @@
   "target.remoteUpdate": "Pentru acest computer este disponibil un Aqulify mai nou: {ver}",
   "target.hideUpdate": "Nu-mi mai aminti de această versiune",
   "remote.deviceVersion": "aplicație: {ver}",
-  "remote.appUpdate": "Aplicație mai nouă disponibilă: {ver}"
+  "remote.appUpdate": "Aplicație mai nouă disponibilă: {ver}",
+  "skip.channel": "se aplică doar canalului {ch} (EQ separat stânga / dreapta nu este încă disponibil)",
+  "skip.directive": "liniile „{d}:” nu sunt acceptate",
+  "cv.multiChannel": "Răspuns la impuls cu {n} canale: convolverul folosește doar IR mono sau stereo („true stereo” cu 4 canale nu este încă acceptat)."
 }

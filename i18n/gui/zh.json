@@ -773,5 +773,8 @@
   "target.remoteUpdate": "此电脑有更新的 Aqulify 可用：{ver}",
   "target.hideUpdate": "不再提示此版本",
   "remote.deviceVersion": "应用：{ver}",
-  "remote.appUpdate": "有更新的应用：{ver}"
+  "remote.appUpdate": "有更新的应用：{ver}",
+  "skip.channel": "仅作用于 {ch} 声道（暂不支持左右声道独立 EQ）",
+  "skip.directive": "不支持“{d}:”行",
+  "cv.multiChannel": "{n} 声道脉冲响应：卷积器只能使用单声道或立体声 IR（暂不支持 4 声道 “true stereo”）。"
 }

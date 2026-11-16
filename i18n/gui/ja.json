@@ -773,5 +773,8 @@
   "target.remoteUpdate": "このコンピューター用の新しい Aqulify があります：{ver}",
   "target.hideUpdate": "このバージョンは通知しない",
   "remote.deviceVersion": "アプリ：{ver}",
-  "remote.appUpdate": "新しいアプリがあります：{ver}"
+  "remote.appUpdate": "新しいアプリがあります：{ver}",
+  "skip.channel": "{ch} チャンネルにのみ適用されます（左右別々の EQ はまだありません）",
+  "skip.directive": "「{d}:」行には対応していません",
+  "cv.multiChannel": "{n} チャンネルのインパルス応答：コンボルバーはモノラルまたはステレオの IR のみ使用します（4 チャンネルの「true stereo」にはまだ対応していません）。"
 }

@@ -773,5 +773,8 @@
   "target.remoteUpdate": "Er is een nieuwere Aqulify beschikbaar voor deze computer: {ver}",
   "target.hideUpdate": "Niet meer melden voor deze versie",
   "remote.deviceVersion": "app: {ver}",
-  "remote.appUpdate": "Nieuwere app beschikbaar: {ver}"
+  "remote.appUpdate": "Nieuwere app beschikbaar: {ver}",
+  "skip.channel": "geldt alleen voor kanaal {ch} (aparte linker / rechter EQ is nog niet beschikbaar)",
+  "skip.directive": "„{d}:”-regels worden niet ondersteund",
+  "cv.multiChannel": "Impulsrespons met {n} kanalen: de convolver gebruikt alleen mono- of stereo-IR's (4-kanaals „true stereo” wordt nog niet ondersteund)."
 }

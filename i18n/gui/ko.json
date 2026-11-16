@@ -773,5 +773,8 @@
   "target.remoteUpdate": "이 컴퓨터용 최신 Aqulify가 있습니다: {ver}",
   "target.hideUpdate": "이 버전은 다시 알리지 않기",
   "remote.deviceVersion": "앱: {ver}",
-  "remote.appUpdate": "최신 앱이 있습니다: {ver}"
+  "remote.appUpdate": "최신 앱이 있습니다: {ver}",
+  "skip.channel": "{ch} 채널에만 적용됩니다(좌우 개별 EQ는 아직 없음)",
+  "skip.directive": "“{d}:” 줄은 지원되지 않습니다",
+  "cv.multiChannel": "{n}채널 임펄스 응답: 컨볼버는 모노 또는 스테레오 IR만 사용합니다(4채널 “true stereo”는 아직 지원되지 않음)."
 }

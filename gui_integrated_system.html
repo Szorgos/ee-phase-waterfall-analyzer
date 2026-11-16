@@ -8938,13 +8938,51 @@ async function loadRealAutoEqProfile(idx) {
 // LS/LSC -> Lo-shelf, HS/HSC -> Hi-shelf, NO -> Notch, AP -> Allpass, BP -> Bandpass; mód: APO (DR)
 const APO_TYPES = { PK: 1, PEQ: 1, PEAK: 1, LP: 4, LPQ: 4, LPF: 4, HP: 2, HPQ: 2, HPF: 2,
                     LS: 5, LSC: 5, HS: 3, HSC: 3, NO: 6, AP: 8, BP: 9 };
+/**
+ * Egy "Channel:" sor csatornái: true, ha mindkét (bal és jobb) csatornára szól ("all", "L R", "1 2"), különben a
+ * csatorna-azonosítók rendezett szövege (pl. "L"). Az EQ a motorban mindkét csatornára azonos, ezért csak a mindkét
+ * csatornára szóló szűrők alkalmazhatók közvetlenül.
+ */
+function apoChannelScope(spec) {
+  const toks = String(spec || "").trim().toUpperCase().split(/[\s,]+/).filter(Boolean);
+  if (!toks.length || toks.includes("ALL")) return true;
+  const set = new Set(toks.map(x => x === "1" ? "L" : x === "2" ? "R" : x));
+  if (set.size === 2 && set.has("L") && set.has("R")) return true;
+  return [...set].sort().join(" ");
+}
+
 function parseApoParametric(text) {
   const res = { bands: [], preamp: null, skipped: [], filterLines: 0 };
   const colorPalette = ["#6FB7FF", "#F07178", "#F2A65A", "#5ED6A0", "#A99CFF", "#E3B66B", "#4FD1C5", "#FF9E7A", "#8FB8FF"];
   const skip = (line, reason) => res.skipped.push({ line: line.length > 60 ? line.slice(0, 57) + "..." : line, reason });
+  // Csatornánkénti blokkok ("Channel: L" … "Channel: R" …): a mindkét csatornára szóló szűrők közvetlenül jönnek; a
+  // csak egy csatornára szólókat külön gyűjtjük. Ha a bal és a jobb blokk sorról sorra azonos, egyszer alkalmazzuk
+  // (az eredmény ugyanaz); különben kimaradnak, megnevezve (külön bal / jobb EQ a motorban még nincs).
+  let scope = true;
+  const perChannel = new Map();   // csatorna -> [szűrősor]
+  const lines = [];
   String(text || "").split(/\r?\n/).forEach((raw) => {
     const l = raw.trim();
-    if (!l) return;
+    if (!l || l.startsWith("#")) return;
+    const cm = l.match(/^Channel:\s*(.*)$/i);
+    if (cm) { scope = apoChannelScope(cm[1]); return; }
+    const dm = l.match(/^(Delay|Convolution|Include|Copy|Device|Eval|If|ElseIf|Else|EndIf|Stage)\s*:/i);
+    if (dm) { skip(l, t("skip.directive", { d: dm[1] })); return; }
+    if (scope !== true && /^Filter\b/i.test(l)) {
+      if (!perChannel.has(scope)) perChannel.set(scope, []);
+      perChannel.get(scope).push(l);
+      return;
+    }
+    lines.push(l);
+  });
+  if (perChannel.size) {
+    const sets = [...perChannel.entries()];
+    const norm = (arr) => arr.map(s => s.replace(/^Filter\s*\d*\s*:/i, "").replace(/\s+/g, " ").trim()).join("\n");
+    const same = sets.length === 2 && perChannel.has("L") && perChannel.has("R") && norm(perChannel.get("L")) === norm(perChannel.get("R"));
+    if (same) lines.push(...perChannel.get("L"));
+    else sets.forEach(([ch, arr]) => arr.forEach(l => { res.filterLines++; skip(l, t("skip.channel", { ch })); }));
+  }
+  lines.forEach((l) => {
     const pm = l.match(/^Preamp:\s*([+-]?\d+(?:\.\d+)?)\s*dB/i);
     if (pm) { res.preamp = parseFloat(pm[1]); return; }
     if (!/^Filter\b/i.test(l)) return;
@@ -10215,7 +10253,7 @@ function decodeWavNative(buf) {
       chans[c][i] = v;
     }
   }
-  return { sr: fmt.sr, channels: chans };
+  return { sr: fmt.sr, channels: chans, srcChannels: fmt.channels };
 }
 
 const CONV_MAX_FRAMES = 262144;
@@ -10345,14 +10383,19 @@ async function handleConvFileSelect(e) {
 /** IR-fájl dekódolása: WAV a saját olvasóval, egyéb formátum a böngésző dekódolójával (a környezet mintavételére). */
 async function decodeIrFile(file) {
   const buf = await file.arrayBuffer();
-  const dec = decodeWavNative(buf);
-  if (dec) return dec;
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const ab = await ctx.decodeAudioData(buf.slice(0));
-  const chans = [];
-  for (let c = 0; c < Math.min(2, ab.numberOfChannels); c++) chans.push(ab.getChannelData(c).slice());
-  ctx.close();
-  return { sr: ab.sampleRate, channels: chans };
+  let dec = decodeWavNative(buf);
+  if (!dec) {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ab = await ctx.decodeAudioData(buf.slice(0));
+    const chans = [];
+    for (let c = 0; c < Math.min(2, ab.numberOfChannels); c++) chans.push(ab.getChannelData(c).slice());
+    ctx.close();
+    dec = { sr: ab.sampleRate, channels: chans, srcChannels: ab.numberOfChannels };
+  }
+  // A konvolver mono vagy sztereó IR-t használ. A több csatornás (pl. 4 csatornás „true stereo”: LL, LR, RL, RR)
+  // fájlból az első kettő nem a bal és a jobb csatorna szűrője: ilyenkor rossz eredmény helyett elutasítjuk.
+  if (dec.srcChannels > 2) throw new Error(t("cv.multiChannel", { n: dec.srcChannels }));
+  return dec;
 }
 
 // =========================================================================
