@@ -1,0 +1,81 @@
+# Raspberry Pi 4 / 5 (arm64) .deb csomag natív arm64-es GitHub-gépen, Debian 13 („trixie”, a Raspberry Pi OS alapja)
+# konténerben, a tools/pi/pi_deb_build.sh-val (RNNoise-modellel, a közös tesztekkel, a test_dsp-vel együtt).
+# Kézi indítás: a forrás (címke vagy commit), a csomagrevízió, és ha meg van adva, a kiadás, amelyhez feltölti.
+name: Pi-csomag
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Forrás (címke vagy commit), pl. v2.3.0"
+        required: true
+      revision:
+        description: "Csomagrevízió (1: első csomag; 2, 3…: ugyanannak a verziónak az újraépítése)"
+        required: true
+        default: "1"
+      release_tag:
+        description: "Kiadás, amelyhez feltölti (üres: csak munkafolyamat-termék)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  pi-deb:
+    runs-on: ubuntu-24.04-arm
+    container: debian:trixie
+    outputs:
+      file: ${{ steps.out.outputs.file }}
+    steps:
+      - name: Függőségek (docs/pi.md, 1. pont)
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential cmake ninja-build pkg-config xz-utils dpkg-dev \
+            fakeroot git python3 curl ca-certificates libpipewire-0.3-dev libfftw3-dev libsystemd-dev libasound2-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Csomagkészítés
+        env:
+          AQ_PI_REV: ${{ inputs.revision }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git rev-parse --verify --quiet "$SOURCE_REF^{commit}" >/dev/null || { echo "::error::ismeretlen forrás: $SOURCE_REF"; exit 1; }
+          bash tools/pi/pi_deb_build.sh "$GITHUB_WORKSPACE" "$SOURCE_REF" "$GITHUB_WORKSPACE/pi-deb"
+      - name: Fájlnév a kiadáshoz (a GitHub a „~” jelet „.”-ra cseréli), sha256
+        id: out
+        run: |
+          cd pi-deb
+          f=$(ls aqulify_*_arm64.deb)
+          g=$(echo "$f" | tr '~' '.')
+          [ "$f" = "$g" ] || mv "$f" "$g"
+          sha256sum "$g" > "$g.sha256"
+          cat "$g.sha256"
+          echo "file=$g" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Aqulify-Pi
+          path: |
+            pi-deb/*.deb
+            pi-deb/*.deb.sha256
+            pi-deb/build.log
+
+  upload:
+    needs: pi-deb
+    if: inputs.release_tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Aqulify-Pi
+      - name: Feltöltés a kiadáshoz (meglévő, azonos nevű fájlt nem ír felül)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+          FILE: ${{ needs.pi-deb.outputs.file }}
+        run: gh release upload "$TAG" "$FILE" "$FILE.sha256" -R "$GITHUB_REPOSITORY"
