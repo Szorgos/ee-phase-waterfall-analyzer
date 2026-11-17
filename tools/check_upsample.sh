@@ -24,11 +24,13 @@ else
     repo_git() { git -C "$REPO" "$@"; }
 fi
 
-BASE_REF="origin/master"
-if ! repo_git rev-parse --verify --quiet "$BASE_REF" >/dev/null 2>&1; then
-    BASE_REF="bac20b9"
+FROZEN_COMMIT="$(repo_git log --format='%H %s' HEAD | grep 'Felmintavételezés: tesztek (befagyasztva)' | head -n 1 | awk '{print $1}')"
+if [ -n "$FROZEN_COMMIT" ] && repo_git rev-parse --verify --quiet "${FROZEN_COMMIT}^" >/dev/null 2>&1; then
+    BASE_REF="$(repo_git rev-parse "${FROZEN_COMMIT}^")"
+else
+    BASE_REF="origin/master"
     if ! repo_git rev-parse --verify --quiet "$BASE_REF" >/dev/null 2>&1; then
-        BASE_REF="$(repo_git rev-list --max-parents=0 HEAD | head -n 1)"
+        BASE_REF="bac20b9"
     fi
 fi
 
@@ -206,7 +208,6 @@ if [ $QUICK -eq 0 ]; then
     # 5. Befagyasztott tesztek ellenőrzése (8.1)
     echo "[5/7] Befagyasztott tesztek ellenőrzése (8.1)..."
     t0=$(date +%s)
-    FROZEN_COMMIT="$(repo_git log --reverse --format='%H %s' "$BASE_REF"..HEAD | head -n 1 | awk '{print $1}')"
     if [ -z "$FROZEN_COMMIT" ]; then
         echo "  [HIBA] Nem található első (befagyasztott) tesztcommit!"
         printf "frozen_tests\tHIBA\t0\n" >> "$SUMMARY_LOG"
