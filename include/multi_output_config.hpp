@@ -17,10 +17,18 @@ namespace multiout {
 constexpr int kMaxOutputs = 4;
 constexpr int kMaxCrossovers = kMaxOutputs - 1;
 constexpr double kMaxDelayMs = 50.0;          // legfeljebb ~17 m távolságkülönbség
+constexpr int kMaxWayBands = 10;              // útonkénti EQ legfeljebb 10 sáv (3.2)
 
 enum class Mode : int32_t { Zones = 0, Crossover = 1 };
 
 /** Egy kimenet beállításai. */
+/** Útonkénti EQ (kizárólag aktív keresztváltóban hat; a zónák láncától teljesen független). */
+struct WayEq {
+    bool on = false;
+    int32_t numBands = 0;
+    std::array<EqBandPod, kMaxWayBands> bands{};   // típus: csak Bell / LoShelf / HiShelf
+};
+
 struct OutputConfig {
     bool enabled = true;
     int32_t band = -1;          // keresztváltóban: 0 = legalsó sáv … (vágási pontok száma) = legfelső; -1 = teljes jel
@@ -28,6 +36,7 @@ struct OutputConfig {
     float delayMs = 0.0f;       // 0 … 50 ms
     bool invert = false;        // polaritásfordítás (pl. fordítva bekötött hangszóró)
     ParamData chain = transparentParams();   // független zónában a kimenet saját lánca; keresztváltóban csak az 1.-é él
+    WayEq way{};                             // az út saját EQ-ja keresztváltó módban
 };
 
 struct MultiConfig {
@@ -41,6 +50,24 @@ struct MultiConfig {
 };
 
 /** Érvényes tartományba igazítás (a felületről vagy fájlból érkező beállításra). */
+/** Egy út EQ-jának érvényes tartományba igazítása (K12: legfeljebb 10 sáv, +6 dB plafon). */
+inline void sanitizeWayEq(WayEq& w) {
+    w.numBands = std::clamp(w.numBands, 0, kMaxWayBands);
+    for (auto& b : w.bands) {
+        if (b.type != static_cast<int32_t>(EqBandType::Bell) &&
+            b.type != static_cast<int32_t>(EqBandType::LoShelf) &&
+            b.type != static_cast<int32_t>(EqBandType::HiShelf)) {
+            b.type = static_cast<int32_t>(EqBandType::Bell);
+        }
+        if (!std::isfinite(b.freq)) b.freq = 1000.0f;
+        if (!std::isfinite(b.gainDb)) b.gainDb = 0.0f;
+        if (!std::isfinite(b.q)) b.q = 1.0f;
+        b.freq = std::clamp(b.freq, 20.0f, 20000.0f);
+        b.gainDb = std::clamp(b.gainDb, -18.0f, 6.0f);
+        b.q = std::clamp(b.q, 0.3f, 10.0f);
+    }
+}
+
 inline void sanitize(MultiConfig& c) {
     c.mode = c.mode == Mode::Crossover ? Mode::Crossover : Mode::Zones;
     c.numOutputs = std::clamp(c.numOutputs, 2, kMaxOutputs);
@@ -56,6 +83,7 @@ inline void sanitize(MultiConfig& c) {
         o.delayMs = std::clamp(o.delayMs, 0.0f, static_cast<float>(kMaxDelayMs));
         o.band = std::clamp(o.band, -1, c.numCrossovers);
         sanitizeParams(o.chain);
+        sanitizeWayEq(o.way);
     }
 }
 
