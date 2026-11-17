@@ -40,7 +40,7 @@
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Aqulify processes the system audio (EQ, crossfeed, convolver, limiter) and shows it in the analyzer. The audio never leaves this Mac.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Aqulify only uses the output of your audio device. If the device also has inputs, macOS may ask for this permission; Aqulify does not record from the microphone.</string>
+	<string>Aqulify records from the microphone only during a room measurement that you start yourself, to measure your speakers in the room. At any other time it does not record from the microphone.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
