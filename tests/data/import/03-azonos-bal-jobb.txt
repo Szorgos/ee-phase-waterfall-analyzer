@@ -1,0 +1,6 @@
+Channel: L
+Filter 1: ON PK Fc 60 Hz Gain -6.0 dB Q 4.00
+Filter 2: ON LS 6dB Fc 120 Hz Gain 2.0 dB
+Channel: R
+Filter 1: ON PK Fc 60 Hz Gain -6.0 dB Q 4.00
+Filter 2: ON LS 6dB Fc 120 Hz Gain 2.0 dB

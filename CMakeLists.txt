@@ -74,6 +74,11 @@ target_link_libraries(test_multiout PRIVATE ee_dsp_core Threads::Threads)
 add_executable(test_keepawake src/test_keepawake.cpp)
 target_link_libraries(test_keepawake PRIVATE ee_dsp_core)
 
+# 8b. Tesztalkalmazás: szobamérő mag (log sweep, dekonvolúció, simítás, célgörbe, auto-EQ)
+add_executable(test_room src/test_room.cpp)
+target_link_libraries(test_room PRIVATE ee_dsp_core Threads::Threads)
+target_compile_definitions(test_room PRIVATE AQ_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+
 # 2.x: beépített zenelejátszó (dekóderek: third_party/decoders, megengedő licencek; a hangkimenet platformonként)
 set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
 set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
@@ -251,6 +256,7 @@ if(WIN32)
             ${CMAKE_CURRENT_SOURCE_DIR}/autoeq_index.js
             ${CMAKE_CURRENT_SOURCE_DIR}/gui_i18n.js
             ${CMAKE_CURRENT_SOURCE_DIR}/gui_player.js
+            ${CMAKE_CURRENT_SOURCE_DIR}/import_parser.js
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/README_WINDOWS.md)
@@ -264,6 +270,7 @@ if(WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/autoeq_index.js ${EE_PAYLOAD_DIR}/autoeq.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/gui_i18n.js ${EE_PAYLOAD_DIR}/i18n.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/gui_player.js ${EE_PAYLOAD_DIR}/player.bin
+            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/import_parser.js ${EE_PAYLOAD_DIR}/importparser.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js ${EE_PAYLOAD_DIR}/three.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE ${EE_PAYLOAD_DIR}/threelic.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/README_WINDOWS.md ${EE_PAYLOAD_DIR}/readme.bin
@@ -278,6 +285,7 @@ if(WIN32)
             "FILE_AUTOEQ|gui\\autoeq_index.js\n"
             "FILE_I18N|gui\\gui_i18n.js\n"
             "FILE_PLAYERJS|gui\\gui_player.js\n"
+            "FILE_IMPORTJS|gui\\import_parser.js\n"
             "FILE_THREE|gui\\three.min.js\n"
             "FILE_THREELIC|gui\\three.js-LICENSE.txt\n"
             "FILE_README|OLVASS_EL.md\n")
@@ -290,6 +298,7 @@ if(WIN32)
             "FILE_AUTOEQ RCDATA \"${EE_PAYLOAD_DIR}/autoeq.bin\"\n"
             "FILE_I18N RCDATA \"${EE_PAYLOAD_DIR}/i18n.bin\"\n"
             "FILE_PLAYERJS RCDATA \"${EE_PAYLOAD_DIR}/player.bin\"\n"
+            "FILE_IMPORTJS RCDATA \"${EE_PAYLOAD_DIR}/importparser.bin\"\n"
             "FILE_THREE RCDATA \"${EE_PAYLOAD_DIR}/three.bin\"\n"
             "FILE_THREELIC RCDATA \"${EE_PAYLOAD_DIR}/threelic.bin\"\n"
             "FILE_README RCDATA \"${EE_PAYLOAD_DIR}/readme.bin\"\n")
@@ -330,6 +339,7 @@ if(APPLE)
         ${CMAKE_CURRENT_SOURCE_DIR}/autoeq_index.js
         ${CMAKE_CURRENT_SOURCE_DIR}/gui_i18n.js
         ${CMAKE_CURRENT_SOURCE_DIR}/gui_player.js
+        ${CMAKE_CURRENT_SOURCE_DIR}/import_parser.js
         ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js)
     add_executable(Aqulify MACOSX_BUNDLE macos/app/main.mm macos/engine/mac_engine.mm macos/engine/mac_media.mm ${AQ_MAC_GUI}
         ${AQ_MAC_RES}/Aqulify.icns ${AQ_MAC_RES}/en.lproj/InfoPlist.strings ${AQ_MAC_RES}/hu.lproj/InfoPlist.strings)
@@ -447,7 +457,7 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
     if(TARGET aqulify-gui)
         install(TARGETS aqulify-gui RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     endif()
-    install(FILES gui_integrated_system.html autoeq_index.js gui_i18n.js gui_player.js windows/third_party/three/three.min.js
+    install(FILES gui_integrated_system.html autoeq_index.js gui_i18n.js gui_player.js import_parser.js windows/third_party/three/three.min.js
             DESTINATION ${CMAKE_INSTALL_DATADIR}/aqulify/gui)
     install(FILES windows/third_party/three/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/aqulify/gui RENAME three.js-LICENSE.txt)
     install(FILES linux/io.github.szorgos.Aqulify.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)

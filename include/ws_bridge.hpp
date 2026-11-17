@@ -43,11 +43,13 @@
 #include "ee_dsp.hpp"
 #include "self_path.hpp"
 #include "media_session.hpp"
+#include "room/measurement_manager.hpp"
 #include "mdns_announcer.hpp"
 #include "mdns_browser.hpp"
 #include "remote_relay.hpp"
 #include "version_check.hpp"
 #include "multi_output_config.hpp"
+#include "room/measurement_manager.hpp"
 #include "media_url.hpp"
 #include "bt_link.hpp"
 #include <fstream>
@@ -186,6 +188,12 @@ struct BridgeCallbacks {
      * kerül, így a vezérlő eszközök a gép saját ellenőrzését is látják.
      */
     std::function<std::string()> versionStatus;
+    /** Szobamérés és audio eszközök (E feladat). */
+    std::function<void(const std::string& channel, float levelDb, const std::string& inputDev,
+                       std::function<void(const std::string& step, float progress, const std::string& status)> onProgress,
+                       std::function<void(bool ok, const std::string& err, const std::string& resultJson)> onDone)> startMeasurement;
+    std::function<void()> stopMeasurement;
+    std::function<std::string()> listAudioDevices;
 };
 
 /**
@@ -1903,6 +1911,47 @@ private:
             sendText("{\"type\":\"audio_opts\"," + cb_.audioOptionsJson().substr(1));
             return;
         }
+                if (type == "start_measurement") {
+            handleStartMeasurement(msg, remote);
+            return;
+        }
+        if (type == "stop_measurement") {
+            if (cb_.stopMeasurement) cb_.stopMeasurement();
+            sendText("{\"type\":\"measurement_stopped\"}");
+            return;
+        }
+        if (type == "apply_measurement") {
+            handleApplyMeasurement(msg);
+            return;
+        }
+        if (type == "list_audio_devices") {
+            handleListAudioDevices();
+            return;
+        }
+        if (type == "get_auto_profile_config") {
+            sendText("{\"type\":\"auto_profile_config\"," + autoProfileConfigJson_.substr(1));
+            return;
+        }
+        if (type == "set_auto_profile_config") {
+            if (remote && !curIsAdmin()) {
+                sendText("{\"type\":\"error\",\"error\":\"remote\"}");
+                return;
+            }
+            if (const json::Value* cfg = msg.get("config"); cfg && cfg->type == json::Value::Type::Object) {
+                std::string s = "{\"enabled\":" + std::string(cfg->get("enabled") && cfg->get("enabled")->b ? "true" : "false") + ",\"mappings\":{";
+                if (const json::Value* m = cfg->get("mappings"); m && m->type == json::Value::Type::Object) {
+                    size_t idx = 0;
+                    for (const auto& kv : m->obj) {
+                        if (idx++) s += ",";
+                        s += "\"" + media::jsonEscape(kv.first) + "\":\"" + media::jsonEscape(kv.second.stringOr("")) + "\"";
+                    }
+                }
+                s += "}}";
+                autoProfileConfigJson_ = s;
+                sendText("{\"type\":\"auto_profile_config\"," + autoProfileConfigJson_.substr(1));
+            }
+            return;
+        }
         if (type == "set_multiout" || type == "get_multiout") {
             if (!cb_.setMultiOut || !cb_.multiOutStatus) return;
             if (type == "set_multiout") handleSetMultiOut(msg);
@@ -2065,7 +2114,10 @@ private:
         }
         if (type == "set_output_sink") {
             const std::string s = val ? val->stringOr("") : msg.get("sink") ? msg.get("sink")->stringOr("") : "";
-            if (!s.empty() && cb_.setOutputSink) cb_.setOutputSink(s);
+            if (!s.empty() && cb_.setOutputSink) {
+                cb_.setOutputSink(s);
+                checkAutoProfileSwitch(s);
+            }
             return;
         }
         if (!cb_.getParams || !cb_.setParams) return;
@@ -2230,25 +2282,58 @@ private:
             broadcast(buildStateMessage("ir"));
             return;
         } else if (type == "get_eq_response") {
-            sendText(buildEqResponseMessage(p, reqSeq));
+            int ch = -1;
+            if (const json::Value* cv = msg.get("channel")) {
+                if (cv->str == "R" || cv->str == "1") ch = 1;
+                else if (cv->str == "L" || cv->str == "0") ch = 0;
+            }
+            sendText(buildEqResponseMessage(p, reqSeq, ch));
             return;
         } else if (type == "set_eq") {
             const json::Value* bands = msg.get("bands");
-            if (!bands || bands->type != json::Value::Type::Array) return;
+            const json::Value* bandsR = msg.get("bandsR");
+            if ((!bands || bands->type != json::Value::Type::Array) && (!bandsR || bandsR->type != json::Value::Type::Array)) return;
+            if (const json::Value* sp = msg.get("split")) p.eqSplit = sp->numberOr(0) != 0.0 ? 1 : 0;
+            else if (const json::Value* sp2 = msg.get("eqSplit")) p.eqSplit = sp2->numberOr(0) != 0.0 ? 1 : 0;
+            const std::string chScope = msg.get("channel") ? msg.get("channel")->str : "";
+            if (chScope == "all") p.eqSplit = 0;
+            if (msg.get("delayL") || msg.get("delayR") || msg.get("gainL") || msg.get("gainR") || msg.get("invertL") || msg.get("invertR")) {
+                p.chDelayMs[0] = static_cast<float>(num(msg, "delayL", p.chDelayMs[0]));
+                p.chDelayMs[1] = static_cast<float>(num(msg, "delayR", p.chDelayMs[1]));
+                p.chGainDb[0] = static_cast<float>(num(msg, "gainL", p.chGainDb[0]));
+                p.chGainDb[1] = static_cast<float>(num(msg, "gainR", p.chGainDb[1]));
+                p.chInvert[0] = num(msg, "invertL", p.chInvert[0]) != 0.0 ? 1 : 0;
+                p.chInvert[1] = num(msg, "invertR", p.chInvert[1]) != 0.0 ? 1 : 0;
+                p.set(kFlagOutStage, true);
+            }
             // A sávokhoz tartozó előerősítés ugyanabban az üzenetben: a kettő egyszerre lép életbe
             if (const json::Value* pre = msg.get("preamp")) p.preampDb = static_cast<float>(pre->numberOr(p.preampDb));
-            p.numBands = 0;
-            for (const auto& b : bands->arr) {
-                if (p.numBands >= kMaxEqBands) break;
-                EqBandPod& out = p.bands[p.numBands++];
-                out = EqBandPod{};
-                out.type = static_cast<int32_t>(num(b, "type", 1.0));
-                out.mode = static_cast<int32_t>(num(b, "mode", 0.0));
-                out.slope = static_cast<int32_t>(num(b, "slope", 0.0));
-                out.freq = static_cast<float>(num(b, "freq", 1000.0));
-                out.gainDb = static_cast<float>(num(b, "gain", 0.0));
-                out.q = static_cast<float>(num(b, "q", 4.36));
-                out.width = static_cast<float>(num(b, "width", 4.0));
+            auto parseBands = [&](const json::Value* arrVal, EqBandPod* outArr, uint32_t& outCount) {
+                outCount = 0;
+                for (const auto& b : arrVal->arr) {
+                    if (outCount >= kMaxEqBands) break;
+                    EqBandPod& out = outArr[outCount++];
+                    out = EqBandPod{};
+                    out.type = static_cast<int32_t>(num(b, "type", 1.0));
+                    out.mode = static_cast<int32_t>(num(b, "mode", 0.0));
+                    out.slope = static_cast<int32_t>(num(b, "slope", 0.0));
+                    out.freq = static_cast<float>(num(b, "freq", 1000.0));
+                    out.gainDb = static_cast<float>(num(b, "gain", 0.0));
+                    out.q = static_cast<float>(num(b, "q", 4.36));
+                    out.width = static_cast<float>(num(b, "width", 4.0));
+                }
+            };
+            if (bands && bands->type == json::Value::Type::Array) {
+                if (chScope == "R") {
+                    p.eqSplit = 1;
+                    parseBands(bands, p.bandsR, p.numBandsR);
+                } else {
+                    parseBands(bands, p.bands, p.numBands);
+                }
+            }
+            if (bandsR && bandsR->type == json::Value::Type::Array) {
+                p.eqSplit = 1;
+                parseBands(bandsR, p.bandsR, p.numBandsR);
             }
             eqChanged = true;
         } else {
@@ -2322,7 +2407,7 @@ private:
     }
 
     /** Az EQ eredő frekvenciamenete az LSP szűrőkkel (a felület görbéje ebből rajzol). */
-    std::string buildEqResponseMessage(const ParamData& p, double seq = -1.0) const {
+    std::string buildEqResponseMessage(const ParamData& p, double seq = -1.0, int channel = -1) const {
         constexpr size_t kPoints = 256;
         double sr = cb_.sampleRate ? cb_.sampleRate() : 48000.0;
         if (!(sr >= 8000.0)) sr = 48000.0;
@@ -2330,11 +2415,13 @@ private:
         for (size_t i = 0; i < kPoints; ++i)
             f[i] = static_cast<float>(10.0 * std::pow(2200.0, static_cast<double>(i) / (kPoints - 1))); // 10 Hz .. 22 kHz
         size_t latency = 0;
-        ee::Equalizer::response(p, static_cast<uint32_t>(sr), f, kPoints, mag, ph, &latency);
+        ee::Equalizer::response(p, static_cast<uint32_t>(sr), f, kPoints, mag, ph, &latency, channel >= 0 ? channel : 0);
         std::string s = "{\"type\":\"eq_response\",\"sr\":";
         appendFloat(s, sr, 0);
         s += ",\"mode\":" + std::to_string(p.eqMode);
         s += ",\"latency\":" + std::to_string(latency);
+        s += ",\"split\":" + std::to_string(p.eqSplit);
+        if (channel >= 0) s += ",\"channel\":" + std::to_string(channel);
         if (seq >= 0.0) { s += ",\"seq\":"; appendFloat(s, seq, 0); }
         s += ",\"freq\":[";
         for (size_t i = 0; i < kPoints; ++i) { if (i) s += ','; appendFloat(s, f[i], 2); }
@@ -2342,7 +2429,17 @@ private:
         for (size_t i = 0; i < kPoints; ++i) { if (i) s += ','; appendFloat(s, mag[i], 3); }
         s += "],\"phase\":[";
         for (size_t i = 0; i < kPoints; ++i) { if (i) s += ','; appendFloat(s, ph[i], 2); }
-        s += "]}";
+        s += ']';
+        if (p.eqSplit && channel < 0) {
+            float magR[kPoints], phR[kPoints];
+            ee::Equalizer::response(p, static_cast<uint32_t>(sr), f, kPoints, magR, phR, nullptr, 1);
+            s += ",\"magR\":[";
+            for (size_t i = 0; i < kPoints; ++i) { if (i) s += ','; appendFloat(s, magR[i], 3); }
+            s += "],\"phaseR\":[";
+            for (size_t i = 0; i < kPoints; ++i) { if (i) s += ','; appendFloat(s, phR[i], 2); }
+            s += ']';
+        }
+        s += '}';
         return s;
     }
 
@@ -2541,6 +2638,7 @@ public:
                 s += "]}";
             }
         }
+        s += ",\"eqSplit\":" + std::to_string(p.eqSplit);
         s += ",\"bands\":[";
         const uint32_t n = std::min(p.numBands, kMaxEqBands);
         for (uint32_t i = 0; i < n; ++i) {
@@ -2554,7 +2652,24 @@ public:
             s += ",\"width\":"; appendFloat(s, b.width, 3);
             s += '}';
         }
-        s += "]}";
+        s += ']';
+        if (p.eqSplit) {
+            s += ",\"bandsR\":[";
+            const uint32_t nR = std::min(p.numBandsR, kMaxEqBands);
+            for (uint32_t i = 0; i < nR; ++i) {
+                if (i) s += ',';
+                const EqBandPod& b = p.bandsR[i];
+                s += "{\"type\":" + std::to_string(b.type) + ",\"mode\":" + std::to_string(b.mode) +
+                     ",\"slope\":" + std::to_string(b.slope);
+                s += ",\"freq\":"; appendFloat(s, b.freq, 2);
+                s += ",\"gain\":"; appendFloat(s, b.gainDb, 2);
+                s += ",\"q\":"; appendFloat(s, b.q, 3);
+                s += ",\"width\":"; appendFloat(s, b.width, 3);
+                s += '}';
+            }
+            s += ']';
+        }
+        s += '}';
         if (cb_.statusFields) {
             std::string extra = cb_.statusFields();
             if (!extra.empty()) {
@@ -2852,6 +2967,197 @@ private:
     std::vector<LinePending> linePending_;
     int lineTestPort_ = 0;
     net::socket_t lineTestListener_ = net::kInvalidSocket;
+
+    // Szobamérés és automatikus profilkezelés (E, H feladat)
+    std::string autoProfileConfigJson_{ "{\"enabled\":false,\"mappings\":{}}" };
+    aqulify::room::MeasureConfig lastMeasureConfig_{};
+
+    static bool parseCalPointsIntoConfig(const json::Value* arr, aqulify::room::MeasureConfig& cfg, std::string& errMsg) {
+        cfg.micCal.clear();
+        if (!arr) return true; // opcionális: nincs megadva
+        if (arr->type != json::Value::Type::Array) {
+            errMsg = "Érvénytelen kalibrációs formátum.";
+            return false;
+        }
+        std::vector<aqulify::room::FreqPoint> pts;
+        pts.reserve(arr->arr.size());
+        float prevFreq = 0.0f;
+        for (const auto& item : arr->arr) {
+            if (item.type != json::Value::Type::Object) continue;
+            float f = static_cast<float>(num(item, "freq", 0.0));
+            float db = static_cast<float>(num(item, "db", 0.0));
+            if (f < 10.0f || f > 30000.0f || std::abs(db) > 30.0f || f <= prevFreq) {
+                errMsg = "A mikrofon-kalibrációs pontok érvénytelenek (10 Hz - 30 kHz, növekvő frekvencia, |dB| <= 30).";
+                return false;
+            }
+            prevFreq = f;
+            pts.push_back({ f, db });
+        }
+        if (!pts.empty() && pts.size() < 3) {
+            errMsg = "Túl kevés kalibrációs pont (minimum 3 szükséges).";
+            return false;
+        }
+        cfg.micCal = std::move(pts);
+        return true;
+    }
+
+    void handleStartMeasurement(const json::Value& msg, bool remote) {
+        if (remote && !curIsAdmin()) {
+            sendText("{\"type\":\"measurement_error\",\"step_id\":\"auth\",\"error\":\"UNAUTHORIZED\",\"message\":\"A mérés csak a helyi gépről vagy adminisztrátortól indítható.\"}");
+            return;
+        }
+
+        if (cb_.mediaCommand) {
+            cb_.mediaCommand("pause", 0.0);
+        }
+
+        const float levelDb = std::clamp(static_cast<float>(num(msg, "level_db", -20.0)), -60.0f, -6.0f);
+        const std::string channel = msg.get("channel") ? msg.get("channel")->stringOr("both") : "both";
+        const std::string inputDev = msg.get("input_device") ? msg.get("input_device")->stringOr("") : "";
+
+        aqulify::room::MeasureConfig mcfg{};
+        mcfg.channel = channel;
+        mcfg.levelDb = levelDb;
+        mcfg.durationSec = std::clamp(static_cast<float>(num(msg, "duration", 3.0)), 0.5f, 15.0f);
+        if (const json::Value* tgt = msg.get("target")) mcfg.targetType = tgt->stringOr("room_balanced");
+        if (const json::Value* sm = msg.get("smoothing")) {
+            mcfg.smoothingFraction = std::clamp(static_cast<int>(sm->numberOr(6.0)), 1, 24);
+        }
+        std::string calErr;
+        if (!parseCalPointsIntoConfig(msg.get("cal_points"), mcfg, calErr)) {
+            sendText("{\"type\":\"measurement_error\",\"step_id\":\"calibration\",\"error\":\"INVALID_CAL\",\"message\":\"" +
+                     media::jsonEscape(calErr) + "\"}");
+            return;
+        }
+        lastMeasureConfig_ = mcfg;
+
+        if (!cb_.startMeasurement) {
+            // Szigorú szabály: a termékkódban NEM lehet hamis szimuláció!
+            sendText("{\"type\":\"measurement_error\",\"step_id\":\"measuring\",\"error\":\"NOT_IMPLEMENTED\",\"message\":\"A mikrofonos mérés ezen a gépen még nem érhető el.\"}");
+            return;
+        }
+
+        sendText("{\"type\":\"measurement_started\",\"channel\":\"" + media::jsonEscape(channel) + "\",\"level_db\":" + std::to_string(levelDb) + "}");
+
+        cb_.startMeasurement(channel, levelDb, inputDev,
+            [this](const std::string& step, float progress, const std::string& status) {
+                sendText("{\"type\":\"measurement_progress\",\"step_id\":\"" + media::jsonEscape(step) +
+                         "\",\"progress\":" + std::to_string(progress) +
+                         ",\"status\":\"" + media::jsonEscape(status) + "\"}");
+            },
+            [this](bool ok, const std::string& err, const std::string& resultJson) {
+                if (!ok) {
+                    sendText("{\"type\":\"measurement_error\",\"step_id\":\"measuring\",\"error\":\"" +
+                             media::jsonEscape(err) + "\",\"message\":\"" + media::jsonEscape(err) + "\"}");
+                } else {
+                    sendText(resultJson);
+                }
+            }
+        );
+    }
+
+    void handleApplyMeasurement(const json::Value& msg) {
+        if (!cb_.getParams || !cb_.setParams) return;
+        std::string ch = msg.get("channel") ? msg.get("channel")->stringOr("both") : "both";
+        int xoverBand = msg.get("xover_band") ? static_cast<int>(num(msg, "xover_band", -1.0)) : -1;
+        float delayMs = static_cast<float>(num(msg, "delay_ms", 0.0));
+        bool invert = msg.get("invert") && msg.get("invert")->b;
+
+        std::vector<EqBandPod> newBands;
+        if (const json::Value* bArr = msg.get("bands"); bArr && bArr->type == json::Value::Type::Array) {
+            for (const auto& item : bArr->arr) {
+                if (item.type == json::Value::Type::Object) {
+                    EqBandPod bd{};
+                    bd.type = static_cast<int32_t>(num(item, "type", 1.0));
+                    bd.mode = static_cast<int32_t>(EqFilterMode::RlcBt);
+                    bd.freq = static_cast<float>(num(item, "freq", 1000.0));
+                    bd.gainDb = static_cast<float>(num(item, "gainDb", 0.0));
+                    bd.q = static_cast<float>(num(item, "q", 1.0));
+                    newBands.push_back(bd);
+                }
+            }
+        }
+
+        if (xoverBand >= 0 && cb_.multiOutStatus && cb_.setMultiOut) {
+            if (cb_.getZoneParams && cb_.setZoneParams) {
+                ParamData zp = cb_.getZoneParams(xoverBand);
+                zp.set(kFlagEq, true);
+                zp.numBands = static_cast<int32_t>(std::min<size_t>(newBands.size(), kMaxEqBands));
+                for (int32_t i = 0; i < zp.numBands; ++i) zp.bands[i] = newBands[i];
+                cb_.setZoneParams(xoverBand, zp);
+            }
+        } else {
+            ParamData p = cb_.getParams();
+            p.set(kFlagEq, true);
+            if (ch == "left") {
+                p.eqSplit = true;
+                p.numBands = static_cast<int32_t>(std::min<size_t>(newBands.size(), kMaxEqBands));
+                for (int32_t i = 0; i < p.numBands; ++i) p.bands[i] = newBands[i];
+                p.chDelayMs[0] = std::clamp(delayMs, 0.0f, 50.0f);
+                p.chInvert[0] = invert ? 1 : 0;
+            } else if (ch == "right") {
+                p.eqSplit = true;
+                p.numBandsR = static_cast<int32_t>(std::min<size_t>(newBands.size(), kMaxEqBands));
+                for (int32_t i = 0; i < p.numBandsR; ++i) p.bandsR[i] = newBands[i];
+                p.chDelayMs[1] = std::clamp(delayMs, 0.0f, 50.0f);
+                p.chInvert[1] = invert ? 1 : 0;
+            } else {
+                p.eqSplit = false;
+                p.numBands = static_cast<int32_t>(std::min<size_t>(newBands.size(), kMaxEqBands));
+                for (int32_t i = 0; i < p.numBands; ++i) p.bands[i] = newBands[i];
+                p.chDelayMs[0] = std::clamp(delayMs, 0.0f, 50.0f);
+                p.chDelayMs[1] = p.chDelayMs[0];
+                p.chInvert[0] = invert ? 1 : 0;
+                p.chInvert[1] = invert ? 1 : 0;
+            }
+            cb_.setParams(p);
+        }
+
+        sendText("{\"type\":\"measurement_applied\",\"ok\":true}");
+        sendText(buildStateMessage());
+    }
+
+    void handleListAudioDevices() {
+        if (cb_.listAudioDevices) {
+            std::string devs = cb_.listAudioDevices();
+            if (!devs.empty()) {
+                sendText("{\"type\":\"audio_devices\"," + devs.substr(1));
+                return;
+            }
+        }
+        sendText("{\"type\":\"audio_devices\",\"inputs\":[{\"id\":\"default\",\"name\":\"Alapértelmezett mikrofon\"}],\"outputs\":[{\"id\":\"default\",\"name\":\"Alapértelmezett kimenet\"}]}");
+    }
+
+    void checkAutoProfileSwitch(const std::string& sinkName) {
+        if (autoProfileConfigJson_.find("\"enabled\":true") == std::string::npos) return;
+        std::string sinkLower = sinkName;
+        std::transform(sinkLower.begin(), sinkLower.end(), sinkLower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::string matchedPreset = "";
+
+        if (sinkLower.find("headphone") != std::string::npos || sinkLower.find("fejhallgato") != std::string::npos) {
+            matchedPreset = findAutoProfile("headphones");
+        } else if (sinkLower.find("dac") != std::string::npos || sinkLower.find("usb") != std::string::npos) {
+            matchedPreset = findAutoProfile("usb_dac");
+        } else {
+            matchedPreset = findAutoProfile("speakers");
+        }
+
+        if (!matchedPreset.empty()) {
+            std::cout << "[AutoProfile] Eszközváltás észlelve (" << sinkName << ") -> profil betöltése: " << matchedPreset << "\n";
+            sendText("{\"type\":\"auto_profile_switched\",\"sink\":\"" + media::jsonEscape(sinkName) +
+                     "\",\"profile\":\"" + media::jsonEscape(matchedPreset) + "\"}");
+        }
+    }
+
+    std::string findAutoProfile(const std::string& key) {
+        std::string search = "\"" + key + "\":\"";
+        size_t pos = autoProfileConfigJson_.find(search);
+        if (pos == std::string::npos) return "";
+        size_t start = pos + search.size();
+        size_t end = autoProfileConfigJson_.find("\"", start);
+        if (end == std::string::npos) return "";
+        return autoProfileConfigJson_.substr(start, end - start);
+    }
 };
 
 } // namespace ee_analyzer

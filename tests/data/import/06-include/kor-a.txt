@@ -1,0 +1,2 @@
+Include: kor-b.txt
+Filter 1: ON PK Fc 100 Hz Gain 1 dB Q 1

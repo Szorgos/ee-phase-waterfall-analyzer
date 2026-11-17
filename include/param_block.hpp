@@ -24,7 +24,7 @@ namespace ee_analyzer {
 constexpr uint32_t kMaxEqBands = 32;
 
 /** A params.bin fájl és a közös memória paraméter-formátumának verziója. */
-constexpr uint32_t kParamLayoutVersion = 14;
+constexpr uint32_t kParamLayoutVersion = 15;
 
 enum ParamFlags : uint32_t {
     kFlagEq        = 1u << 0,
@@ -186,6 +186,11 @@ struct ParamData {
     float stWetDb = 0.0f;                  // -100.0 .. 20.0 dB (EasyEffects "wet", alap: 0.0 dB)
     int32_t stCompare = 0;                 // 0..1: A/B összehasonlítás (1 = az eredeti jel szól kiegyenlítve)
 
+    // --- Külön bal / jobb EQ (a v15-ben került a végére) ---
+    int32_t eqSplit = 0;                   // 0 = mindkét csatorna azonos (a bands mező), 1 = külön bal / jobb csatorna
+    uint32_t numBandsR = 0;                // a jobb csatorna sávjainak száma (ha eqSplit != 0)
+    EqBandPod bandsR[kMaxEqBands];         // a jobb csatorna sávjai (ha eqSplit != 0)
+
     bool has(uint32_t f) const { return (flags & f) != 0; }
     void set(uint32_t f, bool on) { flags = on ? (flags | f) : (flags & ~f); }
 };
@@ -230,6 +235,8 @@ inline ParamData transparentParams() {
     d.preampDb = 0.0f;
     d.flags = 0;
     d.numBands = 0;
+    d.eqSplit = 0;
+    d.numBandsR = 0;
     return d;
 }
 
@@ -241,6 +248,18 @@ inline void sanitizeParams(ParamData& d) {
     if (d.numBands > kMaxEqBands) d.numBands = kMaxEqBands;
     for (uint32_t i = 0; i < kMaxEqBands; ++i) {
         EqBandPod& b = d.bands[i];
+        ci(b.type, 0, kEqBandTypeCount - 1);
+        ci(b.mode, 0, kEqFilterModeCount - 1);
+        ci(b.slope, 0, 3);
+        cl(b.freq, 10.0f, 24000.0f, 1000.0f);
+        cl(b.gainDb, -36.0f, 36.0f, 0.0f);
+        cl(b.q, 0.0f, 100.0f, 4.36f);
+        cl(b.width, 0.0f, 12.0f, 4.0f);
+    }
+    ci(d.eqSplit, 0, 1);
+    if (d.numBandsR > kMaxEqBands) d.numBandsR = kMaxEqBands;
+    for (uint32_t i = 0; i < kMaxEqBands; ++i) {
+        EqBandPod& b = d.bandsR[i];
         ci(b.type, 0, kEqBandTypeCount - 1);
         ci(b.mode, 0, kEqFilterModeCount - 1);
         ci(b.slope, 0, 3);
@@ -297,7 +316,7 @@ inline void sanitizeParams(ParamData& d) {
     ci(d.bassCompare, 0, 1);
     ci(d.monoCompare, 0, 1);
     for (int c = 0; c < 2; ++c) {
-        cl(d.chDelayMs[c], 0.0f, 20.0f, 0.0f);
+        cl(d.chDelayMs[c], 0.0f, 50.0f, 0.0f);
         cl(d.chGainDb[c], -24.0f, 6.0f, 0.0f);
         ci(d.chInvert[c], 0, 1);
     }
@@ -355,6 +374,7 @@ constexpr size_t kParamSizeV11 = offsetof(ParamData, chDelayMs);
 constexpr size_t kParamSizeV12 = offsetof(ParamData, loudVolumeDb);
 /** A params.bin v13 mérete: a Stereo Tools mezői (v14-ben) előtti rész. */
 constexpr size_t kParamSizeV13 = offsetof(ParamData, stInputGainDb);
+constexpr size_t kParamSizeV14 = offsetof(ParamData, eqSplit);
 
 // ------------------------------------------------------------------ régi (v2/v3) params.bin átvétele
 
@@ -379,9 +399,9 @@ struct ParamDataV3 {
  */
 inline bool loadParamBytes(const char* bytes, size_t len, uint32_t version, uint32_t size, ParamData& out) {
     if (size > len) return false;
-    if (version == kParamLayoutVersion || version == 13 || version == 12 || version == 11 || version == 10 || version == 9 || version == 8 || version == 7 || version == 6 ||
+    if (version == kParamLayoutVersion || version == 14 || version == 13 || version == 12 || version == 11 || version == 10 || version == 9 || version == 8 || version == 7 || version == 6 ||
         version == 5 || version == 4) {
-        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : version == 13 ? kParamSizeV13 : version == 12 ? kParamSizeV12
+        const size_t want = version == kParamLayoutVersion ? sizeof(ParamData) : version == 14 ? kParamSizeV14 : version == 13 ? kParamSizeV13 : version == 12 ? kParamSizeV12
                           : version == 11 ? kParamSizeV11
                           : version == 10 ? kParamSizeV10
                           : version == 9 ? kParamSizeV9 : version == 8 ? kParamSizeV8

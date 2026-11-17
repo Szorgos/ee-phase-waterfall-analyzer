@@ -1,0 +1,32 @@
+filters:
+  bass_l:
+    type: Biquad
+    parameters: {type: Peaking, freq: 44, gain: -7.0, q: 5.0}
+  bass_r:
+    type: Biquad
+    parameters: {type: Peaking, freq: 47, gain: -6.0, q: 5.0}
+  shelf:
+    type: Biquad
+    parameters: {type: Highshelf, freq: 8000, gain: -1.5, q: 0.707}
+  hp:
+    type: Biquad
+    parameters: {type: Highpass, freq: 25, q: 0.707}
+  delay_l:
+    type: Delay
+    parameters: {delay: 0.35, unit: ms}
+  vol:
+    type: Gain
+    parameters: {gain: -5.0}
+  room_l:
+    type: Conv
+    parameters: {type: Wav, filename: 07-konvolucio/ir-bal.wav}
+  ismeretlen:
+    type: DiffEq
+    parameters: {a: [1.0], b: [1.0]}
+pipeline:
+  - type: Filter
+    channels: [0]
+    names: [vol, hp, bass_l, delay_l, shelf]
+  - type: Filter
+    channels: [1]
+    names: [vol, hp, bass_r, shelf]

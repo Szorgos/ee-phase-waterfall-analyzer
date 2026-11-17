@@ -27,7 +27,7 @@ struct OutputConfig {
     float gainDb = 0.0f;        // -24 … +12 dB
     float delayMs = 0.0f;       // 0 … 50 ms
     bool invert = false;        // polaritásfordítás (pl. fordítva bekötött hangszóró)
-    ParamData chain = transparentParams();   // független zónában a kimenet saját lánca; keresztváltóban csak az 1.-é él
+    ParamData chain = transparentParams();   // független zónában vagy keresztváltóban a kimenet (sáv / hangszóró-út) saját lánca
 };
 
 struct MultiConfig {

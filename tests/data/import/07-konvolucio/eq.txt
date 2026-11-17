@@ -1,0 +1,5 @@
+Preamp: -2 dB
+Channel: L
+Convolution: ir-bal.wav
+Channel: R
+Convolution: ir-jobb.wav

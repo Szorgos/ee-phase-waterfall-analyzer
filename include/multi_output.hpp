@@ -258,8 +258,12 @@ public:
         const bool xoverChanged = c.mode != cfg_.mode || c.numCrossovers != cfg_.numCrossovers ||
                                   c.slopeDbPerOct != cfg_.slopeDbPerOct || c.crossoverHz != cfg_.crossoverHz || !designed_;
         cfg_ = c;
-        const int chainsUsed = cfg_.mode == Mode::Zones ? cfg_.numOutputs : 1;
-        for (int k = external_ ? 1 : 0; k < chainsUsed; ++k) chains_[k]->applyParamsRT(cfg_.outputs[k].chain);
+        const int chainsUsed = cfg_.numOutputs;
+        if (cfg_.mode == Mode::Zones && external_) {
+            for (int k = 1; k < chainsUsed; ++k) chains_[k]->applyParamsRT(cfg_.outputs[k].chain);
+        } else {
+            for (int k = 0; k < chainsUsed; ++k) chains_[k]->applyParamsRT(cfg_.outputs[k].chain);
+        }
         for (int k = 0; k < kMaxOutputs; ++k) {
             const auto& o = cfg_.outputs[k];
             outs_[k].gain = static_cast<float>(std::pow(10.0, o.gainDb / 20.0)) * (o.invert ? -1.0f : 1.0f);
@@ -368,20 +372,25 @@ private:
                 mainOr(k).process(oL[k], oR[k], m);
             }
         } else {
-            std::copy(inL, inL + m, tmpL_.data());
-            std::copy(inR, inR + m, tmpR_.data());
-            mainOr(0).process(tmpL_.data(), tmpR_.data(), m);
+            if (external_) {
+                std::copy(inL, inL + m, tmpL_.data());
+                std::copy(inR, inR + m, tmpR_.data());
+                external_->process(tmpL_.data(), tmpR_.data(), m);
+            }
+            const float* srcL = external_ ? tmpL_.data() : inL;
+            const float* srcR = external_ ? tmpR_.data() : inR;
             for (int k = 0; k < nOut; ++k) {
                 OutFilters& f = filt_[k];
                 if (f.stages == 0) {
-                    std::copy(tmpL_.begin(), tmpL_.begin() + m, oL[k]);
-                    std::copy(tmpR_.begin(), tmpR_.begin() + m, oR[k]);
-                    continue;
+                    std::copy(srcL, srcL + m, oL[k]);
+                    std::copy(srcR, srcR + m, oR[k]);
+                } else {
+                    for (size_t i = 0; i < m; ++i) {
+                        oL[k][i] = static_cast<float>(filterSample(f, 0, srcL[i]));
+                        oR[k][i] = static_cast<float>(filterSample(f, 1, srcR[i]));
+                    }
                 }
-                for (size_t i = 0; i < m; ++i) {
-                    oL[k][i] = static_cast<float>(filterSample(f, 0, tmpL_[i]));
-                    oR[k][i] = static_cast<float>(filterSample(f, 1, tmpR_[i]));
-                }
+                chains_[k]->process(oL[k], oR[k], m);
             }
         }
         for (int k = 0; k < nOut; ++k) {

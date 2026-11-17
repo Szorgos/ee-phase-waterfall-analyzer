@@ -15,11 +15,14 @@ namespace ee_analyzer {
 struct IrData {
     uint32_t sampleRate = 0;
     std::string name;
-    std::vector<float> left;   // mono IR esetén csak ez
-    std::vector<float> right;  // üres = mono
+    std::vector<float> left;   // mono IR esetén csak ez (LL sztereónál)
+    std::vector<float> right;  // üres = mono (RR sztereónál)
+    std::vector<float> lr;     // true stereo: bal bemenet -> jobb kimenet áthallás
+    std::vector<float> rl;     // true stereo: jobb bemenet -> bal kimenet áthallás
 
     bool empty() const { return left.empty(); }
-    uint32_t channels() const { return left.empty() ? 0u : (right.empty() ? 1u : 2u); }
+    bool isTrueStereo() const { return !lr.empty() && !rl.empty() && lr.size() == left.size() && rl.size() == left.size(); }
+    uint32_t channels() const { return left.empty() ? 0u : (isTrueStereo() ? 4u : (right.empty() ? 1u : 2u)); }
     size_t frames() const { return left.size(); }
 
     static IrData fromInterleaved(const float* data, uint32_t frames, uint32_t channels, uint32_t sr, std::string nm) {
@@ -28,11 +31,38 @@ struct IrData {
         ir.name = std::move(nm);
         if (!data || frames == 0 || channels == 0) return ir;
         ir.left.resize(frames);
-        if (channels >= 2) ir.right.resize(frames);
-        for (uint32_t i = 0; i < frames; ++i) {
-            ir.left[i] = data[static_cast<size_t>(i) * channels];
-            if (channels >= 2) ir.right[i] = data[static_cast<size_t>(i) * channels + 1];
+        if (channels >= 4) {
+            ir.right.resize(frames);
+            ir.lr.resize(frames);
+            ir.rl.resize(frames);
+            for (uint32_t i = 0; i < frames; ++i) {
+                ir.left[i]  = data[static_cast<size_t>(i) * channels];
+                ir.lr[i]    = data[static_cast<size_t>(i) * channels + 1];
+                ir.rl[i]    = data[static_cast<size_t>(i) * channels + 2];
+                ir.right[i] = data[static_cast<size_t>(i) * channels + 3];
+            }
+        } else if (channels >= 2) {
+            ir.right.resize(frames);
+            for (uint32_t i = 0; i < frames; ++i) {
+                ir.left[i]  = data[static_cast<size_t>(i) * channels];
+                ir.right[i] = data[static_cast<size_t>(i) * channels + 1];
+            }
+        } else {
+            for (uint32_t i = 0; i < frames; ++i) ir.left[i] = data[i];
         }
+        return ir;
+    }
+
+    static IrData fromMonoPair(const IrData& monoL, const IrData& monoR, std::string nm) {
+        IrData ir;
+        ir.sampleRate = monoL.sampleRate ? monoL.sampleRate : monoR.sampleRate;
+        ir.name = std::move(nm);
+        const size_t n = std::max(monoL.frames(), monoR.frames());
+        if (n == 0) return ir;
+        ir.left.assign(n, 0.0f);
+        ir.right.assign(n, 0.0f);
+        if (!monoL.left.empty()) std::copy(monoL.left.begin(), monoL.left.end(), ir.left.begin());
+        if (!monoR.left.empty()) std::copy(monoR.left.begin(), monoR.left.end(), ir.right.begin());
         return ir;
     }
 
@@ -79,10 +109,9 @@ inline bool parseIrMessage(const std::string& msg, IrData& out, uint32_t maxFram
     if (msg.size() < dataOff + static_cast<size_t>(frames) * ch * 4) return false;
     const uint32_t useFrames = std::min(frames, maxFrames);
     std::vector<float> inter(static_cast<size_t>(useFrames) * ch);
-    // csak az első 2 csatornát használjuk
     std::memcpy(inter.data(), msg.data() + dataOff, inter.size() * 4);
-    std::vector<float> st(static_cast<size_t>(useFrames) * std::min<uint32_t>(ch, 2));
-    const uint32_t outCh = std::min<uint32_t>(ch, 2);
+    const uint32_t outCh = (ch >= 4) ? 4u : (ch >= 2 ? 2u : 1u);
+    std::vector<float> st(static_cast<size_t>(useFrames) * outCh);
     for (uint32_t i = 0; i < useFrames; ++i)
         for (uint32_t c = 0; c < outCh; ++c) st[static_cast<size_t>(i) * outCh + c] = inter[static_cast<size_t>(i) * ch + c];
     out = IrData::fromInterleaved(st.data(), useFrames, outCh, sr, msg.substr(24, nameLen));

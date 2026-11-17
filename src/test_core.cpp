@@ -184,6 +184,11 @@ static void testParamFile() {
     CHECK(loadParamBytes(reinterpret_cast<const char*>(&dm), kParamSizeV7, 7, static_cast<uint32_t>(kParamSizeV7), r7) &&
               r7.magicAmount == 70.0f && r7.monoAmount == 0.0f,
           "v7 paraméterfájl átvétele (Mono-keverés: 0 %%)");
+    // v14 (külön bal / jobb EQ előtti) fájl: a beállítások megmaradnak, eqSplit = 0
+    ParamData r14{};
+    CHECK(loadParamBytes(reinterpret_cast<const char*>(&dm), kParamSizeV14, 14, static_cast<uint32_t>(kParamSizeV14), r14) &&
+              r14.eqSplit == 0 && r14.numBandsR == 0,
+          "v14 paraméterfájl átvétele (külön bal/jobb: ki)");
     // Tartományon kívüli választó: a megengedett tartományba kerül
     ParamData dx = d;
     dx.magicCharacter = 9; dx.magicContent = -4;

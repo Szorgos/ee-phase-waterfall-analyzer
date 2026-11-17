@@ -1,0 +1,5 @@
+Filter 1: ON HP Fc 25 Hz
+Filter 2: ON LPQ Fc 18000 Hz Q 0.71
+Filter 3: ON LS 12dB Fc 80 Hz Gain 3.0 dB
+Filter 4: ON HS 6dB Fc 6000 Hz Gain -2.0 dB
+Filter 5: ON HP 24 dB Fc 30 Hz

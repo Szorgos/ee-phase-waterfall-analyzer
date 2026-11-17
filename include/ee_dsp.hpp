@@ -67,7 +67,7 @@ public:
      * mintavételi frekvenciával, mint a feldolgozás). Nem valós idejű.
      */
     static void response(const ParamData& d, uint32_t sampleRate, const float* freqs, size_t count,
-                         float* magDb, float* phaseDeg, size_t* latencySamples = nullptr);
+                         float* magDb, float* phaseDeg, size_t* latencySamples = nullptr, int channel = 0);
     /** A decramp beállításból adódó túlmintavételezés (para_equalizer::calc_decramping). */
     static uint32_t decrampFactor(int32_t decramp, uint32_t sampleRate);
 
@@ -161,19 +161,26 @@ private:
 
 // ============================================================ Convolver (zita-convolver)
 
-/** Konvolúciós kernel (sztereó), EasyEffects ConvolverKernelManager::KernelData megfelelője. */
+/** Konvolúciós kernel (sztereó vagy 4 csatornás true stereo), EasyEffects ConvolverKernelManager::KernelData megfelelője. */
 struct ConvKernel {
     uint32_t rate = 0;
     std::vector<float> left, right;
-    bool valid() const { return rate > 0 && !left.empty() && left.size() == right.size(); }
+    std::vector<float> lr, rl;
+    bool isTrueStereo() const { return !lr.empty() && !rl.empty() && lr.size() == left.size() && rl.size() == left.size(); }
+    bool valid() const {
+        if (rate == 0 || left.empty() || left.size() != right.size()) return false;
+        if (!lr.empty() || !rl.empty()) return isTrueStereo();
+        return true;
+    }
 };
 
 /**
- * Kernel előkészítése: monó -> sztereó, újramintavételezés SpeexDSP-vel (QUALITY_DESKTOP),
+ * Kernel előkészítése: monó -> sztereó vagy 4 csatornás true stereo, újramintavételezés SpeexDSP-vel (QUALITY_DESKTOP),
  * sztereó szélesség (ir_width) és autogain, ahogy az EasyEffects teszi. Nem valós idejű.
  */
 ConvKernel prepareConvKernel(const std::vector<float>& left, const std::vector<float>& right, uint32_t irRate,
-                             uint32_t targetRate, int irWidth, bool autogain);
+                             uint32_t targetRate, int irWidth, bool autogain,
+                             const std::vector<float>& lr = {}, const std::vector<float>& rl = {});
 
 /**
  * Egy zita-convolver példány a hozzá tartozó blokkméret-illesztéssel (EasyEffects Convolver::process).

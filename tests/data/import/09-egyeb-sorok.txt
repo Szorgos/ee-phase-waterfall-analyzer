@@ -1,0 +1,6 @@
+Device: Hangszórók
+Stage: post-mix
+Eval: x = 1
+Filter 1: ON PK Fc 1000 Hz Gain 1 dB Q 1
+Filter 2: ON XYZ Fc 1000 Hz Gain 1 dB Q 1
+Ez egy értelmezhetetlen sor

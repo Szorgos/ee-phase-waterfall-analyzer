@@ -562,7 +562,7 @@ private:
             if (want.on) {
                 bool rebuild = false;
                 if (!(want == lastIr)) {
-                    kernel = ee::prepareConvKernel(ir.left, ir.right, ir.sampleRate, sr, want.width, want.autogain != 0);
+                    kernel = ee::prepareConvKernel(ir.left, ir.right, ir.sampleRate, sr, want.width, want.autogain != 0, ir.lr, ir.rl);
                     lastIr = want;
                     rebuild = true;
                 }

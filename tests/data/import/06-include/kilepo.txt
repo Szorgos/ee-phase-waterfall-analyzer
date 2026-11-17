@@ -1,0 +1,3 @@
+Include: ../../titkos.txt
+Include: C:\Windows\win.ini
+Include: /etc/passwd

@@ -1232,7 +1232,7 @@ mkdir -p "$BIN_DIR" "$GUI_DIR" "$APP_DIR" "$ICON_DIR" "$UNIT_DIR" "$PIXMAP_DIR"
 install -m 755 build/aqulify-engine "$BIN_DIR/aqulify-engine"
 # 2.x: a beépített lejátszó parancssori indítója (aqulify-play <fájl>)
 if [ -x build/aqulify-play ]; then install -m 755 build/aqulify-play "$BIN_DIR/aqulify-play"; fi
-install -m 644 gui_integrated_system.html autoeq_index.js gui_i18n.js gui_player.js "$GUI_DIR/"
+install -m 644 gui_integrated_system.html autoeq_index.js gui_i18n.js gui_player.js import_parser.js "$GUI_DIR/"
 install -m 644 windows/third_party/three/three.min.js "$GUI_DIR/three.min.js"
 install -m 644 windows/third_party/three/LICENSE "$GUI_DIR/three.js-LICENSE.txt"
 install -m 644 linux/aqulify.png "$ICON_DIR/aqulify.png"

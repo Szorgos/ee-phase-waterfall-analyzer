@@ -14,6 +14,7 @@ on:
       - "gui_integrated_system.html"
       - "gui_i18n.js"
       - "gui_player.js"
+      - "import_parser.js"
       - "autoeq_index.js"
       - ".github/workflows/macos.yml"
   workflow_dispatch:

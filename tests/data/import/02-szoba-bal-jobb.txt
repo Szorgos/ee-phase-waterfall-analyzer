@@ -1,0 +1,13 @@
+# Szintetikus szobakorrekciós export (bal és jobb hangszóró külön)
+Preamp: -5.0 dB
+Channel: L
+Delay: 0.35 ms
+Filter 1: ON PK Fc 42 Hz Gain -7.5 dB Q 6.00
+Filter 2: ON PK Fc 87 Hz Gain -4.0 dB Q 3.50
+Filter 3: ON PK Fc 210 Hz Gain 2.5 dB Q 2.00
+Channel: R
+Delay: 0 ms
+Filter 1: ON PK Fc 45 Hz Gain -6.0 dB Q 5.50
+Filter 2: ON PK Fc 160 Hz Gain -3.5 dB Q 4.00
+Channel: L R
+Filter 4: ON HSC Fc 8000 Hz Gain -1.5 dB Q 0.71

@@ -1,0 +1,2 @@
+Copy: L=0.5*L+0.5*R R=R
+Filter 1: ON PK Fc 100 Hz Gain -2 dB Q 2

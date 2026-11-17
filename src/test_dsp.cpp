@@ -312,6 +312,40 @@ static void testConvolver() {
         CHECK(ok && maxErr < 2e-4 && (q != 256 || best == 0),
               "blokk %u: eltérés a közvetlen konvolúciótól %.2e, késleltetés %zu minta", q, maxErr, best);
     }
+
+    // 4 csatornás (true stereo) konvolúció és mono pár tesztje
+    {
+        std::vector<float> ll(256, 0.0f), rr(256, 0.0f), lr(256, 0.0f), rl(256, 0.0f);
+        ll[0] = 1.0f;
+        rr[0] = 1.0f;
+        lr[20] = 0.3f;
+        rl[20] = 0.3f;
+        ee::ConvKernel k4 = ee::prepareConvKernel(ll, rr, 48000, 48000, 100, false, lr, rl);
+        CHECK(k4.valid() && k4.isTrueStereo(), "4 csatornas true stereo kernel valid");
+
+        ee::ZitaInstance zi4;
+        const bool ok4 = zi4.init(k4, 256);
+        CHECK(ok4, "ZitaInstance init 4 csatornas kernellel");
+        if (ok4) {
+            std::vector<float> inL(256, 0.0f), inR(256, 0.0f);
+            inL[0] = 1.0f;
+            zi4.process(inL.data(), inR.data(), 256);
+            CHECK(std::abs(inL[0] - 1.0f) < 1e-4f, "True stereo bal->bal csucs @ 0: %.4f", inL[0]);
+            CHECK(std::abs(inR[20] - 0.3f) < 1e-4f, "True stereo athallas bal->jobb csucs @ 20: %.4f", inR[20]);
+        }
+
+        IrData monoL, monoR;
+        monoL.sampleRate = 48000;
+        monoL.left.assign(128, 0.0f);
+        monoL.left[0] = 1.0f;
+        monoR.sampleRate = 48000;
+        monoR.left.assign(128, 0.0f);
+        monoR.left[24] = 0.8f;
+        IrData paired = IrData::fromMonoPair(monoL, monoR, "sztereo_par");
+        CHECK(paired.channels() == 2 && paired.left.size() == 128 && paired.right.size() == 128,
+              "Mono par osszefuzese sztereova: 2 csatorna");
+        CHECK(paired.left[0] == 1.0f && paired.right[24] == 0.8f, "Mono par csucsai a helyukon");
+    }
 }
 
 static void testChain() {
@@ -1693,6 +1727,68 @@ static void testOutStage() {
     const bool ok = loadParamBytes(reinterpret_cast<const char*>(&v), sizeof(v), 11, kParamSizeV11, out);
     CHECK(ok && out.has(kFlagEq) && !out.has(kFlagOutStage) && out.chDelayMs[0] == 0.0f && out.ditherBits == 24,
           "v11-es params.bin: betöltve, a kimeneti fokozat alapértéken");
+}
+
+/** Csatornánkénti (bal / jobb) EQ, késleltetés, szint és polaritás a láncon át (A feladat). */
+static void testSplitChannelChain() {
+    std::printf("\n--- Csatornánkénti EQ, késleltetés, szint és polaritás (A feladat) ---\n");
+    AetherChain chain;
+    chain.setSampleRate(48000.0);
+    const size_t n = 9600;
+
+    ParamData d = transparentParams();
+    d.set(kFlagEq, true);
+    d.set(kFlagOutStage, true);
+    d.eqSplit = 1;
+
+    // Bal csatorna: 1 sáv (Peaking 1000 Hz, +6 dB, Q 2.0), késleltetés 1 ms (48 minta), erősítés 0 dB, normál polaritás
+    d.numBands = 1;
+    d.bands[0].type = static_cast<int32_t>(EqBandType::Bell);
+    d.bands[0].mode = static_cast<int32_t>(EqFilterMode::ApoDr);
+    d.bands[0].freq = 1000.0f;
+    d.bands[0].gainDb = 6.0f;
+    d.bands[0].q = 2.0f;
+    d.chDelayMs[0] = 1.0f;
+    d.chGainDb[0] = 0.0f;
+    d.chInvert[0] = 0;
+
+    // Jobb csatorna: 1 sáv (Peaking 1000 Hz, -6 dB, Q 2.0), késleltetés 0 ms, erősítés -3 dB, fordított polaritás
+    d.numBandsR = 1;
+    d.bandsR[0].type = static_cast<int32_t>(EqBandType::Bell);
+    d.bandsR[0].mode = static_cast<int32_t>(EqFilterMode::ApoDr);
+    d.bandsR[0].freq = 1000.0f;
+    d.bandsR[0].gainDb = -6.0f;
+    d.bandsR[0].q = 2.0f;
+    d.chDelayMs[1] = 0.0f;
+    d.chGainDb[1] = -3.0f;
+    d.chInvert[1] = 1;
+
+    chain.applyParamsRT(d);
+
+    // Impulzus mindkét csatornán az 1000. mintán
+    std::vector<float> L(n, 0.0f), R(n, 0.0f);
+    L[1000] = 1.0f;
+    R[1000] = 1.0f;
+
+    // Átfuttatjuk a láncon
+    runBlocks([&](float* l, float* r, size_t m) { chain.process(l, r, m); }, L, R, 480);
+
+    // 1. Késleltetés ellenőrzése: a bal csatorna csúcsa 1 ms (48 minta) késéssel érkezik: 1048. mintán
+    const size_t peakL = static_cast<size_t>(std::max_element(L.begin(), L.end(), [](float a, float b) { return std::abs(a) < std::abs(b); }) - L.begin());
+    const size_t peakR = static_cast<size_t>(std::max_element(R.begin(), R.end(), [](float a, float b) { return std::abs(a) < std::abs(b); }) - R.begin());
+    CHECK(peakL == 1048, "Bal csatorna késleltetés: csúcs a 1048. mintán (mért %zu)", peakL);
+    CHECK(peakR == 1000, "Jobb csatorna késleltetés: csúcs a 1000. mintán (mért %zu)", peakR);
+
+    // 2. Polaritás és szint ellenőrzése a jobb csatornán: negatív csúcs (polaritásfordítás)
+    CHECK(R[peakR] < 0.0f, "Jobb csatorna polaritás: negatív előjelű impulzus (érték %.4f)", R[peakR]);
+
+    // 3. Eltérő frekvenciaátvitel a bal és jobb csatornán
+    float freqs[1] = { 1000.0f };
+    float magL[1], phL[1], magR[1], phR[1];
+    ee::Equalizer::response(d, 48000, freqs, 1, magL, phL, nullptr, 0);
+    ee::Equalizer::response(d, 48000, freqs, 1, magR, phR, nullptr, 1);
+    CHECK(std::abs(magL[0] - 6.0f) < 0.2f, "Bal csatorna EQ átvitel 1 kHz: +6 dB (mért %.2f dB)", magL[0]);
+    CHECK(std::abs(magR[0] - (-6.0f)) < 0.2f, "Jobb csatorna EQ átvitel 1 kHz: -6 dB (mért %.2f dB)", magR[0]);
 }
 
 /** A kimeneti hangerő (setOutputGain; a Windows-lejátszó kizárólagos módja): 1-nél bitpontos, különben pontos szorzó. */
@@ -3103,6 +3199,7 @@ int main() {
     testEqLatency();
     testIrLibraryFormat();
     testOutStage();
+    testSplitChannelChain();
     testOutputGain();
     testPcmConvert();
     testLoudness();

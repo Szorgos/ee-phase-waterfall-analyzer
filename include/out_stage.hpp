@@ -4,7 +4,7 @@
  * @brief Kimeneti fokozat (a lánc végén): csatornánkénti késleltetés, szint és polaritás (a hangszórók távolságának
  *        és szintjének kiegyenlítése, ha a hallgató nem középen ül), valamint dither a hangkártya bitmélységére.
  *
- * - Késleltetés: egész mintányi (48 kHz-en 1 minta ≈ 7 mm), legfeljebb 20 ms csatornánként.
+ * - Késleltetés: egész mintányi (48 kHz-en 1 minta ≈ 7 mm), legfeljebb 50 ms csatornánként.
  * - Szint: 5 ms alatt úszik az új értékre (nincs lépcső).
  * - Dither: TPDF (két egyenletes zaj különbsége, ±1 LSB), vagy zajformált (TPDF + elsőrendű hibavisszacsatolás: a
  *   kvantálási zaj a magas frekvenciák felé tolódik, a hallás legérzékenyebb sávjában halkabb). A kimenet a megadott
@@ -24,7 +24,7 @@ namespace ee_analyzer::outstage {
 
 class OutStage {
 public:
-    static constexpr float kMaxDelayMs = 20.0f;
+    static constexpr float kMaxDelayMs = 50.0f;
 
     void setSampleRate(uint32_t sr) {
         sr_ = sr > 0 ? sr : 48000;

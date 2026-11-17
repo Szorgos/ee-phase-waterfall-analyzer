@@ -97,29 +97,43 @@ struct Fifo {
 } // namespace
 
 ConvKernel prepareConvKernel(const std::vector<float>& left, const std::vector<float>& right, uint32_t irRate,
-                             uint32_t targetRate, int irWidth, bool autogain) {
+                             uint32_t targetRate, int irWidth, bool autogain,
+                             const std::vector<float>& lr, const std::vector<float>& rl) {
     ConvKernel k;
     if (left.empty() || irRate == 0) return k;
-    // Monó IR: mindkét csatornára ugyanaz (EasyEffects: channels == 1 -> 2)
     k.rate = irRate;
     k.left = left;
     k.right = right.empty() ? left : right;
     if (k.right.size() != k.left.size()) k.right.resize(k.left.size(), 0.0f);
+    if (!lr.empty() && !rl.empty()) {
+        k.lr = lr;
+        k.rl = rl;
+        if (k.lr.size() != k.left.size()) k.lr.resize(k.left.size(), 0.0f);
+        if (k.rl.size() != k.left.size()) k.rl.resize(k.left.size(), 0.0f);
+    }
 
     // resampleKernel
     if (targetRate != 0 && k.rate != targetRate) {
         k.left = resampleChannel(k.left, k.rate, targetRate);
         k.right = resampleChannel(k.right, k.rate, targetRate);
+        if (k.isTrueStereo()) {
+            k.lr = resampleChannel(k.lr, k.rate, targetRate);
+            k.rl = resampleChannel(k.rl, k.rate, targetRate);
+        }
         k.rate = targetRate;
-        const size_t n = std::min(k.left.size(), k.right.size());
+        size_t n = std::min(k.left.size(), k.right.size());
+        if (k.isTrueStereo()) {
+            n = std::min(n, std::min(k.lr.size(), k.rl.size()));
+            k.lr.resize(n);
+            k.rl.resize(n);
+        }
         k.left.resize(n);
         k.right.resize(n);
     }
     if (!k.valid()) return k;
 
-    // set_kernel_stereo_width (Mid-Side; https://github.com/tomszilagyi/ir.lv2)
-    {
-        // osztás (és nem · 0,01F): 100 %-nál pontosan 1, így FMA-s gépen (pl. aarch64) is pontosan érintetlen
+    // set_kernel_stereo_width: normál sztereó esetén
+    if (!k.isTrueStereo()) {
         const float w = static_cast<float>(irWidth) / 100.0F;
         const float x = (1.0F - w) / (1.0F + w);
         for (size_t i = 0; i < k.left.size(); i++) {
@@ -131,25 +145,39 @@ ConvKernel prepareConvKernel(const std::vector<float>& left, const std::vector<f
     }
 
     if (autogain) {
-        // normalizeKernel
         float peak = 0.0f;
         for (float v : k.left) peak = std::max(peak, std::fabs(v));
         for (float v : k.right) peak = std::max(peak, std::fabs(v));
+        if (k.isTrueStereo()) {
+            for (float v : k.lr) peak = std::max(peak, std::fabs(v));
+            for (float v : k.rl) peak = std::max(peak, std::fabs(v));
+        }
         if (peak > 1e-6) {
             for (float& v : k.left) v /= peak;
             for (float& v : k.right) v /= peak;
+            if (k.isTrueStereo()) {
+                for (float& v : k.lr) v /= peak;
+                for (float& v : k.rl) v /= peak;
+            }
         }
-        // apply_kernel_autogain
         float power_LL = 0.0F, power_RR = 0.0F;
         for (size_t i = 0; i < k.left.size(); i++) {
             power_LL += k.left[i] * k.left[i];
             power_RR += k.right[i] * k.right[i];
+            if (k.isTrueStereo()) {
+                power_LL += k.rl[i] * k.rl[i];
+                power_RR += k.lr[i] * k.lr[i];
+            }
         }
         const float power = std::max(power_LL, power_RR);
-        const float gain = std::min(1.0F, 1.0F / std::sqrt(power));
+        const float gain = std::min(1.0F, 1.0F / std::sqrt(std::max(1e-12f, power)));
         for (size_t i = 0; i < k.left.size(); i++) {
             k.left[i] *= gain;
             k.right[i] *= gain;
+            if (k.isTrueStereo()) {
+                k.lr[i] *= gain;
+                k.rl[i] *= gain;
+            }
         }
     }
     return k;
@@ -219,6 +247,14 @@ bool ZitaInstance::init(const ConvKernel& k, uint32_t quantum) {
         conv->cleanup();
         delete conv;
         return false;
+    }
+    if (k.isTrueStereo()) {
+        if (conv->impdata_create(0, 1, 1, const_cast<float*>(k.lr.data()), 0, static_cast<int>(size)) != 0 ||
+            conv->impdata_create(1, 0, 1, const_cast<float*>(k.rl.data()), 0, static_cast<int>(size)) != 0) {
+            conv->cleanup();
+            delete conv;
+            return false;
+        }
     }
     if (conv->start_process(0, convolverSchedPolicy()) != 0) {
         conv->cleanup();

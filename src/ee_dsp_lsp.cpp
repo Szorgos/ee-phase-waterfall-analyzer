@@ -234,8 +234,11 @@ size_t eqLatencyBase(size_t eqLatency, size_t oversampling) {
 }
 
 /** Egy sáv LSP szűrőparaméterei (para_equalizer::update_settings, solo/mute/inspect nélkül). */
-void band_params(const ParamData& d, size_t j, dspu::filter_params_t* fp) {
-    if (j >= std::min<size_t>(d.numBands, EQ_FILTERS)) {
+void band_params_channel(const ParamData& d, int channel, size_t j, dspu::filter_params_t* fp) {
+    const bool useR = (channel == 1 && d.eqSplit != 0);
+    const uint32_t nBands = useR ? d.numBandsR : d.numBands;
+    const EqBandPod* bandArr = useR ? d.bandsR : d.bands;
+    if (j >= std::min<size_t>(nBands, EQ_FILTERS)) {
         fp->nType = dspu::FLT_NONE;
         fp->nSlope = 1;
         fp->fFreq = fp->fFreq2 = 1000.0f;
@@ -243,7 +246,7 @@ void band_params(const ParamData& d, size_t j, dspu::filter_params_t* fp) {
         fp->fQuality = 0.0f;
         return;
     }
-    const EqBandPod& b = d.bands[j];
+    const EqBandPod& b = bandArr[j];
     fp->nType = static_cast<uint32_t>(b.type);
     fp->nSlope = static_cast<uint32_t>(b.slope) + 1;
     decode_filter(&fp->nType, &fp->nSlope, static_cast<size_t>(b.mode));
@@ -260,6 +263,10 @@ void band_params(const ParamData& d, size_t j, dspu::filter_params_t* fp) {
     }
     fp->fGain = (adjust_gain(fp->nType)) ? dspu::db_to_gain(b.gainDb) : 1.0f;
     fp->fQuality = b.q;
+}
+
+void band_params(const ParamData& d, size_t j, dspu::filter_params_t* fp) {
+    band_params_channel(d, 0, j, fp);
 }
 
 } // namespace
@@ -309,7 +316,8 @@ struct Equalizer::Impl {
 
     Impl() {
         initDsp();
-        for (Channel& c : ch) {
+        for (size_t c_idx = 0; c_idx < 2; ++c_idx) {
+            Channel& c = ch[c_idx];
             c.sOversampler.init();
             c.sOversampler.set_filtering(false);
             c.sEqualizer.init(EQ_FILTERS, EQ_RANK);
@@ -335,7 +343,8 @@ struct Equalizer::Impl {
             nDecramp = decramp;
             decramp_changed = true;
         }
-        for (Channel& c : ch) {
+        for (size_t c_idx = 0; c_idx < 2; ++c_idx) {
+            Channel& c = ch[c_idx];
             c.sOversampler.set_sample_rate(fSampleRate);
             c.sOversampler.set_mode(over_mode);
             if (c.sOversampler.modified()) {
@@ -354,7 +363,7 @@ struct Equalizer::Impl {
                 f.sOldFP = f.sFP;
                 dspu::filter_params_t* fp = &f.sFP;
                 dspu::filter_params_t* op = &f.sOldFP;
-                band_params(d, j, fp);
+                band_params_channel(d, static_cast<int>(c_idx), j, fp);
                 c.sEqualizer.limit_params(j, fp);
                 const bool type_changed = (fp->nType != op->nType) || (fp->nSlope != op->nSlope);
                 const bool param_changed = (fp->fGain != op->fGain) || (fp->fFreq != op->fFreq) ||
@@ -371,7 +380,8 @@ struct Equalizer::Impl {
             bSmoothMode = false;
 
         size_t lat = 0;
-        for (Channel& c : ch) {
+        for (size_t c_idx = 0; c_idx < 2; ++c_idx) {
+            Channel& c = ch[c_idx];
             const size_t ovs_lat = c.sOversampler.latency();
             // Módváltáskor az új FIR/FFT kernel közvetlenül lép életbe (get_latency() itt építi fel).
             // Simítással az LSP az első blokkban még a régi kernellel számolna és abból úsztatna át, de SPM után
@@ -473,7 +483,7 @@ void Equalizer::reset() {
 }
 
 void Equalizer::response(const ParamData& d, uint32_t sampleRate, const float* freqs, size_t count, float* magDb,
-                         float* phaseDeg, size_t* latencySamples) {
+                         float* phaseDeg, size_t* latencySamples, int channel) {
     initDsp();
     dspu::Equalizer eq;
     eq.init(EQ_FILTERS, 0);
@@ -483,7 +493,7 @@ void Equalizer::response(const ParamData& d, uint32_t sampleRate, const float* f
     eq.set_actual_sample_rate(sampleRate);
     for (size_t j = 0; j < EQ_FILTERS; ++j) {
         dspu::filter_params_t fp{};
-        band_params(d, j, &fp);
+        band_params_channel(d, channel, j, &fp);
         eq.limit_params(j, &fp);
         eq.set_params(j, &fp);
     }
@@ -605,7 +615,8 @@ struct Limiter::Impl {
     Impl() {
         initDsp();
         const float lk_latency = int(dspu::samples_to_millis(MAX_SAMPLE_RATE, OVERSAMPLING_MAX)) + LOOKAHEAD_MAX + 1.0f;
-        for (Channel& c : ch) {
+        for (size_t c_idx = 0; c_idx < 2; ++c_idx) {
+            Channel& c = ch[c_idx];
             c.sOver.init();
             c.sScOver.init();
             c.sLimit.init(MAX_SAMPLE_RATE * OVERSAMPLING_MAX, lk_latency);
@@ -620,7 +631,8 @@ struct Limiter::Impl {
 
     void update_sample_rate(uint32_t sr) {
         fSampleRate = sr;
-        for (Channel& c : ch) {
+        for (size_t c_idx = 0; c_idx < 2; ++c_idx) {
+            Channel& c = ch[c_idx];
             c.sOver.set_sample_rate(sr);
             c.sScOver.set_sample_rate(sr);
             const size_t real_sample_rate = c.sOver.get_oversampling() * sr;
@@ -653,7 +665,8 @@ struct Limiter::Impl {
         outGain = dbToGain(d.limOutputGainDb);
 
         sDither.set_bits(dither);
-        for (Channel& c : ch) {
+        for (size_t c_idx = 0; c_idx < 2; ++c_idx) {
+            Channel& c = ch[c_idx];
             c.sOver.set_mode(mode);
             c.sOver.set_filtering(filtering);
             if (c.sOver.modified()) c.sOver.update_settings();
