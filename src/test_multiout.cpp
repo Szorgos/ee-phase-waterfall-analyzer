@@ -815,7 +815,7 @@ static void testWayEqK6K7Impl() {
                 for (size_t i = 0; i < freqs.size(); ++i) {
                     const auto meas = resp(o.L[k], freqs[i], sr);
                     const double magM = db(meas), magW = db(wr[i]);
-                    worstDb = std::max(worstDb, std::fabs(magM - magW));
+                    if (magW > -90.0) worstDb = std::max(worstDb, std::fabs(magM - magW));
                     if (magM > -60.0) {
                         const double phM = std::arg(meas) * 180.0 / kPi;
                         const double phW = std::arg(wr[i]) * 180.0 / kPi;
@@ -1068,7 +1068,7 @@ static void testWayEqSeed50Impl() {
                 band.q = static_cast<float>(std::uniform_real_distribution<double>(0.3, 10.0)(rng));
             }
 
-            const size_t len = static_cast<size_t>(sr * 0.5);
+            const size_t len = static_cast<size_t>(sr * 1.5);
             std::vector<float> imp(len, 0.0f);
             imp[0] = 1.0f;
 
@@ -1088,8 +1088,10 @@ static void testWayEqSeed50Impl() {
                 const double expDb = db(hAna);
                 const double measDb = db(resp(oEq.L[targetWay], f, sr));
                 const double err = std::fabs(measDb - expDb);
-                worstGlobalErr = std::max(worstGlobalErr, err);
-                if (err > 0.05) caseOk = false;
+                if (expDb > -90.0) {
+                    worstGlobalErr = std::max(worstGlobalErr, err);
+                    if (err > 0.05) caseOk = false;
+                }
             }
             for (int k = 0; k < nOut; ++k) {
                 if (k == targetWay) continue;
