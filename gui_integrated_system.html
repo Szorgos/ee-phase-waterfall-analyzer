@@ -5615,6 +5615,39 @@ var qrcode = function() {
   <div id="aqCoverView" class="workspace-pane cover-listening-view" hidden></div>
   </div> <!-- /workspaceStage -->
 
+  <!-- WAY EQ MODAL -->
+  <div id="wayEqModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:10000; align-items:center; justify-content:center;" onclick="if(event.target===this)closeWayEq()">
+    <div class="aq-modal" style="width:800px; max-width:calc(100vw - 32px); max-height:90vh; display:flex; flex-direction:column; gap:12px; overflow-y:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <h3 id="wayEqTitle" style="margin:0; font-size:1.1rem; color:var(--aq-text);">EQ</h3>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button type="button" id="wayEqHelpBtn" class="adw-btn" onclick="toggleWayEqHelp()" data-i18n-aria-label="way.helpTitle" data-i18n-title="way.helpTitle" style="min-width:30px; padding:4px 9px; font-weight:700;">i</button>
+          <button type="button" id="wayEqCloseBtn" class="icon-btn" onclick="closeWayEq()" data-i18n-title="common.close" data-i18n-aria-label="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+        </div>
+      </div>
+      <div id="wayEqHelpText" hidden style="background:var(--aq-input); border:1px solid var(--aq-line); border-radius:8px; padding:10px 12px; font-size:var(--aq-fs-sub); color:var(--aq-text-2);" data-i18n="way.help"></div>
+      <div id="wayEqNoConn" hidden style="background:rgba(255,120,80,0.12); border:1px solid rgba(255,120,80,0.4); border-radius:8px; padding:10px 12px; font-size:var(--aq-fs-sub); color:#ffb090;" data-i18n="way.noConn"></div>
+      <div style="background:var(--aq-input); border:1px solid var(--aq-line); border-radius:8px; padding:8px;">
+        <canvas id="wayEqCanvas" width="760" height="210" style="width:100%; height:210px; display:block;" data-i18n-aria-label="way.title"></canvas>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; color:var(--aq-text);">
+            <input type="checkbox" id="wayEqToggle" onchange="wayEqOnToggle()">
+            <span data-i18n="way.enable"></span>
+          </label>
+          <button type="button" id="wayEqAddBandBtn" class="adw-btn primary" onclick="wayEqAddBand()" data-i18n="way.addBand"></button>
+          <button type="button" id="wayEqResetBtn" class="adw-btn" onclick="wayEqReset()" data-i18n="way.reset"></button>
+        </div>
+        <small id="wayEqLimitNote" style="color:var(--aq-text-2);" data-i18n="way.limitNote"></small>
+      </div>
+      <div id="wayEqErr" style="display:none; color:#ff8080; font-size:var(--aq-fs-sub);"></div>
+      <div id="wayEqBands" style="display:flex; flex-direction:column; gap:6px;"></div>
+    </div>
+  </div>
+
   <!-- ZENETÁR MAPPÁK MODAL (2.X) -->
   <div id="modalLibrary" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:10000; align-items:center; justify-content:center;" onclick="if(event.target===this)closeLibraryModal()">
     <div class="aq-modal" style="width:580px; max-width:calc(100vw - 32px); max-height:90vh; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
@@ -10185,6 +10218,7 @@ function moOnStatus(st) {
   if (!st || typeof st !== "object") return;
   moStatus = st;
   renderMultiOut();
+  if (typeof renderWayEqModal === "function" && typeof wayEqOpenIdx === "number" && wayEqOpenIdx >= 0) renderWayEqModal(false);
   renderZoneBar();
 }
 function moCfgFromStatus() {
@@ -10292,7 +10326,8 @@ function renderMultiOut() {
     const band = xo ? `<td><select class="ee-select mo-band" onchange="moEdit(this)">` +
                       [-1, ...Array.from({ length: n }, (_, i) => i)].map(b => `<option value="${b}"${b === o.band ? " selected" : ""}>${escHtml(moBandLabel(n, b, xoF))}</option>`).join("") +
                       `</select></td>` : "";
-    const edit = !xo && on ? `<button type="button" class="adw-btn${aqEditZone === k ? " primary" : ""}" onclick="setEditZone(${k})">${escHtml(t("mo.edit"))}</button>` : "";
+    const wayBtn = xo ? `<button type="button" class="adw-btn mo-way-eq" onclick="openWayEq(${k})" aria-label="${escHtml(t("way.editBtn"))} ${k + 1}"${o.way && o.way.on ? ' style="border-color:var(--aq-accent); color:var(--aq-accent);"' : ""}>${escHtml(t("way.editBtn"))}</button>` : "";
+    const edit = xo ? wayBtn : (!xo && on ? `<button type="button" class="adw-btn${aqEditZone === k ? " primary" : ""}" onclick="setEditZone(${k})">${escHtml(t("mo.edit"))}</button>` : "");
     const dl = +o.delay || 0;
     h += `<tr data-k="${k}"><td>${k + 1}.</td><td>${dev}</td>` +
          `<td><input type="checkbox" class="mo-en"${o.enabled !== false ? " checked" : ""} onchange="moEdit(this)" aria-label="${escHtml(t("mo.enabled"))}"></td>${band}` +
@@ -10321,6 +10356,211 @@ function renderZoneBar() {
   if (!note.hidden) note.textContent = t("mo.editingNote", { n: aqEditZone + 1 });
   document.body.classList.toggle("zone-editing", show && aqEditZone > 0);
 }
+var wayEqOpenIdx = -1;
+var wayEqLastPlot = null;
+
+function wayEqConnected() {
+  return !!(typeof pipewireWs !== "undefined" && pipewireWs && typeof isPipewireConnected !== "undefined" && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN && moStatus && Array.isArray(moStatus.outputs));
+}
+function openWayEq(k) {
+  wayEqOpenIdx = k;
+  const m = document.getElementById("wayEqModal");
+  if (!m) return;
+  const errEl = document.getElementById("wayEqErr");
+  if (errEl) { errEl.style.display = "none"; errEl.textContent = ""; }
+  const h = document.getElementById("wayEqHelpText");
+  if (h) h.hidden = true;
+  m.style.display = "flex";
+  renderWayEqModal(true);
+}
+function closeWayEq() {
+  wayEqOpenIdx = -1;
+  const m = document.getElementById("wayEqModal");
+  if (m) m.style.display = "none";
+}
+function toggleWayEqHelp() {
+  const h = document.getElementById("wayEqHelpText");
+  if (h) h.hidden = !h.hidden;
+}
+function wayEqOnError(msg) {
+  const e = document.getElementById("wayEqErr");
+  if (!e) return;
+  e.textContent = msg || t("way.rangeErr");
+  e.style.display = msg ? "block" : "none";
+}
+function wayEqCurrentWay() {
+  if (!moStatus || !Array.isArray(moStatus.outputs) || wayEqOpenIdx < 0 || wayEqOpenIdx >= moStatus.outputs.length) {
+    return { on: false, bands: [] };
+  }
+  const w = moStatus.outputs[wayEqOpenIdx].way;
+  return (w && typeof w === "object") ? { on: !!w.on, bands: Array.isArray(w.bands) ? w.bands.map(b => Object.assign({}, b)) : [] } : { on: false, bands: [] };
+}
+function wayEqSend(on, bands) {
+  if (!wayEqConnected() || wayEqOpenIdx < 0) return;
+  moSend({ type: "set_way_eq", output: wayEqOpenIdx, on: !!on, bands: bands });
+}
+function wayEqOnToggle() {
+  const tgl = document.getElementById("wayEqToggle");
+  const w = wayEqCurrentWay();
+  wayEqSend(!!(tgl && tgl.checked), w.bands);
+}
+function wayEqAddBand() {
+  const w = wayEqCurrentWay();
+  if (w.bands.length >= 10) return;
+  w.bands.push({ type: "bell", freq: 1000, gain: 0, q: 1.0 });
+  wayEqSend(w.on, w.bands);
+}
+function wayEqDelBand(idx) {
+  const w = wayEqCurrentWay();
+  if (idx < 0 || idx >= w.bands.length) return;
+  w.bands.splice(idx, 1);
+  wayEqSend(w.on, w.bands);
+}
+function wayEqReset() {
+  wayEqOnError("");
+  wayEqSend(false, []);
+}
+function wayEqCommitFromDom() {
+  const box = document.getElementById("wayEqBands");
+  if (!box) return;
+  const rows = [...box.querySelectorAll(".way-band-row")];
+  const bands = [];
+  let valid = true;
+  rows.forEach(row => {
+    const sel = row.querySelector("select.way-b-type");
+    const fEl = row.querySelector("input.way-b-freq");
+    const gEl = row.querySelector("input.way-b-gain");
+    const qEl = row.querySelector("input.way-b-q");
+    const f = parseFloat(fEl ? fEl.value : "NaN");
+    const g = parseFloat(gEl ? gEl.value : "NaN");
+    const q = parseFloat(qEl ? qEl.value : "NaN");
+    const fOk = Number.isFinite(f) && f >= 20 && f <= 20000;
+    const gOk = Number.isFinite(g) && g >= -18 && g <= 6;
+    const qOk = Number.isFinite(q) && q >= 0.3 && q <= 10;
+    if (fEl) { fEl.setAttribute("aria-invalid", String(!fOk)); fEl.style.borderColor = fOk ? "" : "#ff6060"; }
+    if (gEl) { gEl.setAttribute("aria-invalid", String(!gOk)); gEl.style.borderColor = gOk ? "" : "#ff6060"; }
+    if (qEl) { qEl.setAttribute("aria-invalid", String(!qOk)); qEl.style.borderColor = qOk ? "" : "#ff6060"; }
+    if (!fOk || !gOk || !qOk) valid = false;
+    bands.push({ type: sel ? sel.value : "bell", freq: f, gain: g, q: q });
+  });
+  if (!valid) {
+    wayEqOnError(t("way.rangeErr"));
+    return;
+  }
+  wayEqOnError("");
+  const tgl = document.getElementById("wayEqToggle");
+  wayEqSend(!!(tgl && tgl.checked), bands);
+}
+function drawWayEqPlot(k) {
+  const cv = document.getElementById("wayEqCanvas");
+  if (!cv) return;
+  const ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  const conn = wayEqConnected();
+  const nc = document.getElementById("wayEqNoConn");
+  if (nc) nc.hidden = conn;
+  if (!conn || !moStatus.response || !Array.isArray(moStatus.response.freqs) ||
+      !Array.isArray(moStatus.response.ways) || !Array.isArray(moStatus.response.ways[k])) {
+    wayEqLastPlot = null;
+    return;
+  }
+  const freqs = moStatus.response.freqs;
+  const wayDb = moStatus.response.ways[k];
+  const sumDb = Array.isArray(moStatus.response.sum) ? moStatus.response.sum : [];
+  wayEqLastPlot = { way: k, freqs: freqs.slice(), wayDb: wayDb.slice(), sumDb: sumDb.slice() };
+
+  const padL = 44, padR = 14, padT = 16, padB = 24;
+  const pw = W - padL - padR, ph = H - padT - padB;
+  const minDb = -36, maxDb = 12;
+  const xOf = f => padL + pw * Math.log10(Math.max(20, Math.min(20000, f)) / 20) / 3;
+  const yOf = db => padT + ph * (1 - (Math.max(minDb, Math.min(maxDb, db)) - minDb) / (maxDb - minDb));
+
+  ctx.strokeStyle = "rgba(255,255,255,0.1)";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.font = "11px sans-serif";
+  [-30, -18, -12, -6, 0, 6].forEach(d => {
+    const y = yOf(d);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillText(d + " dB", 4, y + 3);
+  });
+  [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000].forEach(f => {
+    const x = xOf(f);
+    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, H - padB); ctx.stroke();
+    const lbl = f >= 1000 ? (f / 1000) + "k" : String(f);
+    ctx.fillText(lbl, x - 8, H - 6);
+  });
+
+  if (sumDb.length === freqs.length) {
+    ctx.strokeStyle = "rgba(255,255,255,0.32)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    freqs.forEach((f, i) => { const x = xOf(f), y = yOf(sumDb[i]); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+    ctx.stroke();
+  }
+  ctx.strokeStyle = "#6FB7FF";
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  freqs.forEach((f, i) => { const x = xOf(f), y = yOf(wayDb[i]); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+  ctx.stroke();
+
+  ctx.fillStyle = "#6FB7FF";
+  ctx.fillText("— " + t("way.legendWay"), padL + 8, padT + 12);
+  ctx.fillStyle = "rgba(255,255,255,0.6)";
+  ctx.fillText("— " + t("way.legendSum"), padL + 160, padT + 12);
+}
+function renderWayEqModal(forceDom) {
+  if (wayEqOpenIdx < 0) return;
+  const k = wayEqOpenIdx;
+  const c = moStatus ? moCfgFromStatus() : null;
+  const titleEl = document.getElementById("wayEqTitle");
+  if (titleEl) {
+    const xoF = c && Array.isArray(c.crossovers) ? c.crossovers : [2500];
+    const bandIdx = c && c.outputs && c.outputs[k] ? c.outputs[k].band : -1;
+    const bandTxt = c ? moBandLabel(c.outputs.length, bandIdx, xoF) : "";
+    titleEl.textContent = t("way.title", { n: k + 1, band: bandTxt });
+  }
+  const m = document.getElementById("wayEqModal");
+  if (forceDom && m) applyI18nDom(m);
+  drawWayEqPlot(k);
+
+  const w = wayEqCurrentWay();
+  const tgl = document.getElementById("wayEqToggle");
+  if (tgl) tgl.checked = w.on;
+  const addBtn = document.getElementById("wayEqAddBandBtn");
+  if (addBtn) addBtn.disabled = !wayEqConnected() || w.bands.length >= 10;
+
+  const box = document.getElementById("wayEqBands");
+  if (!box) return;
+  if (!forceDom && box.contains(document.activeElement)) return;
+  if (w.bands.length === 0) {
+    box.innerHTML = `<div style="color:var(--aq-text-2); font-size:var(--aq-fs-sub); padding:6px 0;">${escHtml(t("way.empty"))}</div>`;
+    return;
+  }
+  box.innerHTML = w.bands.map((b, i) => `
+    <div class="way-band-row" style="display:grid; grid-template-columns:1.4fr 1fr 1fr 0.9fr auto; gap:8px; align-items:center;">
+      <select class="ee-select way-b-type" aria-label="${escHtml(t("way.colType"))} ${i + 1}" onchange="wayEqCommitFromDom()">
+        <option value="bell"${b.type === "bell" ? " selected" : ""}>${escHtml(t("way.typeBell"))}</option>
+        <option value="lowshelf"${b.type === "lowshelf" ? " selected" : ""}>${escHtml(t("way.typeLowShelf"))}</option>
+        <option value="highshelf"${b.type === "highshelf" ? " selected" : ""}>${escHtml(t("way.typeHighShelf"))}</option>
+      </select>
+      <label style="display:flex; align-items:center; gap:4px; font-size:var(--aq-fs-sub);">
+        <input type="number" class="ee-input way-b-freq" min="20" max="20000" step="1" value="${Math.round(b.freq * 10) / 10}" aria-label="${escHtml(t("way.colFreq"))} ${i + 1}" onchange="wayEqCommitFromDom()" oninput="wayEqCommitFromDom()">
+        <span>Hz</span>
+      </label>
+      <label style="display:flex; align-items:center; gap:4px; font-size:var(--aq-fs-sub);">
+        <input type="number" class="ee-input way-b-gain" min="-18" max="6" step="0.5" value="${Math.round(b.gain * 100) / 100}" aria-label="${escHtml(t("way.colGain"))} ${i + 1}" onchange="wayEqCommitFromDom()" oninput="wayEqCommitFromDom()">
+        <span>dB</span>
+      </label>
+      <label style="display:flex; align-items:center; gap:4px; font-size:var(--aq-fs-sub);">
+        <span>Q</span>
+        <input type="number" class="ee-input way-b-q" min="0.3" max="10" step="0.1" value="${Math.round(b.q * 100) / 100}" aria-label="${escHtml(t("way.colQ"))} ${i + 1}" onchange="wayEqCommitFromDom()" oninput="wayEqCommitFromDom()">
+      </label>
+      <button type="button" class="adw-btn way-b-del" aria-label="${escHtml(t("way.delBand"))} ${i + 1}" title="${escHtml(t("way.delBand"))}" onclick="wayEqDelBand(${i})">✕</button>
+    </div>`).join("");
+}
+
 /** A szerkesztett kimenet váltása: a motor a kimenet állapotát küldi vissza (state, reason "zone"). */
 function setEditZone(k) {
   k = Math.max(0, Math.min(3, k | 0));
@@ -10333,6 +10573,7 @@ function setEditZone(k) {
   if (typeof refreshPresetUi === "function") refreshPresetUi();
   renderZoneBar();
   renderMultiOut();
+  if (typeof renderWayEqModal === "function" && typeof wayEqOpenIdx === "number" && wayEqOpenIdx >= 0) renderWayEqModal(false);
 }
 setInterval(() => {
   if (moCaps && currentActiveTab === "outputs" && !document.hidden && moStatus && moStatus.enabled) moSend({ type: "get_multiout" });
@@ -12683,6 +12924,8 @@ function initPipewireBridge() {
           onIrMissing(data.id);
         } else if (data.type === "multiout") {
           moOnStatus(data.status);
+        } else if (data.type === "way_eq_error") {
+          if (typeof wayEqOnError === "function") wayEqOnError(data.message || data.error);
         } else if (data.type === "update_result") {
           updOnResult(data);
         } else if (data.type === "audio_opts") {
@@ -13426,6 +13669,7 @@ function refreshDynamicTexts() {
   renderConvIrInfo();
   if (lastPhysicalSinks) updatePhysicalSinkSelector(lastPhysicalSinks, lastCurrentSink);   // hangkártyák felirata
   if (typeof renderMultiOut === "function") renderMultiOut();
+  if (typeof renderWayEqModal === "function" && typeof wayEqOpenIdx === "number" && wayEqOpenIdx >= 0) renderWayEqModal(true);
   updateEngineBadge();
   updateLimiterMeters(null, lastGrDb);
   refreshPresetUi();
