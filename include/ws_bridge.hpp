@@ -144,6 +144,8 @@ struct BridgeCallbacks {
      */
     std::function<void(const multiout::MultiConfig& cfg, const std::array<std::string, 3>& sinks)> setMultiOut;
     std::function<std::string()> multiOutStatus;
+    std::function<multiout::MultiConfig()> getMultiOut;
+    std::function<void(int output, const multiout::WayEq& way)> setWayEq;
     std::function<ParamData(int zone)> getZoneParams;
     std::function<void(int zone, const ParamData&)> setZoneParams;
     /** A 2–4. kimenet impulzusválasza (konvolver; pl. szobakorrekció a második hangkártyához). */
@@ -1755,6 +1757,10 @@ private:
     /** set_multiout: {"enabled","mode":"zones"|"crossover","slope","crossovers":[Hz…],"outputs":[{"sink","band","gain","delay","invert","enabled"}…]} */
     void handleSetMultiOut(const json::Value& msg) {
         multiout::MultiConfig c;
+        if (cb_.getMultiOut) {
+            const auto prev = cb_.getMultiOut();
+            for (int k = 0; k < multiout::kMaxOutputs; ++k) c.outputs[k].way = prev.outputs[k].way;
+        }
         c.enabled = num(msg, "enabled", 0.0) != 0.0;
         const json::Value* mode = msg.get("mode");
         c.mode = (mode && mode->stringOr("") == "crossover") ? multiout::Mode::Crossover : multiout::Mode::Zones;
@@ -1775,10 +1781,96 @@ private:
                 oc.invert = num(o, "invert", 0.0) != 0.0;
                 oc.enabled = num(o, "enabled", 1.0) != 0.0;
                 if (k > 0) sinks[k - 1] = o.get("sink") ? o.get("sink")->stringOr("") : "";
+                if (const json::Value* wv = o.get("way"); wv && wv->type == json::Value::Type::Object) {
+                    multiout::WayEq pw;
+                    std::string err;
+                    if (parseWayEq(*wv, pw, err)) oc.way = pw;
+                }
             }
         }
         multiout::sanitize(c);
         cb_.setMultiOut(c, sinks);
+    }
+
+    static bool parseWayEq(const json::Value& msg, multiout::WayEq& out, std::string& errOut) {
+        const json::Value* onV = msg.get("on");
+        if (!onV || (onV->type != json::Value::Type::Bool && onV->type != json::Value::Type::Number)) {
+            errOut = "Hiányzó vagy hibás 'on' kapcsoló.";
+            return false;
+        }
+        const json::Value* bandsV = msg.get("bands");
+        if (!bandsV || bandsV->type != json::Value::Type::Array ||
+            bandsV->arr.size() > static_cast<size_t>(multiout::kMaxWayBands)) {
+            errOut = "Hiányzó vagy túl sok sáv a 'bands' listában (max 10).";
+            return false;
+        }
+        multiout::WayEq w{};
+        w.on = (onV->type == json::Value::Type::Bool) ? onV->b : (onV->num != 0.0);
+        w.numBands = static_cast<int32_t>(bandsV->arr.size());
+        for (size_t i = 0; i < bandsV->arr.size(); ++i) {
+            const json::Value& item = bandsV->arr[i];
+            if (item.type != json::Value::Type::Object) {
+                errOut = "A sáv nem JSON objektum.";
+                return false;
+            }
+            const json::Value* typeV = item.get("type");
+            if (!typeV || typeV->type != json::Value::Type::String) {
+                errOut = "Hiányzó sávtípus.";
+                return false;
+            }
+            const std::string& ts = typeV->str;
+            int32_t btype = -1;
+            if (ts == "bell") btype = static_cast<int32_t>(EqBandType::Bell);
+            else if (ts == "lowshelf") btype = static_cast<int32_t>(EqBandType::LoShelf);
+            else if (ts == "highshelf") btype = static_cast<int32_t>(EqBandType::HiShelf);
+            else {
+                errOut = "Ismeretlen sávtípus: " + ts;
+                return false;
+            }
+            const json::Value* fV = item.get("freq");
+            const json::Value* gV = item.get("gain");
+            const json::Value* qV = item.get("q");
+            if (!fV || fV->type != json::Value::Type::Number || !std::isfinite(fV->num) ||
+                !gV || gV->type != json::Value::Type::Number || !std::isfinite(gV->num) ||
+                !qV || qV->type != json::Value::Type::Number || !std::isfinite(qV->num)) {
+                errOut = "A frekvencia, erősítés vagy Q nem érvényes szám.";
+                return false;
+            }
+            w.bands[i].type = btype;
+            w.bands[i].freq = static_cast<float>(fV->num);
+            w.bands[i].gainDb = static_cast<float>(gV->num);
+            w.bands[i].q = static_cast<float>(qV->num);
+        }
+        multiout::sanitizeWayEq(w);
+        out = w;
+        return true;
+    }
+
+    void handleSetWayEq(const json::Value& msg, bool remote) {
+        if (!cb_.setWayEq || !cb_.multiOutStatus || !cb_.getMultiOut) return;
+        if (remote && !curIsAdmin()) {
+            sendText("{\"type\":\"way_eq_error\",\"error\":\"remote\",\"message\":\"Nincs jogosultság.\"}");
+            return;
+        }
+        const auto cur = cb_.getMultiOut();
+        const json::Value* outV = msg.get("output");
+        if (!outV || outV->type != json::Value::Type::Number || !std::isfinite(outV->num)) {
+            sendText("{\"type\":\"way_eq_error\",\"error\":\"invalid_output\",\"message\":\"Hiányzó vagy hibás kimenetszám.\"}");
+            return;
+        }
+        const int outIdx = static_cast<int>(std::lround(outV->num));
+        if (std::fabs(outV->num - outIdx) > 1e-6 || outIdx < 0 || outIdx >= cur.numOutputs || outIdx >= multiout::kMaxOutputs) {
+            sendText("{\"type\":\"way_eq_error\",\"error\":\"invalid_output\",\"message\":\"Érvénytelen kimenet index.\"}");
+            return;
+        }
+        multiout::WayEq w{};
+        std::string err;
+        if (!parseWayEq(msg, w, err)) {
+            sendText("{\"type\":\"way_eq_error\",\"error\":\"invalid_params\",\"message\":\"" + media::jsonEscape(err) + "\"}");
+            return;
+        }
+        cb_.setWayEq(outIdx, w);
+        broadcast("{\"type\":\"multiout\",\"status\":" + cb_.multiOutStatus() + "}");
     }
 
     void handleMessage(const std::string& text) {
@@ -1974,10 +2066,22 @@ private:
             }
             return;
         }
+        if (type == "set_way_eq") {
+            handleSetWayEq(msg, remote);
+            return;
+        }
         if (type == "set_multiout" || type == "get_multiout") {
+            if (type == "set_multiout" && remote && !curIsAdmin()) {
+                sendText("{\"type\":\"error\",\"error\":\"remote\"}");
+                return;
+            }
             if (!cb_.setMultiOut || !cb_.multiOutStatus) return;
-            if (type == "set_multiout") handleSetMultiOut(msg);
-            sendText("{\"type\":\"multiout\",\"status\":" + cb_.multiOutStatus() + "}");
+            if (type == "set_multiout") {
+                handleSetMultiOut(msg);
+                broadcast("{\"type\":\"multiout\",\"status\":" + cb_.multiOutStatus() + "}");
+            } else {
+                sendText("{\"type\":\"multiout\",\"status\":" + cb_.multiOutStatus() + "}");
+            }
             return;
         }
         if (type == "engine_quit") {
@@ -3143,14 +3247,31 @@ private:
             }
         }
 
-        if (xoverBand >= 0 && cb_.multiOutStatus && cb_.setMultiOut) {
-            if (cb_.getZoneParams && cb_.setZoneParams) {
-                ParamData zp = cb_.getZoneParams(xoverBand);
-                zp.set(kFlagEq, true);
-                zp.numBands = static_cast<int32_t>(std::min<size_t>(newBands.size(), kMaxEqBands));
-                for (int32_t i = 0; i < zp.numBands; ++i) zp.bands[i] = newBands[i];
-                cb_.setZoneParams(xoverBand, zp);
+        if (xoverBand >= 0) {
+            if (!cb_.getMultiOut || !cb_.setWayEq || !cb_.multiOutStatus) {
+                sendText("{\"type\":\"measurement_error\",\"error\":\"NOT_SUPPORTED\"}");
+                return;
             }
+            const auto mcfg = cb_.getMultiOut();
+            if (xoverBand >= mcfg.numOutputs || xoverBand >= multiout::kMaxOutputs) {
+                sendText("{\"type\":\"measurement_error\",\"error\":\"NOT_SUPPORTED\"}");
+                return;
+            }
+            multiout::WayEq w{};
+            w.on = true;
+            w.numBands = static_cast<int32_t>(std::min<size_t>(newBands.size(), multiout::kMaxWayBands));
+            for (int32_t i = 0; i < w.numBands; ++i) {
+                auto bd = newBands[i];
+                if (bd.type != static_cast<int32_t>(EqBandType::Bell) &&
+                    bd.type != static_cast<int32_t>(EqBandType::LoShelf) &&
+                    bd.type != static_cast<int32_t>(EqBandType::HiShelf)) {
+                    bd.type = static_cast<int32_t>(EqBandType::Bell);
+                }
+                w.bands[i] = bd;
+            }
+            multiout::sanitizeWayEq(w);
+            cb_.setWayEq(xoverBand, w);
+            broadcast("{\"type\":\"multiout\",\"status\":" + cb_.multiOutStatus() + "}");
         } else {
             ParamData p = cb_.getParams();
             p.set(kFlagEq, true);

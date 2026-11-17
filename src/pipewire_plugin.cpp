@@ -754,6 +754,8 @@ int main(int argc, char* argv[]) {
         }
         multiState = c;
         pushMulti();
+        linux_store::saveMultiOut(multiState, multiTargets);
+        s_multiDirty = false;
         std::cout << "[Több kimenet] " << (c.enabled ? "bekapcsolva" : "kikapcsolva") << ", " << c.numOutputs << " kimenet, "
                   << (c.mode == multiout::Mode::Crossover ? "keresztváltó" : "független zónák") << "\n";
     };
@@ -770,10 +772,25 @@ int main(int argc, char* argv[]) {
             if (k) s += ",";
             s += "{\"sink\":\"" + jsonEscape(k == 0 ? std::string() : multiTargets[k - 1]) + "\",\"band\":" + std::to_string(o.band) +
                  ",\"gain\":" + std::to_string(o.gainDb) + ",\"delay\":" + std::to_string(o.delayMs) +
-                 ",\"invert\":" + (o.invert ? "true" : "false") + ",\"enabled\":" + (o.enabled ? "true" : "false") + "}";
+                 ",\"invert\":" + (o.invert ? "true" : "false") + ",\"enabled\":" + (o.enabled ? "true" : "false") +
+                 ",\"way\":" + multiout::wayEqToJson(o.way) + "}";
         }
-        s += "],\"zones\":" + node.multiStatusJson() + ",\"sinks\":" + cachedSinksJson + "}";
+        const double curSr = std::max(1.0, static_cast<double>(node.sampleRate.load()));
+        s += "],\"zones\":" + node.multiStatusJson() + ",\"response\":" + multiout::multiResponseJson(c, curSr) + ",\"sinks\":" + cachedSinksJson + "}";
         return s;
+    };
+    cb.getMultiOut = [&]() -> multiout::MultiConfig {
+        std::lock_guard<std::mutex> lk(multiMutex);
+        return multiState;
+    };
+    cb.setWayEq = [&](int output, const multiout::WayEq& w) {
+        std::lock_guard<std::mutex> lk(multiMutex);
+        if (output < 0 || output >= multiState.numOutputs || output >= multiout::kMaxOutputs) return;
+        multiState.outputs[output].way = w;
+        multiout::sanitize(multiState);
+        pushMulti();
+        linux_store::saveMultiOut(multiState, multiTargets);
+        s_multiDirty = false;
     };
     cb.getZoneParams = [&](int zone) -> ParamData {
         std::lock_guard<std::mutex> lk(multiMutex);

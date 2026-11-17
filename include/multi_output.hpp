@@ -26,6 +26,8 @@
 #include <atomic>
 #include <cmath>
 #include <complex>
+#include <cstdio>
+#include <string>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -669,6 +671,79 @@ private:
     std::array<uint32_t, kMaxOutputs> fadeTotal_{};
     std::array<std::array<uint32_t, 2>, kMaxOutputs> fadePos_{};
 };
+
+/** Egy WayEq szerkezet JSON-ként (a híd és a felület protokollja szerint). */
+inline std::string wayEqToJson(const WayEq& w) {
+    char buf[64];
+    std::string s = "{\"on\":";
+    s += (w.on ? "true" : "false");
+    s += ",\"bands\":[";
+    const int n = std::clamp(w.numBands, 0, kMaxWayBands);
+    for (int i = 0; i < n; ++i) {
+        const auto& b = w.bands[i];
+        if (i > 0) s += ",";
+        const char* t = (b.type == static_cast<int32_t>(EqBandType::LoShelf)) ? "lowshelf"
+                      : (b.type == static_cast<int32_t>(EqBandType::HiShelf)) ? "highshelf" : "bell";
+        const float freq = std::clamp(std::isfinite(b.freq) ? b.freq : 1000.0f, 20.0f, 20000.0f);
+        const float gain = std::clamp(std::isfinite(b.gainDb) ? b.gainDb : 0.0f, -18.0f, 6.0f);
+        const float q = std::clamp(std::isfinite(b.q) ? b.q : 1.0f, 0.3f, 10.0f);
+        std::snprintf(buf, sizeof(buf), "\"freq\":%.2f,\"gain\":%.2f,\"q\":%.3f", freq, gain, q);
+        s += "{\"type\":\"";
+        s += t;
+        s += "\",";
+        s += buf;
+        s += "}";
+    }
+    s += "]}";
+    return s;
+}
+
+/** 1/12 oktávos (20 Hz – 20 kHz) átviteli JSON a motor valódi szűrőegyütthatóiból. */
+inline std::string multiResponseJson(const MultiConfig& c, double sr) {
+    std::vector<double> freqs;
+    freqs.reserve(124);
+    for (int m = 0;; ++m) {
+        const double f = 20.0 * std::pow(2.0, m / 12.0);
+        if (f > 20000.5) break;
+        freqs.push_back(f);
+    }
+    if (freqs.empty() || freqs.back() < 19999.0) freqs.push_back(20000.0);
+
+    auto fmtDb = [](std::complex<double> h) {
+        const double v = 20.0 * std::log10(std::max(1e-6, std::abs(h)));
+        return std::isfinite(v) ? std::clamp(v, -120.0, 24.0) : -120.0;
+    };
+
+    char buf[32];
+    std::string s = "{\"freqs\":[";
+    for (size_t i = 0; i < freqs.size(); ++i) {
+        if (i) s += ",";
+        std::snprintf(buf, sizeof(buf), "%.2f", freqs[i]);
+        s += buf;
+    }
+    s += "],\"ways\":[";
+    const int nOut = std::clamp(c.numOutputs, 2, kMaxOutputs);
+    for (int k = 0; k < nOut; ++k) {
+        if (k) s += ",";
+        s += "[";
+        const auto wr = MultiOutputEngine::computeWayResponse(c, sr, k, freqs);
+        for (size_t i = 0; i < wr.size(); ++i) {
+            if (i) s += ",";
+            std::snprintf(buf, sizeof(buf), "%.2f", fmtDb(wr[i]));
+            s += buf;
+        }
+        s += "]";
+    }
+    s += "],\"sum\":[";
+    const auto srVec = MultiOutputEngine::computeSumResponse(c, sr, freqs);
+    for (size_t i = 0; i < srVec.size(); ++i) {
+        if (i) s += ",";
+        std::snprintf(buf, sizeof(buf), "%.2f", fmtDb(srVec[i]));
+        s += buf;
+    }
+    s += "]}";
+    return s;
+}
 
 } // namespace multiout
 } // namespace ee_analyzer
