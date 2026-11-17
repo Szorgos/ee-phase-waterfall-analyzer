@@ -54,7 +54,7 @@ A hangszórós szobakorrekcióhoz a szakirodalomban bizonyított természetes sz
 - **Csatornánkénti (L/R) EQ és késleltetés:** Független 32-32 sávos EQ, mintapontos késleltetés (0–50 ms), szint- és polaritásállítás a bal és jobb csatornára külön-külön.
 - **Sávcsökkentő (Band Reducer):** Intelligens algoritmus, amely a sok sávos (pl. 32 sávos vagy GraphicEQ) beállítást a felhasználó által kívánt kevesebb (pl. 5-7) sávra egyszerűsíti a legfontosabb szobarezonanciák megtartásával, kijelezve a maximális és RMS dB hibát.
 - **Valódi sztereó (4 csatornás) konvolúció:** LL, LR, RL, RR impulzusválasz mátrix keresztcsatolás (cross-talk) támogatással, vagy két különálló mono fájlpár egyesítése.
-- **Keresztváltó sávonkénti EQ:** Aktív több-utas rendszerekben (pl. mélysugárzó és magassugárzó) minden kimeneti útnak saját EQ-ja, késleltetése és polaritása van.
+- **Keresztváltó:** Aktív több-utas rendszerekben minden kimeneti útnak saját szintje, késleltetése és polaritása van; az EQ és a többi modul a közös láncban fut (útonkénti EQ egy későbbi kiadásban, saját kezelőfelülettel).
 - **Automatikus profilváltás:** Kimeneti eszközváltáskor (fejhallgató / hangszóró / USB DAC) automatikusan betöltődik a hozzá rendelt hangzásprofil.
 
 ---

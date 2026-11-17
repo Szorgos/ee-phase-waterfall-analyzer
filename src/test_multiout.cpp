@@ -232,65 +232,6 @@ static void testBlockIndependence(double sr) {
     CHECK(worst == 0.0, "%5.0f Hz: keresztváltó + mélyvágás + késleltetés: blokkmérettől független (eltérés %.3g)", sr, worst);
 }
 
-static void testCrossoverPerBandEq(double sr) {
-    MultiOutputEngine e;
-    e.setSampleRate(sr);
-    MultiConfig c;
-    c.mode = Mode::Crossover;
-    c.numOutputs = 2;
-    c.numCrossovers = 1;
-    c.crossoverHz[0] = 1000.0f;
-    c.slopeDbPerOct = 24;
-    c.outputs[0].band = 0; // Mély sáv (0..1000 Hz)
-    c.outputs[1].band = 1; // Magas sáv (1000.. Hz)
-
-    // 0. sáv: +6 dB kiemelés 100 Hz-en
-    ParamData& d0 = c.outputs[0].chain;
-    d0.set(kFlagEq, true);
-    d0.numBands = 1;
-    d0.bands[0].type = static_cast<int32_t>(EqBandType::Bell);
-    d0.bands[0].mode = static_cast<int32_t>(EqFilterMode::RlcBt);
-    d0.bands[0].freq = 100.0f;
-    d0.bands[0].gainDb = 6.0f;
-    d0.bands[0].q = 1.0f;
-
-    // 1. sáv: -6 dB vágás 5000 Hz-en
-    ParamData& d1 = c.outputs[1].chain;
-    d1.set(kFlagEq, true);
-    d1.numBands = 1;
-    d1.bands[0].type = static_cast<int32_t>(EqBandType::Bell);
-    d1.bands[0].mode = static_cast<int32_t>(EqFilterMode::RlcBt);
-    d1.bands[0].freq = 5000.0f;
-    d1.bands[0].gainDb = -6.0f;
-    d1.bands[0].q = 1.0f;
-
-    e.applyConfigRT(c);
-    warmup(e, 256);
-
-    const size_t len = static_cast<size_t>(sr * 0.5);
-    std::vector<float> imp(len, 0.0f);
-    imp[0] = 1.0f;
-    const Outs o = run(e, imp, imp, 256);
-
-    MultiOutputEngine eRef;
-    eRef.setSampleRate(sr);
-    MultiConfig cRef = c;
-    cRef.outputs[0].chain = transparentParams();
-    cRef.outputs[1].chain = transparentParams();
-    eRef.applyConfigRT(cRef);
-    warmup(eRef, 256);
-    const Outs oRef = run(eRef, imp, imp, 256);
-
-    const double g0_100 = db(resp(o.L[0], 100.0, sr)) - db(resp(oRef.L[0], 100.0, sr));
-    CHECK(std::fabs(g0_100 - 6.0) < 0.2, "%5.0f Hz: keresztváltó 0. sáv (mély) 100 Hz EQ: %.2f dB (elvárt +6.00 dB)", sr, g0_100);
-
-    const double g1_5k = db(resp(o.L[1], 5000.0, sr)) - db(resp(oRef.L[1], 5000.0, sr));
-    CHECK(std::fabs(g1_5k - (-6.0)) < 0.2, "%5.0f Hz: keresztváltó 1. sáv (magas) 5 kHz EQ: %.2f dB (elvárt -6.00 dB)", sr, g1_5k);
-
-    const double g1_100 = db(resp(o.L[1], 100.0, sr)) - db(resp(oRef.L[1], 100.0, sr));
-    CHECK(std::fabs(g1_100) < 0.1, "%5.0f Hz: 0. sáv EQ-ja nincs hatással az 1. sávra: %.3f dB", sr, g1_100);
-}
-
 static void testSanitize() {
     MultiConfig c;
     c.numOutputs = 9;
@@ -377,7 +318,6 @@ int main() {
         }
         testDelayGainPolarity(sr);
         testBlockIndependence(sr);
-        testCrossoverPerBandEq(sr);
     }
     testPlumbing();
     std::printf("\n-- beállítások ellenőrzése --\n");
