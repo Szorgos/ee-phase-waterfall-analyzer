@@ -1,13 +1,11 @@
 --- a/src/file_player.cpp
 +++ b/src/file_player.cpp
-@@ -737,6 +737,10 @@
+@@ -737,6 +737,8 @@
      return false;
  }
  void FilePlayer::render(float* stereo, size_t frames) {
-+    static void* volatile s_mutSink = nullptr;
-+    int* badAlloc = new int(static_cast<int>(frames));
-+    s_mutSink = badAlloc;
-+    delete badAlloc;
++    std::vector<float> rtBadBuf(frames * 2 + 1024, 0.0f);
++    if (frames > 0) stereo[0] = rtBadBuf[frames];
      if (state_.load() != State::Playing) {
          std::memset(stereo, 0, frames * 2 * sizeof(float));
          return;
