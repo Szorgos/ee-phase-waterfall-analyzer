@@ -12,14 +12,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 export AQ_CHECK_SEED="${AQ_CHECK_SEED:-$(date +%s)}"
 
-if repo_git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    repo_git() { repo_git "$@"; }
+if git -C "$REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    repo_git() { git -C "$REPO" "$@"; }
 elif [ -f "$REPO/.git" ] && command -v wslpath >/dev/null 2>&1; then
     WIN_GITDIR="$(sed 's/^gitdir:[[:space:]]*//; s/\r$//' "$REPO/.git")"
     UNIX_GITDIR="$(wslpath -u "$WIN_GITDIR")"
     repo_git() { GIT_DIR="$UNIX_GITDIR" GIT_WORK_TREE="$REPO" git "$@"; }
 else
-    repo_git() { repo_git "$@"; }
+    repo_git() { git -C "$REPO" "$@"; }
 fi
 
 BASE_REF="v2.5.0"

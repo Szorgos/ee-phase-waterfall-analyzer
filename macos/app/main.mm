@@ -30,6 +30,7 @@
 #include "audio_options.hpp"
 #include "linux_store.hpp"
 #include "mac_engine.hpp"
+#include "multi_output.hpp"
 #include "mac_media.hpp"
 #include "ws_bridge.hpp"
 #include "startup_restore.hpp"

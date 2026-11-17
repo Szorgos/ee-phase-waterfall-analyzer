@@ -30,3 +30,4 @@ Tipikus felhasználások:
 - **A magassugárzóra ne adj mélyhangot:** az útonkénti EQ nem váltja ki a keresztváltót; alul- és felüláteresztő szűrő helyett mindig a keresztváltó vágási frekvenciája védi a hangszórót.
 - **+6 dB-nél nagyobb emelés nincs:** a hangszóró tekercsének túlterhelése és a torzítás elkerülése érdekében a rendszer szándékosan korlátozza az emelést. Szobai dübörgésnél és rezonanciáknál mindig a **csökkentés (vágás)** ad tisztább, biztonságosabb eredményt.
 - **Kimenetenként független beállítás:** egy út EQ-ja semmilyen körülmények között nem szivárog át a többi kimenetre vagy a zóna mód láncaiba.
+- **Távvezérlési jogosultság:** az aktív keresztváltó (`set_multiout`) és az útonkénti EQ (`set_way_eq`) beállításait a helyi gépen túl távoli távirányítóról kizárólag adminisztrátori joggal rendelkező, jóváhagyott eszköz módosíthatja.
