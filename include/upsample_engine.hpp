@@ -28,6 +28,64 @@ public:
     /**
      * Motor inicializálása a megadott mintavételi frekvenciákkal és minőségi paraméterekkel.
      */
+    /**
+     * Célmintavétel kiválasztása a 3.2 szabályok szerint (lefelé soha, csak támogatott rátára).
+     */
+    static uint32_t selectTargetRate(uint32_t srcRate,
+                                     audioopt::UpsampleRule rule,
+                                     const std::vector<uint32_t>& supported,
+                                     const std::map<uint32_t, uint32_t>& customMap,
+                                     bool bypassUpsample,
+                                     bool isDsd,
+                                     std::string* reasonOut = nullptr) {
+        auto setReason = [&](const char* r) { if (reasonOut) *reasonOut = r; };
+        if (bypassUpsample) { setReason("bypass"); return srcRate; }
+        if (isDsd) { setReason("dsd"); return srcRate; }
+        if (srcRate > 192000) { setReason("source_rate"); return srcRate; }
+        if (rule == audioopt::UpsampleRule::Off) { setReason("off"); return srcRate; }
+
+        auto isSupported = [&](uint32_t r) {
+            return std::find(supported.begin(), supported.end(), r) != supported.end();
+        };
+
+        if (rule == audioopt::UpsampleRule::Double) {
+            const uint32_t target = srcRate * 2;
+            if (isSupported(target)) { setReason(""); return target; }
+            setReason("dac_unsupported");
+            return srcRate;
+        }
+        if (rule == audioopt::UpsampleRule::PowerOfTwo) {
+            uint32_t best = srcRate;
+            for (uint32_t mult = 2; mult <= 16; mult *= 2) {
+                const uint32_t cand = srcRate * mult;
+                if (isSupported(cand) && cand > best) best = cand;
+            }
+            if (best > srcRate) { setReason(""); return best; }
+            setReason("dac_unsupported");
+            return srcRate;
+        }
+        if (rule == audioopt::UpsampleRule::MaxOutput) {
+            uint32_t maxRate = srcRate;
+            for (uint32_t r : supported) {
+                if (r > maxRate) maxRate = r;
+            }
+            if (maxRate > srcRate) { setReason(""); return maxRate; }
+            setReason("dac_unsupported");
+            return srcRate;
+        }
+        if (rule == audioopt::UpsampleRule::Custom) {
+            auto it = customMap.find(srcRate);
+            if (it != customMap.end()) {
+                const uint32_t target = it->second;
+                if (target > srcRate && isSupported(target)) { setReason(""); return target; }
+            }
+            setReason("dac_unsupported");
+            return srcRate;
+        }
+        setReason("off");
+        return srcRate;
+    }
+
     bool init(uint32_t srcRate, uint32_t dstRate, uint32_t channels = 2,
               int precision = 28, double phase = 25.0,
               double passbandEnd = 0.95, double stopbandBegin = 1.00,

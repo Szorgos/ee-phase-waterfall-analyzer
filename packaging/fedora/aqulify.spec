@@ -62,7 +62,7 @@ tar -xJf %{SOURCE1} -C rnnoise-model --strip-components=2 rnnoise-0.2/src/rnnois
 rm -f %{buildroot}%{_bindir}/test_*
 
 %check
-for t in test_ringbuffer test_core test_dsp; do
+for t in test_ringbuffer test_core test_dsp test_upsample; do
     %{__cmake_builddir}/$t
 done
 desktop-file-validate %{buildroot}%{_datadir}/applications/io.github.szorgos.Aqulify.desktop
@@ -85,7 +85,7 @@ fi
 %systemd_user_postun_with_restart aqulify.service
 
 %files
-%license LICENSE
+%license LICENSE third_party/soxr/LICENCE
 %doc README.md RELEASE_NOTES.md
 %{_bindir}/aqulify-engine
 %{_bindir}/aqulify-play

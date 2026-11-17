@@ -26,7 +26,7 @@ build-arch: check-version
 	cmake -B $(B) -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON \
 	  $(if $(RNN_TAR),-DAQULIFY_RNNOISE_MODEL_DIR=$(RNN_DIR),)
 	cmake --build $(B) -j$$(nproc)
-	for t in test_ringbuffer test_core test_dsp test_matrix test_player; do (cd $(B) && ./$$t) || exit 1; done
+	for t in test_ringbuffer test_core test_dsp test_matrix test_player test_upsample; do (cd $(B) && ./$$t) || exit 1; done
 
 binary-indep:
 binary: binary-arch
@@ -41,6 +41,7 @@ binary-arch: build-arch
 	gzip -9n -c debian/changelog > $(D)/usr/share/doc/$(PKG)/changelog.Debian.gz
 	install -m 644 debian/copyright $(D)/usr/share/doc/$(PKG)/copyright
 	install -m 644 LICENSE $(D)/usr/share/doc/$(PKG)/LICENSE
+	install -m 644 third_party/soxr/LICENCE $(D)/usr/share/doc/$(PKG)/soxr-LICENCE
 	install -m 755 debian/postinst $(D)/DEBIAN/postinst
 	install -m 755 debian/postrm $(D)/DEBIAN/postrm
 	dpkg-shlibdeps -O -e$(D)/usr/bin/aqulify-engine -e$(D)/usr/bin/aqulify-play -e$(D)/usr/bin/aqulify-gui > debian/substvars.tmp

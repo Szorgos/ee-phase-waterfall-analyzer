@@ -836,64 +836,15 @@ void FilePlayer::decodeLoop() {
 }
 
 uint32_t FilePlayer::decideTargetRate(uint32_t srcRate, bool bypassUpsample, bool isDsd) const {
-    if (bypassUpsample) { upsampleReason_ = "bypass"; return srcRate; }
-    if (isDsd) { upsampleReason_ = "dsd"; return srcRate; }
-    if (srcRate > 192000) { upsampleReason_ = "source_rate"; return srcRate; }
-    if (!upsampleEnabled_ && upsampleOpts_.upsampleRule == audioopt::UpsampleRule::Off) {
-        upsampleReason_ = "off";
-        return srcRate;
-    }
-
     audioopt::UpsampleRule rule = upsampleOpts_.upsampleRule;
     if (rule == audioopt::UpsampleRule::Off && upsampleEnabled_) {
         rule = audioopt::UpsampleRule::Double;
     }
-    if (rule == audioopt::UpsampleRule::Off) {
-        upsampleReason_ = "off";
-        return srcRate;
-    }
-
-    const std::vector<uint32_t> supported = out_ ? out_->supportedRates() : std::vector<uint32_t>{ 44100, 48000, 88200, 96000, 176400, 192000 };
-    auto isSupported = [&](uint32_t r) {
-        return std::find(supported.begin(), supported.end(), r) != supported.end();
-    };
-
-    if (rule == audioopt::UpsampleRule::Double) {
-        uint32_t target = srcRate * 2;
-        if (isSupported(target)) { upsampleReason_.clear(); return target; }
-        upsampleReason_ = "dac_unsupported";
-        return srcRate;
-    }
-    if (rule == audioopt::UpsampleRule::PowerOfTwo) {
-        uint32_t best = srcRate;
-        for (uint32_t mult = 2; mult <= 16; mult *= 2) {
-            uint32_t cand = srcRate * mult;
-            if (isSupported(cand) && cand > best) best = cand;
-        }
-        if (best > srcRate) { upsampleReason_.clear(); return best; }
-        upsampleReason_ = "dac_unsupported";
-        return srcRate;
-    }
-    if (rule == audioopt::UpsampleRule::MaxOutput) {
-        uint32_t maxRate = srcRate;
-        for (uint32_t r : supported) {
-            if (r > maxRate) maxRate = r;
-        }
-        if (maxRate > srcRate) { upsampleReason_.clear(); return maxRate; }
-        upsampleReason_ = "dac_unsupported";
-        return srcRate;
-    }
-    if (rule == audioopt::UpsampleRule::Custom) {
-        auto it = upsampleOpts_.upsampleCustom.find(srcRate);
-        if (it != upsampleOpts_.upsampleCustom.end()) {
-            uint32_t target = it->second;
-            if (target > srcRate && isSupported(target)) { upsampleReason_.clear(); return target; }
-        }
-        upsampleReason_ = "dac_unsupported";
-        return srcRate;
-    }
-    upsampleReason_ = "off";
-    return srcRate;
+    const std::vector<uint32_t> supported = out_
+        ? out_->supportedRates()
+        : std::vector<uint32_t>{ 44100, 48000, 88200, 96000, 176400, 192000 };
+    return UpsampleEngine::selectTargetRate(srcRate, rule, supported, upsampleOpts_.upsampleCustom,
+                                            bypassUpsample, isDsd, &upsampleReason_);
 }
 
 void FilePlayer::setUpsample(bool on) {

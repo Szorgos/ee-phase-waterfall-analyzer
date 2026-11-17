@@ -657,7 +657,7 @@ int main(int argc, char* argv[]) {
         return true;
     };
     cb.playerOpenBypass = [&](const std::string& path, std::string& error) {
-        if (!filePlayer.open(path, &error, /*bypassUpsample=*/true)) {
+        if (!filePlayer.open(path, &error, 0, /*bypassUpsample=*/true)) {
             std::cerr << "[Lejátszó/Mérés] " << path << ": " << error << "\n";
             return false;
         }
@@ -878,6 +878,7 @@ int main(int argc, char* argv[]) {
         } else if (ratesTouched) {
             pwSetSetting("clock.force-rate", origForceRate.empty() ? "0" : origForceRate);
             if (!origAllowedRates.empty()) pwSetSetting("clock.allowed-rates", origAllowedRates);
+            else runCapture("pw-metadata -n settings 0 -d clock.allowed-rates");
             ratesTouched = false;
         }
     };
@@ -976,12 +977,16 @@ int main(int argc, char* argv[]) {
         return out;
     };
     player::pwAllowedRatesHook() = [&, parseAllowedRates]() -> std::vector<uint32_t> {
-        auto parsed = parseAllowedRates(pwSetting("clock.allowed-rates"));
-        if (!parsed.empty()) return parsed;
+        audioopt::RateMode rm = audioopt::RateMode::System;
+        { std::lock_guard<std::mutex> lk(audioMutex); rm = audioOpts.rateMode; }
+        if (rm == audioopt::RateMode::Follow) {
+            auto parsed = parseAllowedRates(pwSetting("clock.allowed-rates"));
+            if (!parsed.empty()) return parsed;
+        }
         return { 44100, 48000, 88200, 96000, 176400, 192000 };
     };
     player::pwActualRateHook() = [&]() -> uint32_t {
-        return node.sampleRate.load();
+        return node.actualGraphRate();
     };
     player::pwBeforeOpenHook() = [&](uint32_t) {
         s_playerTicket.fetch_add(1);
@@ -1081,7 +1086,7 @@ int main(int argc, char* argv[]) {
             const bool uActive = filePlayer.isUpsampleActive();
             const uint32_t uSrc = filePlayer.upsampleSrcRate();
             const uint32_t uTgt = filePlayer.upsampleTargetRate();
-            uint32_t uActual = node.sampleRate.load();
+            uint32_t uActual = node.actualGraphRate();
 #if defined(AQ_HAVE_ALSA)
             if (playerSel && playerSel->exclusiveActive()) {
                 uActual = playerSel->actualRate();

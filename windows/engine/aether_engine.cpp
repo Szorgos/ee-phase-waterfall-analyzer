@@ -922,7 +922,7 @@ int main(int argc, char** argv) {
         return true;
     };
     cb.playerOpenBypass = [&](const std::string& path, std::string& error) {
-        if (!filePlayer.open(path, &error, /*bypassUpsample=*/true)) {
+        if (!filePlayer.open(path, &error, 0, /*bypassUpsample=*/true)) {
             std::cout << "[Lejátszó/Mérés] " << path << ": " << error << "\n";
             return false;
         }

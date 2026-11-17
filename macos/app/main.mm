@@ -587,7 +587,7 @@ struct Core {
         return true;
     };
     cb.playerOpenBypass = [c](const std::string& path, std::string& error) {
-        return c->filePlayer.open(path, &error, /*bypassUpsample=*/true);
+        return c->filePlayer.open(path, &error, 0, /*bypassUpsample=*/true);
     };
     cb.playerStop = [c] { c->filePlayer.stop(); };
     // Szobamérés: mikrofonfelvétel Core Audióval (room/mic_capture_coreaudio.hpp; az első használatkor a rendszer
