@@ -180,6 +180,7 @@ struct Core {
             engine.setBufferFrames(static_cast<uint32_t>(audioOpts.bufferFrames));
             filePlayer.setReplayGain(audioOpts.replayGain, audioOpts.rgPreampDb, audioOpts.rgPreventClip);
             filePlayer.setPreload(audioOpts.preload);
+            filePlayer.setUpsampleOptions(audioOpts);
             if (playerSel && playerSel->wantExclusive() != audioOpts.exclusive) {
                 playerSel->setExclusive(audioOpts.exclusive);
                 std::cout << "[Lejátszó] Core Audio kizárólagos kimenet (hog mode): " << (audioOpts.exclusive ? "be" : "ki")
@@ -332,7 +333,23 @@ struct Core {
                       q, reqBuf, bufMs, eqLat, limLat, convLat, dspMs, 2.0 * bufMs + dspMs, 100.0 * engine.dspLoad(),
                       100.0 * engine.takeDspPeak(), engine.overruns(), !AetherChain::modifiesSignal(p) && !crossover ? "true" : "false",
                       filePlayer.streamRate(), filePlayer.hasTrack() ? filePlayer.currentGainDb() : 0.0f);
-        return s + pb;
+        const bool uActive = filePlayer.isUpsampleActive();
+        const uint32_t uSrc = filePlayer.upsampleSrcRate();
+        const uint32_t uTgt = filePlayer.upsampleTargetRate();
+        const uint32_t uActual = playerExclusive() ? playerDsp.sampleRate() : engine.sampleRate();
+        const bool uResampleWarn = uActive && uActual > 0 && uTgt > 0 && uActual != uTgt;
+        const std::string uReason = filePlayer.upsampleReason();
+        char ubuf[384];
+        std::snprintf(ubuf, sizeof(ubuf),
+                      ",\"upsample\":{\"active\":%s,\"srcRate\":%u,\"targetRate\":%u,\"actualDacRate\":%u,"
+                      "\"resampleWarning\":%s,\"reason\":\"%s\",\"clippedSamples\":%llu,"
+                      "\"processedFrames\":%llu,\"delayMs\":%.2f}",
+                      uActive ? "true" : "false", uSrc, uTgt, uActual,
+                      uResampleWarn ? "true" : "false", uReason.c_str(),
+                      static_cast<unsigned long long>(filePlayer.upsampleClippedSamples()),
+                      static_cast<unsigned long long>(filePlayer.upsampleProcessedFrames()),
+                      filePlayer.upsampleDelayMs());
+        return s + pb + ubuf;
     }
 
     void setOutput(const std::string& target) {
@@ -569,6 +586,9 @@ struct Core {
         std::cout << "[Lejátszó] Szól: " << path << "\n";
         return true;
     };
+    cb.playerOpenBypass = [c](const std::string& path, std::string& error) {
+        return c->filePlayer.open(path, &error, /*bypassUpsample=*/true);
+    };
     cb.playerStop = [c] { c->filePlayer.stop(); };
     // Szobamérés: mikrofonfelvétel Core Audióval (room/mic_capture_coreaudio.hpp; az első használatkor a rendszer
     // engedélyt kér – Info.plist: NSMicrophoneUsageDescription)
@@ -608,7 +628,7 @@ struct Core {
     cb.audioOptionsJson = [c]() -> std::string {
         std::lock_guard<std::mutex> lk(c->audioMutex);
         return "{\"opts\":" + audioopt::toJson(c->audioOpts) +
-               ",\"caps\":{\"buffer\":true,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true,"
+               ",\"caps\":{\"buffer\":true,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true,\"upsample\":true,"
                "\"exclusive\":true,\"exclusiveKind\":\"hog\"}}";
     };
     cb.setAudioOptions = [c](const json::Value& v) {
@@ -622,6 +642,7 @@ struct Core {
         c->engine.setBufferFrames(static_cast<uint32_t>(o.bufferFrames));
         c->filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         c->filePlayer.setPreload(o.preload);
+        c->filePlayer.setUpsampleOptions(o);
         if (c->playerSel && c->playerSel->wantExclusive() != o.exclusive) {
             c->playerSel->setExclusive(o.exclusive);   // a következő számtól
             std::cout << "[Lejátszó] Core Audio kizárólagos kimenet (hog mode): " << (o.exclusive ? "be" : "ki")

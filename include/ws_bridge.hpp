@@ -106,6 +106,8 @@ struct BridgeCallbacks {
     std::function<bool(const std::string& id, std::string& mime, std::string& bytes, std::string& url)> mediaArt;
     /** Beépített lejátszó (2.x): fájl megnyitása és lejátszása (csak a saját gépről); false: hiba (error). */
     std::function<bool(const std::string& path, std::string& error)> playerOpen;
+    /** Mérőjel megnyitása felmintavételezés nélkül (K15: megkerülő út). */
+    std::function<bool(const std::string& path, std::string& error)> playerOpenBypass;
     /** A beépített lejátszó leállítása (a „most szól” utána ismét a gépen futó lejátszót mutatja). */
     std::function<void()> playerStop;
     /**
@@ -410,7 +412,9 @@ public:
         if (cb_.makeMicCapture && cb_.playerOpen && cb_.getParams && cb_.setParams) {
             aqulify::room::SessionDeps d;
             d.bypassChain = [this](bool on) { setMeasureBypass(on); };
-            d.playFile = [this](const std::string& path, std::string& err) { return cb_.playerOpen(path, err); };
+            d.playFile = [this](const std::string& path, std::string& err) {
+                return cb_.playerOpenBypass ? cb_.playerOpenBypass(path, err) : cb_.playerOpen(path, err);
+            };
             d.stopPlayback = [this] { if (cb_.playerStop) cb_.playerStop(); };
             d.pauseMedia = [this] { if (cb_.mediaCommand) cb_.mediaCommand("pause", 0.0); };
             d.makeMic = cb_.makeMicCapture;

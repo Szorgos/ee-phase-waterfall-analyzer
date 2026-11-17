@@ -912,6 +912,17 @@ uint64_t FilePlayer::upsampleClippedSamples() const {
     return upsampler_.clippedSamples();
 }
 
+uint64_t FilePlayer::upsampleProcessedFrames() const {
+    std::lock_guard<std::mutex> lk(m_);
+    return upsampler_.processedFrames();
+}
+
+double FilePlayer::upsampleDelayMs() const {
+    std::lock_guard<std::mutex> lk(m_);
+    if (!upsampleActive_.load() || rate_ == 0) return 0.0;
+    return 1000.0 * upsampler_.delayFrames() / static_cast<double>(rate_);
+}
+
 std::string FilePlayer::upsampleReason() const {
     std::lock_guard<std::mutex> lk(m_);
     return upsampleReason_;

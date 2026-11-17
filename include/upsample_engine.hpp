@@ -117,6 +117,7 @@ public:
         size_t odone = 0;
         soxr_error_t err = soxr_process(soxr_, in, inFrames, &idone, out, outCapacityFrames, &odone);
         outFrames = odone;
+        processedFrames_ += odone;
 
         // Fejtér alkalmazása és túlvezérlés számlálása
         const size_t totalSamples = odone * channels_;
@@ -142,6 +143,7 @@ public:
         size_t idone = 0, odone = 0;
         soxr_error_t err = soxr_process(soxr_, nullptr, 0, &idone, out, outCapacityFrames, &odone);
         outFrames = odone;
+        processedFrames_ += odone;
 
         const size_t totalSamples = odone * channels_;
         for (size_t i = 0; i < totalSamples; ++i) {
@@ -172,6 +174,7 @@ public:
     float headroomDb() const { return headroomDb_; }
     float headroomGain() const { return headroomGain_; }
     uint64_t clippedSamples() const { return clippedSamples_; }
+    uint64_t processedFrames() const { return processedFrames_; }
     void resetClippedSamples() { clippedSamples_ = 0; }
 
 private:
@@ -183,6 +186,7 @@ private:
     float headroomDb_ = -1.0f;
     float headroomGain_ = 1.0f;
     uint64_t clippedSamples_ = 0;
+    uint64_t processedFrames_ = 0;
 };
 
 } // namespace ee_analyzer

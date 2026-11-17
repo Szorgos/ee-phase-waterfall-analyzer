@@ -656,6 +656,14 @@ int main(int argc, char* argv[]) {
         std::cout << "[Lejátszó] Szól: " << path << "\n";
         return true;
     };
+    cb.playerOpenBypass = [&](const std::string& path, std::string& error) {
+        if (!filePlayer.open(path, &error, /*bypassUpsample=*/true)) {
+            std::cerr << "[Lejátszó/Mérés] " << path << ": " << error << "\n";
+            return false;
+        }
+        std::cout << "[Lejátszó/Mérés] Mérőjel (felmintavételezés megkerülve): " << path << "\n";
+        return true;
+    };
     cb.playerStop = [&] { filePlayer.stop(); };
     // Szobamérés: mikrofonfelvétel PipeWire-rel (room/mic_capture_pipewire.hpp)
     cb.makeMicCapture = [] { return aqulify::room::createMicCapture(); };
@@ -845,6 +853,7 @@ int main(int argc, char* argv[]) {
         audioopt::resampleQuality().store(o.resampleQuality);
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         filePlayer.setPreload(o.preload);
+        filePlayer.setUpsampleOptions(o);
 #if defined(AQ_HAVE_ALSA)
         filePlayer.setDsdDop(o.exclusive && dsdDop);
         if (playerSel && playerSel->wantExclusive() != o.exclusive) {
@@ -949,6 +958,31 @@ int main(int argc, char* argv[]) {
     static std::atomic<uint64_t> s_playerTicket{0};
     static std::atomic<bool> s_engineQuit{false};
     std::atomic<bool>& s_playerOpen = playerStreamOpenFlag;
+    auto parseAllowedRates = [](const std::string& raw) -> std::vector<uint32_t> {
+        std::vector<uint32_t> out;
+        uint32_t cur = 0;
+        bool inNum = false;
+        for (char ch : raw) {
+            if (ch >= '0' && ch <= '9') {
+                cur = cur * 10u + static_cast<uint32_t>(ch - '0');
+                inNum = true;
+            } else if (inNum) {
+                if (cur >= 8000 && cur <= 768000) out.push_back(cur);
+                cur = 0;
+                inNum = false;
+            }
+        }
+        if (inNum && cur >= 8000 && cur <= 768000) out.push_back(cur);
+        return out;
+    };
+    player::pwAllowedRatesHook() = [&, parseAllowedRates]() -> std::vector<uint32_t> {
+        auto parsed = parseAllowedRates(pwSetting("clock.allowed-rates"));
+        if (!parsed.empty()) return parsed;
+        return { 44100, 48000, 88200, 96000, 176400, 192000 };
+    };
+    player::pwActualRateHook() = [&]() -> uint32_t {
+        return node.sampleRate.load();
+    };
     player::pwBeforeOpenHook() = [&](uint32_t) {
         s_playerTicket.fetch_add(1);
         s_playerOpen = true;
@@ -983,7 +1017,7 @@ int main(int argc, char* argv[]) {
         const char* exclCap = "";
 #endif
         return "{\"opts\":" + optsToJsonWithDop(audioOpts, dsdDop) +
-               ",\"caps\":{\"buffer\":true,\"keepAwake\":true,\"rate\":true,\"resample\":true,\"player\":true" + exclCap + "}}";
+               ",\"caps\":{\"buffer\":true,\"keepAwake\":true,\"rate\":true,\"resample\":true,\"player\":true,\"upsample\":true" + exclCap + "}}";
     };
     cb.setAudioOptions = [&](const json::Value& v) {
         std::lock_guard<std::mutex> lk(audioMutex);
@@ -1044,7 +1078,30 @@ int main(int argc, char* argv[]) {
                           filePlayer.hasTrack() ? filePlayer.currentGainDb() : 0.0f,
                           dopWant ? "true" : "false", dopActive ? "true" : "false",
                           dopDsdRate, dopFb.c_str());
-            return s + buf;
+            const bool uActive = filePlayer.isUpsampleActive();
+            const uint32_t uSrc = filePlayer.upsampleSrcRate();
+            const uint32_t uTgt = filePlayer.upsampleTargetRate();
+            uint32_t uActual = node.sampleRate.load();
+#if defined(AQ_HAVE_ALSA)
+            if (playerSel && playerSel->exclusiveActive()) {
+                uActual = playerSel->actualRate();
+            }
+#endif
+            const bool uResampleWarn = uActive && uActual > 0 && uTgt > 0 && uActual != uTgt;
+            const std::string uReason = filePlayer.upsampleReason();
+            const uint64_t uClipped = filePlayer.upsampleClippedSamples();
+            const uint64_t uProcessed = filePlayer.upsampleProcessedFrames();
+            const double uDelayMs = filePlayer.upsampleDelayMs();
+            char ubuf[384];
+            std::snprintf(ubuf, sizeof(ubuf),
+                          ",\"upsample\":{\"active\":%s,\"srcRate\":%u,\"targetRate\":%u,\"actualDacRate\":%u,"
+                          "\"resampleWarning\":%s,\"reason\":\"%s\",\"clippedSamples\":%llu,"
+                          "\"processedFrames\":%llu,\"delayMs\":%.2f}",
+                          uActive ? "true" : "false", uSrc, uTgt, uActual,
+                          uResampleWarn ? "true" : "false", uReason.c_str(),
+                          static_cast<unsigned long long>(uClipped),
+                          static_cast<unsigned long long>(uProcessed), uDelayMs);
+            return s + buf + ubuf;
         };
     }
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
@@ -1088,6 +1145,8 @@ int main(int argc, char* argv[]) {
     s_engineQuit = true;
     player::pwBeforeOpenHook() = nullptr;
     player::pwAfterCloseHook() = nullptr;
+    player::pwAllowedRatesHook() = nullptr;
+    player::pwActualRateHook() = nullptr;
     filePlayer.stop();
     mediaSession.stop();
     {

@@ -142,6 +142,8 @@ public:
     uint32_t upsampleSrcRate() const { return upsampleSrcRate_.load(); }
     uint32_t upsampleTargetRate() const { return upsampleTargetRate_.load(); }
     uint64_t upsampleClippedSamples() const;
+    uint64_t upsampleProcessedFrames() const;
+    double upsampleDelayMs() const;
     std::string upsampleReason() const;
     static constexpr uint64_t kPreloadMaxBytes = 400ull << 20;
     /** Natív DSD (DoP 1.1) kérése (csak kizárólagos kimeneten; elutasításkor a lejátszó PCM-re lép vissza). */
