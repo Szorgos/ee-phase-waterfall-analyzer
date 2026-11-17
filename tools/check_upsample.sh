@@ -89,8 +89,11 @@ run_timed() {
     local s_t e_t rc out
     s_t=$(date +%s)
     out="$WORK/out_${name//[^a-zA-Z0-9_]/_}.log"
-    "$@" > "$out" 2>&1
-    rc=$?
+    if "$@" > "$out" 2>&1; then
+        rc=0
+    else
+        rc=$?
+    fi
     e_t=$(date +%s)
     grep '^K_METRIC:' "$out" >> "$METRICS_LOG" || true
     if [ $rc -eq 0 ]; then
@@ -219,11 +222,9 @@ if [ $QUICK -eq 0 ]; then
         repo_git archive "$FROZEN_COMMIT" | tar -C "$FROZEN_DIR/src" -xf -
         cmake -S "$FROZEN_DIR/src" -B "$FROZEN_DIR/build" -G Ninja >/dev/null 2>&1
         cmake --build "$FROZEN_DIR/build" --target test_core test_player test_alsa >/dev/null 2>&1
-        set +e
         "$FROZEN_DIR/build/test_core" >/dev/null 2>&1; rc_co=$?
         "$FROZEN_DIR/build/test_alsa" >/dev/null 2>&1; rc_al=$?
         "$FROZEN_DIR/build/test_player" > "$WORK/frozen_player.log" 2>&1; rc_pl=$?
-        set -e
         k1_ok_cnt="$(grep -c '\[OK\].*K1 ' "$WORK/frozen_player.log" || true)"
         if [ $rc_co -ne 0 ] && [ $rc_al -ne 0 ] && [ $rc_pl -ne 0 ] && [ "$k1_ok_cnt" -eq 14 ]; then
             echo "  [OK]   Befagyasztott tesztek implementáció nélkül elbuktak (core=$rc_co, alsa=$rc_al, player=$rc_pl), K1 14/14 zöld!"
