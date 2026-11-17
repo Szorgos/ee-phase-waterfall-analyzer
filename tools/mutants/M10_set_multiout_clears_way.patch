@@ -1,0 +1,11 @@
+--- a/include/ws_bridge.hpp
++++ b/include/ws_bridge.hpp
+@@ -1759,7 +1759,7 @@
+         multiout::MultiConfig c;
+         if (cb_.getMultiOut) {
+             const auto prev = cb_.getMultiOut();
+-            for (int k = 0; k < multiout::kMaxOutputs; ++k) c.outputs[k].way = prev.outputs[k].way;
++            (void)prev;
+         }
+         c.enabled = num(msg, "enabled", 0.0) != 0.0;
+         const json::Value* mode = msg.get("mode");

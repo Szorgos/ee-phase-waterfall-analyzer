@@ -1,0 +1,19 @@
+--- a/include/multi_output.hpp
++++ b/include/multi_output.hpp
+@@ -326,7 +326,7 @@
+         const bool xoverChanged = modeChanged || c.numCrossovers != prev.numCrossovers ||
+                                   c.slopeDbPerOct != cfg_.slopeDbPerOct || c.crossoverHz != cfg_.crossoverHz || !designed_;
+         cfg_ = c;
+-        const int chainsUsed = cfg_.mode == Mode::Zones ? cfg_.numOutputs : 1;
++        const int chainsUsed = cfg_.numOutputs;
+         for (int k = external_ ? 1 : 0; k < chainsUsed; ++k) chains_[k]->applyParamsRT(cfg_.outputs[k].chain);
+         for (int k = 0; k < kMaxOutputs; ++k) {
+             const auto& o = cfg_.outputs[k];
+@@ -569,6 +569,7 @@
+                 }
+             }
+         }
++        if (cfg_.mode == Mode::Crossover) { for (int k = 1; k < nOut; ++k) mainOr(k).process(oL[k], oR[k], m); }
+         for (int k = 0; k < nOut; ++k) {
+             Out& o = outs_[k];
+             const bool on = cfg_.outputs[k].enabled;

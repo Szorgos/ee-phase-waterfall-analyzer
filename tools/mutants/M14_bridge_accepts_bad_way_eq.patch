@@ -1,0 +1,14 @@
+--- a/include/ws_bridge.hpp
++++ b/include/ws_bridge.hpp
+@@ -1865,10 +1865,7 @@
+         }
+         multiout::WayEq w{};
+         std::string err;
+-        if (!parseWayEq(msg, w, err)) {
+-            sendText("{\"type\":\"way_eq_error\",\"error\":\"invalid_params\",\"message\":\"" + media::jsonEscape(err) + "\"}");
+-            return;
+-        }
++        if (!parseWayEq(msg, w, err)) { (void)err; }
+         cb_.setWayEq(outIdx, w);
+         broadcast("{\"type\":\"multiout\",\"status\":" + cb_.multiOutStatus() + "}");
+     }

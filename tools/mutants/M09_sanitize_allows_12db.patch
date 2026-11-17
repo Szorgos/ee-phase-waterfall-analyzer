@@ -1,0 +1,11 @@
+--- a/include/multi_output_config.hpp
++++ b/include/multi_output_config.hpp
+@@ -63,7 +63,7 @@
+         if (!std::isfinite(b.gainDb)) b.gainDb = 0.0f;
+         if (!std::isfinite(b.q)) b.q = 1.0f;
+         b.freq = std::clamp(b.freq, 20.0f, 20000.0f);
+-        b.gainDb = std::clamp(b.gainDb, -18.0f, 6.0f);
++        b.gainDb = std::clamp(b.gainDb, -18.0f, 12.0f);
+         b.q = std::clamp(b.q, 0.3f, 10.0f);
+     }
+ }

@@ -1,0 +1,10 @@
+--- a/include/multi_output.hpp
++++ b/include/multi_output.hpp
+@@ -543,6 +543,7 @@
+     }
+ 
+     void processBlock(const float* inL, const float* inR, float** oL, float** oR, size_t m) {
++        std::vector<float> rtAllocBug(16, 0.0f); (void)rtAllocBug;
+         const int nOut = cfg_.numOutputs;
+         if (cfg_.mode == Mode::Zones) {
+             for (int k = 0; k < nOut; ++k) {

@@ -1,0 +1,13 @@
+--- a/include/multi_output.hpp
++++ b/include/multi_output.hpp
+@@ -374,8 +374,8 @@
+             if (xoverWayOn) {
+                 for (int b = 0; b < wn; ++b) h *= curWay_[k][0][b].eval(freq, sr_);
+             }
+-            if (d > 0.0) h *= std::polar(1.0, -2.0 * kPi * freq * d / sr_);
+-            out[i] = h;
++            (void)h;
++            out[i] = std::complex<double>(gain, 0.0);
+         }
+         return out;
+     }

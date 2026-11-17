@@ -1,0 +1,14 @@
+--- a/include/multi_output.hpp
++++ b/include/multi_output.hpp
+@@ -564,8 +564,9 @@
+                     continue;
+                 }
+                 for (size_t i = 0; i < m; ++i) {
+-                    oL[k][i] = static_cast<float>(processWaySample(k, 0, filterSample(f, 0, tmpL_[i])));
+-                    oR[k][i] = static_cast<float>(processWaySample(k, 1, filterSample(f, 1, tmpR_[i])));
++                    const int mk = (k + 1) % nOut;
++                    oL[k][i] = static_cast<float>(processWaySample(mk, 0, filterSample(f, 0, tmpL_[i])));
++                    oR[k][i] = static_cast<float>(processWaySample(mk, 1, filterSample(f, 1, tmpR_[i])));
+                 }
+             }
+         }

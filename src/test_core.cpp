@@ -25,6 +25,14 @@
 #include "sha256.hpp"
 #include "update_logic.hpp"
 #include "media_url.hpp"
+#include "multi_output_config.hpp"
+#ifndef _WIN32
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <unistd.h>
+#include "linux_store.hpp"
+#endif
 
 using namespace ee_analyzer;
 
@@ -2213,6 +2221,510 @@ static void testBridgeLoudnessStereo() {
     bridge.stop();
 }
 
+// =========================================================================
+// Utonkenti EQ (K11 tarolo es K13 hid) befagyasztott tesztek
+// =========================================================================
+
+template <class CfgT>
+concept HasCoreWayCfg = requires(CfgT& c) {
+    c.outputs[0].way.on;
+    c.outputs[0].way.numBands;
+    c.outputs[0].way.bands[0].type;
+    c.outputs[0].way.bands[0].freq;
+    c.outputs[0].way.bands[0].gainDb;
+    c.outputs[0].way.bands[0].q;
+};
+
+template <class CbT, class CfgT>
+concept HasBridgeWayCb = HasCoreWayCfg<CfgT> && requires(CbT& cb) {
+    cb.getMultiOut;
+    cb.setWayEq;
+};
+
+#ifndef _WIN32
+template <class CfgT = multiout::MultiConfig>
+static void testMultiOutStorageImpl() {
+    std::printf("[21] multiout.bin v2 / v1 (2.5.0) / v11 (2.0.7) tárolóteszt (K11)\n");
+    namespace fs = std::filesystem;
+
+    const std::string tmpRoot = "/tmp/aq_k11_store_" + std::to_string(::getpid());
+    std::error_code ec;
+    fs::remove_all(tmpRoot, ec);
+    fs::create_directories(tmpRoot, ec);
+
+    const char* prevXdg = std::getenv("XDG_CONFIG_HOME");
+    const std::string savedXdg = prevXdg ? prevXdg : "";
+    const bool hadXdg = (prevXdg != nullptr);
+#ifdef __APPLE__
+    const char* prevHome = std::getenv("HOME");
+    const std::string savedHome = prevHome ? prevHome : "";
+    ::setenv("HOME", tmpRoot.c_str(), 1);
+    const std::string appDir = tmpRoot + "/Library/Application Support/Aqulify";
+    fs::create_directories(appDir, ec);
+#else
+    ::setenv("XDG_CONFIG_HOME", tmpRoot.c_str(), 1);
+    const std::string appDir = tmpRoot + "/aqulify";
+    fs::create_directories(appDir, ec);
+#endif
+    const std::string binPath = appDir + "/multiout.bin";
+
+    auto restoreEnv = [&] {
+#ifdef __APPLE__
+        if (!savedHome.empty()) ::setenv("HOME", savedHome.c_str(), 1);
+#else
+        if (hadXdg) ::setenv("XDG_CONFIG_HOME", savedXdg.c_str(), 1);
+        else ::unsetenv("XDG_CONFIG_HOME");
+#endif
+        fs::remove_all(tmpRoot, ec);
+    };
+
+    // 1. v2 iras-olvasas oda-vissza (hdr[1] == 2)
+    {
+        CfgT orig{};
+        orig.enabled = true;
+        orig.mode = multiout::Mode::Crossover;
+        orig.numOutputs = 3;
+        orig.numCrossovers = 2;
+        orig.crossoverHz = { 120.0f, 2400.0f, 5000.0f };
+        orig.slopeDbPerOct = 48;
+        orig.outputs[0].band = 0;
+        orig.outputs[1].band = 1;
+        orig.outputs[1].gainDb = -2.5f;
+        orig.outputs[1].delayMs = 1.25f;
+        orig.outputs[2].band = 2;
+        orig.outputs[2].invert = true;
+
+        if constexpr (HasCoreWayCfg<CfgT>) {
+            orig.outputs[1].way.on = true;
+            orig.outputs[1].way.numBands = 2;
+            orig.outputs[1].way.bands[0].type = static_cast<int32_t>(EqBandType::Bell);
+            orig.outputs[1].way.bands[0].freq = 4000.0f;
+            orig.outputs[1].way.bands[0].gainDb = 5.5f;
+            orig.outputs[1].way.bands[0].q = 2.0f;
+            orig.outputs[1].way.bands[1].type = static_cast<int32_t>(EqBandType::LoShelf);
+            orig.outputs[1].way.bands[1].freq = 80.0f;
+            orig.outputs[1].way.bands[1].gainDb = -6.0f;
+            orig.outputs[1].way.bands[1].q = 0.707f;
+        }
+
+        const std::array<std::string, 3> tgts = { "dac_b", "dac_c", "" };
+        const bool okSave = linux_store::saveMultiOut(orig, tgts);
+        CHECK(okSave, "K11: saveMultiOut sikeres");
+
+        uint32_t hdr[4] = {};
+        {
+            std::ifstream f(binPath, std::ios::binary);
+            f.read(reinterpret_cast<char*>(hdr), sizeof(hdr));
+        }
+        std::printf("K_METRIC: {\"test\":\"K11_v2\",\"hdr1\":%u,\"bytes\":%zu}\n",
+                    hdr[1], static_cast<size_t>(fs::file_size(binPath, ec)));
+        CHECK(hdr[0] == linux_store::kMultiMagic && hdr[1] == 2u,
+              "K11: multiout.bin fejléc verziója hdr[1]=%u (elvárt 2)", hdr[1]);
+
+        CfgT loaded{};
+        std::array<std::string, 3> gotTgts{};
+        const bool okLoad = linux_store::loadMultiOut(loaded, gotTgts);
+        const bool sameRaw = okLoad && (std::memcmp(&loaded, &orig, sizeof(orig)) == 0) && gotTgts == tgts;
+        CHECK(sameRaw, "K11: multiout.bin v2 visszaolvasás bitre azonos");
+    }
+
+    // 2. 2.5.0-s (v1) fajl visszafele kompatibilis betoltese
+    {
+        struct OldOutputV1 {
+            bool enabled = true;
+            int32_t band = -1;
+            float gainDb = 0.0f;
+            float delayMs = 0.0f;
+            bool invert = false;
+            ParamData chain = transparentParams();
+        };
+        struct OldMultiV1 {
+            bool enabled = false;
+            multiout::Mode mode = multiout::Mode::Zones;
+            int32_t numOutputs = 2;
+            int32_t numCrossovers = 1;
+            std::array<float, multiout::kMaxCrossovers> crossoverHz = { 80.0f, 1000.0f, 5000.0f };
+            int32_t slopeDbPerOct = 24;
+            std::array<OldOutputV1, multiout::kMaxOutputs> outputs{};
+        };
+
+        OldMultiV1 oldCfg{};
+        oldCfg.enabled = true;
+        oldCfg.mode = multiout::Mode::Crossover;
+        oldCfg.numOutputs = 2;
+        oldCfg.numCrossovers = 1;
+        oldCfg.crossoverHz[0] = 650.0f;
+        oldCfg.slopeDbPerOct = 24;
+        oldCfg.outputs[0].band = 0;
+        oldCfg.outputs[0].gainDb = -1.5f;
+        oldCfg.outputs[1].band = 1;
+        oldCfg.outputs[1].delayMs = 2.0f;
+        oldCfg.outputs[1].invert = true;
+
+        const uint32_t hdr[4] = {
+            linux_store::kMultiMagic, 1u, kParamLayoutVersion, static_cast<uint32_t>(sizeof(OldMultiV1))
+        };
+        std::vector<char> bytes(sizeof(hdr) + sizeof(OldMultiV1));
+        std::memcpy(bytes.data(), hdr, sizeof(hdr));
+        std::memcpy(bytes.data() + sizeof(hdr), &oldCfg, sizeof(OldMultiV1));
+        const std::array<std::string, 3> v1Tgts = { "sink_v1", "", "" };
+        for (const auto& t : v1Tgts) {
+            const uint32_t n = static_cast<uint32_t>(t.size());
+            bytes.insert(bytes.end(), reinterpret_cast<const char*>(&n), reinterpret_cast<const char*>(&n) + 4);
+            bytes.insert(bytes.end(), t.data(), t.data() + n);
+        }
+        {
+            std::ofstream f(binPath, std::ios::binary | std::ios::trunc);
+            f.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        }
+
+        CfgT loaded{};
+        std::array<std::string, 3> gotTgts{};
+        const bool okV1 = linux_store::loadMultiOut(loaded, gotTgts);
+        bool wayClean = false;
+        if constexpr (HasCoreWayCfg<CfgT>) {
+            wayClean = true;
+            for (int k = 0; k < multiout::kMaxOutputs; ++k)
+                wayClean = wayClean && !loaded.outputs[k].way.on && loaded.outputs[k].way.numBands == 0;
+        }
+        CHECK(okV1 && wayClean && loaded.enabled && loaded.mode == multiout::Mode::Crossover &&
+              std::fabs(loaded.crossoverHz[0] - 650.0f) < 1e-4f && loaded.outputs[1].invert &&
+              std::fabs(loaded.outputs[1].delayMs - 2.0f) < 1e-4f && gotTgts[0] == "sink_v1",
+              "K11: 2.5.0-s (v1) multiout.bin betöltődik, way EQ kikapcsolva, adatok változatlanok");
+    }
+
+    // 3. 2.0.7-es (v11) fajl visszafele kompatibilis betoltese
+    {
+        linux_store::legacy::MultiConfigV11 v11{};
+        v11.enabled = true;
+        v11.mode = multiout::Mode::Crossover;
+        v11.numOutputs = 2;
+        v11.numCrossovers = 1;
+        v11.crossoverHz = { 1200.0f, 3000.0f, 6000.0f };
+        v11.slopeDbPerOct = 12;
+        v11.outputs[0].enabled = true; v11.outputs[0].band = 0;
+        v11.outputs[1].enabled = true; v11.outputs[1].band = 1;
+        v11.outputs[1].gainDb = -4.0f;
+        const ParamData defP = transparentParams();
+        std::memcpy(v11.outputs[0].chain, &defP, kParamSizeV11);
+        std::memcpy(v11.outputs[1].chain, &defP, kParamSizeV11);
+
+        const uint32_t hdr[4] = {
+            linux_store::kMultiMagic, 1u, 11u, static_cast<uint32_t>(sizeof(linux_store::legacy::MultiConfigV11))
+        };
+        std::vector<char> bytes(sizeof(hdr) + sizeof(v11));
+        std::memcpy(bytes.data(), hdr, sizeof(hdr));
+        std::memcpy(bytes.data() + sizeof(hdr), &v11, sizeof(v11));
+        for (int i = 0; i < 3; ++i) {
+            const uint32_t n = 0;
+            bytes.insert(bytes.end(), reinterpret_cast<const char*>(&n), reinterpret_cast<const char*>(&n) + 4);
+        }
+        {
+            std::ofstream f(binPath, std::ios::binary | std::ios::trunc);
+            f.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        }
+
+        CfgT loaded{};
+        std::array<std::string, 3> gotTgts{};
+        const bool okV11 = linux_store::loadMultiOut(loaded, gotTgts);
+        bool wayClean = false;
+        if constexpr (HasCoreWayCfg<CfgT>) {
+            wayClean = true;
+            for (int k = 0; k < multiout::kMaxOutputs; ++k)
+                wayClean = wayClean && !loaded.outputs[k].way.on && loaded.outputs[k].way.numBands == 0;
+        }
+        CHECK(okV11 && wayClean && loaded.slopeDbPerOct == 12 &&
+              std::fabs(loaded.crossoverHz[0] - 1200.0f) < 1e-4f &&
+              std::fabs(loaded.outputs[1].gainDb + 4.0f) < 1e-4f,
+              "K11: 2.0.7-es (v11) multiout.bin betöltődik, way EQ kikapcsolva, adatok változatlanok");
+    }
+
+    // 4. Serult es rovid fajlok elutasitasa osszeomlas nelkul
+    {
+        std::vector<char> junk = { 'A', 'M', 'O', 'T', 2, 0, 0, 0, 15, 0 };
+        {
+            std::ofstream f(binPath, std::ios::binary | std::ios::trunc);
+            f.write(junk.data(), static_cast<std::streamsize>(junk.size()));
+        }
+        CfgT loaded{};
+        std::array<std::string, 3> gotTgts{};
+        CHECK(!linux_store::loadMultiOut(loaded, gotTgts), "K11: rövid fájl elutasítva összeomlás nélkül");
+
+        const uint32_t badHdr[4] = { 0xDEADBEEFu, 2u, kParamLayoutVersion, sizeof(CfgT) };
+        std::vector<char> badBytes(sizeof(badHdr) + sizeof(CfgT), 0);
+        std::memcpy(badBytes.data(), badHdr, sizeof(badHdr));
+        {
+            std::ofstream f(binPath, std::ios::binary | std::ios::trunc);
+            f.write(badBytes.data(), static_cast<std::streamsize>(badBytes.size()));
+        }
+        CHECK(!linux_store::loadMultiOut(loaded, gotTgts), "K11: sérült magic elutasítva összeomlás nélkül");
+    }
+
+    restoreEnv();
+}
+#endif
+
+template <class CbT = BridgeCallbacks, class CfgT = multiout::MultiConfig>
+static void testBridgeWayEqImpl() {
+    std::printf("[22] Híd: set_way_eq, broadcast, validáció, set_multiout megőrzés és admin jogosultság (K13)\n");
+    if constexpr (HasBridgeWayCb<CbT, CfgT>) {
+        std::mutex mu;
+        CfgT curMulti{};
+        curMulti.enabled = true;
+        curMulti.mode = multiout::Mode::Crossover;
+        curMulti.numOutputs = 2;
+        curMulti.numCrossovers = 1;
+        curMulti.crossoverHz[0] = 500.0f;
+        curMulti.slopeDbPerOct = 24;
+        curMulti.outputs[0].band = 0;
+        curMulti.outputs[1].band = 1;
+        std::array<std::string, 3> curSinks = { "dac_b", "", "" };
+        std::string savedRemote;
+
+        auto buildMockMultiStatus = [&] {
+            std::lock_guard<std::mutex> lk(mu);
+            std::string j = "{";
+            j += "\"supported\":true,";
+            j += "\"enabled\":" + std::string(curMulti.enabled ? "true" : "false") + ",";
+            j += "\"mode\":\"" + std::string(curMulti.mode == multiout::Mode::Crossover ? "crossover" : "zones") + "\",";
+            j += "\"slope\":" + std::to_string(curMulti.slopeDbPerOct) + ",";
+            j += "\"crossovers\":[" + std::to_string(curMulti.crossoverHz[0]) + "],";
+            j += "\"outputs\":[";
+            for (int k = 0; k < curMulti.numOutputs; ++k) {
+                if (k > 0) j += ",";
+                const auto& o = curMulti.outputs[k];
+                j += "{\"band\":" + std::to_string(o.band) + ",\"gain\":" + std::to_string(o.gainDb) + ",\"way\":{";
+                j += "\"on\":" + std::string(o.way.on ? "true" : "false") + ",\"bands\":[";
+                for (int b = 0; b < o.way.numBands; ++b) {
+                    if (b > 0) j += ",";
+                    const auto& bd = o.way.bands[b];
+                    const char* tn = bd.type == static_cast<int32_t>(EqBandType::LoShelf) ? "lowshelf"
+                                   : bd.type == static_cast<int32_t>(EqBandType::HiShelf) ? "highshelf" : "bell";
+                    j += "{\"type\":\"" + std::string(tn) + "\",\"freq\":" + std::to_string(bd.freq) +
+                         ",\"gain\":" + std::to_string(bd.gainDb) + ",\"q\":" + std::to_string(bd.q) + "}";
+                }
+                j += "]}}";
+            }
+            j += "]}";
+            return j;
+        };
+
+        ParamData curP = transparentParams();
+        CbT cb{};
+        cb.pullAudio = [](float*, size_t) -> size_t { return 0; };
+        cb.sampleRate = [] { return 48000.0; };
+        cb.getParams = [&] { std::lock_guard<std::mutex> lk(mu); return curP; };
+        cb.setParams = [&](const ParamData& p) { std::lock_guard<std::mutex> lk(mu); curP = p; };
+        cb.saveRemote = [&](const std::string& s) { std::lock_guard<std::mutex> lk(mu); savedRemote = s; return true; };
+        cb.loadRemote = [&] { std::lock_guard<std::mutex> lk(mu); return savedRemote; };
+        cb.getMultiOut = [&] { std::lock_guard<std::mutex> lk(mu); return curMulti; };
+        cb.multiOutStatus = buildMockMultiStatus;
+        cb.setMultiOut = [&](const CfgT& c, const std::array<std::string, 3>& s) {
+            std::lock_guard<std::mutex> lk(mu);
+            curMulti = c;
+            curSinks = s;
+        };
+        cb.setWayEq = [&](int output, const decltype(curMulti.outputs[0].way)& w) {
+            std::lock_guard<std::mutex> lk(mu);
+            if (output >= 0 && output < multiout::kMaxOutputs) {
+                curMulti.outputs[output].way = w;
+                multiout::sanitize(curMulti);
+            }
+        };
+
+        WebSocketBridge bridge(47899);
+        const bool started = bridge.start(cb);
+        CHECK(started, "K13: a híd elindul a 47899-es porton");
+        if (!started) return;
+
+        net::socket_t s1 = wsConnectLive(47899, "/");
+        net::socket_t s2 = wsConnectLive(47899, "/");
+        CHECK(s1 != net::kInvalidSocket && s2 != net::kInvalidSocket, "K13: két helyi kliens csatlakozik");
+        if (s1 == net::kInvalidSocket || s2 == net::kInvalidSocket) {
+            if (s1 != net::kInvalidSocket) net::closeSocket(s1);
+            if (s2 != net::kInvalidSocket) net::closeSocket(s2);
+            bridge.stop();
+            return;
+        }
+        wsWaitFor(s1, "\"modules\"", 1000);
+        wsWaitFor(s2, "\"modules\"", 1000);
+
+        wsSendText(s1, "{\"type\":\"set_way_eq\",\"output\":1,\"on\":true,\"bands\":[{\"type\":\"bell\",\"freq\":4000,\"gain\":5.5,\"q\":1.5}]}");
+        std::string b1 = wsWaitFor(s1, "\"type\":\"multiout\"", 2000);
+        std::string b2 = wsWaitFor(s2, "\"type\":\"multiout\"", 2000);
+        const bool ok1 = !b1.empty() && b1.find("\"way\":{\"on\":true") != std::string::npos && b1.find("4000") != std::string::npos;
+        const bool ok2 = !b2.empty() && b2.find("\"way\":{\"on\":true") != std::string::npos && b2.find("4000") != std::string::npos;
+        CHECK(ok1 && ok2, "K13: set_way_eq broadcast mindkét klienshez eljut");
+
+        auto snapshotBefore = [&] { std::lock_guard<std::mutex> lk(mu); return curMulti; };
+        const CfgT refGood = snapshotBefore();
+
+        const char* badMsgs[] = {
+            "{\"type\":\"set_way_eq\",\"output\":9,\"on\":true,\"bands\":[]}",
+            "{\"type\":\"set_way_eq\",\"output\":1,\"bands\":[]}",
+            "{\"type\":\"set_way_eq\",\"output\":1,\"on\":true,\"bands\":[{\"type\":\"bell\",\"freq\":\"abc\",\"gain\":2,\"q\":1}]}",
+            "{\"type\":\"set_way_eq\",\"output\":1,\"on\":true,\"bands\":[{\"type\":\"bandpass\",\"freq\":1000,\"gain\":2,\"q\":1}]}"
+        };
+        bool allRejected = true;
+        for (const char* m : badMsgs) {
+            wsSendText(s1, m);
+            std::string err = wsWaitFor(s1, "\"way_eq_error\"", 1500);
+            std::lock_guard<std::mutex> lk(mu);
+            if (err.empty() || std::memcmp(&curMulti, &refGood, sizeof(refGood)) != 0) allRejected = false;
+        }
+        CHECK(allRejected, "K13: hibás set_way_eq üzenetek elutasítva (way_eq_error), az állapot változatlan");
+
+        wsSendText(s1, "{\"type\":\"set_multiout\",\"enabled\":1,\"mode\":\"crossover\",\"slope\":24,\"crossovers\":[600],"
+                       "\"outputs\":[{\"band\":0,\"gain\":0,\"delay\":0,\"invert\":0,\"enabled\":1},"
+                       "{\"sink\":\"dac_b\",\"band\":1,\"gain\":-1,\"delay\":0,\"invert\":0,\"enabled\":1}]}");
+        std::string moRes = wsWaitFor(s1, "\"type\":\"multiout\"", 2000);
+        bool preserved = !moRes.empty();
+        {
+            std::lock_guard<std::mutex> lk(mu);
+            preserved = preserved && curMulti.outputs[1].way.on && curMulti.outputs[1].way.numBands == 1 &&
+                        std::fabs(curMulti.outputs[1].way.bands[0].freq - 4000.0f) < 1e-3f;
+        }
+        CHECK(preserved, "K13: set_multiout (way mező nélkül) megőrzi az útonkénti EQ-t");
+
+        wsSendText(s1, "{\"type\":\"set_remote\",\"enabled\":true,\"port\":47920}");
+        wsWaitFor(s1, "\"enabled\":true", 2000);
+        wsSendText(s1, "{\"type\":\"remote_new_code\"}");
+        std::string code;
+        const auto codeUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(3000);
+        while (std::chrono::steady_clock::now() < codeUntil) {
+            std::string codeMsg = wsWaitFor(s1, "\"code\":\"", 500);
+            code = jsonField(codeMsg, "code");
+            if (code.size() == 6) break;
+        }
+        CHECK(code.size() == 6, "K13: párosító kód lekérve (%s)", code.c_str());
+        if (code.size() == 6) {
+            net::socket_t sRem = wsConnectLive(47920, "/?pair=" + code + "&client=aqulify_desktop&name=Guest");
+            CHECK(sRem != net::kInvalidSocket, "K13: távoli nem-admin kliens csatlakozott");
+            if (sRem != net::kInvalidSocket) {
+                wsWaitFor(sRem, "\"type\":\"paired\"", 2000);
+                wsSendText(sRem, "{\"type\":\"set_way_eq\",\"output\":1,\"on\":false,\"bands\":[]}");
+                std::string rErr = wsWaitFor(sRem, "\"error\":\"remote\"", 2000);
+                bool unch = false;
+                {
+                    std::lock_guard<std::mutex> lk(mu);
+                    unch = !rErr.empty() && curMulti.outputs[1].way.on && curMulti.outputs[1].way.numBands == 1;
+                }
+                CHECK(unch, "K13: távoli nem-admin kliens set_way_eq kérése elutasítva (remote), állapot változatlan");
+                net::closeSocket(sRem);
+            }
+        }
+
+        net::closeSocket(s1);
+        net::closeSocket(s2);
+        bridge.stop();
+    } else {
+        CHECK(false, "K13: BridgeCallbacks::setWayEq / OutputConfig::way nincs megvalósítva");
+    }
+}
+
+static void testBridgeMultiOutRemoteAuth() {
+    std::printf("[23] Híd: set_multiout távoli jogosultság (nem-admin elutasítva, admin elfogadva)\n");
+    std::mutex mu;
+    multiout::MultiConfig curMulti{};
+    curMulti.enabled = false;
+    curMulti.mode = multiout::Mode::Zones;
+    curMulti.numOutputs = 2;
+    curMulti.crossoverHz[0] = 500.0f;
+    std::array<std::string, 3> curSinks{};
+    std::string savedRemote;
+    int setCalls = 0;
+
+    ParamData curP = transparentParams();
+    BridgeCallbacks cb{};
+    cb.pullAudio = [](float*, size_t) -> size_t { return 0; };
+    cb.sampleRate = [] { return 48000.0; };
+    cb.getParams = [&] { std::lock_guard<std::mutex> lk(mu); return curP; };
+    cb.setParams = [&](const ParamData& p) { std::lock_guard<std::mutex> lk(mu); curP = p; };
+    cb.saveRemote = [&](const std::string& s) { std::lock_guard<std::mutex> lk(mu); savedRemote = s; return true; };
+    cb.loadRemote = [&] { std::lock_guard<std::mutex> lk(mu); return savedRemote; };
+    cb.getMultiOut = [&] { std::lock_guard<std::mutex> lk(mu); return curMulti; };
+    cb.setMultiOut = [&](const multiout::MultiConfig& c, const std::array<std::string, 3>& s) {
+        std::lock_guard<std::mutex> lk(mu);
+        curMulti = c;
+        curSinks = s;
+        ++setCalls;
+    };
+    cb.multiOutStatus = [&] {
+        std::lock_guard<std::mutex> lk(mu);
+        return std::string("{\"supported\":true,\"enabled\":") + (curMulti.enabled ? "true" : "false") +
+               ",\"mode\":\"" + (curMulti.mode == multiout::Mode::Crossover ? "crossover" : "zones") +
+               "\",\"crossovers\":[" + std::to_string(curMulti.crossoverHz[0]) + "]}";
+    };
+
+    WebSocketBridge bridge(47900);
+    const bool started = bridge.start(cb);
+    CHECK(started, "a híd elindul a 47900-as porton");
+    if (!started) return;
+
+    net::socket_t sLocal = wsConnectLive(47900, "/");
+    CHECK(sLocal != net::kInvalidSocket, "helyi kliens csatlakozik a 47900-as portra");
+    if (sLocal == net::kInvalidSocket) { bridge.stop(); return; }
+    wsWaitFor(sLocal, "\"modules\"", 1000);
+
+    wsSendText(sLocal, "{\"type\":\"set_remote\",\"enabled\":true,\"port\":47921}");
+    std::string remOn = wsWaitFor(sLocal, "\"enabled\":true", 2000);
+    CHECK(!remOn.empty(), "távoli elérés bekapcsolva (47921)");
+
+    wsSendText(sLocal, "{\"type\":\"remote_new_code\"}");
+    std::string code;
+    const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(3000);
+    while (std::chrono::steady_clock::now() < until) {
+        std::string msg = wsWaitFor(sLocal, "\"code\":\"", 500);
+        code = jsonField(msg, "code");
+        if (code.size() == 6) break;
+    }
+    CHECK(code.size() == 6, "párosító kód lekérve: %s", code.c_str());
+
+    if (code.size() == 6) {
+        net::socket_t sRem = wsConnectLive(47921, "/?pair=" + code + "&client=aqulify_desktop&name=MultiGuest");
+        CHECK(sRem != net::kInvalidSocket, "távoli kliens csatlakozik");
+        if (sRem != net::kInvalidSocket) {
+            std::string paired = wsWaitFor(sRem, "\"type\":\"paired\"", 2000);
+            std::string devId = jsonField(paired, "id");
+            CHECK(!devId.empty(), "párosított eszköz ID: %s", devId.c_str());
+
+            const char* moReq = "{\"type\":\"set_multiout\",\"enabled\":1,\"mode\":\"crossover\",\"slope\":24,"
+                                "\"crossovers\":[800],\"outputs\":[{\"band\":0,\"gain\":-3},{\"sink\":\"dac_b\",\"band\":1,\"gain\":2}]}";
+
+            // 1. Nem-admin tavoli kliens -> elutasitva, beallitas valtozatlan
+            wsSendText(sRem, moReq);
+            std::string errMsg = wsWaitFor(sRem, "\"error\":\"remote\"", 2000);
+            bool unchanged = false;
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                unchanged = !errMsg.empty() && setCalls == 0 && !curMulti.enabled &&
+                            curMulti.mode == multiout::Mode::Zones &&
+                            std::fabs(curMulti.crossoverHz[0] - 500.0f) < 1e-3f;
+            }
+            CHECK(unchanged, "nem-admin távoli kliens set_multiout kérése elutasítva (remote), állapot változatlan");
+
+            // 2. Admin jog megadasa utan -> elfogadva
+            wsSendText(sLocal, "{\"type\":\"remote_set_admin\",\"id\":\"" + devId + "\",\"admin\":true}");
+            std::this_thread::sleep_for(std::chrono::milliseconds(80));
+
+            wsSendText(sRem, moReq);
+            std::string okMsg = wsWaitFor(sRem, "\"type\":\"multiout\"", 2000);
+            bool accepted = false;
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                accepted = !okMsg.empty() && setCalls == 1 && curMulti.enabled &&
+                           curMulti.mode == multiout::Mode::Crossover &&
+                           std::fabs(curMulti.crossoverHz[0] - 800.0f) < 1e-3f;
+            }
+            CHECK(accepted, "admin távoli kliens set_multiout kérése elfogadva, konfiguráció frissült");
+            net::closeSocket(sRem);
+        }
+    }
+
+    net::closeSocket(sLocal);
+    bridge.stop();
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
@@ -2238,6 +2750,11 @@ int main() {
     testRemoteRelay();
     testRemoteAdmin();
     testVersionCheck();
+#ifndef _WIN32
+    testMultiOutStorageImpl();
+#endif
+    testBridgeWayEqImpl();
+    testBridgeMultiOutRemoteAuth();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

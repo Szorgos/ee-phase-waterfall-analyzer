@@ -1,0 +1,11 @@
+--- a/include/multi_output.hpp
++++ b/include/multi_output.hpp
+@@ -630,7 +630,7 @@
+     }
+ 
+     double processWaySample(int k, int ch, double x) {
+-        if (cfg_.mode != Mode::Crossover) return x;
++        (void)k; (void)ch; return x;
+         if (fadePos_[k][ch] == 0) {
+             if (!curWayOn_[k]) return x;
+             double y = x;

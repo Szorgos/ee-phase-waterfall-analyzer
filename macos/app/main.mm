@@ -30,6 +30,7 @@
 #include "audio_options.hpp"
 #include "linux_store.hpp"
 #include "mac_engine.hpp"
+#include "multi_output.hpp"
 #include "mac_media.hpp"
 #include "ws_bridge.hpp"
 #include "startup_restore.hpp"
@@ -696,9 +697,23 @@ struct Core {
             if (k) s += ",";
             s += "{\"sink\":\"" + jsonEscape(k == 0 ? std::string() : c->multiTargets[k - 1]) + "\",\"band\":" + std::to_string(o.band) +
                  ",\"gain\":" + std::to_string(o.gainDb) + ",\"delay\":" + std::to_string(o.delayMs) + ",\"invert\":" +
-                 (o.invert ? "true" : "false") + ",\"enabled\":" + (o.enabled ? "true" : "false") + "}";
+                 (o.invert ? "true" : "false") + ",\"enabled\":" + (o.enabled ? "true" : "false") +
+                 ",\"way\":" + multiout::wayEqToJson(o.way) + "}";
         }
-        return s + "],\"zones\":" + c->engine.multiStatusJson() + ",\"sinks\":" + sinks + "}";
+        const double curSr = std::max(1.0, static_cast<double>(c->engine.sampleRate()));
+        return s + "],\"zones\":" + c->engine.multiStatusJson() + ",\"response\":" + multiout::multiResponseJson(m, curSr) + ",\"sinks\":" + sinks + "}";
+    };
+    cb.getMultiOut = [c]() -> multiout::MultiConfig {
+        std::lock_guard<std::mutex> lk(c->multiMutex);
+        return c->multiState;
+    };
+    cb.setWayEq = [c](int output, const multiout::WayEq& w) {
+        std::lock_guard<std::mutex> lk(c->multiMutex);
+        if (output < 0 || output >= c->multiState.numOutputs || output >= multiout::kMaxOutputs) return;
+        c->multiState.outputs[output].way = w;
+        multiout::sanitize(c->multiState);
+        c->engine.setMultiOutput(c->multiState, c->multiTargets);
+        c->multiDirty = true;
     };
     cb.getZoneParams = [c](int zone) -> ParamData {
         std::lock_guard<std::mutex> lk(c->multiMutex);

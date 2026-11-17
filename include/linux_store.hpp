@@ -146,12 +146,24 @@ struct MultiConfigV11 {
     std::array<float, multiout::kMaxCrossovers> crossoverHz; int32_t slopeDbPerOct;
     std::array<OutputConfigV11, multiout::kMaxOutputs> outputs;
 };
+struct OutputConfigV1 {
+    bool enabled; int32_t band; float gainDb; float delayMs; bool invert;
+    ParamData chain;
+};
+struct MultiConfigV1 {
+    bool enabled; multiout::Mode mode; int32_t numOutputs; int32_t numCrossovers;
+    std::array<float, multiout::kMaxCrossovers> crossoverHz; int32_t slopeDbPerOct;
+    std::array<OutputConfigV1, multiout::kMaxOutputs> outputs;
+};
 } // namespace legacy
 static_assert(sizeof(legacy::MultiConfigV11) ==
-                  sizeof(multiout::MultiConfig) - multiout::kMaxOutputs * (sizeof(ParamData) - kParamSizeV11),
+                  sizeof(legacy::MultiConfigV1) - multiout::kMaxOutputs * (sizeof(ParamData) - kParamSizeV11),
               "a v11-es multiout.bin elrendezése nem egyezik");
+static_assert(sizeof(legacy::MultiConfigV1) ==
+                  sizeof(multiout::MultiConfig) - multiout::kMaxOutputs * sizeof(multiout::WayEq),
+              "a 2.5.0-s (v1) multiout.bin elrendezése nem egyezik");
 inline bool saveMultiOut(const multiout::MultiConfig& c, const std::array<std::string, 3>& targets) {
-    const uint32_t hdr[4] = { kMultiMagic, 1u, kParamLayoutVersion, static_cast<uint32_t>(sizeof(multiout::MultiConfig)) };
+    const uint32_t hdr[4] = { kMultiMagic, 2u, kParamLayoutVersion, static_cast<uint32_t>(sizeof(multiout::MultiConfig)) };
     std::vector<char> b(sizeof(hdr) + sizeof(multiout::MultiConfig));
     std::memcpy(b.data(), hdr, sizeof(hdr));
     std::memcpy(b.data() + sizeof(hdr), &c, sizeof(multiout::MultiConfig));
@@ -168,16 +180,33 @@ inline bool loadMultiOut(multiout::MultiConfig& c, std::array<std::string, 3>& t
     if (!f) return false;
     std::vector<char> b((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     uint32_t hdr[4] = {};
-    if (b.size() < sizeof(hdr) + sizeof(multiout::MultiConfig)) return false;
+    if (b.size() < sizeof(hdr)) return false;
     std::memcpy(hdr, b.data(), sizeof(hdr));
-    if (hdr[0] != kMultiMagic || hdr[1] != 1u) return false;
+    if (hdr[0] != kMultiMagic) return false;
     multiout::MultiConfig tmp;
     size_t pos = sizeof(hdr);
-    if (hdr[2] == kParamLayoutVersion && hdr[3] == sizeof(multiout::MultiConfig)) {
+    if (hdr[1] == 2u && hdr[2] == kParamLayoutVersion && hdr[3] == sizeof(multiout::MultiConfig)) {
+        if (b.size() < pos + sizeof(multiout::MultiConfig)) return false;
         std::memcpy(static_cast<void*>(&tmp), b.data() + pos, sizeof(multiout::MultiConfig));
         pos += sizeof(multiout::MultiConfig);
-    } else if (hdr[2] == 11 && hdr[3] == sizeof(legacy::MultiConfigV11)) {
+    } else if (hdr[1] == 1u && hdr[2] == kParamLayoutVersion && hdr[3] == sizeof(legacy::MultiConfigV1)) {
+        // a 2.5.0 fájlja (v1): útonkénti EQ nélküli MultiConfig
+        if (b.size() < pos + sizeof(legacy::MultiConfigV1)) return false;
+        legacy::MultiConfigV1 o;
+        std::memcpy(static_cast<void*>(&o), b.data() + pos, sizeof(o));
+        pos += sizeof(o);
+        tmp.enabled = o.enabled; tmp.mode = o.mode; tmp.numOutputs = o.numOutputs; tmp.numCrossovers = o.numCrossovers;
+        tmp.crossoverHz = o.crossoverHz; tmp.slopeDbPerOct = o.slopeDbPerOct;
+        for (int k = 0; k < multiout::kMaxOutputs; ++k) {
+            auto& n = tmp.outputs[k];
+            const auto& v = o.outputs[k];
+            n.enabled = v.enabled; n.band = v.band; n.gainDb = v.gainDb; n.delayMs = v.delayMs; n.invert = v.invert;
+            n.chain = v.chain;
+            n.way = {};
+        }
+    } else if (hdr[1] == 1u && hdr[2] == 11 && hdr[3] == sizeof(legacy::MultiConfigV11)) {
         // a 2.0.7 fájlja (params v11): a zónák lánca a kimeneti fokozat nélkül
+        if (b.size() < pos + sizeof(legacy::MultiConfigV11)) return false;
         legacy::MultiConfigV11 o;
         std::memcpy(static_cast<void*>(&o), b.data() + pos, sizeof(o));
         pos += sizeof(o);
