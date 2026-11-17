@@ -202,7 +202,7 @@ if [ $QUICK -eq 0 ]; then
     mkdir -p "$MUT_SRC"
     tar -C "$SRC" -cf - . | tar -C "$MUT_SRC" -xf -
     find "$MUT_SRC/include" "$MUT_SRC/src" -type f -exec sed -i 's/\r$//' {} +
-    cmake -S "$MUT_SRC" -B "$MUT_BUILD" -G Ninja >/dev/null
+    find "$SRC/include" "$SRC/src" -type f -exec sed -i 's/\r$//' {} +
     cmake -S "$MUT_SRC" -B "$MUT_BUILD" -G Ninja >/dev/null
     cmake --build "$MUT_BUILD" --target test_multiout test_core >/dev/null 2>&1
 
@@ -210,8 +210,7 @@ if [ $QUICK -eq 0 ]; then
         [ -f "$patch" ] || continue
         mname="$(basename "$patch" .patch)"
         mt0=$(date +%s)
-        if ! git apply --directory="$MUT_SRC" --unsafe-paths "$patch" 2>/dev/null && \
-           ! (cd "$MUT_SRC" && patch -p1 --silent < "$patch"); then
+        if ! (cd "$MUT_SRC" && patch -p1 --silent < "$patch"); then
             echo "  [HIBA] $mname nem alkalmazható!"
             printf "%s\tHIBA (apply)\t-\n" "$mname" >> "$MUTANTS_LOG"
             FAIL=1
@@ -231,7 +230,7 @@ if [ $QUICK -eq 0 ]; then
         fi
         # Visszaállítás az eredeti $SRC-ből
         (cd "$MUT_SRC" && patch -R -p1 --silent < "$patch" >/dev/null 2>&1) || \
-            tar -C "$SRC" -cf - include src | tar -C "$MUT_SRC" -xf -
+            tar -C "$SRC" -cf - include src | tar -C "$MUT_SRC" -xf - && find "$MUT_SRC/include" "$MUT_SRC/src" -type f -exec sed -i 's/\r$//' {} +
         mt1=$(date +%s)
         if [ -n "$killer" ] && [ "$killer" != "BUILD_ERROR" ]; then
             echo "  [OK]   $mname -> megölte: $killer ($((mt1 - mt0)) s)"
