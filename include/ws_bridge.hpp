@@ -49,7 +49,7 @@
 #include "remote_relay.hpp"
 #include "version_check.hpp"
 #include "multi_output_config.hpp"
-#include "room/measurement_manager.hpp"
+#include "room/measurement_session.hpp"
 #include "media_url.hpp"
 #include "bt_link.hpp"
 #include <fstream>
@@ -188,12 +188,12 @@ struct BridgeCallbacks {
      * kerül, így a vezérlő eszközök a gép saját ellenőrzését is látják.
      */
     std::function<std::string()> versionStatus;
-    /** Szobamérés és audio eszközök (E feladat). */
-    std::function<void(const std::string& channel, float levelDb, const std::string& inputDev,
-                       std::function<void(const std::string& step, float progress, const std::string& status)> onProgress,
-                       std::function<void(bool ok, const std::string& err, const std::string& resultJson)> onDone)> startMeasurement;
-    std::function<void()> stopMeasurement;
-    std::function<std::string()> listAudioDevices;
+    /**
+     * Szobamérés: a platform mikrofonfelvevője (room::createMicCapture; nullptr / nincs megadva: a mérés ezen a gépen
+     * nem érhető el). A mérőjelet a playerOpen / playerStop játssza le, a lánc mérési módját a getParams / setParams
+     * adja (room/measurement_session.hpp).
+     */
+    std::function<std::unique_ptr<aqulify::room::MicCapture>()> makeMicCapture;
 };
 
 /**
@@ -405,14 +405,31 @@ public:
             [this]() { return cb_.loadTargets ? cb_.loadTargets() : std::string(); },
             [this](const std::string& j) { return cb_.saveTargets ? cb_.saveTargets(j) : false; }
         );
+        if (cb_.makeMicCapture && cb_.playerOpen && cb_.getParams && cb_.setParams) {
+            aqulify::room::SessionDeps d;
+            d.bypassChain = [this](bool on) { setMeasureBypass(on); };
+            d.playFile = [this](const std::string& path, std::string& err) { return cb_.playerOpen(path, err); };
+            d.stopPlayback = [this] { if (cb_.playerStop) cb_.playerStop(); };
+            d.pauseMedia = [this] { if (cb_.mediaCommand) cb_.mediaCommand("pause", 0.0); };
+            d.makeMic = cb_.makeMicCapture;
+            d.post = [this](const std::string& s) { postBroadcast(s); };
+            measure_ = std::make_unique<aqulify::room::MeasurementSession>(std::move(d));
+        }
         running_ = true;
         thread_ = std::thread(&WebSocketBridge::run, this);
         return true;
     }
 
+    /** Szálbiztos üzenet mindenkinek: a híd szála küldi ki (pl. a mérés munkaszálából). */
+    void postBroadcast(const std::string& text) {
+        std::lock_guard<std::mutex> lk(outboxMu_);
+        outbox_.push_back(text);
+    }
+
     void stop() {
         if (!running_.exchange(false)) return;
         if (thread_.joinable()) thread_.join();
+        measure_.reset();   // egy futó mérés leáll, a lánc visszaáll
         if (discoveryWorker_.joinable()) discoveryWorker_.join();
         joinAsync();
         relayManager_.closeAll();
@@ -616,6 +633,7 @@ private:
             progressAsyncPairing();
             progressAsyncRelayConnect();
             reapAsync();
+            drainOutbox();
 
             // 1. Hang lehúzása a motorból (akkor is, ha nincs kliens, hogy ne torlódjon fel)
             if (cb_.pullAudio) {
@@ -1915,9 +1933,13 @@ private:
             handleStartMeasurement(msg, remote);
             return;
         }
-        if (type == "stop_measurement") {
-            if (cb_.stopMeasurement) cb_.stopMeasurement();
-            sendText("{\"type\":\"measurement_stopped\"}");
+        if (type == "stop_measurement" || type == "stop_level_check") {
+            if (measure_) measure_->stop();
+            if (!measure_ || !measure_->busy()) sendText("{\"type\":\"measurement_stopped\"}");
+            return;
+        }
+        if (type == "start_level_check") {
+            handleStartLevelCheck(msg, remote);
             return;
         }
         if (type == "apply_measurement") {
@@ -2971,6 +2993,12 @@ private:
     // Szobamérés és automatikus profilkezelés (E, H feladat)
     std::string autoProfileConfigJson_{ "{\"enabled\":false,\"mappings\":{}}" };
     aqulify::room::MeasureConfig lastMeasureConfig_{};
+    std::mutex outboxMu_;
+    std::vector<std::string> outbox_;
+    std::mutex measureParamsMu_;
+    ParamData measureSavedParams_{};
+    bool measureSaved_ = false;
+    std::unique_ptr<aqulify::room::MeasurementSession> measure_;   // a tagok közül utolsóként: elsőként szűnik meg
 
     static bool parseCalPointsIntoConfig(const json::Value* arr, aqulify::room::MeasureConfig& cfg, std::string& errMsg) {
         cfg.micCal.clear();
@@ -3007,10 +3035,6 @@ private:
             return;
         }
 
-        if (cb_.mediaCommand) {
-            cb_.mediaCommand("pause", 0.0);
-        }
-
         const float levelDb = std::clamp(static_cast<float>(num(msg, "level_db", -20.0)), -60.0f, -6.0f);
         const std::string channel = msg.get("channel") ? msg.get("channel")->stringOr("both") : "both";
         const std::string inputDev = msg.get("input_device") ? msg.get("input_device")->stringOr("") : "";
@@ -3031,29 +3055,70 @@ private:
         }
         lastMeasureConfig_ = mcfg;
 
-        if (!cb_.startMeasurement) {
+        if (!measure_) {
             // Szigorú szabály: a termékkódban NEM lehet hamis szimuláció!
             sendText("{\"type\":\"measurement_error\",\"step_id\":\"measuring\",\"error\":\"NOT_IMPLEMENTED\",\"message\":\"A mikrofonos mérés ezen a gépen még nem érhető el.\"}");
             return;
         }
-
+        std::string err;
+        if (!measure_->startMeasurement(mcfg, inputDev, err)) {
+            sendText("{\"type\":\"measurement_error\",\"step_id\":\"measuring\",\"error\":\"BUSY\",\"message\":\"Már fut egy mérés vagy szintpróba.\"}");
+            return;
+        }
         sendText("{\"type\":\"measurement_started\",\"channel\":\"" + media::jsonEscape(channel) + "\",\"level_db\":" + std::to_string(levelDb) + "}");
+    }
 
-        cb_.startMeasurement(channel, levelDb, inputDev,
-            [this](const std::string& step, float progress, const std::string& status) {
-                sendText("{\"type\":\"measurement_progress\",\"step_id\":\"" + media::jsonEscape(step) +
-                         "\",\"progress\":" + std::to_string(progress) +
-                         ",\"status\":\"" + media::jsonEscape(status) + "\"}");
-            },
-            [this](bool ok, const std::string& err, const std::string& resultJson) {
-                if (!ok) {
-                    sendText("{\"type\":\"measurement_error\",\"step_id\":\"measuring\",\"error\":\"" +
-                             media::jsonEscape(err) + "\",\"message\":\"" + media::jsonEscape(err) + "\"}");
-                } else {
-                    sendText(resultJson);
-                }
-            }
-        );
+    void handleStartLevelCheck(const json::Value& msg, bool remote) {
+        if (remote && !curIsAdmin()) {
+            sendText("{\"type\":\"measurement_error\",\"step_id\":\"auth\",\"error\":\"UNAUTHORIZED\",\"message\":\"A mérés csak a helyi gépről vagy adminisztrátortól indítható.\"}");
+            return;
+        }
+        if (!measure_) {
+            sendText("{\"type\":\"measurement_error\",\"step_id\":\"level_check\",\"error\":\"NOT_IMPLEMENTED\",\"message\":\"A mikrofonos mérés ezen a gépen még nem érhető el.\"}");
+            return;
+        }
+        const float levelDb = std::clamp(static_cast<float>(num(msg, "level_db", -20.0)), -60.0f, -6.0f);
+        const std::string channel = msg.get("channel") ? msg.get("channel")->stringOr("both") : "both";
+        const std::string inputDev = msg.get("input_device") ? msg.get("input_device")->stringOr("") : "";
+        std::string err;
+        if (!measure_->startLevelCheck(inputDev, levelDb, channel, err)) {
+            sendText("{\"type\":\"measurement_error\",\"step_id\":\"level_check\",\"error\":\"BUSY\",\"message\":\"Már fut egy mérés vagy szintpróba.\"}");
+            return;
+        }
+        sendText("{\"type\":\"level_check_started\"}");
+    }
+
+    /**
+     * Mérési mód: az EQ, a konvolver, a hangszínező modulok, az előerősítés és a kimeneti fokozat (késleltetés,
+     * szint, polaritás) ki; a keresztváltó és a limiter marad. Kilépéskor a mérés előtti beállítás áll vissza.
+     */
+    void setMeasureBypass(bool on) {
+        if (!cb_.getParams || !cb_.setParams) return;
+        std::lock_guard<std::mutex> lk(measureParamsMu_);
+        if (on) {
+            if (measureSaved_) return;
+            measureSavedParams_ = cb_.getParams();
+            measureSaved_ = true;
+            ParamData p = measureSavedParams_;
+            p.flags &= ~static_cast<uint32_t>(kFlagEq | kFlagCrossfeed | kFlagConvolver | kFlagBass | kFlagMagic | kFlagMono |
+                                              kFlagAutogain | kFlagOutStage | kFlagLoudness | kFlagStereoTools);
+            p.preampDb = 0.0f;
+            cb_.setParams(p);
+        } else {
+            if (!measureSaved_) return;
+            cb_.setParams(measureSavedParams_);
+            measureSaved_ = false;
+        }
+    }
+
+    void drainOutbox() {
+        std::vector<std::string> out;
+        {
+            std::lock_guard<std::mutex> lk(outboxMu_);
+            if (outbox_.empty()) return;
+            out.swap(outbox_);
+        }
+        for (const auto& s : out) broadcast(s);
     }
 
     void handleApplyMeasurement(const json::Value& msg) {
@@ -3118,14 +3183,9 @@ private:
     }
 
     void handleListAudioDevices() {
-        if (cb_.listAudioDevices) {
-            std::string devs = cb_.listAudioDevices();
-            if (!devs.empty()) {
-                sendText("{\"type\":\"audio_devices\"," + devs.substr(1));
-                return;
-            }
-        }
-        sendText("{\"type\":\"audio_devices\",\"inputs\":[{\"id\":\"default\",\"name\":\"Alapértelmezett mikrofon\"}],\"outputs\":[{\"id\":\"default\",\"name\":\"Alapértelmezett kimenet\"}]}");
+        // A valódi bemenetek (a felület az első helyre „Alapértelmezett” elemet tesz); mérés nélkül üres lista
+        if (measure_) sendText(measure_->listInputsJson());
+        else sendText("{\"type\":\"audio_devices\",\"inputs\":[],\"available\":false}");
     }
 
     void checkAutoProfileSwitch(const std::string& sinkName) {

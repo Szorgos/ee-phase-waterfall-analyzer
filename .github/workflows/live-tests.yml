@@ -44,10 +44,16 @@ jobs:
         run: |
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=OFF \
             -DAQULIFY_RNNOISE_MODEL_DIR="$RUNNER_TEMP/rnnoise-model"
-          cmake --build build -j"$(nproc)" --target aqulify-engine test_alsa
+          cmake --build build -j"$(nproc)" --target aqulify-engine test_alsa test_room test_mic_live test_measure_live
 
       - name: ALSA-kimenet tesztje
         run: ./build/test_alsa
+
+      - name: Szobamérés – mag, mikrofonfelvétel és teljes mérés élőben
+        run: |
+          ./build/test_room
+          bash tests/live/mic_live.sh build
+          bash tests/live/measure_live.sh build
 
       - name: Rendszerhangoló teszt (aqulify-tune)
         run: bash tools/pi/test-aqulify-tune.sh

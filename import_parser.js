@@ -525,7 +525,7 @@
     });
 
     if (!text || !String(text).trim()) {
-      return emptyRes("empty", "A fájl üres.");
+      return emptyRes("empty", "");
     }
 
     const numRe = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
@@ -547,7 +547,9 @@
         continue;
       }
 
-      const clean = line.replace(/,/g, " ").replace(/;/g, " ");
+      // Pontosvessző vagy tabulátor mellett a vessző tizedesjel (pl. „20;0,8” vagy „20<tab>0,8”), különben elválasztó
+      const commaIsDecimal = line.includes(";") || line.includes("\t");
+      const clean = commaIsDecimal ? line.replace(/,/g, ".").replace(/;/g, " ") : line.replace(/,/g, " ");
       const tokens = clean.split(/\s+/).filter(Boolean);
 
       if (tokens.length >= 2 && numRe.test(tokens[0]) && numRe.test(tokens[1])) {
@@ -569,10 +571,11 @@
     }
 
     if (points.length === 0) {
-      return emptyRes(invalidDataLines > 0 ? "unparsable" : "empty", "Nem található értelmezhető kalibrációs adatpont.");
+      return emptyRes(invalidDataLines > 0 ? "unparsable" : "empty", "");
     }
+    // errorDetail: nyelvfüggetlen (a hibás érték vagy sor); a mondatot a felület fordítja
     if (points.length < 3) {
-      return emptyRes("tooFewPoints", `Csak ${points.length} pont található (minimum 3 szükséges).`);
+      return emptyRes("tooFewPoints", String(points.length));
     }
 
     let minFreq = points[0].freq;
@@ -583,13 +586,13 @@
     for (let i = 0; i < points.length; ++i) {
       const p = points[i];
       if (p.freq < 10.0 || p.freq > 30000.0) {
-        return emptyRes("outOfFreqRange", `${p.freq} Hz kívül esik a 10 Hz – 30 kHz tartományon.`);
+        return emptyRes("outOfFreqRange", `${p.freq} Hz`);
       }
       if (Math.abs(p.db) > 30.0) {
-        return emptyRes("outOfGainRange", `${p.db} dB korrekció kívül esik a ±30 dB határon.`);
+        return emptyRes("outOfGainRange", `${p.db} dB`);
       }
       if (i > 0 && p.freq <= points[i - 1].freq) {
-        return emptyRes("notIncreasing", `${points[i - 1].freq} Hz után ${p.freq} Hz következik (nem növekvő).`);
+        return emptyRes("notIncreasing", `${points[i - 1].freq} Hz → ${p.freq} Hz`);
       }
       if (p.freq < minFreq) minFreq = p.freq;
       if (p.freq > maxFreq) maxFreq = p.freq;
@@ -621,7 +624,9 @@
     for (let rawLine of lines) {
       const line = rawLine.trim();
       if (!line || line.startsWith("#") || line.startsWith("*") || line.startsWith('"')) continue;
-      const clean = line.replace(/,/g, " ").replace(/;/g, " ");
+      // Pontosvessző vagy tabulátor mellett a vessző tizedesjel (pl. „20;0,8” vagy „20<tab>0,8”), különben elválasztó
+      const commaIsDecimal = line.includes(";") || line.includes("\t");
+      const clean = commaIsDecimal ? line.replace(/,/g, ".").replace(/;/g, " ") : line.replace(/,/g, " ");
       const tokens = clean.split(/\s+/).filter(Boolean);
       if (tokens.length >= 2) {
         const f = parseFloat(tokens[0]);

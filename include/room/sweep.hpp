@@ -5,6 +5,9 @@
  */
 
 #include <cmath>
+#ifndef M_PI   // szigorú (-std=c++17) módban a Windows / macOS fordító nem adja
+#define M_PI 3.14159265358979323846
+#endif
 #include <cstdint>
 #include <vector>
 #include <algorithm>
@@ -66,17 +69,19 @@ inline std::vector<float> generateInverseFilter(double f1, double f2, double dur
     const double T = durationSec;
     const double logRatio = std::log(f2 / f1);
 
-    // Időben megfordított sweep modulálva az inverz spektrális burkolóval: m(t) = exp(-t/T * ln(f2/f1))
+    // Időben megfordított sweep, a pillanatnyi frekvenciával arányos amplitúdóval: m(t) = f(t) / f1 =
+    // exp(t/T * ln(f2/f1)). A log sweep energiasűrűsége 1/f (−3 dB/okt.), a megfordított sweepé szintén: a +6 dB/okt.
+    // moduláció teszi a kettő szorzatát síkká. (A korábbi −6 dB/okt. moduláció −12 dB/okt. dőlést adott.)
     for (size_t i = 0; i < N; ++i) {
         const double t = static_cast<double>(i) / sampleRate;
-        const double env = std::exp(-(t / T) * logRatio);
+        const double env = std::exp((t / T) * logRatio) / (f2 / f1);
         inv[N - 1 - i] = static_cast<float>(sweep[i] * env);
     }
 
-    // Normalizálás úgy, hogy az impulzus amplitúdója pontosan 1.0 legyen
+    // Normalizálás: az `amplitude` szintű sweep és az inverz konvolúciójának csúcsa (az N−1. minta) pontosan 1
     double energy = 0.0;
     for (size_t i = 0; i < N; ++i) {
-        energy += static_cast<double>(sweep[i]) * inv[i];
+        energy += static_cast<double>(sweep[i]) * inv[N - 1 - i];
     }
     if (std::abs(energy) > 1e-12) {
         const float scale = static_cast<float>(1.0 / (energy * amplitude));

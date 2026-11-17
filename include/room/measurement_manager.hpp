@@ -47,7 +47,8 @@ struct MeasureConfig {
     int xoverBand = -1;             // -1: normál kimenet, 0..3: keresztváltó sáv
     float levelDb = -20.0f;         // Lejátszási szint dBFS-ben (max -6 dBFS)
     float durationSec = 3.0f;       // Sweep hossza (másodperc)
-    float startFreq = 20.0f;        // Kezdőfrekvencia Hz
+    float startFreq = 10.0f;        // A sweep kezdőfrekvenciája Hz (egy oktávval a kiértékelt 20 Hz alatt: a sávszél
+                                    // be- és kifutása így nem torzítja a mély tartományt)
     float endFreq = 20000.0f;       // Végfrekvencia Hz
     int smoothingFraction = 6;      // 1/6 oktávos simítás alapértelmezetten
     float maxBoostDb = 3.0f;        // Legnagyobb megengedett kiemelés (biztonság: max +3 dB)
@@ -55,13 +56,17 @@ struct MeasureConfig {
     int maxBands = 10;              // Parametrikus sávok száma
     std::string targetType = "balanced"; // "flat", "balanced" (+3 dB), "bass_boost" (+6 dB)
     std::vector<FreqPoint> micCal;  // Opcionális mikrofon kalibrációs görbe
+    float noiseRms = 0.0f;          // a háttérzaj RMS-e (a lejátszás előtti csendből); 0: nincs zajellenőrzés
 };
 
 struct MeasureResult {
     bool success = false;
     std::string errorCode = "";     // "MIC_TOO_QUIET", "MIC_CLIPPING", "NOISY_ROOM", "NO_INPUT_DEVICE"
     std::string errorMessage = "";
+    // A hang érkezése a felvétel elejéhez képest (ms). Önmagában nem késleltetés-korrekció (benne van a hangkártya
+    // és a rendszer saját késése is); csak két csatorna ugyanazzal az úttal mért értékeinek különbsége értelmes.
     float measuredDelayMs = 0.0f;
+    // A csúcs előjele. A mikrofon / előerősítő polaritása ismeretlen, így ez is csak csatornák között hasonlítható.
     bool invertedPolarity = false;
     float snrDb = 0.0f;
     float peakLevelDbfs = -100.0f;
@@ -162,9 +167,10 @@ public:
     }
 
     /**
-     * Mérés feldolgozása átadott valódi mintákkal.
+     * Egy felvétel elemzése: szintek, dekonvolúció, frekvenciamenet, kalibráció, simítás, 0 dB-re igazítás.
+     * success = true: az elemzés sikerült (javaslat még nincs: finalize).
      */
-    MeasureResult processMeasurement(
+    MeasureResult analyzeRecording(
         const MeasureConfig& cfg,
         uint32_t sampleRate,
         const std::vector<float>& recordedSamples,
@@ -189,7 +195,7 @@ public:
             return res;
         }
 
-        if (!checkLevels(recordedSamples, 0.001f, res)) {
+        if (!checkLevels(recordedSamples, cfg.noiseRms, res)) {
             state_ = MeasureState::Error;
             return res;
         }
@@ -200,19 +206,34 @@ public:
         state_ = MeasureState::MeasuringSweep;
         if (onProgress) onProgress("sweep_playback", 0.3f, "Mérési sweep feldolgozása...");
 
-        auto sweep = generateLogSweep(cfg.startFreq, cfg.endFreq, cfg.durationSec, sampleRate, sweepAmp);
         auto invFilter = generateInverseFilter(cfg.startFreq, cfg.endFreq, cfg.durationSec, sampleRate, sweepAmp);
 
         if (stopRequested_) { state_ = MeasureState::Stopped; return res; }
 
-        // 4. Dekonvolúció (IR kinyerés)
+        // 4. Dekonvolúció (IR kinyerés): a felvétel és az inverz szűrő konvolúciója (FFT), ablakozva
         state_ = MeasureState::Deconvolving;
-        if (onProgress) onProgress("deconvolution", 0.5f, "Impulzusválasz és késleltetés számítása...");
+        if (onProgress) onProgress("deconvolution", 0.5f, "Impulzusválasz számítása...");
 
-        DeconvResult dRes = deconvolve(recordedSamples, invFilter, sampleRate);
-        res.measuredDelayMs = dRes.delayMs;
-        res.invertedPolarity = dRes.invertedPolarity;
-        res.snrDb = dRes.snrDb;
+        FarinaResult dRes = farinaDeconvolve(recordedSamples, invFilter, sampleRate);
+        if (!dRes.ok) {
+            res.success = false;
+            res.errorCode = "NO_SIGNAL";
+            res.errorMessage = "A felvételben nem található a mérőjel.";
+            state_ = MeasureState::Error;
+            return res;
+        }
+        res.measuredDelayMs = static_cast<float>(dRes.arrivalSamples * 1000.0 / sampleRate);
+        res.invertedPolarity = dRes.peakValue < 0.0f;
+        // A jel-zaj viszony a felvétel lejátszás előtti csendjéből (checkLevels, noiseRms) megbízható; az IR csúcs
+        // előtti szakaszában a sávszélek (20 Hz) utólengése is benne van, ezért az csak tartalék, enyhébb határral.
+        if (cfg.noiseRms <= 0.0f) res.snrDb = dRes.snrDb;
+        if (cfg.noiseRms <= 0.0f && dRes.snrDb < 10.0f) {
+            res.success = false;
+            res.errorCode = "NOISY_ROOM";
+            res.errorMessage = "A mérőjel alig emelkedik ki a zajból. Növeld a hangerőt, vagy csökkentsd a zajt.";
+            state_ = MeasureState::Error;
+            return res;
+        }
 
         if (stopRequested_) { state_ = MeasureState::Stopped; return res; }
 
@@ -221,6 +242,11 @@ public:
         if (onProgress) onProgress("analysis", 0.7f, "Frekvenciamenet simítása és kiértékelése...");
 
         res.rawResponse = calculateFrequencyResponse(dRes.ir, sampleRate, 240);
+        // Csak a sweep tartományán belül (a kezdete fölött legalább egy oktávval) érvényes az adat
+        const float evalLow = std::max(20.0f, cfg.startFreq * 2.0f);
+        res.rawResponse.erase(std::remove_if(res.rawResponse.begin(), res.rawResponse.end(), [&](const FreqPoint& p) {
+            return p.freq < evalLow || p.freq > cfg.endFreq;
+        }), res.rawResponse.end());
 
         // Mikrofon kalibrációs görbe érvényesítése (ha megadták)
         if (!cfg.micCal.empty()) {
@@ -230,12 +256,45 @@ public:
         // Törtoktávos simítás
         res.smoothedResponse = smoothSpectrum(res.rawResponse, cfg.smoothingFraction);
 
+        // A szint önkényes (mikrofonerősítés, hangerő): a görbét a 300 Hz – 3 kHz átlagához igazítjuk (0 dB)
+        {
+            double sum = 0.0;
+            int cnt = 0;
+            for (const auto& p : res.smoothedResponse)
+                if (p.freq >= 300.0f && p.freq <= 3000.0f) { sum += p.magDb; ++cnt; }
+            const float ref = cnt > 0 ? static_cast<float>(sum / cnt) : 0.0f;
+            for (auto& p : res.smoothedResponse) p.magDb -= ref;
+            for (auto& p : res.rawResponse) p.magDb -= ref;
+        }
+        res.success = true;
+        return res;
+    }
+
+    /**
+     * Mérés feldolgozása átadott valódi mintákkal: elemzés (analyzeRecording) és javaslat (finalize).
+     */
+    MeasureResult processMeasurement(
+        const MeasureConfig& cfg,
+        uint32_t sampleRate,
+        const std::vector<float>& recordedSamples,
+        ProgressCallback onProgress = nullptr
+    ) {
+        MeasureResult res = analyzeRecording(cfg, sampleRate, recordedSamples, onProgress);
+        if (res.success) finalize(cfg, res, onProgress);
+        return res;
+    }
+
+    /**
+     * A célgörbe, a korrekciós javaslat és az összefoglaló a (simított, 0 dB-re igazított) görbéből. Több mérés
+     * (pl. bal és jobb) átlagára is hívható: ilyenkor a res.smoothedResponse az átlag.
+     */
+    void finalize(const MeasureConfig& cfg, MeasureResult& res, ProgressCallback onProgress = nullptr) {
         // 6. Célgörbe és korrekciós EQ szűrők számítása
         if (onProgress) onProgress("auto_eq", 0.85f, "Optimális akusztikai szűrők számítása...");
 
         float bassBoost = 3.0f; // Alapértelmezett kiegyensúlyozott célgörbe
-        if (cfg.targetType == "bass_boost") bassBoost = 6.0f;
-        else if (cfg.targetType == "flat") bassBoost = 0.0f;
+        if (cfg.targetType == "bass_boost" || cfg.targetType == "room_warm") bassBoost = 6.0f;
+        else if (cfg.targetType == "flat" || cfg.targetType == "channel_match") bassBoost = 0.0f;
 
         res.targetCurve = res.smoothedResponse;
         for (auto& pt : res.targetCurve) {
@@ -262,9 +321,7 @@ public:
 
         res.success = true;
         state_ = MeasureState::Complete;
-        if (onProgress) onProgress("complete", 1.0f, "A szobamérés és korrekció sikeresen elkészült!");
-
-        return res;
+        if (onProgress) onProgress("complete", 1.0f, "A mérés elkészült.");
     }
 
 private:
@@ -274,17 +331,10 @@ private:
     void generateHumanSummary(MeasureResult& res) {
         std::ostringstream hu, en;
 
-        hu << "A szobakorrekció sikeresen elkészült.\n";
-        en << "Room correction completed successfully.\n";
-
-        if (std::fabs(res.measuredDelayMs) > 0.1f) {
-            hu << "• Késleltetés: " << std::fixed << std::setprecision(1) << res.measuredDelayMs << " ms időbeli eltérés beállítva a tökéletes sztereó képért.\n";
-            en << "• Time alignment: " << std::fixed << std::setprecision(1) << res.measuredDelayMs << " ms delay aligned for precise stereo imaging.\n";
-        }
-        if (res.invertedPolarity) {
-            hu << "• Polaritás: Fordított hangszóró-fázis észlelve és automatikusan helyreállítva.\n";
-            en << "• Polarity: Inverted speaker phase detected and automatically corrected.\n";
-        }
+        // Csak azt írjuk, amit a mérés valóban alátámaszt: a késleltetést és a polaritást egyetlen mérés nem
+        // mutatja meg (a hangkártya késése és a mikrofon polaritása ismeretlen) – ezt a csatornák összevetése adja.
+        hu << "A mérés elkészült (jel-zaj viszony: " << static_cast<int>(std::round(res.snrDb)) << " dB).\n";
+        en << "Measurement complete (signal-to-noise ratio: " << static_cast<int>(std::round(res.snrDb)) << " dB).\n";
 
         float maxCut = 0.0f;
         float maxCutFreq = 0.0f;
@@ -303,23 +353,26 @@ private:
         }
 
         if (maxCut < -2.0f) {
-            hu << "• Mélyhangok tisztasága: A " << static_cast<int>(std::round(maxCutFreq)) 
-               << " Hz körüli zavaró szobai dübörgést " << std::fixed << std::setprecision(1) 
-               << std::fabs(maxCut) << " dB-lel mérsékeltük.\n";
-            en << "• Bass clarity: Tamed boomy room resonance around " << static_cast<int>(std::round(maxCutFreq))
+            hu << "• Javaslat: a " << static_cast<int>(std::round(maxCutFreq))
+               << " Hz körüli szobai kiemelés csökkentése " << std::fixed << std::setprecision(1)
+               << std::fabs(maxCut) << " dB-lel.\n";
+            en << "• Proposed: reduce the room boost around " << static_cast<int>(std::round(maxCutFreq))
                << " Hz by " << std::fixed << std::setprecision(1) << std::fabs(maxCut) << " dB.\n";
         }
 
         if (maxBoost > 1.0f) {
-            hu << "• Részletgazdagság: A " << static_cast<int>(std::round(maxBoostFreq)) 
-               << " Hz körüli mélyedést kíméletesen (+ " << std::fixed << std::setprecision(1) 
-               << maxBoost << " dB, hangszóróvédelmi korláttal) megemeltük.\n";
-            en << "• Detail recovery: Gently compensated dip around " << static_cast<int>(std::round(maxBoostFreq))
+            hu << "• Javaslat: a " << static_cast<int>(std::round(maxBoostFreq))
+               << " Hz körüli mélyedés kíméletes emelése (+" << std::fixed << std::setprecision(1)
+               << maxBoost << " dB, hangszóróvédelmi korláttal).\n";
+            en << "• Proposed: gently lift the dip around " << static_cast<int>(std::round(maxBoostFreq))
                << " Hz (+" << std::fixed << std::setprecision(1) << maxBoost << " dB, speaker protection active).\n";
         }
-
-        hu << "• Eredmény: Tisztább vokálok, megfogottabb basszusok, természetes hangzáskép.";
-        en << "• Overall result: Clearer vocals, tighter bass, and natural balance.";
+        if (res.correctionBands.empty()) {
+            hu << "• A mért görbe közel van a célhoz; korrekció nem szükséges.\n";
+            en << "• The measured response is close to the target; no correction needed.\n";
+        }
+        hu << "A javaslat az „Alkalmazás” lépésben kapcsolható be, és egy kattintással visszavonható.";
+        en << "Turn the proposal on in the “Apply” step; it can be undone with one click.";
 
         res.humanSummaryHu = hu.str();
         res.humanSummaryEn = en.str();

@@ -5989,8 +5989,9 @@ var qrcode = function() {
           <div style="display:flex; flex-direction:column; gap:6px;">
             <label style="font-weight:600; font-size:0.85rem;">Mérőmikrofon:</label>
             <select id="rwMicSelect" class="ee-select" style="width:100%;" onchange="onRwMicChanged()">
-              <option value="default">Alapértelmezett mikrofon</option>
+              <option value="default" data-i18n="rw.micDefault">Alapértelmezett mikrofon</option>
             </select>
+            <span id="rwMicAvailNote" style="font-size:0.8rem; color:#e5a50a;"></span>
           </div>
           <div style="display:flex; flex-direction:column; gap:6px;">
             <label style="font-weight:600; font-size:0.85rem;">Kalibrációs fájl (.cal / .txt / .frd / .csv) - opcionális:</label>
@@ -6020,7 +6021,7 @@ var qrcode = function() {
         <div id="rwStep2" class="rw-step-pane" style="display:none; flex-direction:column; gap:14px; flex:1;">
           <p style="margin:0; font-size:0.9rem;">Ellenőrizd, hogy a szobában csend van-e, és a teszthang nem túl halk vagy túl hangos.</p>
           <div style="display:flex; gap:10px; align-items:center;">
-            <button type="button" class="adw-btn primary" id="btnRwTestLevel" onclick="startRwLevelCheck()">Teszthang indítása</button>
+            <button type="button" class="adw-btn primary" id="btnRwTestLevel" onclick="startRwLevelCheck()" data-i18n="rw.levelStart">Teszthang indítása</button>
             <span id="rwLevelStatusText" style="font-weight:600; font-size:0.9rem; color:var(--aq-text);">Kattints a teszthang indítására.</span>
           </div>
           <!-- Szintjelző sáv -->
@@ -9607,6 +9608,12 @@ function applyImportedConfig(parsed, opts) {
   const totalBands = parsed.eqSplit ? (bandsL.length + bandsR.length) : bandsL.length;
   createPresetFromCurrent(opts.presetName, opts.kind);
   let msg = opts.makeToast(activePresetName, totalBands, finalPreamp, preampNote, limiterInfo);
+  if (hasConv) {
+    // Konvolúciós fájlnál a szokásos összefoglaló („Convolver: kikapcsolva”, „N sáv aktív”) félrevezető volna
+    const files = [...new Set([parsed.convL, parsed.convR].filter(Boolean))].join(", ");
+    msg = t("imp.toastConv", { name: activePresetName, files, n: totalBands, preamp: finalPreamp.toFixed(1),
+                               note: preampNote, limiter: limiterInfo });
+  }
   if (hasConv && !convReadyNow) {
     const missing = [...new Set([parsed.convL, parsed.convR].filter(r => r && !findCachedImportFile(r)))];
     if (missing.length) msg += "\n• " + t("cv.missingFiles", { files: missing.join(", ") });
@@ -12519,19 +12526,33 @@ function initPipewireBridge() {
     pipewireWs.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data);
+        if (data && data.type === "measurement_started") {
+          const st = document.getElementById("rwSweepStatusText");
+          if (st) { st.textContent = t('rw.measuring'); st.style.color = 'var(--aq-text)'; }
+        }
         if (data && data.type === "measurement_progress") {
           const pb = document.getElementById("rwSweepProgressBar");
           const pct = document.getElementById("rwSweepProgressPct");
           const st = document.getElementById("rwSweepStatusText");
           if (pb) pb.style.width = Math.round(data.progress * 100) + "%";
           if (pct) pct.textContent = Math.round(data.progress * 100) + "%";
-          if (st && data.status) st.textContent = data.status;
+          // A motor szövege magyar: a felület a lépés azonosítója szerint, a választott nyelven ír
+          if (st) {
+            st.textContent = data.step_id === 'sweep_playback'
+              ? t('rw.measuring') + (typeof data.level_db === 'number' ? ' · ' + t('rw.micLevel', { db: fmtNum(data.level_db, 0) }) : '')
+              : t('rw.analyzing');
+          }
         }
         if (data && data.type === "measurement_result") {
           handleRwMeasurementResult(data);
           setRoomWizardStep(4);
         }
         if (data && data.type === "measurement_error") {
+          const msg = rwErrorText(data);
+          if (data.step_id === 'level_check' || rwLevelRunning) {
+            rwLevelRunning = false;
+            renderRwLevelIdle(msg, true);
+          }
           const pb = document.getElementById("rwSweepProgressBar");
           const pct = document.getElementById("rwSweepProgressPct");
           const st = document.getElementById("rwSweepStatusText");
@@ -12541,25 +12562,43 @@ function initPipewireBridge() {
           if (btnStop) btnStop.style.display = 'none';
           if (pb) pb.style.width = '0%';
           if (pct) pct.textContent = '0%';
-          const msg = data.message || data.error || (typeof t === 'function' ? t('rw.notImplemented') : 'A mikrofonos mérés ezen a gépen még nem érhető el.');
           if (st) {
-            st.textContent = "Hiba: " + msg;
+            st.textContent = msg;
             st.style.color = '#ed333b';
           }
-          if (typeof showToast === "function") showToast("Mérési hiba: " + msg);
+          if (typeof showToast === "function") showToast(msg);
+        }
+        if (data && data.type === "level_check_started") {
+          rwLevelRunning = true;
+          const btn = document.getElementById('btnRwTestLevel');
+          if (btn) btn.textContent = t('rw.levelStop');
+        }
+        if (data && data.type === "mic_level") {
+          renderRwLevel(data.peak_db, data.hold_db);
+        }
+        if (data && (data.type === "mic_level_done" || data.type === "measurement_stopped")) {
+          if (rwLevelRunning) { rwLevelRunning = false; renderRwLevelIdle(); }
         }
         if (data && data.type === "audio_devices" && Array.isArray(data.inputs)) {
           const sel = document.getElementById("rwMicSelect");
           if (sel) {
+            const prev = sel.value;
             sel.innerHTML = "";
+            const def = document.createElement("option");
+            def.value = "default";
+            def.textContent = t('rw.micDefault');
+            sel.appendChild(def);
             data.inputs.forEach(inp => {
               const opt = document.createElement("option");
               opt.value = inp.id;
               opt.textContent = inp.name;
               sel.appendChild(opt);
             });
+            if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
             loadRwCalForCurrentMic();
           }
+          const note = document.getElementById("rwMicAvailNote");
+          if (note) note.textContent = data.available === false ? t('rw.notImplemented') : '';
         }
         if (data && data.type === "auto_profile_switched" && data.profile) {
           if (typeof showToast === "function") showToast(t("profile.autoSwitch") + ": " + data.profile);
@@ -14432,20 +14471,18 @@ function renderRwCalStatus(errMsg) {
     return;
   }
   if (!rwActiveMicCal) {
-    status.textContent = t('rw.calNone') || 'Nincs kalibráció betöltve (lineáris mikrofon átvitel).';
+    status.textContent = t('rw.calNone');
     status.style.color = 'var(--aq-text-2)';
     if (btnClear) btnClear.style.display = 'none';
     return;
   }
   const p = rwActiveMicCal.parsed;
-  const fMin = Math.round(p.minFreq);
-  const fMax = Math.round(p.maxFreq);
-  const maxStr = (p.maxCorrectionDb >= 0 ? '+' : '') + p.maxCorrectionDb.toFixed(1) + ' dB';
-  let txt = `${rwActiveMicCal.fileName}: ${p.points.length} pont (${fMin} Hz – ${fMax} Hz, max: ${maxStr}`;
-  if (typeof p.sensitivity === 'number') txt += `, érzékenység: ${p.sensitivity.toFixed(1)} dB`;
-  txt += ')';
+  const maxStr = (p.maxCorrectionDb >= 0 ? '+' : '') + fmtNum(p.maxCorrectionDb, 1) + ' dB';
+  let txt = t('rw.calSummary', { file: rwActiveMicCal.fileName, n: p.points.length,
+    fmin: fmtNum(Math.round(p.minFreq)), fmax: fmtNum(Math.round(p.maxFreq)), max: maxStr });
+  if (typeof p.sensitivity === 'number') txt += ' · ' + t('rw.calSens', { sens: fmtNum(p.sensitivity, 1) });
   if (/0\s*(?:°|deg)/i.test(rwActiveMicCal.fileName)) {
-    txt += ' — ' + (t('rw.cal0DegWarn') || 'Megjegyzés: 0°-os fájl észlelve; szobaméréshez a felfelé néző (90°) változat ajánlott.');
+    txt += ' — ' + t('rw.cal0DegWarn');
   }
   status.textContent = txt;
   status.style.color = 'var(--aq-green)';
@@ -14529,23 +14566,21 @@ function onRwCalFileLoaded(input) {
   reader.onload = function(e) {
     const text = e.target.result;
     if (typeof AqulifyImport === 'undefined' || typeof AqulifyImport.parseMicCalibration !== 'function') {
-      renderRwCalStatus('A kalibráció-értelmező modul nem érhető el.');
+      renderRwCalStatus(t('rw.calErrFormat'));
       input.value = '';
       return;
     }
     const parsed = AqulifyImport.parseMicCalibration(text);
     if (!parsed.ok) {
       const msgMap = {
-        empty: t('rw.calErrEmpty') || 'A kalibrációs fájl üres.',
-        tooFewPoints: t('rw.calErrFew') || 'Túl kevés érvényes pont (minimum 3 szükséges).',
-        notIncreasing: t('rw.calErrOrder') || 'A frekvenciák nem növekvő sorrendben vannak.',
-        outOfFreqRange: t('rw.calErrFreq') || 'Frekvenciaérték a 10 Hz – 30 kHz határon kívül esik.',
-        outOfGainRange: t('rw.calErrGain') || 'Korrekciós érték a ±30 dB határon kívül esik.',
-        unparsable: t('rw.calErrFormat') || 'Értelmezhetetlen sor a kalibrációs fájlban.'
+        empty: 'rw.calErrEmpty', tooFewPoints: 'rw.calErrFew', notIncreasing: 'rw.calErrOrder',
+        outOfFreqRange: 'rw.calErrFreq', outOfGainRange: 'rw.calErrGain', unparsable: 'rw.calErrFormat'
       };
-      const reason = (msgMap[parsed.error] || 'Érvénytelen kalibrációs fájl.') + (parsed.errorDetail ? ' (' + parsed.errorDetail + ')' : '');
+      // errorDetail: a hibás érték vagy sor (nyelvfüggetlen)
+      const reason = t(msgMap[parsed.error] || 'rw.calErrFormat') + (parsed.errorDetail ? ' (' + parsed.errorDetail + ')' : '');
       input.value = '';
-      renderRwCalStatus(reason);
+      // Hibás fájlnál a korábban betöltött kalibráció marad érvényben (ha volt) – ezt is kiírjuk
+      renderRwCalStatus(reason + (rwActiveMicCal ? ' ' + t('rw.calKeptPrevious', { file: rwActiveMicCal.fileName }) : ''));
       return;
     }
     rwActiveMicCal = { fileName: file.name, parsed };
@@ -14557,19 +14592,66 @@ function onRwCalFileLoaded(input) {
   reader.readAsText(file);
 }
 
-// 2. Szintellenőrzés (kizárólag valós hardveres rögzítéssel; jelenleg még nincs bekötve)
+// 2. Szintellenőrzés: a motor rózsaszín zajt játszik a mérés szintjén, közben a mikrofon valódi szintjét küldi
+// ("mic_level", 100 ms-onként). Második kattintás: leállítás.
+let rwLevelRunning = false;
+
 function startRwLevelCheck() {
+  const ws = (typeof pipewireWs !== 'undefined') ? pipewireWs : null;
+  if (rwLevelRunning) {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'stop_level_check' }));
+    return;
+  }
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    renderRwLevelIdle(t('rw.notImplemented'), true);
+    return;
+  }
+  const lvl = document.getElementById('rwLevelSlider');
+  const ch = document.getElementById('rwChannelSelect');
+  ws.send(JSON.stringify({ type: 'start_level_check', input_device: getRwMicId(),
+                           level_db: lvl ? parseFloat(lvl.value) : -20, channel: ch ? ch.value : 'both' }));
+}
+
+/** A szintjelző: −60 .. 0 dBFS a sáv szélességén; zöld a −40 .. −10 dBFS tartományban. */
+function renderRwLevel(peakDb, holdDb) {
   const meterBar = document.getElementById('rwLevelMeterBar');
   const statusText = document.getElementById('rwLevelStatusText');
-  if (meterBar) {
-    meterBar.style.width = '0%';
-    meterBar.style.background = 'var(--aq-amber)';
-  }
+  const db = typeof holdDb === 'number' ? holdDb : peakDb;
+  const pct = Math.max(0, Math.min(100, (db + 60) / 60 * 100));
+  let color = 'var(--aq-green)', key = 'rw.levelOk';
+  if (db < -40) { color = 'var(--aq-amber)'; key = 'rw.levelLow'; }
+  else if (db > -6) { color = '#ed333b'; key = 'rw.levelHigh'; }
+  if (meterBar) { meterBar.style.width = pct.toFixed(0) + '%'; meterBar.style.background = color; }
   if (statusText) {
-    statusText.textContent = (typeof t === 'function' ? t('rw.levelNotAvailable') : '') ||
-      'A mikrofon szintmérése ezen a gépen még nem érhető el.';
-    statusText.style.color = '#e5a50a';
+    statusText.textContent = t('rw.micLevel', { db: fmtNum(db, 0) }) + ' — ' + t(key);
+    statusText.style.color = color;
   }
+}
+
+function renderRwLevelIdle(msg, isError) {
+  const btn = document.getElementById('btnRwTestLevel');
+  if (btn) btn.textContent = t('rw.levelStart');
+  const meterBar = document.getElementById('rwLevelMeterBar');
+  if (meterBar) meterBar.style.width = '0%';
+  const statusText = document.getElementById('rwLevelStatusText');
+  if (statusText && msg) {
+    statusText.textContent = msg;
+    statusText.style.color = isError ? '#ed333b' : 'var(--aq-text)';
+  }
+}
+
+/** A motor hibakódjából a választott nyelvű, közérthető szöveg (a motor üzenete csak tartalék). */
+function rwErrorText(data) {
+  const code = String(data.error || '');
+  const map = {
+    NOT_IMPLEMENTED: 'rw.notImplemented', BUSY: 'rw.errBusy', UNAUTHORIZED: 'rw.errAuth',
+    NO_INPUT_DEVICE: 'rw.errNoMic', MIC_no_device: 'rw.errNoMic', MIC_busy: 'rw.errMicBusy',
+    MIC_permission: 'rw.errMicPermission', MIC_TOO_QUIET: 'rw.levelLow', MIC_CLIPPING: 'rw.levelHigh',
+    NOISY_ROOM: 'rw.errNoisy', NO_SIGNAL: 'rw.errNoSignal', PLAYBACK_FAILED: 'rw.errPlayback',
+    INVALID_CAL: 'rw.calErrFormat'
+  };
+  if (map[code]) return t(map[code]);
+  return t('rw.errGeneric', { code: code || '?' });
 }
 
 // 3. Mérés indítása és kezelése (kizárólag valós mérés, szimuláció nélkül)
@@ -14591,7 +14673,7 @@ function startRwSweepMeasurement() {
 
   if (typeof pipewireWs !== 'undefined' && pipewireWs && pipewireWs.readyState === WebSocket.OPEN) {
     if (statusText) {
-      statusText.textContent = (typeof t === 'function' ? t('rw.measuring') : '') || 'Mérés indítása...';
+      statusText.textContent = t('rw.starting');   // a "measurement_started" után: lejátszás és felvétel
       statusText.style.color = 'var(--aq-text)';
     }
     const payload = {
@@ -14675,7 +14757,9 @@ function renderRwResults() {
   if (!rwMeasuredData) return;
   const sumEl = document.getElementById('rwHumanSummaryText');
   if (sumEl) {
-    sumEl.textContent = rwMeasuredData.human_summary_hu || rwMeasuredData.human_summary_en || 'Sikeres mérés.';
+    // A motor összefoglalója magyarul és angolul érkezik: magyar felületen a magyar, egyébként az angol
+    sumEl.textContent = (aqLang === 'hu' ? rwMeasuredData.human_summary_hu : rwMeasuredData.human_summary_en) ||
+      rwMeasuredData.human_summary_en || rwMeasuredData.human_summary_hu || '';
   }
 
   // Szűrők listázása a haladó dobozban

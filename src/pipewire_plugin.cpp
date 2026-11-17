@@ -657,6 +657,8 @@ int main(int argc, char* argv[]) {
         return true;
     };
     cb.playerStop = [&] { filePlayer.stop(); };
+    // Szobamérés: mikrofonfelvétel PipeWire-rel (room/mic_capture_pipewire.hpp)
+    cb.makeMicCapture = [] { return aqulify::room::createMicCapture(); };
     // Média-hivatkozás (URL) megnyitása: csak grafikus munkamenetben (DISPLAY / WAYLAND_DISPLAY)
     const char* disp = std::getenv("DISPLAY");
     const char* wayland = std::getenv("WAYLAND_DISPLAY");

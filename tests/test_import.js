@@ -256,6 +256,17 @@ assertEq(calSemiPhase.ok, true, "Pontosvessző/vessző/tab + fázis elfogadva");
 assertEq(calSemiPhase.points.length, 3, "3 pont elválasztókkal");
 assertApprox(calSemiPhase.points[2].phase, -10.5, 0.01, "Fázis oszlop megőrizve");
 
+// Tizedesvessző (európai táblázatkezelők exportja): pontosvessző vagy tabulátor mellett a vessző tizedesjel
+const calDecComma = parseMicCalibration("20;0,8\n1000;0\n20000;-1,2\n");
+assertEq(calDecComma.ok, true, "Pontosvessző + tizedesvessző elfogadva");
+assertApprox(calDecComma.points[0].db, 0.8, 0.001, "20;0,8 → +0,8 dB (nem 0)");
+assertApprox(calDecComma.points[2].db, -1.2, 0.001, "20000;-1,2 → −1,2 dB");
+const calTabComma = parseMicCalibration("20\t0,8\t5,5\n1000\t0\t0\n20000\t-1,2\t-3\n");
+assertApprox(calTabComma.points[0].db, 0.8, 0.001, "tab + tizedesvessző: +0,8 dB");
+assertApprox(calTabComma.points[0].phase, 5.5, 0.001, "tab + tizedesvessző: fázis 5,5");
+const csvDecComma = parseCsvPoints("45;6,0;10\n100;0,5;0\n");
+assertApprox(csvDecComma[0][1], 6.0, 0.001, "mérési CSV: 45;6,0 → +6 dB");
+
 console.log(`\n========================================`);
 console.log(`MINDEN TESZT SIKERES: ${passed} / ${total} ellenőrzés rendben!`);
 console.log(`========================================\n`);

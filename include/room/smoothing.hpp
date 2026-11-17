@@ -6,6 +6,9 @@
 
 #include <algorithm>
 #include <cmath>
+#ifndef M_PI   // szigorú (-std=c++17) módban a Windows / macOS fordító nem adja
+#define M_PI 3.14159265358979323846
+#endif
 #include <complex>
 #include <cstdint>
 #include <vector>

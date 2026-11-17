@@ -922,6 +922,8 @@ int main(int argc, char** argv) {
         return true;
     };
     cb.playerStop = [&] { filePlayer.stop(); };
+    // Szobamérés: mikrofonfelvétel WASAPI-val (room/mic_capture_wasapi.hpp)
+    cb.makeMicCapture = [] { return aqulify::room::createMicCapture(); };
     // Egykattintásos frissítés (a felület „Új verzió érhető el” ablakából): letöltés, ellenőrzés, a telepítő indítása
     win::Updater updater;
     cb.updateInstall = [&](const std::string& version, std::string& error) { return updater.start(version, error); };
