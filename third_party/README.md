@@ -17,6 +17,7 @@ kivéve ahol jelölve van; mindegyik a saját licencével.
 | `speexdsp` | https://github.com/xiph/speexdsp (7a15878): resampler; `speexdsp_config_types.h` a configure kimenete helyett | | BSD-3-Clause |
 | `zita-convolver` | Fons Adriaensen zita-convolvere az Ardour hordozható változatában (https://github.com/Ardour/ardour, libs/zita-convolver, 1e41d33) | 4.0.0 | GPL-3.0-or-later |
 | `rnnoise` | https://gitlab.xiph.org/xiph/rnnoise (a 0.2-es kiadás kódja a 372f7b4 javítással: „Fix compilation errors.”, a Debian `fix-compilation-errors.patch` foltja); a fordításhoz szükséges fájlok, a betanított modell nélkül | 0.2 | BSD-3-Clause |
+| `soxr` | https://sourceforge.net/projects/soxr/files/soxr-0.1.3-Source.tar.xz/download (sha256: `b111c15fdc8c029989330ff559184198c161100a59312f5dc19ddeb9b5a15889`, CMake 3.20+ kompatibilitási és elérésiút-szóköz javítás: `third_party/soxr-cmake.patch`) | 0.1.3 | LGPL-2.1-or-later (`soxr/LICENCE`, `soxr/COPYING.LGPL`) |
 
 Az RNNoise betanított modellje (`src/rnnoise_data.c`, 29 MB, a `model_version` szerinti 0b50c45) sincs a tárolóban.
 Forrása az Ubuntu `rnnoise_0.2+ds.orig.tar.xz` csomagja

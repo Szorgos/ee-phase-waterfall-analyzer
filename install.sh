@@ -1235,6 +1235,7 @@ if [ -x build/aqulify-play ]; then install -m 755 build/aqulify-play "$BIN_DIR/a
 install -m 644 gui_integrated_system.html autoeq_index.js gui_i18n.js gui_player.js import_parser.js "$GUI_DIR/"
 install -m 644 windows/third_party/three/three.min.js "$GUI_DIR/three.min.js"
 install -m 644 windows/third_party/three/LICENSE "$GUI_DIR/three.js-LICENSE.txt"
+install -m 644 third_party/soxr/LICENCE "$GUI_DIR/libsoxr-LICENSE.txt"
 install -m 644 linux/aqulify.png "$ICON_DIR/aqulify.png"
 install -m 644 linux/aqulify.png "$PIXMAP_DIR/aqulify.png"
 if [ "$HAVE_GUI" = 1 ]; then
