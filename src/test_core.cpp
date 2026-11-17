@@ -2586,12 +2586,19 @@ static void testBridgeWayEqImpl() {
         }
         CHECK(preserved, "K13: set_multiout (way mező nélkül) megőrzi az útonkénti EQ-t");
 
+        wsSendText(s1, "{\"type\":\"set_remote\",\"enabled\":true,\"port\":47920}");
+        wsWaitFor(s1, "\"enabled\":true", 2000);
         wsSendText(s1, "{\"type\":\"remote_new_code\"}");
-        std::string codeMsg = wsWaitFor(s1, "\"code\":\"", 2000);
-        std::string code = jsonField(codeMsg, "code");
+        std::string code;
+        const auto codeUntil = std::chrono::steady_clock::now() + std::chrono::milliseconds(3000);
+        while (std::chrono::steady_clock::now() < codeUntil) {
+            std::string codeMsg = wsWaitFor(s1, "\"code\":\"", 500);
+            code = jsonField(codeMsg, "code");
+            if (code.size() == 6) break;
+        }
         CHECK(code.size() == 6, "K13: párosító kód lekérve (%s)", code.c_str());
         if (code.size() == 6) {
-            net::socket_t sRem = wsConnectLive(47899, "/?pair=" + code + "&client=aqulify_desktop&name=Guest");
+            net::socket_t sRem = wsConnectLive(47920, "/?pair=" + code + "&client=aqulify_desktop&name=Guest");
             CHECK(sRem != net::kInvalidSocket, "K13: távoli nem-admin kliens csatlakozott");
             if (sRem != net::kInvalidSocket) {
                 wsWaitFor(sRem, "\"type\":\"paired\"", 2000);
