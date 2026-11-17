@@ -35,6 +35,21 @@ namespace fs = std::filesystem;
 
 static int g_fail = 0;
 #define CHECK(cond, ...) do { if (!(cond)) { ++g_fail; std::printf("  [HIBA] " __VA_ARGS__); } else { std::printf("  [OK]   " __VA_ARGS__); } std::printf("\n"); } while (0)
+static thread_local bool g_rtTrackAlloc = false;
+static std::atomic<uint64_t> g_rtAllocCount{0};
+
+void* operator new(std::size_t size) {
+    if (g_rtTrackAlloc) ++g_rtAllocCount;
+    void* p = std::malloc(size);
+    if (!p) throw std::bad_alloc();
+    return p;
+}
+void operator delete(void* p) noexcept {
+    std::free(p);
+}
+void operator delete(void* p, std::size_t) noexcept {
+    std::free(p);
+}
 
 static constexpr double kPi = 3.14159265358979323846;
 // A tesztfájlok mappája: a fordításkor megadott, vagy az AQ_TEST_DATA_DIR környezeti változó (pl. ha a Windows-os
@@ -2073,10 +2088,170 @@ static void testUpsamplePlayerK1K6K7K8K16() {
 
     if constexpr (HasUpsamplePlayer<FilePlayer>) {
         std::printf("[K6/K7/K8/K16] Upsample player tesztek futtatása...\n");
-        // K6: Késleltetés és pozíció
-        // K7: Szünetmentes folytonosság
-        // K8: Valós idejű foglalásmentesség
+
+        // K6: Késleltetés és pozíció (±1 ms pontosság)
+        {
+            const uint32_t sr = 44100;
+            const size_t n = 2 * sr;
+            std::vector<float> src(n * 2);
+            for (size_t i = 0; i < n; ++i) {
+                src[2 * i] = static_cast<float>(0.5 * std::sin(2 * kPi * 440 * i / sr));
+                src[2 * i + 1] = static_cast<float>(0.25 * std::sin(2 * kPi * 1000 * i / sr));
+            }
+            const std::string path = tmpPath("aq_k6_pos.wav");
+            writeWavFloat(path, sr, 2, src);
+
+            auto* out = new FakeOutput;
+            FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+            audioopt::AudioOptions opts;
+            opts.upsampleRule = audioopt::UpsampleRule::Double;
+            p.setUpsampleOptions(opts);
+            p.setUpsample(true);
+            std::string err;
+            CHECK(p.open(path, &err) && out->rate == 88200 && out->active, "K6: megnyitás 44.1k -> 88.2k sikeres");
+
+            // 0.5 s lejátszása (44100 kimeneti keret 88.2 kHz-en)
+            std::vector<float> pulled = pullFrames(p, *out, sr);
+            CHECK(pulled.size() == sr * 2, "K6: 0.5 s kimenet lehúzva (%zu minta)", pulled.size());
+            CHECK(std::abs(p.position() - 0.5) <= 0.001, "K6: pozíció 0.5 s-nél %.4f s (hiba <= 1 ms)", p.position());
+
+            // Tekerés 1.2 s-ra
+            p.seek(1.2);
+            CHECK(std::abs(p.position() - 1.2) <= 0.001, "K6: tekerés 1.2 s-ra: pozíció %.4f s (hiba <= 1 ms)", p.position());
+            std::vector<float> afterSeek = pullFrames(p, *out, 8820);
+            CHECK(std::abs(p.position() - 1.3) <= 0.001, "K6: tekerés utáni lejátszás: pozíció %.4f s (hiba <= 1 ms)", p.position());
+            p.stop();
+        }
+
+        // K7: Szünetmentes folytonosság (azonos forrásmintavételű két szám vágásánál d2 <= 2x referencia)
+        {
+            QueueFiles qf;
+            const uint32_t sr = 44100;
+            const size_t nA = 22050; // 0.5s
+            const size_t nB = 22050; // 0.5s
+            std::vector<float> xA(nA * 2), xB(nB * 2), full((nA + nB) * 2);
+            for (size_t i = 0; i < nA; ++i) {
+                float v = static_cast<float>(0.5 * std::sin(2.0 * kPi * 1000.0 * i / sr));
+                xA[2 * i] = xA[2 * i + 1] = v;
+                full[2 * i] = full[2 * i + 1] = v;
+            }
+            for (size_t i = 0; i < nB; ++i) {
+                float v = static_cast<float>(0.5 * std::sin(2.0 * kPi * 1000.0 * (nA + i) / sr));
+                xB[2 * i] = xB[2 * i + 1] = v;
+                full[2 * (nA + i)] = full[2 * (nA + i) + 1] = v;
+            }
+            const std::string pathA = tmpPath("aq_k7_a.wav");
+            const std::string pathB = tmpPath("aq_k7_b.wav");
+            writeWavFloat(pathA, sr, 2, xA);
+            writeWavFloat(pathB, sr, 2, xB);
+            qf.path["k7a"] = pathA;
+            qf.path["k7b"] = pathB;
+
+            // Referencia folyamatos szinusz felmintavételezve
+            UpsampleEngine refEngine;
+            audioopt::AudioOptions defaultOpts;
+            defaultOpts.upsampleRule = audioopt::UpsampleRule::Double;
+            refEngine.initWithOptions(sr, sr * 2, 2, defaultOpts);
+            std::vector<float> refOut((nA + nB) * 4 + 2048);
+            size_t refOutFrames = 0;
+            refEngine.process(full.data(), nA + nB, refOut.data(), refOut.size() / 2, refOutFrames);
+            size_t flFrames = 0;
+            refEngine.flush(refOut.data() + refOutFrames * 2, (refOut.size() - refOutFrames * 2) / 2, flFrames);
+            refOutFrames += flFrames;
+
+            float maxD2Ref = 0.0f;
+            for (size_t i = 4; i < refOutFrames * 2; i += 2) {
+                float d2 = std::abs(refOut[i] - 2.0f * refOut[i - 2] + refOut[i - 4]);
+                if (d2 > maxD2Ref) maxD2Ref = d2;
+            }
+
+            auto* out = new FakeOutput;
+            FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+            p.setUpsampleOptions(defaultOpts);
+            p.setUpsample(true);
+            PlayQueue q(p, qf.resolve());
+            const bool started = q.play(qf.items({ "k7a", "k7b" }), 0);
+            CHECK(started && out->rate == 88200, "K7: lejátszás elindult 88200 Hz-en");
+
+            // K6 (szűrő-késleltetés a számhatáron): 0.6 s lehúzása (0.5 s A + 0.1 s B) -> B pozíciója 0.100 s ±1 ms
+            const size_t part1Frames = nA * 2 + 8820; // 0.5 s + 0.1 s = 0.6 s
+            std::vector<float> gotOut = pullFrames(p, *out, part1Frames);
+            const double posInB = p.position();
+            CHECK(std::abs(posInB - 0.1) <= 0.001,
+                  "K6: szünetmentes váltás utáni pozíció a B számban %.4f s (várt 0.1000 s, hiba <= 1 ms)", posInB);
+            const size_t totalOutFrames = (nA + nB) * 2;
+            std::vector<float> restOut = pullFrames(p, *out, totalOutFrames - part1Frames);
+            gotOut.insert(gotOut.end(), restOut.begin(), restOut.end());
+            p.stop();
+
+            CHECK(out->opens == 1, "K7: szünetmentes váltás, 1etlen hangfolyam nyílt a két számhoz");
+
+            float maxD2Cut = 0.0f;
+            const size_t cutFrame = nA * 2;
+            const size_t checkStart = cutFrame > 200 ? cutFrame - 200 : 2;
+            const size_t checkEnd = std::min(cutFrame + 200, gotOut.size() / 2);
+            for (size_t f = checkStart; f < checkEnd; ++f) {
+                float d2 = std::abs(gotOut[2 * f] - 2.0f * gotOut[2 * (f - 1)] + gotOut[2 * (f - 2)]);
+                if (d2 > maxD2Cut) maxD2Cut = d2;
+            }
+            CHECK(maxD2Cut <= 2.0f * maxD2Ref,
+                  "K7 szünetmentes folytonosság: vágásnál max d2 = %.6f <= 2x referencia (%.6f)",
+                  maxD2Cut, 2.0f * maxD2Ref);
+        }
+
+        // K8: Valós idejű foglalásmentesség a render szálon
+        {
+            auto* out = new FakeOutput;
+            FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+            audioopt::AudioOptions defaultOpts;
+            defaultOpts.upsampleRule = audioopt::UpsampleRule::Double;
+            p.setUpsampleOptions(defaultOpts);
+            p.setUpsample(true);
+            std::string err;
+            p.open(tmpPath("aq_k7_a.wav"), &err);
+            pullFrames(p, *out, 1024);
+
+            g_rtAllocCount = 0;
+            g_rtTrackAlloc = true;
+            for (int i = 0; i < 20; ++i) {
+                float buf[512 * 2];
+                out->pull(buf, 512);
+            }
+            g_rtTrackAlloc = false;
+            p.stop();
+
+            CHECK(g_rtAllocCount == 0, "K8: valós idejű foglalásmentesség (render hívások alatt 0 újrafoglalás, mért: %llu)",
+                  (unsigned long long)g_rtAllocCount);
+        }
+
         // K16: DSD/DoP és > 192 kHz kihagyása
+        {
+            // 1. > 192 kHz forrás (pl. 352.8 kHz)
+            const uint32_t highRate = 352800;
+            std::vector<float> highPcm(highRate / 10 * 2, 0.1f);
+            const std::string highPath = tmpPath("aq_k16_352k.wav");
+            writeWavFloat(highPath, highRate, 2, highPcm);
+
+            auto* out1 = new FakeOutput;
+            FilePlayer p1{ std::unique_ptr<PlayerOutput>(out1) };
+            audioopt::AudioOptions opts;
+            opts.upsampleRule = audioopt::UpsampleRule::Double;
+            p1.setUpsampleOptions(opts);
+            p1.setUpsample(true);
+            std::string err;
+            CHECK(p1.open(highPath, &err), "K16: 352.8 kHz fájl megnyitva");
+            CHECK(out1->rate == highRate, "K16: kimeneti frekvencia maradt 352.8 kHz (nem duplázódott)");
+            CHECK(p1.upsampleReason() == "source_rate", "K16: indoklás 'source_rate' (%s)", p1.upsampleReason().c_str());
+            p1.stop();
+
+            // 2. DoP / DSD esetén
+            auto* out2 = new FakeOutput;
+            FilePlayer p2{ std::unique_ptr<PlayerOutput>(out2) };
+            p2.setUpsampleOptions(opts);
+            p2.setUpsample(true);
+            CHECK(p2.decideTargetRate(176400, false, true) == 176400, "K16: DoP / DSD esetén decideTargetRate változatlan");
+            CHECK(p2.upsampleReason() == "dsd", "K16: DoP / DSD esetén indoklás 'dsd'");
+        }
     } else {
         CHECK(false, "K6/K7/K8/K16: FilePlayer felmintavételezés nincs megvalósítva");
     }

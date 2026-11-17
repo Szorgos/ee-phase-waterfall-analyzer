@@ -38,6 +38,7 @@
 #include "audio_decoder.hpp"
 #include "dsd.hpp"
 #include "media_session.hpp"
+#include "upsample_engine.hpp"
 
 namespace ee_analyzer::player {
 
@@ -79,6 +80,12 @@ public:
      * kezdi (FilePlayer::kRateSettleMs). Megosztott módban a rendszer keverője igazít, a DAC nem vált: false.
      */
     virtual bool settlesOnRateChange() const { return false; }
+    /** A kimenet által támogatott mintavételi frekvenciák (alapértelmezett: 44.1..192k). */
+    virtual std::vector<uint32_t> supportedRates() const {
+        return { 44100, 48000, 88200, 96000, 176400, 192000 };
+    }
+    /** A hardver / keverő ténylegesen futó mintavétele (0: a kért mintavétel érvényes). */
+    virtual uint32_t actualRate() const { return 0; }
 };
 
 class FilePlayer {
@@ -100,7 +107,7 @@ public:
      * A fájl megnyitása és lejátszása (az előző leáll). token: a sor jele a számhoz (0: nem a sorból).
      * false: nem nyitható (error: a magyarázat).
      */
-    bool open(const std::string& path, std::string* error = nullptr, uint64_t token = 0);
+    bool open(const std::string& path, std::string* error = nullptr, uint64_t token = 0, bool bypassUpsample = false);
     void setNextProvider(NextProvider next);
     /**
      * A sor megváltozott: az előre betöltött következő szám(ok) kiesnek, és a lejátszó a mostani szám végén újra
@@ -127,6 +134,15 @@ public:
     void setReplayGain(int mode, float preampDb, bool preventClip);
     /** Előbetöltés a memóriába (a következő megnyitott számtól; legfeljebb kPreloadMaxBytes méretű fájlnál). */
     void setPreload(bool on) { preload_ = on; }
+    /** Felmintavételezés bekapcsolása (vagy kikapcsolása). */
+    void setUpsample(bool on);
+    /** Felmintavételezés beállításainak átadása az AudioOptions alapján. */
+    void setUpsampleOptions(const audioopt::AudioOptions& opts);
+    bool isUpsampleActive() const { return upsampleActive_.load(); }
+    uint32_t upsampleSrcRate() const { return upsampleSrcRate_.load(); }
+    uint32_t upsampleTargetRate() const { return upsampleTargetRate_.load(); }
+    uint64_t upsampleClippedSamples() const;
+    std::string upsampleReason() const;
     static constexpr uint64_t kPreloadMaxBytes = 400ull << 20;
     /** Natív DSD (DoP 1.1) kérése (csak kizárólagos kimeneten; elutasításkor a lejátszó PCM-re lép vissza). */
     void setDsdDop(bool on);
@@ -165,6 +181,7 @@ public:
     static constexpr uint32_t kRateSettleMs = 800;
     /** Az új hangfolyam elején még hátralévő csend kerete (tesztekhez). */
     uint64_t leadInFrames() const { return leadIn_.load(); }
+    uint32_t decideTargetRate(uint32_t srcRate, bool bypassUpsample, bool isDsd) const;
 
 private:
     /** Egy szám az idővonalon (az idővonal a tekerés / megnyitás óta folyamatos, az első szám kereteiben indul). */
@@ -195,9 +212,10 @@ private:
         uint64_t start = 0;                 // az idővonalon az első kerete
         uint64_t end = UINT64_MAX;          // az idővonalon az utolsó utáni kerete (a dekódolás végén derül ki)
         uint64_t token = 0;
+        bool bypassUpsample = false;
     };
 
-    std::unique_ptr<Segment> makeSegment(const std::string& path, std::string* error, uint64_t token);
+    std::unique_ptr<Segment> makeSegment(const std::string& path, std::string* error, uint64_t token, bool bypassUpsample = false);
     float gainFor(const TrackTags& t) const;
     void decodeLoop();
     void stopLocked();
@@ -252,6 +270,17 @@ private:
     std::string dopFallback_;
     // kattanásmentes váltás (lásd kRateSettleMs): a hátralévő és az összes csend a hangfolyam elején
     std::atomic<uint64_t> leadIn_{0}, leadTotal_{0};
+
+    // Felmintavételezés belső állapota és átalakító motorja
+    audioopt::AudioOptions upsampleOpts_;
+    bool upsampleEnabled_ = false;
+    std::atomic<bool> upsampleActive_{false};
+    std::atomic<uint32_t> upsampleSrcRate_{0};
+    std::atomic<uint32_t> upsampleTargetRate_{0};
+    mutable std::string upsampleReason_{ "off" };
+    UpsampleEngine upsampler_;
+    std::vector<float> upsampleOutBuf_;
+    std::vector<float> stereoMixBuf_;
 };
 
 } // namespace ee_analyzer::player
