@@ -1,0 +1,13 @@
+--- a/include/linux_store.hpp
++++ b/include/linux_store.hpp
+@@ -166,7 +166,9 @@
+     const uint32_t hdr[4] = { kMultiMagic, 2u, kParamLayoutVersion, static_cast<uint32_t>(sizeof(multiout::MultiConfig)) };
+     std::vector<char> b(sizeof(hdr) + sizeof(multiout::MultiConfig));
+     std::memcpy(b.data(), hdr, sizeof(hdr));
+-    std::memcpy(b.data() + sizeof(hdr), &c, sizeof(multiout::MultiConfig));
++    multiout::MultiConfig stripped = c;
++    for (auto& o : stripped.outputs) o.way = {};
++    std::memcpy(b.data() + sizeof(hdr), &stripped, sizeof(multiout::MultiConfig));
+     for (const auto& t : targets) {
+         const uint32_t n = static_cast<uint32_t>(std::min<size_t>(t.size(), 200));
+         const char* np = reinterpret_cast<const char*>(&n);

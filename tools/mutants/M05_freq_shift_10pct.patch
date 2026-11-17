@@ -1,0 +1,11 @@
+--- a/include/multi_output.hpp
++++ b/include/multi_output.hpp
+@@ -149,7 +149,7 @@
+             return;
+         }
+         const double nyq = std::max(25.0, sr * 0.49);
+-        const double f0 = std::clamp(freq, 20.0, std::min(20000.0, nyq));
++        const double f0 = std::clamp(freq * 1.10, 20.0, std::min(20000.0, nyq));
+         const double qClamped = std::clamp(q, 0.3, 10.0);
+         const double gClamped = std::clamp(gainDb, -18.0, 6.0);
+         const double w0 = 2.0 * kPi * f0 / sr;

@@ -1,0 +1,30 @@
+--- a/include/multi_output.hpp
++++ b/include/multi_output.hpp
+@@ -549,6 +549,10 @@
+                 std::copy(inL, inL + m, oL[k]);
+                 std::copy(inR, inR + m, oR[k]);
+                 mainOr(k).process(oL[k], oR[k], m);
++                for (size_t i = 0; i < m; ++i) {
++                    oL[k][i] = static_cast<float>(processWaySample(k, 0, oL[k][i]));
++                    oR[k][i] = static_cast<float>(processWaySample(k, 1, oR[k][i]));
++                }
+             }
+         } else {
+             std::copy(inL, inL + m, tmpL_.data());
+@@ -597,7 +601,7 @@
+ 
+     void designWayEq(int k, bool allowFade) {
+         const auto& w = cfg_.outputs[k].way;
+-        const bool active = (cfg_.mode == Mode::Crossover) && w.on && w.numBands > 0;
++        const bool active = w.on && w.numBands > 0;
+         const int count = active ? std::clamp(w.numBands, 0, kMaxWayBands) : 0;
+         const bool needFade = allowFade && (curWayOn_[k] || active);
+         if (needFade) {
+@@ -630,7 +634,6 @@
+     }
+ 
+     double processWaySample(int k, int ch, double x) {
+-        if (cfg_.mode != Mode::Crossover) return x;
+         if (fadePos_[k][ch] == 0) {
+             if (!curWayOn_[k]) return x;
+             double y = x;

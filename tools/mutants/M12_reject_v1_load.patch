@@ -1,0 +1,11 @@
+--- a/include/linux_store.hpp
++++ b/include/linux_store.hpp
+@@ -189,7 +189,7 @@
+         if (b.size() < pos + sizeof(multiout::MultiConfig)) return false;
+         std::memcpy(static_cast<void*>(&tmp), b.data() + pos, sizeof(multiout::MultiConfig));
+         pos += sizeof(multiout::MultiConfig);
+-    } else if (hdr[1] == 1u && hdr[2] == kParamLayoutVersion && hdr[3] == sizeof(legacy::MultiConfigV1)) {
++    } else if (hdr[1] == 99u && hdr[2] == kParamLayoutVersion && hdr[3] == sizeof(legacy::MultiConfigV1)) {
+         // a 2.5.0 fájlja (v1): útonkénti EQ nélküli MultiConfig
+         if (b.size() < pos + sizeof(legacy::MultiConfigV1)) return false;
+         legacy::MultiConfigV1 o;
