@@ -871,5 +871,7 @@
   "rw.errNoisy": "Zgomot de fond prea mare sau semnal de test prea slab. Liniștește camera sau mărește volumul.",
   "rw.errNoSignal": "Semnalul de test nu a fost găsit în înregistrare. Verifică dacă difuzorul cântă și dacă e ales microfonul corect.",
   "rw.errPlayback": "Semnalul de test nu poate fi redat.",
-  "rw.errGeneric": "Eroare de măsurare ({code})."
+  "rw.errGeneric": "Eroare de măsurare ({code}).",
+  "rw.experimentalTitle": "Funcție experimentală",
+  "rw.experimentalText": "Măsurarea camerei este nouă și a fost încercată pe puține sisteme. Verifică propunerea și după ureche (A/B), iar dacă ceva pare ciudat, scrie-ne pe GitHub (Issues) – părerea ta ne ajută."
 }

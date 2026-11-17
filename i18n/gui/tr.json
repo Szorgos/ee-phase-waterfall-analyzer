@@ -871,5 +871,7 @@
   "rw.errNoisy": "Arka plan gürültüsü çok yüksek veya ölçüm sinyali çok düşük. Odayı sessizleştirin veya sesi açın.",
   "rw.errNoSignal": "Kayıtta ölçüm sinyali bulunamadı. Hoparlörün çaldığını ve doğru mikrofonun seçildiğini kontrol edin.",
   "rw.errPlayback": "Ölçüm sinyali çalınamıyor.",
-  "rw.errGeneric": "Ölçüm hatası ({code})."
+  "rw.errGeneric": "Ölçüm hatası ({code}).",
+  "rw.experimentalTitle": "Deneysel özellik",
+  "rw.experimentalText": "Oda ölçümü yeni ve henüz az sayıda sistemde denendi. Öneriyi kulakla da kontrol edin (A/B); tuhaf bir şey görürseniz GitHub'da (Issues) bize yazın – geri bildiriminiz yardımcı olur."
 }

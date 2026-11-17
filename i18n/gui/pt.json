@@ -871,5 +871,7 @@
   "rw.errNoisy": "Ruído de fundo alto demais ou sinal de teste baixo demais. Silencie a sala ou aumente o volume.",
   "rw.errNoSignal": "O sinal de teste não foi encontrado na gravação. Verifique se o alto-falante toca e se o microfone certo está selecionado.",
   "rw.errPlayback": "Não é possível reproduzir o sinal de teste.",
-  "rw.errGeneric": "Erro de medição ({code})."
+  "rw.errGeneric": "Erro de medição ({code}).",
+  "rw.experimentalTitle": "Função experimental",
+  "rw.experimentalText": "A medição da sala é nova e foi testada em poucos sistemas. Verifique a proposta também de ouvido (A/B) e, se algo parecer estranho, conte-nos no GitHub (Issues) – seu retorno ajuda."
 }

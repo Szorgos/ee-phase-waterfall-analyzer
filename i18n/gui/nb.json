@@ -871,5 +871,7 @@
   "rw.errNoisy": "For mye bakgrunnsstøy eller for svakt målesignal. Gjør rommet stille eller skru opp volumet.",
   "rw.errNoSignal": "Fant ikke målesignalet i opptaket. Kontroller at høyttaleren spiller og at riktig mikrofon er valgt.",
   "rw.errPlayback": "Målesignalet kan ikke spilles av.",
-  "rw.errGeneric": "Målefeil ({code})."
+  "rw.errGeneric": "Målefeil ({code}).",
+  "rw.experimentalTitle": "Eksperimentell funksjon",
+  "rw.experimentalText": "Rommålingen er ny og bare prøvd på få systemer. Sjekk forslaget også med ørene (A/B), og si fra på GitHub (Issues) hvis noe virker rart – tilbakemeldingen din hjelper."
 }

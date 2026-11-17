@@ -871,5 +871,7 @@
   "rw.errNoisy": "Te veel achtergrondgeluid of een te zacht meetsignaal. Maak de kamer stiller of zet het volume hoger.",
   "rw.errNoSignal": "Het meetsignaal is niet in de opname gevonden. Controleer of de luidspreker speelt en de juiste microfoon is gekozen.",
   "rw.errPlayback": "Het meetsignaal kan niet worden afgespeeld.",
-  "rw.errGeneric": "Meetfout ({code})."
+  "rw.errGeneric": "Meetfout ({code}).",
+  "rw.experimentalTitle": "Experimentele functie",
+  "rw.experimentalText": "De ruimtemeting is nieuw en pas op weinig systemen uitgeprobeerd. Controleer het voorstel ook op het gehoor (A/B) en laat het ons via GitHub (Issues) weten als iets vreemd lijkt – je feedback helpt."
 }

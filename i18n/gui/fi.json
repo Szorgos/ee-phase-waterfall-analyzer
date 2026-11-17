@@ -871,5 +871,7 @@
   "rw.errNoisy": "Liikaa taustamelua tai liian hiljainen mittaussignaali. Hiljennä huone tai nosta äänenvoimakkuutta.",
   "rw.errNoSignal": "Mittaussignaalia ei löytynyt äänityksestä. Tarkista, että kaiutin soi ja oikea mikrofoni on valittu.",
   "rw.errPlayback": "Mittaussignaalia ei voi toistaa.",
-  "rw.errGeneric": "Mittausvirhe ({code})."
+  "rw.errGeneric": "Mittausvirhe ({code}).",
+  "rw.experimentalTitle": "Kokeellinen ominaisuus",
+  "rw.experimentalText": "Huonemittaus on uusi, ja sitä on kokeiltu vasta muutamassa järjestelmässä. Tarkista ehdotus myös korvin (A/B), ja jos jokin näyttää oudolta, kerro meille GitHubissa (Issues) – palautteesi auttaa."
 }

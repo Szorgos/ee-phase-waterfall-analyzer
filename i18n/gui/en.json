@@ -871,5 +871,7 @@
   "rw.errNoisy": "Background noise is too high or the test signal too quiet. Quiet the room or raise the volume.",
   "rw.errNoSignal": "The test signal was not found in the recording. Check that the speaker plays and the right microphone is selected.",
   "rw.errPlayback": "The test signal cannot be played.",
-  "rw.errGeneric": "Measurement error ({code})."
+  "rw.errGeneric": "Measurement error ({code}).",
+  "rw.experimentalTitle": "Experimental feature",
+  "rw.experimentalText": "Room measurement is new and has been tried on only a few systems. Check the proposal by ear too (A/B), and if anything looks odd, tell us on GitHub (Issues) – your feedback helps."
 }

@@ -871,5 +871,7 @@
   "rw.errNoisy": "배경 소음이 너무 크거나 측정 신호가 너무 작습니다. 방을 조용히 하거나 음량을 높이세요.",
   "rw.errNoSignal": "녹음에서 측정 신호를 찾을 수 없습니다. 스피커가 소리를 내는지, 올바른 마이크가 선택되었는지 확인하세요.",
   "rw.errPlayback": "측정 신호를 재생할 수 없습니다.",
-  "rw.errGeneric": "측정 오류 ({code})."
+  "rw.errGeneric": "측정 오류 ({code}).",
+  "rw.experimentalTitle": "실험적 기능",
+  "rw.experimentalText": "룸 측정은 새로운 기능이며 아직 소수의 시스템에서만 시험되었습니다. 제안을 귀로도 확인하고(A/B), 이상한 점이 있으면 GitHub(Issues)에 알려 주세요. 의견이 큰 도움이 됩니다."
 }

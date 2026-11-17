@@ -871,5 +871,7 @@
   "rw.errNoisy": "Zu viel Hintergrundgeräusch oder zu leises Messsignal. Raum beruhigen oder lauter stellen.",
   "rw.errNoSignal": "Das Messsignal wurde in der Aufnahme nicht gefunden. Prüfen, ob der Lautsprecher spielt und das richtige Mikrofon gewählt ist.",
   "rw.errPlayback": "Das Messsignal kann nicht abgespielt werden.",
-  "rw.errGeneric": "Messfehler ({code})."
+  "rw.errGeneric": "Messfehler ({code}).",
+  "rw.experimentalTitle": "Experimentelle Funktion",
+  "rw.experimentalText": "Die Raummessung ist neu und wurde erst auf wenigen Systemen erprobt. Prüfe den Vorschlag auch mit dem Gehör (A/B), und wenn dir etwas seltsam vorkommt, schreib uns auf GitHub (Issues) – dein Feedback hilft."
 }

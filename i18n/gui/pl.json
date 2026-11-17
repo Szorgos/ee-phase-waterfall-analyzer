@@ -871,5 +871,7 @@
   "rw.errNoisy": "Za duży hałas tła lub za cichy sygnał pomiarowy. Wycisz pokój lub zwiększ głośność.",
   "rw.errNoSignal": "W nagraniu nie znaleziono sygnału pomiarowego. Sprawdź, czy głośnik gra i czy wybrano właściwy mikrofon.",
   "rw.errPlayback": "Nie można odtworzyć sygnału pomiarowego.",
-  "rw.errGeneric": "Błąd pomiaru ({code})."
+  "rw.errGeneric": "Błąd pomiaru ({code}).",
+  "rw.experimentalTitle": "Funkcja eksperymentalna",
+  "rw.experimentalText": "Pomiar pomieszczenia jest nowy i sprawdzono go dotąd na niewielu systemach. Sprawdź propozycję także na słuch (A/B), a jeśli coś wyda się dziwne, napisz do nas na GitHubie (Issues) – Twoja opinia pomaga."
 }

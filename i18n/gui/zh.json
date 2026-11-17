@@ -871,5 +871,7 @@
   "rw.errNoisy": "背景噪声过大或测量信号过小。请保持安静或调高音量。",
   "rw.errNoSignal": "录音中未找到测量信号。请检查扬声器是否发声，以及是否选择了正确的麦克风。",
   "rw.errPlayback": "无法播放测量信号。",
-  "rw.errGeneric": "测量错误（{code}）。"
+  "rw.errGeneric": "测量错误（{code}）。",
+  "rw.experimentalTitle": "实验性功能",
+  "rw.experimentalText": "房间测量是新功能，仅在少数系统上试用过。请同时用耳朵检查建议（A/B），如发现异常，请在 GitHub（Issues）告诉我们——你的反馈很有帮助。"
 }

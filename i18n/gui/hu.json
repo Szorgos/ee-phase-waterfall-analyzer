@@ -871,5 +871,7 @@
   "rw.errNoisy": "Túl nagy a háttérzaj, vagy túl halk a mérőjel. Csendesítsd a szobát, vagy növeld a hangerőt.",
   "rw.errNoSignal": "A felvételben nem található a mérőjel. Ellenőrizd, hogy szól-e a hangszóró, és a jó mikrofon van-e kiválasztva.",
   "rw.errPlayback": "A mérőjel nem játszható le.",
-  "rw.errGeneric": "Mérési hiba ({code})."
+  "rw.errGeneric": "Mérési hiba ({code}).",
+  "rw.experimentalTitle": "Kísérleti funkció",
+  "rw.experimentalText": "A szobamérés új, még kevés gépen kipróbált. A javaslatot füllel is ellenőrizd (A/B), és ha valami furcsát tapasztalsz, írd meg nekünk a GitHubon (Issues) – a visszajelzésed segít."
 }

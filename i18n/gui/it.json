@@ -871,5 +871,7 @@
   "rw.errNoisy": "Troppo rumore di fondo o segnale di prova troppo basso. Fai silenzio o alza il volume.",
   "rw.errNoSignal": "Il segnale di prova non è stato trovato nella registrazione. Controlla che l’altoparlante suoni e che sia scelto il microfono giusto.",
   "rw.errPlayback": "Impossibile riprodurre il segnale di prova.",
-  "rw.errGeneric": "Errore di misura ({code})."
+  "rw.errGeneric": "Errore di misura ({code}).",
+  "rw.experimentalTitle": "Funzione sperimentale",
+  "rw.experimentalText": "La misura della stanza è nuova e provata solo su pochi sistemi. Verifica la proposta anche a orecchio (A/B) e, se noti qualcosa di strano, scrivici su GitHub (Issues): il tuo riscontro ci aiuta."
 }

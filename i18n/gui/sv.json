@@ -871,5 +871,7 @@
   "rw.errNoisy": "För mycket bakgrundsbrus eller för svag mätsignal. Gör rummet tystare eller höj volymen.",
   "rw.errNoSignal": "Mätsignalen hittades inte i inspelningen. Kontrollera att högtalaren spelar och att rätt mikrofon är vald.",
   "rw.errPlayback": "Mätsignalen kan inte spelas upp.",
-  "rw.errGeneric": "Mätfel ({code})."
+  "rw.errGeneric": "Mätfel ({code}).",
+  "rw.experimentalTitle": "Experimentell funktion",
+  "rw.experimentalText": "Rumsmätningen är ny och har bara provats på ett fåtal system. Kontrollera förslaget även med öronen (A/B), och hör av dig på GitHub (Issues) om något verkar konstigt – din återkoppling hjälper."
 }

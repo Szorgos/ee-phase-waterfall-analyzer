@@ -871,5 +871,7 @@
   "rw.errNoisy": "Příliš velký hluk v pozadí nebo příliš slabý měřicí signál. Ztište místnost nebo zvyšte hlasitost.",
   "rw.errNoSignal": "Měřicí signál nebyl v nahrávce nalezen. Zkontrolujte, že reproduktor hraje a je vybrán správný mikrofon.",
   "rw.errPlayback": "Měřicí signál nelze přehrát.",
-  "rw.errGeneric": "Chyba měření ({code})."
+  "rw.errGeneric": "Chyba měření ({code}).",
+  "rw.experimentalTitle": "Experimentální funkce",
+  "rw.experimentalText": "Měření místnosti je nové a vyzkoušené zatím jen na několika systémech. Ověřte návrh i poslechem (A/B), a pokud se vám něco nezdá, napište nám na GitHub (Issues) – vaše zpětná vazba pomáhá."
 }

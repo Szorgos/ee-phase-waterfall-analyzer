@@ -871,5 +871,7 @@
   "rw.errNoisy": "Trop de bruit de fond ou signal de test trop faible. Faites le silence ou montez le volume.",
   "rw.errNoSignal": "Le signal de test est introuvable dans l’enregistrement. Vérifiez que l’enceinte joue et que le bon micro est choisi.",
   "rw.errPlayback": "Le signal de test ne peut pas être lu.",
-  "rw.errGeneric": "Erreur de mesure ({code})."
+  "rw.errGeneric": "Erreur de mesure ({code}).",
+  "rw.experimentalTitle": "Fonction expérimentale",
+  "rw.experimentalText": "La mesure de la pièce est nouvelle et n’a été essayée que sur peu de systèmes. Vérifiez aussi la proposition à l’oreille (A/B) et, si quelque chose vous semble étrange, signalez-le sur GitHub (Issues) : votre retour nous aide."
 }

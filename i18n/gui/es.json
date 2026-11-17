@@ -871,5 +871,7 @@
   "rw.errNoisy": "Hay demasiado ruido de fondo o la señal de prueba es muy baja. Silencia la sala o sube el volumen.",
   "rw.errNoSignal": "No se encontró la señal de prueba en la grabación. Comprueba que el altavoz suena y que el micrófono elegido es el correcto.",
   "rw.errPlayback": "No se puede reproducir la señal de prueba.",
-  "rw.errGeneric": "Error de medición ({code})."
+  "rw.errGeneric": "Error de medición ({code}).",
+  "rw.experimentalTitle": "Función experimental",
+  "rw.experimentalText": "La medición de la sala es nueva y se ha probado en pocos equipos. Comprueba también la propuesta de oído (A/B) y, si notas algo raro, cuéntanoslo en GitHub (Issues): tus comentarios ayudan."
 }
