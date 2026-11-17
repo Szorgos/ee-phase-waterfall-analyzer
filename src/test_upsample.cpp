@@ -193,14 +193,18 @@ static void testK3FrequencyResponseAndRejection() {
         double gainDb = 20.0 * std::log10(outRms / inRms);
         if (std::abs(gainDb) > maxDeviationDb) maxDeviationDb = std::abs(gainDb);
     }
-    CHECK(maxDeviationDb <= 0.015, "K3 passband flatness 20 Hz..20 kHz: max elteres = %.4f dB (<= 0.01 dB)", maxDeviationDb);
+    CHECK(maxDeviationDb <= 0.01, "K3 passband flatness 20 Hz..20 kHz: max elteres = %.4f dB (<= 0.01 dB)", maxDeviationDb);
+    std::printf("K_METRIC: {\"test\":\"K3_flatness\",\"maxDevDb\":%.4f,\"limitDb\":0.01}\n", maxDeviationDb);
+    for (const auto& rp : std::vector<std::pair<uint32_t,uint32_t>>{{48000,96000},{44100,176400},{96000,192000}}) {
+        EngT er; CHECK(er.init(rp.first, rp.second, 1, 28, 25.0, 0.95, 1.00, 0.0f), "K3 par %u -> %u init", rp.first, rp.second);
+    }
 
     // 2. Tükörkép-elnyomás mérése a Nyquist felett
     struct PrecisionCheck { int bits; double minRejectionDb; };
     std::vector<PrecisionCheck> precisions = {
         { 20, 110.0 },
         { 24, 130.0 },
-        { 28, 145.0 }
+        { 28, 150.0 }
     };
 
     for (const auto& pc : precisions) {
@@ -243,6 +247,7 @@ static void testK3FrequencyResponseAndRejection() {
         double rejDb = 20.0 * std::log10(peakFund / std::max(peakAlias, 1e-12));
         CHECK(rejDb >= pc.minRejectionDb, "K3 stopband rejection %d bit: mert = %.1f dB (elvart >= %.0f dB)",
               pc.bits, rejDb, pc.minRejectionDb);
+        std::printf("K_METRIC: {\"test\":\"K3_stopband_%db\",\"rejectionDb\":%.2f,\"minDb\":%.1f}\n", pc.bits, rejDb, pc.minRejectionDb);
     }
 }
 
@@ -400,14 +405,50 @@ static void testK5PhaseAndStopband() {
         CHECK(std::abs(pBad - p50) < 1e-6, "K5 50 feletti érték (75) lekorlátozva 50-re");
     }
 
-    // K5b: Zárósáv kezdete (stopband_begin: 1.00 vs 1.20)
+    // K5b: Zárósáv kezdete (stopband_begin: 1.00 vs 1.20) valódi FFT méréssel
     {
         EngT eng100, eng120, engBad;
         bool ok100 = eng100.init(44100, 88200, 1, 24, 25.0, 0.80, 1.00, 0.0f);
         bool ok120 = eng120.init(44100, 88200, 1, 24, 25.0, 0.80, 1.20, 0.0f);
         bool okBad = engBad.init(44100, 88200, 1, 24, 25.0, 1.10, 1.00, 0.0f);
-
         CHECK(ok100 && ok120 && !okBad, "K5b: Stopband 100%% és 120%% aktív, passband >= stopband elutasítva");
+
+        auto measureImageRej = [](EngT& eng, double toneHz) {
+            const size_t inLen = 32768;
+            std::vector<float> inSig(inLen);
+            for (size_t i = 0; i < inLen; ++i)
+                inSig[i] = static_cast<float>(0.7071 * std::sin(2.0 * kPi * toneHz * i / 44100.0));
+            std::vector<float> outSig(inLen * 2 + 16384);
+            size_t outFrames = 0, fl = 0;
+            eng.clear();
+            eng.process(inSig.data(), inLen, outSig.data(), outSig.size(), outFrames);
+            eng.flush(outSig.data() + outFrames, outSig.size() - outFrames, fl);
+            const size_t fftN = 16384;
+            std::vector<std::complex<double>> buf(fftN);
+            for (size_t i = 0; i < fftN; ++i) {
+                double w = 0.5 * (1.0 - std::cos(2.0 * kPi * i / (fftN - 1)));
+                buf[i] = outSig[8192 + i] * w;
+            }
+            simpleFft(buf, false);
+            const double binHz = 88200.0 / fftN;
+            const double imgHz = 44100.0 - toneHz;
+            double pkFund = 0.0, pkImg = 0.0;
+            for (size_t k = 0; k < fftN / 2; ++k) {
+                double f = k * binHz, m = std::abs(buf[k]);
+                if (std::abs(f - toneHz) < 300.0 && m > pkFund) pkFund = m;
+                if (std::abs(f - imgHz) < 300.0 && m > pkImg) pkImg = m;
+            }
+            return 20.0 * std::log10(pkFund / std::max(pkImg, 1e-12));
+        };
+        // 20 kHz jel tükörképe 24,1 kHz (~109,3% Nyquist, a 100-120% sávban); 14 kHz jel tükörképe 30,1 kHz (~136,5%, >120%)
+        const double rej100_mid = measureImageRej(eng100, 20000.0);
+        const double rej120_mid = measureImageRej(eng120, 20000.0);
+        const double rej120_hi  = measureImageRej(eng120, 14000.0);
+        CHECK(rej100_mid >= 130.0 && rej120_mid + 20.0 < rej100_mid && rej120_hi >= 130.0,
+              "K5b mérés: 109%% Nyquist elnyomás (sb100=%.1f dB vs sb120=%.1f dB), >120%% Nyquist (sb120=%.1f dB)",
+              rej100_mid, rej120_mid, rej120_hi);
+        std::printf("K_METRIC: {\"test\":\"K5b_stopband\",\"sb100_109pct_dB\":%.2f,\"sb120_109pct_dB\":%.2f,\"sb120_136pct_dB\":%.2f}\n",
+                    rej100_mid, rej120_mid, rej120_hi);
     }
 }
 

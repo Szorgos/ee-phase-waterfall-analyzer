@@ -1,0 +1,13 @@
+--- a/include/upsample_engine.hpp
++++ b/include/upsample_engine.hpp
+@@ -44,8 +44,8 @@
+         if (srcRate > 192000) { setReason("source_rate"); return srcRate; }
+         if (rule == audioopt::UpsampleRule::Off) { setReason("off"); return srcRate; }
+ 
+-        auto isSupported = [&](uint32_t r) {
+-            return std::find(supported.begin(), supported.end(), r) != supported.end();
++        auto isSupported = [&](uint32_t) {
++            return true;
+         };
+ 
+         if (rule == audioopt::UpsampleRule::Double) {

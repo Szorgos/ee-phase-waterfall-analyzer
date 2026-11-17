@@ -2251,6 +2251,9 @@ static void testUpsamplePlayerK1K6K7K8K16() {
             p2.setUpsample(true);
             CHECK(p2.decideTargetRate(176400, false, true) == 176400, "K16: DoP / DSD esetén decideTargetRate változatlan");
             CHECK(p2.upsampleReason() == "dsd", "K16: DoP / DSD esetén indoklás 'dsd'");
+            // K15 egység-ellenőrzés: bypassUpsample=true megkerüli a felmintavételezőt
+            CHECK(p2.decideTargetRate(44100, true, false) == 44100 && p2.upsampleReason() == "bypass",
+                  "K15: bypassUpsample esetén nincs átalakítás (ok: bypass)");
         }
     } else {
         CHECK(false, "K6/K7/K8/K16: FilePlayer felmintavételezés nincs megvalósítva");

@@ -1,0 +1,11 @@
+--- a/include/upsample_engine.hpp
++++ b/include/upsample_engine.hpp
+@@ -103,7 +103,7 @@
+         }
+ 
+         soxr_quality_spec_t q_spec = soxr_quality_spec(SOXR_VHQ, 0);
+-        q_spec.precision = static_cast<double>(precision);
++        q_spec.precision = 16.0;
+         q_spec.phase_response = std::clamp(phase, 0.0, 50.0);
+         q_spec.passband_end = passbandEnd;
+         q_spec.stopband_begin = stopbandBegin;

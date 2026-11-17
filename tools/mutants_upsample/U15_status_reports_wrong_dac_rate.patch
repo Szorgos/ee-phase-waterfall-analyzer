@@ -1,0 +1,11 @@
+--- a/src/pipewire_plugin.cpp
++++ b/src/pipewire_plugin.cpp
+@@ -1086,7 +1086,7 @@
+             const bool uActive = filePlayer.isUpsampleActive();
+             const uint32_t uSrc = filePlayer.upsampleSrcRate();
+             const uint32_t uTgt = filePlayer.upsampleTargetRate();
+-            uint32_t uActual = node.actualGraphRate();
++            uint32_t uActual = uActive ? uTgt : node.actualGraphRate();
+ #if defined(AQ_HAVE_ALSA)
+             if (playerSel && playerSel->exclusiveActive()) {
+                 uActual = playerSel->actualRate();

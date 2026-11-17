@@ -1,0 +1,11 @@
+--- a/include/upsample_engine.hpp
++++ b/include/upsample_engine.hpp
+@@ -39,7 +39,7 @@
+                                      bool isDsd,
+                                      std::string* reasonOut = nullptr) {
+         auto setReason = [&](const char* r) { if (reasonOut) *reasonOut = r; };
+-        if (bypassUpsample) { setReason("bypass"); return srcRate; }
++        (void)bypassUpsample;
+         if (isDsd) { setReason("dsd"); return srcRate; }
+         if (srcRate > 192000) { setReason("source_rate"); return srcRate; }
+         if (rule == audioopt::UpsampleRule::Off) { setReason("off"); return srcRate; }

@@ -78,7 +78,7 @@ int main() {
     player::FilePlayer fp(std::make_unique<player::PwPlayerOutput>("dac_st"));
     SessionDeps d;
     d.bypassChain = [](bool on) { (on ? g_bypassOn : g_bypassOff)++; };
-    d.playFile = [&fp](const std::string& path, std::string& err) { return fp.open(path, &err); };
+    d.playFile = [&fp](const std::string& path, std::string& err) { return fp.open(path, &err, 0, /*bypassUpsample=*/true); };
     d.stopPlayback = [&fp] { fp.stop(); };
     d.pauseMedia = [] {};
     d.makeMic = [] { return createMicCapture(); };
@@ -151,6 +151,44 @@ int main() {
         const std::string e = waitFor(s, "measurement_error", 10.0);
         CHECK(e.find("MIC_no_device") != std::string::npos, "hiba: %s", e.c_str());
         CHECK(g_bypassOn.load() == on, "a lánc nem változott");
+    }
+
+
+    std::printf("[K15] Szobamérés bekapcsolt felmintavételezés (×2, minimumfázis) mellett: megkerülő út\n");
+    {
+        { std::lock_guard<std::mutex> lk(g_mu); g_posts.clear(); }
+        ee_analyzer::audioopt::AudioOptions uo;
+        uo.upsampleRule = ee_analyzer::audioopt::UpsampleRule::Double;
+        uo.upsamplePreset = 2; // Minimumfázis
+        uo.upsamplePhase = 0.0;
+        uo.upsampleHeadroomDb = -1.0f;
+        fp.setUpsampleOptions(uo);
+        const uint64_t procBefore = fp.upsampleProcessedFrames();
+
+        MeasureConfig cfg;
+        cfg.channel = "left";
+        cfg.durationSec = 2.0f;
+        cfg.levelDb = -12.0f;
+        cfg.targetType = "flat";
+        cfg.smoothingFraction = 12;
+        std::string err;
+        CHECK(s.startMeasurement(cfg, "dac_st", err), "K15: a mérés elindul bekapcsolt felmintavételezéssel");
+        const std::string res = waitFor(s, "measurement_result", 30.0);
+        CHECK(!res.empty(), "K15: mérési eredmény érkezett");
+        if (!res.empty()) {
+            const auto f = jsonArr(res, "freqs"), m = jsonArr(res, "measured_dbs");
+            double maxDev = 0.0;
+            for (size_t i = 0; i < f.size() && i < m.size(); ++i)
+                if (f[i] >= 30.0 && f[i] <= 16000.0 && std::fabs(m[i]) > maxDev) maxDev = std::fabs(m[i]);
+            CHECK(f.size() > 100 && maxDev < 1.0, "K15: a görbe sík (±1 dB): %.2f dB", maxDev);
+            CHECK(jsonNum(res, "snr_db") > 40.0, "K15: SNR > 40 dB (%.1f dB)", jsonNum(res, "snr_db"));
+        }
+        const uint64_t procAfter = fp.upsampleProcessedFrames();
+        CHECK(procAfter == procBefore && !fp.isUpsampleActive() && fp.upsampleReason() == "bypass",
+              "K15: a felmintavételező nem futott a mérés alatt (feldolgozott keretek: %llu -> %llu, ok: %s)",
+              static_cast<unsigned long long>(procBefore),
+              static_cast<unsigned long long>(procAfter),
+              fp.upsampleReason().c_str());
     }
 
     std::printf(g_fail ? "\nHIBA: %d ellenőrzés nem sikerült\n" : "\nMINDEN TESZT SIKERES (0 hiba)\n", g_fail);

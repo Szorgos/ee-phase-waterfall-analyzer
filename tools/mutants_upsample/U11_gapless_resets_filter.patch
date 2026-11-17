@@ -1,0 +1,12 @@
+--- a/src/file_player.cpp
++++ b/src/file_player.cpp
+@@ -676,7 +676,8 @@
+                 : 0;
+             s.end = base_.load() + w + delayOut;
+             if (appendNextLocked()) {
+-                continue; // szünetmentes átmenet azonos forrással, a szűrő folytonos marad (K7)
++                if (upsampleActive_.load()) upsampler_.clear();
++                continue;
+             }
+             if (upsampleActive_.load()) {
+                 size_t flFrames = 0;
