@@ -12,8 +12,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 export AQ_CHECK_SEED="${AQ_CHECK_SEED:-$(date +%s)}"
 
+if repo_git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    repo_git() { repo_git "$@"; }
+elif [ -f "$REPO/.git" ] && command -v wslpath >/dev/null 2>&1; then
+    WIN_GITDIR="$(sed 's/^gitdir:[[:space:]]*//; s/\r$//' "$REPO/.git")"
+    UNIX_GITDIR="$(wslpath -u "$WIN_GITDIR")"
+    repo_git() { GIT_DIR="$UNIX_GITDIR" GIT_WORK_TREE="$REPO" git "$@"; }
+else
+    repo_git() { repo_git "$@"; }
+fi
+
 BASE_REF="v2.5.0"
-if ! git -C "$REPO" rev-parse --verify --quiet "$BASE_REF" >/dev/null 2>&1; then
+if ! repo_git rev-parse --verify --quiet "$BASE_REF" >/dev/null 2>&1; then
     BASE_REF="992bee2"
 fi
 
@@ -53,13 +63,13 @@ find "$SRC" -name '*.sh' -exec sed -i 's/\r$//' {} +
 t0=$(date +%s)
 echo "[1/6] Tiszta CMake + Ninja fordítás..."
 if cmake -S "$SRC" -B "$BUILD" -G Ninja >/dev/null && \
-   cmake --build "$BUILD" --target test_core test_player test_alsa test_dsd test_dsp test_multiout test_matrix test_room aqulify-engine >/dev/null 2>&1; then
+   cmake --build "$BUILD" --target test_core test_player test_alsa test_dsd test_dsp test_multiout test_matrix test_room test_mic_live test_measure_live aqulify-engine >/dev/null 2>&1; then
     t1=$(date +%s)
     printf "build\tOK\t%d\n" "$((t1 - t0))" >> "$SUMMARY_LOG"
     echo "  [OK]   Tiszta fordítás ($((t1 - t0)) s)"
 else
     cmake -S "$SRC" -B "$BUILD" -G Ninja
-    cmake --build "$BUILD" --target test_core test_player test_alsa test_dsd test_dsp test_multiout test_matrix test_room aqulify-engine
+    cmake --build "$BUILD" --target test_core test_player test_alsa test_dsd test_dsp test_multiout test_matrix test_room test_mic_live test_measure_live aqulify-engine
     t1=$(date +%s)
     printf "build\tHIBA\t%d\n" "$((t1 - t0))" >> "$SUMMARY_LOG"
     echo "  [HIBA] A tiszta fordítás sikertelen"
@@ -100,7 +110,7 @@ echo "[3/6] Tiltott minták ellenőrzése (7.5)..."
 forbidden_ok=1
 t0=$(date +%s)
 PROD_DIFF="$WORK/prod_diff.txt"
-git -C "$REPO" diff -U0 "$BASE_REF"..HEAD -- include/ src/pipewire_plugin.cpp macos/ gui_integrated_system.html | grep '^+' | grep -v '^+++' > "$PROD_DIFF" || true
+repo_git diff -U0 "$BASE_REF"..HEAD -- include/ src/pipewire_plugin.cpp macos/ gui_integrated_system.html | grep '^+' | grep -v '^+++' > "$PROD_DIFF" || true
 if grep -E '\b(Math\.random|TODO|FIXME|stub|fake|simul)\b' "$PROD_DIFF" >/dev/null 2>&1; then
     echo "  [HIBA] Tiltott minta a termékkódban (Math.random/TODO/FIXME/stub/fake/simul):"
     grep -nE '\b(Math\.random|TODO|FIXME|stub|fake|simul)\b' "$PROD_DIFF" | head -n 10
@@ -109,7 +119,7 @@ fi
 
 TEST_DIFF="$WORK/test_diff.txt"
 {
-    git -C "$REPO" diff -U0 "$BASE_REF"..HEAD -- src/test_multiout.cpp src/test_core.cpp | grep '^+' | grep -v '^+++' || true
+    repo_git diff -U0 "$BASE_REF"..HEAD -- src/test_multiout.cpp src/test_core.cpp | grep '^+' | grep -v '^+++' || true
     cat "$SRC/tests/live/way_eq_live.py" "$SRC/tests/live/gui_way_eq_live.js"
 } > "$TEST_DIFF"
 if grep -E '\bskip\b|\bSKIP\b|#if 0|if \(false\)|// *CHECK' "$TEST_DIFF" >/dev/null 2>&1; then
@@ -119,7 +129,7 @@ if grep -E '\bskip\b|\bSKIP\b|#if 0|if \(false\)|// *CHECK' "$TEST_DIFF" >/dev/n
 fi
 
 GUI_DIFF="$WORK/gui_diff.txt"
-git -C "$REPO" diff -U0 "$BASE_REF"..HEAD -- gui_integrated_system.html | grep '^+' | grep -v '^+++' > "$GUI_DIFF" || true
+repo_git diff -U0 "$BASE_REF"..HEAD -- gui_integrated_system.html | grep '^+' | grep -v '^+++' > "$GUI_DIFF" || true
 if python3 - "$GUI_DIFF" <<'PY'
 import re, sys
 bad = []
@@ -156,7 +166,7 @@ if [ $QUICK -eq 0 ]; then
     # 4. Befagyasztott tesztek ellenőrzése (7.1)
     echo "[4/6] Befagyasztott tesztek ellenőrzése (7.1)..."
     t0=$(date +%s)
-    FROZEN_COMMIT="$(git -C "$REPO" log --format='%H %s' "$BASE_REF"..HEAD | grep 'Útonkénti EQ: tesztek (befagyasztva)' | head -n 1 | awk '{print $1}')"
+    FROZEN_COMMIT="$(repo_git log --format='%H %s' "$BASE_REF"..HEAD | grep 'Útonkénti EQ: tesztek (befagyasztva)' | head -n 1 | awk '{print $1}')"
     if [ -z "$FROZEN_COMMIT" ]; then
         echo "  [HIBA] Nem található 'Útonkénti EQ: tesztek (befagyasztva)' commit!"
         printf "frozen_tests\tHIBA\t0\n" >> "$SUMMARY_LOG"
@@ -165,7 +175,7 @@ if [ $QUICK -eq 0 ]; then
         echo "  Befagyasztott tesztcommit: $FROZEN_COMMIT"
         FROZEN_DIR="$WORK/frozen"
         mkdir -p "$FROZEN_DIR/src" "$FROZEN_DIR/build"
-        git -C "$REPO" archive "$FROZEN_COMMIT" | tar -C "$FROZEN_DIR/src" -xf -
+        repo_git archive "$FROZEN_COMMIT" | tar -C "$FROZEN_DIR/src" -xf -
         cmake -S "$FROZEN_DIR/src" -B "$FROZEN_DIR/build" -G Ninja >/dev/null
         cmake --build "$FROZEN_DIR/build" --target test_multiout test_core >/dev/null 2>&1
         set +e
@@ -178,9 +188,9 @@ if [ $QUICK -eq 0 ]; then
             echo "  [HIBA] A befagyasztott tesztek nem buktak el implementáció nélkül (rc_mo=$rc_mo, rc_co=$rc_co)!"
             FAIL=1
         fi
-        BAD_TEST_COMMITS="$(git -C "$REPO" log --format='%H %s' "$FROZEN_COMMIT"..HEAD -- src/test_multiout.cpp src/test_core.cpp tests/live/way_eq_live.py tests/live/gui_way_eq_live.js | grep -v 'Teszt-javítás:' || true)"
+        BAD_TEST_COMMITS="$(repo_git log --format='%H %s' "$FROZEN_COMMIT"..HEAD -- src/test_multiout.cpp src/test_core.cpp tests/live/way_eq_live.py tests/live/gui_way_eq_live.js | grep -v 'Teszt-javítás:' || true)"
         echo "  Teszt-javítás commitok a befagyasztás óta:"
-        git -C "$REPO" log --oneline "$FROZEN_COMMIT"..HEAD -- src/test_multiout.cpp src/test_core.cpp tests/live/way_eq_live.py tests/live/gui_way_eq_live.js || true
+        repo_git log --oneline "$FROZEN_COMMIT"..HEAD -- src/test_multiout.cpp src/test_core.cpp tests/live/way_eq_live.py tests/live/gui_way_eq_live.js || true
         if [ -n "$BAD_TEST_COMMITS" ]; then
             echo "  [HIBA] Nem 'Teszt-javítás:' commit módosította a fagyasztott teszteket:"
             echo "$BAD_TEST_COMMITS"
