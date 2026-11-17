@@ -371,8 +371,14 @@ option(BUILD_LINUX_GUI "Saját ablakos felület (WebKitGTK), ha a fejlesztői cs
 if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
-    add_executable(aqulify-engine src/pipewire_plugin.cpp)
-    target_include_directories(aqulify-engine PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
+    add_executable(aqulify-engine src/pipewire_plugin.cpp src/mic_capture.cpp)
+    target_include_directories(aqulify-engine PRIVATE ${PIPEWIRE_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+    # Mikrofonfelvétel a szobaméréshez (PipeWire): élő teszt elszigetelt PipeWire-ben – tests/live/mic_live.sh
+    add_executable(test_mic_live src/test_mic_live.cpp src/mic_capture.cpp)
+    target_include_directories(test_mic_live PRIVATE ${PIPEWIRE_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_directories(test_mic_live PRIVATE ${PIPEWIRE_LIBRARY_DIRS})
+    target_link_libraries(test_mic_live PRIVATE ${PIPEWIRE_LIBRARIES} Threads::Threads)
     target_link_directories(aqulify-engine PRIVATE ${PIPEWIRE_LIBRARY_DIRS})
     target_link_libraries(aqulify-engine PRIVATE ee_dsp_core aq_player ${PIPEWIRE_LIBRARIES} Threads::Threads)
     target_compile_definitions(aqulify-engine PRIVATE AQULIFY_VERSION="${PROJECT_VERSION}")
