@@ -57,6 +57,22 @@ public:
     /** A közvetlen kimenetben futó DSP-lánc (nem birtokolt; a motor élettartama alatt él). */
     void setExclusiveDsp(ExclusiveDsp* dsp) { dsp_ = dsp; }
 
+    std::vector<uint32_t> supportedRates() const override {
+        static const uint32_t kCandidates[] = { 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000 };
+        const AudioObjectID dev = chooseRealOutputDevice();
+        std::vector<uint32_t> res;
+        if (dev != kAudioObjectUnknown) {
+            for (uint32_t r : kCandidates) {
+                if (supportsSampleRate(dev, static_cast<Float64>(r))) res.push_back(r);
+            }
+        }
+        if (res.empty()) return { 44100, 48000, 88200, 96000, 176400, 192000 };
+        return res;
+    }
+    uint32_t actualRate() const override {
+        return open_.load() ? rate_ : 0;
+    }
+
     bool open(uint32_t sampleRate, RenderFn render, std::string* error) override {
         close();
         if (sampleRate == 0 || !render) {

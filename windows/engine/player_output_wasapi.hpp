@@ -77,6 +77,56 @@ public:
     uint32_t currentRate() const { return rate_; }
     /** Kizárólagos módban a DAC a mintavétel váltásakor új órajelre áll: a lejátszó rövid csenddel kezd. */
     bool settlesOnRateChange() const override { return exclusiveOn_.load(); }
+    std::vector<uint32_t> supportedRates() const override {
+        static const uint32_t kCandidates[] = { 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000 };
+        if (wantExclusive_.load()) {
+            // Kizárólagos módban az alapértelmezett WASAPI eszköz támogatott mintavételei
+            std::vector<uint32_t> res;
+            ComPtr<IMMDeviceEnumerator> en;
+            if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&en)))) {
+                ComPtr<IMMDevice> dev;
+                if (SUCCEEDED(en->GetDefaultAudioEndpoint(eRender, eConsole, &dev))) {
+                    ComPtr<IAudioClient> cli;
+                    if (SUCCEEDED(dev->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&cli)))) {
+                        for (uint32_t r : kCandidates) {
+                            WAVEFORMATEXTENSIBLE wf{};
+                            wf.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+                            wf.Format.nChannels = 2;
+                            wf.Format.nSamplesPerSec = r;
+                            wf.Format.wBitsPerSample = 32;
+                            wf.Format.nBlockAlign = 8;
+                            wf.Format.nAvgBytesPerSec = r * 8;
+                            wf.Format.cbSize = 22;
+                            wf.Samples.wValidBitsPerSample = 32;
+                            wf.dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
+                            wf.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+                            if (cli->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, &wf.Format, nullptr) == S_OK) {
+                                res.push_back(r);
+                                continue;
+                            }
+                            wf.SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
+                            if (cli->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, &wf.Format, nullptr) == S_OK) {
+                                res.push_back(r);
+                                continue;
+                            }
+                            wf.Format.wBitsPerSample = 16;
+                            wf.Format.nBlockAlign = 4;
+                            wf.Format.nAvgBytesPerSec = r * 4;
+                            wf.Samples.wValidBitsPerSample = 16;
+                            if (cli->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, &wf.Format, nullptr) == S_OK) {
+                                res.push_back(r);
+                            }
+                        }
+                    }
+                }
+            }
+            if (!res.empty()) return res;
+        }
+        return { 44100, 48000, 88200, 96000, 176400, 192000 };
+    }
+    uint32_t actualRate() const override {
+        return thread_.joinable() ? rate_ : 0;
+    }
     /** A legutóbbi kizárólagos megnyitás bitpontos volt-e eddig (nem veszett el bit a kimenet formátumára alakításkor). */
     bool quantExact() const { return !quantLoss_.load(); }
 
