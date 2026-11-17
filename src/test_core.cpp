@@ -2622,6 +2622,109 @@ static void testBridgeWayEqImpl() {
     }
 }
 
+static void testBridgeMultiOutRemoteAuth() {
+    std::printf("[23] Híd: set_multiout távoli jogosultság (nem-admin elutasítva, admin elfogadva)\n");
+    std::mutex mu;
+    multiout::MultiConfig curMulti{};
+    curMulti.enabled = false;
+    curMulti.mode = multiout::Mode::Zones;
+    curMulti.numOutputs = 2;
+    curMulti.crossoverHz[0] = 500.0f;
+    std::array<std::string, 3> curSinks{};
+    std::string savedRemote;
+    int setCalls = 0;
+
+    ParamData curP = transparentParams();
+    BridgeCallbacks cb{};
+    cb.pullAudio = [](float*, size_t) -> size_t { return 0; };
+    cb.sampleRate = [] { return 48000.0; };
+    cb.getParams = [&] { std::lock_guard<std::mutex> lk(mu); return curP; };
+    cb.setParams = [&](const ParamData& p) { std::lock_guard<std::mutex> lk(mu); curP = p; };
+    cb.saveRemote = [&](const std::string& s) { std::lock_guard<std::mutex> lk(mu); savedRemote = s; return true; };
+    cb.loadRemote = [&] { std::lock_guard<std::mutex> lk(mu); return savedRemote; };
+    cb.getMultiOut = [&] { std::lock_guard<std::mutex> lk(mu); return curMulti; };
+    cb.setMultiOut = [&](const multiout::MultiConfig& c, const std::array<std::string, 3>& s) {
+        std::lock_guard<std::mutex> lk(mu);
+        curMulti = c;
+        curSinks = s;
+        ++setCalls;
+    };
+    cb.multiOutStatus = [&] {
+        std::lock_guard<std::mutex> lk(mu);
+        return std::string("{\"supported\":true,\"enabled\":") + (curMulti.enabled ? "true" : "false") +
+               ",\"mode\":\"" + (curMulti.mode == multiout::Mode::Crossover ? "crossover" : "zones") +
+               "\",\"crossovers\":[" + std::to_string(curMulti.crossoverHz[0]) + "]}";
+    };
+
+    WebSocketBridge bridge(47900);
+    const bool started = bridge.start(cb);
+    CHECK(started, "a híd elindul a 47900-as porton");
+    if (!started) return;
+
+    net::socket_t sLocal = wsConnectLive(47900, "/");
+    CHECK(sLocal != net::kInvalidSocket, "helyi kliens csatlakozik a 47900-as portra");
+    if (sLocal == net::kInvalidSocket) { bridge.stop(); return; }
+    wsWaitFor(sLocal, "\"modules\"", 1000);
+
+    wsSendText(sLocal, "{\"type\":\"set_remote\",\"enabled\":true,\"port\":47921}");
+    std::string remOn = wsWaitFor(sLocal, "\"enabled\":true", 2000);
+    CHECK(!remOn.empty(), "távoli elérés bekapcsolva (47921)");
+
+    wsSendText(sLocal, "{\"type\":\"remote_new_code\"}");
+    std::string code;
+    const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(3000);
+    while (std::chrono::steady_clock::now() < until) {
+        std::string msg = wsWaitFor(sLocal, "\"code\":\"", 500);
+        code = jsonField(msg, "code");
+        if (code.size() == 6) break;
+    }
+    CHECK(code.size() == 6, "párosító kód lekérve: %s", code.c_str());
+
+    if (code.size() == 6) {
+        net::socket_t sRem = wsConnectLive(47921, "/?pair=" + code + "&client=aqulify_desktop&name=MultiGuest");
+        CHECK(sRem != net::kInvalidSocket, "távoli kliens csatlakozik");
+        if (sRem != net::kInvalidSocket) {
+            std::string paired = wsWaitFor(sRem, "\"type\":\"paired\"", 2000);
+            std::string devId = jsonField(paired, "id");
+            CHECK(!devId.empty(), "párosított eszköz ID: %s", devId.c_str());
+
+            const char* moReq = "{\"type\":\"set_multiout\",\"enabled\":1,\"mode\":\"crossover\",\"slope\":24,"
+                                "\"crossovers\":[800],\"outputs\":[{\"band\":0,\"gain\":-3},{\"sink\":\"dac_b\",\"band\":1,\"gain\":2}]}";
+
+            // 1. Nem-admin tavoli kliens -> elutasitva, beallitas valtozatlan
+            wsSendText(sRem, moReq);
+            std::string errMsg = wsWaitFor(sRem, "\"error\":\"remote\"", 2000);
+            bool unchanged = false;
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                unchanged = !errMsg.empty() && setCalls == 0 && !curMulti.enabled &&
+                            curMulti.mode == multiout::Mode::Zones &&
+                            std::fabs(curMulti.crossoverHz[0] - 500.0f) < 1e-3f;
+            }
+            CHECK(unchanged, "nem-admin távoli kliens set_multiout kérése elutasítva (remote), állapot változatlan");
+
+            // 2. Admin jog megadasa utan -> elfogadva
+            wsSendText(sLocal, "{\"type\":\"remote_set_admin\",\"id\":\"" + devId + "\",\"admin\":true}");
+            std::this_thread::sleep_for(std::chrono::milliseconds(80));
+
+            wsSendText(sRem, moReq);
+            std::string okMsg = wsWaitFor(sRem, "\"type\":\"multiout\"", 2000);
+            bool accepted = false;
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                accepted = !okMsg.empty() && setCalls == 1 && curMulti.enabled &&
+                           curMulti.mode == multiout::Mode::Crossover &&
+                           std::fabs(curMulti.crossoverHz[0] - 800.0f) < 1e-3f;
+            }
+            CHECK(accepted, "admin távoli kliens set_multiout kérése elfogadva, konfiguráció frissült");
+            net::closeSocket(sRem);
+        }
+    }
+
+    net::closeSocket(sLocal);
+    bridge.stop();
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
@@ -2651,6 +2754,7 @@ int main() {
     testMultiOutStorageImpl();
 #endif
     testBridgeWayEqImpl();
+    testBridgeMultiOutRemoteAuth();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }
