@@ -138,8 +138,8 @@ static void testK2RulesMatrix() {
                 uint32_t target = computeExpectedTargetRate(rule, src, caps, customTable);
                 const uint32_t expectedOut = (target == 0) ? src : target;
                 // Független elvárás összevetése a termékkód UpsampleEngine::selectTargetRate függvényével
-                const uint32_t actualOut = UpsampleEngine::selectTargetRate(
-                    src, static_cast<audioopt::UpsampleRule>(rule), caps, customTable, false, false);
+                const uint32_t actualOut = ee_analyzer::UpsampleEngine::selectTargetRate(
+                    src, static_cast<ee_analyzer::audioopt::UpsampleRule>(rule), caps, customTable, false, false);
                 // Lefelé soha nem alakíthat, és csak a képességkészletben szereplő (vagy eredeti) rátára válthat!
                 if (actualOut < src || actualOut != expectedOut) {
                     allValid = false;

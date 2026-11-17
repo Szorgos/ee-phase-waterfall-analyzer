@@ -267,18 +267,26 @@ if [ $QUICK -eq 0 ]; then
             elif ! bash "$MUT_SRC/tests/live/multiout_live.sh" "$MUT_BUILD" python3 -I "$MUT_SRC/tests/live/upsample_live.py" >/dev/null 2>&1; then
                 killer="upsample_live.py"
             fi
-        else
-            if ! cmake --build "$MUT_BUILD" --target test_upsample test_player test_core >/dev/null 2>&1; then
+        elif [[ "$mname" == U16_* ]]; then
+            if ! cmake --build "$MUT_BUILD" --target test_core >/dev/null 2>&1; then
                 killer="BUILD_ERROR"
                 FAIL=1
-            else
-                if ! "$MUT_BUILD/test_upsample" >/dev/null 2>&1; then
-                    killer="test_upsample"
-                elif ! "$MUT_BUILD/test_player" >/dev/null 2>&1; then
-                    killer="test_player"
-                elif ! "$MUT_BUILD/test_core" >/dev/null 2>&1; then
-                    killer="test_core"
-                fi
+            elif ! "$MUT_BUILD/test_core" >/dev/null 2>&1; then
+                killer="test_core"
+            fi
+        elif [[ "$mname" == U02_* || "$mname" == U03_* || "$mname" == U04_* || "$mname" == U05_* || "$mname" == U06* || "$mname" == U07_* || "$mname" == U08_* || "$mname" == U09_* ]]; then
+            if ! cmake --build "$MUT_BUILD" --target test_upsample >/dev/null 2>&1; then
+                killer="BUILD_ERROR"
+                FAIL=1
+            elif ! "$MUT_BUILD/test_upsample" >/dev/null 2>&1; then
+                killer="test_upsample"
+            fi
+        else
+            if ! cmake --build "$MUT_BUILD" --target test_player >/dev/null 2>&1; then
+                killer="BUILD_ERROR"
+                FAIL=1
+            elif ! "$MUT_BUILD/test_player" >/dev/null 2>&1; then
+                killer="test_player"
             fi
         fi
         # Visszaállítás
