@@ -2160,8 +2160,10 @@ static void testUpsamplePlayerK1K6K7K8K16() {
             refOutFrames += flFrames;
 
             float maxD2Ref = 0.0f;
-            for (size_t i = 4; i < refOutFrames * 2; i += 2) {
-                float d2 = std::abs(refOut[i] - 2.0f * refOut[i - 2] + refOut[i - 4]);
+            const size_t refStart = std::min<size_t>(4000, refOutFrames);
+            const size_t refEnd = refOutFrames > 4000 ? refOutFrames - 4000 : refOutFrames;
+            for (size_t f = refStart; f < refEnd; ++f) {
+                float d2 = std::abs(refOut[2 * f] - 2.0f * refOut[2 * (f - 1)] + refOut[2 * (f - 2)]);
                 if (d2 > maxD2Ref) maxD2Ref = d2;
             }
 
@@ -2186,10 +2188,12 @@ static void testUpsamplePlayerK1K6K7K8K16() {
 
             CHECK(out->opens == 1, "K7: szünetmentes váltás, 1etlen hangfolyam nyílt a két számhoz");
 
+            // A teljes középső szakaszon vizsgáljuk a második differenciát (a szűrő késleltetése előtti és
+            // utáni határon is, hogy a szűrőállapot nullázása miatti kattanás biztosan lebukjon - K7 / U11)
             float maxD2Cut = 0.0f;
-            const size_t cutFrame = nA * 2;
-            const size_t checkStart = cutFrame > 200 ? cutFrame - 200 : 2;
-            const size_t checkEnd = std::min(cutFrame + 200, gotOut.size() / 2);
+            const size_t totalFrames = gotOut.size() / 2;
+            const size_t checkStart = std::min<size_t>(4000, totalFrames);
+            const size_t checkEnd = totalFrames > 4000 ? totalFrames - 4000 : totalFrames;
             for (size_t f = checkStart; f < checkEnd; ++f) {
                 float d2 = std::abs(gotOut[2 * f] - 2.0f * gotOut[2 * (f - 1)] + gotOut[2 * (f - 2)]);
                 if (d2 > maxD2Cut) maxD2Cut = d2;

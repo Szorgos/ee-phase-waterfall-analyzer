@@ -136,15 +136,16 @@ static void testK2RulesMatrix() {
         for (uint32_t src : srcRates) {
             for (const auto& caps : capabilitySets) {
                 uint32_t target = computeExpectedTargetRate(rule, src, caps, customTable);
-                // Lefelé soha nem alakíthat!
-                if (target != 0 && target <= src) {
+                const uint32_t expectedOut = (target == 0) ? src : target;
+                // Független elvárás összevetése a termékkód UpsampleEngine::selectTargetRate függvényével
+                const uint32_t actualOut = UpsampleEngine::selectTargetRate(
+                    src, static_cast<audioopt::UpsampleRule>(rule), caps, customTable, false, false);
+                // Lefelé soha nem alakíthat, és csak a képességkészletben szereplő (vagy eredeti) rátára válthat!
+                if (actualOut < src || actualOut != expectedOut) {
                     allValid = false;
                 }
-                // Ha cél van megadva, benne kell lennie a képességkészletben
-                if (target != 0) {
-                    if (std::find(caps.begin(), caps.end(), target) == caps.end()) {
-                        allValid = false;
-                    }
+                if (actualOut > src && std::find(caps.begin(), caps.end(), actualOut) == caps.end()) {
+                    allValid = false;
                 }
                 ++testsCount;
             }

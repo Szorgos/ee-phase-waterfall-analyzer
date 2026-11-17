@@ -5,7 +5,7 @@
          if (isDsd) { setReason("dsd"); return srcRate; }
          if (srcRate > 192000) { setReason("source_rate"); return srcRate; }
 -        if (rule == audioopt::UpsampleRule::Off) { setReason("off"); return srcRate; }
-+        if (rule == audioopt::UpsampleRule::Off) { setReason(""); return srcRate * 2; }
++        if (rule == audioopt::UpsampleRule::Off) { setReason(""); return (srcRate <= 96000) ? srcRate * 2 : srcRate; }
  
          auto isSupported = [&](uint32_t r) {
              return std::find(supported.begin(), supported.end(), r) != supported.end();
