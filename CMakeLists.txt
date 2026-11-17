@@ -184,8 +184,12 @@ if(WIN32)
     ee_version_rc(setup_version.rc "Aqulify-Setup" "Aqulify-Setup.exe" "Aqulify Setup" "Aqulify telepítő" "VFT_APP")
 
     if(BUILD_WINDOWS_ENGINE)
-        add_executable(Aqulify WIN32 windows/engine/aether_engine.cpp ${EE_RES_DIR}/engine.rc)
-        target_include_directories(Aqulify PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+        add_executable(Aqulify WIN32 windows/engine/aether_engine.cpp src/mic_capture.cpp ${EE_RES_DIR}/engine.rc)
+        # Mikrofonfelvétel (WASAPI) alaptesztje – hangeszköz nélküli CI-gépen is fut
+        add_executable(test_mic_basic src/test_mic_basic.cpp src/mic_capture.cpp)
+        target_include_directories(test_mic_basic PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        target_link_libraries(test_mic_basic PRIVATE ole32 oleaut32 uuid)
+        target_include_directories(Aqulify PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
         target_link_libraries(Aqulify PRIVATE ee_dsp_core aq_player ws2_32 iphlpapi ole32 oleaut32 shell32 shlwapi advapi32 user32 uuid avrt winhttp)
         # 2.x: a beépített lejátszó parancssori indítója (konzolos program)
         add_executable(aqulify-play src/aqulify_play.cpp)
@@ -341,7 +345,11 @@ if(APPLE)
         ${CMAKE_CURRENT_SOURCE_DIR}/gui_player.js
         ${CMAKE_CURRENT_SOURCE_DIR}/import_parser.js
         ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js)
-    add_executable(Aqulify MACOSX_BUNDLE macos/app/main.mm macos/engine/mac_engine.mm macos/engine/mac_media.mm ${AQ_MAC_GUI}
+    # Mikrofonfelvétel (Core Audio) alaptesztje – hangeszköz nélküli CI-gépen is fut
+    add_executable(test_mic_basic src/test_mic_basic.cpp src/mic_capture.cpp)
+    target_include_directories(test_mic_basic PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(test_mic_basic PRIVATE "-framework AudioToolbox" "-framework CoreAudio" "-framework CoreFoundation")
+    add_executable(Aqulify MACOSX_BUNDLE macos/app/main.mm macos/engine/mac_engine.mm macos/engine/mac_media.mm src/mic_capture.cpp ${AQ_MAC_GUI}
         ${AQ_MAC_RES}/Aqulify.icns ${AQ_MAC_RES}/en.lproj/InfoPlist.strings ${AQ_MAC_RES}/hu.lproj/InfoPlist.strings)
     set_source_files_properties(${AQ_MAC_GUI} PROPERTIES MACOSX_PACKAGE_LOCATION Resources/gui)
     set_source_files_properties(${AQ_MAC_RES}/Aqulify.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
@@ -352,7 +360,7 @@ if(APPLE)
         MACOSX_BUNDLE_GUI_IDENTIFIER io.github.szorgos.Aqulify
         MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
         MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION})
-    target_include_directories(Aqulify PRIVATE macos/engine)
+    target_include_directories(Aqulify PRIVATE macos/engine ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_options(Aqulify PRIVATE -fobjc-arc)
     target_compile_definitions(Aqulify PRIVATE AQULIFY_VERSION="${PROJECT_VERSION}")
     target_link_libraries(Aqulify PRIVATE ee_dsp_core aq_player Threads::Threads
@@ -381,8 +389,14 @@ option(BUILD_LINUX_GUI "Saját ablakos felület (WebKitGTK), ha a fejlesztői cs
 if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
-    add_executable(aqulify-engine src/pipewire_plugin.cpp)
-    target_include_directories(aqulify-engine PRIVATE ${PIPEWIRE_INCLUDE_DIRS})
+    add_executable(aqulify-engine src/pipewire_plugin.cpp src/mic_capture.cpp)
+    target_include_directories(aqulify-engine PRIVATE ${PIPEWIRE_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+    # Mikrofonfelvétel a szobaméréshez (PipeWire): élő teszt elszigetelt PipeWire-ben – tests/live/mic_live.sh
+    add_executable(test_mic_live src/test_mic_live.cpp src/mic_capture.cpp)
+    target_include_directories(test_mic_live PRIVATE ${PIPEWIRE_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_directories(test_mic_live PRIVATE ${PIPEWIRE_LIBRARY_DIRS})
+    target_link_libraries(test_mic_live PRIVATE ${PIPEWIRE_LIBRARIES} Threads::Threads)
     target_link_directories(aqulify-engine PRIVATE ${PIPEWIRE_LIBRARY_DIRS})
     target_link_libraries(aqulify-engine PRIVATE ee_dsp_core aq_player ${PIPEWIRE_LIBRARIES} Threads::Threads)
     target_compile_definitions(aqulify-engine PRIVATE AQULIFY_VERSION="${PROJECT_VERSION}")
