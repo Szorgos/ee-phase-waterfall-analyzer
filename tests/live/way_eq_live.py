@@ -89,6 +89,7 @@ def main():
     print("[1] Alap keresztváltó 500 Hz (DAC A = mély, DAC B = magas)")
     ws.send({"type": "set_multiout", "enabled": True, "mode": "crossover", "slope": 24, "crossovers": [500],
              "outputs": [{"band": 0}, {"sink": "dac_b", "band": 1}]})
+    ws.wait_type("multiout", limit=500)
     time.sleep(0.8)
     a0, b0 = record("xo_base", t)
     check(abs(a0[100] + 12) < 0.3 and a0[4000] < -60 and abs(b0[4000] + 12) < 0.3 and b0[100] < -55,
@@ -106,10 +107,12 @@ def main():
     check(abs(a1[100] + 12.0) < 0.3 and a1[4000] < -60,
           f"K14 DAC A változatlan: 100 Hz={a1[100]:.2f} dBFS (-12.0±0.3), 4 kHz={a1[4000]:.2f} (<-60)")
 
-    st = m["status"] if m else get_status()
+    st = get_status()
     has_way = bool(st.get("outputs") and len(st["outputs"]) > 1 and st["outputs"][1].get("way", {}).get("on") is True)
     has_resp = bool(st.get("response") and st["response"].get("freqs") and st["response"].get("ways"))
     check(has_way and has_resp, "K14 állapot JSON tartalmazza a way és response mezőket")
+    ws.send({"type": "restore_mode", "mode": "always", "parts": {"chain": False, "multi": True, "audio": False}})
+    time.sleep(0.3)
     ws.s.close()
 
     print("[3] K14: motor újraindítása után az útonkénti EQ megmarad")

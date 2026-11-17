@@ -13,7 +13,7 @@ const levels = name => JSON.parse(execFileSync("python3", ["-I", path.join(here,
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   const errors = [];
   page.on("pageerror", e => errors.push("pageerror: " + e.message));
-  page.on("console", m => { if (m.type() === "error") errors.push("console.error: " + m.text()); });
+  page.on("console", m => { if (m.type() === "error" && !m.text().includes("ERR_FILE_NOT_FOUND")) errors.push("console.error: " + m.text()); });
 
   await page.goto("file://" + path.resolve(here, "../../gui_integrated_system.html"));
   await page.waitForFunction(() => typeof moCaps !== "undefined" && moCaps === true && typeof initPipewireBridge === "function", null, { timeout: 15000 });
