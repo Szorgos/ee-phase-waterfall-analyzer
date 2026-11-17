@@ -35,11 +35,11 @@ namespace fs = std::filesystem;
 
 static int g_fail = 0;
 #define CHECK(cond, ...) do { if (!(cond)) { ++g_fail; std::printf("  [HIBA] " __VA_ARGS__); } else { std::printf("  [OK]   " __VA_ARGS__); } std::printf("\n"); } while (0)
-static thread_local bool g_rtTrackAlloc = false;
-static std::atomic<uint64_t> g_rtAllocCount{0};
+thread_local volatile bool g_rtTrackAlloc = false;
+std::atomic<uint64_t> g_rtAllocCount{0};
 
 void* operator new(std::size_t size) {
-    if (g_rtTrackAlloc) ++g_rtAllocCount;
+    if (g_rtTrackAlloc) g_rtAllocCount.fetch_add(1, std::memory_order_relaxed);
     void* p = std::malloc(size);
     if (!p) throw std::bad_alloc();
     return p;
@@ -2215,7 +2215,7 @@ static void testUpsamplePlayerK1K6K7K8K16() {
             p.open(tmpPath("aq_k7_a.wav"), &err);
             pullFrames(p, *out, 1024);
 
-            g_rtAllocCount = 0;
+            g_rtAllocCount.store(0, std::memory_order_seq_cst);
             g_rtTrackAlloc = true;
             for (int i = 0; i < 20; ++i) {
                 float buf[512 * 2];
@@ -2224,8 +2224,8 @@ static void testUpsamplePlayerK1K6K7K8K16() {
             g_rtTrackAlloc = false;
             p.stop();
 
-            CHECK(g_rtAllocCount == 0, "K8: valós idejű foglalásmentesség (render hívások alatt 0 újrafoglalás, mért: %llu)",
-                  (unsigned long long)g_rtAllocCount);
+            CHECK(g_rtAllocCount.load(std::memory_order_seq_cst) == 0, "K8: valós idejű foglalásmentesség (render hívások alatt 0 újrafoglalás, mért: %llu)",
+                  (unsigned long long)g_rtAllocCount.load());
         }
 
         // K16: DSD/DoP és > 192 kHz kihagyása
