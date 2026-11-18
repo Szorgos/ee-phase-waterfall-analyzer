@@ -223,13 +223,20 @@ void MusicLibrary::rescan() {
         startScan();
     } else {
         scanning_ = true;
-        rescanRequested_ = true;
+        {
+            // a jelző a várakozás zárja alatt: a szál a feltétel ellenőrzése és az elalvás között sem maradhat le róla
+            std::lock_guard<std::mutex> lk(cvMutex_);
+            rescanRequested_ = true;
+        }
         cv_.notify_all();
     }
 }
 
 void MusicLibrary::stopScan() {
-    cancel_ = true;
+    {
+        std::lock_guard<std::mutex> lk(cvMutex_);
+        cancel_ = true;
+    }
     cv_.notify_all();
     if (thread_.joinable()) {
         thread_.join();
@@ -244,11 +251,13 @@ void MusicLibrary::startScan() {
     rescanRequested_ = false;
     scanning_ = true;
     thread_ = std::thread([this] {
-        // Rövid várakozás (20 ms), hogy induláskor a felület a gyorsítótárból azonnal, I/O-versenyhelyzet nélkül megjelenhessen
+        // Rövid várakozás (alapból 20 ms), hogy induláskor a felület a gyorsítótárból azonnal, I/O-versenyhelyzet nélkül
+        // megjelenhessen; a kézi újrabejárás (rescan) megszakítja
         {
             std::unique_lock<std::mutex> lk(cvMutex_);
-            cv_.wait_for(lk, std::chrono::milliseconds(20), [this] { return cancel_.load(); });
+            cv_.wait_for(lk, scanStartDelay_, [this] { return cancel_.load() || rescanRequested_.load(); });
         }
+        rescanRequested_ = false;   // az első bejárás most indul: a kérés teljesül
         while (!cancel_.load()) {
             scanned_ = 0;
             const auto r = roots();

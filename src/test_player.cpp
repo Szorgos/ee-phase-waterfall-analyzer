@@ -1302,6 +1302,9 @@ static void testLibraryCache() {
     {
         library::MusicLibrary lib;
         lib.setCacheStorage(loadFn, saveFn);
+        // A háttérbejárás csak a kézi indításra induljon (különben a 3 apró fájlt a 20 ms-os várakozás után gyorsan
+        // végigjárja, és terhelt gépen a cached jelzés az ellenőrzések között már hamis lehet: versenyhelyzet)
+        lib.setScanStartDelay(std::chrono::minutes(5));
         lib.setRoots({ u8s(root) });
         // Azonnal a setRoots után ellenőrizzük: azonnal betöltődött a gyorsítótárból!
         auto snap = lib.snapshot();
@@ -1312,7 +1315,8 @@ static void testLibraryCache() {
         id2 = snap->tracks[1].id;
         id3 = snap->tracks[2].id;
 
-        // Megvárjuk a háttérszálat (gyors stat-ellenőrzés)
+        // A háttérellenőrzés indítása (a várakozást a rescan megszakítja), majd megvárjuk
+        lib.rescan();
         CHECK(lib.waitIdle(10000), "háttérellenőrzés lefut");
         CHECK(!lib.cached(), "háttérellenőrzés után cached = false");
         auto snap2 = lib.snapshot();

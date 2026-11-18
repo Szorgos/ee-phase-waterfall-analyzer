@@ -14,6 +14,7 @@
  * Az útvonalak UTF-8 szövegek (Windowson is).
  */
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
@@ -84,6 +85,12 @@ public:
 
     /** Gyorsítótár perzisztencia kezelőinek beállítása (betöltés és mentés). */
     void setCacheStorage(std::function<std::string()> loadCache, std::function<void(const std::string&)> saveCache);
+    /**
+     * A háttérbejárás indulás előtti várakozása (alapból 20 ms: a felület addig a gyorsítótárból jelenik meg). A
+     * setRoots előtt hívandó; a rescan() a várakozást megszakítja. A tesztek hosszú várakozással a gyorsítótárból
+     * induló állapotot versenyhelyzet nélkül vizsgálhatják.
+     */
+    void setScanStartDelay(std::chrono::milliseconds d) { scanStartDelay_ = d; }
 
     // ---- a protokoll üzenetei (JSON, "type" mezővel)
     /** {"type":"library", scanning, scanned, tracks, albums, folders[, roots]}; a mappák csak helyi kliensnek. */
@@ -124,6 +131,7 @@ private:
     std::condition_variable cv_;
     std::function<std::string()> loadCache_;
     std::function<void(const std::string&)> saveCache_;
+    std::chrono::milliseconds scanStartDelay_{20};
 };
 
 /** Gyorsítótár szerializálás JSON formátumba (version: 1). */
