@@ -1,0 +1,11 @@
+--- a/include/dsd.hpp
++++ b/include/dsd.hpp
+@@ -615,7 +615,7 @@
+      * Az egyfokozatú út költsége a DSD-mintavétellel arányos (DSD1024-en ~2,5× valós idő egy laptopmagon); a
+      * kétfokozatúé kb. harmada. DSD64–DSD256 az eredeti, egyfokozatú úton marad (bitre változatlan).
+      */
+-    static constexpr uint32_t kTwoStageMinDecim = 256;
++    static constexpr uint32_t kTwoStageMinDecim = 1u << 30;
+     static constexpr uint32_t kStageAGroups = 8;           // az A-szűrő hossza köztes mintában
+     static constexpr double kStageABeta = 11.16;           // ~110 dB zárósáv (Kaiser)
+ 

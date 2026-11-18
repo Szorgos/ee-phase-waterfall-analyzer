@@ -734,8 +734,8 @@
   "dev.irBtn": "Load impulse response (Convolver)",
   "dev.profileHint": "The selected profile takes effect immediately. An EQ profile turns on the Equalizer, an impulse response the Convolver.",
   "dev.multiBtn": "Configure outputs",
-  "ao.dsdDop": "Native DSD (DoP)",
-  "ao.dsdDopHint": "DSD files are sent to the DAC without PCM conversion, packed as DoP 1.1. The DSP chain, ReplayGain and digital volume are bypassed (adjust volume on the DAC).",
+  "ao.dsdDop": "DSD natively (native DSD or DoP)",
+  "ao.dsdDopHint": "DSD files go to the DAC without PCM conversion: as native DSD when the output and the DAC support it (direct ALSA output on Linux, ASIO on Windows), otherwise in DoP 1.1 packing. The DSP chain, ReplayGain and the digital volume are bypassed then (set the volume on the DAC).",
   "ao.dsdDopWarn": "If your DAC does not support DoP, native DSD playback may produce loud noise. Try it at a low volume first! Enable it anyway?",
   "target.thisMachine": "This machine",
   "target.addMachine": "+ Add machine…",
@@ -986,5 +986,7 @@
   "ao.asioErr_hw_malfunction": "the DAC reported an error",
   "ao.asioErr_no_dsp": "internal error: no DSP chain",
   "ao.asioErr_open_failed": "opening failed",
-  "ao.asioErr_other": "error code: {code}"
+  "ao.asioErr_other": "error code: {code}",
+  "ao.dsdNativeOn": "Native DSD: {dsd}, {format} – the DAC receives the file's DSD stream bit-for-bit unchanged",
+  "ao.exclRate": "the DAC accepts this DSD rate neither natively nor over DoP (DSD1024 does not fit into DoP on any DAC); playing converted to PCM"
 }

@@ -1,0 +1,11 @@
+--- a/include/dsd.hpp
++++ b/include/dsd.hpp
+@@ -851,7 +851,7 @@
+             float* o = out + f * channels_;
+             for (uint32_t c = 0; c < channels_; ++c) {
+                 const float* h = &bHist_[static_cast<size_t>(c) * bTaps_];
+-                double acc = 0.0;
++                float acc = 0.0f;
+                 uint32_t idx = bHead_;
+                 for (uint32_t k = 0; k < bTaps_; ++k) {
+                     acc += bCoeffs_[k] * h[idx];

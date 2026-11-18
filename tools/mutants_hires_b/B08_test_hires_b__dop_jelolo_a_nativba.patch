@@ -1,0 +1,11 @@
+--- a/include/player_output_alsa.hpp
++++ b/include/player_output_alsa.hpp
+@@ -256,7 +256,7 @@
+             if (carried_) d[0] = carry_[c];
+             for (size_t i = 0; i < frames; ++i) {
+                 const uint32_t w = static_cast<uint32_t>(dop[2 * i + static_cast<size_t>(c)]);
+-                d[carried_ + 2 * i] = static_cast<uint8_t>((w >> 8) & 0xFFu);
++                d[carried_ + 2 * i] = static_cast<uint8_t>((w >> 16) & 0xFFu);
+                 d[carried_ + 2 * i + 1] = static_cast<uint8_t>(w & 0xFFu);
+             }
+         }

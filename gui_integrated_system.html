@@ -10605,7 +10605,12 @@ function aoRenderPath() {
     }
   }
   if (p.dop && p.dop.want) {
-    if (p.dop.active) {
+    // a DSD-szint (DSD64 … DSD1024) a DSD-mintavételből: 44,1 kHz · 64 · n vagy 48 kHz · 64 · n
+    const dsdName = r => { const m = r % 44100 === 0 ? r / 2822400 : r / 3072000; return m >= 1 ? "DSD" + Math.round(64 * m) : ""; };
+    if (p.dop.active && p.dop.native) {
+      const fmt = String(p.dop.format || "").replace(/[^A-Z0-9_]/g, "");
+      lines.push(`<span class="ok">● ${t("ao.dsdNativeOn", { dsd: dsdName(p.dop.dsdRate || 0), format: fmt })}</span>`);
+    } else if (p.dop.active) {
       lines.push(`<span class="ok">● ${t("ao.dsdDop")}</span> · ${t("ao.dsdDopHint")}`);
     } else if (p.dop.fallback) {
       const why = "ao.excl" + p.dop.fallback.charAt(0).toUpperCase() + p.dop.fallback.slice(1);

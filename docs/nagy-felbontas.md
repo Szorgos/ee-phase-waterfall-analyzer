@@ -59,8 +59,42 @@ A hangmotor méri a saját processzorhasználatát. Ha az **tartósan** (20 más
 
 A tanácsadó **magától soha nem változtat semmit.**
 
+## Fájlformátumok
+
+A WAV, a FLAC és az **AIFF / AIFF-C** (`.aif`, `.aiff`, `.aifc`) 352,8–768 kHz-en is bitpontosan szól, tekeréssel
+együtt. A 32 bites egész fájlok a lejátszó lebegőpontos útja miatt 24 bites pontossággal szólnak (ez a legtöbb DAC
+felbontásánál nem számít).
+
+A spektrum, a vízesés és a csúcsmérő 192 kHz fölött tizedelt jelből dolgozik. Ugyanazt a felbontást mutatja, mint
+176,4 / 192 kHz-en, és a csúcsmérő minden mintát lát.
+
+## DSD512 és DSD1024
+
+A DSF és a DFF (tömörítetlen) fájlokat DSD64-től DSD1024-ig olvassa, mindkét családban (44,1 és 48 kHz).
+
+| Kimenet | Hogyan szól |
+|---|---|
+| Linux / Pi, közvetlen ALSA (kizárólagos), „DSD natívan” bekapcsolva | **natív DSD** (`DSD_U32_BE`, `U32_LE`, `U16_BE`, `U16_LE`, `U8` – amit a DAC tud), bitre változatlanul; ha a DAC nem tud natív DSD-t: DoP |
+| Windows, ASIO, „DSD natívan” bekapcsolva | natív DSD, ha az ASIO-meghajtó tudja; különben DoP PCM-keretekben |
+| Windows, kizárólagos WASAPI | DoP, az eszköz határáig |
+| macOS, és minden más esetben | DSD → PCM (88,2 / 96 kHz), a DSP-lánccal (macOS-en a DoP / natív DSD még nincs megvalósítva) |
+
+- **A DoP-nak van határa.** DSD512 DoP-ban 1,4112 MHz-es, DSD1024 DoP-ban 2,8224 MHz-es PCM kellene; ez utóbbit egy
+  DAC sem fogadja. Ilyenkor a jelút kiírja az okot, és a lejátszó PCM-re alakít.
+- **DSD-bitfolyamon nincs DSP.** Natív DSD-nél és DoP-nál a DSP-lánc, a ReplayGain és a digitális hangerő kimarad. Ha
+  EQ vagy szobakorrekció kell, kapcsold ki a „DSD natívan” beállítást: ekkor a DSD → PCM út szól, a lánccal.
+- **DSD → PCM DSD512 / DSD1024-en kétfokozatú tizedeléssel.** A zaj és a hang szintje 0,1 dB-en belül ugyanaz, mint
+  az egyfokozatú úton, de kb. kétszer gyorsabb. DSD1024 → 88,2 kHz egy laptopmagon ~5–7× valós idő; a Pi-n a valós
+  idejű lejátszáshoz elég, de ezt valódi Pi-n még meg kell mérni.
+
 ## Ellenőrzés (fejlesztőknek)
 
+- `test_hires_b`: DSF / DFF DSD64–DSD1024 mindkét családban (fejléc, hossz, nyers bitfolyam bitre, tekerés);
+  DSD512 / DSD1024 → PCM: a kétfokozatú út jele és THD+N-je a bevált egyfokozatúéval egyezik (≤ −115 dB); a köztes
+  mintavétel közeli hang visszahajlása ≤ −105 dB; tekerés bitre; sebesség; natív ALSA-csomagolás mind az 5
+  formátumban, több perióduson át (DSD_U8 páratlan periódussal is); végponttól végpontig a lejátszón és az ALSA
+  „null” eszközén át, natív és DoP módban, bitre.
+- `tools/check_hires_b.sh`: a fentiek friss másolatból, tiltott minták, 8 mutáns (`tools/mutants_hires_b/`).
 - `test_hires`: DSP-korlát (705,6 / 768 kHz bitpontos, 384 kHz-en a DSP hat), késleltetés, beállítások és régi JSON,
   célválasztás, egy / két szál bitazonossága, terhelésmérő, tanácsadó, 384 / 768 kHz-es WAV, mag-rögzítés.
 - `tests/live/hires_live.py`: valódi PipeWire-gráfon 768 kHz bitpontos lejátszás (a monitorról felvett jel bitre

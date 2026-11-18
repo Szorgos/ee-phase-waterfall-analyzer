@@ -1,0 +1,11 @@
+--- a/include/dsd.hpp
++++ b/include/dsd.hpp
+@@ -616,7 +616,7 @@
+      * kétfokozatúé kb. harmada. DSD64–DSD256 az eredeti, egyfokozatú úton marad (bitre változatlan).
+      */
+     static constexpr uint32_t kTwoStageMinDecim = 256;
+-    static constexpr uint32_t kStageAGroups = 8;           // az A-szűrő hossza köztes mintában
++    static constexpr uint32_t kStageAGroups = 2;           // az A-szűrő hossza köztes mintában
+     static constexpr double kStageABeta = 11.16;           // ~110 dB zárósáv (Kaiser)
+ 
+     /** allowTwoStage = false: mindig az egyfokozatú út (a teszt ezzel veti össze a kétfokozatút a bevált úttal). */
