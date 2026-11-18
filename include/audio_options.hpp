@@ -45,7 +45,11 @@ enum class UpsamplePreset : int {
 /** A választható pufferméretek mintában (0: automatikus, a rendszer dönt). */
 inline constexpr std::array<int, 8> kBufferChoices{ 0, 64, 128, 256, 512, 1024, 2048, 4096 };
 /** A választható rögzített mintavételek. */
-inline constexpr std::array<int, 6> kRateChoices{ 44100, 48000, 88200, 96000, 176400, 192000 };
+inline constexpr std::array<int, 10> kRateChoices{ 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000 };
+/** A DSP-lánc legnagyobb mintavétele: fölötte a lánc bitpontosan átenged (az LSP-modulok erre vannak méretezve). */
+inline constexpr uint32_t kMaxDspRate = 384000;
+/** A felmintavételezés felső korlátjának választható értékei (0: nincs korlát). */
+inline constexpr std::array<int, 5> kUpsampleMaxRateChoices{ 0, 176400, 192000, 352800, 384000 };
 /** A választható szűrőpontosságok (bit). */
 inline constexpr std::array<int, 4> kPrecisionChoices{ 20, 24, 28, 32 };
 /** A választható fejtér értékek (dB). */
@@ -74,6 +78,10 @@ struct AudioOptions {
     double upsamplePhase = 25.0;                // 0.0 .. 50.0 (25: köztes)
     float upsampleHeadroomDb = -1.0f;           // 0, -1, -3, -6 dB
     std::map<uint32_t, uint32_t> upsampleCustom; // Egyéni táblázat: forrás -> cél
+    int upsampleThreads = 0;                    // 0: automatikus (ajánlott), 1: egy szál, 2: két szál (bal / jobb)
+    uint32_t upsampleMaxRate = 0;               // a célmintavétel felső korlátja (0: nincs; a terhelés-tanácsadó állítja)
+    int dedicatedCore = -1;                     // a dekóder-szál rögzítése egy magra (-1: ki; csak Linux / Windows)
+    bool loadAdvisor = true;                    // a terhelés-tanácsadó szól-e
 
     bool operator==(const AudioOptions& o) const {
         return bufferFrames == o.bufferFrames && keepAwake == o.keepAwake && rateMode == o.rateMode &&
@@ -86,7 +94,8 @@ struct AudioOptions {
                upsamplePrecision == o.upsamplePrecision &&
                std::abs(upsamplePhase - o.upsamplePhase) < 1e-4 &&
                std::abs(upsampleHeadroomDb - o.upsampleHeadroomDb) < 1e-3f &&
-               upsampleCustom == o.upsampleCustom;
+               upsampleCustom == o.upsampleCustom && upsampleThreads == o.upsampleThreads &&
+               upsampleMaxRate == o.upsampleMaxRate && dedicatedCore == o.dedicatedCore && loadAdvisor == o.loadAdvisor;
     }
     bool operator!=(const AudioOptions& o) const { return !(*this == o); }
 };
@@ -132,6 +141,11 @@ inline void sanitize(AudioOptions& o) {
         o.upsamplePassbandEnd = 0.95;
         o.upsampleStopbandBegin = 1.00;
     }
+    if (o.upsampleThreads < 0 || o.upsampleThreads > 2) o.upsampleThreads = 0;
+    if (std::find(kUpsampleMaxRateChoices.begin(), kUpsampleMaxRateChoices.end(), static_cast<int>(o.upsampleMaxRate)) ==
+        kUpsampleMaxRateChoices.end())
+        o.upsampleMaxRate = 0;
+    if (o.dedicatedCore < -1 || o.dedicatedCore > 255) o.dedicatedCore = -1;
 }
 
 inline const char* rateModeName(RateMode m) {
@@ -170,7 +184,10 @@ inline std::string toJson(const AudioOptions& o) {
         s += "\"" + std::to_string(kv.first) + "\":" + std::to_string(kv.second);
         first = false;
     }
-    s += "}}";
+    s += "},\"upsampleThreads\":" + std::to_string(o.upsampleThreads) +
+         ",\"upsampleMaxRate\":" + std::to_string(o.upsampleMaxRate) +
+         ",\"dedicatedCore\":" + std::to_string(o.dedicatedCore) +
+         ",\"loadAdvisor\":" + (o.loadAdvisor ? "true" : "false") + "}";
     return s;
 }
 
@@ -216,6 +233,11 @@ inline AudioOptions fromJson(const json::Value& v, AudioOptions base = {}) {
             } catch (...) {}
         }
     }
+    if (const json::Value* x = v.get("upsampleThreads"); x && x->type == T::Number) base.upsampleThreads = static_cast<int>(x->num);
+    if (const json::Value* x = v.get("upsampleMaxRate"); x && x->type == T::Number)
+        base.upsampleMaxRate = x->num >= 0 && x->num < 1e7 ? static_cast<uint32_t>(x->num) : 0;
+    if (const json::Value* x = v.get("dedicatedCore"); x && x->type == T::Number) base.dedicatedCore = static_cast<int>(x->num);
+    if (const json::Value* x = v.get("loadAdvisor"); x && x->type == T::Bool) base.loadAdvisor = x->b;
 
     sanitize(base);
     return base;

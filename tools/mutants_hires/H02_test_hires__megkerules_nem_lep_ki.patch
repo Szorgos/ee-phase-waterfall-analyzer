@@ -1,0 +1,11 @@
+--- a/include/aether_chain.hpp
++++ b/include/aether_chain.hpp
+@@ -420,7 +420,7 @@
+ 
+     void processChunk(float* L, float* R, size_t m) {
+         // 384 kHz fölött a modulok (LSP) nem futhatnak: a jel bitpontosan, érintetlenül megy tovább
+-        if (dspBypass_) return;
++        if (dspBypass_ && !dspBypass_) return;
+         quantum_.store(static_cast<uint32_t>(m), std::memory_order_relaxed);
+         const ParamData& d = current_;
+ 

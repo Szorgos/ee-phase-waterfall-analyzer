@@ -25,6 +25,7 @@
 #include "file_player.hpp"
 #include "library_bridge.hpp"
 #include "linux_store.hpp"
+#include "load_advisor.hpp"
 #include "media_mpris.hpp"
 #include "pair_cli.hpp"
 #if defined(AQ_HAVE_ALSA)
@@ -870,7 +871,9 @@ int main(int argc, char* argv[]) {
         node.setRateFollow(o.rateMode == audioopt::RateMode::Follow);
         if (o.rateMode == audioopt::RateMode::Follow) {
             pwSetSetting("clock.force-rate", "0");
-            pwSetSetting("clock.allowed-rates", "[ 44100 48000 88200 96000 176400 192000 ]");
+            // A forrás (vagy a felmintavételezés célja) szerint vált a gráf; a hangkártya által nem tudott értéket a
+            // PipeWire nem választja. 384 kHz fölött a DSP-lánc bitpontosan átenged (AetherChain).
+            pwSetSetting("clock.allowed-rates", "[ 44100 48000 88200 96000 176400 192000 352800 384000 705600 768000 ]");
             ratesTouched = true;
         } else if (o.rateMode == audioopt::RateMode::Fixed) {
             pwSetSetting("clock.force-rate", std::to_string(o.fixedRate));
@@ -1039,6 +1042,8 @@ int main(int argc, char* argv[]) {
         if (!linux_store::saveAudioOptions(savedJson)) std::cerr << "[Hangkimenet] Figyelem: az audio.json nem írható.\n";
         std::cout << "[Hangkimenet] " << savedJson << "\n";
     };
+    // Terhelés-tanácsadó (a motor processzorterhelése, hangkimaradások; Pi-n szigorúbb küszöb)
+    load::Tracker loadTracker(load::defaultThresholdPct());
     // Jelút és késleltetés a felület állapotsorába: quantum, a DSP saját késleltetése, terhelés, bitpontosság
     {
         auto base = cb.statusFields;
@@ -1106,7 +1111,12 @@ int main(int argc, char* argv[]) {
                           uResampleWarn ? "true" : "false", uReason.c_str(),
                           static_cast<unsigned long long>(uClipped),
                           static_cast<unsigned long long>(uProcessed), uDelayMs);
-            return s + buf + ubuf;
+            audioopt::AudioOptions curOpts;
+            { std::lock_guard<std::mutex> lk(audioMutex); curOpts = audioOpts; }
+            const bool dspBypassed = node.chain.dspBypassedForRate() || filePlayer.streamRate() > audioopt::kMaxDspRate;
+            return s + buf + ubuf +
+                   loadTracker.json(curOpts, uActive ? uTgt : uSrc, filePlayer.underruns(), dspBypassed,
+                                    filePlayer.upsampleThreadsInUse(), filePlayer.dedicatedCoreApplied());
         };
     }
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };

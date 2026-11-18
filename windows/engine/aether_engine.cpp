@@ -60,6 +60,7 @@
 #include "tray.hpp"
 #include "media_smtc.hpp"
 #include "audio_options.hpp"
+#include "load_advisor.hpp"
 #include "file_player.hpp"
 #include "library_bridge.hpp"
 #include "player_output_wasapi.hpp"
@@ -1104,6 +1105,19 @@ int main(int argc, char** argv) {
         }
         writeFileAtomic(userFilePath(L"audio.json", true), optsToJsonWithDop(o, dsdDop));
     };
+    // Terhelés-tanácsadó: a motor processzorterhelése és a lejátszó hangkimaradásai az állapot végére
+    load::Tracker loadTracker(load::defaultThresholdPct());
+    {
+        auto base = cb.statusFields;
+        cb.statusFields = [&, base]() {
+            std::string s = base ? base() : std::string();
+            audioopt::AudioOptions curOpts;
+            { std::lock_guard<std::mutex> lk(audioMutex); curOpts = audioOpts; }
+            const uint32_t tgt = filePlayer.isUpsampleActive() ? filePlayer.upsampleTargetRate() : filePlayer.upsampleSrcRate();
+            return s + loadTracker.json(curOpts, tgt, filePlayer.underruns(), filePlayer.streamRate() > audioopt::kMaxDspRate,
+                                        filePlayer.upsampleThreadsInUse(), filePlayer.dedicatedCoreApplied());
+        };
+    }
     cb.getLanguage = [] { return aq_i18n::savedLanguage(); };
     cb.setLanguage = [](const std::string& l) {
         if (aq_i18n::set(l) && !aq_i18n::saveLanguage(l)) std::cout << "[Nyelv] Figyelem: a language.txt nem írható.\n";

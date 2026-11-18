@@ -145,6 +145,12 @@ public:
     uint64_t upsampleProcessedFrames() const;
     double upsampleDelayMs() const;
     std::string upsampleReason() const;
+    /** A felmintavételezés ténylegesen használt szálainak száma (1 vagy 2; 0, ha nincs átalakítás). */
+    int upsampleThreadsInUse() const { return upsampleActive_.load() ? upsampleThreadsUsed_.load() : 0; }
+    /** Hangkimaradások: a kimenet több keretet kért, mint amennyi a pufferben volt (a fájl vége előtt). */
+    uint64_t underruns() const { return underruns_.load(std::memory_order_relaxed); }
+    /** A dekóder-szál tényleges rögzítése (-1: nincs rögzítve; csak Linux / Windows). */
+    int dedicatedCoreApplied() const { return coreApplied_.load(); }
     static constexpr uint64_t kPreloadMaxBytes = 400ull << 20;
     /** Natív DSD (DoP 1.1) kérése (csak kizárólagos kimeneten; elutasításkor a lejátszó PCM-re lép vissza). */
     void setDsdDop(bool on);
@@ -282,6 +288,10 @@ private:
     mutable std::string upsampleReason_{ "off" };
     UpsampleEngine upsampler_;
     std::vector<float> upsampleOutBuf_;
+    std::atomic<int> upsampleThreadsUsed_{1};
+    std::atomic<uint64_t> underruns_{0};
+    std::atomic<int> coreWanted_{-1};    // a beállítás szerint kért mag (-1: nincs rögzítés)
+    std::atomic<int> coreApplied_{-1};   // a dekóder-szálon ténylegesen beállított mag
     std::vector<float> stereoMixBuf_;
 };
 

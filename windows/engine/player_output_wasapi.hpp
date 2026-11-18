@@ -78,7 +78,7 @@ public:
     /** Kizárólagos módban a DAC a mintavétel váltásakor új órajelre áll: a lejátszó rövid csenddel kezd. */
     bool settlesOnRateChange() const override { return exclusiveOn_.load(); }
     std::vector<uint32_t> supportedRates() const override {
-        static const uint32_t kCandidates[] = { 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000 };
+        static const uint32_t kCandidates[] = { 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000 };
         if (wantExclusive_.load()) {
             // Kizárólagos módban az alapértelmezett WASAPI eszköz támogatott mintavételei
             std::vector<uint32_t> res;

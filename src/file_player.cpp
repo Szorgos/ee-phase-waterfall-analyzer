@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "music_library.hpp"
+#include "load_meter.hpp"
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -317,6 +318,12 @@ bool FilePlayer::startStreamLocked(std::unique_ptr<Segment> seg, std::string* er
         upsampleActive_ = true;
         upsampleSrcRate_ = srcRate;
         upsampleTargetRate_ = targetRate;
+        // Szálak: 2 = kért; automatikus = 2 szál a nagy célmintavételeknél (≥ 352,8 kHz), ha van legalább 4 mag
+        const int thr = upsampleOpts_.upsampleThreads == 2 ? 2
+                      : upsampleOpts_.upsampleThreads == 1 ? 1
+                      : (targetRate >= 352800 && load::logicalCores() >= 4 ? 2 : 1);
+        upsampler_.setThreads(thr);
+        upsampleThreadsUsed_ = thr;
         upsampler_.initWithOptions(srcRate, targetRate, 2, upsampleOpts_);
         rate_ = targetRate;
         if (seg->total > 0) {
@@ -764,6 +771,7 @@ void FilePlayer::render(float* stereo, size_t frames) {
         finished_ = true;
         cv_.notify_all();
     } else if (!eof_.load() && (w - r - n) < ringFrames_ / 2) {
+        if (n < frames) underruns_.fetch_add(1, std::memory_order_relaxed);   // hangkimaradás (a terhelés-tanácsadónak)
         cv_.notify_all();   // a puffer félig kiürült: a dekódoló szál ne a következő 20 ms-os ébredésre várjon
     }
 }
@@ -811,6 +819,11 @@ void FilePlayer::decodeLoop() {
     while (!quit_) {
         cv_.wait_for(lk, std::chrono::milliseconds(20));
         if (quit_) break;
+        // Dedikált mag (Linux / Windows): a beállítás változása a következő körben érvényes
+        if (const int want = coreWanted_.load(); want != coreApplied_.load()) {
+            if (load::pinCurrentThread(want)) coreApplied_ = (want >= 0 ? load::currentThreadAffinitySingle() : -1);
+            else coreApplied_ = -1, coreWanted_ = -1;
+        }
         if (segs_.empty()) continue;
         // a már elhangzott számok kiesnek (a hallott és a később következők maradnak)
         while (segs_.size() > 1 && audibleFrame() >= segs_.front().end) segs_.pop_front();
@@ -844,7 +857,7 @@ uint32_t FilePlayer::decideTargetRate(uint32_t srcRate, bool bypassUpsample, boo
         ? out_->supportedRates()
         : std::vector<uint32_t>{ 44100, 48000, 88200, 96000, 176400, 192000 };
     return UpsampleEngine::selectTargetRate(srcRate, rule, supported, upsampleOpts_.upsampleCustom,
-                                            bypassUpsample, isDsd, &upsampleReason_);
+                                            bypassUpsample, isDsd, &upsampleReason_, upsampleOpts_.upsampleMaxRate);
 }
 
 void FilePlayer::setUpsample(bool on) {
@@ -856,6 +869,7 @@ void FilePlayer::setUpsampleOptions(const audioopt::AudioOptions& opts) {
     std::lock_guard<std::mutex> lk(m_);
     upsampleOpts_ = opts;
     upsampleEnabled_ = (opts.upsampleRule != audioopt::UpsampleRule::Off);
+    coreWanted_ = load::affinitySupported() ? opts.dedicatedCore : -1;
 }
 
 uint64_t FilePlayer::upsampleClippedSamples() const {

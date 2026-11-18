@@ -4917,6 +4917,8 @@ var qrcode = function() {
               <label class="ao-row ao-check" id="aoRowRgClip"><input type="checkbox" id="aoRgClip" checked onchange="aoSend()"> <span data-i18n="ao.rgClip">Túlvezérlés elleni védelem (csúcs-címke)</span></label>
               <label class="ao-row ao-check"><input type="checkbox" id="aoPreload" onchange="aoSend()"> <span data-i18n="ao.preload">Fájl betöltése memóriába</span></label>
               <div class="ao-hint" data-i18n="ao.preloadHint">Lejátszás közben nincs lemez- vagy hálózati olvasás (pl. elalvó külső lemez, NAS).</div>
+              <label class="ao-row ao-check"><input type="checkbox" id="aoLoadAdvisor" checked onchange="aoSend()"> <span data-i18n="la.setting">Szóljon, ha nagy a processzorterhelés</span></label>
+              <div class="ao-hint" data-i18n="la.settingHint">Ha a hangmotor tartósan sokat terheli a gépet, vagy hangkimaradás van, felajánl egy könnyítést. Magától soha nem változtat.</div>
               <div id="aoExclWrap" hidden>
                 <label class="ao-row ao-check"><input type="checkbox" id="aoExclusive" onchange="aoSend()"> <span id="aoExclLabel" data-i18n="ao.exclusive">Kizárólagos mód (WASAPI exclusive)</span></label>
                 <div class="ao-hint" id="aoExclHint" data-i18n="ao.exclusiveHint">A lejátszó egyedül használja a hangkártyát: a Windows keverője és az Equalizer APO kimarad, a fájl saját mintavételén szól, a DSP-lánc a programban fut. Közben más programok nem szólnak ezen az eszközön. Lejátszás közbeni váltáskor a hang egy pillanatra megszakad.</div>
@@ -4965,6 +4967,15 @@ var qrcode = function() {
                       <button type="button" id="upsPreset2" class="adw-btn" style="flex:1; font-size:11px; padding:4px 6px;" onclick="upsSelectPreset(2)" data-i18n="ups.presetMinimum">Minimumfázis</button>
                     </div>
                   </div>
+                  <label class="ao-row" style="margin-top:4px;"><span data-i18n="ups.maxRate">Legnagyobb célmintavétel</span>
+                    <select id="upsMaxRate" class="mini-select" onchange="aoSend()">
+                      <option value="0" data-i18n="ups.maxRateNone">Nincs korlát</option>
+                      <option value="176400">176,4 kHz</option>
+                      <option value="192000">192 kHz</option>
+                      <option value="352800">352,8 kHz</option>
+                      <option value="384000">384 kHz</option>
+                    </select>
+                  </label>
                   <label class="ao-row" style="margin-top:4px;"><span data-i18n="ups.headroom">Fejtér</span>
                     <select id="upsHeadroom" class="mini-select" onchange="aoSend()">
                       <option value="0">0 dB</option>
@@ -4996,6 +5007,18 @@ var qrcode = function() {
                       </label>
                       <div class="ao-hint" data-i18n="ups.phaseScale">0 = minimumfázis · 25 = köztes · 50 = lineáris</div>
                       <div id="upsErrOrder" class="ao-hint" hidden style="color:var(--aq-err,#ef4444); font-weight:600;" data-i18n="ups.errOrder"></div>
+                      <label class="ao-row"><span data-i18n="ups.threads">Számítási szálak</span>
+                        <select id="upsThreads" class="mini-select" onchange="aoSend()">
+                          <option value="0" data-i18n="ups.threadsAuto">Automatikus (ajánlott)</option>
+                          <option value="1" data-i18n="ups.threads1">1 szál</option>
+                          <option value="2" data-i18n="ups.threads2">2 szál</option>
+                        </select>
+                      </label>
+                      <div class="ao-hint" data-i18n="ups.threadsHint">Két szálnál a bal és a jobb csatorna külön magon számolódik. Az eredmény bitre azonos az egy szálas számítással, nincs hallható különbség; csak a terhelés oszlik meg, és a nagy célmintavételek könnyebben kijönnek.</div>
+                      <label class="ao-row" id="upsCoreRow" hidden><span data-i18n="ups.core">Dedikált mag</span>
+                        <select id="upsCore" class="mini-select" onchange="aoSend()"></select>
+                      </label>
+                      <div class="ao-hint" id="upsCoreHint" hidden data-i18n="ups.coreHint">A dekóder-szálat egy processzormagra rögzíti. A hangminőségen nem változtat, legfeljebb az ütemezést teheti kiszámíthatóbbá; a legtöbb gépen nincs rá szükség, ezért alapból ki van kapcsolva.</div>
                     </div>
                   </details>
                 </div>
@@ -5078,6 +5101,19 @@ var qrcode = function() {
       <button type="button" id="btnRemoteUpdHide" class="mini-btn" hidden data-i18n="target.hideUpdate" onclick="hideRemoteUpdate()">Ne szólj erről a verzióról</button>
     </div>
     <button type="button" class="mini-btn" onclick="switchControlledMachine('')" data-i18n="target.switchBack">Vissza a saját géphez</button>
+  </div>
+  <div id="hiresDspNote" class="dsp-warn" hidden><span id="hiresDspNoteText"></span></div>
+  <div id="loadAdvBanner" class="remote-banner" style="flex-wrap:wrap;" hidden>
+    <div style="display:flex; flex-direction:column; gap:2px; flex:1 1 320px;">
+      <span id="laTitle" style="font-weight:600;"></span>
+      <span id="laText" class="ao-hint" style="margin:0;"></span>
+    </div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+      <button type="button" id="laBtnOptimize" class="mini-btn" data-i18n="la.optimize" onclick="laOptimize()">Optimalizálás</button>
+      <button type="button" id="laBtnUndo" class="mini-btn" hidden data-i18n="la.undo" onclick="laUndoApply()">Visszavonás</button>
+      <button type="button" id="laBtnKeep" class="mini-btn" data-i18n="la.keep" onclick="laKeep()">Marad így</button>
+      <button type="button" id="laBtnNever" class="mini-btn" data-i18n="la.never" onclick="laNever()">Ne kérdezz többet</button>
+    </div>
   </div>
   <div id="dspWarn"  class="dsp-warn" hidden><span id="dspWarnText"></span><button type="button" id="btnApoConfigurator" class="dsp-warn-btn" hidden data-i18n="engine.apoConfigurator">Equalizer APO Configurator megnyitása</button></div>
 
@@ -10119,7 +10155,7 @@ function saveZoneActive() {
 // ---- Haladó hangkimenet (audio_options.hpp): pufferméret, mintavétel, újramintavételezés, ébren tartás, jelút
 var aoCaps = false, aoOpts = null, aoCapsDetail = null;
 const AO_BUFFERS = [0, 64, 128, 256, 512, 1024, 2048, 4096];
-const AO_RATES = [44100, 48000, 88200, 96000, 176400, 192000];
+const AO_RATES = [44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000];
 const AO_RESAMPLE = [-1, 2, 6, 10, 14];
 function aoKhz(r) { return fmtNum(Math.round(r / 100) / 10) + " kHz"; }
 function aoFillSelects() {
@@ -10161,6 +10197,7 @@ function aoOnMessage(m) {
   document.getElementById("aoRgPreamp").value = typeof o.rgPreamp === "number" ? o.rgPreamp : 0;
   document.getElementById("aoRgClip").checked = o.rgClip !== false;
   document.getElementById("aoPreload").checked = !!o.preload;
+  document.getElementById("aoLoadAdvisor").checked = o.loadAdvisor !== false;
   document.getElementById("aoExclWrap").hidden = cp.exclusive !== true;
   // Linuxon a kizárólagos mód a közvetlen ALSA-kimenet: saját felirat, és nincs hardveres hangerő-választás
   const exclAlsa = cp.exclusiveKind === "alsa", exclHog = cp.exclusiveKind === "hog";
@@ -10188,7 +10225,7 @@ function aoOnMessage(m) {
 }
 
 const UPS_SRCS = [44100, 48000, 88200, 96000, 176400, 192000];
-const UPS_TGTS = [88200, 96000, 176400, 192000, 352800, 384000];
+const UPS_TGTS = [88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000];
 let upsPresetState = 1;
 
 function upsFillCustomSelects() {
@@ -10246,6 +10283,9 @@ function upsApplyOptions(o, cp) {
   document.getElementById("upsPhase").value = String(typeof o.upsamplePhase === "number" ? o.upsamplePhase : 25);
   document.getElementById("upsHeadroom").value = String(typeof o.upsampleHeadroomDb === "number" ? o.upsampleHeadroomDb : -1);
   document.getElementById("upsErrOrder").hidden = true;
+  document.getElementById("upsThreads").value = String(typeof o.upsampleThreads === "number" ? o.upsampleThreads : 0);
+  document.getElementById("upsMaxRate").value = String(typeof o.upsampleMaxRate === "number" ? o.upsampleMaxRate : 0);
+  upsFillCoreSelect(typeof o.dedicatedCore === "number" ? o.dedicatedCore : -1);
   const cust = o.upsampleCustom || {};
   for (const s of UPS_SRCS) {
     const sel = document.getElementById("upsCust" + s);
@@ -10320,7 +10360,99 @@ function upsRenderStatus() {
   if (u.clippedSamples > 0) {
     parts.push(`<span class="warn">${t("ups.statusClipped", { count: u.clippedSamples })}</span>`);
   }
+  const la = engineStatus && engineStatus.loadAdvisor;
+  if (la && u.active) {
+    parts.push(`<span>${t("ups.statusThreads", { n: la.threads })}</span>`);
+    if (la.coreApplied >= 0) parts.push(`<span>${t("ups.statusCore", { n: la.coreApplied + 1 })}</span>`);
+  }
   el.innerHTML = parts.join("<br>");
+}
+
+/* ===== Nagy felbontás: DSP-korlát jelzés és terhelés-tanácsadó ===== */
+let laSnoozed = false;       // "Marad így": amíg a figyelmeztetés meg nem szűnik
+let laUndo = null;           // az optimalizálás előtti beállítások (visszavonáshoz)
+const LA_CTRL = { upsThreads: "0", upsMaxRate: "0", upsPrecision: "28", upsRule: "0" };
+
+/** A dedikált mag választó: Ki + a gép magjai (csak ha a rendszer támogatja). */
+function upsFillCoreSelect(cur) {
+  const la = engineStatus && engineStatus.loadAdvisor;
+  const row = document.getElementById("upsCoreRow"), hint = document.getElementById("upsCoreHint"), sel = document.getElementById("upsCore");
+  if (!row || !sel) return;
+  const ok = !!(la && la.affinity);
+  row.hidden = !ok; hint.hidden = !ok;
+  if (!ok && cur < 0) { sel.innerHTML = `<option value="-1">${t("ups.coreOff")}</option>`; return; }
+  const n = Math.max((la && la.cores) || 0, cur + 1, 1);
+  let h = `<option value="-1">${t("ups.coreOff")}</option>`;
+  for (let i = 0; i < n; ++i) h += `<option value="${i}">${t("ups.coreN", { n: i + 1 })}</option>`;
+  sel.innerHTML = h;
+  sel.value = String(cur);
+}
+
+function laRender() {
+  const la = engineStatus && engineStatus.loadAdvisor;
+  const note = document.getElementById("hiresDspNote");
+  const banner = document.getElementById("loadAdvBanner");
+  if (!note || !banner) return;
+  const sr = (engineStatus && engineStatus.sr) || 0;
+  const bypassed = !!(la && la.dspBypassed);
+  note.hidden = !bypassed;
+  if (bypassed) document.getElementById("hiresDspNoteText").textContent = t("hires.dspOff", { rate: aoKhz(sr) });
+  const enabled = !(aoOpts && aoOpts.loadAdvisor === false);
+  const warn = !!(la && la.warn) && enabled;
+  if (!warn) laSnoozed = false;
+  const undoBtn = document.getElementById("laBtnUndo"), optBtn = document.getElementById("laBtnOptimize");
+  const keepBtn = document.getElementById("laBtnKeep"), neverBtn = document.getElementById("laBtnNever");
+  if (laUndo) {   // az optimalizálás után: rövid visszajelzés + visszavonás
+    banner.hidden = false;
+    document.getElementById("laTitle").textContent = t("la.doneTitle");
+    document.getElementById("laText").textContent = t("la.doneText");
+    optBtn.hidden = true; keepBtn.hidden = false; neverBtn.hidden = true; undoBtn.hidden = false;
+    return;
+  }
+  const coreSel = document.getElementById("upsCore");
+  if (la && la.affinity && coreSel && coreSel.options.length <= 1 && (la.cores || 1) > 1)
+    upsFillCoreSelect(aoOpts && typeof aoOpts.dedicatedCore === "number" ? aoOpts.dedicatedCore : -1);
+  if (!warn || laSnoozed) { banner.hidden = true; return; }
+  banner.hidden = false;
+  const xr = la.recentUnderruns > 0;
+  document.getElementById("laTitle").textContent = t("la.title");
+  const why = xr ? t("la.whyXrun", { n: la.recentUnderruns }) : t("la.whyCpu", { cpu: Math.round(la.cpu) });
+  const sug = t("la.step." + (la.step || "none"));
+  document.getElementById("laText").textContent = why + " " + sug;
+  optBtn.hidden = !la.step || la.step === "none";
+  undoBtn.hidden = true; keepBtn.hidden = false; neverBtn.hidden = false;
+}
+function laOptimize() {
+  const la = engineStatus && engineStatus.loadAdvisor;
+  if (!la || !la.step || la.step === "none") return;
+  laUndo = {};
+  for (const id of Object.keys(LA_CTRL)) laUndo[id] = document.getElementById(id).value;
+  switch (la.step) {
+    case "two_threads": document.getElementById("upsThreads").value = "2"; break;
+    case "precision24": document.getElementById("upsPrecision").value = "24"; upsUpdatePresetButtons(3); break;
+    case "lower_target": {
+      const tgt = (engineStatus.upsample && engineStatus.upsample.targetRate) || 0;
+      document.getElementById("upsMaxRate").value = tgt > 384000 ? "384000" : "192000"; break;
+    }
+    case "upsample_off": document.getElementById("upsRule").value = "0"; upsOnRuleChange(); return laRender();
+  }
+  aoSend();
+  laRender();
+}
+function laUndoApply() {
+  if (!laUndo) return;
+  for (const id of Object.keys(laUndo)) document.getElementById(id).value = laUndo[id];
+  laUndo = null;
+  laSnoozed = true;
+  upsOnRuleChange();
+  laRender();
+}
+function laKeep() { laUndo = null; laSnoozed = true; laRender(); }
+function laNever() {
+  laUndo = null;
+  document.getElementById("aoLoadAdvisor").checked = false;
+  aoSend();
+  laRender();
 }
 function aoDopToggle(chk) {
   if (chk && chk.checked) {
@@ -10365,7 +10497,13 @@ function aoSend() {
         }
       }
       opts.upsampleCustom = cust;
+      opts.upsampleThreads = parseInt(document.getElementById("upsThreads").value, 10) || 0;
+      opts.upsampleMaxRate = parseInt(document.getElementById("upsMaxRate").value, 10) || 0;
+      const coreEl = document.getElementById("upsCore");
+      const coreVal = coreEl ? parseInt(coreEl.value, 10) : -1;
+      opts.dedicatedCore = isNaN(coreVal) ? -1 : coreVal;
     }
+    opts.loadAdvisor = document.getElementById("aoLoadAdvisor").checked;
   }
   if (aoCapsDetail && aoCapsDetail.exclusive) {
     opts.exclusive = document.getElementById("aoExclusive").checked;
@@ -13228,7 +13366,7 @@ function initPipewireBridge() {
           engineStatus = data;
           updOnEngineStatus(data.update);
           updateEngineBadge();
-          if (aoCaps) aoRenderPath();
+          if (aoCaps) { aoRenderPath(); laRender(); upsRenderStatus(); }
           if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);
           if (typeof data.gr === "number") updateLimiterMeters(null, data.gr);
           updateMagicDiag(data.magic || null);

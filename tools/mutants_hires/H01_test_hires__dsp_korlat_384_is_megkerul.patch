@@ -1,0 +1,11 @@
+--- a/include/aether_chain.hpp
++++ b/include/aether_chain.hpp
+@@ -214,7 +214,7 @@
+     void setSampleRateInternal(uint32_t sr) {
+         // A modulok (LSP) legfeljebb audioopt::kMaxDspRate-re vannak méretezve: fölötte a lánc bitpontosan átenged,
+         // és a modulok mintavétele nem változik (nem kapnak érvénytelen értéket)
+-        dspBypass_ = sr > audioopt::kMaxDspRate;
++        dspBypass_ = sr >= audioopt::kMaxDspRate;
+         dspBypassFlag_.store(dspBypass_, std::memory_order_relaxed);
+         if (dspBypass_) {
+             sampleRate_.store(sr);
