@@ -103,7 +103,7 @@ run_win_exe() {
     return $rc
 }
 
-# CRLF/LF-független unified diff alkalmazó segédfüggvény
+# CRLF/LF-független, többhunkos unified diff alkalmazó segédfüggvény
 apply_patch_file() {
     local patch_file="$1"
     python3 - "$ROOT_DIR" "$patch_file" << 'PY'
@@ -112,37 +112,46 @@ import os, sys
 root, patch_path = sys.argv[1], sys.argv[2]
 lines = open(patch_path, encoding="utf-8").read().splitlines()
 target_rel = None
-old_chunk, new_chunk = [], []
+hunks = []
+cur_old, cur_new = [], []
 in_hunk = False
 
 for line in lines:
     if line.startswith("+++ b/"):
         target_rel = line[6:].strip()
     elif line.startswith("@@ "):
+        if in_hunk and cur_old:
+            hunks.append((cur_old, cur_new))
+        cur_old, cur_new = [], []
         in_hunk = True
     elif in_hunk:
         if line.startswith("-"):
-            old_chunk.append(line[1:])
+            cur_old.append(line[1:])
         elif line.startswith("+"):
-            new_chunk.append(line[1:])
+            cur_new.append(line[1:])
         elif line.startswith(" "):
-            old_chunk.append(line[1:])
-            new_chunk.append(line[1:])
+            cur_old.append(line[1:])
+            cur_new.append(line[1:])
 
-if not target_rel or not old_chunk:
+if in_hunk and cur_old:
+    hunks.append((cur_old, cur_new))
+
+if not target_rel or not hunks:
     sys.exit(1)
 
 full_path = os.path.join(root, target_rel)
 raw = open(full_path, "rb").read().decode("utf-8")
 crlf = "\r\n" in raw
 norm = raw.replace("\r\n", "\n")
-old_str = "\n".join(old_chunk)
-new_str = "\n".join(new_chunk)
-if old_str not in norm:
-    sys.exit(1)
-patched = norm.replace(old_str, new_str, 1)
-if crlf:
-    patched = patched.replace("\n", "\r\n")
+
+for old_chunk, new_chunk in hunks:
+    old_str = "\n".join(old_chunk)
+    new_str = "\n".join(new_chunk)
+    if old_str not in norm:
+        sys.exit(1)
+    norm = norm.replace(old_str, new_str, 1)
+
+patched = norm.replace("\n", "\r\n") if crlf else norm
 open(full_path, "wb").write(patched.encode("utf-8"))
 PY
 }
@@ -383,11 +392,13 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6. 7.2: Mutánsok futtatása (8 mutáns)
+# 6. 7.2: Mutánsok futtatása (10 mutáns)
 # ---------------------------------------------------------------------------
-echo "[6/7] Mutánsok futtatása (7.2, 8 mutáns)..."
+echo "[6/7] Mutánsok futtatása (7.2, 10 mutáns)..."
 if [ "$QUICK" -eq 0 ]; then
+    MUT_COUNT=0
     for patch in "$ROOT_DIR"/tools/mutants_asio/U*.patch; do
+        MUT_COUNT=$((MUT_COUNT + 1))
         mname="$(basename "$patch" .patch)"
         MT0=$(date +%s)
         cp "$ORIG_ASIO_HPP" "$ROOT_DIR/windows/engine/player_output_asio.hpp"
@@ -425,7 +436,11 @@ if [ "$QUICK" -eq 0 ]; then
             FAILS=$((FAILS + 1))
         fi
     done
-    rm -f "$BUILD_DIR/CMakeFiles/test_asio.dir/src/test_asio.cpp.obj"
+    if [ "$MUT_COUNT" -lt 10 ]; then
+        echo "  [HIBA] Kevesebb mint 10 mutáns található ($MUT_COUNT db)!"
+        FAILS=$((FAILS + 1))
+    fi
+    rm -f "$BUILD_DIR/CMakeFiles/test_asio.dir/src/test_asio.dir/src/test_asio.cpp.obj" "$BUILD_DIR/CMakeFiles/test_asio.dir/src/test_asio.cpp.obj"
     cmake --build "$BUILD_DIR" -j"$(nproc)" --target test_asio >/dev/null 2>&1
 else
     echo "  [KIHAGYVA] Mutánsok (--quick)"

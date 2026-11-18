@@ -619,11 +619,8 @@ private:
         bufferSize_ = bufSz;
 
         // Előre lefoglaljuk a munkapuffereket a vezérlőszálon, hogy a bufferSwitch alatt 0 foglalás legyen
-        const size_t dopFramesPerBuf = nativeDsd_.load(std::memory_order_relaxed)
-            ? (static_cast<size_t>(bufSz) / 16u)
-            : static_cast<size_t>(bufSz);
         tmpFloat_.assign(static_cast<size_t>(bufSz) * 2, 0.0f);
-        tmpDop_.assign(dopFramesPerBuf * 2, 0);
+        tmpDop_.assign(static_cast<size_t>(bufSz) * 2, 0);
 
         std::memset(bufferInfos_, 0, sizeof(bufferInfos_));
         bufferInfos_[0].isInput = ASIOFalse;

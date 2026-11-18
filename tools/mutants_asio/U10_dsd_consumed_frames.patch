@@ -1,0 +1,11 @@
+--- a/windows/engine/player_output_asio.hpp
++++ b/windows/engine/player_output_asio.hpp
+@@ -817,7 +817,7 @@
+                 dstR[2 * i + 1] = b1R;
+             }
+             if (drv_) drv_->outputReady();
+-            consumedFrames_.fetch_add(dopFrames, std::memory_order_release);
++            consumedFrames_.fetch_add(n, std::memory_order_release);
+             return;
+         }
+ 

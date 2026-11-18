@@ -1,0 +1,20 @@
+--- a/windows/engine/player_output_asio.hpp
++++ b/windows/engine/player_output_asio.hpp
+@@ -415,7 +415,7 @@
+             case ASIOSTFloat32LSB: return sz * 4u;
+             case ASIOSTFloat64LSB: return sz * 8u;
+             case ASIOSTDSDInt8LSB1:
+-            case ASIOSTDSDInt8MSB1: return sz / 8u;
++            case ASIOSTDSDInt8MSB1: return sz * 2u;
+             default: return 0;
+         }
+     }
+@@ -788,7 +788,7 @@
+         }
+ 
+         if (nativeDsd_.load(std::memory_order_relaxed)) {
+-            const size_t dopFrames = n / 16u;
++            const size_t dopFrames = n;
+             int32_t* dop = tmpDop_.data();
+             if (renderDop_) {
+                 renderDop_(dop, dopFrames);

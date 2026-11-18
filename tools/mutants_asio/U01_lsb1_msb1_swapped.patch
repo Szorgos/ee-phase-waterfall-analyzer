@@ -1,11 +1,11 @@
 --- a/windows/engine/player_output_asio.hpp
 +++ b/windows/engine/player_output_asio.hpp
-@@ -698,7 +698,7 @@
+@@ -797,7 +797,7 @@
                      dop[i] = dsd::packDopSample(dsd::kDsdSilenceByte, dsd::kDsdSilenceByte, 0x05u);
                  }
              }
 -            const bool lsb1 = (sampleType_ == ASIOSTDSDInt8LSB1);
 +            const bool lsb1 = (sampleType_ == ASIOSTDSDInt8MSB1);
-             for (size_t i = 0; i < n; ++i) {
+             for (size_t i = 0; i < dopFrames; ++i) {
                  const uint32_t wL = static_cast<uint32_t>(dop[2 * i]);
                  const uint32_t wR = static_cast<uint32_t>(dop[2 * i + 1]);

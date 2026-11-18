@@ -1,9 +1,10 @@
 --- a/windows/engine/player_output_asio.hpp
 +++ b/windows/engine/player_output_asio.hpp
-@@ -657,8 +657,7 @@
+@@ -753,9 +753,7 @@
              case kAsioResetRequest: {
                  AsioPlayerOutput* self = s_activeInstance.load(std::memory_order_acquire);
                  if (self) {
+-                    self->invalidateRatesCache();
 -                    self->resetCount_.fetch_add(1, std::memory_order_relaxed);
 -                    self->resetRequested_.store(true, std::memory_order_release);
 +                    (void)self;
