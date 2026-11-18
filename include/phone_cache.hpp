@@ -165,7 +165,7 @@ public:
     }
 
     static bool sanitizeExt(const std::string& ext) {
-        for (const char* ok : { "flac", "wav", "mp3", "ogg", "m4a", "aac", "opus", "wv" }) {
+        for (const char* ok : { "flac", "wav", "aif", "aiff", "mp3", "ogg", "m4a", "aac", "opus", "wv" }) {
             if (ext == ok) return true;
         }
         return false;

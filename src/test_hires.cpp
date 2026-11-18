@@ -8,6 +8,8 @@
 //  [7] Terhelés-tanácsadó: döntési táblázat (független elvárás)
 //  [8] Lejátszó: 384 és 768 kHz-es fájl bitpontosan; alulcsordulás-számláló
 //  [9] Dedikált mag (Linux): a dekóder-szál a kért magra kerül, a kimenet bitre azonos
+//  [11] FLAC és AIFF dekóder 352,8–768 kHz-en: független íróval készült 24 bites fájlok bitre, tekeréssel
+//  [12] Spektrum és csúcsmérő 384 kHz fölött: a felbontás és a szintek a 192 kHz-essel egyeznek, a csúcs nem vész el
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -25,12 +27,14 @@
 #include <vector>
 
 #include "aether_chain.hpp"
+#include "audio_decoder.hpp"
 #include "audio_options.hpp"
 #include "file_player.hpp"
 #include "load_advisor.hpp"
 #include "load_meter.hpp"
 #include "out_stage.hpp"
 #include "param_block.hpp"
+#include "spectrum.hpp"
 #include "upsample_engine.hpp"
 
 using namespace ee_analyzer;
@@ -360,6 +364,184 @@ static void testPlayerHighRate() {
     }
 }
 
+// ---------------------------------------------------------------- [11]
+// Független író a teszthez: FLAC (a szabvány szerint, tömörítetlen VERBATIM alkeretekkel) és AIFF (24 bit, big-endian).
+static uint8_t crc8(const std::vector<uint8_t>& d, size_t from, size_t to) {
+    uint8_t c = 0;
+    for (size_t i = from; i < to; ++i) {
+        c ^= d[i];
+        for (int b = 0; b < 8; ++b) c = (c & 0x80) ? static_cast<uint8_t>((c << 1) ^ 0x07) : static_cast<uint8_t>(c << 1);
+    }
+    return c;
+}
+static uint16_t crc16(const std::vector<uint8_t>& d, size_t from, size_t to) {
+    uint16_t c = 0;
+    for (size_t i = from; i < to; ++i) {
+        c ^= static_cast<uint16_t>(d[i]) << 8;
+        for (int b = 0; b < 8; ++b) c = (c & 0x8000) ? static_cast<uint16_t>((c << 1) ^ 0x8005) : static_cast<uint16_t>(c << 1);
+    }
+    return c;
+}
+static void putUtf8(std::vector<uint8_t>& o, uint32_t v) {   // a FLAC keretszáma „UTF-8” kódolással
+    if (v < 0x80) { o.push_back(static_cast<uint8_t>(v)); return; }
+    if (v < 0x800) { o.push_back(0xC0 | (v >> 6)); o.push_back(0x80 | (v & 0x3F)); return; }
+    if (v < 0x10000) { o.push_back(0xE0 | (v >> 12)); o.push_back(0x80 | ((v >> 6) & 0x3F)); o.push_back(0x80 | (v & 0x3F)); return; }
+    o.push_back(0xF0 | (v >> 18)); o.push_back(0x80 | ((v >> 12) & 0x3F)); o.push_back(0x80 | ((v >> 6) & 0x3F)); o.push_back(0x80 | (v & 0x3F));
+}
+/** 24 bites sztereó FLAC (váltakozó L, R minták, −2^23 … 2^23−1), 4096 keretes blokkokkal. */
+static void writeFlac24(const std::string& path, uint32_t rate, const std::vector<int32_t>& lr) {
+    const uint32_t frames = static_cast<uint32_t>(lr.size() / 2), bs = 4096;
+    std::vector<uint8_t> o = { 'f', 'L', 'a', 'C' };
+    // STREAMINFO (utolsó metaadat-blokk, 34 bájt)
+    o.push_back(0x80); o.push_back(0); o.push_back(0); o.push_back(34);
+    o.push_back(bs >> 8); o.push_back(bs & 0xFF); o.push_back(bs >> 8); o.push_back(bs & 0xFF);   // min / max blokk
+    for (int i = 0; i < 6; ++i) o.push_back(0);                                                     // min / max keret: ismeretlen
+    // 20 bit mintavétel | 3 bit (csatorna − 1) | 5 bit (bitmélység − 1) | 36 bit mintaszám
+    const uint64_t packed = (uint64_t(rate) << 44) | (uint64_t(1) << 41) | (uint64_t(23) << 36) | uint64_t(frames);
+    for (int i = 7; i >= 0; --i) o.push_back(static_cast<uint8_t>(packed >> (8 * i)));
+    for (int i = 0; i < 16; ++i) o.push_back(0);                                                    // MD5: ismeretlen
+    for (uint32_t f = 0, fn = 0; f < frames; f += bs, ++fn) {
+        const uint32_t n = std::min(bs, frames - f);
+        const size_t h = o.size();
+        o.push_back(0xFF); o.push_back(0xF8);                          // szinkron, rögzített blokkméret
+        o.push_back(0x70);                                             // blokkméret: 16 bites (n−1) a fejléc végén; mintavétel: a STREAMINFO-ból
+        o.push_back(0x1C);                                             // 2 független csatorna, 24 bit
+        putUtf8(o, fn);
+        o.push_back(static_cast<uint8_t>((n - 1) >> 8)); o.push_back(static_cast<uint8_t>((n - 1) & 0xFF));
+        o.push_back(crc8(o, h, o.size()));
+        for (int ch = 0; ch < 2; ++ch) {
+            o.push_back(0x02);                                         // VERBATIM alkeret
+            for (uint32_t i = 0; i < n; ++i) {
+                const uint32_t v = static_cast<uint32_t>(lr[2 * (f + i) + ch]) & 0xFFFFFF;
+                o.push_back(v >> 16); o.push_back((v >> 8) & 0xFF); o.push_back(v & 0xFF);
+            }
+        }
+        const uint16_t c = crc16(o, h, o.size());
+        o.push_back(c >> 8); o.push_back(c & 0xFF);
+    }
+    std::ofstream(path, std::ios::binary).write(reinterpret_cast<const char*>(o.data()), static_cast<std::streamsize>(o.size()));
+}
+/** 24 bites sztereó AIFF (a mintavétel 80 bites IEEE extended számként). */
+static void writeAiff24(const std::string& path, uint32_t rate, const std::vector<int32_t>& lr) {
+    const uint32_t frames = static_cast<uint32_t>(lr.size() / 2);
+    std::vector<uint8_t> o;
+    auto be32 = [&](uint32_t v) { for (int i = 3; i >= 0; --i) o.push_back(static_cast<uint8_t>(v >> (8 * i))); };
+    auto be16 = [&](uint16_t v) { o.push_back(v >> 8); o.push_back(v & 0xFF); };
+    const uint32_t data = frames * 6;
+    o.insert(o.end(), { 'F', 'O', 'R', 'M' }); be32(4 + 26 + 16 + data);
+    o.insert(o.end(), { 'A', 'I', 'F', 'F', 'C', 'O', 'M', 'M' }); be32(18);
+    be16(2); be32(frames); be16(24);
+    int e = 0;                                                         // 80 bites extended: előjel+kitevő (15 bit), 64 bites mantissza
+    uint64_t m = rate;
+    while (!(m & (uint64_t(1) << 63))) { m <<= 1; ++e; }
+    be16(static_cast<uint16_t>(16383 + 63 - e));
+    for (int i = 7; i >= 0; --i) o.push_back(static_cast<uint8_t>(m >> (8 * i)));
+    o.insert(o.end(), { 'S', 'S', 'N', 'D' }); be32(8 + data); be32(0); be32(0);
+    for (int32_t v : lr) { const uint32_t u = static_cast<uint32_t>(v) & 0xFFFFFF; o.push_back(u >> 16); o.push_back((u >> 8) & 0xFF); o.push_back(u & 0xFF); }
+    std::ofstream(path, std::ios::binary).write(reinterpret_cast<const char*>(o.data()), static_cast<std::streamsize>(o.size()));
+}
+
+static void testHiresDecoders() {
+    std::printf("[11] FLAC és AIFF dekóder 352,8–768 kHz-en (24 bit, bitre)\n");
+    for (uint32_t sr : { 352800u, 384000u, 705600u, 768000u }) {
+        std::mt19937 rng(sr ^ 0x5A5A);
+        std::uniform_int_distribution<int32_t> u(-8388608, 8388607);
+        const uint32_t frames = sr / 4 + 1234;                         // nem kerek blokkszám: az utolsó blokk rövidebb
+        std::vector<int32_t> lr(static_cast<size_t>(frames) * 2);
+        for (auto& v : lr) v = u(rng);
+        for (const char* kind : { "flac", "aiff" }) {
+            const std::string path = (fs::temp_directory_path() / ("aq_hires_dec_" + std::to_string(sr) + "." + kind)).string();
+            if (std::string(kind) == "flac") writeFlac24(path, sr, lr); else writeAiff24(path, sr, lr);
+            std::string err;
+            auto d = openDecoder(path, &err);
+            bool ok = d && d->sampleRate() == sr && d->channels() == 2 && d->totalFrames() == frames;
+            size_t diff = 0, got = 0;
+            if (d) {
+                std::vector<float> buf(8192 * 2);
+                size_t pos = 0;
+                for (;;) {
+                    const size_t n = d->read(buf.data(), 8192);
+                    if (n == 0) break;
+                    for (size_t i = 0; i < n * 2 && pos + i < lr.size(); ++i)
+                        if (buf[i] != static_cast<float>(lr[pos + i]) / 8388608.0f) ++diff;
+                    pos += n * 2;
+                }
+                got = pos / 2;
+                // tekerés a közepére: a minta pontosan ott folytatódik
+                const uint64_t mid = frames / 2 + 17;
+                float two[2] = {};
+                const bool sk = d->seek(mid) && d->read(two, 1) == 1;
+                ok = ok && sk && two[0] == static_cast<float>(lr[mid * 2]) / 8388608.0f &&
+                     two[1] == static_cast<float>(lr[mid * 2 + 1]) / 8388608.0f;
+            }
+            CHECK(ok && got == frames && diff == 0, "%s %u Hz: %zu / %u keret, %zu eltérő minta, tekerés pontos (%s)", kind, sr, got,
+                  frames, diff, err.c_str());
+            d.reset();   // Windowson a nyitott fájl nem törölhető: előbb a dekóder zár
+            std::error_code ec;
+            fs::remove(path, ec);
+        }
+    }
+    CHECK(isSupportedFile("a.aif") && isSupportedFile("b.AIFF") && isSupportedFile("c.aifc"), "az AIFF kiterjesztéseket a zenetár is ismeri");
+}
+
+// ---------------------------------------------------------------- [12]
+/** Ugyanaz a jel (hangok 100 / 230 / 1000 / 5000 / 15000 Hz-en) a megadott mintavételen, 16 ms-os darabokban. */
+static SpectrumAnalyzer analyzeTones(double sr, int chunks) {
+    SpectrumAnalyzer a(4096, 160);
+    a.setSampleRate(sr);
+    const size_t n = static_cast<size_t>(sr * 0.016);
+    std::vector<float> lr(n * 2);
+    uint64_t t = 0;
+    for (int c = 0; c < chunks; ++c) {
+        for (size_t i = 0; i < n; ++i, ++t) {
+            const double x = static_cast<double>(t) / sr;
+            const double v = 0.2 * std::sin(2 * kPi * 100 * x) + 0.2 * std::sin(2 * kPi * 230 * x) + 0.1 * std::sin(2 * kPi * 1000 * x) +
+                             0.05 * std::sin(2 * kPi * 5000 * x) + 0.05 * std::sin(2 * kPi * 15000 * x);
+            lr[2 * i] = lr[2 * i + 1] = static_cast<float>(v);
+        }
+        a.push(lr.data(), n);
+        a.compute(sr);
+    }
+    return a;
+}
+
+static void testAnalyzerHighRate() {
+    std::printf("[12] Spektrum és csúcsmérő 384 kHz fölött\n");
+    // a referencia a saját családból: 44,1-es család 176,4 kHz, 48-as család 192 kHz (ott a régi, tizedelés nélküli út)
+    const SpectrumAnalyzer ref441 = analyzeTones(176400.0, 30), ref48 = analyzeTones(192000.0, 30);
+    for (double sr : { 352800.0, 384000.0, 705600.0, 768000.0 }) {
+        const SpectrumAnalyzer& ref = (static_cast<long>(sr) % 44100 == 0) ? ref441 : ref48;
+        const SpectrumAnalyzer a = analyzeTones(sr, 30);
+        double worst = 0.0;
+        for (size_t b = 0; b < ref.numBands(); ++b) {
+            if (ref.bandCenterHz(b) > 20000.0) break;
+            if (ref.levels()[b] < 0.25f && a.levels()[b] < 0.25f) continue;   // csak a jelet hordozó sávok
+            worst = std::max(worst, std::abs(static_cast<double>(a.levels()[b] - ref.levels()[b])));
+        }
+        // a szintek 0..1 skálán, 90 dB-re: 0,02 ≈ 1,8 dB
+        CHECK(worst < 0.02, "%.1f kHz: a spektrum a saját család referenciájával egyezik (legnagyobb eltérés %.3f ≈ %.1f dB)", sr / 1000.0,
+              worst, worst * 90.0);
+        // a 100 és a 230 Hz-es hang közötti sáv (kb. 160 Hz) nem lehet magasabb, mint a referencián: a felbontás nem romlik
+        const size_t mid = a.bandOf(160.0);
+        CHECK(a.levels()[mid] <= ref.levels()[mid] + 0.01f, "%.1f kHz: a 100 és 230 Hz közötti völgy %.2f (referencia %.2f)", sr / 1000.0,
+              a.levels()[mid], ref.levels()[mid]);
+    }
+    // Csúcsmérő: egy 16 ms-os darab elején 1 ms-os, 0,9-es burst, utána csend -> a mérő látja
+    for (double sr : { 192000.0, 768000.0 }) {
+        SpectrumAnalyzer a(4096, 160);
+        a.setSampleRate(sr);
+        const size_t n = static_cast<size_t>(sr * 0.016), burst = static_cast<size_t>(sr * 0.001);
+        std::vector<float> lr(n * 2, 0.0f);
+        for (size_t i = 0; i < burst; ++i) lr[2 * i] = lr[2 * i + 1] = (i & 1) ? 0.9f : -0.9f;
+        a.push(lr.data(), n);
+        a.compute(sr);
+        const float pk = a.peakDb();
+        const bool expectSeen = sr > 192000.0;   // 192 kHz-en a régi viselkedés marad (a csúszó ablak 21 ms)
+        if (expectSeen) CHECK(pk > -1.5f && pk < 0.0f, "%.0f kHz: a darab elején lévő csúcsot a mérő látja (%.1f dBFS)", sr / 1000.0, pk);
+        else CHECK(pk > -1.5f, "%.0f kHz: a csúcsmérő a régi módon (%.1f dBFS)", sr / 1000.0, pk);
+    }
+}
+
 // ---------------------------------------------------------------- [9]
 static void testDedicatedCore() {
     std::printf("[9] Dedikált mag\n");
@@ -417,6 +599,8 @@ int main() {
     testAdvisor();
     testPlayerHighRate();
     testDedicatedCore();
+    testHiresDecoders();
+    testAnalyzerHighRate();
     std::printf(g_fail ? "\nHIBA: %d ellenőrzés nem sikerült\n" : "\nMINDEN TESZT SIKERES (0 hiba)\n", g_fail);
     return g_fail ? 1 : 0;
 }
