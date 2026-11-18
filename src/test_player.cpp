@@ -2212,17 +2212,32 @@ static void testUpsamplePlayerK1K6K7K8K16() {
             p.setUpsampleOptions(defaultOpts);
             p.setUpsample(true);
             std::string err;
-            p.open(tmpPath("aq_k7_a.wav"), &err);
-            pullFrames(p, *out, 1024);
+            const uint32_t k8Sr = 44100;
+            std::vector<float> k8Src(k8Sr * 2);
+            for (size_t i = 0; i < k8Sr; ++i) {
+                float v = static_cast<float>(0.4 * std::sin(2.0 * kPi * 1000.0 * i / k8Sr));
+                k8Src[2 * i] = k8Src[2 * i + 1] = v;
+            }
+            const std::string k8Path = tmpPath("aq_k8_rt.wav");
+            writeWavFloat(k8Path, k8Sr, 2, k8Src);
+            const bool opened = p.open(k8Path, &err);
+            CHECK(opened && out->rate == 88200 && out->active,
+                  "K8: valós idejű foglalásmentesség tesztfájl megnyitva (88200 Hz)");
+            const auto warmup = pullFrames(p, *out, 1024);
+            CHECK(warmup.size() == 1024 * 2, "K8: bemelegítő render lefutott (%zu minta)", warmup.size());
 
             g_rtAllocCount.store(0, std::memory_order_seq_cst);
             g_rtTrackAlloc = true;
+            int pullOk = 0;
             for (int i = 0; i < 20; ++i) {
                 float buf[512 * 2];
-                out->pull(buf, 512);
+                if (out->pull(buf, 512)) ++pullOk;
             }
             g_rtTrackAlloc = false;
             p.stop();
+            std::error_code ec;
+            fs::remove(k8Path, ec);
+            CHECK(pullOk == 20, "K8: mind a 20 render hívás ténylegesen lefutott (%d/20)", pullOk);
 
             CHECK(g_rtAllocCount.load(std::memory_order_seq_cst) == 0, "K8: valós idejű foglalásmentesség (render hívások alatt 0 újrafoglalás, mért: %llu)",
                   (unsigned long long)g_rtAllocCount.load());
