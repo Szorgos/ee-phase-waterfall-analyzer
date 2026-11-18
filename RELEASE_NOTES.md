@@ -1,3 +1,21 @@
+### Újdonságok (2.6.0)
+
+**Letöltés (2.6.0):**
+- Windows 11: [Aqulify-Setup-2.6.0.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.0/Aqulify-Setup-2.6.0.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.0/Aqulify-Setup-2.6.0.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.6.0-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.0/Aqulify-2.6.0-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.0/Aqulify-2.6.0-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.6.0.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.0/Aqulify-Linux-2.6.0.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.0/Aqulify-Linux-2.6.0.tar.gz.sha256))
+- Fedora: [aqulify-2.6.0-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.0/aqulify-2.6.0-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.6.0-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.0/aqulify_2.6.0-1_amd64.deb) · Arch: [aqulify-2.6.0-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.0/aqulify-2.6.0-1-x86_64.pkg.tar.zst)
+- Raspberry Pi 4 / 5 (Raspberry Pi OS, 64 bit): [aqulify_2.6.0-1.pi1_arm64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.0/aqulify_2.6.0-1.pi1_arm64.deb) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.0/aqulify_2.6.0-1.pi1_arm64.deb.sha256)) · útmutató: `docs/pi.md`
+- Android-távirányító (Android 8+, változatlan): [Aqulify-Remote-1.1.0.apk](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.0/Aqulify-Remote-1.1.0.apk) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.0/Aqulify-Remote-1.1.0.apk.sha256))
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Nagy felbontás: 352,8–768 kHz bitpontosan.** A beépített lejátszó a 352,8 / 384 és a 705,6 / 768 kHz-es PCM-fájlokat is bitpontosan játssza (FLAC, WAV, és mostantól AIFF is). A bitpontosság mért adat: az élő teszt egy 768 kHz-es, 24 bites fájl lejátszásakor visszarögzíti a hangkártyának átadott digitális adatfolyamot, és bitre összeveti a fájllal (100 000 keret, 0 eltérés) – minden változtatás után automatikusan. 384 kHz fölött a DSP-lánc nem hat, ezt a felület jelzi. Útmutató: `docs/nagy-felbontas.md`.
+- **DSD512 és DSD1024** (DSF és DFF). Linuxon kizárólagos (ALSA) módban **natív DSD** is, ha a DAC és a meghajtója felajánlja; ha nem, a lejátszó magától DoP-ra, végül PCM-re vált. A natív DSD még kevés DAC-on kipróbált – visszajelzést szívesen fogadunk. DSD512 / DSD1024-nél a DSD→PCM átalakítás új, kétfokozatú szűrővel kétszer gyorsabb, változatlan minőséggel.
+- **ASIO-kimenet Windowson** a DAC gyártójának ASIO-meghajtóján át (a Steinberg ASIO SDK-val, GPLv3). Natív DSD, ha a meghajtó tudja; különben DoP vagy PCM. Ha az ASIO nem indul, a zene WASAPI-n szól tovább, és a jelút megmondja, miért. Útmutató: `docs/asio.md`.
+- **Felmintavételezés a beépített lejátszóban** (libsoxr), alapból kikapcsolva: ×2, legnagyobb ×2ⁿ, a kimenet maximuma vagy egyéni táblázat; lineáris, köztes, minimumfázisú és **Referencia** előbeállítás (99,7 % sávszélesség, 32 bit, lineáris fázis); fejtér. A terhelés-tanácsadó szól, ha a gép nem bírja, és könnyítést ajánl – magától soha nem vált. Útmutató: `docs/felmintavetelezes.md`.
+- **Útonkénti EQ az aktív keresztváltóban:** hangszórónként külön EQ a keresztváltó szűrői után, útonként legfeljebb 10 sávval. Útmutató: `docs/keresztvalto.md`.
+- **Javítás:** hosszú felmintavételező szűrőnél (pl. egyéni 99,5 % + 32 bit) a szám vége levágódhatott – a lejátszó most a szűrőt a szám végén teljesen kiüríti.
+
 ### Újdonságok (2.5.0)
 
 **Letöltés (2.5.0):**

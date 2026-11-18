@@ -55,9 +55,9 @@ sed -i "s|^Maintainer: .*|Maintainer: $AUTHOR|" debian/control
 # AQ_EMULALT=1 esetén a csomagkészítés ezt az egy tesztet kihagyja. A valódi Pi-n ne add meg: ott a mérés
 # mutatja meg, mit bír a Pi.
 if [ "${AQ_EMULALT:-0}" = "1" ]; then
-  sed -i 's/test_core test_dsp test_matrix/test_core test_matrix/; s/ test_hires_b;/;/' debian/rules
+  sed -i 's/test_core test_dsp test_matrix/test_core test_matrix/; s/ test_hires_b test_src_ref;/;/' debian/rules
   grep -q 'test_core test_matrix' debian/rules || { echo "HIBA: a debian/rules tesztlistája nem a várt"; exit 1; }
-  echo "FIGYELEM: emulált környezet – a test_dsp és a test_hires_b (valós idejű sebességmérés) kihagyva"
+  echo "FIGYELEM: emulált környezet – a test_dsp, a test_hires_b és a test_src_ref (valós idejű sebességmérés) kihagyva"
 fi
 # Választható, visszavonható rendszerhangoló szkript (aqulify-tune) és eltávolításkori visszaállítás (prerm):
 cp "$SCRIPT_DIR/aqulify-tune.sh" debian/aqulify-tune.sh

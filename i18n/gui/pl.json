@@ -907,6 +907,8 @@
   "ups.presetLinear": "Faza liniowa",
   "ups.presetIntermediate": "Pośrednia (zalecana)",
   "ups.presetMinimum": "Faza minimalna",
+  "ups.presetReference": "Reference",
+  "ups.presetReferenceHint": "99.7% bandwidth, 32-bit precision, linear phase. The most accurate, but needs the most computation.",
   "ups.headroom": "Zapas (headroom)",
   "ups.advanced": "Zaawansowane ustawienia filtra",
   "ups.passband": "Pasmo przenoszenia (%)",

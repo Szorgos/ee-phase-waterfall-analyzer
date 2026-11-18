@@ -907,6 +907,8 @@
   "ups.presetLinear": "Линейная фаза",
   "ups.presetIntermediate": "Промежуточная (рекомендуется)",
   "ups.presetMinimum": "Минимальная фаза",
+  "ups.presetReference": "Reference",
+  "ups.presetReferenceHint": "99.7% bandwidth, 32-bit precision, linear phase. The most accurate, but needs the most computation.",
   "ups.headroom": "Запас уровня",
   "ups.advanced": "Расширенные параметры фильтра",
   "ups.passband": "Полоса пропускания (%)",

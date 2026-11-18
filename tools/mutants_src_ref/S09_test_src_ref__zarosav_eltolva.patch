@@ -1,0 +1,11 @@
+--- a/include/audio_options.hpp
++++ b/include/audio_options.hpp
+@@ -115,7 +115,7 @@
+ inline void applyUpsamplePreset(AudioOptions& o, int preset) {
+     if (preset < 0 || preset > kUpsamplePresetReference || preset == 3) return;
+     o.upsamplePreset = preset;
+-    o.upsampleStopbandBegin = 1.00;
++    o.upsampleStopbandBegin = 1.05;
+     if (preset == kUpsamplePresetReference) {
+         o.upsamplePassbandEnd = kUpsamplePassbandMax;
+         o.upsamplePrecision = 32;

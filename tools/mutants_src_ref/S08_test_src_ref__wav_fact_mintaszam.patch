@@ -1,0 +1,11 @@
+--- a/include/src_convert.hpp
++++ b/include/src_convert.hpp
+@@ -57,7 +57,7 @@
+     std::fwrite("WAVE", 1, 4, f);
+     std::fwrite("fmt ", 1, 4, f); u32(18);
+     u16(3); u16(static_cast<uint16_t>(channels)); u32(rate); u32(rate * channels * 4); u16(static_cast<uint16_t>(channels * 4)); u16(32); u16(0);
+-    std::fwrite("fact", 1, 4, f); u32(4); u32(frames);
++    std::fwrite("fact", 1, 4, f); u32(4); u32(frames * channels);
+     std::fwrite("data", 1, 4, f); u32(dataBytes);
+     // a minták kis-endián IEEE float formában (minden támogatott gépen ez a natív forma)
+     const bool ok = std::fwrite(interleaved.data(), 4, interleaved.size(), f) == interleaved.size();

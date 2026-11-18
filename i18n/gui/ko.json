@@ -907,6 +907,8 @@
   "ups.presetLinear": "선형 위상",
   "ups.presetIntermediate": "중간 위상 (권장)",
   "ups.presetMinimum": "최소 위상",
+  "ups.presetReference": "Reference",
+  "ups.presetReferenceHint": "99.7% bandwidth, 32-bit precision, linear phase. The most accurate, but needs the most computation.",
   "ups.headroom": "헤드룸",
   "ups.advanced": "고급 필터 설정",
   "ups.passband": "통과 대역폭 (%)",

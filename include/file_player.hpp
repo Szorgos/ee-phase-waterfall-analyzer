@@ -274,6 +274,9 @@ private:
     size_t ringFrames_ = 0;
     std::atomic<uint64_t> wr_{0}, rd_{0};
     std::atomic<bool> eof_{false}, finished_{false};
+    // A szám vége felmintavételezéskor: a libsoxr szűrőjét több lépésben ürítjük, mindig csak annyit, amennyi a
+    // gyűrűben elfér (hosszú szűrőnél, pl. a Referencia előbeállításnál, a visszatartott rész 1 s-nál is több lehet)
+    std::atomic<bool> draining_{false};
     std::atomic<uint64_t> played_{0};   // a kimenetnek átadott keretek (a fájl elejétől számolva)
     std::atomic<uint64_t> base_{0};     // az utolsó tekerés (vagy a megnyitás) helye
     std::atomic<State> state_{State::Idle};

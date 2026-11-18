@@ -1,0 +1,11 @@
+--- a/include/src_convert.hpp
++++ b/include/src_convert.hpp
+@@ -97,7 +97,7 @@
+         const float* p = decodeBuf.data();
+         for (size_t i = 0; i < got; ++i, p += srcCh) {   // ugyanaz a keverés, mint a file_player.cpp-ben
+             float l, r;
+-            if (srcCh == 1) l = r = p[0];
++            if (srcCh == 1) { l = p[0]; r = 0.0f; }
+             else if (srcCh == 2) { l = p[0]; r = p[1]; }
+             else {
+                 constexpr float k = 0.70710678f;

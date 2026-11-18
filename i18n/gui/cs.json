@@ -907,6 +907,8 @@
   "ups.presetLinear": "Lineární fáze",
   "ups.presetIntermediate": "Střední fáze (doporučeno)",
   "ups.presetMinimum": "Minimální fáze",
+  "ups.presetReference": "Reference",
+  "ups.presetReferenceHint": "99.7% bandwidth, 32-bit precision, linear phase. The most accurate, but needs the most computation.",
   "ups.headroom": "Rezerva (headroom)",
   "ups.advanced": "Pokročilé nastavení filtru",
   "ups.passband": "Šířka pásma (%)",

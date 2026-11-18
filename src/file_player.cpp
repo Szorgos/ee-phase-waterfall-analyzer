@@ -21,6 +21,7 @@ namespace ee_analyzer::player {
 
 namespace {
 constexpr size_t kChunkFrames = 4096;   // egyszerre ennyi keretet dekódol a szál
+constexpr size_t kFlushChunkFrames = kChunkFrames * 4;   // a szűrő kiürítésekor egy lépés legfeljebb ennyi keret
 constexpr int kMaxSkip = 16;            // a sorban egymás után legfeljebb ennyi nem nyitható számot ugrik át
 
 std::string fileStem(const std::string& path) {
@@ -266,7 +267,7 @@ void FilePlayer::replaceTrackLocked(std::unique_ptr<Segment> seg, bool streamSto
     segs_.push_back(std::move(*seg));
     pending_.reset();
     wr_ = rd_ = played_ = base_ = 0;
-    eof_ = finished_ = false;
+    eof_ = finished_ = draining_ = false;
     out_->flush();                      // az előző szám pufferben maradt része ne szóljon
     // Ha a kimenet állt (szünet / a szám vége), az újrainduláskor a DAC újra szinkronizál: csenddel kezd
     const uint64_t settleFrames = static_cast<uint64_t>(rate_) * kRateSettleMs / 1000;
@@ -297,7 +298,7 @@ bool FilePlayer::startStreamLocked(std::unique_ptr<Segment> seg, std::string* er
             ringFrames_ = std::max<size_t>(rate_, kChunkFrames * 2);
             dopRing_.assign(ringFrames_ * 2, 0);
             wr_ = rd_ = played_ = base_ = 0;
-            eof_ = finished_ = false;
+            eof_ = finished_ = draining_ = false;
             dopPhase_ = 0;
             dopRenderPhase_ = 0;
             leadIn_ = 0;
@@ -356,7 +357,7 @@ bool FilePlayer::startStreamLocked(std::unique_ptr<Segment> seg, std::string* er
     ringFrames_ = std::max<size_t>(rate_, kChunkFrames * 2);   // kb. 1 s
     ring_.assign(ringFrames_ * 2, 0.0f);
     wr_ = rd_ = played_ = base_ = 0;
-    eof_ = finished_ = false;
+    eof_ = finished_ = draining_ = false;
     std::string err;
     leadIn_ = 0;
     leadTotal_ = 0;
@@ -401,7 +402,7 @@ void FilePlayer::dropPrefetched() {
         const uint64_t boundary = s.end - base_.load();
         if (boundary >= rd_.load() && boundary <= wr_.load()) wr_ = boundary;
         s.end = UINT64_MAX;
-        eof_ = finished_ = false;
+        eof_ = finished_ = draining_ = false;
     }
     out_->unlock();
     cv_.notify_all();
@@ -487,7 +488,7 @@ void FilePlayer::seekLocked(uint64_t frame) {
     s.end = UINT64_MAX;
     wr_ = rd_ = 0;
     played_ = base_ = frame;
-    eof_ = finished_ = false;
+    eof_ = finished_ = draining_ = false;
     out_->flush();                      // a kimenet pufferében várakozó régi minták se szóljanak
     leadIn_ = 0;                        // tekeréskor az eleji csend elmarad (a flush a számlálót is nullázza)
     leadTotal_ = 0;
@@ -684,6 +685,27 @@ bool FilePlayer::fillLocked() {
             : 1u;
         const size_t minFree = std::max<size_t>(kChunkFrames * ratioCeil + 1024, upsampleActive_.load() ? 16384u : kChunkFrames);
         if (free < minFree) return true;
+        if (draining_.load()) {
+            // A szám vége felmintavételezéskor: a szűrő kiürítése lépésenként, legfeljebb annyi, amennyi elfér; amíg a
+            // libsoxr ad mintát, a szám nem ért véget (hosszú szűrőnél egyetlen hívás nem üríti ki, a vége elveszne)
+            if (upsampleOutBuf_.size() < kFlushChunkFrames * 2) upsampleOutBuf_.resize(kFlushChunkFrames * 2);
+            const size_t cap = std::min(free, upsampleOutBuf_.size() / 2);
+            size_t flFrames = 0;
+            upsampler_.flush(upsampleOutBuf_.data(), cap, flFrames);
+            for (size_t i = 0; i < flFrames; ++i) {
+                const size_t idx = static_cast<size_t>((w + i) % ringFrames_) * 2;
+                ring_[idx] = upsampleOutBuf_[2 * i];
+                ring_[idx + 1] = upsampleOutBuf_[2 * i + 1];
+            }
+            wr_.store(w + flFrames, std::memory_order_release);
+            if (flFrames == 0) {
+                s.end = base_.load() + wr_.load();
+                draining_ = false;
+                eof_ = true;
+                break;
+            }
+            continue;
+        }
         if (decodeBuf_.size() < kChunkFrames * s.channels) decodeBuf_.assign(kChunkFrames * s.channels, 0.0f);
         const size_t got = s.dec->read(decodeBuf_.data(), kChunkFrames);
         if (got == 0) {
@@ -697,16 +719,8 @@ bool FilePlayer::fillLocked() {
                 continue; // szünetmentes átmenet azonos forrással, a szűrő folytonos marad (K7)
             }
             if (upsampleActive_.load()) {
-                size_t flFrames = 0;
-                if (upsampleOutBuf_.size() < kChunkFrames * 8) upsampleOutBuf_.resize(kChunkFrames * 8);
-                upsampler_.flush(upsampleOutBuf_.data(), upsampleOutBuf_.size() / 2, flFrames);
-                for (size_t i = 0; i < flFrames; ++i) {
-                    const size_t idx = static_cast<size_t>((w + i) % ringFrames_) * 2;
-                    ring_[idx] = upsampleOutBuf_[2 * i];
-                    ring_[idx + 1] = upsampleOutBuf_[2 * i + 1];
-                }
-                wr_.store(w + flFrames, std::memory_order_release);
-                s.end = base_.load() + wr_.load();
+                draining_ = true;   // a következő körökben a szűrő kiürítése (lásd fent)
+                continue;
             }
             eof_ = true;
             break;

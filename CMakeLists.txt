@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
 project(aqulify 
-    VERSION 2.5.0
+    VERSION 2.6.0
     DESCRIPTION "Aqulify - Real-time Phase, Group Delay & Acoustic Waterfall DSP Suite"
     LANGUAGES C CXX
 )
@@ -169,6 +169,17 @@ target_link_libraries(test_hires_b PRIVATE aq_player ee_dsp_core Threads::Thread
 target_include_directories(test_hires_b PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 if(WIN32)
     target_link_libraries(test_hires_b PRIVATE ws2_32 iphlpapi)
+endif()
+# SRC „Referencia”: parancssori átalakító a lejátszó kódútján (mérőeszköz, nem települ) és a tesztje
+add_executable(aqulify-src src/aqulify_src.cpp)
+target_link_libraries(aqulify-src PRIVATE aq_player soxr Threads::Threads)
+target_include_directories(aqulify-src PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+add_executable(test_src_ref src/test_src_ref.cpp)
+target_link_libraries(test_src_ref PRIVATE aq_player soxr Threads::Threads)
+target_include_directories(test_src_ref PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+if(WIN32)
+    target_link_libraries(aqulify-src PRIVATE ws2_32 iphlpapi)
+    target_link_libraries(test_src_ref PRIVATE ws2_32 iphlpapi)
 endif()
 
 

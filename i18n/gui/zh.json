@@ -907,6 +907,8 @@
   "ups.presetLinear": "线性相位",
   "ups.presetIntermediate": "中间相位（推荐）",
   "ups.presetMinimum": "最小相位",
+  "ups.presetReference": "Reference",
+  "ups.presetReferenceHint": "99.7% bandwidth, 32-bit precision, linear phase. The most accurate, but needs the most computation.",
   "ups.headroom": "余量",
   "ups.advanced": "高级滤波器设置",
   "ups.passband": "通带宽度 (%)",
