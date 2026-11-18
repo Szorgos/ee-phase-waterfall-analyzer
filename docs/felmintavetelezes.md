@@ -30,11 +30,12 @@ A lejátszó **lefelé soha nem alakít**, és mindig figyelembe veszi a kimenet
 - **Kiegyensúlyozott kiindulópont:** szabály **×2**, előbeállítás **Köztes (ajánlott)** (fázis: 25, 28 bit, 95 % sávszélesség, 100 % záró sáv), fejtér **−1 dB**.
 - **Előrezgés-mentes hangzás (minimumfázis):** szabály **×2** vagy **Legnagyobb ×2ⁿ**, előbeállítás **Minimumfázis** (fázis: 0), fejtér **−1 dB**.
 - **Szimmetrikus fázisválasz:** szabály **×2**, előbeállítás **Lineáris fázis** (fázis: 50), fejtér **−1 dB**.
+- **Referencia (a legpontosabb):** előbeállítás **Referencia** (lineáris fázis, 32 bit, 99,7 % sávszélesség, 100 % záró sáv). A szűrő 44,1 kHz-es forrásnál kb. 21,99 kHz-ig sík; az ára a hosszabb szűrő: több számítás, és a lineáris fázis miatt hosszabb előcsengés. Gyengébb gépen a terhelés-tanácsadó szól, ha nem bírja.
 
 ### Haladó szűrőbeállítások és fejtér
 
 - **Fázis (0–50):** a `libsoxr` saját skálája (`0` = minimumfázis, `25` = köztes, `50` = lineáris fázis). 50 fölötti (maximumfázisú) érték nem választható.
-- **Sávszélesség (80,0 – 99,5 %):** az áteresztő sáv vége a forrás Nyquist-frekvenciájához viszonyítva (alap: 95 %).
+- **Sávszélesség (80,0 – 99,7 %):** az áteresztő sáv vége a forrás Nyquist-frekvenciájához viszonyítva (alap: 95 %).
 - **Záró sáv kezdete (100 – 150 %):** 100 % esetén a szűrő a Nyquist-frekvenciánál teljesen zár; 100 % fölött lankásabb lefutás érhető el némi szándékos tükörkép (aliasing) árán. A sávszélességnek mindig kisebbnek kell lennie a záró sáv kezdeténél.
 - **Pontosság:** 20 / 24 / 28 / 32 bit. A szűrőhosszt és a belső fokozatot a motor automatikusan számolja a fenti értékekből.
 - **Fejtér (0 / −1 / −3 / −6 dB):** a mintavételek közti csúcsok (intersample peaks) miatt a felmintavételezett jel 0 dBFS fölé mehet. Az alapértelmezett **−1 dB** biztonsági tartalékot ad; ha mégis keletkezik 1,0 fölötti minta, az állapotsor kiírja a túlvezérelt minták pontos számát.
