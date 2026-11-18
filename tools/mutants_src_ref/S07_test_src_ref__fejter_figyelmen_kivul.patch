@@ -1,0 +1,10 @@
+--- a/include/src_convert.hpp
++++ b/include/src_convert.hpp
+@@ -80,6 +80,7 @@
+     if (srcCh == 0 || srcRate == 0) { if (err) *err = "érvénytelen fájl: " + in; return false; }
+     audioopt::AudioOptions opts = optsIn;
+     audioopt::sanitize(opts);
++    opts.upsampleHeadroomDb = -1.0f;
+ 
+     UpsampleEngine ups;
+     ups.setThreads(1);

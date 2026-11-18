@@ -1,0 +1,11 @@
+--- a/include/audio_options.hpp
++++ b/include/audio_options.hpp
+@@ -119,7 +119,7 @@
+     if (preset == kUpsamplePresetReference) {
+         o.upsamplePassbandEnd = kUpsamplePassbandMax;
+         o.upsamplePrecision = 32;
+-        o.upsamplePhase = 50.0;
++        o.upsamplePhase = 25.0;
+         return;
+     }
+     o.upsamplePassbandEnd = 0.95;

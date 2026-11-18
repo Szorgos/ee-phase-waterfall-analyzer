@@ -1,0 +1,11 @@
+--- a/include/src_convert.hpp
++++ b/include/src_convert.hpp
+@@ -124,7 +124,7 @@
+             size_t fl = 0;
+             ups.flush(stage.data(), kFlushFrames, fl);
+             if (fl == 0) break;
+-            if (step >= kMaxFlushSteps) { res.leftoverFrames += fl; break; }
++            if (step >= 1) { res.leftoverFrames += fl; break; }
+             res.flushFrames += fl;
+             ++res.flushSteps;
+             all.insert(all.end(), stage.begin(), stage.begin() + static_cast<std::ptrdiff_t>(fl * 2));

@@ -170,6 +170,17 @@ target_include_directories(test_hires_b PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/incl
 if(WIN32)
     target_link_libraries(test_hires_b PRIVATE ws2_32 iphlpapi)
 endif()
+# SRC „Referencia”: parancssori átalakító a lejátszó kódútján (mérőeszköz, nem települ) és a tesztje
+add_executable(aqulify-src src/aqulify_src.cpp)
+target_link_libraries(aqulify-src PRIVATE aq_player soxr Threads::Threads)
+target_include_directories(aqulify-src PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+add_executable(test_src_ref src/test_src_ref.cpp)
+target_link_libraries(test_src_ref PRIVATE aq_player soxr Threads::Threads)
+target_include_directories(test_src_ref PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+if(WIN32)
+    target_link_libraries(aqulify-src PRIVATE ws2_32 iphlpapi)
+    target_link_libraries(test_src_ref PRIVATE ws2_32 iphlpapi)
+endif()
 
 
 # 9b. Tesztalkalmazás: DSD (.dsf/.dff) fejléc, FIR szűrő, PCM dekódolás, tekerés, ID3v2, DST elutasítás, DoP 1.1

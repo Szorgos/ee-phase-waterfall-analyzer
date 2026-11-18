@@ -39,8 +39,12 @@ enum class UpsamplePreset : int {
     Linear = 0,        // Lineáris fázis (50)
     Intermediate = 1,  // Köztes (ajánlott, 25)
     Minimum = 2,       // Minimumfázis (0)
-    Custom = 3         // Egyéni beállítás
+    Custom = 3,        // Egyéni beállítás
+    Reference = 4      // Referencia: 99,7% sávszélesség, 32 bites pontosság, lineáris fázis (a legtöbb számítás)
 };
+inline constexpr int kUpsamplePresetReference = 4;
+/** A sávszélesség (passband) felső határa: a Referencia előbeállítás értéke. */
+inline constexpr double kUpsamplePassbandMax = 0.997;
 
 /** A választható pufferméretek mintában (0: automatikus, a rendszer dönt). */
 inline constexpr std::array<int, 8> kBufferChoices{ 0, 64, 128, 256, 512, 1024, 2048, 4096 };
@@ -71,8 +75,8 @@ struct AudioOptions {
 
     // Felmintavételezés a beépített lejátszóban (libsoxr)
     UpsampleRule upsampleRule = UpsampleRule::Off;
-    int upsamplePreset = 1;                     // 0: linear, 1: intermediate, 2: minimum, 3: custom
-    double upsamplePassbandEnd = 0.95;          // 0.80 .. 0.995 (95%)
+    int upsamplePreset = 1;                     // 0: linear, 1: intermediate, 2: minimum, 3: custom, 4: reference
+    double upsamplePassbandEnd = 0.95;          // 0.80 .. 0.997 (95%)
     double upsampleStopbandBegin = 1.00;        // 1.00 .. 1.50 (100%)
     int upsamplePrecision = 28;                 // 20, 24, 28, 32 bit
     double upsamplePhase = 25.0;                // 0.0 .. 50.0 (25: köztes)
@@ -104,6 +108,25 @@ struct AudioOptions {
     bool operator!=(const AudioOptions& o) const { return !(*this == o); }
 };
 
+/**
+ * Egy előbeállítás szűrőértékeinek beírása (a felület gombjai ugyanezt teszik, a telefon és a parancssori átalakító ezt
+ * hívja). A fejtér a felhasználóé marad. Az Egyéni (3) nem változtat semmit.
+ */
+inline void applyUpsamplePreset(AudioOptions& o, int preset) {
+    if (preset < 0 || preset > kUpsamplePresetReference || preset == 3) return;
+    o.upsamplePreset = preset;
+    o.upsampleStopbandBegin = 1.00;
+    if (preset == kUpsamplePresetReference) {
+        o.upsamplePassbandEnd = kUpsamplePassbandMax;
+        o.upsamplePrecision = 32;
+        o.upsamplePhase = 50.0;
+        return;
+    }
+    o.upsamplePassbandEnd = 0.95;
+    o.upsamplePrecision = 28;
+    o.upsamplePhase = preset == 0 ? 50.0 : preset == 2 ? 0.0 : 25.0;
+}
+
 /** Érvényes értékekre igazítás (ismeretlen pufferméret / mintavétel: a legközelebbi választható). */
 inline void sanitize(AudioOptions& o) {
     auto nearestInt = [](int v, const auto& list, int skipZero = 0) {
@@ -134,12 +157,12 @@ inline void sanitize(AudioOptions& o) {
     // Felmintavételezés beállításainak érvényesítése
     const int ur = static_cast<int>(o.upsampleRule);
     if (ur < 0 || ur > 4) o.upsampleRule = UpsampleRule::Off;
-    o.upsamplePreset = std::clamp(o.upsamplePreset, 0, 3);
+    o.upsamplePreset = std::clamp(o.upsamplePreset, 0, kUpsamplePresetReference);
     o.upsamplePhase = std::clamp(o.upsamplePhase, 0.0, 50.0);
     o.upsamplePrecision = nearestInt(o.upsamplePrecision, kPrecisionChoices);
     o.upsampleHeadroomDb = nearestFloat(o.upsampleHeadroomDb, kHeadroomChoices);
 
-    o.upsamplePassbandEnd = std::clamp(o.upsamplePassbandEnd, 0.80, 0.995);
+    o.upsamplePassbandEnd = std::clamp(o.upsamplePassbandEnd, 0.80, kUpsamplePassbandMax);
     o.upsampleStopbandBegin = std::clamp(o.upsampleStopbandBegin, 1.00, 1.50);
     if (o.upsamplePassbandEnd >= o.upsampleStopbandBegin) {
         o.upsamplePassbandEnd = 0.95;

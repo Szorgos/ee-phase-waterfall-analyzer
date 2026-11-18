@@ -1,0 +1,11 @@
+--- a/include/audio_options.hpp
++++ b/include/audio_options.hpp
+@@ -44,7 +44,7 @@
+ };
+ inline constexpr int kUpsamplePresetReference = 4;
+ /** A sávszélesség (passband) felső határa: a Referencia előbeállítás értéke. */
+-inline constexpr double kUpsamplePassbandMax = 0.997;
++inline constexpr double kUpsamplePassbandMax = 0.995;
+ 
+ /** A választható pufferméretek mintában (0: automatikus, a rendszer dönt). */
+ inline constexpr std::array<int, 8> kBufferChoices{ 0, 64, 128, 256, 512, 1024, 2048, 4096 };

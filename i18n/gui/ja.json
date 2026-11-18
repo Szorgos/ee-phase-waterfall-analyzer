@@ -907,6 +907,8 @@
   "ups.presetLinear": "リニア位相",
   "ups.presetIntermediate": "中間位相（推奨）",
   "ups.presetMinimum": "ミニマム位相",
+  "ups.presetReference": "Reference",
+  "ups.presetReferenceHint": "99.7% bandwidth, 32-bit precision, linear phase. The most accurate, but needs the most computation.",
   "ups.headroom": "ヘッドルーム",
   "ups.advanced": "高度なフィルター設定",
   "ups.passband": "通過帯域 (%)",

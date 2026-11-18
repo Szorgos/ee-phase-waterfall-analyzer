@@ -907,6 +907,8 @@
   "ups.presetLinear": "Fază liniară",
   "ups.presetIntermediate": "Intermediară (recomandată)",
   "ups.presetMinimum": "Fază minimă",
+  "ups.presetReference": "Reference",
+  "ups.presetReferenceHint": "99.7% bandwidth, 32-bit precision, linear phase. The most accurate, but needs the most computation.",
   "ups.headroom": "Rezervă (headroom)",
   "ups.advanced": "Setări avansate filtru",
   "ups.passband": "Lățime de bandă (%)",

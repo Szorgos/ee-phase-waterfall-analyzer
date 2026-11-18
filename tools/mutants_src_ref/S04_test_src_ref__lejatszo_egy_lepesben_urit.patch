@@ -1,0 +1,11 @@
+--- a/src/file_player.cpp
++++ b/src/file_player.cpp
+@@ -698,7 +698,7 @@
+                 ring_[idx + 1] = upsampleOutBuf_[2 * i + 1];
+             }
+             wr_.store(w + flFrames, std::memory_order_release);
+-            if (flFrames == 0) {
++            if (true) {
+                 s.end = base_.load() + wr_.load();
+                 draining_ = false;
+                 eof_ = true;

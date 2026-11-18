@@ -907,6 +907,8 @@
   "ups.presetLinear": "Lineaarinen vaihe",
   "ups.presetIntermediate": "Välivaihe (suositus)",
   "ups.presetMinimum": "Minimivaihe",
+  "ups.presetReference": "Reference",
+  "ups.presetReferenceHint": "99.7% bandwidth, 32-bit precision, linear phase. The most accurate, but needs the most computation.",
   "ups.headroom": "Pelivara (headroom)",
   "ups.advanced": "Suodattimen lisäasetukset",
   "ups.passband": "Kaistanleveys (%)",

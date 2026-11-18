@@ -907,6 +907,8 @@
   "ups.presetLinear": "Lineáris fázis",
   "ups.presetIntermediate": "Köztes (ajánlott)",
   "ups.presetMinimum": "Minimumfázis",
+  "ups.presetReference": "Referencia",
+  "ups.presetReferenceHint": "99,7% sávszélesség, 32 bites pontosság, lineáris fázis. A legpontosabb, de a legtöbb számítást igényli.",
   "ups.headroom": "Fejtér",
   "ups.advanced": "Haladó szűrőbeállítások",
   "ups.passband": "Sávszélesség (%)",

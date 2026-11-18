@@ -907,6 +907,8 @@
   "ups.presetLinear": "פאזה ליניארית",
   "ups.presetIntermediate": "פאזת ביניים (מומלץ)",
   "ups.presetMinimum": "פאזה מינימלית",
+  "ups.presetReference": "Reference",
+  "ups.presetReferenceHint": "99.7% bandwidth, 32-bit precision, linear phase. The most accurate, but needs the most computation.",
   "ups.headroom": "מרווח (headroom)",
   "ups.advanced": "הגדרות מסנן מתקדמות",
   "ups.passband": "רוחב פס (%)",

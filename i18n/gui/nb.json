@@ -907,6 +907,8 @@
   "ups.presetLinear": "Lineær fase",
   "ups.presetIntermediate": "Mellomfase (anbefalt)",
   "ups.presetMinimum": "Minimumsfase",
+  "ups.presetReference": "Reference",
+  "ups.presetReferenceHint": "99.7% bandwidth, 32-bit precision, linear phase. The most accurate, but needs the most computation.",
   "ups.headroom": "Headroom",
   "ups.advanced": "Avanserte filterinnstillinger",
   "ups.passband": "Båndbredde (%)",

@@ -4974,6 +4974,7 @@ var qrcode = function() {
                       <button type="button" id="upsPreset0" class="adw-btn" style="flex:1; font-size:11px; padding:4px 6px;" onclick="upsSelectPreset(0)" data-i18n="ups.presetLinear">Lineáris fázis</button>
                       <button type="button" id="upsPreset1" class="adw-btn" style="flex:1; font-size:11px; padding:4px 6px;" onclick="upsSelectPreset(1)" data-i18n="ups.presetIntermediate">Köztes (ajánlott)</button>
                       <button type="button" id="upsPreset2" class="adw-btn" style="flex:1; font-size:11px; padding:4px 6px;" onclick="upsSelectPreset(2)" data-i18n="ups.presetMinimum">Minimumfázis</button>
+                      <button type="button" id="upsPreset4" class="adw-btn" style="flex:1; font-size:11px; padding:4px 6px;" onclick="upsSelectPreset(4)" data-i18n="ups.presetReference" data-i18n-title="ups.presetReferenceHint" title="99,7% sávszélesség, 32 bites pontosság, lineáris fázis. A legpontosabb, de a legtöbb számítást igényli.">Referencia</button>
                     </div>
                   </div>
                   <label class="ao-row" style="margin-top:4px;"><span data-i18n="ups.maxRate">Legnagyobb célmintavétel</span>
@@ -4997,7 +4998,7 @@ var qrcode = function() {
                     <summary style="cursor:pointer; font-size:12px; opacity:0.9;" data-i18n="ups.advanced">Haladó szűrőbeállítások</summary>
                     <div style="margin-top:6px; padding-left:4px;">
                       <label class="ao-row"><span data-i18n="ups.passband">Sávszélesség (%)</span>
-                        <input type="number" id="upsPassband" class="ee-input" style="width:72px; text-align:center;" min="80" max="99.5" step="0.5" value="95" onchange="upsOnAdvChange()">
+                        <input type="number" id="upsPassband" class="ee-input" style="width:72px; text-align:center;" min="80" max="99.7" step="0.1" value="95" onchange="upsOnAdvChange()">
                       </label>
                       <label class="ao-row"><span data-i18n="ups.stopband">Záró sáv kezdete (%)</span>
                         <input type="number" id="upsStopband" class="ee-input" style="width:72px; text-align:center;" min="100" max="150" step="1" value="100" onchange="upsOnAdvChange()">
@@ -10300,7 +10301,7 @@ function upsToggleHelp() {
 
 function upsUpdatePresetButtons(preset) {
   upsPresetState = preset;
-  for (let i = 0; i < 3; ++i) {
+  for (const i of [0, 1, 2, 4]) {
     const btn = document.getElementById("upsPreset" + i);
     if (!btn) continue;
     btn.classList.toggle("primary", preset === i);
@@ -10345,12 +10346,14 @@ function upsOnRuleChange() {
 }
 
 function upsSelectPreset(preset) {
+  // ugyanazok az értékek, mint az audio_options.hpp applyUpsamplePreset() függvényében
   upsUpdatePresetButtons(preset);
-  document.getElementById("upsPassband").value = "95";
+  const ref = preset === 4;
+  document.getElementById("upsPassband").value = ref ? "99.7" : "95";
   document.getElementById("upsStopband").value = "100";
   document.getElementById("upsStopbandWarn").hidden = true;
-  document.getElementById("upsPrecision").value = "28";
-  document.getElementById("upsPhase").value = preset === 0 ? "50" : preset === 2 ? "0" : "25";
+  document.getElementById("upsPrecision").value = ref ? "32" : "28";
+  document.getElementById("upsPhase").value = preset === 0 || ref ? "50" : preset === 2 ? "0" : "25";
   document.getElementById("upsErrOrder").hidden = true;
   aoSend();
 }
