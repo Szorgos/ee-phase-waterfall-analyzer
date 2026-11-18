@@ -1,0 +1,11 @@
+--- a/windows/engine/player_output_asio.hpp
++++ b/windows/engine/player_output_asio.hpp
+@@ -793,7 +793,7 @@
+         }
+ 
+         if (drv_) drv_->outputReady();
+-        consumedFrames_.fetch_add(n, std::memory_order_release);
++        consumedFrames_.fetch_add(n * 2, std::memory_order_release);
+     }
+ 
+     std::string driverIdOrName_;

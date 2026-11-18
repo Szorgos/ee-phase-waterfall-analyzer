@@ -1,0 +1,10 @@
+--- a/windows/engine/player_output_asio.hpp
++++ b/windows/engine/player_output_asio.hpp
+@@ -153,6 +153,7 @@
+     bool settlesOnRateChange() const override { return true; }
+ 
+     std::vector<uint32_t> supportedRates() const override {
++        return { 44100, 48000, 88200, 96000, 176400, 192000 };
+         static constexpr uint32_t kCandidates[] = {
+             44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000
+         };

@@ -511,3 +511,16 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
 endif()
 
 message(STATUS "Aqulify C++ DSP Engine sikeresen konfigurálva.")
+
+# ------------------------------------------------------------------
+# Windows-only: ASIO-kimenet motor tesztje (Steinberg ASIO SDK 2.3.4, GPLv3)
+# ------------------------------------------------------------------
+if(WIN32)
+    add_executable(test_asio src/test_asio.cpp)
+    target_include_directories(test_asio PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/windows/engine
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/asiosdk/common
+    )
+    target_link_libraries(test_asio PRIVATE aq_player ee_dsp_core ole32 uuid advapi32 avrt)
+endif()

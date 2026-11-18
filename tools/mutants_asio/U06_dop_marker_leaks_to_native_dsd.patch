@@ -1,0 +1,13 @@
+--- a/windows/engine/player_output_asio.hpp
++++ b/windows/engine/player_output_asio.hpp
+@@ -801,8 +801,8 @@
+             for (size_t i = 0; i < dopFrames; ++i) {
+                 const uint32_t wL = static_cast<uint32_t>(dop[2 * i]);
+                 const uint32_t wR = static_cast<uint32_t>(dop[2 * i + 1]);
+-                uint8_t b0L = static_cast<uint8_t>((wL >> 8) & 0xFFu);
+-                uint8_t b1L = static_cast<uint8_t>(wL & 0xFFu);
++                uint8_t b0L = static_cast<uint8_t>((wL >> 16) & 0xFFu);
++                uint8_t b1L = static_cast<uint8_t>((wL >> 8) & 0xFFu);
+                 uint8_t b0R = static_cast<uint8_t>((wR >> 8) & 0xFFu);
+                 uint8_t b1R = static_cast<uint8_t>(wR & 0xFFu);
+                 if (lsb1) {
