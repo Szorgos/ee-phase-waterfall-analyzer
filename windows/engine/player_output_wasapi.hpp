@@ -82,39 +82,24 @@ public:
         if (wantExclusive_.load()) {
             // Kizárólagos módban az alapértelmezett WASAPI eszköz támogatott mintavételei
             std::vector<uint32_t> res;
-            ComPtr<IMMDeviceEnumerator> en;
-            if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&en)))) {
-                ComPtr<IMMDevice> dev;
-                if (SUCCEEDED(en->GetDefaultAudioEndpoint(eRender, eConsole, &dev))) {
-                    ComPtr<IAudioClient> cli;
-                    if (SUCCEEDED(dev->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&cli)))) {
-                        for (uint32_t r : kCandidates) {
-                            WAVEFORMATEXTENSIBLE wf{};
-                            wf.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
-                            wf.Format.nChannels = 2;
-                            wf.Format.nSamplesPerSec = r;
-                            wf.Format.wBitsPerSample = 32;
-                            wf.Format.nBlockAlign = 8;
-                            wf.Format.nAvgBytesPerSec = r * 8;
-                            wf.Format.cbSize = 22;
-                            wf.Samples.wValidBitsPerSample = 32;
-                            wf.dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
-                            wf.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
-                            if (cli->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, &wf.Format, nullptr) == S_OK) {
+            win::ComPtr<IMMDevice> dev;
+            if (defaultDevice(dev)) {
+                win::ComPtr<IAudioClient> cli;
+                if (SUCCEEDED(dev->Activate(win::kIID_IAudioClient, CLSCTX_ALL, nullptr,
+                                            reinterpret_cast<void**>(cli.put())))) {
+                    static const WasapiFormat kProbeFmts[] = {
+                        { 32, 32, true,  0, "32 bit float" },
+                        { 32, 32, false, 0, "32 bit int" },
+                        { 32, 24, false, 0, "24 bit (32)" },
+                        { 16, 16, false, 0, "16 bit" },
+                    };
+                    for (uint32_t r : kCandidates) {
+                        for (const WasapiFormat& f : kProbeFmts) {
+                            WAVEFORMATEXTENSIBLE wf = makeFormat(r, f);
+                            if (cli->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE,
+                                                       reinterpret_cast<const WAVEFORMATEX*>(&wf), nullptr) == S_OK) {
                                 res.push_back(r);
-                                continue;
-                            }
-                            wf.SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
-                            if (cli->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, &wf.Format, nullptr) == S_OK) {
-                                res.push_back(r);
-                                continue;
-                            }
-                            wf.Format.wBitsPerSample = 16;
-                            wf.Format.nBlockAlign = 4;
-                            wf.Format.nAvgBytesPerSec = r * 4;
-                            wf.Samples.wValidBitsPerSample = 16;
-                            if (cli->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, &wf.Format, nullptr) == S_OK) {
-                                res.push_back(r);
+                                break;
                             }
                         }
                     }
