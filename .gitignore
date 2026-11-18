@@ -15,3 +15,4 @@ __pycache__/
 /debian/substvars.tmp
 /debian/files
 hires_a_results.json
+hires_b_results.json

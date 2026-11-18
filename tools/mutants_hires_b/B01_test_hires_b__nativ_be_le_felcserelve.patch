@@ -1,0 +1,11 @@
+--- a/include/player_output_alsa.hpp
++++ b/include/player_output_alsa.hpp
+@@ -227,7 +227,7 @@
+     for (size_t n = 0; n < frames; ++n)
+         for (int c = 0; c < 2; ++c)
+             for (int p = 0; p < bytes; ++p)
+-                out[(n * 2 + static_cast<size_t>(c)) * static_cast<size_t>(bytes) + static_cast<size_t>(bigEndian ? p : bytes - 1 - p)] =
++                out[(n * 2 + static_cast<size_t>(c)) * static_cast<size_t>(bytes) + static_cast<size_t>(bigEndian ? bytes - 1 - p : p)] =
+                     chBytes[c][n * static_cast<size_t>(bytes) + static_cast<size_t>(p)];
+ }
+ 

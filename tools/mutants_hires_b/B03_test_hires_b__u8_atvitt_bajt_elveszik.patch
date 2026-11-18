@@ -1,0 +1,11 @@
+--- a/include/player_output_alsa.hpp
++++ b/include/player_output_alsa.hpp
+@@ -261,7 +261,7 @@
+             }
+         }
+         const size_t total = carried_ + 2 * frames;
+-        if (total > need) { carry_[0] = ch_[0][need]; carry_[1] = ch_[1][need]; carried_ = 1; }
++        if (total > need) { carry_[0] = ch_[0][need]; carry_[1] = ch_[1][need]; carried_ = 0; }
+         else carried_ = 0;
+         const uint8_t* src[2] = { ch_[0].data(), ch_[1].data() };
+         packNativeDsd(src, period, static_cast<int>(nb_), be_, out);

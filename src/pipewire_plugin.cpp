@@ -433,6 +433,7 @@ int main(int argc, char* argv[]) {
     // és a mérők / a vízesés ebből kapják a jelet (a PipeWire „Aqulify” eszközén nem szól semmi)
     std::unique_ptr<player::ChainPlayerDsp> playerDsp;
     player::SelectablePlayerOutput* playerSel = nullptr;
+    player::AlsaPlayerOutput* alsaRaw = nullptr;
     player::FilePlayer* playerFilePlayer = nullptr;
     uint64_t playerReadPos = 0;
     auto playerExclusive = [&]() { return playerSel && playerSel->exclusiveActive(); };
@@ -599,6 +600,7 @@ int main(int argc, char* argv[]) {
     }
     auto alsaOut = std::make_unique<player::AlsaPlayerOutput>();
     alsaOut->setExclusiveDsp(playerDsp.get());
+    alsaRaw = alsaOut.get();   // a jelút állapotához (natív DSD és formátuma)
     auto selOut = std::make_unique<player::SelectablePlayerOutput>(std::make_unique<player::PwPlayerOutput>("aqulify_sink"),
                                                                    std::move(alsaOut));
     playerSel = selOut.get();
@@ -1065,29 +1067,34 @@ int main(int argc, char* argv[]) {
             { std::lock_guard<std::mutex> lk(audioMutex); reqBuf = audioOpts.bufferFrames; keep = audioOpts.keepAwake; }
             bool dopActive = false;
             bool dopWant = false;
+            bool dsdNative = false;
             uint32_t dopDsdRate = 0;
-            std::string dopFb;
+            std::string dopFb, dsdFormat;
 #if defined(AQ_HAVE_ALSA)
             dopActive = filePlayer.isDopActive();
             dopWant = filePlayer.dsdDop();
             dopDsdRate = filePlayer.dopDsdRate();
             dopFb = filePlayer.dopFallbackReason();
+            if (dopActive && alsaRaw && alsaRaw->isNativeDsd()) {   // natív DSD (DSD_U32 / U16 / U8), nem DoP
+                dsdNative = true;
+                dsdFormat = alsaRaw->nativeDsdFormat();
+            }
 #endif
             const bool transparent = dopActive || (chainTransparent(p) && !crossover);
             const bool dspTransparent = dopActive || chainTransparent(p);
-            char buf[640];
+            char buf[720];
             std::snprintf(buf, sizeof(buf),
                           ",\"path\":{\"quantum\":%u,\"bufReq\":%d,\"bufMs\":%.2f,\"eqLat\":%zu,\"limLat\":%zu,\"convLat\":%zu,"
                           "\"dspMs\":%.2f,\"totalMs\":%.1f,\"load\":%.1f,\"peak\":%.1f,\"overruns\":%u,\"transparent\":%s,"
                           "\"dspTransparent\":%s,\"keepAwake\":%s,\"playerRate\":%u,\"playerGain\":%.2f,"
-                          "\"dop\":{\"want\":%s,\"active\":%s,\"dsdRate\":%u,\"fallback\":\"%s\"}}",
+                          "\"dop\":{\"want\":%s,\"active\":%s,\"dsdRate\":%u,\"fallback\":\"%s\",\"native\":%s,\"format\":\"%s\"}}",
                           q, reqBuf, bufMs, eqLat, limLat, convLat, dspMs, 2.0 * bufMs + dspMs, 100.0 * node.dspLoad(),
                           100.0 * node.takeDspPeak(), node.overruns(), transparent ? "true" : "false",
                           dspTransparent ? "true" : "false",
                           keep && node.keepAwakeActive() ? "true" : "false", filePlayer.streamRate(),
                           filePlayer.hasTrack() ? filePlayer.currentGainDb() : 0.0f,
                           dopWant ? "true" : "false", dopActive ? "true" : "false",
-                          dopDsdRate, dopFb.c_str());
+                          dopDsdRate, dopFb.c_str(), dsdNative ? "true" : "false", dsdFormat.c_str());
             const bool uActive = filePlayer.isUpsampleActive();
             const uint32_t uSrc = filePlayer.upsampleSrcRate();
             const uint32_t uTgt = filePlayer.upsampleTargetRate();

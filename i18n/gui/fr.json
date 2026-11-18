@@ -986,5 +986,7 @@
   "ao.asioErr_hw_malfunction": "the DAC reported an error",
   "ao.asioErr_no_dsp": "internal error: no DSP chain",
   "ao.asioErr_open_failed": "opening failed",
-  "ao.asioErr_other": "error code: {code}"
+  "ao.asioErr_other": "error code: {code}",
+  "ao.dsdNativeOn": "Native DSD: {dsd}, {format} – the DAC receives the file's DSD stream bit-for-bit unchanged",
+  "ao.exclRate": "the DAC accepts this DSD rate neither natively nor over DoP (DSD1024 does not fit into DoP on any DAC); playing converted to PCM"
 }

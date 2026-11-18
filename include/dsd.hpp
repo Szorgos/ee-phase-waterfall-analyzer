@@ -609,13 +609,26 @@ public:
      */
     static constexpr double kOutputGain = 2.0;
 
-    bool init(uint32_t dsdSampleRate, uint32_t pcmSampleRate, uint32_t channels) {
+    /**
+     * Ettől a tizedelési aránytól (DSD512 → 88,2 kHz: 256) kétfokozatú a tizedelés: (A) rövid FIR az 1 bites jelen a
+     * kimenet 8-szorosára (705,6 / 768 kHz), (B) a fenti egyfokozatúval azonos időtartamú és menetű FIR a kimenetre.
+     * Az egyfokozatú út költsége a DSD-mintavétellel arányos (DSD1024-en ~2,5× valós idő egy laptopmagon); a
+     * kétfokozatúé kb. harmada. DSD64–DSD256 az eredeti, egyfokozatú úton marad (bitre változatlan).
+     */
+    static constexpr uint32_t kTwoStageMinDecim = 256;
+    static constexpr uint32_t kStageAGroups = 8;           // az A-szűrő hossza köztes mintában
+    static constexpr double kStageABeta = 11.16;           // ~110 dB zárósáv (Kaiser)
+
+    /** allowTwoStage = false: mindig az egyfokozatú út (a teszt ezzel veti össze a kétfokozatút a bevált úttal). */
+    bool init(uint32_t dsdSampleRate, uint32_t pcmSampleRate, uint32_t channels, bool allowTwoStage = true) {
         if (channels == 0 || pcmSampleRate == 0 || dsdSampleRate % (8u * pcmSampleRate) != 0) return false;
         dsdRate_ = dsdSampleRate;
         pcmRate_ = pcmSampleRate;
         channels_ = channels;
         decimFactor_ = dsdSampleRate / pcmSampleRate;
         bytesPerPcmFrame_ = decimFactor_ / 8u; // pl. DSD64 -> 32 / 8 = 4 bájt
+        twoStage_ = allowTwoStage && decimFactor_ >= kTwoStageMinDecim && decimFactor_ % 64u == 0;
+        if (twoStage_) return initTwoStage();
 
         // Szimmetrikus FIR hossza: Kaiser képlet szerint Δω = 2π·22000 / dsdRate -> ~867 * (dsdRate / 2822400).
         // 29 PCM keret (DSD64-nél 29 * 32 = 928 tap, 116 bájt) biztosítja a páratlan keretszámú, nulla fázistolású
@@ -669,14 +682,28 @@ public:
     uint32_t halfFilterBytes() const { return halfFilterBytes_; }
     const std::vector<double>& coeffs() const { return coeffs_; }
 
+    /** Kétfokozatú-e (DSD512 és fölötte). */
+    bool twoStage() const { return twoStage_; }
+
     /** Szűrőállapot alaphelyzetbe állítása DSD csenddel (tekerés előtt vagy fájl elején). */
     void reset() {
+        if (twoStage_) {
+            std::fill(aHist_.begin(), aHist_.end(), kDsdSilenceByte);
+            std::fill(bHist_.begin(), bHist_.end(), 0.0f);
+            aHead_ = bHead_ = 0;
+            byteCount_ = 0;
+            return;
+        }
         std::fill(history_.begin(), history_.end(), kDsdSilenceByte);
         histHead_ = 0;
     }
 
     /** Egy `bytesPerPcmFrame()` bájt/csatorna előzetes betöltése a gyűrűpufferbe (kimenet nélkül, pre-rollhoz). */
     void pushSilenceBytes(uint32_t chBytesCount) {
+        if (twoStage_) {
+            for (uint32_t i = 0; i < chBytesCount; ++i) pushByteTwoStage(nullptr);
+            return;
+        }
         for (uint32_t i = 0; i < chBytesCount; ++i) {
             for (uint32_t c = 0; c < channels_; ++c) {
                 history_[static_cast<size_t>(c) * filterBytes_ + histHead_] = kDsdSilenceByte;
@@ -687,6 +714,10 @@ public:
 
     /** `chBytesCount` bájtnyi (interleaved MSB-first) adat betöltése kimenet generálása nélkül. */
     void pushBytesOnly(const uint8_t* interleavedMsb, size_t chBytesCount) {
+        if (twoStage_) {
+            for (size_t i = 0; i < chBytesCount; ++i) pushByteTwoStage(interleavedMsb + i * channels_);
+            return;
+        }
         for (size_t i = 0; i < chBytesCount; ++i) {
             const uint8_t* src = interleavedMsb + i * channels_;
             for (uint32_t c = 0; c < channels_; ++c) {
@@ -703,6 +734,10 @@ public:
      * @param pcmOut             kimenet: `pcmFrames * channels` float (-1.0 .. +1.0)
      */
     void process(const uint8_t* dsdInterleavedMsb, size_t pcmFrames, float* pcmOut) {
+        if (twoStage_) {
+            processTwoStage(dsdInterleavedMsb, pcmFrames, pcmOut);
+            return;
+        }
         const size_t step = bytesPerPcmFrame_;
         for (size_t f = 0; f < pcmFrames; ++f) {
             // 1. Új keret (`step` bájt/csatorna) betolása a gyűrűpufferbe
@@ -732,6 +767,101 @@ public:
     }
 
 private:
+    /** Kaiser-ablakos sinc aluláteresztő (szimmetrikus, egységnyi DC erősítés). */
+    static std::vector<double> kaiserLowpass(size_t taps, double fcNorm, double beta) {
+        std::vector<double> h(taps, 0.0);
+        const double center = 0.5 * static_cast<double>(taps - 1);
+        const double denom = detail::besselI0(beta);
+        constexpr double kPi = 3.14159265358979323846;
+        double sum = 0.0;
+        for (size_t n = 0; n < taps; ++n) {
+            const double d = static_cast<double>(n) - center;
+            const double sinc = (std::abs(d) < 1e-12) ? (2.0 * fcNorm) : (std::sin(2.0 * kPi * fcNorm * d) / (kPi * d));
+            const double r = d / center;
+            h[n] = sinc * detail::besselI0(beta * std::sqrt(std::max(0.0, 1.0 - r * r))) / denom;
+            sum += h[n];
+        }
+        for (double& v : h) v /= sum;
+        return h;
+    }
+
+    /**
+     * Kétfokozatú tizedelés (DSD512 / DSD1024). Köztes mintavétel: a kimenet 8-szorosa (705,6 / 768 kHz).
+     *  A: az 1 bites jelen, kStageAGroups köztes minta hosszú FIR (bájt-LUT), áteresztés 20 kHz-ig, zárósáv a köztes
+     *     mintavétel − 42 kHz-től (ezek a sávok hajlanának vissza a 0–42 kHz-be), ~110 dB.
+     *  B: a köztes jelen az egyfokozatúval azonos FIR (31 kHz, β = 10,61, 29 kimeneti periódus), 8-as tizedeléssel.
+     */
+    bool initTwoStage() {
+        bpi_ = bytesPerPcmFrame_ / 8u;                                    // bájt / köztes minta (DSD512: 4, DSD1024: 8)
+        const double ri = 8.0 * static_cast<double>(pcmRate_);           // köztes mintavétel
+        aBytes_ = kStageAGroups * bpi_;
+        const double fcA = 0.5 * (20000.0 + (ri - 42000.0)) / static_cast<double>(dsdRate_);
+        const std::vector<double> hA = kaiserLowpass(static_cast<size_t>(aBytes_) * 8u, fcA, kStageABeta);
+        aLut_.assign(static_cast<size_t>(aBytes_) * 256u, 0.0f);
+        for (uint32_t b = 0; b < aBytes_; ++b) {
+            const double* hb = &hA[static_cast<size_t>(b) * 8u];
+            float* table = &aLut_[static_cast<size_t>(b) * 256u];
+            for (int val = 0; val < 256; ++val) {
+                double acc = 0.0;
+                for (int bit = 0; bit < 8; ++bit) acc += (((val >> (7 - bit)) & 1) != 0) ? hb[bit] : -hb[bit];
+                table[val] = static_cast<float>(acc);
+            }
+        }
+        constexpr uint32_t kFilterPcmSpan = 29u;
+        bTaps_ = kFilterPcmSpan * 8u;
+        const std::vector<double> hB = kaiserLowpass(bTaps_, kCutoffHz / ri, kKaiserBeta);
+        bCoeffs_.assign(hB.size(), 0.0f);
+        for (size_t i = 0; i < hB.size(); ++i) bCoeffs_[i] = static_cast<float>(hB[i] * kOutputGain);
+        coeffs_ = hB;
+        // az előtöltés (a dekóder tekerése) mindkét fokozat teljes memóriáját fedje, egész kimeneti keretben
+        filterBytes_ = aBytes_ + bTaps_ * bpi_;
+        const uint32_t halfFrames = (filterBytes_ / 2u + bytesPerPcmFrame_ - 1u) / bytesPerPcmFrame_;
+        halfFilterBytes_ = halfFrames * bytesPerPcmFrame_;
+        aHist_.assign(static_cast<size_t>(channels_) * aBytes_, kDsdSilenceByte);
+        bHist_.assign(static_cast<size_t>(channels_) * bTaps_, 0.0f);
+        aHead_ = bHead_ = 0;
+        byteCount_ = 0;
+        return true;
+    }
+
+    /** Egy bájt / csatorna be az A-fokozatba; minden bpi_. bájt után egy köztes minta a B gyűrűjébe. */
+    void pushByteTwoStage(const uint8_t* srcOrNull) {
+        for (uint32_t c = 0; c < channels_; ++c)
+            aHist_[static_cast<size_t>(c) * aBytes_ + aHead_] = srcOrNull ? srcOrNull[c] : kDsdSilenceByte;
+        aHead_ = (aHead_ + 1u) % aBytes_;
+        if (++byteCount_ < bpi_) return;
+        byteCount_ = 0;
+        for (uint32_t c = 0; c < channels_; ++c) {
+            const uint8_t* h = &aHist_[static_cast<size_t>(c) * aBytes_];
+            double acc = 0.0;        // dupla pontosság: DSD1024-en is a bevált egyfokozatú zajszintje
+            uint32_t idx = aHead_;   // a legrégebbi bájttól a legújabbig
+            for (uint32_t b = 0; b < aBytes_; ++b) {
+                acc += aLut_[static_cast<size_t>(b) * 256u + h[idx]];
+                if (++idx == aBytes_) idx = 0;
+            }
+            bHist_[static_cast<size_t>(c) * bTaps_ + bHead_] = acc;   // köztes minta
+        }
+        bHead_ = (bHead_ + 1u) % bTaps_;
+    }
+
+    void processTwoStage(const uint8_t* dsd, size_t pcmFrames, float* out) {
+        const size_t step = bytesPerPcmFrame_;
+        for (size_t f = 0; f < pcmFrames; ++f) {
+            for (size_t s = 0; s < step; ++s) pushByteTwoStage(dsd + (f * step + s) * channels_);
+            float* o = out + f * channels_;
+            for (uint32_t c = 0; c < channels_; ++c) {
+                const float* h = &bHist_[static_cast<size_t>(c) * bTaps_];
+                double acc = 0.0;
+                uint32_t idx = bHead_;
+                for (uint32_t k = 0; k < bTaps_; ++k) {
+                    acc += bCoeffs_[k] * h[idx];
+                    if (++idx == bTaps_) idx = 0;
+                }
+                o[c] = static_cast<float>(acc);
+            }
+        }
+    }
+
     uint32_t dsdRate_ = 0;
     uint32_t pcmRate_ = 0;
     uint32_t channels_ = 0;
@@ -743,6 +873,11 @@ private:
     std::vector<double> coeffs_;
     std::vector<float> lut_;
     std::vector<uint8_t> history_;
+    // kétfokozatú út (DSD512 / DSD1024)
+    bool twoStage_ = false;
+    uint32_t bpi_ = 0, aBytes_ = 0, bTaps_ = 0, aHead_ = 0, bHead_ = 0, byteCount_ = 0;
+    std::vector<float> aLut_, bCoeffs_, bHist_;
+    std::vector<uint8_t> aHist_;
 };
 
 /**

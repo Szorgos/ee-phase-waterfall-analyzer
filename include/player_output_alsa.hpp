@@ -197,6 +197,84 @@ public:
 };
 #endif
 
+/**
+ * Natív DSD-formátum az ALSA-n (Linux / Pi, kizárólagos kimenet). A hardver-paraméterekből választjuk, ebben a
+ * sorrendben. Egy ALSA-keret csatornánként `bytes` DSD-bájtot visz (8 · bytes 1 bites mintát), a bájtokon belül az
+ * időben első bit a legfelső (MSB-first); a _BE formátumban a bájtok időrendben, a _LE-ben fordított sorrendben
+ * állnak a mintán belül. A keretráta = DSD-ráta / (8 · bytes), tehát a DoP-rátához képest: 2 / bytes-szoros.
+ * Forrás: ALSA SND_PCM_FORMAT_DSD_* (alsa-lib pcm.h), ellenőrizve 2026-11-18.
+ */
+struct AlsaDsdFormat {
+    snd_pcm_format_t fmt;
+    int bytes;         // DSD-bájt / csatorna / ALSA-keret
+    bool bigEndian;    // a mintán belüli bájtsorrend (U8-nál közömbös)
+    const char* name;
+};
+inline constexpr AlsaDsdFormat kAlsaDsdFormats[] = {
+    { SND_PCM_FORMAT_DSD_U32_BE, 4, true, "DSD_U32_BE" },
+    { SND_PCM_FORMAT_DSD_U32_LE, 4, false, "DSD_U32_LE" },
+    { SND_PCM_FORMAT_DSD_U16_BE, 2, true, "DSD_U16_BE" },
+    { SND_PCM_FORMAT_DSD_U16_LE, 2, false, "DSD_U16_LE" },
+    { SND_PCM_FORMAT_DSD_U8, 1, true, "DSD_U8" },
+};
+
+/**
+ * DSD-bájtfolyam (csatornánként, időrendben, MSB-first) csomagolása natív ALSA DSD-keretekbe.
+ * @param chBytes  csatornánként `frames * bytes` bájt (chBytes[c][k]: a c. csatorna k. bájtja)
+ * @param out      `frames * 2 * bytes` bájt, sztereó keretek
+ */
+inline void packNativeDsd(const uint8_t* const chBytes[2], size_t frames, int bytes, bool bigEndian, uint8_t* out) {
+    for (size_t n = 0; n < frames; ++n)
+        for (int c = 0; c < 2; ++c)
+            for (int p = 0; p < bytes; ++p)
+                out[(n * 2 + static_cast<size_t>(c)) * static_cast<size_t>(bytes) + static_cast<size_t>(bigEndian ? p : bytes - 1 - p)] =
+                    chBytes[c][n * static_cast<size_t>(bytes) + static_cast<size_t>(p)];
+}
+
+/**
+ * DoP-szavakból (a lejátszó DoP-kimenete: [23:16] jelölő, [15:8] b0, [7:0] b1, MSB-first DSD-bájtok) natív ALSA
+ * DSD-periódusok. Egy DoP-szó csatornánként 2 bájt; ha a periódus bájtszáma páratlan (DSD_U8), a maradék bájt a
+ * következő periódusba kerül. A jelölő nem kerül át.
+ */
+class NativeDsdPacker {
+public:
+    void setup(int bytes, bool bigEndian, size_t maxPeriod) {
+        nb_ = static_cast<size_t>(bytes);
+        be_ = bigEndian;
+        ch_[0].assign(maxPeriod * nb_ + 2, dsd::kDsdSilenceByte);
+        ch_[1].assign(maxPeriod * nb_ + 2, dsd::kDsdSilenceByte);
+        carried_ = 0;
+    }
+    void reset() { carried_ = 0; }
+    /** Ennyi DoP-keret kell a következő `period` ALSA-kerethez. */
+    size_t dopFramesFor(size_t period) const { return (period * nb_ - carried_ + 1) / 2; }
+    /** `dop`: dopFramesFor(period) sztereó DoP-szó; `out`: period · 2 · nb bájt. */
+    void pack(const int32_t* dop, size_t period, uint8_t* out) {
+        const size_t need = period * nb_, frames = dopFramesFor(period);
+        for (int c = 0; c < 2; ++c) {
+            uint8_t* d = ch_[c].data();
+            if (carried_) d[0] = carry_[c];
+            for (size_t i = 0; i < frames; ++i) {
+                const uint32_t w = static_cast<uint32_t>(dop[2 * i + static_cast<size_t>(c)]);
+                d[carried_ + 2 * i] = static_cast<uint8_t>((w >> 8) & 0xFFu);
+                d[carried_ + 2 * i + 1] = static_cast<uint8_t>(w & 0xFFu);
+            }
+        }
+        const size_t total = carried_ + 2 * frames;
+        if (total > need) { carry_[0] = ch_[0][need]; carry_[1] = ch_[1][need]; carried_ = 1; }
+        else carried_ = 0;
+        const uint8_t* src[2] = { ch_[0].data(), ch_[1].data() };
+        packNativeDsd(src, period, static_cast<int>(nb_), be_, out);
+    }
+
+private:
+    size_t nb_ = 4;
+    bool be_ = true;
+    std::vector<uint8_t> ch_[2];
+    uint8_t carry_[2] = { 0, 0 };
+    size_t carried_ = 0;
+};
+
 /** A kimenet formátuma. */
 struct AlsaFormat {
     snd_pcm_format_t fmt = SND_PCM_FORMAT_S32_LE;
@@ -253,6 +331,7 @@ public:
         }
         open_ = false;
         dopMode_ = false;
+        nativeDsd_ = false;
         std::lock_guard<std::mutex> lk(renderMutex_);
         render_ = nullptr;
         renderDop_ = nullptr;
@@ -356,6 +435,11 @@ public:
     /** A kimeneti szál valós idejű (SCHED_FIFO) prioritása, vagy 0, ha normál prioritással fut. */
     int realtimePriority() const { return rtPriority_.load(); }
     bool isDopMode() const { return dopMode_.load(); }
+    /** DSD-nél natív formátumban (DSD_U32 / U16 / U8) szól-e, nem DoP-ban; a formátum neve, ha igen. */
+    bool isNativeDsd() const { return nativeDsd_.load(); }
+    std::string nativeDsdFormat() const { std::lock_guard<std::mutex> lk(infoMutex_); return nativeName_; }
+    /** A natív DSD kipróbálása DoP előtt (alapból igen; a teszt és a hibakeresés kikapcsolhatja). */
+    void setPreferNativeDsd(bool on) { preferNative_ = on; }
     void setDopTap(std::function<void(const int32_t*, size_t)> fn) { dopTap_ = std::move(fn); }
     void setRawTap(std::function<void(const uint8_t*, size_t, const AlsaFormat&)> fn) { rawTap_ = std::move(fn); }
 
@@ -423,7 +507,32 @@ private:
             { SND_PCM_FORMAT_S24_3LE, 24, 24, 24, "24 bit DoP" },
         };
         bool fmtOk = false;
-        if (dopMode_) {
+        unsigned hwRate = rate_;
+        nativeDsd_ = false;
+        if (dopMode_ && preferNative_) {
+            // natív DSD előbb: az első formátum, amelyhez a hardver a megfelelő keretrátát is elfogadja
+            for (const auto& d : kAlsaDsdFormats) {
+                if ((static_cast<unsigned>(rate_) * 2u) % static_cast<unsigned>(d.bytes) != 0) continue;
+                const unsigned nr = static_cast<unsigned>(rate_) * 2u / static_cast<unsigned>(d.bytes);
+                snd_pcm_hw_params_t* t;
+                snd_pcm_hw_params_alloca(&t);
+                snd_pcm_hw_params_copy(t, hw);
+                if (snd_pcm_hw_params_set_format(pcm, t, d.fmt) == 0 && snd_pcm_hw_params_set_channels(pcm, t, 2) == 0 &&
+                    snd_pcm_hw_params_set_rate(pcm, t, nr, 0) == 0) {
+                    snd_pcm_hw_params_copy(hw, t);
+                    f = AlsaFormat{ d.fmt, d.bytes * 8, d.bytes * 8, 0, d.name };
+                    nativeBytes_ = d.bytes;
+                    nativeBigEndian_ = d.bigEndian;
+                    hwRate = nr;
+                    nativeDsd_ = true;
+                    fmtOk = true;
+                    break;
+                }
+            }
+        }
+        if (nativeDsd_) {
+            // a formátum, a csatornák és a ráta már beállítva
+        } else if (dopMode_) {
             for (const auto& c : dopFormats) {
                 if (snd_pcm_hw_params_test_format(pcm, hw, c.fmt) == 0 && snd_pcm_hw_params_set_format(pcm, hw, c.fmt) == 0) {
                     f = c;
@@ -440,7 +549,7 @@ private:
                 }
             }
         }
-        const unsigned rate = rate_;
+        const unsigned rate = hwRate;
         auto fail = [&](const std::string& e, const char* dopCode = "format") {
             setError(e);
             if (dopMode_) dopError_ = dopCode;
@@ -453,9 +562,13 @@ private:
             return fail(dopMode_ ? "a hangkártya nem fogad 32 vagy 24 bites egész mintát DoP-hoz"
                                  : "a hangkártya nem fogad 32, 24 vagy 16 bites egész mintát", "format");
         }
-        if (snd_pcm_hw_params_set_channels(pcm, hw, 2) < 0) return fail("a hangkártya nem fogad sztereó jelet", "format");
-        if (snd_pcm_hw_params_set_rate(pcm, hw, rate, 0) < 0)
-            return fail("a hangkártya nem tudja ezt a mintavételt: " + std::to_string(rate) + " Hz", "format");
+        if (!nativeDsd_) {
+            if (snd_pcm_hw_params_set_channels(pcm, hw, 2) < 0) return fail("a hangkártya nem fogad sztereó jelet", "format");
+            if (snd_pcm_hw_params_set_rate(pcm, hw, rate, 0) < 0)
+                // DoP 768 kHz fölött (DSD1024: 2,8224 MHz-es PCM) gyakorlatilag egy DAC-on sem megy: külön ok a felületnek
+                return fail("a hangkártya nem tudja ezt a mintavételt: " + std::to_string(rate) + " Hz",
+                            (dopMode_ && rate > 768000u) ? "rate" : "format");
+        }
         period = std::max<snd_pcm_uframes_t>(64, rate / 100);              // kb. 10 ms
         int dir = 0;
         snd_pcm_hw_params_set_period_size_near(pcm, hw, &period, &dir);
@@ -476,8 +589,15 @@ private:
             std::lock_guard<std::mutex> lk(infoMutex_);
             openedDevice_ = dev;
             char buf[192];
-            std::snprintf(buf, sizeof(buf), "%s, %s, %u Hz, %lu keret periódusonként", dev.c_str(), f.name, rate,
-                          static_cast<unsigned long>(period));
+            if (nativeDsd_) {
+                std::snprintf(buf, sizeof(buf), "%s, natív DSD %s, DSD-ráta %u Hz (%u keret/s), %lu keret periódusonként", dev.c_str(),
+                              f.name, rate * 8u * static_cast<unsigned>(nativeBytes_), rate, static_cast<unsigned long>(period));
+                nativeName_ = f.name;
+            } else {
+                std::snprintf(buf, sizeof(buf), "%s, %s, %u Hz, %lu keret periódusonként", dev.c_str(), f.name, rate,
+                              static_cast<unsigned long>(period));
+                nativeName_.clear();
+            }
             info_ = buf;
             error_.clear();
         }
@@ -528,7 +648,13 @@ private:
 
         std::vector<float> buf;
         std::vector<int32_t> dopBuf;
-        if (dopMode_) dopBuf.resize(period * 2);
+        // natív DSD: a DoP-szavakból csomagoló (előre lefoglalt pufferekkel, a hangszálon nincs foglalás)
+        const size_t nb = static_cast<size_t>(nativeBytes_);
+        NativeDsdPacker packer;
+        if (nativeDsd_) {
+            packer.setup(nativeBytes_, nativeBigEndian_, period);
+            dopBuf.resize((period * nb / 2 + 1) * 2);
+        } else if (dopMode_) dopBuf.resize(period * 2);
         else buf.resize(period * 2);
         std::vector<uint8_t> out(period * 2 * static_cast<size_t>(f.bits / 8));
         bool running = false, paused = false;
@@ -540,6 +666,7 @@ private:
                 snd_pcm_prepare(pcm);
                 running = paused = false;
                 sinceFlush = 0;
+                packer.reset();
             }
             if (!active_) {
                 if (running && !paused) {
@@ -551,7 +678,20 @@ private:
                 continue;
             }
             if (paused) { snd_pcm_pause(pcm, 0); paused = false; }
-            if (dopMode_) {
+            if (nativeDsd_) {
+                // a periódushoz kell `period · nb` bájt / csatorna; egy DoP-szó 2 bájtot ad (b0, majd b1, időrendben)
+                const size_t dopFrames = packer.dopFramesFor(period);
+                {
+                    std::lock_guard<std::mutex> lk(renderMutex_);
+                    if (renderDop_) renderDop_(dopBuf.data(), dopFrames);
+                    else std::fill(dopBuf.begin(), dopBuf.begin() + static_cast<std::ptrdiff_t>(dopFrames * 2),
+                                   dsd::packDopSample(dsd::kDsdSilenceByte, dsd::kDsdSilenceByte, 0x05u));
+                }
+                // a lejátszótól kapott DoP-folyam ugyanaz, mint DoP-kimenetnél: a lehallgatópont itt is látja
+                if (dopTap_) dopTap_(dopBuf.data(), dopFrames);
+                packer.pack(dopBuf.data(), period, out.data());
+                if (rawTap_) rawTap_(out.data(), period * 2 * nb, f);
+            } else if (dopMode_) {
                 {
                     std::lock_guard<std::mutex> lk(renderMutex_);
                     if (renderDop_) renderDop_(dopBuf.data(), period);
@@ -596,7 +736,9 @@ private:
             snd_pcm_sframes_t delay = 0;
             if (snd_pcm_delay(pcm, &delay) < 0) delay = 0;
             const uint64_t d = delay > 0 ? static_cast<uint64_t>(delay) : 0;
-            consumed_ = sinceFlush > d ? sinceFlush - d : 0;
+            const uint64_t playedHw = sinceFlush > d ? sinceFlush - d : 0;
+            // a lejátszó DoP-keretben számol: natív DSD-nél egy ALSA-keret nb / 2 DoP-keret
+            consumed_ = nativeDsd_ ? playedHw * nb / 2 : playedHw;
         }
         snd_pcm_drop(pcm);
         snd_pcm_close(pcm);
@@ -613,6 +755,10 @@ private:
     std::thread thread_;
     std::atomic<uint32_t> rate_{0};
     std::atomic<bool> active_{false}, quit_{false}, flushReq_{false}, open_{false}, quantLoss_{false}, dopMode_{false};
+    std::atomic<bool> nativeDsd_{false}, preferNative_{true};
+    int nativeBytes_ = 4;
+    bool nativeBigEndian_ = true;
+    std::string nativeName_;
     std::atomic<int> rtPriority_{0};
     std::atomic<uint64_t> written_{0}, consumed_{0};
     std::atomic<uint32_t> overruns_{0};

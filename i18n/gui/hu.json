@@ -734,8 +734,8 @@
   "dev.irBtn": "Impulzusválasz (Konvolver) betöltése",
   "dev.profileHint": "A kiválasztott profil azonnal szól. EQ-profilnál az Equalizer, impulzusválasznál a Konvolver kapcsol be.",
   "dev.multiBtn": "Kimenetek beállítása",
-  "ao.dsdDop": "DSD natívan (DoP)",
-  "ao.dsdDopHint": "A DSD-fájlok PCM-átalakítás nélkül, DoP 1.1 csomagolásban mennek a DAC-ra. Ilyenkor a DSP-lánc, a ReplayGain és a digitális hangerő kimarad (a hangerőt a DAC-on szabályozd).",
+  "ao.dsdDop": "DSD natívan (natív DSD vagy DoP)",
+  "ao.dsdDopHint": "A DSD-fájlok PCM-átalakítás nélkül mennek a DAC-ra: natív DSD-ként, ha a kimenet és a DAC tudja (Linuxon a közvetlen ALSA-kimenet, Windowson az ASIO), különben DoP 1.1 csomagolásban. Ilyenkor a DSP-lánc, a ReplayGain és a digitális hangerő kimarad (a hangerőt a DAC-on szabályozd).",
   "ao.dsdDopWarn": "Ha a DAC nem ismeri a DoP formátumot, a natív DSD-lejátszás hangos zajt adhat. Előbb kis hangerőn próbáld ki! Biztosan bekapcsolod?",
   "target.thisMachine": "Ez a gép",
   "target.addMachine": "+ Gép hozzáadása…",
@@ -986,5 +986,7 @@
   "ao.asioErr_hw_malfunction": "a DAC hibát jelzett",
   "ao.asioErr_no_dsp": "belső hiba: nincs DSP-lánc",
   "ao.asioErr_open_failed": "a megnyitás nem sikerült",
-  "ao.asioErr_other": "hibakód: {code}"
+  "ao.asioErr_other": "hibakód: {code}",
+  "ao.dsdNativeOn": "Natív DSD: {dsd}, {format} – a DAC a fájl DSD-folyamát bitre változatlanul kapja",
+  "ao.exclRate": "ezt a DSD-mintavételt a DAC sem natívan, sem DoP-ban nem fogadja (DSD1024 DoP-ban egy DAC-on sem fér át); PCM-re alakítva szól"
 }

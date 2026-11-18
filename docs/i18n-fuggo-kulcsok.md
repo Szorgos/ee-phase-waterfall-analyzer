@@ -10,6 +10,8 @@ Fájl: `i18n/gui/<nyelv>.json`, összeállítás: `python tools/i18n_build.py`.
 
 - ASIO-kimenet (C rész bekötése): `ao.asio`, `ao.asioDriver`, `ao.asioHint`, `ao.asioNone`, `ao.asioFirst`, `ao.asioMissing`, `ao.asioCredit`, `ao.asioOn`, `ao.asioDsdNative`, `ao.asioDsdDop`, `ao.asioFallback`, valamint az `ao.asioErr_*` hibaokok (`not_open`, `no_driver`, `driver_not_found`, `invalid_clsid`, `com_create_failed`, `init_failed`, `channels`, `rate`, `format`, `buffer`, `create_buffers`, `busy`, `start_failed`, `reset`, `device_lost`, `hw_malfunction`, `no_dsp`, `open_failed`, `other`)
 
+- Natív DSD (B rész): `ao.dsdNativeOn`, `ao.exclRate` (új); **módosult a szövege** (a 21 nyelvben még a régi, csak DoP-ról szóló változat áll): `ao.dsdDop`, `ao.dsdDopHint`
+
 Az `ao.asioCredit` védjegy-feltüntetés: a cégnév és a „védjegye és szoftvere” szerkezet maradjon meg minden nyelven.
 
 Fordításnál ügyelj a változókra (`{rate}`, `{cpu}`, `{n}`), és hogy a szálak / dedikált mag szövege őszinte maradjon: nem ígér hangminőség-javulást.

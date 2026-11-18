@@ -1,0 +1,11 @@
+--- a/include/dsd.hpp
++++ b/include/dsd.hpp
+@@ -815,7 +815,7 @@
+         coeffs_ = hB;
+         // az előtöltés (a dekóder tekerése) mindkét fokozat teljes memóriáját fedje, egész kimeneti keretben
+         filterBytes_ = aBytes_ + bTaps_ * bpi_;
+-        const uint32_t halfFrames = (filterBytes_ / 2u + bytesPerPcmFrame_ - 1u) / bytesPerPcmFrame_;
++        const uint32_t halfFrames = (filterBytes_ / 4u + bytesPerPcmFrame_ - 1u) / bytesPerPcmFrame_;
+         halfFilterBytes_ = halfFrames * bytesPerPcmFrame_;
+         aHist_.assign(static_cast<size_t>(channels_) * aBytes_, kDsdSilenceByte);
+         bHist_.assign(static_cast<size_t>(channels_) * bTaps_, 0.0f);
