@@ -1371,7 +1371,7 @@ bool isSupportedFile(const std::string& path) {
     const std::string e = lowerExt(path);
     return e == "flac" || e == "wav" || e == "mp3" || e == "ogg" || e == "oga" ||
            e == "m4a" || e == "alac" || e == "caf" || e == "opus" || e == "wv" ||
-           e == "dsf" || e == "dff";
+           e == "aif" || e == "aiff" || e == "aifc" || e == "dsf" || e == "dff";
 }
 
 std::unique_ptr<AudioDecoder> openDecoder(const std::string& path, std::string* error, bool probe) {
@@ -1379,6 +1379,8 @@ std::unique_ptr<AudioDecoder> openDecoder(const std::string& path, std::string* 
     auto fail = [&](const char* why) -> std::unique_ptr<AudioDecoder> { if (error) *error = why; return nullptr; };
     if (e == "flac") { auto d = std::make_unique<FlacDecoder>(); if (d->open(path)) return d; return fail("A FLAC fájl nem nyitható meg."); }
     if (e == "wav") { auto d = std::make_unique<WavDecoder>(); if (d->open(path)) return d; return fail("A WAV fájl nem nyitható meg."); }
+    // AIFF / AIFF-C: ugyanaz a dekóder (dr_wav; a tárolót a fájl fejlécéből ismeri fel), 768 kHz-ig
+    if (e == "aif" || e == "aiff" || e == "aifc") { auto d = std::make_unique<WavDecoder>(); if (d->open(path)) return d; return fail("Az AIFF fájl nem nyitható meg."); }
     if (e == "mp3") { auto d = std::make_unique<Mp3Decoder>(); if (d->open(path, probe)) return d; return fail("Az MP3 fájl nem nyitható meg."); }
     if (e == "ogg" || e == "oga") {
         auto d = std::make_unique<VorbisDecoder>();
@@ -1396,7 +1398,7 @@ std::unique_ptr<AudioDecoder> openDecoder(const std::string& path, std::string* 
         if (d->open(path, dsdErr, probe)) return d;
         return fail(dsdErr.empty() ? "A DSD fájl nem nyitható meg." : dsdErr.c_str());
     }
-    return fail("Nem támogatott formátum (FLAC, WAV, MP3, Ogg Vorbis, ALAC, Opus, WavPack, DSF, DFF).");
+    return fail("Nem támogatott formátum (FLAC, WAV, AIFF, MP3, Ogg Vorbis, ALAC, Opus, WavPack, DSF, DFF).");
 }
 
 } // namespace ee_analyzer::player

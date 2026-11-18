@@ -27,6 +27,8 @@ public:
     /** A decimált jel mintavétele (kb.) és a mély FFT mérete. */
     static constexpr double kLowRateHz = 1500.0;
     static constexpr size_t kLowFft = 512;
+    /** Efölött a bemenet tizedelve kerül az elemzésbe (a kijelzés 0–24 kHz, az FFT-ablak így 192 kHz-es marad). */
+    static constexpr double kHiMaxRate = 192000.0;
 
     explicit SpectrumAnalyzer(size_t fftSize = 4096, size_t numBands = 160, double maxHz = 24000.0,
                               double floorDb = -90.0, double ceilDb = 0.0)
@@ -64,8 +66,14 @@ public:
      * A bemenet mintavétele (a mély elemzés decimálásához). Változáskor a mély elemzés újraindul;
      * a compute() is beállítja, de a push() előtt kell, ha a mintavétel megváltozhat.
      */
-    void setSampleRate(double sr) {
-        if (!(sr > 0.0) || std::abs(sr - sampleRate_) < 0.5) return;
+    void setSampleRate(double inSr) {
+        if (!(inSr > 0.0) || std::abs(inSr - inRate_) < 0.5) return;
+        inRate_ = inSr;
+        // Nagy felbontás: 192 kHz fölött a jel előbb egész számmal tizedelve (352,8 / 384 kHz: 2, 705,6 / 768 kHz: 4),
+        // így az FFT-ablak ideje és felbontása ugyanaz, mint 176,4 / 192 kHz-en (a kijelzés 0–24 kHz)
+        hiD_ = inSr > kHiMaxRate ? static_cast<size_t>(std::ceil(inSr / kHiMaxRate)) : 1;
+        setupHiDecimator();
+        const double sr = inSr / static_cast<double>(hiD_);
         sampleRate_ = sr;
         decim_ = std::max<size_t>(1, static_cast<size_t>(std::lround(sr / kLowRateHz)));
         lowRate_ = sr / static_cast<double>(decim_);
@@ -89,8 +97,41 @@ public:
         std::fill(lowHistory_.begin(), lowHistory_.end(), 0.0f);
     }
 
-    /** Interleaved sztereó minták betolása a csúszó ablakba. */
+    /** Interleaved sztereó minták betolása a csúszó ablakba (a setSampleRate szerinti mintavételen). */
     void push(const float* lr, size_t frames) {
+        if (hiD_ <= 1) {
+            pushEffective(lr, frames);
+            return;
+        }
+        // 192 kHz fölött: a csúcs a nyers jel minden mintájából, a spektrum a tizedelt jelből
+        hiOut_.clear();
+        for (size_t i = 0; i < frames; ++i) {
+            const float l = lr[2 * i], r = lr[2 * i + 1];
+            const float a = std::max(std::abs(l), std::abs(r));
+            if (a > pendingPeak_) pendingPeak_ = a;
+            hiL_[hiPos_] = l;
+            hiR_[hiPos_] = r;
+            hiPos_ = (hiPos_ + 1) % hiL_.size();
+            if (++hiCount_ >= hiD_) {
+                hiCount_ = 0;
+                // FIR: a legutóbbi hiTaps_ minta a harmadrendű átlagoló (három D hosszú dobozszűrő) együtthatóival
+                double sl = 0.0, sr = 0.0;
+                const size_t len = hiL_.size();
+                for (size_t k = 0; k < hiTaps_.size(); ++k) {
+                    const size_t idx = (hiPos_ + len - 1 - k) % len;
+                    sl += hiTaps_[k] * hiL_[idx];
+                    sr += hiTaps_[k] * hiR_[idx];
+                }
+                hiOut_.push_back(static_cast<float>(sl));
+                hiOut_.push_back(static_cast<float>(sr));
+            }
+        }
+        samplesSincePeak_ += frames;
+        if (!hiOut_.empty()) pushEffective(hiOut_.data(), hiOut_.size() / 2);
+    }
+
+private:
+    void pushEffective(const float* lr, size_t frames) {
         // Mély elemzés: minden minta a szűrőn át, minden decim_. a decimált pufferbe
         for (size_t i = 0; i < frames; ++i) {
             double y = 0.5 * (static_cast<double>(lr[2 * i]) + static_cast<double>(lr[2 * i + 1]));
@@ -110,12 +151,42 @@ public:
         std::copy(lr, lr + frames * 2, history_.begin() + keep);
     }
 
+    /** A 192 kHz fölötti tizedelő együtthatói: három D hosszú dobozszűrő konvolúciója, egységnyi erősítéssel. */
+    void setupHiDecimator() {
+        hiCount_ = 0;
+        hiPos_ = 0;
+        pendingPeak_ = latchedPeak_ = 0.0f;
+        samplesSincePeak_ = 0;
+        if (hiD_ <= 1) {
+            hiTaps_.clear();
+            return;
+        }
+        std::vector<double> h(1, 1.0);
+        for (int stage = 0; stage < 3; ++stage) {
+            std::vector<double> g(h.size() + hiD_ - 1, 0.0);
+            for (size_t i = 0; i < h.size(); ++i)
+                for (size_t k = 0; k < hiD_; ++k) g[i + k] += h[i] / static_cast<double>(hiD_);
+            h.swap(g);
+        }
+        hiTaps_ = h;
+        hiL_.assign(hiTaps_.size(), 0.0f);
+        hiR_.assign(hiTaps_.size(), 0.0f);
+        hiOut_.reserve(8192);
+    }
+
+public:
     /**
      * Spektrum kiszámítása az aktuális ablakra.
-     * @param sampleRate a jel mintavételi frekvenciája
+     * @param inSampleRate a jel (bemenet) mintavételi frekvenciája
      */
-    void compute(double sampleRate) {
-        setSampleRate(sampleRate);
+    void compute(double inSampleRate) {
+        setSampleRate(inSampleRate);
+        if (hiD_ > 1 && samplesSincePeak_ > 0) {   // a csúcs a legutóbbi számolás óta beérkezett összes mintából
+            latchedPeak_ = pendingPeak_;
+            pendingPeak_ = 0.0f;
+            samplesSincePeak_ = 0;
+        }
+        const double sampleRate = sampleRate_;      // a tizedelt (tényleges elemzési) mintavétel
         for (size_t i = 0; i < n_; ++i) {
             const float w = window_[i];
             const float l = history_[2 * i];
@@ -185,6 +256,7 @@ public:
 
     /** Pillanatnyi csúcsszint dBFS-ben a csúszó pufferből (-90 .. +12 dBFS). */
     float peakDb() const {
+        if (hiD_ > 1) return latchedPeak_ > 1e-5f ? static_cast<float>(20.0 * std::log10(latchedPeak_)) : -90.0f;
         float mx = 0.0f;
         for (size_t i = 0; i < n_ * 2; ++i) {
             const float a = std::abs(history_[i]);
@@ -270,6 +342,12 @@ private:
     double floorDb_, ceilDb_, warpSpan_;
     double sampleRate_ = 0.0, lowRate_ = kLowRateHz;
     size_t decim_ = 1, decimCount_ = 0, lowPos_ = 0;
+    // 192 kHz fölötti bemenet: tizedelés (hiD_) és a nyers jel csúcsa a legutóbbi compute() óta
+    double inRate_ = 0.0;
+    size_t hiD_ = 1, hiCount_ = 0, hiPos_ = 0, samplesSincePeak_ = 0;
+    std::vector<double> hiTaps_;
+    std::vector<float> hiL_, hiR_, hiOut_;
+    float pendingPeak_ = 0.0f, latchedPeak_ = 0.0f;
     Biquad lowpass_[4];
     std::vector<float> history_, window_, lowWindow_, lowHistory_, levels_, phaseDeg_;
     std::vector<std::complex<float>> bufM_, bufL_, bufR_, bufLow_, twiddle_, lowTwiddle_;
