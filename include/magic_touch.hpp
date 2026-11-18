@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file magic_touch.hpp
- * @brief Magic Touch: automatikus, visszafogott hangszépítő (docs/plans/magic-touch.md, 1–5. ütem).
+ * @brief Magic Touch: automatikus, visszafogott hangszépítő (aqulify-mobile/docs/plans/magic-touch.md, 1–5. ütem).
  *
  * Hangút (valós idejű szál; IIR szűrők és burkolók, késleltetés csak a kattanásjavításnál és az RNNoise-nál):
  *
@@ -79,7 +79,7 @@ enum ContentSel : int32_t { kContentAuto = 0, kContentMusic = 1, kContentSpeech 
 /** A használt profil (a diagnosztikában is). */
 enum Profile : uint32_t { kProfMusic = 0, kProfMusicDense = 1, kProfMusicDynamic = 2, kProfSpeech = 3, kProfArchive = 4 };
 
-/** A szabályok súlyai tartalmi profilonként (docs/plans/magic-touch.md, „Tartalmi profilok”). */
+/** A szabályok súlyai tartalmi profilonként (aqulify-mobile/docs/plans/magic-touch.md, „Tartalmi profilok”). */
 struct ProfileWeights { float lowMid, air, exciter, transient, upward, width, warmth, nr; bool speech; };
 inline const ProfileWeights& profileWeights(uint32_t p) {
     static const ProfileWeights w[5] = {

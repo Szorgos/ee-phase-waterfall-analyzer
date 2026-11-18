@@ -122,7 +122,7 @@ struct ParamData {
     float convInputGainDb = 0.0f;
     float convOutputGainDb = 0.0f;
 
-    // --- Magic Touch (az Aqulify saját modulja, docs/plans/magic-touch.md) ---
+    // --- Magic Touch (az Aqulify saját modulja, aqulify-mobile/docs/plans/magic-touch.md) ---
     float magicAmount = 50.0f;     // % (0 .. 200): az intenzitás (100 % fölött „Bátor” tartomány)
     int32_t magicCompare = 0;      // A/B: 1 = az eredeti (feldolgozatlan) jel szól, hangerőre kiegyenlítve
     int32_t magicCharacter = 0;    // Karakter: 0 Természetes, 1 Meleg, 2 Fényes, 3 Tágas

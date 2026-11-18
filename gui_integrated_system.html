@@ -12169,7 +12169,7 @@ function sendOutstage() {
                dither: getCtl("osDither"), bits: getCtl("osBits") === 0 ? 16 : 24 });
 }
 
-// --- Magic Touch (automatikus hangszépítő; docs/plans/magic-touch.md)
+// --- Magic Touch (automatikus hangszépítő; aqulify-mobile/docs/plans/magic-touch.md)
 buildControls("magicControls", [
   // 100% fölött „Bátor” tartomány (200%-ig): a hangszépítő korlátok a kétszeresükig nőnek (magic_touch.hpp)
   { id: "magicAmount", kind: "num", label: "ctl.magicAmount", min: 0, max: 200, step: 1, unit: "%", def: 50, hint: "ctl.magicAmountHint",
