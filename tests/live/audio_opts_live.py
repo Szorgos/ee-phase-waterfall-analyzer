@@ -116,7 +116,8 @@ check(n.get("dac_a", {}).get("state") != "running", f"ébren tartás ki: a hangk
 # --- mintavétel
 opts(rateMode="follow")
 time.sleep(0.5)
-check(setting("clock.allowed-rates") == "[ 44100 48000 88200 96000 176400 192000 ]" and setting("clock.force-rate") == "0",
+# nagy felbontás (A rész): a forrás követése 352,8–768 kHz-ig
+check(setting("clock.allowed-rates") == "[ 44100 48000 88200 96000 176400 192000 352800 384000 705600 768000 ]" and setting("clock.force-rate") == "0",
       f"forrást követő: allowed-rates = {setting('clock.allowed-rates')}")
 opts(rateMode="fixed", fixedRate=96000)
 time.sleep(0.5)

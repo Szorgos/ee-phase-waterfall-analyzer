@@ -69,11 +69,12 @@ def make_noise_wav24(path, sr, seconds, seed):
 
 
 def record(rate, seconds):
-    raw = os.path.join(WORK, f"hires_rec_{rate}.raw")
+    # WAV-fájlba vesz fel (a régebbi pw-record, pl. a PipeWire 1.0, nem ismeri a --raw kapcsolót)
+    raw = os.path.join(WORK, f"hires_rec_{rate}.wav")
     if os.path.exists(raw):
         os.remove(raw)
     p = subprocess.Popen(["pw-record", "--target", "dac_a", "--rate", str(rate), "--channels", "2",
-                          "--format", "s32", "--raw", "-P", "stream.capture.sink=true", raw],
+                          "--format", "s32", "-P", "stream.capture.sink=true", raw],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(seconds)
     p.terminate()
@@ -88,10 +89,22 @@ def record(rate, seconds):
     if diag:
         os.makedirs(diag, exist_ok=True)
         open(os.path.join(diag, os.path.basename(raw)), "wb").write(data)
-    n = len(data) // 8
+    off = 0
+    if data[:4] == b"RIFF":   # a "data" blokk keresése (a fejléc hossza verziónként eltér)
+        pos = 12
+        off = -1
+        while pos + 8 <= len(data):
+            cid, size = data[pos:pos + 4], struct.unpack_from("<I", data, pos + 4)[0]
+            if cid == b"data":
+                off = pos + 8
+                break
+            pos += 8 + size + (size & 1)
+        if off < 0:
+            return []
+    n = (len(data) - off) // 8
     out = []
     for i in range(n):
-        l, r = struct.unpack_from("<ii", data, i * 8)
+        l, r = struct.unpack_from("<ii", data, off + i * 8)
         out.append((l >> 8, r >> 8))   # s32-ből 24 bit (a felső 24 bit)
     return out
 
