@@ -1,6 +1,35 @@
 {
   "versions": [
     {
+      "version": "2.6.1",
+      "date": "2026-11-18",
+      "notes": {
+        "hu": ["Az Eszköz menü áttekinthető, középre nyíló ablakban, görgetés nélkül.", "Windows: figyelmeztetés, ha a hang olyan eszközön szól, amelyen nincs bekapcsolva az Equalizer APO; a vízesés ilyenkor is mozog.", "Javítás: hiányzó ikonok miatt elcsúszott gombfeliratok; olvashatóbb lista a párosított telefonokról."],
+        "en": ["The Device menu now opens as a clear, centred window, without scrolling.", "Windows: a warning when audio plays on a device without Equalizer APO enabled; the waterfall keeps moving in that case.", "Fix: button labels shifted by missing icons; a more readable list of paired phones."],
+        "es": ["El menú Dispositivo se abre ahora en una ventana centrada y clara, sin desplazamiento.", "Windows: aviso cuando el sonido se reproduce en un dispositivo sin Equalizer APO activado; la cascada sigue funcionando.", "Corrección: etiquetas de botones desplazadas por iconos ausentes; lista de teléfonos emparejados más legible."],
+        "fr": ["Le menu Appareil s’ouvre désormais dans une fenêtre centrée et claire, sans défilement.", "Windows : avertissement lorsque le son est lu sur un appareil sans Equalizer APO activé ; la cascade continue de fonctionner.", "Correctif : libellés de boutons décalés par des icônes manquantes ; liste des téléphones appairés plus lisible."],
+        "zh": ["“设备”菜单现在以居中、清晰的窗口打开，无需滚动。", "Windows：当声音在未启用 Equalizer APO 的设备上播放时给出提示；此时瀑布图仍会正常显示。", "修复：因图标缺失导致的按钮文字错位；已配对手机列表更易阅读。"],
+        "de": ["Das Gerätemenü öffnet sich jetzt als übersichtliches, zentriertes Fenster, ohne Scrollen.", "Windows: Hinweis, wenn der Ton auf einem Gerät ohne aktivierten Equalizer APO läuft; der Wasserfall läuft trotzdem weiter.", "Korrektur: durch fehlende Symbole verschobene Schaltflächenbeschriftungen; besser lesbare Liste gekoppelter Telefone."],
+        "it": ["Il menu Dispositivo ora si apre in una finestra centrata e chiara, senza scorrimento.", "Windows: avviso quando l'audio viene riprodotto su un dispositivo senza Equalizer APO attivo; la cascata continua a funzionare.", "Correzione: etichette dei pulsanti spostate da icone mancanti; elenco dei telefoni associati più leggibile."],
+        "nl": ["Het menu Apparaat opent nu als een overzichtelijk, gecentreerd venster, zonder scrollen.", "Windows: waarschuwing als het geluid op een apparaat zonder ingeschakelde Equalizer APO speelt; de waterval blijft werken.", "Oplossing: knoplabels verschoven door ontbrekende pictogrammen; beter leesbare lijst van gekoppelde telefoons."],
+        "pl": ["Menu Urządzenie otwiera się teraz w przejrzystym, wyśrodkowanym oknie, bez przewijania.", "Windows: ostrzeżenie, gdy dźwięk gra na urządzeniu bez włączonego Equalizer APO; wodospad nadal działa.", "Poprawka: etykiety przycisków przesunięte przez brakujące ikony; czytelniejsza lista sparowanych telefonów."],
+        "ru": ["Меню «Устройство» теперь открывается в понятном окне по центру, без прокрутки.", "Windows: предупреждение, если звук идёт на устройство без включённого Equalizer APO; водопад при этом продолжает работать.", "Исправление: подписи кнопок, сдвинутые из-за отсутствующих значков; более читаемый список сопряжённых телефонов."],
+        "pt": ["O menu Dispositivo agora abre numa janela centralizada e clara, sem rolagem.", "Windows: aviso quando o som toca num dispositivo sem Equalizer APO ativado; a cascata continua a funcionar.", "Correção: rótulos de botões deslocados por ícones ausentes; lista de telefones pareados mais legível."],
+        "ro": ["Meniul Dispozitiv se deschide acum într-o fereastră centrată și clară, fără derulare.", "Windows: avertizare când sunetul rulează pe un dispozitiv fără Equalizer APO activat; cascada continuă să funcționeze.", "Remediere: etichete de butoane deplasate din cauza pictogramelor lipsă; listă mai lizibilă a telefoanelor asociate."],
+        "el": ["Το μενού Συσκευή ανοίγει πλέον σε ένα καθαρό, κεντραρισμένο παράθυρο, χωρίς κύλιση.", "Windows: προειδοποίηση όταν ο ήχος παίζει σε συσκευή χωρίς ενεργό Equalizer APO· ο καταρράκτης συνεχίζει να λειτουργεί.", "Διόρθωση: ετικέτες κουμπιών μετατοπισμένες λόγω εικονιδίων που έλειπαν· πιο ευανάγνωστη λίστα συζευγμένων τηλεφώνων."],
+        "tr": ["Cihaz menüsü artık kaydırma gerektirmeyen, ortalanmış ve düzenli bir pencerede açılıyor.", "Windows: ses, Equalizer APO etkin olmayan bir cihazda çalarken uyarı; şelale bu durumda da çalışır.", "Düzeltme: eksik simgeler yüzünden kayan düğme yazıları; eşleştirilmiş telefonların daha okunaklı listesi."],
+        "fi": ["Laite-valikko avautuu nyt selkeään, keskitettyyn ikkunaan ilman vierittämistä.", "Windows: varoitus, kun ääni soi laitteella, jossa Equalizer APO ei ole käytössä; vesiputous toimii silti.", "Korjaus: puuttuvien kuvakkeiden siirtämät painikkeiden tekstit; luettavampi luettelo pariliitetyistä puhelimista."],
+        "da": ["Enhedsmenuen åbner nu i et overskueligt, centreret vindue uden rulning.", "Windows: advarsel, når lyden spiller på en enhed uden aktiveret Equalizer APO; vandfaldet kører stadig.", "Rettelse: knaptekster forskudt af manglende ikoner; mere læsbar liste over parrede telefoner."],
+        "nb": ["Enhetsmenyen åpnes nå i et oversiktlig, sentrert vindu uten rulling.", "Windows: varsel når lyden spilles på en enhet uten aktivert Equalizer APO; fossen fungerer fortsatt.", "Retting: knappetekster forskjøvet av manglende ikoner; mer lesbar liste over sammenkoblede telefoner."],
+        "sv": ["Enhetsmenyn öppnas nu i ett överskådligt, centrerat fönster utan rullning.", "Windows: varning när ljudet spelas på en enhet utan aktiverad Equalizer APO; vattenfallet fungerar ändå.", "Rättelse: knapptexter förskjutna av saknade ikoner; mer läsbar lista över parkopplade telefoner."],
+        "he": ["תפריט ההתקן נפתח עכשיו בחלון ממורכז וברור, בלי גלילה.", "Windows: אזהרה כשהצליל מתנגן בהתקן שבו Equalizer APO אינו מופעל; תצוגת המפל ממשיכה לפעול.", "תיקון: תוויות כפתורים שזזו בגלל סמלים חסרים; רשימה קריאה יותר של טלפונים מוצמדים."],
+        "ja": ["「デバイス」メニューが、スクロール不要の見やすい中央ウィンドウで開くようになりました。", "Windows：Equalizer APO が有効でないデバイスで再生しているときに警告を表示。その場合もウォーターフォールは動きます。", "修正：アイコンの欠落でずれていたボタンの表示、ペアリング済み電話の一覧を見やすく。"],
+        "ko": ["장치 메뉴가 이제 스크롤 없이 보기 쉬운 가운데 창으로 열립니다.", "Windows: Equalizer APO가 켜지지 않은 장치에서 재생될 때 경고 표시. 이때도 워터폴은 계속 동작합니다.", "수정: 아이콘 누락으로 어긋난 버튼 글자, 더 읽기 쉬운 페어링된 휴대폰 목록."],
+        "cs": ["Nabídka Zařízení se nyní otevírá v přehledném okně uprostřed, bez posouvání.", "Windows: upozornění, když zvuk hraje na zařízení bez zapnutého Equalizer APO; vodopád přitom dál funguje.", "Oprava: popisky tlačítek posunuté chybějícími ikonami; čitelnější seznam spárovaných telefonů."],
+        "uk": ["Меню «Пристрій» тепер відкривається в зрозумілому вікні по центру, без прокручування.", "Windows: попередження, якщо звук відтворюється на пристрої без увімкненого Equalizer APO; водоспад при цьому працює.", "Виправлення: підписи кнопок, зсунуті через відсутні значки; зручніший список спарених телефонів."]
+      }
+    },
+    {
       "version": "2.6.0",
       "date": "2026-11-18",
       "notes": {
