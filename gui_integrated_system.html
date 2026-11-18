@@ -4920,8 +4920,17 @@ var qrcode = function() {
               <label class="ao-row ao-check"><input type="checkbox" id="aoLoadAdvisor" checked onchange="aoSend()"> <span data-i18n="la.setting">Szóljon, ha nagy a processzorterhelés</span></label>
               <div class="ao-hint" data-i18n="la.settingHint">Ha a hangmotor tartósan sokat terheli a gépet, vagy hangkimaradás van, felajánl egy könnyítést. Magától soha nem változtat.</div>
               <div id="aoExclWrap" hidden>
+                <div id="aoAsioWrap" hidden>
+                  <label class="ao-row ao-check"><input type="checkbox" id="aoAsio" onchange="aoSend()"> <span data-i18n="ao.asio">ASIO-kimenet (a DAC gyártójának meghajtóján át)</span></label>
+                  <label class="ao-row" id="aoRowAsioDrv" hidden><span data-i18n="ao.asioDriver">ASIO-meghajtó</span>
+                    <select id="aoAsioDriver" class="mini-select" onchange="aoSend()"></select></label>
+                  <div class="ao-hint" data-i18n="ao.asioHint">A lejátszó a DAC gyártójának ASIO-meghajtóján át szól: a Windows hangrendszere és az Equalizer APO kimarad, a DSP-lánc a programban fut, a hangerő digitális. Natív DSD-t akkor ad, ha a meghajtó tudja. Ha az ASIO nem indul el, a lejátszó a WASAPI-ra lép vissza, és a jelút megmondja, miért.</div>
+                  <div class="ao-hint" id="aoAsioNone" hidden data-i18n="ao.asioNone">Ezen a gépen nincs telepített ASIO-meghajtó. Ha a DAC-odhoz van, telepítsd a gyártó oldaláról, majd nyisd meg újra ezt a menüt.</div>
+                </div>
+                <div id="aoExclRow">
                 <label class="ao-row ao-check"><input type="checkbox" id="aoExclusive" onchange="aoSend()"> <span id="aoExclLabel" data-i18n="ao.exclusive">Kizárólagos mód (WASAPI exclusive)</span></label>
                 <div class="ao-hint" id="aoExclHint" data-i18n="ao.exclusiveHint">A lejátszó egyedül használja a hangkártyát: a Windows keverője és az Equalizer APO kimarad, a fájl saját mintavételén szól, a DSP-lánc a programban fut. Közben más programok nem szólnak ezen az eszközön. Lejátszás közbeni váltáskor a hang egy pillanatra megszakad.</div>
+                </div>
                 <div id="aoExclVolWrap">
                 <label class="ao-row" id="aoRowExclVol"><span data-i18n="ao.exclVol">Hangerő kizárólagos módban</span>
                   <select id="aoExclVol" class="mini-select" onchange="aoSend()">
@@ -5056,6 +5065,7 @@ var qrcode = function() {
               <span id="updStatus" class="ao-hint" style="margin:0;"></span>
             </div>
             <div id="upsAboutCredit" class="ao-hint" style="margin-top:6px;" data-i18n="ups.aboutCredit">Felmintavételezés: libsoxr, LGPL-2.1+</div>
+            <div id="asioAboutCredit" class="ao-hint" style="margin-top:2px;" data-i18n="ao.asioCredit">ASIO-kimenet (Windows): Steinberg ASIO SDK 2.3.4, GPLv3. Az ASIO a Steinberg Media Technologies GmbH védjegye és szoftvere.</div>
           </div>
         </div>
       </div>
@@ -10208,13 +10218,18 @@ function aoOnMessage(m) {
     const el = document.getElementById(id);
     if (el.getAttribute("data-i18n") !== key) { el.setAttribute("data-i18n", key); el.textContent = t(key); }
   }
-  document.getElementById("aoExclVolWrap").hidden = exclAlsa || exclHog;
   document.getElementById("aoExclusive").checked = !!o.exclusive;
   document.getElementById("aoExclVol").value = o.exclHwVolume ? "hardware" : "digital";
+  aoFillAsio(o, cp);
+  const asioOn = cp.asio === true && !!o.asio;
+  // ASIO-n a kizárólagos WASAPI és a hardveres hangerő nem értelmezett (a meghajtó egyedül használja a DAC-ot)
+  document.getElementById("aoExclRow").hidden = asioOn;
+  document.getElementById("aoExclVolWrap").hidden = exclAlsa || exclHog || asioOn;
   const dopWrap = document.getElementById("aoDopWrap"), dopChk = document.getElementById("aoDsdDop");
   if (dopWrap && dopChk) {
-    dopWrap.hidden = cp.dop !== true || !o.exclusive;
-    dopChk.disabled = !o.exclusive;
+    const dopPossible = !!o.exclusive || asioOn;
+    dopWrap.hidden = cp.dop !== true || !dopPossible;
+    dopChk.disabled = !dopPossible;
     dopChk.checked = !!o.dsdDop;
   }
   const rgOn = (o.replayGain || "off") !== "off";
@@ -10222,6 +10237,35 @@ function aoOnMessage(m) {
   document.getElementById("aoRowRgClip").hidden = !rgOn;
   upsApplyOptions(o, cp);
   aoRenderPath();
+}
+
+/** ASIO (Windows): a kapcsoló és a telepített meghajtók listája a motor válaszából (caps.asioDrivers). */
+function aoFillAsio(o, cp) {
+  const wrap = document.getElementById("aoAsioWrap");
+  if (!wrap) return;
+  wrap.hidden = cp.asio !== true;
+  if (cp.asio !== true) return;
+  const drivers = Array.isArray(cp.asioDrivers) ? cp.asioDrivers : [];
+  const chk = document.getElementById("aoAsio"), sel = document.getElementById("aoAsioDriver");
+  const cur = typeof o.asioDriver === "string" ? o.asioDriver : "";
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  let h = `<option value="">${esc(t("ao.asioFirst"))}</option>`;
+  let found = cur === "";
+  for (const d of drivers) {
+    if (!d || typeof d.id !== "string") continue;
+    if (d.id === cur || d.name === cur) found = true;
+    h += `<option value="${esc(d.id)}">${esc(d.name || d.id)}</option>`;
+  }
+  // a mentett meghajtó már nincs telepítve: megmarad választhatóként, jelölve
+  if (!found) h += `<option value="${esc(cur)}">${esc(cur)} (${esc(t("ao.asioMissing"))})</option>`;
+  sel.innerHTML = h;
+  const byName = drivers.find(d => d && d.name === cur);
+  sel.value = byName ? byName.id : cur;
+  chk.checked = !!o.asio;
+  const none = drivers.length === 0;
+  chk.disabled = none && !o.asio;
+  document.getElementById("aoAsioNone").hidden = !none;
+  document.getElementById("aoRowAsioDrv").hidden = !o.asio;
 }
 
 const UPS_SRCS = [44100, 48000, 88200, 96000, 176400, 192000];
@@ -10508,10 +10552,20 @@ function aoSend() {
   if (aoCapsDetail && aoCapsDetail.exclusive) {
     opts.exclusive = document.getElementById("aoExclusive").checked;
     opts.exclHwVolume = document.getElementById("aoExclVol").value === "hardware";
+    let asioOn = false;
+    if (aoCapsDetail.asio) {
+      opts.asio = document.getElementById("aoAsio").checked;
+      opts.asioDriver = document.getElementById("aoAsioDriver").value || "";
+      asioOn = opts.asio;
+      document.getElementById("aoRowAsioDrv").hidden = !asioOn;
+      document.getElementById("aoExclRow").hidden = asioOn;
+      document.getElementById("aoExclVolWrap").hidden = asioOn;
+    }
     const dopWrap = document.getElementById("aoDopWrap"), dopChk = document.getElementById("aoDsdDop");
     if (dopWrap && dopChk && aoCapsDetail.dop) {
-      dopWrap.hidden = !opts.exclusive;
-      dopChk.disabled = !opts.exclusive;
+      const dopPossible = opts.exclusive || asioOn;
+      dopWrap.hidden = !dopPossible;
+      dopChk.disabled = !dopPossible;
       opts.dsdDop = dopChk.checked;
     }
   }
@@ -10526,6 +10580,21 @@ function aoRenderPath() {
   const sr = engineStatus.sr || 48000;
   const f1 = v => fmtNum(Math.round(+v * 10) / 10);
   const lines = [];
+  // Windows, ASIO: a meghajtó, a formátum, a natív DSD; ha nem indult el, miért (és hogy WASAPI-n szól)
+  const asio = p.asio;
+  if (asio && asio.want) {
+    const esc = s => String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    if (asio.active) {
+      const kind = asio.nativeDsd ? t("ao.asioDsdNative") : asio.dopPcm ? t("ao.asioDsdDop") : esc(asio.format);
+      lines.push(`<span class="ok">● ${t("ao.asioOn", { driver: esc(asio.driver) || "ASIO", format: kind })}</span>`);
+    } else {
+      const code = String(asio.error || "not_open").replace(/[^a-z_]/g, "");
+      const key = "ao.asioErr_" + code;
+      const reason = t(key) !== key ? t(key) : t("ao.asioErr_other", { code: esc(code) });
+      lines.push(`<span class="warn">● ${t("ao.asioFallback", { reason })}</span>`);
+      if (asio.detail) lines.push(`<span class="ao-hint" style="margin:0;">${esc(asio.detail)}</span>`);
+    }
+  }
   // Windows, beépített lejátszó: kizárólagos mód (exclusive) vagy megosztott mód (mixer: a Windows keveri a jelet)
   const ex = p.exclusive;
   if (ex && ex.want) {

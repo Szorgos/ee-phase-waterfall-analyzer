@@ -1,4 +1,22 @@
-# ASIO-kimenet Windowson (tervezet)
+# ASIO-kimenet Windowson
+
+## 0. Bekapcsolás
+
+1. Telepítsd a DAC gyártójának ASIO-meghajtóját (a gyártó oldaláról).
+2. Az Aqulifyban: felső sáv **Kimenet** → **Hangkimenet (haladó)** → **Beépített lejátszó** →
+   **ASIO-kimenet (a DAC gyártójának meghajtóján át)**.
+3. Ha több ASIO-meghajtó van a gépen, az **ASIO-meghajtó** listában válaszd ki a DAC-odét (alapból az első
+   telepített).
+
+**Működés:**
+- A váltás lejátszás közben is működik: a szóló szám ugyanattól a helytől szól tovább az új kimeneten.
+- ASIO-n a DSP-lánc (EQ, konvolver, szobakorrekció) a programban fut, és a hangerő digitális (a lánc végén).
+- A DSD natívan megy át, ha a „DSD natívan” be van kapcsolva és a meghajtó tudja. Ha a meghajtó nem tud natív DSD-t,
+  DoP-ban, PCM-keretekben megy; ha azt sem, a lejátszó PCM-re alakít.
+- A jelút („Hangkimenet (haladó)” alján) mutatja a meghajtót és a formátumot. Ha az ASIO nem indult el, a zene
+  WASAPI-n szól tovább, és a jelút megmondja, miért (pl. nincs meghajtó, a DAC nem tudja a mintavételt, foglalt).
+- Ha a meghajtó újraindítást kér (pl. a saját paneljén pufferméretet váltottál), a lejátszó magától újranyitja a
+  kimenetet.
 
 ## 1. Mi ez és mi kell hozzá?
 

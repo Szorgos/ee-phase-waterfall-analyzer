@@ -67,13 +67,13 @@ jobs:
           cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE=windows/toolchain-llvm-mingw.cmake -DLLVM_MINGW_ROOT="$LLVM_MINGW_ROOT" \
             -DAQULIFY_FFTW_SOURCE_DIR="$FFTW_DIR" -DAQULIFY_RNNOISE_MODEL_DIR="$RNNOISE_DIR"
-          cmake --build build -j"$(nproc)" --target test_ringbuffer test_core test_dsp test_matrix test_multiout test_keepawake test_dsd test_player test_upsample test_hires test_mic_basic test_asio
+          cmake --build build -j"$(nproc)" --target test_ringbuffer test_core test_dsp test_matrix test_multiout test_keepawake test_dsd test_player test_upsample test_hires test_mic_basic test_asio test_winout
 
       - name: Tesztek futtatása (Windows)
         shell: bash
         run: |
           fail=0
-          for t in test_ringbuffer test_core test_dsp test_matrix test_multiout test_keepawake test_dsd test_player test_upsample test_hires test_mic_basic test_asio; do
+          for t in test_ringbuffer test_core test_dsp test_matrix test_multiout test_keepawake test_dsd test_player test_upsample test_hires test_mic_basic test_asio test_winout; do
             echo "::group::$t"
             if ./build/$t.exe; then echo "$t: OK"; else echo "::error::$t sikertelen"; fail=1; fi
             echo "::endgroup::"
