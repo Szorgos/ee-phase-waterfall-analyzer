@@ -92,6 +92,13 @@ if bad:
     print("  [HIBA] i18n nélküli magyar szöveg:", bad[:5]); sys.exit(1)
 PY
 then :; else ok=0; fi
+# Windowsos sorvég (CR) nem kerülhet olyan fájlba, amelyben az alapon nem volt (Linuxon a szkriptek nem indulnának)
+for f in $(repo_git diff --name-only "$BASE_REF"..HEAD); do
+    repo_git cat-file -e "HEAD:$f" 2>/dev/null || continue
+    now=$(repo_git show "HEAD:$f" | grep -c $'\r')
+    old=$(repo_git show "$BASE_REF:$f" 2>/dev/null | grep -c $'\r')
+    if [ "$now" -gt 0 ] && [ "${old:-0}" -eq 0 ]; then echo "  [HIBA] CRLF sorvég került ide: $f ($now sor)"; ok=0; fi
+done
 if [ $ok -eq 1 ]; then printf "forbidden\tOK\t0\n" >> "$SUMMARY"; echo "  [OK]   tiltott minták: 0 találat"
 else printf "forbidden\tHIBA\t0\n" >> "$SUMMARY"; FAIL=1; fi
 
