@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file magic_restore.hpp
- * @brief Magic Touch, Restoration (docs/plans/magic-touch.md, 5. ütem): de-hum, kattanásjavítás, zajcsökkentés.
+ * @brief Magic Touch, Restoration (aqulify-mobile/docs/plans/magic-touch.md, 5. ütem): de-hum, kattanásjavítás, zajcsökkentés.
  *
  * Valós idejű fokozatok:
  *  - Dehum: keskeny vágások a felismert hálózati alapfrekvencián (50/60 Hz) és felharmonikusain (késleltetés nélkül).

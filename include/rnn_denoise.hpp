@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file rnn_denoise.hpp
- * @brief RNNoise (Xiph, BSD-3) egy csatornára: a Magic Touch beszéd zajcsökkentése (docs/plans/magic-touch.md, 5. ütem).
+ * @brief RNNoise (Xiph, BSD-3) egy csatornára: a Magic Touch beszéd zajcsökkentése (aqulify-mobile/docs/plans/magic-touch.md, 5. ütem).
  *
  * 48 kHz, 480 mintás keretek. A kimenet késleltetése változatfüggő (0.1: 480, 0.2: 960 minta, mert az
  * egy keretnyit előre néz): delay() egyszer, próbajellel méri meg.
