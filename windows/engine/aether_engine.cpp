@@ -64,6 +64,12 @@
 #include "file_player.hpp"
 #include "library_bridge.hpp"
 #include "player_output_wasapi.hpp"
+#include "player_output_win.hpp"
+
+namespace ee_analyzer::player {
+/** A motor kimenete: WASAPI (megosztott / kizárólagos) vagy ASIO, a haladó hangkimenet beállítása szerint. */
+using WinPlayerOutput = BasicWinPlayerOutput<WasapiPlayerOutput>;
+}
 #include "updater.hpp"
 
 using namespace ee_analyzer;
@@ -407,7 +413,7 @@ private:
 /** Az EQ APO plugin közös memóriájának figyelése és a jelforrás kiválasztása. */
 class SourceManager {
 public:
-    SourceManager(win::WasapiLoopback& lb, PlayerDsp& dsp, player::WasapiPlayerOutput& out)
+    SourceManager(win::WasapiLoopback& lb, PlayerDsp& dsp, player::WinPlayerOutput& out)
         : loopback_(lb), player_(dsp), playerOut_(out), apoDevice_(loadApoDevice()) {}
 
     /** Rendszeresen hívandó (pl. 250 ms-onként) a fő szálból. */
@@ -566,7 +572,10 @@ public:
         std::lock_guard<std::mutex> lk(mutex_);
         if (playerActive_) {
             wchar_t buf[96];
-            if (playerOut_.dopActive()) {
+            if (playerOut_.asioActive()) {
+                swprintf(buf, 96, playerOut_.dopActive() ? L"ASIO DSD (%.1f kHz)" : L"ASIO (%.1f kHz)",
+                         playerOut_.currentRate() / 1000.0);
+            } else if (playerOut_.dopActive()) {
                 swprintf(buf, 96, L"WASAPI exclusive DoP (%.1f kHz)", playerOut_.currentRate() / 1000.0);
             } else {
                 swprintf(buf, 96, L"WASAPI exclusive (%.1f kHz)", player_.sampleRate() / 1000.0);
@@ -588,8 +597,9 @@ public:
         if (playerActive_) {
             const bool dop = playerOut_.dopActive();
             const uint32_t sr = dop ? playerOut_.currentRate() : player_.sampleRate();
+            const bool asio = playerOut_.asioActive();
             std::snprintf(buf, sizeof(buf), ",\"source\":\"%s\",\"dspActive\":%s,\"sr\":%u,\"gr\":%.2f",
-                          dop ? "WASAPI exclusive (DoP)" : "WASAPI exclusive",
+                          asio ? (dop ? "ASIO (DSD)" : "ASIO") : dop ? "WASAPI exclusive (DoP)" : "WASAPI exclusive",
                           dop ? "false" : "true", sr, dop ? 0.0 : player_.gainReductionDb());
             s += buf;
             s += ",\"dspState\":\"active\"";
@@ -684,7 +694,7 @@ private:
 
     win::WasapiLoopback& loopback_;
     PlayerDsp& player_;
-    player::WasapiPlayerOutput& playerOut_;
+    player::WinPlayerOutput& playerOut_;
     win::SharedMapping mapping_;
     std::mutex mutex_;
     bool playerActive_ = false;
@@ -767,8 +777,8 @@ int main(int argc, char** argv) {
 
     // A beépített lejátszó kimenete és a kizárólagos módú saját lánca (a lánc a lejátszónál tovább él)
     PlayerDsp playerDsp;
-    auto playerOutOwned = std::make_unique<player::WasapiPlayerOutput>();
-    player::WasapiPlayerOutput& playerOut = *playerOutOwned;
+    auto playerOutOwned = std::make_unique<player::WinPlayerOutput>();
+    player::WinPlayerOutput& playerOut = *playerOutOwned;
     playerOut.setExclusiveDsp(&playerDsp);
 
     SourceManager sources(*loopback, playerDsp, playerOut);
@@ -1071,15 +1081,27 @@ int main(int argc, char** argv) {
         filePlayer.setPreload(audioOpts.preload);
         filePlayer.setUpsampleOptions(audioOpts);
         playerOut.setExclusive(audioOpts.exclusive);
+        playerOut.setAsio(audioOpts.asio, audioOpts.asioDriver);
+        // natív DSD: kizárólagos WASAPI-n (DoP) vagy ASIO-n (natív DSD, ha a meghajtó tudja; különben DoP)
         playerOut.setWantDop(audioOpts.exclusive && dsdDop);
-        filePlayer.setDsdDop(audioOpts.exclusive && dsdDop);
-        playerDsp.setHardwarePref(audioOpts.exclHwVolume);
+        filePlayer.setDsdDop((audioOpts.exclusive || audioOpts.asio) && dsdDop);
+        // ASIO-n a Windows végponti hangereje nem hat a hangfolyamra: ott mindig digitális a hangerő
+        playerDsp.setHardwarePref(audioOpts.exclHwVolume && !audioOpts.asio);
+        if (audioOpts.asio) std::cout << "[Lejátszó] ASIO-kimenet kérve (" << (audioOpts.asioDriver.empty() ? "az első meghajtó" : audioOpts.asioDriver) << ").\n";
     }
     cb.audioOptionsJson = [&]() -> std::string {
         std::lock_guard<std::mutex> lk(audioMutex);
+        // a telepített ASIO-meghajtók (csak olvasás a registryből; üres lista, ha nincs)
+        std::string drivers = "[";
+        for (const auto& d : player::AsioPlayerOutput::listDrivers()) {
+            if (drivers.size() > 1) drivers += ",";
+            drivers += "{\"id\":\"" + audioopt::jsonStringBody(d.clsid) + "\",\"name\":\"" +
+                       audioopt::jsonStringBody(d.description) + "\"}";
+        }
+        drivers += "]";
         return "{\"opts\":" + optsToJsonWithDop(audioOpts, dsdDop) +
                ",\"caps\":{\"buffer\":false,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true,\"upsample\":true,"
-               "\"exclusive\":true,\"dop\":true}}";
+               "\"exclusive\":true,\"dop\":true,\"asio\":true,\"asioDrivers\":" + drivers + "}}";
     };
     cb.setAudioOptions = [&](const json::Value& v) {
         std::lock_guard<std::mutex> lk(audioMutex);
@@ -1092,17 +1114,25 @@ int main(int argc, char** argv) {
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         filePlayer.setPreload(o.preload);
         filePlayer.setUpsampleOptions(o);
-        playerDsp.setHardwarePref(o.exclHwVolume);
+        playerDsp.setHardwarePref(o.exclHwVolume && !o.asio);
         if (o.exclusive != playerOut.wantExclusive()) {
             playerOut.setExclusive(o.exclusive);
             std::cout << "[Lejátszó] Kizárólagos mód: " << (o.exclusive ? "be" : "ki") << ".\n";
         }
-        const bool effDop = o.exclusive && dsdDop;
-        if (effDop != filePlayer.dsdDop()) {
-            playerOut.setWantDop(effDop);
-            filePlayer.setDsdDop(effDop);
-            std::cout << "[Lejátszó] DSD natívan (DoP): " << (effDop ? "be" : "ki") << ".\n";
+        // ASIO be / ki vagy másik meghajtó: a szóló szám a mostani helyről újranyílik az új kimeneten
+        const bool asioChanged = o.asio != playerOut.wantAsio() || (o.asio && o.asioDriver != playerOut.asioDriverWanted());
+        if (asioChanged) {
+            playerOut.setAsio(o.asio, o.asioDriver);
+            std::cout << "[Lejátszó] ASIO-kimenet: " << (o.asio ? "be" : "ki") << ".\n";
         }
+        playerOut.setWantDop(o.exclusive && dsdDop);
+        const bool effDop = (o.exclusive || o.asio) && dsdDop;
+        if (effDop != filePlayer.dsdDop()) {
+            filePlayer.setDsdDop(effDop);   // DSD-fájlnál maga nyitja újra
+            std::cout << "[Lejátszó] DSD natívan: " << (effDop ? "be" : "ki") << ".\n";
+        }
+        // (ha egyszerre a DSD-beállítás is változott és DSD szól, ez egy második, rövid újranyitás – ritka eset)
+        if (asioChanged) filePlayer.reopenOutput();
         writeFileAtomic(userFilePath(L"audio.json", true), optsToJsonWithDop(o, dsdDop));
     };
     // Terhelés-tanácsadó: a motor processzorterhelése és a lejátszó hangkimaradásai az állapot végére
@@ -1171,6 +1201,13 @@ int main(int argc, char** argv) {
             }
         }
         sources.poll(snapshot);
+        // ASIO: a meghajtó resetet kért (pl. pufferméret- vagy mintavétel-váltás a saját paneljén), vagy a hangfolyam
+        // megszakadt: a szóló szám a mostani helyről újranyílik (ASIO-n, ha megy; különben WASAPI-n)
+        if (playerOut.asioNeedsReopen()) {
+            std::cout << "[Lejátszó] Az ASIO-hangfolyam leállt (" << playerOut.asio().lastError() << "); újranyitás.\n";
+            playerOut.acknowledgeAsioStop();
+            filePlayer.reopenOutput();
+        }
         if (save) {
             if (!win::saveParamFile(snapshot)) std::cout << "[Beállítások] Figyelem: a ProgramData\\Aqulify\\params.bin nem írható.\n";
             if (!win::saveRestoreParamFile(snapshot)) std::cout << "[Beállítások] Figyelem: a last_params.bin nem írható.\n";

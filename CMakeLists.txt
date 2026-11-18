@@ -206,7 +206,8 @@ if(WIN32)
         add_executable(test_mic_basic src/test_mic_basic.cpp src/mic_capture.cpp)
         target_include_directories(test_mic_basic PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
         target_link_libraries(test_mic_basic PRIVATE ole32 oleaut32 uuid)
-        target_include_directories(Aqulify PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        target_include_directories(Aqulify PRIVATE ${EE_RES_DIR} ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/asiosdk/common)   # ASIO-kimenet (Steinberg ASIO SDK 2.3.4, GPLv3)
         target_link_libraries(Aqulify PRIVATE ee_dsp_core aq_player ws2_32 iphlpapi ole32 oleaut32 shell32 shlwapi advapi32 user32 uuid avrt winhttp)
         # 2.x: a beépített lejátszó parancssori indítója (konzolos program)
         add_executable(aqulify-play src/aqulify_play.cpp)
@@ -281,6 +282,7 @@ if(WIN32)
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/soxr/LICENCE
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/asiosdk/LICENSE.txt
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/README_WINDOWS.md)
         add_custom_command(
             OUTPUT ${EE_PAYLOAD_DIR}/payload.stamp
@@ -296,6 +298,7 @@ if(WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js ${EE_PAYLOAD_DIR}/three.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE ${EE_PAYLOAD_DIR}/threelic.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/third_party/soxr/LICENCE ${EE_PAYLOAD_DIR}/soxrlic.bin
+            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/third_party/asiosdk/LICENSE.txt ${EE_PAYLOAD_DIR}/asiolic.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/README_WINDOWS.md ${EE_PAYLOAD_DIR}/readme.bin
             COMMAND ${CMAKE_COMMAND} -E touch ${EE_PAYLOAD_DIR}/payload.stamp
             DEPENDS Aqulify AqulifyPlugin AqulifyGui ${EE_PAYLOAD_SOURCES}
@@ -312,6 +315,7 @@ if(WIN32)
             "FILE_THREE|gui\\three.min.js\n"
             "FILE_THREELIC|gui\\three.js-LICENSE.txt\n"
             "FILE_SOXRLIC|gui\\libsoxr-LICENSE.txt\n"
+            "FILE_ASIOLIC|gui\\asiosdk-LICENSE.txt\n"
             "FILE_README|OLVASS_EL.md\n")
         file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/setup_payload.rc
             "PAYLOAD_INDEX RCDATA \"${EE_PAYLOAD_DIR}/index.txt\"\n"
@@ -326,6 +330,7 @@ if(WIN32)
             "FILE_THREE RCDATA \"${EE_PAYLOAD_DIR}/three.bin\"\n"
             "FILE_THREELIC RCDATA \"${EE_PAYLOAD_DIR}/threelic.bin\"\n"
             "FILE_SOXRLIC RCDATA \"${EE_PAYLOAD_DIR}/soxrlic.bin\"\n"
+            "FILE_ASIOLIC RCDATA \"${EE_PAYLOAD_DIR}/asiolic.bin\"\n"
             "FILE_README RCDATA \"${EE_PAYLOAD_DIR}/readme.bin\"\n")
         set_source_files_properties(${EE_RES_DIR}/setup.rc PROPERTIES OBJECT_DEPENDS ${EE_PAYLOAD_DIR}/payload.stamp)
         add_custom_target(AqulifyPayload DEPENDS ${EE_PAYLOAD_DIR}/payload.stamp)
@@ -511,3 +516,24 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
 endif()
 
 message(STATUS "Aqulify C++ DSP Engine sikeresen konfigurálva.")
+
+# ------------------------------------------------------------------
+# Windows-only: ASIO-kimenet motor tesztje (Steinberg ASIO SDK 2.3.4, GPLv3)
+# ------------------------------------------------------------------
+if(WIN32)
+    add_executable(test_asio src/test_asio.cpp)
+    target_include_directories(test_asio PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/windows/engine
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/asiosdk/common
+    )
+    target_link_libraries(test_asio PRIVATE aq_player ee_dsp_core ole32 uuid advapi32 avrt)
+    # A motor Windowsos kimenet-váltója (WASAPI / ASIO): hamis WASAPI-kimenettel és saját hamis ASIO-meghajtóval
+    add_executable(test_winout src/test_winout.cpp)
+    target_include_directories(test_winout PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/windows/engine
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/asiosdk/common
+    )
+    target_link_libraries(test_winout PRIVATE aq_player ee_dsp_core ole32 uuid advapi32 avrt)
+endif()

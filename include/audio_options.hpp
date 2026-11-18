@@ -82,6 +82,9 @@ struct AudioOptions {
     uint32_t upsampleMaxRate = 0;               // a célmintavétel felső korlátja (0: nincs; a terhelés-tanácsadó állítja)
     int dedicatedCore = -1;                     // a dekóder-szál rögzítése egy magra (-1: ki; csak Linux / Windows)
     bool loadAdvisor = true;                    // a terhelés-tanácsadó szól-e
+    // Windows: ASIO-kimenet a beépített lejátszóhoz (a gyártó ASIO-meghajtóján át; a DSP a motorban fut)
+    bool asio = false;
+    std::string asioDriver;                     // a meghajtó CLSID-je vagy neve (üres: az első telepített)
 
     bool operator==(const AudioOptions& o) const {
         return bufferFrames == o.bufferFrames && keepAwake == o.keepAwake && rateMode == o.rateMode &&
@@ -95,7 +98,8 @@ struct AudioOptions {
                std::abs(upsamplePhase - o.upsamplePhase) < 1e-4 &&
                std::abs(upsampleHeadroomDb - o.upsampleHeadroomDb) < 1e-3f &&
                upsampleCustom == o.upsampleCustom && upsampleThreads == o.upsampleThreads &&
-               upsampleMaxRate == o.upsampleMaxRate && dedicatedCore == o.dedicatedCore && loadAdvisor == o.loadAdvisor;
+               upsampleMaxRate == o.upsampleMaxRate && dedicatedCore == o.dedicatedCore && loadAdvisor == o.loadAdvisor &&
+               asio == o.asio && asioDriver == o.asioDriver;
     }
     bool operator!=(const AudioOptions& o) const { return !(*this == o); }
 };
@@ -146,6 +150,22 @@ inline void sanitize(AudioOptions& o) {
         kUpsampleMaxRateChoices.end())
         o.upsampleMaxRate = 0;
     if (o.dedicatedCore < -1 || o.dedicatedCore > 255) o.dedicatedCore = -1;
+    // a meghajtó azonosítója: legfeljebb 255 bájt, vezérlőkarakter nélkül (registry-név vagy "{CLSID}")
+    if (o.asioDriver.size() > 255) o.asioDriver.clear();
+    for (char c : o.asioDriver) {
+        if (static_cast<unsigned char>(c) < 0x20) { o.asioDriver.clear(); break; }
+    }
+}
+
+/** Szöveg JSON-karakterlánc tartalmaként (idézőjel és visszaper escape; a vezérlőkaraktert a sanitize kiszűri). */
+inline std::string jsonStringBody(const std::string& in) {
+    std::string out;
+    out.reserve(in.size());
+    for (char c : in) {
+        if (c == '"' || c == '\\') out += '\\';
+        if (static_cast<unsigned char>(c) >= 0x20) out += c;
+    }
+    return out;
 }
 
 inline const char* rateModeName(RateMode m) {
@@ -187,7 +207,9 @@ inline std::string toJson(const AudioOptions& o) {
     s += "},\"upsampleThreads\":" + std::to_string(o.upsampleThreads) +
          ",\"upsampleMaxRate\":" + std::to_string(o.upsampleMaxRate) +
          ",\"dedicatedCore\":" + std::to_string(o.dedicatedCore) +
-         ",\"loadAdvisor\":" + (o.loadAdvisor ? "true" : "false") + "}";
+         ",\"loadAdvisor\":" + (o.loadAdvisor ? "true" : "false") +
+         ",\"asio\":" + (o.asio ? "true" : "false") +
+         ",\"asioDriver\":\"" + jsonStringBody(o.asioDriver) + "\"}";
     return s;
 }
 
@@ -238,6 +260,8 @@ inline AudioOptions fromJson(const json::Value& v, AudioOptions base = {}) {
         base.upsampleMaxRate = x->num >= 0 && x->num < 1e7 ? static_cast<uint32_t>(x->num) : 0;
     if (const json::Value* x = v.get("dedicatedCore"); x && x->type == T::Number) base.dedicatedCore = static_cast<int>(x->num);
     if (const json::Value* x = v.get("loadAdvisor"); x && x->type == T::Bool) base.loadAdvisor = x->b;
+    if (const json::Value* x = v.get("asio"); x && x->type == T::Bool) base.asio = x->b;
+    if (const json::Value* x = v.get("asioDriver"); x && x->type == T::String) base.asioDriver = x->str;
 
     sanitize(base);
     return base;

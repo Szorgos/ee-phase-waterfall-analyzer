@@ -155,6 +155,11 @@ public:
     /** Natív DSD (DoP 1.1) kérése (csak kizárólagos kimeneten; elutasításkor a lejátszó PCM-re lép vissza). */
     void setDsdDop(bool on);
     bool dsdDop() const { return dsdDop_.load(); }
+    /**
+     * A kimenet újranyitása (pl. a kimenet típusa változott: WASAPI ↔ ASIO): a hallott számot ugyanattól a helytől
+     * nyitja meg újra, a szünet megmarad. Ha nincs betöltött szám, nem csinál semmit.
+     */
+    void reopenOutput();
     /** Most ténylegesen DoP-kereteket ad-e a lejátszó. */
     bool isDopActive() const { return dopActive_.load(); }
     /** A szóló DSD-fájl eredeti 1 bites mintavétele (pl. 2822400 DSD64-nél; 0, ha nem DSD). */
@@ -192,6 +197,10 @@ public:
     uint32_t decideTargetRate(uint32_t srcRate, bool bypassUpsample, bool isDsd) const;
 
 private:
+    /** A hallott szám újranyitása a mostani helyről (dsdOnly: csak DSD-fájlnál; a DoP-váltáshoz). */
+    void reopenAudible(bool dsdOnly);
+    /** A következő open() új hangfolyamot nyit (nem csak a számot cseréli) – a reopenOutput() kéri. */
+    std::atomic<bool> forceNewStream_{false};
     /** Egy szám az idővonalon (az idővonal a tekerés / megnyitás óta folyamatos, az első szám kereteiben indul). */
     /** Az előbetöltött fájl ideiglenes másolata (megszűnéskor törlődik). */
     struct TempCopy {

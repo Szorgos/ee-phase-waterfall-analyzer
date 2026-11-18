@@ -148,6 +148,14 @@ std::string FilePlayer::dopFallbackReason() const {
 
 void FilePlayer::setDsdDop(bool on) {
     if (dsdDop_.exchange(on) == on) return;
+    reopenAudible(/*dsdOnly=*/true);
+}
+
+void FilePlayer::reopenOutput() {
+    reopenAudible(/*dsdOnly=*/false);
+}
+
+void FilePlayer::reopenAudible(bool dsdOnly) {
     dropPrefetched();
     std::string reopenPath;
     uint64_t reopenToken = 0;
@@ -157,7 +165,7 @@ void FilePlayer::setDsdDop(bool on) {
         std::lock_guard<std::mutex> lk(m_);
         prevState = state_.load();
         const Segment* a = audibleLocked();
-        if (prevState != State::Idle && a && isDsdFilePath(a->path)) {
+        if (prevState != State::Idle && a && (!dsdOnly || isDsdFilePath(a->path))) {
             reopenPath = a->path;
             reopenToken = a->token;
             const uint64_t t = audibleFrame();
@@ -165,6 +173,7 @@ void FilePlayer::setDsdDop(bool on) {
         }
     }
     if (!reopenPath.empty()) {
+        if (!dsdOnly) forceNewStream_ = true;
         if (open(reopenPath, nullptr, reopenToken)) {
             if (reopenPos > 0.0) seek(reopenPos);
             if (prevState == State::Paused) pause();
@@ -225,7 +234,9 @@ bool FilePlayer::open(const std::string& path, std::string* error, uint64_t toke
     const bool nextDop = seg->dopRaw != nullptr;
     const uint32_t nextSrcRate = nextDop ? seg->dopRate : seg->dec->sampleRate();
     const uint32_t nextTargetRate = decideTargetRate(nextSrcRate, seg->bypassUpsample, nextDop || (seg->dsdRate > 0));
-    if (st != State::Idle && !segs_.empty() && curDop == nextDop && nextTargetRate == rate_ && out_->settlesOnRateChange() &&
+    // reopenOutput(): a kimenetet mindenképp újra kell nyitni (pl. WASAPI ↔ ASIO), a szám cseréje nem elég
+    const bool forceNew = forceNewStream_.exchange(false);
+    if (!forceNew && st != State::Idle && !segs_.empty() && curDop == nextDop && nextTargetRate == rate_ && out_->settlesOnRateChange() &&
         (!upsampleActive_.load() || nextSrcRate == upsampleSrcRate_.load())) {
         replaceTrackLocked(std::move(seg), st != State::Playing);
         return true;
