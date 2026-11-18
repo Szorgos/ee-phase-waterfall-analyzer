@@ -34,20 +34,34 @@ inline const char* dspStateName(DspState s) {
     return "idle";
 }
 
+/** Be van-e kapcsolva az Equalizer APO a mostani lejátszóeszközön (Windows; máshol mindig Unknown). */
+enum class ApoOnDevice { Unknown, Yes, No };
+
 struct DspStateInput {
     bool pluginAlive = false;     ///< van élő plugin-példány
     bool deviceOk = true;         ///< a lejátszóeszköz elérhető (a lehallgatás fut)
     std::string device;           ///< a mostani lejátszóeszköz neve
     std::string apoDevice;        ///< az eszköz, amelyen a plugin legutóbb futott (üres: még sosem)
     double playingMs = 0.0;       ///< mióta szól folyamatosan hallható jel (PlaybackDetector)
+    ApoOnDevice apoOnDevice = ApoOnDevice::Unknown;   ///< a mostani eszközön van-e Equalizer APO
 };
+
+/**
+ * A plugin a mostani lejátszóeszköz hangját dolgozza-e fel. Élő plugin mellett is „nem”, ha a mostani eszközön
+ * biztosan nincs Equalizer APO: ilyenkor a plugin egy másik eszközön fut, a zene feldolgozás nélkül szól.
+ * Ismeretlen esetben (a regisztrációs adatbázis nem olvasható) a plugin élete dönt: nincs téves riasztás.
+ */
+inline bool pluginServesDevice(bool pluginAlive, ApoOnDevice apo) {
+    return pluginAlive && apo != ApoOnDevice::No;
+}
 
 /** Ennyi ideig szóló zene után számít hibának, ha a plugin nem indult el (indításkor a plugin ennél jóval gyorsabb). */
 constexpr double kDspNotLoadedGraceMs = 3000.0;
 
 inline DspState classifyDspState(const DspStateInput& in) {
-    if (in.pluginAlive) return DspState::Active;
+    if (pluginServesDevice(in.pluginAlive, in.apoOnDevice)) return DspState::Active;
     if (!in.deviceOk) return DspState::NoDevice;
+    if (in.apoOnDevice == ApoOnDevice::No) return DspState::OtherDevice;   // ezen az eszközön nincs Equalizer APO
     if (!in.apoDevice.empty() && in.device != in.apoDevice) return DspState::OtherDevice;
     if (in.playingMs >= kDspNotLoadedGraceMs) return DspState::NotLoaded;
     return DspState::Idle;

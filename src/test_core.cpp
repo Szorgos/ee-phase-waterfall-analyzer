@@ -319,6 +319,27 @@ static void testDspState() {
     in.playingMs = 5000;
     CHECK(classifyDspState(in) == DspState::NotLoaded, "még sosem futott plugin, szól a zene: hiba");
 
+    // A plugin él, de egy másik eszközön: a mostani eszközön nincs Equalizer APO (pl. új USB DAC, 2.6.1)
+    DspStateInput o;
+    o.device = o.apoDevice = "Hangszórók (USB DAC)";
+    o.pluginAlive = true;
+    o.apoOnDevice = ApoOnDevice::No;
+    CHECK(!pluginServesDevice(true, ApoOnDevice::No), "élő plugin, de a mostani eszközön nincs APO: nem ezt dolgozza fel");
+    CHECK(classifyDspState(o) == DspState::OtherDevice, "élő plugin másik eszközön: „másik eszköz”, nem „aktív”");
+    o.playingMs = 0;
+    o.pluginAlive = false;
+    CHECK(classifyDspState(o) == DspState::OtherDevice, "nincs APO az eszközön, plugin sem fut: „másik eszköz” (szünetben is)");
+    o.deviceOk = false;
+    CHECK(classifyDspState(o) == DspState::NoDevice, "eszköz nélkül a „nincs eszköz” az erősebb");
+    o.deviceOk = true;
+    o.pluginAlive = true;
+    o.apoOnDevice = ApoOnDevice::Unknown;
+    CHECK(pluginServesDevice(true, ApoOnDevice::Unknown) && classifyDspState(o) == DspState::Active,
+          "ismeretlen (a regisztrációs adatbázis nem olvasható): nincs téves riasztás, a plugin a forrás");
+    o.apoOnDevice = ApoOnDevice::Yes;
+    CHECK(pluginServesDevice(true, ApoOnDevice::Yes) && classifyDspState(o) == DspState::Active, "APO az eszközön, plugin fut: aktív");
+    CHECK(!pluginServesDevice(false, ApoOnDevice::Yes), "APO az eszközön, de nincs élő plugin: nem aktív");
+
     // Lejátszás felismerése a jelszintből (48 kHz, 10 ms-os blokkok)
     const double sr = 48000.0;
     std::vector<float> tone(480 * 2), quiet(480 * 2, 1e-5f), zero(480 * 2, 0.0f);

@@ -30,6 +30,7 @@
 #include "file_player.hpp"
 #include "mini_json.hpp"
 #include "player_output_win.hpp"
+#include "apo_detect.hpp"
 
 using namespace ee_analyzer;
 using namespace ee_analyzer::player;
@@ -485,6 +486,31 @@ int main() {
         fp.stop();
         std::error_code ec;
         std::filesystem::remove(wav, ec);
+    }
+
+    std::printf("\n[9] Equalizer APO a lejátszóeszközön (2.6.1: a regisztrációs adatbázisból, csak olvasva)\n");
+    {
+        using win::endpointKeyFromId;
+        CHECK(endpointKeyFromId(L"{0.0.0.00000000}.{56869ca8-1234-4abc-8def-0123456789ab}") ==
+                  L"{56869ca8-1234-4abc-8def-0123456789ab}",
+              "a WASAPI-azonosítóból a regisztrációs kulcs");
+        CHECK(endpointKeyFromId(L"").empty() && endpointKeyFromId(L"{0.0.0.00000000}").empty() &&
+                  endpointKeyFromId(L"{0.0.0.00000000}.{rövid}").empty(),
+              "hibás azonosítóból üres kulcs (ismeretlen, nincs riasztás)");
+        CHECK(win::isEqApoClassName(L"EqualizerAPO Pre-Mix Class") && win::isEqApoClassName(L"EqualizerAPO Post-Mix Class") &&
+                  !win::isEqApoClassName(L"Realtek Audio Effects") && !win::isEqApoClassName(L""),
+              "az Equalizer APO osztálynév felismerése (más gyártó effektje nem az)");
+        CHECK(win::apoOnRenderDevice(L"nem-azonosito") == ApoOnDevice::Unknown, "értelmezhetetlen azonosító: ismeretlen");
+        // A gép valódi eszközei: a lista és az egyenkénti lekérdezés ugyanazt mondja
+        const auto devs = win::listRenderDevices();
+        bool consistent = true;
+        for (const auto& d : devs) {
+            const ApoOnDevice one = win::apoOnRenderDevice(L"{0.0.0.00000000}." + d.key);
+            if (one != d.apo) consistent = false;
+            std::printf("         %s %-60s APO: %s\n", d.active ? "[aktív]" : "[ -   ]", d.name.c_str(),
+                        d.apo == ApoOnDevice::Yes ? "igen" : d.apo == ApoOnDevice::No ? "nem" : "?");
+        }
+        CHECK(consistent, "a lista és az egyenkénti lekérdezés egyezik (%zu eszköz)", devs.size());
     }
 
     std::printf("\n%s (%d hiba, %d rendben)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail, g_ok);
