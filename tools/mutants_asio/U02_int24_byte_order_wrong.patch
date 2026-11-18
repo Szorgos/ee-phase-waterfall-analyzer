@@ -1,0 +1,11 @@
+--- a/windows/engine/player_output_asio.hpp
++++ b/windows/engine/player_output_asio.hpp
+@@ -769,7 +769,7 @@
+                 }
+             } else if (sampleType_ == ASIOSTInt24LSB) {
+                 for (size_t i = 0; i < n; ++i) {
+-                    pcm::floatToInt(&st[2 * i],     dstL + i * 3, 1, 24, 24);
++                    pcm::floatToInt(&st[2 * i],     dstL + i * 3, 1, 24, 24); std::swap(dstL[i * 3], dstL[i * 3 + 2]);
+                     pcm::floatToInt(&st[2 * i + 1], dstR + i * 3, 1, 24, 24);
+                 }
+             } else if (sampleType_ == ASIOSTInt16LSB) {

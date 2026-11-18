@@ -1,0 +1,9 @@
+--- a/third_party/asiosdk/common/asio.h
++++ b/third_party/asiosdk/common/asio.h
+@@ -1,5 +1,5 @@
+ //------------------------------------------------------------------------
+-// Project     : ASIO SDK
++// Project     : ASIO SDK (modified mutant)
+ //
+ // Category    : Interfaces
+ // Filename    : common/asio.h
