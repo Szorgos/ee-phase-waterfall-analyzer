@@ -1,0 +1,917 @@
+// Windows ASIO-kimenet motor tesztje (K3–K10 és 7.3 véletlen-mag: 40 eset).
+// A hamis ASIO-meghajtó (FakeAsioDriver) a Steinberg ASIO SDK IASIO COM-felületét valósítja meg.
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <objbase.h>
+
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <functional>
+#include <memory>
+#include <random>
+#include <set>
+#include <string>
+#include <thread>
+#include <vector>
+
+#include "asiosys.h"
+#include "asio.h"
+#include "iasiodrv.h"
+#include "file_player.hpp"
+
+#if __has_include("../windows/engine/player_output_asio.hpp")
+#include "../windows/engine/player_output_asio.hpp"
+#else
+// Befagyasztott tesztcommit állapota a termékkód megvalósítása előtt:
+// a tesztek valódi hívásokkal futnak, és implementáció hiányában elbuknak.
+namespace ee_analyzer::player {
+struct AsioDriverInfo {
+    std::string keyName;
+    std::string clsid;
+    std::string description;
+};
+class AsioPlayerOutput : public PlayerOutput {
+public:
+    using DriverFactory = std::function<IASIO*(std::string* errorOut)>;
+    explicit AsioPlayerOutput(std::string = {}, DriverFactory = {}) {}
+    static std::vector<AsioDriverInfo> listDrivers(HKEY = HKEY_LOCAL_MACHINE, const wchar_t* = L"SOFTWARE\\ASIO") { return {}; }
+    bool open(uint32_t, RenderFn, std::string* err = nullptr) override { if (err) *err = "not_implemented"; return false; }
+    bool openDop(uint32_t, RenderDopFn, std::string* err = nullptr) override { if (err) *err = "not_implemented"; return false; }
+    void close() override {}
+    void setActive(bool) override {}
+    void lock() override {}
+    void unlock() override {}
+    void flush() override {}
+    uint64_t consumedFrames() const override { return 0; }
+    bool settlesOnRateChange() const override { return false; }
+    std::vector<uint32_t> supportedRates() const override { return {}; }
+    uint32_t actualRate() const override { return 0; }
+    bool isOpen() const { return false; }
+    bool isRunning() const { return false; }
+    bool isNativeDsdActive() const { return false; }
+    bool isDopPcmActive() const { return false; }
+    uint32_t resetCount() const { return 0; }
+    std::string lastError() const { return "not_implemented"; }
+    long bufferSize() const { return 0; }
+    ASIOSampleType sampleType() const { return 0; }
+};
+} // namespace ee_analyzer::player
+#endif
+
+using namespace ee_analyzer;
+using namespace ee_analyzer::player;
+
+static int g_fail = 0;
+#define CHECK(cond, ...) do { \
+    if (!(cond)) { ++g_fail; std::printf("  [HIBA] " __VA_ARGS__); } \
+    else { std::printf("  [OK]   " __VA_ARGS__); } \
+    std::printf("\n"); \
+} while (0)
+
+// Globális valós idejű foglalás-számláló a K9 ellenőrzéshez
+thread_local volatile bool g_rtTrackAlloc = false;
+std::atomic<uint64_t> g_rtAllocCount{0};
+
+void* operator new(std::size_t size) {
+    if (g_rtTrackAlloc) g_rtAllocCount.fetch_add(1, std::memory_order_relaxed);
+    void* p = std::malloc(size);
+    if (!p) throw std::bad_alloc();
+    return p;
+}
+void operator delete(void* p) noexcept { std::free(p); }
+void operator delete(void* p, std::size_t) noexcept { std::free(p); }
+
+// ---------------------------------------------------------------------------
+// Független referencia-átalakítók (a termékkódtól teljesen függetlenül számolva)
+// ---------------------------------------------------------------------------
+
+static uint8_t refReverseBits8(uint8_t b) {
+    uint8_t r = 0;
+    for (int i = 0; i < 8; ++i) {
+        r = static_cast<uint8_t>((r << 1) | ((b >> i) & 1u));
+    }
+    return r;
+}
+
+static std::vector<uint8_t> refExpectedPcmBytes(const std::vector<float>& chSamples, ASIOSampleType type) {
+    std::vector<uint8_t> out;
+    for (float x : chSamples) {
+        if (type == ASIOSTInt32LSB) {
+            const double scale = 2147483648.0; // 2^31
+            long long r = std::llround(static_cast<double>(x) * scale);
+            if (r > 2147483647LL) r = 2147483647LL;
+            if (r < -2147483648LL) r = -2147483648LL;
+            const uint32_t u = static_cast<uint32_t>(static_cast<int32_t>(r));
+            out.push_back(static_cast<uint8_t>(u & 0xFFu));
+            out.push_back(static_cast<uint8_t>((u >> 8) & 0xFFu));
+            out.push_back(static_cast<uint8_t>((u >> 16) & 0xFFu));
+            out.push_back(static_cast<uint8_t>((u >> 24) & 0xFFu));
+        } else if (type == ASIOSTInt24LSB) {
+            const double scale = 8388608.0; // 2^23
+            long long r = std::llround(static_cast<double>(x) * scale);
+            if (r > 8388607LL) r = 8388607LL;
+            if (r < -8388608LL) r = -8388608LL;
+            const uint32_t u = static_cast<uint32_t>(static_cast<int32_t>(r));
+            out.push_back(static_cast<uint8_t>(u & 0xFFu));
+            out.push_back(static_cast<uint8_t>((u >> 8) & 0xFFu));
+            out.push_back(static_cast<uint8_t>((u >> 16) & 0xFFu));
+        } else if (type == ASIOSTInt16LSB) {
+            const double scale = 32768.0; // 2^15
+            long long r = std::llround(static_cast<double>(x) * scale);
+            if (r > 32767LL) r = 32767LL;
+            if (r < -32768LL) r = -32768LL;
+            const uint16_t u = static_cast<uint16_t>(static_cast<int16_t>(r));
+            out.push_back(static_cast<uint8_t>(u & 0xFFu));
+            out.push_back(static_cast<uint8_t>((u >> 8) & 0xFFu));
+        } else if (type == ASIOSTFloat32LSB) {
+            uint8_t b[4];
+            std::memcpy(b, &x, 4);
+            out.insert(out.end(), b, b + 4);
+        } else if (type == ASIOSTFloat64LSB) {
+            const double d = static_cast<double>(x);
+            uint8_t b[8];
+            std::memcpy(b, &d, 8);
+            out.insert(out.end(), b, b + 8);
+        }
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// Hamis ASIO-meghajtó (IASIO megvalósítás a teszthez)
+// ---------------------------------------------------------------------------
+
+struct FakeAsioState {
+    std::set<uint64_t> supportedRates{ 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000 };
+    std::set<uint64_t> supportedDsdBitRates{ 2822400, 3072000, 5644800, 6144000, 11289600, 12288000, 22579200, 24576000, 45158400, 49152000 };
+    ASIOSampleType pcmType = ASIOSTInt32LSB;
+    ASIOSampleType dsdType = ASIOSTDSDInt8MSB1;
+    bool allowNativeDsd = true;
+    long numOutputChannels = 2;
+    long preferredBufferSize = 128;
+
+    bool failInit = false;
+    bool failCreateBuffers = false;
+    bool failStart = false;
+    std::atomic<bool> deviceLost{false};
+
+    std::atomic<int> initCalls{0};
+    std::atomic<int> startCalls{0};
+    std::atomic<int> stopCalls{0};
+    std::atomic<int> disposeCalls{0};
+    std::atomic<int> canRateCalls{0};
+    std::atomic<int> outputReadyCalls{0};
+    std::atomic<double> currentRate{48000.0};
+    std::atomic<long> currentIoFormat{kASIOPCMFormat};
+
+    ASIOCallbacks callbacks{};
+    bool hasCallbacks = false;
+    long createdBufferSize = 0;
+    std::vector<uint8_t> buffers[2][2]; // [channel][doubleBufferIdx]
+
+    size_t bytesPerFrame(ASIOSampleType t) const {
+        switch (t) {
+            case ASIOSTInt16LSB: return 2;
+            case ASIOSTInt24LSB: return 3;
+            case ASIOSTInt32LSB:
+            case ASIOSTInt32LSB24:
+            case ASIOSTFloat32LSB: return 4;
+            case ASIOSTFloat64LSB: return 8;
+            case ASIOSTDSDInt8LSB1:
+            case ASIOSTDSDInt8MSB1: return 2; // 1 DoP keret = 16 DSD bit = 2 DSD bájt
+            default: return 4;
+        }
+    }
+
+    void triggerBufferSwitch(long idx) {
+        if (!hasCallbacks) return;
+        if (callbacks.bufferSwitch) {
+            callbacks.bufferSwitch(idx, ASIOTrue);
+        } else if (callbacks.bufferSwitchTimeInfo) {
+            ASIOTime t{};
+            callbacks.bufferSwitchTimeInfo(&t, idx, ASIOTrue);
+        }
+    }
+
+    long triggerResetRequest() {
+        if (!hasCallbacks || !callbacks.asioMessage) return 0;
+        return callbacks.asioMessage(kAsioResetRequest, 0, nullptr, nullptr);
+    }
+};
+
+class FakeAsioDriver : public IASIO {
+public:
+    explicit FakeAsioDriver(std::shared_ptr<FakeAsioState> st) : st_(std::move(st)) {}
+    virtual ~FakeAsioDriver() = default;
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void** ppv) override {
+        if (!ppv) return E_POINTER;
+        *ppv = static_cast<IASIO*>(this);
+        AddRef();
+        return S_OK;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++ref_; }
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG r = --ref_;
+        if (r == 0) delete this;
+        return r;
+    }
+
+    ASIOBool init(void*) override {
+        st_->initCalls.fetch_add(1);
+        if (st_->failInit) return ASIOFalse;
+        return ASIOTrue;
+    }
+    void getDriverName(char* name) override {
+        if (name) std::strcpy(name, "AqulifyFakeASIO");
+    }
+    long getDriverVersion() override { return 2; }
+    void getErrorMessage(char* string) override {
+        if (string) std::strcpy(string, st_->failInit ? "Simulated init error" : "OK");
+    }
+    ASIOError start() override {
+        st_->startCalls.fetch_add(1);
+        if (st_->failStart) return ASE_HWMalfunction;
+        return ASE_OK;
+    }
+    ASIOError stop() override {
+        st_->stopCalls.fetch_add(1);
+        return ASE_OK;
+    }
+    ASIOError getChannels(long* numIn, long* numOut) override {
+        if (numIn) *numIn = 0;
+        if (numOut) *numOut = st_->numOutputChannels;
+        return ASE_OK;
+    }
+    ASIOError getLatencies(long* inLat, long* outLat) override {
+        if (inLat) *inLat = st_->preferredBufferSize;
+        if (outLat) *outLat = st_->preferredBufferSize;
+        return ASE_OK;
+    }
+    ASIOError getBufferSize(long* minS, long* maxS, long* prefS, long* gran) override {
+        if (minS) *minS = 64;
+        if (maxS) *maxS = 4096;
+        if (prefS) *prefS = st_->preferredBufferSize;
+        if (gran) *gran = -1;
+        return ASE_OK;
+    }
+    ASIOError canSampleRate(ASIOSampleRate sRate) override {
+        st_->canRateCalls.fetch_add(1);
+        const uint64_t r = static_cast<uint64_t>(std::llround(sRate));
+        if (st_->currentIoFormat.load() == kASIODSDFormat) {
+            return st_->supportedDsdBitRates.count(r) ? ASE_OK : ASE_NoClock;
+        }
+        return st_->supportedRates.count(r) ? ASE_OK : ASE_NoClock;
+    }
+    ASIOError getSampleRate(ASIOSampleRate* currentRate) override {
+        if (currentRate) *currentRate = st_->currentRate.load();
+        return ASE_OK;
+    }
+    ASIOError setSampleRate(ASIOSampleRate sampleRate) override {
+        if (canSampleRate(sampleRate) != ASE_OK) return ASE_NoClock;
+        st_->currentRate.store(sampleRate);
+        return ASE_OK;
+    }
+    ASIOError getClockSources(ASIOClockSource* clocks, long* numSources) override {
+        if (clocks && numSources && *numSources >= 1) {
+            clocks[0].index = 0;
+            clocks[0].associatedChannel = -1;
+            clocks[0].associatedGroup = -1;
+            clocks[0].isCurrentSource = ASIOTrue;
+            std::strcpy(clocks[0].name, "Internal");
+            *numSources = 1;
+        }
+        return ASE_OK;
+    }
+    ASIOError setClockSource(long) override { return ASE_OK; }
+    ASIOError getSamplePosition(ASIOSamples* sPos, ASIOTimeStamp* tStamp) override {
+        if (st_->deviceLost.load()) return ASE_NotPresent;
+        if (sPos) { sPos->hi = 0; sPos->lo = 0; }
+        if (tStamp) { tStamp->hi = 0; tStamp->lo = 0; }
+        return ASE_OK;
+    }
+    ASIOError getChannelInfo(ASIOChannelInfo* info) override {
+        if (!info || info->isInput == ASIOTrue || info->channel < 0 || info->channel >= st_->numOutputChannels)
+            return ASE_InvalidParameter;
+        info->isActive = ASIOTrue;
+        info->channelGroup = 0;
+        info->type = (st_->currentIoFormat.load() == kASIODSDFormat) ? st_->dsdType : st_->pcmType;
+        std::snprintf(info->name, sizeof(info->name), "Out %ld", info->channel);
+        return ASE_OK;
+    }
+    ASIOError createBuffers(ASIOBufferInfo* bufferInfos, long numChannels, long bufferSize, ASIOCallbacks* callbacks) override {
+        if (st_->failCreateBuffers || !bufferInfos || !callbacks || numChannels != 2 || bufferSize <= 0)
+            return ASE_NoMemory;
+        const ASIOSampleType t = (st_->currentIoFormat.load() == kASIODSDFormat) ? st_->dsdType : st_->pcmType;
+        const size_t bytes = static_cast<size_t>(bufferSize) * st_->bytesPerFrame(t);
+        st_->createdBufferSize = bufferSize;
+        for (int ch = 0; ch < 2; ++ch) {
+            for (int b = 0; b < 2; ++b) {
+                st_->buffers[ch][b].assign(bytes, 0);
+                bufferInfos[ch].buffers[b] = st_->buffers[ch][b].data();
+            }
+        }
+        st_->callbacks = *callbacks;
+        st_->hasCallbacks = true;
+        return ASE_OK;
+    }
+    ASIOError disposeBuffers() override {
+        st_->disposeCalls.fetch_add(1);
+        st_->hasCallbacks = false;
+        return ASE_OK;
+    }
+    ASIOError controlPanel() override { return ASE_NotPresent; }
+    ASIOError future(long selector, void* opt) override {
+        if (selector == kAsioSetIoFormat && opt) {
+            auto* f = static_cast<ASIOIoFormat*>(opt);
+            if (f->FormatType == kASIODSDFormat) {
+                if (!st_->allowNativeDsd) {
+                    f->FormatType = kASIOFormatInvalid;
+                    return ASE_InvalidMode;
+                }
+                st_->currentIoFormat.store(kASIODSDFormat);
+                return ASE_SUCCESS;
+            }
+            if (f->FormatType == kASIOPCMFormat) {
+                st_->currentIoFormat.store(kASIOPCMFormat);
+                return ASE_SUCCESS;
+            }
+            f->FormatType = kASIOFormatInvalid;
+            return ASE_InvalidParameter;
+        }
+        if (selector == kAsioGetIoFormat && opt) {
+            auto* f = static_cast<ASIOIoFormat*>(opt);
+            f->FormatType = st_->currentIoFormat.load();
+            return ASE_SUCCESS;
+        }
+        if (selector == kAsioCanDoIoFormat && opt) {
+            auto* f = static_cast<ASIOIoFormat*>(opt);
+            if (f->FormatType == kASIODSDFormat && !st_->allowNativeDsd) {
+                f->FormatType = kASIOFormatInvalid;
+                return ASE_InvalidMode;
+            }
+            return ASE_SUCCESS;
+        }
+        return ASE_NotPresent;
+    }
+    ASIOError outputReady() override {
+        st_->outputReadyCalls.fetch_add(1);
+        return ASE_OK;
+    }
+
+private:
+    std::atomic<ULONG> ref_{1};
+    std::shared_ptr<FakeAsioState> st_;
+};
+
+// ---------------------------------------------------------------------------
+// K3: Meghajtó-lista (registry olvasás) és gyáron keresztüli betöltés
+// ---------------------------------------------------------------------------
+static void testK3DriverListAndFactory() {
+    std::printf("\n[K3] Meghajtó-lista (registry) és hamis meghajtó betöltése a gyáron át\n");
+    // 1. Valódi HKLM\SOFTWARE\ASIO olvasása: nem dobhat kivételt
+    bool noThrow = true;
+    std::vector<AsioDriverInfo> realList;
+    try {
+        realList = AsioPlayerOutput::listDrivers();
+    } catch (...) {
+        noThrow = false;
+    }
+    CHECK(noThrow, "K3: HKLM\\SOFTWARE\\ASIO olvasása nem dob kivételt (talált meghajtók: %zu)", realList.size());
+
+    // 2. Nem létező kulcs olvasása -> üres lista
+    const auto emptyList = AsioPlayerOutput::listDrivers(HKEY_CURRENT_USER, L"Software\\AqulifyNonExistentAsioKey_12345");
+    CHECK(emptyList.empty(), "K3: nem létező registry kulcsra üres lista (%zu)", emptyList.size());
+
+    // 3. Ideiglenes HKCU tesztkulcs 2 alkulccsal (1 érvényes CLSID, 1 hibás CLSID)
+    const wchar_t* testSubKey = L"Software\\AqulifyAsioTest_K3";
+    RegDeleteTreeW(HKEY_CURRENT_USER, testSubKey);
+    HKEY hRoot = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, testSubKey, 0, nullptr, 0, KEY_WRITE, nullptr, &hRoot, nullptr) == ERROR_SUCCESS) {
+        HKEY hDrv1 = nullptr;
+        if (RegCreateKeyExW(hRoot, L"TestDAC ASIO Driver", 0, nullptr, 0, KEY_WRITE, nullptr, &hDrv1, nullptr) == ERROR_SUCCESS) {
+            const wchar_t* clsid1 = L"{12345678-1234-1234-1234-123456789ABC}";
+            const wchar_t* desc1 = L"TestDAC USB ASIO";
+            RegSetValueExW(hDrv1, L"CLSID", 0, REG_SZ, reinterpret_cast<const BYTE*>(clsid1), static_cast<DWORD>(( std::wcslen(clsid1) + 1) * sizeof(wchar_t)));
+            RegSetValueExW(hDrv1, L"Description", 0, REG_SZ, reinterpret_cast<const BYTE*>(desc1), static_cast<DWORD>((std::wcslen(desc1) + 1) * sizeof(wchar_t)));
+            RegCloseKey(hDrv1);
+        }
+        HKEY hDrv2 = nullptr;
+        if (RegCreateKeyExW(hRoot, L"BrokenDriver", 0, nullptr, 0, KEY_WRITE, nullptr, &hDrv2, nullptr) == ERROR_SUCCESS) {
+            const wchar_t* clsid2 = L"not-a-valid-clsid";
+            RegSetValueExW(hDrv2, L"CLSID", 0, REG_SZ, reinterpret_cast<const BYTE*>(clsid2), static_cast<DWORD>((std::wcslen(clsid2) + 1) * sizeof(wchar_t)));
+            RegCloseKey(hDrv2);
+        }
+        RegCloseKey(hRoot);
+    }
+    const auto parsed = AsioPlayerOutput::listDrivers(HKEY_CURRENT_USER, testSubKey);
+    RegDeleteTreeW(HKEY_CURRENT_USER, testSubKey);
+    CHECK(parsed.size() == 1 && parsed[0].clsid == "{12345678-1234-1234-1234-123456789ABC}" && parsed[0].description == "TestDAC USB ASIO",
+          "K3: registry alkulcsok (CLSID + Description) pontos kiolvasása és érvénytelen CLSID kiszűrése");
+
+    // 4. Hamis meghajtó betöltése a gyáron át
+    auto st = std::make_shared<FakeAsioState>();
+    AsioPlayerOutput out("FakeASIO", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+    std::string err;
+    const bool opened = out.open(48000, [](float* s, size_t n) { std::memset(s, 0, n * 2 * sizeof(float)); }, &err);
+    CHECK(opened && st->initCalls.load() == 1 && out.isOpen(), "K3: hamis meghajtó betöltése a gyáron át sikeres (err='%s')", err.c_str());
+    out.close();
+}
+
+// ---------------------------------------------------------------------------
+// K4: PCM-formátumok (5 mintatípus × 5 mintavétel = 25 eset, 24 bites bitpontosság)
+// ---------------------------------------------------------------------------
+static void testK4PcmFormats() {
+    std::printf("\n[K4] PCM-formátumok: 5 mintatípus × 5 mintavétel (44,1 / 96 / 192 / 384 / 768 kHz)\n");
+    const std::vector<ASIOSampleType> types = {
+        ASIOSTInt32LSB, ASIOSTInt24LSB, ASIOSTInt16LSB, ASIOSTFloat32LSB, ASIOSTFloat64LSB
+    };
+    const std::vector<uint32_t> rates = { 44100, 96000, 192000, 384000, 768000 };
+    const size_t frames = 64;
+
+    // 24 bites rácsra pontosan illeszkedő tesztminták (hogy a 24 bites egész bitpontosság is ellenőrizhető legyen)
+    std::vector<int32_t> exact24L(frames), exact24R(frames);
+    std::vector<float> expectedL(frames), expectedR(frames);
+    for (size_t i = 0; i < frames; ++i) {
+        int32_t vL = static_cast<int32_t>((static_cast<int64_t>(i) * 321097 - 4000000) & 0x7FFFFF);
+        if (i & 1) vL = -vL;
+        int32_t vR = static_cast<int32_t>((static_cast<int64_t>(i) * 512341 - 2000000) & 0x7FFFFF);
+        if ((i & 2) == 0) vR = -vR;
+        if (i == 0) { vL = 0x123456; vR = -0x654321; }
+        if (i == 1) { vL = 8388607; vR = -8388608; }
+        exact24L[i] = vL;
+        exact24R[i] = vR;
+        expectedL[i] = static_cast<float>(std::ldexp(static_cast<double>(vL), -23));
+        expectedR[i] = static_cast<float>(std::ldexp(static_cast<double>(vR), -23));
+    }
+
+    int passCount = 0;
+    bool exact24BitOk = true;
+    for (ASIOSampleType t : types) {
+        for (uint32_t sr : rates) {
+            auto st = std::make_shared<FakeAsioState>();
+            st->pcmType = t;
+            st->preferredBufferSize = static_cast<long>(frames);
+            AsioPlayerOutput out("Fake", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+            std::string err;
+            bool ok = out.open(sr, [&](float* stereo, size_t n) {
+                for (size_t i = 0; i < n; ++i) {
+                    stereo[2 * i]     = expectedL[i % frames];
+                    stereo[2 * i + 1] = expectedR[i % frames];
+                }
+            }, &err);
+            out.setActive(true);
+            for (int wait = 0; wait < 100 && !out.isRunning(); ++wait)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            st->triggerBufferSwitch(0);
+
+            const std::vector<uint8_t> refL = refExpectedPcmBytes(expectedL, t);
+            const std::vector<uint8_t> refR = refExpectedPcmBytes(expectedR, t);
+            const bool matchL = (st->buffers[0][0] == refL);
+            const bool matchR = (st->buffers[1][0] == refR);
+
+            // 24 bites forrás bitpontos ellenőrzése egész formátumon (Int24LSB és Int32LSB)
+            if (t == ASIOSTInt24LSB && st->buffers[0][0].size() == frames * 3) {
+                for (size_t i = 0; i < frames; ++i) {
+                    const uint8_t* p = &st->buffers[0][0][i * 3];
+                    int32_t got = static_cast<int32_t>(p[0] | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16));
+                    if (got & 0x800000) got |= ~0xFFFFFF;
+                    if (got != exact24L[i]) exact24BitOk = false;
+                }
+            } else if (t == ASIOSTInt32LSB && st->buffers[0][0].size() == frames * 4) {
+                for (size_t i = 0; i < frames; ++i) {
+                    int32_t got32 = 0;
+                    std::memcpy(&got32, &st->buffers[0][0][i * 4], 4);
+                    if ((got32 >> 8) != exact24L[i] || (got32 & 0xFF) != 0) exact24BitOk = false;
+                }
+            }
+
+            out.close();
+            if (ok && matchL && matchR && std::llround(st->currentRate.load()) == sr) {
+                ++passCount;
+            } else {
+                std::printf("  [HIBA] K4 eltérés type=%ld sr=%u ok=%d matchL=%d matchR=%d err='%s'\n",
+                            static_cast<long>(t), sr, (int)ok, (int)matchL, (int)matchR, err.c_str());
+            }
+        }
+    }
+    CHECK(passCount == 25, "K4: mind a 25 (5 mintatípus × 5 mintavétel) kombináció bájtról bájtra egyezik (%d/25)", passCount);
+    CHECK(exact24BitOk, "K4: 24 bites forrás egész formátumon (ASIOSTInt24LSB és ASIOSTInt32LSB) bitpontosan jut át");
+
+    // Nem támogatott mintatípus (pl. big-endian ASIOSTInt32MSB) -> érthető hiba
+    auto stBad = std::make_shared<FakeAsioState>();
+    stBad->pcmType = ASIOSTInt32MSB;
+    AsioPlayerOutput outBad("Fake", [stBad](std::string*) -> IASIO* { return new FakeAsioDriver(stBad); });
+    std::string errBad;
+    const bool okBad = outBad.open(48000, [](float*, size_t) {}, &errBad);
+    CHECK(!okBad && errBad == "format", "K4: nem támogatott mintatípusra érthető hiba (err='%s')", errBad.c_str());
+    outBad.close();
+}
+
+// ---------------------------------------------------------------------------
+// K5: supportedRates() a canSampleRate szerint, actualRate() a getSampleRate szerint
+// ---------------------------------------------------------------------------
+static void testK5CapabilitiesAndRates() {
+    std::printf("\n[K5] supportedRates() (canSampleRate) és actualRate() (getSampleRate)\n");
+    auto st = std::make_shared<FakeAsioState>();
+    st->supportedRates = { 44100, 48000, 96000, 384000, 768000 };
+    AsioPlayerOutput out("Fake", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+
+    const std::vector<uint32_t> expected = { 44100, 48000, 96000, 384000, 768000 };
+    const std::vector<uint32_t> got = out.supportedRates();
+    CHECK(got == expected && st->canRateCalls.load() >= 5,
+          "K5: supportedRates() a meghajtó canSampleRate lekérdezéséből adja a pontos listát (hívások: %d)",
+          st->canRateCalls.load());
+    CHECK(out.actualRate() == 0, "K5: zárt állapotban actualRate() == 0");
+    CHECK(out.settlesOnRateChange() == true, "K5: settlesOnRateChange() == true");
+
+    std::string err;
+    const bool opened = out.open(384000, [](float* s, size_t n) { std::memset(s, 0, n * 2 * sizeof(float)); }, &err);
+    CHECK(opened && out.actualRate() == 384000, "K5: nyitott állapotban actualRate() == %u Hz (getSampleRate)", out.actualRate());
+    out.close();
+}
+
+// ---------------------------------------------------------------------------
+// K6 és K7: Natív DSD (DSD64..DSD1024, MSB1/LSB1) és DoP PCM-ként / elutasítás
+// ---------------------------------------------------------------------------
+static void testK6K7DsdAndDop() {
+    std::printf("\n[K6 / K7] Natív DSD (DSD64..DSD1024, MSB1 és LSB1) és DoP PCM tartalék\n");
+    // DSD64, DSD128, DSD256, DSD512, DSD1024 DoP keretráták (dsdBitRate = dopRate * 16)
+    const std::vector<uint32_t> dopRates = { 176400, 352800, 705600, 1411200, 2822400 };
+    const std::vector<ASIOSampleType> dsdTypes = { ASIOSTDSDInt8MSB1, ASIOSTDSDInt8LSB1 };
+    const size_t dopFrames = 64;
+
+    // Forrás DSD-bájtok (szándékosan nem tartalmazzák a 0x05 és 0xFA DoP-jelölőket!)
+    std::vector<uint8_t> rawDsdL(dopFrames * 2), rawDsdR(dopFrames * 2);
+    for (size_t i = 0; i < dopFrames * 2; ++i) {
+        uint8_t bL = static_cast<uint8_t>((i * 37 + 0x11) & 0xFF);
+        if (bL == 0x05 || bL == 0xFA || refReverseBits8(bL) == 0x05 || refReverseBits8(bL) == 0xFA) bL = 0x33;
+        uint8_t bR = static_cast<uint8_t>((i * 73 + 0x29) & 0xFF);
+        if (bR == 0x05 || bR == 0xFA || refReverseBits8(bR) == 0x05 || refReverseBits8(bR) == 0xFA) bR = 0x47;
+        rawDsdL[i] = bL;
+        rawDsdR[i] = bR;
+    }
+
+    int nativePass = 0;
+    bool noMarkerLeak = true;
+    for (ASIOSampleType dt : dsdTypes) {
+        for (uint32_t dr : dopRates) {
+            auto st = std::make_shared<FakeAsioState>();
+            st->allowNativeDsd = true;
+            st->dsdType = dt;
+            st->preferredBufferSize = static_cast<long>(dopFrames);
+
+            AsioPlayerOutput out("Fake", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+            std::string err;
+            bool ok = out.openDop(dr, [&](int32_t* stereoDop24, size_t n) {
+                for (size_t i = 0; i < n; ++i) {
+                    const uint8_t marker = (i & 1) ? 0xFAu : 0x05u;
+                    const uint8_t b0L = rawDsdL[(2 * i) % rawDsdL.size()];
+                    const uint8_t b1L = rawDsdL[(2 * i + 1) % rawDsdL.size()];
+                    const uint8_t b0R = rawDsdR[(2 * i) % rawDsdR.size()];
+                    const uint8_t b1R = rawDsdR[(2 * i + 1) % rawDsdR.size()];
+                    stereoDop24[2 * i]     = static_cast<int32_t>((uint32_t(marker) << 16) | (uint32_t(b0L) << 8) | b1L);
+                    stereoDop24[2 * i + 1] = static_cast<int32_t>((uint32_t(marker) << 16) | (uint32_t(b0R) << 8) | b1R);
+                }
+            }, &err);
+            out.setActive(true);
+            for (int wait = 0; wait < 100 && !out.isRunning(); ++wait)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            st->triggerBufferSwitch(0);
+
+            std::vector<uint8_t> expL(dopFrames * 2), expR(dopFrames * 2);
+            for (size_t i = 0; i < dopFrames * 2; ++i) {
+                expL[i] = (dt == ASIOSTDSDInt8LSB1) ? refReverseBits8(rawDsdL[i]) : rawDsdL[i];
+                expR[i] = (dt == ASIOSTDSDInt8LSB1) ? refReverseBits8(rawDsdR[i]) : rawDsdR[i];
+            }
+            for (uint8_t b : st->buffers[0][0]) {
+                if (b == 0x05 || b == 0xFA) noMarkerLeak = false;
+            }
+            const bool rateOk = ( static_cast<uint64_t>(std::llround(st->currentRate.load())) == uint64_t(dr) * 16ull );
+            if (ok && out.isNativeDsdActive() && rateOk && st->buffers[0][0] == expL && st->buffers[1][0] == expR) {
+                ++nativePass;
+            }
+            out.close();
+        }
+    }
+    CHECK(nativePass == 10, "K6: natív DSD (DSD64..DSD1024 × MSB1/LSB1) mind a 10 esetben bitpontos (%d/10)", nativePass);
+    CHECK(noMarkerLeak, "K6: a DoP-jelölő (0x05 / 0xFA) soha nem kerül át a natív DSD bitfolyamba");
+
+    // K7 (a): Ha a meghajtó nem tud natív DSD-t, de PCM-ben tudja a dopRate-et -> DoP PCM-ként (24 bit a 32-ben)
+    {
+        auto st = std::make_shared<FakeAsioState>();
+        st->allowNativeDsd = false;
+        st->pcmType = ASIOSTInt32LSB;
+        st->preferredBufferSize = static_cast<long>(dopFrames);
+        AsioPlayerOutput out("Fake", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+        std::string err;
+        bool ok = out.openDop(176400, [&](int32_t* stereoDop24, size_t n) {
+            for (size_t i = 0; i < n; ++i) {
+                const uint8_t marker = (i & 1) ? 0xFAu : 0x05u;
+                stereoDop24[2 * i]     = static_cast<int32_t>((uint32_t(marker) << 16) | 0x1234u);
+                stereoDop24[2 * i + 1] = static_cast<int32_t>((uint32_t(marker) << 16) | 0x5678u);
+            }
+        }, &err);
+        out.setActive(true);
+        for (int wait = 0; wait < 100 && !out.isRunning(); ++wait)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        st->triggerBufferSwitch(0);
+
+        bool dopWordsOk = (st->buffers[0][0].size() == dopFrames * 4);
+        for (size_t i = 0; i < dopFrames && dopWordsOk; ++i) {
+            uint32_t wL = 0, wR = 0;
+            std::memcpy(&wL, &st->buffers[0][0][i * 4], 4);
+            std::memcpy(&wR, &st->buffers[1][0][i * 4], 4);
+            const uint32_t expMarker = (i & 1) ? 0xFAu : 0x05u;
+            if (wL != (((expMarker << 16) | 0x1234u) << 8)) dopWordsOk = false;
+            if (wR != (((expMarker << 16) | 0x5678u) << 8)) dopWordsOk = false;
+        }
+        CHECK(ok && !out.isNativeDsdActive() && out.isDopPcmActive() && dopWordsOk,
+              "K7: natív DSD hiányában DoP PCM-ként (24 bit a 32-ben) bitpontosan működik");
+        out.close();
+    }
+
+    // K7 (b): Harmadik eset – sem natív DSD, sem PCM dopRate nem támogatott -> false + error="format"
+    {
+        auto st = std::make_shared<FakeAsioState>();
+        st->allowNativeDsd = false;
+        st->supportedRates = { 44100, 48000, 96000 }; // 176400 nem támogatott
+        AsioPlayerOutput out("Fake", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+        std::string err;
+        bool ok = out.openDop(176400, [](int32_t*, size_t) {}, &err);
+        CHECK(!ok && err == "format", "K7: nem támogatott DSD/DoP esetén false és error='format' (kapott: '%s')", err.c_str());
+        out.close();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// K8: Hibák (init, createBuffers, kAsioResetRequest, eltűnő meghajtó, 2. példány)
+// ---------------------------------------------------------------------------
+static void testK8ErrorHandlingAndReset() {
+    std::printf("\n[K8] Hibakezelés: init-hiba, createBuffers-hiba, kAsioResetRequest, eltűnő meghajtó, újranyitás\n");
+
+    // 1. Indítási (init) hiba
+    {
+        auto st = std::make_shared<FakeAsioState>();
+        st->failInit = true;
+        AsioPlayerOutput out("Fake", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+        std::string err;
+        bool ok = out.open(48000, [](float*, size_t) {}, &err);
+        CHECK(!ok && !err.empty(), "K8: meghajtó init() hiba esetén false és érthető hibakód ('%s')", err.c_str());
+        out.close();
+    }
+
+    // 2. createBuffers hiba
+    {
+        auto st = std::make_shared<FakeAsioState>();
+        st->failCreateBuffers = true;
+        AsioPlayerOutput out("Fake", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+        std::string err;
+        bool ok = out.open(48000, [](float*, size_t) {}, &err);
+        CHECK(!ok && err == "create_buffers", "K8: createBuffers() hiba esetén false és 'create_buffers' ('%s')", err.c_str());
+        out.close();
+    }
+
+    // 3. Egyszerre csak egy ASIO-meghajtó példány lehet nyitva; kAsioResetRequest és újranyitás
+    {
+        auto st = std::make_shared<FakeAsioState>();
+        AsioPlayerOutput out1("Fake1", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+        std::string err1;
+        bool ok1 = out1.open(48000, [](float* s, size_t n) { std::memset(s, 0, n * 2 * sizeof(float)); }, &err1);
+        out1.setActive(true);
+        for (int wait = 0; wait < 100 && !out1.isRunning(); ++wait)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+        // Második példány megnyitása közben -> "busy"
+        auto st2 = std::make_shared<FakeAsioState>();
+        AsioPlayerOutput out2("Fake2", [st2](std::string*) -> IASIO* { return new FakeAsioDriver(st2); });
+        std::string err2;
+        bool ok2 = out2.open(48000, [](float*, size_t) {}, &err2);
+        CHECK(ok1 && !ok2 && err2 == "busy", "K8: második ASIO-példány nyitása érthető 'busy' hibát ad ('%s')", err2.c_str());
+
+        // Lejátszás közbeni kAsioResetRequest
+        const long resetResp = st->triggerResetRequest();
+        for (int wait = 0; wait < 200 && out1.isOpen(); ++wait)
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        CHECK(resetResp == 1L && out1.resetCount() >= 1 && out1.lastError() == "reset",
+              "K8: kAsioResetRequest feldolgozva (resp=%ld, resetCount=%u, lastError='%s')",
+              resetResp, out1.resetCount(), out1.lastError().c_str());
+        out1.close();
+
+        // Újranyitás kAsioResetRequest után
+        std::string errReopen;
+        bool reopened = out1.open(96000, [](float* s, size_t n) { std::memset(s, 0, n * 2 * sizeof(float)); }, &errReopen);
+        CHECK(reopened && out1.actualRate() == 96000, "K8: kAsioResetRequest után a kimenet hibátlanul újranyitható (96000 Hz)");
+
+        // Eltűnő meghajtó szimulálása lejátszás közben
+        out1.setActive(true);
+        for (int wait = 0; wait < 100 && !out1.isRunning(); ++wait)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        st->deviceLost.store(true);
+        for (int wait = 0; wait < 200 && out1.isOpen(); ++wait)
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        CHECK(!out1.isOpen() && out1.lastError() == "device_lost",
+              "K8: eltűnő meghajtó észlelve, nincs összeomlás (lastError='%s')", out1.lastError().c_str());
+        out1.close();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// K9 és K10: 0 foglalás a bufferSwitch alatt + consumedFrames() pontosság
+// ---------------------------------------------------------------------------
+static void testK9K10RealtimeAndConsumed() {
+    std::printf("\n[K9 / K10] Valós idejű foglalásmentesség (bufferSwitch) és consumedFrames()\n");
+    auto st = std::make_shared<FakeAsioState>();
+    st->pcmType = ASIOSTInt32LSB;
+    st->preferredBufferSize = 256;
+
+    std::atomic<int> renderCalls{0};
+    AsioPlayerOutput out("Fake", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+    std::string err;
+    bool opened = out.open(48000, [&](float* stereo, size_t n) {
+        renderCalls.fetch_add(1, std::memory_order_relaxed);
+        for (size_t i = 0; i < n * 2; ++i) stereo[i] = 0.25f;
+    }, &err);
+    out.setActive(true);
+    for (int wait = 0; wait < 100 && !out.isRunning(); ++wait)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+    // Bemelegítő bufferSwitch
+    st->triggerBufferSwitch(0);
+    renderCalls.store(0);
+
+    g_rtAllocCount.store(0, std::memory_order_seq_cst);
+    g_rtTrackAlloc = true;
+    for (int i = 0; i < 20; ++i) {
+        st->triggerBufferSwitch(i & 1);
+    }
+    g_rtTrackAlloc = false;
+
+    const int gotCalls = renderCalls.load();
+    const uint64_t allocs = g_rtAllocCount.load(std::memory_order_seq_cst);
+    CHECK(opened && gotCalls == 20, "K9: mind a 20 bufferSwitch render-hívás ténylegesen lefutott (%d/20)", gotCalls);
+    CHECK(opened && gotCalls == 20 && allocs == 0,
+          "K9: bufferSwitch alatt 0 memória-foglalás (mért: %llu)", static_cast<unsigned long long>(allocs));
+    std::printf("K_METRIC: {\"test\":\"K9_rt_allocs\",\"allocs\":%llu,\"calls\":%d}\n",
+                static_cast<unsigned long long>(allocs), gotCalls);
+
+    // K10: 1 + 20 = 21 puffer × 256 keret = 5376 keret (±1 puffer = ±256 kereten belül)
+    const uint64_t consumed = out.consumedFrames();
+    const uint64_t expectedFrames = 21ull * 256ull;
+    const uint64_t diff = (consumed > expectedFrames) ? (consumed - expectedFrames) : (expectedFrames - consumed);
+    CHECK(opened && consumed > 0 && diff <= 256,
+          "K10: consumedFrames() = %llu (várt: %llu ± 256)",
+          static_cast<unsigned long long>(consumed), static_cast<unsigned long long>(expectedFrames));
+    std::printf("K_METRIC: {\"test\":\"K10_consumed\",\"consumed\":%llu,\"expected\":%llu,\"diff\":%llu}\n",
+                static_cast<unsigned long long>(consumed), static_cast<unsigned long long>(expectedFrames),
+                static_cast<unsigned long long>(diff));
+
+    out.flush();
+    for (int wait = 0; wait < 50 && out.consumedFrames() != 0; ++wait)
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    CHECK(opened && out.consumedFrames() == 0, "K10: flush() után consumedFrames() == 0");
+    out.close();
+}
+
+// ---------------------------------------------------------------------------
+// 7.3: Véletlen-mag teszt (AQ_CHECK_SEED, 40 véletlen eset)
+// ---------------------------------------------------------------------------
+static void testSeed40(uint64_t seed) {
+    std::printf("\n[7.3] Véletlen-mag tesztek (AQ_CHECK_SEED=%llu, 40 véletlen eset)\n",
+                static_cast<unsigned long long>(seed));
+    std::mt19937_64 rng(seed);
+    const std::vector<uint32_t> allCandidates = { 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000 };
+    const std::vector<ASIOSampleType> pcmTypes = { ASIOSTInt32LSB, ASIOSTInt24LSB, ASIOSTInt16LSB, ASIOSTFloat32LSB, ASIOSTFloat64LSB };
+    const std::vector<uint32_t> dopRates = { 176400, 352800, 705600, 1411200, 2822400 };
+
+    int passedCases = 0;
+    for (int c = 0; c < 40; ++c) {
+        auto st = std::make_shared<FakeAsioState>();
+        st->preferredBufferSize = (c % 2 == 0) ? 64 : 128;
+
+        // Véletlen képességkészlet
+        st->supportedRates.clear();
+        std::vector<uint32_t> expSupported;
+        for (uint32_t r : allCandidates) {
+            if ((rng() % 100) < 65 || r == 48000) {
+                st->supportedRates.insert(r);
+                expSupported.push_back(r);
+            }
+        }
+
+        const int mode = static_cast<int>(rng() % 4); // 0..1: PCM, 2: DSD, 3: hibainjekció
+        bool caseOk = false;
+
+        if (mode == 0 || mode == 1) {
+            const ASIOSampleType pt = pcmTypes[rng() % pcmTypes.size()];
+            const uint32_t sr = expSupported[rng() % expSupported.size()];
+            st->pcmType = pt;
+            const size_t nFrames = static_cast<size_t>(st->preferredBufferSize);
+            std::vector<float> sigL(nFrames), sigR(nFrames);
+            for (size_t i = 0; i < nFrames; ++i) {
+                int32_t qL = static_cast<int32_t>((rng() % 16000000LL) - 8000000LL);
+                int32_t qR = static_cast<int32_t>((rng() % 16000000LL) - 8000000LL);
+                sigL[i] = static_cast<float>(std::ldexp(static_cast<double>(qL), -23));
+                sigR[i] = static_cast<float>(std::ldexp(static_cast<double>(qR), -23));
+            }
+            AsioPlayerOutput out("FakeSeed", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+            const auto gotRates = out.supportedRates();
+            std::string err;
+            bool ok = out.open(sr, [&](float* s, size_t n) {
+                for (size_t i = 0; i < n; ++i) {
+                    s[2 * i]     = sigL[i % nFrames];
+                    s[2 * i + 1] = sigR[i % nFrames];
+                }
+            }, &err);
+            out.setActive(true);
+            for (int w = 0; w < 100 && !out.isRunning(); ++w)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            const int nBlocks = 1 + static_cast<int>(rng() % 4);
+            for (int b = 0; b < nBlocks; ++b) st->triggerBufferSwitch(b & 1);
+            const auto expL = refExpectedPcmBytes(sigL, pt);
+            const auto expR = refExpectedPcmBytes(sigR, pt);
+            const int lastIdx = (nBlocks - 1) & 1;
+            const uint64_t expectedConsumed = static_cast<uint64_t>(nBlocks) * nFrames;
+            caseOk = ok && (gotRates == expSupported) && (out.actualRate() == sr) &&
+                     (st->buffers[0][lastIdx] == expL) && (st->buffers[1][lastIdx] == expR) &&
+                     (out.consumedFrames() == expectedConsumed);
+            out.close();
+        } else if (mode == 2) {
+            const uint32_t dr = dopRates[rng() % dopRates.size()];
+            const ASIOSampleType dt = (rng() & 1) ? ASIOSTDSDInt8LSB1 : ASIOSTDSDInt8MSB1;
+            st->allowNativeDsd = true;
+            st->dsdType = dt;
+            const size_t nFrames = static_cast<size_t>(st->preferredBufferSize);
+            std::vector<uint8_t> dsdL(nFrames * 2), dsdR(nFrames * 2);
+            for (size_t i = 0; i < nFrames * 2; ++i) {
+                dsdL[i] = static_cast<uint8_t>(rng() & 0xFF);
+                dsdR[i] = static_cast<uint8_t>(rng() & 0xFF);
+            }
+            AsioPlayerOutput out("FakeSeed", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+            std::string err;
+            bool ok = out.openDop(dr, [&](int32_t* d, size_t n) {
+                for (size_t i = 0; i < n; ++i) {
+                    const uint8_t m = (i & 1) ? 0xFAu : 0x05u;
+                    d[2 * i]     = static_cast<int32_t>((uint32_t(m) << 16) | (uint32_t(dsdL[2 * i]) << 8) | dsdL[2 * i + 1]);
+                    d[2 * i + 1] = static_cast<int32_t>((uint32_t(m) << 16) | (uint32_t(dsdR[2 * i]) << 8) | dsdR[2 * i + 1]);
+                }
+            }, &err);
+            out.setActive(true);
+            for (int w = 0; w < 100 && !out.isRunning(); ++w)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            st->triggerBufferSwitch(0);
+            std::vector<uint8_t> expL(nFrames * 2), expR(nFrames * 2);
+            for (size_t i = 0; i < nFrames * 2; ++i) {
+                expL[i] = (dt == ASIOSTDSDInt8LSB1) ? refReverseBits8(dsdL[i]) : dsdL[i];
+                expR[i] = (dt == ASIOSTDSDInt8LSB1) ? refReverseBits8(dsdR[i]) : dsdR[i];
+            }
+            caseOk = ok && out.isNativeDsdActive() && (st->buffers[0][0] == expL) && (st->buffers[1][0] == expR);
+            out.close();
+        } else {
+            // Hibainjekció (init vagy createBuffers hiba)
+            if (rng() & 1) st->failInit = true;
+            else st->failCreateBuffers = true;
+            AsioPlayerOutput out("FakeSeed", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+            std::string err;
+            bool ok = out.open(48000, [](float*, size_t) {}, &err);
+            caseOk = !ok && !err.empty();
+            out.close();
+        }
+        if (caseOk) ++passedCases;
+    }
+    CHECK(passedCases == 40, "7.3 SEED: mind a 40 véletlen konfiguráció egyezik a független elvárással (%d/40)", passedCases);
+    std::printf("K_METRIC: {\"test\":\"SEED40\",\"seed\":%llu,\"passed\":%d}\n",
+                static_cast<unsigned long long>(seed), passedCases);
+}
+
+int main() {
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
+    const char* seedEnv = std::getenv("AQ_CHECK_SEED");
+    const uint64_t seed = (seedEnv && *seedEnv) ? std::strtoull(seedEnv, nullptr, 10) : 20261118ull;
+    std::printf("AQ_CHECK_SEED=%llu\n", static_cast<unsigned long long>(seed));
+    std::printf("========================================================\n");
+    std::printf(" Aqulify – Windows ASIO-kimenet motor teszt (test_asio)\n");
+    std::printf("========================================================\n");
+
+    testK3DriverListAndFactory();
+    testK4PcmFormats();
+    testK5CapabilitiesAndRates();
+    testK6K7DsdAndDop();
+    testK8ErrorHandlingAndReset();
+    testK9K10RealtimeAndConsumed();
+    testSeed40(seed);
+
+    std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
+    return g_fail ? 1 : 0;
+}
