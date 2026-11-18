@@ -6,10 +6,13 @@
  */
 #include <algorithm>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <cstring>
 #include <map>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <soxr.h>
@@ -20,7 +23,15 @@ namespace ee_analyzer {
 class UpsampleEngine {
 public:
     UpsampleEngine() = default;
-    ~UpsampleEngine() { reset(); }
+    ~UpsampleEngine() { reset(); stopWorker(); }
+
+    /**
+     * Számítási szálak: 1 = egy szál (egy sztereó libsoxr-példány), 2 = bal és jobb csatorna két mono példányban, a
+     * jobb egy állandó segédszálon. A két mód kimenete bitre azonos (a csatornák a libsoxr-ben egymástól függetlenül,
+     * ugyanazzal a szűrővel számolódnak). A következő init()-től érvényes. A dekóder-szálon fut, nem a hangszálon.
+     */
+    void setThreads(int n) { threads_ = (n == 2) ? 2 : 1; }
+    int threads() const { return threads_; }
 
     UpsampleEngine(const UpsampleEngine&) = delete;
     UpsampleEngine& operator=(const UpsampleEngine&) = delete;
@@ -37,15 +48,17 @@ public:
                                      const std::map<uint32_t, uint32_t>& customMap,
                                      bool bypassUpsample,
                                      bool isDsd,
-                                     std::string* reasonOut = nullptr) {
+                                     std::string* reasonOut = nullptr,
+                                     uint32_t maxRate = 0) {
         auto setReason = [&](const char* r) { if (reasonOut) *reasonOut = r; };
         if (bypassUpsample) { setReason("bypass"); return srcRate; }
         if (isDsd) { setReason("dsd"); return srcRate; }
         if (srcRate > 192000) { setReason("source_rate"); return srcRate; }
         if (rule == audioopt::UpsampleRule::Off) { setReason("off"); return srcRate; }
 
+        // A felső korlát (a terhelés-tanácsadó állítja) a tudott mintavételek közül kizárja a nagyobbakat
         auto isSupported = [&](uint32_t r) {
-            return std::find(supported.begin(), supported.end(), r) != supported.end();
+            return std::find(supported.begin(), supported.end(), r) != supported.end() && (maxRate == 0 || r <= maxRate);
         };
 
         if (rule == audioopt::UpsampleRule::Double) {
@@ -65,11 +78,11 @@ public:
             return srcRate;
         }
         if (rule == audioopt::UpsampleRule::MaxOutput) {
-            uint32_t maxRate = srcRate;
+            uint32_t best = srcRate;
             for (uint32_t r : supported) {
-                if (r > maxRate) maxRate = r;
+                if (isSupported(r) && r > best) best = r;
             }
-            if (maxRate > srcRate) { setReason(""); return maxRate; }
+            if (best > srcRate) { setReason(""); return best; }
             setReason("dac_unsupported");
             return srcRate;
         }
@@ -112,17 +125,18 @@ public:
         soxr_runtime_spec_t rt_spec = soxr_runtime_spec(1);
 
         soxr_error_t err = nullptr;
-        soxr_ = soxr_create(static_cast<double>(srcRate),
-                            static_cast<double>(dstRate),
-                            channels,
-                            &err,
-                            &io_spec,
-                            &q_spec,
+        split_ = (threads_ == 2 && channels == 2);
+        const unsigned perInstance = split_ ? 1u : channels;
+        soxr_ = soxr_create(static_cast<double>(srcRate), static_cast<double>(dstRate), perInstance, &err, &io_spec, &q_spec,
                             &rt_spec);
-        if (err != nullptr || soxr_ == nullptr) {
-            active_ = false;
+        if (err == nullptr && soxr_ != nullptr && split_) {
+            soxrR_ = soxr_create(static_cast<double>(srcRate), static_cast<double>(dstRate), 1, &err, &io_spec, &q_spec, &rt_spec);
+        }
+        if (err != nullptr || soxr_ == nullptr || (split_ && soxrR_ == nullptr)) {
+            reset();
             return false;
         }
+        if (split_) startWorker();
         active_ = true;
         return true;
     }
@@ -142,15 +156,19 @@ public:
             soxr_delete(soxr_);
             soxr_ = nullptr;
         }
+        if (soxrR_) {
+            soxr_delete(soxrR_);
+            soxrR_ = nullptr;
+        }
+        split_ = false;
         active_ = false;
         srcRate_ = 0;
         dstRate_ = 0;
     }
 
     void clear() {
-        if (soxr_) {
-            soxr_clear(soxr_);
-        }
+        if (soxr_) soxr_clear(soxr_);
+        if (soxrR_) soxr_clear(soxrR_);
     }
 
     /**
@@ -171,22 +189,12 @@ public:
             return true;
         }
 
-        size_t idone = 0;
         size_t odone = 0;
-        soxr_error_t err = soxr_process(soxr_, in, inFrames, &idone, out, outCapacityFrames, &odone);
+        soxr_error_t err = split_ ? processSplit(in, inFrames, out, outCapacityFrames, odone)
+                                  : runOne(soxr_, in, inFrames, out, outCapacityFrames, odone);
         outFrames = odone;
         processedFrames_ += odone;
-
-        // Fejtér alkalmazása és túlvezérlés számlálása
-        const size_t totalSamples = odone * channels_;
-        for (size_t i = 0; i < totalSamples; ++i) {
-            float v = out[i] * headroomGain_;
-            if (v > 1.0f || v < -1.0f) {
-                ++clippedSamples_;
-            }
-            out[i] = v;
-        }
-
+        applyHeadroom(out, odone * channels_);
         return (err == nullptr);
     }
 
@@ -198,20 +206,12 @@ public:
             outFrames = 0;
             return true;
         }
-        size_t idone = 0, odone = 0;
-        soxr_error_t err = soxr_process(soxr_, nullptr, 0, &idone, out, outCapacityFrames, &odone);
+        size_t odone = 0;
+        soxr_error_t err = split_ ? processSplit(nullptr, 0, out, outCapacityFrames, odone)
+                                  : runOne(soxr_, nullptr, 0, out, outCapacityFrames, odone);
         outFrames = odone;
         processedFrames_ += odone;
-
-        const size_t totalSamples = odone * channels_;
-        for (size_t i = 0; i < totalSamples; ++i) {
-            float v = out[i] * headroomGain_;
-            if (v > 1.0f || v < -1.0f) {
-                ++clippedSamples_;
-            }
-            out[i] = v;
-        }
-
+        applyHeadroom(out, odone * channels_);
         return (err == nullptr);
     }
 
@@ -236,6 +236,93 @@ public:
     void resetClippedSamples() { clippedSamples_ = 0; }
 
 private:
+    static soxr_error_t runOne(soxr_t s, const float* in, size_t inFrames, float* out, size_t outCap, size_t& odone) {
+        size_t idone = 0;
+        odone = 0;
+        return soxr_process(s, in, inFrames, &idone, out, outCap, &odone);
+    }
+
+    void applyHeadroom(float* out, size_t samples) {
+        for (size_t i = 0; i < samples; ++i) {
+            const float v = out[i] * headroomGain_;
+            if (v > 1.0f || v < -1.0f) ++clippedSamples_;
+            out[i] = v;
+        }
+    }
+
+    /** Két szál: a bal csatorna ezen a szálon, a jobb a segédszálon; a végén visszafésülve. in == nullptr: kiürítés. */
+    soxr_error_t processSplit(const float* in, size_t inFrames, float* out, size_t outCap, size_t& odone) {
+        if (in) {
+            if (inL_.size() < inFrames) { inL_.resize(inFrames); inR_.resize(inFrames); }
+            for (size_t i = 0; i < inFrames; ++i) { inL_[i] = in[2 * i]; inR_[i] = in[2 * i + 1]; }
+        }
+        if (outL_.size() < outCap) { outL_.resize(outCap); outR_.resize(outCap); }
+        {
+            std::lock_guard<std::mutex> lk(jobMu_);
+            jobIn_ = in ? inR_.data() : nullptr;
+            jobInFrames_ = in ? inFrames : 0;
+            jobOutCap_ = outCap;
+            jobDone_ = false;
+            jobPending_ = true;
+        }
+        jobCv_.notify_one();
+        size_t doneL = 0;
+        const soxr_error_t eL = runOne(soxr_, in ? inL_.data() : nullptr, in ? inFrames : 0, outL_.data(), outCap, doneL);
+        {
+            std::unique_lock<std::mutex> lk(jobMu_);
+            jobCv_.wait(lk, [&] { return jobDone_; });
+        }
+        const size_t n = std::min(doneL, jobOutFrames_);
+        for (size_t i = 0; i < n; ++i) { out[2 * i] = outL_[i]; out[2 * i + 1] = outR_[i]; }
+        odone = n;
+        return eL != nullptr ? eL : jobErr_;
+    }
+
+    void startWorker() {
+        if (worker_.joinable()) return;
+        quit_ = false;
+        worker_ = std::thread([this] {
+            std::unique_lock<std::mutex> lk(jobMu_);
+            for (;;) {
+                jobCv_.wait(lk, [&] { return jobPending_ || quit_; });
+                if (quit_) return;
+                jobPending_ = false;
+                const float* in = jobIn_;
+                const size_t inFrames = jobInFrames_, cap = jobOutCap_;
+                lk.unlock();
+                size_t done = 0;
+                const soxr_error_t e = runOne(soxrR_, in, inFrames, outR_.data(), cap, done);
+                lk.lock();
+                jobOutFrames_ = done;
+                jobErr_ = e;
+                jobDone_ = true;
+                jobCv_.notify_all();
+            }
+        });
+    }
+
+    void stopWorker() {
+        if (!worker_.joinable()) return;
+        {
+            std::lock_guard<std::mutex> lk(jobMu_);
+            quit_ = true;
+        }
+        jobCv_.notify_all();
+        worker_.join();
+    }
+
+    int threads_ = 1;
+    bool split_ = false;
+    soxr_t soxrR_ = nullptr;
+    std::vector<float> inL_, inR_, outL_, outR_;
+    std::thread worker_;
+    std::mutex jobMu_;
+    std::condition_variable jobCv_;
+    bool jobPending_ = false, jobDone_ = false, quit_ = false;
+    const float* jobIn_ = nullptr;
+    size_t jobInFrames_ = 0, jobOutCap_ = 0, jobOutFrames_ = 0;
+    soxr_error_t jobErr_ = nullptr;
+
     soxr_t soxr_ = nullptr;
     bool active_ = false;
     uint32_t srcRate_ = 0;

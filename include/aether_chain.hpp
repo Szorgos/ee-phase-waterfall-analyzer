@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "param_block.hpp"
+#include "audio_options.hpp"
 #include "ir_data.hpp"
 #include "ee_dsp.hpp"
 #include "magic_touch.hpp"
@@ -66,6 +67,9 @@ public:
     }
 
     double sampleRate() const { return sampleRate_.load(); }
+
+    /** 384 kHz fölötti mintavételen a lánc nem dolgozik (bitpontos átvitel); bármely szálról olvasható. */
+    bool dspBypassedForRate() const { return dspBypassFlag_.load(std::memory_order_relaxed); }
 
     /** Új impulzusválasz a konvolvernek (bármely szálról, nem valós idejű). */
     void submitIr(IrData ir) {
@@ -208,6 +212,14 @@ private:
     };
 
     void setSampleRateInternal(uint32_t sr) {
+        // A modulok (LSP) legfeljebb audioopt::kMaxDspRate-re vannak méretezve: fölötte a lánc bitpontosan átenged,
+        // és a modulok mintavétele nem változik (nem kapnak érvénytelen értéket)
+        dspBypass_ = sr > audioopt::kMaxDspRate;
+        dspBypassFlag_.store(dspBypass_, std::memory_order_relaxed);
+        if (dspBypass_) {
+            sampleRate_.store(sr);
+            return;
+        }
         magic_.setSampleRate(sr);
         eq_.setSampleRate(sr);
         loudness_.setSampleRate(sr);
@@ -407,6 +419,8 @@ private:
     }
 
     void processChunk(float* L, float* R, size_t m) {
+        // 384 kHz fölött a modulok (LSP) nem futhatnak: a jel bitpontosan, érintetlenül megy tovább
+        if (dspBypass_) return;
         quantum_.store(static_cast<uint32_t>(m), std::memory_order_relaxed);
         const ParamData& d = current_;
 
@@ -628,6 +642,8 @@ private:
     // megosztott
     std::atomic<float> outGainTarget_{1.0f};
     std::atomic<uint32_t> sampleRate_{48000};
+    bool dspBypass_ = false;                    // csak a valós idejű szál olvassa (a mintavétel leállított láncnál változik)
+    std::atomic<bool> dspBypassFlag_{false};
     std::atomic<uint32_t> quantum_{0};
     ParamBlock workerParams_;
 

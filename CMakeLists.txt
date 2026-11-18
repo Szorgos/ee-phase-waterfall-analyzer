@@ -156,6 +156,14 @@ if(WIN32)
     target_link_libraries(test_upsample PRIVATE ws2_32 iphlpapi)
 endif()
 
+# Nagy felbontás, A rész: DSP-korlát 384 kHz fölött, 352,8–768 kHz, két szálas felmintavételezés, terhelés-tanácsadó
+add_executable(test_hires src/test_hires.cpp)
+target_link_libraries(test_hires PRIVATE aq_player ee_dsp_core soxr Threads::Threads)
+target_include_directories(test_hires PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+if(WIN32)
+    target_link_libraries(test_hires PRIVATE ws2_32 iphlpapi)
+endif()
+
 
 # 9b. Tesztalkalmazás: DSD (.dsf/.dff) fejléc, FIR szűrő, PCM dekódolás, tekerés, ID3v2, DST elutasítás, DoP 1.1
 add_executable(test_dsd src/test_dsd.cpp)

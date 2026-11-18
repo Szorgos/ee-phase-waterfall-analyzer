@@ -28,7 +28,9 @@ public:
 
     void setSampleRate(uint32_t sr) {
         sr_ = sr > 0 ? sr : 48000;
-        const size_t need = static_cast<size_t>(std::ceil(kMaxDelayMs * 1e-3 * 192000.0)) + 1;   // a legnagyobb mintavételhez
+        // A puffer a tényleges mintavételhez (legalább 192 kHz-hez): 352,8 / 384 kHz-en az 50 ms 19 200 minta
+        const double maxSr = std::max(192000.0, static_cast<double>(sr_));
+        const size_t need = static_cast<size_t>(std::ceil(kMaxDelayMs * 1e-3 * maxSr)) + 1;
         for (auto& b : buf_) if (b.size() < need) b.assign(need, 0.0f);
         rampLen_ = std::max(1.0f, 0.005f * static_cast<float>(sr_));
         update(params_);
