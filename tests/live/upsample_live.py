@@ -52,12 +52,37 @@ def get_status():
     return m or {}
 
 
+def _parse_pw_dump_objects(text):
+    """A pw-dump kimenete tartalmazhat egy vagy több egymást követő JSON dokumentumot."""
+    dec = json.JSONDecoder()
+    objs = []
+    idx = 0
+    n = len(text)
+    while idx < n:
+        while idx < n and text[idx].isspace():
+            idx += 1
+        if idx >= n:
+            break
+        try:
+            val, next_idx = dec.raw_decode(text, idx)
+        except json.JSONDecodeError:
+            break
+        if isinstance(val, list):
+            objs.extend(val)
+        elif isinstance(val, dict):
+            objs.append(val)
+        idx = next_idx
+    return objs
+
+
 def pw_node_rate(node_name="dac_a"):
     """A PipeWire gráf tényleges futási mintavételének kiolvasása pw-dump-ból (nem a motor állapota!)."""
-    out = subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=5).stdout
-    objs = json.loads(out or "[]")
+    out = subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=5).stdout or ""
+    objs = _parse_pw_dump_objects(out)
+    rate_fmt = 0
+    rate_prop = 0
     for o in objs:
-        if o.get("type") != "PipeWire:Interface:Node":
+        if not isinstance(o, dict) or o.get("type") != "PipeWire:Interface:Node":
             continue
         info = o.get("info", {})
         props = info.get("props", {})
@@ -67,15 +92,17 @@ def pw_node_rate(node_name="dac_a"):
         for fmt in info.get("params", {}).get("Format", []):
             r = fmt.get("rate")
             if isinstance(r, int) and r > 0:
-                return r
+                rate_fmt = r
         # 2. node.rate ("1/88200")
         nr = str(props.get("node.rate", ""))
         if "/" in nr:
             try:
-                return int(nr.split("/")[1])
+                r = int(nr.split("/")[1])
+                if r > 0:
+                    rate_prop = r
             except ValueError:
                 pass
-    return 0
+    return rate_fmt or rate_prop
 
 
 def pw_graph_rate():
