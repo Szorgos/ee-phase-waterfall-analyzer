@@ -56,6 +56,7 @@
 #include "../common/eqapo_paths.hpp"
 #include "dsp_state.hpp"
 #include "wasapi_loopback.hpp"
+#include "apo_detect.hpp"
 #include <endpointvolume.h>
 #include "tray.hpp"
 #include "media_smtc.hpp"
@@ -445,11 +446,19 @@ public:
                 loopbackReadPos_ = loopback_.ring().writePos.load();
             }
         }
-        const bool alive = pluginAliveLocked();
+        refreshApoOnDeviceLocked();
+        // A plugin csak akkor a forrás, ha a mostani eszköz hangját dolgozza fel: ha ezen az eszközön nincs Equalizer
+        // APO (pl. új USB DAC), a plugin egy másik eszközön fut, a zene feldolgozás nélkül szól. Ilyenkor a vízesés a
+        // loopbackből kap jelet, és a felület megmondja, mit kell bekapcsolni.
+        const bool alive = pluginServesDevice(pluginAliveLocked(), apoOnDevice_);
         if (alive != pluginActive_) {
             pluginActive_ = alive;
-            std::cout << (alive ? "[Forrás] EQ APO plugin jel aktív (DSP élőben vezérelhető).\n"
-                                : "[Forrás] WASAPI loopback (csak analízis; a DSP-hez az EQ APO plugin kell).\n");
+            if (!alive && pluginAliveLocked())
+                std::cout << "[Forrás] A mostani eszközön nincs bekapcsolva az Equalizer APO: WASAPI loopback (csak "
+                             "analízis); a plugin egy másik eszközön fut.\n";
+            else
+                std::cout << (alive ? "[Forrás] EQ APO plugin jel aktív (DSP élőben vezérelhető).\n"
+                                    : "[Forrás] WASAPI loopback (csak analízis; a DSP-hez az EQ APO plugin kell).\n");
             if (alive) pluginReadPos_ = mapping_.state()->tap.writePos.load();
             else loopbackReadPos_ = loopback_.ring().writePos.load();
             playback_.reset();   // a lejátszás mérése a plugin leállásától indul
@@ -457,7 +466,7 @@ public:
         if (!loopback_.active()) playback_.reset();   // nincs lehallgatás (nincs eszköz): nincs lejátszás
         // Az eszköz, amelyen a plugin fut (az alapértelmezett lejátszóeszköz): ha később egy másik eszközre
         // vált a hang (pl. bedugott USB hangkártya), a felület meg tudja mondani, hol működött eddig
-        if (pluginActive_) {
+        if (pluginActive_ && apoOnDevice_ == ApoOnDevice::Yes) {   // csak biztosan feldolgozott eszközt jegyzünk meg
             const std::string dev = loopback_.deviceName();
             if (!dev.empty() && dev != apoDevice_) {
                 apoDevice_ = dev;
@@ -621,13 +630,18 @@ public:
             if (pluginIntegrated()) {
                 // szünet (nem hiba), hiba, másik eszköz vagy nincs eszköz (dsp_state.hpp)
                 DspStateInput in;
+                in.pluginAlive = pluginAliveLocked();
                 in.deviceOk = loopback_.active();
                 in.device = dev;
                 in.apoDevice = apoDevice_;
                 in.playingMs = playback_.playingMs();
+                in.apoOnDevice = apoOnDevice_;
+                // Ha ezen az eszközön nincs Equalizer APO, a „hol működik” név egy olyan eszköz legyen, amelyen van
+                // (a korábban mentett név lehet éppen ez az eszköz, ha a plugin közben egy másikon futott)
+                if (apoOnDevice_ == ApoOnDevice::No && (in.apoDevice.empty() || in.apoDevice == dev)) in.apoDevice = apoDeviceHint_;
                 s += ",\"dspState\":\"" + std::string(dspStateName(classifyDspState(in))) + "\"";
                 s += ",\"pluginExpected\":true";
-                if (!apoDevice_.empty() && apoDevice_ != dev) s += ",\"apoDevice\":\"" + jsonEscape(apoDevice_) + "\"";
+                if (!in.apoDevice.empty() && in.apoDevice != dev) s += ",\"apoDevice\":\"" + jsonEscape(in.apoDevice) + "\"";
                 if (!win::eqApoConfiguratorPath().empty()) s += ",\"apoConfigurator\":true";
             }
         }
@@ -652,6 +666,25 @@ public:
     }
 
 private:
+    /** A mostani lejátszóeszközön van-e Equalizer APO (eszközváltáskor és 5 s-onként újraolvasva). */
+    void refreshApoOnDeviceLocked() {
+        const std::wstring id = loopback_.deviceId();
+        const uint64_t now = GetTickCount64();
+        if (id == apoCheckedId_ && now - apoCheckedAt_ < 5000) return;
+        apoCheckedId_ = id;
+        apoCheckedAt_ = now;
+        const ApoOnDevice v = id.empty() ? ApoOnDevice::Unknown : win::apoOnRenderDevice(id);
+        if (v != apoOnDevice_) {
+            apoOnDevice_ = v;
+            if (v == ApoOnDevice::No) {
+                apoDeviceHint_ = win::firstActiveApoDeviceName();
+                std::cout << "[APO] A(z) „" << loopback_.deviceName() << "” eszközön nincs bekapcsolva az Equalizer APO"
+                          << (apoDeviceHint_.empty() ? std::string(".") : "; bekapcsolva itt: „" + apoDeviceHint_ + "”.")
+                          << "\n";
+            }
+        }
+    }
+
     bool pluginAliveLocked() const {
         const AetherSharedState* st = mapping_.state();
         if (!st) return false;
@@ -705,6 +738,10 @@ private:
     uint64_t loopbackReadPos_ = 0;
     uint64_t lastPluginData_ = 0;
     std::string apoDevice_;
+    ApoOnDevice apoOnDevice_ = ApoOnDevice::Unknown;
+    std::wstring apoCheckedId_;
+    uint64_t apoCheckedAt_ = 0;
+    std::string apoDeviceHint_;
     PlaybackDetector playback_;
     std::mutex irMutex_;
     IrData ir_;

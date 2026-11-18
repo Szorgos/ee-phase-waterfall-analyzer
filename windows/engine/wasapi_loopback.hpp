@@ -73,6 +73,11 @@ public:
         std::lock_guard<std::mutex> lk(nameMutex_);
         return deviceName_;
     }
+    /** A mostani lejátszóeszköz WASAPI-azonosítója (üres, ha még nincs eszköz). */
+    std::wstring deviceId() const {
+        std::lock_guard<std::mutex> lk(nameMutex_);
+        return deviceId_;
+    }
 
 private:
     void threadMain() {
@@ -138,6 +143,7 @@ private:
             std::lock_guard<std::mutex> lk(nameMutex_);
             if (deviceName_ != name) std::cout << "[Loopback] Lejátszóeszköz: " << name << "\n";
             deviceName_ = name;
+            deviceId_ = devId;
         }
 
         ComPtr<IAudioClient> client;
@@ -273,6 +279,7 @@ private:
     std::atomic<uint32_t> sampleRate_{48000};
     mutable std::mutex nameMutex_;
     std::string deviceName_;
+    std::wstring deviceId_;
     std::thread thread_;
 };
 
