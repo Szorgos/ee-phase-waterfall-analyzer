@@ -1,0 +1,13 @@
+--- a/include/load_advisor.hpp
++++ b/include/load_advisor.hpp
+@@ -63,8 +63,8 @@
+     Advice a;
+     a.warn = (s.cpuPct > c.thresholdPct && s.sustainedSec >= c.sustainSec) || s.newUnderruns > 0;
+     if (!a.warn || o.upsampleRule == audioopt::UpsampleRule::Off) return a;
+-    if (cores >= 4 && o.upsampleThreads != 2) a.step = Step::TwoThreads;
+-    else if (o.upsamplePrecision > 24) a.step = Step::Precision24;
++    if (o.upsamplePrecision > 24) a.step = Step::Precision24;
++    else if (cores >= 4 && o.upsampleThreads != 2) a.step = Step::TwoThreads;
+     else if (currentTarget > 192000) a.step = Step::LowerTarget;
+     else a.step = Step::UpsampleOff;
+     return a;

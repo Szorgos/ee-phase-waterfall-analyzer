@@ -1,0 +1,11 @@
+--- a/include/load_advisor.hpp
++++ b/include/load_advisor.hpp
+@@ -75,7 +75,7 @@
+     case Step::TwoThreads: o.upsampleThreads = 2; break;
+     case Step::Precision24: o.upsamplePrecision = 24; break;
+     case Step::LowerTarget:
+-        if (currentTarget > 384000) o.upsampleMaxRate = 384000;
++        if (currentTarget > 384000) o.upsampleMaxRate = 192000;
+         else if (currentTarget > 192000) o.upsampleMaxRate = 192000;
+         break;
+     case Step::UpsampleOff: o.upsampleRule = audioopt::UpsampleRule::Off; break;

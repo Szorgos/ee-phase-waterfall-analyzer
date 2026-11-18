@@ -1,0 +1,11 @@
+--- a/src/file_player.cpp
++++ b/src/file_player.cpp
+@@ -321,7 +321,7 @@
+         // Szálak: 2 = kért; automatikus = 2 szál a nagy célmintavételeknél (≥ 352,8 kHz), ha van legalább 4 mag
+         const int thr = upsampleOpts_.upsampleThreads == 2 ? 2
+                       : upsampleOpts_.upsampleThreads == 1 ? 1
+-                      : (targetRate >= 352800 && load::logicalCores() >= 4 ? 2 : 1);
++                      : (targetRate >= 352800 && load::logicalCores() >= 400 ? 2 : 1);
+         upsampler_.setThreads(thr);
+         upsampleThreadsUsed_ = thr;
+         upsampler_.initWithOptions(srcRate, targetRate, 2, upsampleOpts_);

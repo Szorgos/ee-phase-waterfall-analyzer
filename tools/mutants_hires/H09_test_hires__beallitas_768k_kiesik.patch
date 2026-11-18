@@ -1,0 +1,11 @@
+--- a/include/audio_options.hpp
++++ b/include/audio_options.hpp
+@@ -45,7 +45,7 @@
+ /** A választható pufferméretek mintában (0: automatikus, a rendszer dönt). */
+ inline constexpr std::array<int, 8> kBufferChoices{ 0, 64, 128, 256, 512, 1024, 2048, 4096 };
+ /** A választható rögzített mintavételek. */
+-inline constexpr std::array<int, 10> kRateChoices{ 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000 };
++inline constexpr std::array<int, 10> kRateChoices{ 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 705600 };
+ /** A DSP-lánc legnagyobb mintavétele: fölötte a lánc bitpontosan átenged (az LSP-modulok erre vannak méretezve). */
+ inline constexpr uint32_t kMaxDspRate = 384000;
+ /** A felmintavételezés felső korlátjának választható értékei (0: nincs korlát). */

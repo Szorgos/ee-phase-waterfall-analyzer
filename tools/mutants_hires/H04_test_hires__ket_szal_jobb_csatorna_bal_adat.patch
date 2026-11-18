@@ -1,0 +1,11 @@
+--- a/include/upsample_engine.hpp
++++ b/include/upsample_engine.hpp
+@@ -254,7 +254,7 @@
+     soxr_error_t processSplit(const float* in, size_t inFrames, float* out, size_t outCap, size_t& odone) {
+         if (in) {
+             if (inL_.size() < inFrames) { inL_.resize(inFrames); inR_.resize(inFrames); }
+-            for (size_t i = 0; i < inFrames; ++i) { inL_[i] = in[2 * i]; inR_[i] = in[2 * i + 1]; }
++            for (size_t i = 0; i < inFrames; ++i) { inL_[i] = in[2 * i]; inR_[i] = in[2 * i]; }
+         }
+         if (outL_.size() < outCap) { outL_.resize(outCap); outR_.resize(outCap); }
+         {

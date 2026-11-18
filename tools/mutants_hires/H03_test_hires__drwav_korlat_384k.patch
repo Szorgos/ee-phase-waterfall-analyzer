@@ -1,0 +1,11 @@
+--- a/src/decoders_impl.c
++++ b/src/decoders_impl.c
+@@ -3,7 +3,7 @@
+ #include "dr_flac.h"
+ #define DR_WAV_IMPLEMENTATION
+ /* A WAV / AIFF dekóder alapból 384 kHz-ig fogad el fájlt; a nagy felbontás 705,6 / 768 kHz-ig */
+-#define DRWAV_MAX_SAMPLE_RATE 768000
++#define DRWAV_MAX_SAMPLE_RATE 384000
+ #include "dr_wav.h"
+ #define DR_MP3_IMPLEMENTATION
+ #include "dr_mp3.h"
