@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
 project(aqulify 
     VERSION 2.5.0
     DESCRIPTION "Aqulify - Real-time Phase, Group Delay & Acoustic Waterfall DSP Suite"
@@ -134,7 +135,7 @@ if(NOT WIN32)
 endif()
 add_library(aq_player STATIC src/audio_decoder.cpp src/file_player.cpp src/play_queue.cpp src/playlists.cpp src/play_stats.cpp src/smart_lists.cpp src/music_library.cpp)
 target_include_directories(aq_player PUBLIC ${EE_INCLUDE_DIR})
-target_link_libraries(aq_player PUBLIC aq_decoders Threads::Threads)
+target_link_libraries(aq_player PUBLIC aq_decoders soxr Threads::Threads)
 if(WIN32)
     target_link_libraries(aq_player PUBLIC shell32 ole32)   # a Zene ismert mappa (SHGetKnownFolderPath)
 endif()
@@ -147,6 +148,14 @@ if(WIN32)
     target_link_libraries(test_player PRIVATE ws2_32 iphlpapi)
 endif()
 target_compile_definitions(test_player PRIVATE AQ_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+
+# 9c. Tesztalkalmazás: felmintavételezés (libsoxr)
+add_executable(test_upsample src/test_upsample.cpp)
+target_link_libraries(test_upsample PRIVATE aq_player ee_dsp_core soxr Threads::Threads)
+if(WIN32)
+    target_link_libraries(test_upsample PRIVATE ws2_32 iphlpapi)
+endif()
+
 
 # 9b. Tesztalkalmazás: DSD (.dsf/.dff) fejléc, FIR szűrő, PCM dekódolás, tekerés, ID3v2, DST elutasítás, DoP 1.1
 add_executable(test_dsd src/test_dsd.cpp)
@@ -263,6 +272,7 @@ if(WIN32)
             ${CMAKE_CURRENT_SOURCE_DIR}/import_parser.js
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/soxr/LICENCE
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/README_WINDOWS.md)
         add_custom_command(
             OUTPUT ${EE_PAYLOAD_DIR}/payload.stamp
@@ -277,6 +287,7 @@ if(WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/import_parser.js ${EE_PAYLOAD_DIR}/importparser.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js ${EE_PAYLOAD_DIR}/three.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE ${EE_PAYLOAD_DIR}/threelic.bin
+            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/third_party/soxr/LICENCE ${EE_PAYLOAD_DIR}/soxrlic.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/README_WINDOWS.md ${EE_PAYLOAD_DIR}/readme.bin
             COMMAND ${CMAKE_COMMAND} -E touch ${EE_PAYLOAD_DIR}/payload.stamp
             DEPENDS Aqulify AqulifyPlugin AqulifyGui ${EE_PAYLOAD_SOURCES}
@@ -292,6 +303,7 @@ if(WIN32)
             "FILE_IMPORTJS|gui\\import_parser.js\n"
             "FILE_THREE|gui\\three.min.js\n"
             "FILE_THREELIC|gui\\three.js-LICENSE.txt\n"
+            "FILE_SOXRLIC|gui\\libsoxr-LICENSE.txt\n"
             "FILE_README|OLVASS_EL.md\n")
         file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/setup_payload.rc
             "PAYLOAD_INDEX RCDATA \"${EE_PAYLOAD_DIR}/index.txt\"\n"
@@ -305,6 +317,7 @@ if(WIN32)
             "FILE_IMPORTJS RCDATA \"${EE_PAYLOAD_DIR}/importparser.bin\"\n"
             "FILE_THREE RCDATA \"${EE_PAYLOAD_DIR}/three.bin\"\n"
             "FILE_THREELIC RCDATA \"${EE_PAYLOAD_DIR}/threelic.bin\"\n"
+            "FILE_SOXRLIC RCDATA \"${EE_PAYLOAD_DIR}/soxrlic.bin\"\n"
             "FILE_README RCDATA \"${EE_PAYLOAD_DIR}/readme.bin\"\n")
         set_source_files_properties(${EE_RES_DIR}/setup.rc PROPERTIES OBJECT_DEPENDS ${EE_PAYLOAD_DIR}/payload.stamp)
         add_custom_target(AqulifyPayload DEPENDS ${EE_PAYLOAD_DIR}/payload.stamp)
@@ -368,7 +381,9 @@ if(APPLE)
         "-framework Foundation" "-framework ServiceManagement" "-framework WebKit")
     add_custom_command(TARGET Aqulify POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE
-                $<TARGET_BUNDLE_CONTENT_DIR:Aqulify>/Resources/gui/three.js-LICENSE.txt)
+                $<TARGET_BUNDLE_CONTENT_DIR:Aqulify>/Resources/gui/three.js-LICENSE.txt
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/third_party/soxr/LICENCE
+                $<TARGET_BUNDLE_CONTENT_DIR:Aqulify>/Resources/gui/libsoxr-LICENSE.txt)
 
     # 2.x: a beépített lejátszó parancssori indítója macOS-en is
     add_executable(aqulify-play src/aqulify_play.cpp)
@@ -479,6 +494,7 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
     install(FILES gui_integrated_system.html autoeq_index.js gui_i18n.js gui_player.js import_parser.js windows/third_party/three/three.min.js
             DESTINATION ${CMAKE_INSTALL_DATADIR}/aqulify/gui)
     install(FILES windows/third_party/three/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/aqulify/gui RENAME three.js-LICENSE.txt)
+    install(FILES third_party/soxr/LICENCE DESTINATION ${CMAKE_INSTALL_DATADIR}/aqulify/gui RENAME libsoxr-LICENSE.txt)
     install(FILES linux/io.github.szorgos.Aqulify.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.szorgos.Aqulify.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
     install(FILES linux/aqulify.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps)

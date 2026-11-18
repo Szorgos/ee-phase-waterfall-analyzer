@@ -921,6 +921,13 @@ int main(int argc, char** argv) {
         std::cout << "[Lejátszó] Szól: " << path << "\n";
         return true;
     };
+    cb.playerOpenBypass = [&](const std::string& path, std::string& error) {
+        if (!filePlayer.open(path, &error, 0, /*bypassUpsample=*/true)) {
+            std::cout << "[Lejátszó/Mérés] " << path << ": " << error << "\n";
+            return false;
+        }
+        return true;
+    };
     cb.playerStop = [&] { filePlayer.stop(); };
     // Szobamérés: mikrofonfelvétel WASAPI-val (room/mic_capture_wasapi.hpp)
     cb.makeMicCapture = [] { return aqulify::room::createMicCapture(); };
@@ -968,6 +975,25 @@ int main(int argc, char** argv) {
         const bool dop = playerOut.dopActive() || filePlayer.isDopActive();
         const bool digitalVolume = excl && !dop && !playerDsp.hardwareVolume();
         s += digitalVolume ? playerDsp.volumeJson() : endpointVolumeJson();
+        {
+            const bool uActive = filePlayer.isUpsampleActive();
+            const uint32_t uSrc = filePlayer.upsampleSrcRate();
+            const uint32_t uTgt = filePlayer.upsampleTargetRate();
+            const uint32_t uActual = excl ? playerOut.actualRate() : 0;
+            const bool uResampleWarn = uActive && (!excl || (uActual > 0 && uTgt > 0 && uActual != uTgt));
+            const std::string uReason = filePlayer.upsampleReason();
+            char ubuf[384];
+            std::snprintf(ubuf, sizeof(ubuf),
+                          ",\"upsample\":{\"active\":%s,\"srcRate\":%u,\"targetRate\":%u,\"actualDacRate\":%u,"
+                          "\"resampleWarning\":%s,\"reason\":\"%s\",\"clippedSamples\":%llu,"
+                          "\"processedFrames\":%llu,\"delayMs\":%.2f}",
+                          uActive ? "true" : "false", uSrc, uTgt, uActual,
+                          uResampleWarn ? "true" : "false", uReason.c_str(),
+                          static_cast<unsigned long long>(filePlayer.upsampleClippedSamples()),
+                          static_cast<unsigned long long>(filePlayer.upsampleProcessedFrames()),
+                          filePlayer.upsampleDelayMs());
+            s += ubuf;
+        }
         if (!filePlayer.hasTrack()) return s;
         // A jelút (Hangkimenet, haladó): megosztott módban a Windows hangmotorja keveri a jelet (nem bitpontos);
         // kizárólagos módban bitpontos, ha sem a lánc, sem a ReplayGain, sem a hangerő, sem a formátum nem változtat rajta
@@ -1042,6 +1068,7 @@ int main(int argc, char** argv) {
         }
         filePlayer.setReplayGain(audioOpts.replayGain, audioOpts.rgPreampDb, audioOpts.rgPreventClip);
         filePlayer.setPreload(audioOpts.preload);
+        filePlayer.setUpsampleOptions(audioOpts);
         playerOut.setExclusive(audioOpts.exclusive);
         playerOut.setWantDop(audioOpts.exclusive && dsdDop);
         filePlayer.setDsdDop(audioOpts.exclusive && dsdDop);
@@ -1050,7 +1077,7 @@ int main(int argc, char** argv) {
     cb.audioOptionsJson = [&]() -> std::string {
         std::lock_guard<std::mutex> lk(audioMutex);
         return "{\"opts\":" + optsToJsonWithDop(audioOpts, dsdDop) +
-               ",\"caps\":{\"buffer\":false,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true,"
+               ",\"caps\":{\"buffer\":false,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true,\"upsample\":true,"
                "\"exclusive\":true,\"dop\":true}}";
     };
     cb.setAudioOptions = [&](const json::Value& v) {
@@ -1063,6 +1090,7 @@ int main(int argc, char** argv) {
         dsdDop = wantDop;
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         filePlayer.setPreload(o.preload);
+        filePlayer.setUpsampleOptions(o);
         playerDsp.setHardwarePref(o.exclHwVolume);
         if (o.exclusive != playerOut.wantExclusive()) {
             playerOut.setExclusive(o.exclusive);

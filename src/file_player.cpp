@@ -171,7 +171,7 @@ void FilePlayer::setDsdDop(bool on) {
     }
 }
 
-std::unique_ptr<FilePlayer::Segment> FilePlayer::makeSegment(const std::string& path, std::string* error, uint64_t token) {
+std::unique_ptr<FilePlayer::Segment> FilePlayer::makeSegment(const std::string& path, std::string* error, uint64_t token, bool bypassUpsample) {
     std::unique_ptr<TempCopy> temp;
     if (preload_.load()) {
         std::string copy = copyForPreload(path, kPreloadMaxBytes);
@@ -190,6 +190,7 @@ std::unique_ptr<FilePlayer::Segment> FilePlayer::makeSegment(const std::string& 
     if (!dec->tags().art.empty()) s->artId = media::hashId(dec->tags().art);
     else if (library::folderCover(path, s->coverMime, s->cover)) s->artId = media::hashId(s->cover);   // a mappa képe
     s->token = token;
+    s->bypassUpsample = bypassUpsample;
     if (dsdDop_.load() && isDsdFilePath(path)) {
         std::string rawErr;
         auto raw = dsd::openDsdRawFile(actualPath, &rawErr);
@@ -210,21 +211,21 @@ std::unique_ptr<FilePlayer::Segment> FilePlayer::makeSegment(const std::string& 
     return s;
 }
 
-bool FilePlayer::open(const std::string& path, std::string* error, uint64_t token) {
+bool FilePlayer::open(const std::string& path, std::string* error, uint64_t token, bool bypassUpsample) {
     std::string err;
-    auto seg = makeSegment(path, &err, token);
+    auto seg = makeSegment(path, &err, token, bypassUpsample);
     if (!seg) {
         if (error) *error = err;
         return false;
     }
     std::lock_guard<std::mutex> lk(m_);
-    // Kizárólagos módban azonos mintavételnél és azonos módban (PCM->PCM vagy DoP->DoP) a hangfolyam marad:
-    // a DAC-nak nem kell leállnia és újraindulnia, és a számváltás azonnali
     const State st = state_.load();
     const bool curDop = dopActive_.load();
     const bool nextDop = seg->dopRaw != nullptr;
-    const uint32_t nextRate = nextDop ? seg->dopRate : seg->dec->sampleRate();
-    if (st != State::Idle && !segs_.empty() && curDop == nextDop && nextRate == rate_ && out_->settlesOnRateChange()) {
+    const uint32_t nextSrcRate = nextDop ? seg->dopRate : seg->dec->sampleRate();
+    const uint32_t nextTargetRate = decideTargetRate(nextSrcRate, seg->bypassUpsample, nextDop || (seg->dsdRate > 0));
+    if (st != State::Idle && !segs_.empty() && curDop == nextDop && nextTargetRate == rate_ && out_->settlesOnRateChange() &&
+        (!upsampleActive_.load() || nextSrcRate == upsampleSrcRate_.load())) {
         replaceTrackLocked(std::move(seg), st != State::Playing);
         return true;
     }
@@ -243,6 +244,9 @@ void FilePlayer::replaceTrackLocked(std::unique_ptr<Segment> seg, bool streamSto
     } else {
         dopDsdRate_ = seg->dsdRate;
         dopFallback_ = seg->dopFallback;
+        if (upsampleActive_.load() && seg->total > 0 && upsampleSrcRate_.load() > 0) {
+            seg->total = static_cast<uint64_t>(std::round(static_cast<double>(seg->dec->totalFrames()) * rate_ / upsampleSrcRate_.load()));
+        }
     }
     seg->start = 0;
     seg->end = UINT64_MAX;
@@ -305,7 +309,27 @@ bool FilePlayer::startStreamLocked(std::unique_ptr<Segment> seg, std::string* er
     dopActive_ = false;
     dopDsdRate_ = seg->dsdRate;
     dopFallback_ = seg->dopFallback;
-    rate_ = seg->dec->sampleRate();
+    const uint32_t srcRate = seg->dec->sampleRate();
+    const bool isDsd = (seg->dsdRate > 0);
+    const uint32_t targetRate = decideTargetRate(srcRate, seg->bypassUpsample, isDsd);
+
+    if (targetRate > srcRate) {
+        upsampleActive_ = true;
+        upsampleSrcRate_ = srcRate;
+        upsampleTargetRate_ = targetRate;
+        upsampler_.initWithOptions(srcRate, targetRate, 2, upsampleOpts_);
+        rate_ = targetRate;
+        if (seg->total > 0) {
+            seg->total = static_cast<uint64_t>(std::round(static_cast<double>(seg->dec->totalFrames()) * targetRate / srcRate));
+        }
+    } else {
+        upsampleActive_ = false;
+        upsampleSrcRate_ = srcRate;
+        upsampleTargetRate_ = srcRate;
+        upsampler_.reset();
+        rate_ = srcRate;
+    }
+
     seg->start = 0;
     seg->end = UINT64_MAX;
     segs_.clear();
@@ -428,9 +452,18 @@ void FilePlayer::seekLocked(uint64_t frame) {
             s.dopRaw->seekByte(0);
             frame = 0;
         }
-    } else if (!s.dec->seek(frame)) {
-        s.dec->seek(0);
-        frame = 0;
+    } else {
+        uint64_t seekFrame = frame;
+        if (upsampleActive_.load() && upsampleSrcRate_.load() > 0 && rate_ > 0) {
+            seekFrame = static_cast<uint64_t>(std::round(static_cast<double>(frame) * upsampleSrcRate_.load() / rate_));
+        }
+        if (!s.dec->seek(seekFrame)) {
+            s.dec->seek(0);
+            frame = 0;
+        }
+        if (upsampleActive_.load()) {
+            upsampler_.clear();
+        }
     }
     s.start = 0;
     s.end = UINT64_MAX;
@@ -548,14 +581,18 @@ bool FilePlayer::appendNextLocked() {
         uint64_t token = 0;
         if (!next_(after, path, token)) return false;
         auto seg = makeSegment(path, nullptr, token);
-        if (!seg) { after = token; continue; }   // nem nyitható: a sor következő száma
+        if (!seg) { after = token; continue; }
         const bool nextDop = seg->dopRaw != nullptr;
-        const uint32_t nextRate = nextDop ? seg->dopRate : seg->dec->sampleRate();
-        if (nextDop != curDop || nextRate != rate_) {
-            pending_ = std::move(seg);           // eltérő mód (DoP <-> PCM) vagy mintavétel: új hangfolyamon
+        const uint32_t nextSrcRate = nextDop ? seg->dopRate : seg->dec->sampleRate();
+        const uint32_t nextTargetRate = decideTargetRate(nextSrcRate, seg->bypassUpsample, nextDop || (seg->dsdRate > 0));
+        if (nextDop != curDop || nextTargetRate != rate_ || (upsampleActive_.load() && nextSrcRate != upsampleSrcRate_.load())) {
+            pending_ = std::move(seg);           // eltérő mód vagy mintavétel: új hangfolyamon
             return false;
         }
         if (nextDop) seg->total = seg->dopTotal;
+        else if (upsampleActive_.load() && seg->total > 0 && upsampleSrcRate_.load() > 0) {
+            seg->total = static_cast<uint64_t>(std::round(static_cast<double>(seg->dec->totalFrames()) * rate_ / upsampleSrcRate_.load()));
+        }
         seg->start = segs_.back().end;
         seg->end = UINT64_MAX;
         segs_.push_back(std::move(*seg));
@@ -624,40 +661,81 @@ bool FilePlayer::fillLocked() {
         Segment& s = segs_.back();
         const uint64_t w = wr_.load(), r = rd_.load(std::memory_order_acquire);
         const size_t free = ringFrames_ - static_cast<size_t>(w - r);
-        if (free < kChunkFrames) return true;
+        const size_t ratioCeil = upsampleActive_.load()
+            ? static_cast<size_t>(std::ceil(static_cast<double>(rate_) / std::max<uint32_t>(1u, upsampleSrcRate_.load())))
+            : 1u;
+        const size_t minFree = std::max<size_t>(kChunkFrames * ratioCeil + 1024, upsampleActive_.load() ? 16384u : kChunkFrames);
+        if (free < minFree) return true;
         if (decodeBuf_.size() < kChunkFrames * s.channels) decodeBuf_.assign(kChunkFrames * s.channels, 0.0f);
         const size_t got = s.dec->read(decodeBuf_.data(), kChunkFrames);
         if (got == 0) {
-            // a szám vége az idővonalon; azonos mintavételnél a következő szám ugyanebben a pufferben folytatódik
-            s.end = base_.load() + w;
-            if (!appendNextLocked()) { eof_ = true; break; }
-            continue;
+            // A szám vége az idővonalon: felmintavételezéskor a libsoxr szűrő késleltetése (soxr_delay)
+            // még az előző szám mintáit tartja vissza, így a számhatár ennyivel később lép ki a kimeneten (K6)
+            const uint64_t delayOut = upsampleActive_.load()
+                ? static_cast<uint64_t>(std::llround(std::max(0.0, upsampler_.delayFrames())))
+                : 0;
+            s.end = base_.load() + w + delayOut;
+            if (appendNextLocked()) {
+                continue; // szünetmentes átmenet azonos forrással, a szűrő folytonos marad (K7)
+            }
+            if (upsampleActive_.load()) {
+                size_t flFrames = 0;
+                if (upsampleOutBuf_.size() < kChunkFrames * 8) upsampleOutBuf_.resize(kChunkFrames * 8);
+                upsampler_.flush(upsampleOutBuf_.data(), upsampleOutBuf_.size() / 2, flFrames);
+                for (size_t i = 0; i < flFrames; ++i) {
+                    const size_t idx = static_cast<size_t>((w + i) % ringFrames_) * 2;
+                    ring_[idx] = upsampleOutBuf_[2 * i];
+                    ring_[idx + 1] = upsampleOutBuf_[2 * i + 1];
+                }
+                wr_.store(w + flFrames, std::memory_order_release);
+                s.end = base_.load() + wr_.load();
+            }
+            eof_ = true;
+            break;
         }
         const uint32_t srcCh = s.channels;
         const float gain = s.gain;
         if (gain != 1.0f) for (size_t i = 0; i < got * srcCh; ++i) decodeBuf_[i] *= gain;
+
+        if (stereoMixBuf_.size() < got * 2) stereoMixBuf_.resize(got * 2);
         const float* in = decodeBuf_.data();
         for (size_t i = 0; i < got; ++i, in += srcCh) {
             float l, rr;
             if (srcCh == 1) l = rr = in[0];
             else if (srcCh == 2) { l = in[0]; rr = in[1]; }
             else {
-                // FL FR [FC LFE] [BL BR …]: elülső + 0,707 · középső + 0,707 · hátsó (az LFE kimarad)
                 constexpr float k = 0.70710678f;
                 l = in[0]; rr = in[1];
                 if (srcCh >= 3) { l += k * in[2]; rr += k * in[2]; }
                 if (srcCh >= 6) { l += k * in[4]; rr += k * in[5]; }
                 else if (srcCh == 5) { l += k * in[3]; rr += k * in[4]; }
             }
-            const size_t idx = static_cast<size_t>((w + i) % ringFrames_) * 2;
-            ring_[idx] = l;
-            ring_[idx + 1] = rr;
+            stereoMixBuf_[2 * i] = l;
+            stereoMixBuf_[2 * i + 1] = rr;
         }
-        wr_.store(w + got, std::memory_order_release);
+
+        if (upsampleActive_.load()) {
+            size_t neededOut = static_cast<size_t>(std::ceil(got * (static_cast<double>(rate_) / s.dec->sampleRate()))) + 256;
+            if (upsampleOutBuf_.size() < neededOut * 2) upsampleOutBuf_.resize(neededOut * 2);
+            size_t outFrames = 0;
+            upsampler_.process(stereoMixBuf_.data(), got, upsampleOutBuf_.data(), upsampleOutBuf_.size() / 2, outFrames);
+            for (size_t i = 0; i < outFrames; ++i) {
+                const size_t idx = static_cast<size_t>((w + i) % ringFrames_) * 2;
+                ring_[idx] = upsampleOutBuf_[2 * i];
+                ring_[idx + 1] = upsampleOutBuf_[2 * i + 1];
+            }
+            wr_.store(w + outFrames, std::memory_order_release);
+        } else {
+            for (size_t i = 0; i < got; ++i) {
+                const size_t idx = static_cast<size_t>((w + i) % ringFrames_) * 2;
+                ring_[idx] = stereoMixBuf_[2 * i];
+                ring_[idx + 1] = stereoMixBuf_[2 * i + 1];
+            }
+            wr_.store(w + got, std::memory_order_release);
+        }
     }
     return false;
 }
-
 void FilePlayer::render(float* stereo, size_t frames) {
     if (state_.load() != State::Playing) {
         std::memset(stereo, 0, frames * 2 * sizeof(float));
@@ -755,6 +833,50 @@ void FilePlayer::decodeLoop() {
         }
         if (state_.load() == State::Playing || state_.load() == State::Paused) fillLocked();
     }
+}
+
+uint32_t FilePlayer::decideTargetRate(uint32_t srcRate, bool bypassUpsample, bool isDsd) const {
+    audioopt::UpsampleRule rule = upsampleOpts_.upsampleRule;
+    if (rule == audioopt::UpsampleRule::Off && upsampleEnabled_) {
+        rule = audioopt::UpsampleRule::Double;
+    }
+    const std::vector<uint32_t> supported = out_
+        ? out_->supportedRates()
+        : std::vector<uint32_t>{ 44100, 48000, 88200, 96000, 176400, 192000 };
+    return UpsampleEngine::selectTargetRate(srcRate, rule, supported, upsampleOpts_.upsampleCustom,
+                                            bypassUpsample, isDsd, &upsampleReason_);
+}
+
+void FilePlayer::setUpsample(bool on) {
+    std::lock_guard<std::mutex> lk(m_);
+    upsampleEnabled_ = on;
+}
+
+void FilePlayer::setUpsampleOptions(const audioopt::AudioOptions& opts) {
+    std::lock_guard<std::mutex> lk(m_);
+    upsampleOpts_ = opts;
+    upsampleEnabled_ = (opts.upsampleRule != audioopt::UpsampleRule::Off);
+}
+
+uint64_t FilePlayer::upsampleClippedSamples() const {
+    std::lock_guard<std::mutex> lk(m_);
+    return upsampler_.clippedSamples();
+}
+
+uint64_t FilePlayer::upsampleProcessedFrames() const {
+    std::lock_guard<std::mutex> lk(m_);
+    return upsampler_.processedFrames();
+}
+
+double FilePlayer::upsampleDelayMs() const {
+    std::lock_guard<std::mutex> lk(m_);
+    if (!upsampleActive_.load() || rate_ == 0) return 0.0;
+    return 1000.0 * upsampler_.delayFrames() / static_cast<double>(rate_);
+}
+
+std::string FilePlayer::upsampleReason() const {
+    std::lock_guard<std::mutex> lk(m_);
+    return upsampleReason_;
 }
 
 } // namespace ee_analyzer::player

@@ -1,0 +1,11 @@
+--- a/include/upsample_engine.hpp
++++ b/include/upsample_engine.hpp
+@@ -95,7 +95,7 @@
+         dstRate_ = dstRate;
+         channels_ = channels;
+         headroomDb_ = headroomDb;
+-        headroomGain_ = std::pow(10.0f, headroomDb / 20.0f);
++        headroomGain_ = 1.0f;
+ 
+         if (srcRate == 0 || dstRate == 0 || srcRate == dstRate) {
+             active_ = false;

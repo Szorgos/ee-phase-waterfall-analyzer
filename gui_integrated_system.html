@@ -4933,6 +4933,74 @@ var qrcode = function() {
                   <div class="ao-hint" data-i18n="ao.dsdDopHint">A DSD-fájlok PCM-átalakítás nélkül, DoP 1.1 csomagolásban mennek a DAC-ra. Ilyenkor a DSP-lánc, a ReplayGain és a digitális hangerő kimarad (a hangerőt a DAC-on szabályozd).</div>
                 </div>
               </div>
+              <div id="aoUpsampleWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:8px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:4px;">
+                  <div class="sink-sec-title" style="margin:0;" data-i18n="ups.title">Felmintavételezés (beépített lejátszó)</div>
+                  <button type="button" id="upsHelpBtn" class="mini-btn" style="min-width:24px; padding:1px 7px; font-weight:700;" onclick="upsToggleHelp()" title="Súgó a felmintavételezéshez" data-i18n-title="ups.helpBtn" aria-label="i">i</button>
+                </div>
+                <div id="upsHelpBox" class="ao-hint" hidden style="margin-bottom:8px; padding:6px 8px; border:1px solid var(--aq-line); border-radius:6px;" data-i18n="ups.helpText"></div>
+                <label class="ao-row"><span data-i18n="ups.rule">Szabály</span>
+                  <select id="upsRule" class="mini-select" onchange="upsOnRuleChange()">
+                    <option value="0" data-i18n="ups.ruleOff">Kikapcsolva</option>
+                    <option value="1" data-i18n="ups.ruleDouble">×2</option>
+                    <option value="2" data-i18n="ups.rulePow2">Legnagyobb ×2ⁿ</option>
+                    <option value="3" data-i18n="ups.ruleMax">Kimenet maximuma</option>
+                    <option value="4" data-i18n="ups.ruleCustom">Egyéni táblázat</option>
+                  </select>
+                </label>
+                <div id="upsSettingsWrap" hidden>
+                  <div id="upsCustomWrap" hidden style="margin:6px 0; padding:6px; border:1px solid var(--aq-line); border-radius:6px;">
+                    <label class="ao-row"><span>44,1 kHz</span><select id="upsCust44100" class="mini-select" onchange="aoSend()"></select></label>
+                    <label class="ao-row"><span>48 kHz</span><select id="upsCust48000" class="mini-select" onchange="aoSend()"></select></label>
+                    <label class="ao-row"><span>88,2 kHz</span><select id="upsCust88200" class="mini-select" onchange="aoSend()"></select></label>
+                    <label class="ao-row"><span>96 kHz</span><select id="upsCust96000" class="mini-select" onchange="aoSend()"></select></label>
+                    <label class="ao-row"><span>176,4 kHz</span><select id="upsCust176400" class="mini-select" onchange="aoSend()"></select></label>
+                    <label class="ao-row"><span>192 kHz</span><select id="upsCust192000" class="mini-select" onchange="aoSend()"></select></label>
+                  </div>
+                  <div class="ao-row" style="flex-direction:column; align-items:stretch; gap:4px; margin-top:4px;">
+                    <span data-i18n="ups.preset">Szűrő előbeállítás</span>
+                    <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                      <button type="button" id="upsPreset0" class="adw-btn" style="flex:1; font-size:11px; padding:4px 6px;" onclick="upsSelectPreset(0)" data-i18n="ups.presetLinear">Lineáris fázis</button>
+                      <button type="button" id="upsPreset1" class="adw-btn" style="flex:1; font-size:11px; padding:4px 6px;" onclick="upsSelectPreset(1)" data-i18n="ups.presetIntermediate">Köztes (ajánlott)</button>
+                      <button type="button" id="upsPreset2" class="adw-btn" style="flex:1; font-size:11px; padding:4px 6px;" onclick="upsSelectPreset(2)" data-i18n="ups.presetMinimum">Minimumfázis</button>
+                    </div>
+                  </div>
+                  <label class="ao-row" style="margin-top:4px;"><span data-i18n="ups.headroom">Fejtér</span>
+                    <select id="upsHeadroom" class="mini-select" onchange="aoSend()">
+                      <option value="0">0 dB</option>
+                      <option value="-1">-1 dB</option>
+                      <option value="-3">-3 dB</option>
+                      <option value="-6">-6 dB</option>
+                    </select>
+                  </label>
+                  <details id="upsAdvDetails" style="margin-top:6px;">
+                    <summary style="cursor:pointer; font-size:12px; opacity:0.9;" data-i18n="ups.advanced">Haladó szűrőbeállítások</summary>
+                    <div style="margin-top:6px; padding-left:4px;">
+                      <label class="ao-row"><span data-i18n="ups.passband">Sávszélesség (%)</span>
+                        <input type="number" id="upsPassband" class="ee-input" style="width:72px; text-align:center;" min="80" max="99.5" step="0.5" value="95" onchange="upsOnAdvChange()">
+                      </label>
+                      <label class="ao-row"><span data-i18n="ups.stopband">Záró sáv kezdete (%)</span>
+                        <input type="number" id="upsStopband" class="ee-input" style="width:72px; text-align:center;" min="100" max="150" step="1" value="100" onchange="upsOnAdvChange()">
+                      </label>
+                      <div id="upsStopbandWarn" class="ao-hint" hidden style="color:var(--aq-warn,#f59e0b);" data-i18n="ups.stopbandWarn"></div>
+                      <label class="ao-row"><span data-i18n="ups.precision">Pontosság</span>
+                        <select id="upsPrecision" class="mini-select" onchange="upsOnAdvChange()">
+                          <option value="20">20 bit</option>
+                          <option value="24">24 bit</option>
+                          <option value="28" selected>28 bit</option>
+                          <option value="32">32 bit</option>
+                        </select>
+                      </label>
+                      <label class="ao-row"><span data-i18n="ups.phase">Fázis (0–50)</span>
+                        <input type="number" id="upsPhase" class="ee-input" style="width:72px; text-align:center;" min="0" max="50" step="1" value="25" onchange="upsOnAdvChange()">
+                      </label>
+                      <div class="ao-hint" data-i18n="ups.phaseScale">0 = minimumfázis · 25 = köztes · 50 = lineáris</div>
+                      <div id="upsErrOrder" class="ao-hint" hidden style="color:var(--aq-err,#ef4444); font-weight:600;" data-i18n="ups.errOrder"></div>
+                    </div>
+                  </details>
+                </div>
+                <div id="upsStatus" class="ao-path" style="margin-top:6px;"></div>
+              </div>
             </div>
             <div class="ao-path" id="aoPath"></div>
           </div>
@@ -4964,6 +5032,7 @@ var qrcode = function() {
               <button type="button" class="adw-btn" onclick="updCheck(true)" data-i18n="upd.checkNow">Keresés most</button>
               <span id="updStatus" class="ao-hint" style="margin:0;"></span>
             </div>
+            <div id="upsAboutCredit" class="ao-hint" style="margin-top:6px;" data-i18n="ups.aboutCredit">Felmintavételezés: libsoxr, LGPL-2.1+</div>
           </div>
         </div>
       </div>
@@ -10054,6 +10123,8 @@ const AO_RATES = [44100, 48000, 88200, 96000, 176400, 192000];
 const AO_RESAMPLE = [-1, 2, 6, 10, 14];
 function aoKhz(r) { return fmtNum(Math.round(r / 100) / 10) + " kHz"; }
 function aoFillSelects() {
+  upsFillCustomSelects();
+  upsRenderStatus();
   const sr = (engineStatus && engineStatus.sr) || 48000;
   const b = document.getElementById("aoBuffer"), r = document.getElementById("aoRate"), q = document.getElementById("aoResample");
   if (!b || !r || !q) return;
@@ -10112,7 +10183,144 @@ function aoOnMessage(m) {
   const rgOn = (o.replayGain || "off") !== "off";
   document.getElementById("aoRowRgPreamp").hidden = !rgOn;
   document.getElementById("aoRowRgClip").hidden = !rgOn;
+  upsApplyOptions(o, cp);
   aoRenderPath();
+}
+
+const UPS_SRCS = [44100, 48000, 88200, 96000, 176400, 192000];
+const UPS_TGTS = [88200, 96000, 176400, 192000, 352800, 384000];
+let upsPresetState = 1;
+
+function upsFillCustomSelects() {
+  for (const s of UPS_SRCS) {
+    const sel = document.getElementById("upsCust" + s);
+    if (!sel) continue;
+    const prev = sel.value;
+    sel.innerHTML = "";
+    const opt0 = document.createElement("option");
+    opt0.value = String(s);
+    opt0.textContent = t("ups.customKeep");
+    sel.appendChild(opt0);
+    for (const d of UPS_TGTS) {
+      if (d <= s) continue;
+      const opt = document.createElement("option");
+      opt.value = String(d);
+      opt.textContent = aoKhz(d);
+      sel.appendChild(opt);
+    }
+    if (prev) sel.value = prev;
+  }
+}
+
+function upsToggleHelp() {
+  const b = document.getElementById("upsHelpBox");
+  if (b) b.hidden = !b.hidden;
+}
+
+function upsUpdatePresetButtons(preset) {
+  upsPresetState = preset;
+  for (let i = 0; i < 3; ++i) {
+    const btn = document.getElementById("upsPreset" + i);
+    if (!btn) continue;
+    btn.classList.toggle("primary", preset === i);
+  }
+}
+
+function upsApplyOptions(o, cp) {
+  const wrap = document.getElementById("aoUpsampleWrap");
+  if (!wrap) return;
+  wrap.hidden = !(cp && cp.player === true && cp.upsample !== false);
+  upsFillCustomSelects();
+  const rule = typeof o.upsampleRule === "number" ? o.upsampleRule : 0;
+  document.getElementById("upsRule").value = String(rule);
+  document.getElementById("upsSettingsWrap").hidden = rule === 0;
+  document.getElementById("upsCustomWrap").hidden = rule !== 4;
+  const preset = typeof o.upsamplePreset === "number" ? o.upsamplePreset : 1;
+  upsUpdatePresetButtons(preset);
+  const pb = typeof o.upsamplePassbandEnd === "number" ? Math.round(o.upsamplePassbandEnd * 1000) / 10 : 95;
+  const sb = typeof o.upsampleStopbandBegin === "number" ? Math.round(o.upsampleStopbandBegin * 1000) / 10 : 100;
+  document.getElementById("upsPassband").value = String(pb);
+  document.getElementById("upsStopband").value = String(sb);
+  document.getElementById("upsStopbandWarn").hidden = !(sb > 100);
+  document.getElementById("upsPrecision").value = String(o.upsamplePrecision || 28);
+  document.getElementById("upsPhase").value = String(typeof o.upsamplePhase === "number" ? o.upsamplePhase : 25);
+  document.getElementById("upsHeadroom").value = String(typeof o.upsampleHeadroomDb === "number" ? o.upsampleHeadroomDb : -1);
+  document.getElementById("upsErrOrder").hidden = true;
+  const cust = o.upsampleCustom || {};
+  for (const s of UPS_SRCS) {
+    const sel = document.getElementById("upsCust" + s);
+    if (sel) sel.value = String(cust[String(s)] || s);
+  }
+}
+
+function upsOnRuleChange() {
+  const rule = parseInt(document.getElementById("upsRule").value, 10) || 0;
+  document.getElementById("upsSettingsWrap").hidden = rule === 0;
+  document.getElementById("upsCustomWrap").hidden = rule !== 4;
+  aoSend();
+}
+
+function upsSelectPreset(preset) {
+  upsUpdatePresetButtons(preset);
+  document.getElementById("upsPassband").value = "95";
+  document.getElementById("upsStopband").value = "100";
+  document.getElementById("upsStopbandWarn").hidden = true;
+  document.getElementById("upsPrecision").value = "28";
+  document.getElementById("upsPhase").value = preset === 0 ? "50" : preset === 2 ? "0" : "25";
+  document.getElementById("upsErrOrder").hidden = true;
+  aoSend();
+}
+
+function upsOnAdvChange() {
+  const pbEl = document.getElementById("upsPassband");
+  const sbEl = document.getElementById("upsStopband");
+  const errEl = document.getElementById("upsErrOrder");
+  const pb = parseFloat(pbEl.value);
+  const sb = parseFloat(sbEl.value);
+  if (isNaN(pb) || isNaN(sb) || pb >= sb) {
+    errEl.hidden = false;
+    if (aoOpts) {
+      pbEl.value = String(Math.round((aoOpts.upsamplePassbandEnd || 0.95) * 1000) / 10);
+      sbEl.value = String(Math.round((aoOpts.upsampleStopbandBegin || 1.0) * 1000) / 10);
+    }
+    return;
+  }
+  errEl.hidden = true;
+  document.getElementById("upsStopbandWarn").hidden = !(sb > 100);
+  const phEl = document.getElementById("upsPhase");
+  let ph = parseFloat(phEl.value);
+  if (isNaN(ph)) ph = 25;
+  ph = Math.max(0, Math.min(50, ph));
+  phEl.value = String(ph);
+  upsUpdatePresetButtons(3);
+  aoSend();
+}
+
+function upsRenderStatus() {
+  const el = document.getElementById("upsStatus");
+  if (!el) return;
+  const u = engineStatus && engineStatus.upsample;
+  if (!u) { el.innerHTML = ""; return; }
+  const parts = [];
+  if (u.resampleWarning) {
+    parts.push(`<span class="warn">● ${t("ups.statusWarnResample", { actual: aoKhz(u.actualDacRate || 48000) })}</span>`);
+  } else if (u.active) {
+    parts.push(`<span class="ok">● ${t("ups.statusActive", { src: aoKhz(u.srcRate), dst: aoKhz(u.targetRate), actual: aoKhz(u.actualDacRate || u.targetRate) })}</span>`);
+  } else if (u.reason === "dac_unsupported") {
+    parts.push(`<span class="warn">● ${t("ups.statusUnsupported", { src: aoKhz(u.srcRate) })}</span>`);
+  } else if (u.reason === "dsd") {
+    parts.push(`<span>${t("ups.statusDsd")}</span>`);
+  } else if (u.reason === "source_rate") {
+    parts.push(`<span>${t("ups.statusHighRate")}</span>`);
+  } else if (u.reason === "bypass") {
+    parts.push(`<span>${t("ups.statusBypass")}</span>`);
+  } else {
+    parts.push(`<span>${t("ups.statusOff")}</span>`);
+  }
+  if (u.clippedSamples > 0) {
+    parts.push(`<span class="warn">${t("ups.statusClipped", { count: u.clippedSamples })}</span>`);
+  }
+  el.innerHTML = parts.join("<br>");
 }
 function aoDopToggle(chk) {
   if (chk && chk.checked) {
@@ -10135,6 +10343,29 @@ function aoSend() {
     opts.rgPreamp = isNaN(pre) ? 0 : Math.max(-15, Math.min(15, pre));
     opts.rgClip = document.getElementById("aoRgClip").checked;
     opts.preload = document.getElementById("aoPreload").checked;
+    const ruleEl = document.getElementById("upsRule");
+    if (ruleEl) {
+      opts.upsampleRule = parseInt(ruleEl.value, 10) || 0;
+      opts.upsamplePreset = upsPresetState;
+      const pbVal = parseFloat(document.getElementById("upsPassband").value);
+      const sbVal = parseFloat(document.getElementById("upsStopband").value);
+      opts.upsamplePassbandEnd = isNaN(pbVal) ? 0.95 : pbVal / 100.0;
+      opts.upsampleStopbandBegin = isNaN(sbVal) ? 1.0 : sbVal / 100.0;
+      opts.upsamplePrecision = parseInt(document.getElementById("upsPrecision").value, 10) || 28;
+      const phVal = parseFloat(document.getElementById("upsPhase").value);
+      opts.upsamplePhase = isNaN(phVal) ? 25 : Math.max(0, Math.min(50, phVal));
+      const hrVal = parseFloat(document.getElementById("upsHeadroom").value);
+      opts.upsampleHeadroomDb = isNaN(hrVal) ? -1 : hrVal;
+      const cust = {};
+      for (const s of UPS_SRCS) {
+        const sel = document.getElementById("upsCust" + s);
+        if (sel) {
+          const tv = parseInt(sel.value, 10) || s;
+          if (tv > s) cust[String(s)] = tv;
+        }
+      }
+      opts.upsampleCustom = cust;
+    }
   }
   if (aoCapsDetail && aoCapsDetail.exclusive) {
     opts.exclusive = document.getElementById("aoExclusive").checked;
@@ -10198,6 +10429,7 @@ function aoRenderPath() {
   lines.push(`${t("ao.pathLoad")}: ${f1(p.load)} % (${t("ao.peak")} ${f1(p.peak)} %) · ${t("ao.overruns")}: ${p.overruns}`);
   if (p.keepAwake) lines.push(`<span class="ok">● ${t("ao.awake")}</span>`);
   el.innerHTML = lines.join("<br>");
+  upsRenderStatus();
 }
 
 function moOnCaps(caps) {

@@ -37,6 +37,16 @@ inline std::function<void()>& pwAfterCloseHook() {
     static std::function<void()> hook;
     return hook;
 }
+/** A PipeWire gráf engedélyezett mintavételeinek lekérdezése (a motor tölti fel). */
+inline std::function<std::vector<uint32_t>()>& pwAllowedRatesHook() {
+    static std::function<std::vector<uint32_t>()> hook;
+    return hook;
+}
+/** A PipeWire gráf / hangkártya ténylegesen futó mintavétele (Hz; 0 ha ismeretlen). */
+inline std::function<uint32_t()>& pwActualRateHook() {
+    static std::function<uint32_t()> hook;
+    return hook;
+}
 
 class PwPlayerOutput : public PlayerOutput {
 public:
@@ -92,6 +102,7 @@ public:
         struct spa_audio_info_raw info{};
         info.format = SPA_AUDIO_FORMAT_F32;
         info.rate = sampleRate;
+        streamRate_ = sampleRate;
         info.channels = 2;
         info.position[0] = SPA_AUDIO_CHANNEL_FL;
         info.position[1] = SPA_AUDIO_CHANNEL_FR;
@@ -134,6 +145,23 @@ public:
     /** Tekerés: a hangfolyam sorban álló puffereinek eldobása (a lock() alatt hívódik, a hurok zárja megvan). */
     void flush() override { if (stream_) pw_stream_flush(stream_, false); }
 
+    std::vector<uint32_t> supportedRates() const override {
+        if (pwAllowedRatesHook()) {
+            auto rates = pwAllowedRatesHook()();
+            if (!rates.empty()) return rates;
+        }
+        return { 44100, 48000, 88200, 96000, 176400, 192000 };
+    }
+
+    uint32_t actualRate() const override {
+        if (!stream_) return 0;
+        if (pwActualRateHook()) {
+            const uint32_t r = pwActualRateHook()();
+            if (r > 0) return r;
+        }
+        return streamRate_;
+    }
+
 private:
     bool ensureLoop(std::string* error) {
         if (core_) return true;
@@ -174,6 +202,7 @@ private:
     struct pw_stream* stream_ = nullptr;
     struct spa_hook listener_{};
     RenderFn render_;
+    uint32_t streamRate_ = 0;
 };
 
 } // namespace ee_analyzer::player

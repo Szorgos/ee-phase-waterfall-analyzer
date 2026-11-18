@@ -12,8 +12,25 @@ const levels = name => JSON.parse(execFileSync("python3", ["-I", path.join(here,
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   const errors = [];
+  const kGithubUpdateUrl = "https://api.github.com/repos/Szorgos/ee-phase-waterfall-analyzer/releases/latest";
   page.on("pageerror", e => errors.push("pageerror: " + e.message));
-  page.on("console", m => { if (m.type() === "error" && !m.text().includes("ERR_FILE_NOT_FOUND")) errors.push("console.error: " + m.text()); });
+  page.on("requestfailed", r => {
+    const u = r.url();
+    const reason = r.failure() ? r.failure().errorText : "unknown";
+    if (!u.endsWith("/three.min.js")) console.log(`  [REQFAIL] ${u} (${reason})`);
+  });
+  page.on("response", r => {
+    if (r.status() >= 400) console.log(`  [HTTP ${r.status()}] ${r.url()}`);
+  });
+  page.on("console", m => {
+    if (m.type() !== "error") return;
+    const txt = m.text();
+    const locUrl = (m.location && m.location().url) || "";
+    if (txt.includes("ERR_FILE_NOT_FOUND")) return;
+    // A CI runner megosztott IP-jén az automatikus GitHub-kiadás ellenőrzés 403 rate-limitet kaphat: csak ez az egy külső URL szűrt
+    if (txt.includes("status of 403") && locUrl === kGithubUpdateUrl) return;
+    errors.push("console.error: " + txt + (locUrl ? ` [${locUrl}]` : ""));
+  });
 
   await page.goto("file://" + path.resolve(here, "../../gui_integrated_system.html"));
   await page.waitForFunction(() => typeof moCaps !== "undefined" && moCaps === true && typeof initPipewireBridge === "function", null, { timeout: 15000 });

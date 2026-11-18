@@ -1,0 +1,16 @@
+--- a/include/upsample_engine.hpp
++++ b/include/upsample_engine.hpp
+@@ -65,11 +65,11 @@
+             return srcRate;
+         }
+         if (rule == audioopt::UpsampleRule::MaxOutput) {
+-            uint32_t maxRate = srcRate;
++            uint32_t maxRate = 0;
+             for (uint32_t r : supported) {
+                 if (r > maxRate) maxRate = r;
+             }
+-            if (maxRate > srcRate) { setReason(""); return maxRate; }
++            if (maxRate > 0) { setReason(""); return maxRate; }
+             setReason("dac_unsupported");
+             return srcRate;
+         }

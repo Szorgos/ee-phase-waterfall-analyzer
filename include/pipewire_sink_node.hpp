@@ -76,6 +76,8 @@ public:
     ParamBlock params;
 
     std::atomic<uint32_t> sampleRate{48000};
+    std::atomic<uint32_t> graphRate{0};
+    uint32_t actualGraphRate() const { const uint32_t g = graphRate.load(std::memory_order_relaxed); return g > 0 ? g : sampleRate.load(std::memory_order_relaxed); }
     std::atomic<bool> playbackStreaming{false};
     std::atomic<bool> coreError{false};
 
@@ -252,6 +254,7 @@ public:
             e.version = PW_VERSION_STREAM_EVENTS;
             e.process = onPlaybackProcess;
             e.state_changed = onPlaybackState;
+            e.param_changed = onPlaybackParamChanged;
             return e;
         }();
         pw_stream_add_listener(capture, &captureListener, &captureEvents, this);
@@ -675,6 +678,16 @@ private:
         if (spa_format_audio_raw_parse(param, &info) >= 0 && info.rate > 0) self->sampleRate.store(info.rate);
     }
 
+    static void onPlaybackParamChanged(void* data, uint32_t id, const struct spa_pod* param) {
+        auto* self = static_cast<AetherSinkNode*>(data);
+        if (!param || id != SPA_PARAM_Format) return;
+        struct spa_audio_info_raw info{};
+        if (spa_format_audio_raw_parse(param, &info) >= 0 && info.rate > 0) {
+            self->graphRate.store(info.rate, std::memory_order_relaxed);
+            self->sampleRate.store(info.rate, std::memory_order_relaxed);
+        }
+    }
+
     static void onPlaybackState(void* data, enum pw_stream_state old, enum pw_stream_state state, const char* error) {
         auto* self = static_cast<AetherSinkNode*>(data);
         (void)old;
@@ -738,6 +751,11 @@ private:
             std::memset(outR, 0, n * sizeof(float));
         }
 
+        // A gráf valódi órajele a playback stream pw_time szerkezetéből (K12 / U15)
+        struct pw_time pwt{};
+        if (pw_stream_get_time_n(self->playback, &pwt, sizeof(pwt)) == 0 && pwt.rate.denom > 0) {
+            self->graphRate.store(pwt.rate.denom, std::memory_order_relaxed);
+        }
         // Mintavétel-váltás (allowed-rates): ritka esemény, a lánc újrahangolása itt történik
         const uint32_t sr = self->sampleRate.load(std::memory_order_relaxed);
         if (sr > 0 && static_cast<uint32_t>(self->chain.sampleRate()) != sr) {

@@ -77,6 +77,41 @@ public:
     uint32_t currentRate() const { return rate_; }
     /** Kizárólagos módban a DAC a mintavétel váltásakor új órajelre áll: a lejátszó rövid csenddel kezd. */
     bool settlesOnRateChange() const override { return exclusiveOn_.load(); }
+    std::vector<uint32_t> supportedRates() const override {
+        static const uint32_t kCandidates[] = { 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000 };
+        if (wantExclusive_.load()) {
+            // Kizárólagos módban az alapértelmezett WASAPI eszköz támogatott mintavételei
+            std::vector<uint32_t> res;
+            win::ComPtr<IMMDevice> dev;
+            if (defaultDevice(dev)) {
+                win::ComPtr<IAudioClient> cli;
+                if (SUCCEEDED(dev->Activate(win::kIID_IAudioClient, CLSCTX_ALL, nullptr,
+                                            reinterpret_cast<void**>(cli.put())))) {
+                    static const WasapiFormat kProbeFmts[] = {
+                        { 32, 32, true,  0, "32 bit float" },
+                        { 32, 32, false, 0, "32 bit int" },
+                        { 32, 24, false, 0, "24 bit (32)" },
+                        { 16, 16, false, 0, "16 bit" },
+                    };
+                    for (uint32_t r : kCandidates) {
+                        for (const WasapiFormat& f : kProbeFmts) {
+                            WAVEFORMATEXTENSIBLE wf = makeFormat(r, f);
+                            if (cli->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE,
+                                                       reinterpret_cast<const WAVEFORMATEX*>(&wf), nullptr) == S_OK) {
+                                res.push_back(r);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if (!res.empty()) return res;
+        }
+        return { 44100, 48000, 88200, 96000, 176400, 192000 };
+    }
+    uint32_t actualRate() const override {
+        return thread_.joinable() ? rate_ : 0;
+    }
     /** A legutóbbi kizárólagos megnyitás bitpontos volt-e eddig (nem veszett el bit a kimenet formátumára alakításkor). */
     bool quantExact() const { return !quantLoss_.load(); }
 

@@ -76,6 +76,15 @@ public:
     void flush() override { if (PlayerOutput* c = cur_.load()) c->flush(); }
     uint64_t consumedFrames() const override { PlayerOutput* c = cur_.load(); return c ? c->consumedFrames() : UINT64_MAX; }
     bool settlesOnRateChange() const override { PlayerOutput* c = cur_.load(); return c && c->settlesOnRateChange(); }
+    std::vector<uint32_t> supportedRates() const override {
+        if (want_.load() && exclusive_) return exclusive_->supportedRates();
+        if (shared_) return shared_->supportedRates();
+        return PlayerOutput::supportedRates();
+    }
+    uint32_t actualRate() const override {
+        if (PlayerOutput* c = cur_.load()) return c->actualRate();
+        return 0;
+    }
 
 private:
     void setFallback(const std::string& s) { std::lock_guard<std::mutex> lk(m_); fallback_ = s; }

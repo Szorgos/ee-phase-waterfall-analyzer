@@ -1,0 +1,11 @@
+--- a/include/upsample_engine.hpp
++++ b/include/upsample_engine.hpp
+@@ -182,7 +182,7 @@
+         for (size_t i = 0; i < totalSamples; ++i) {
+             float v = out[i] * headroomGain_;
+             if (v > 1.0f || v < -1.0f) {
+-                ++clippedSamples_;
++                // disabled
+             }
+             out[i] = v;
+         }

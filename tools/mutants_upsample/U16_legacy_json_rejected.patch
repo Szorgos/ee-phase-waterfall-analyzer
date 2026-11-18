@@ -1,0 +1,10 @@
+--- a/include/audio_options.hpp
++++ b/include/audio_options.hpp
+@@ -177,6 +177,7 @@
+ /** A JSON-objektum mezői felülírják a megadott alapot (a hiányzó mező marad). */
+ inline AudioOptions fromJson(const json::Value& v, AudioOptions base = {}) {
+     using T = json::Value::Type;
++    if (!v.get("upsampleRule")) return AudioOptions{};
+     if (const json::Value* x = v.get("buffer"); x && x->type == T::Number) base.bufferFrames = static_cast<int>(x->num);
+     if (const json::Value* x = v.get("keepAwake"); x && x->type == T::Bool) base.keepAwake = x->b;
+     if (const json::Value* x = v.get("rateMode"); x && x->type == T::String) base.rateMode = rateModeFromName(x->str);

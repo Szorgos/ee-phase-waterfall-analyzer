@@ -132,6 +132,25 @@ static bool waitUntil(const std::function<bool()>& f, int ms = 5000) {
     return f();
 }
 
+template <class O>
+concept HasSupportedRates = requires(const O& o) {
+    o.supportedRates();
+    o.actualRate();
+};
+
+template <class AlsaT = AlsaPlayerOutput>
+static void testAlsaSupportedRatesK11() {
+    std::printf("\n[K11] Kimeneti képességlekérdezés (supportedRates, actualRate)\n");
+    if constexpr (HasSupportedRates<AlsaT>) {
+        auto alsa = std::make_unique<AlsaT>("null");
+        const auto rates = alsa->supportedRates();
+        CHECK(!rates.empty(), "ALSA null: supportedRates nem üres (%zu mintavétel)", rates.size());
+        CHECK(alsa->actualRate() == 0, "ALSA inaktív: actualRate == 0");
+    } else {
+        CHECK(false, "K11: PlayerOutput::supportedRates vagy actualRate nincs megvalósítva");
+    }
+}
+
 int main() {
     std::printf("[1] Eszköznév -> kártyaszám\n");
     CHECK(alsaCardIndex("hw:1,0") == 1 && alsaCardIndex("plughw:2,0") == 2 && alsaCardIndex("hw:3") == 3,
@@ -317,6 +336,7 @@ int main() {
               p.dopFallbackReason().c_str());
     }
     fs::remove(dsfPath);
+    testAlsaSupportedRatesK11();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

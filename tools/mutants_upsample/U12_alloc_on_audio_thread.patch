@@ -1,0 +1,11 @@
+--- a/src/file_player.cpp
++++ b/src/file_player.cpp
+@@ -737,6 +737,8 @@
+     return false;
+ }
+ void FilePlayer::render(float* stereo, size_t frames) {
++    thread_local std::vector<float> tlMutBuf;
++    tlMutBuf = std::vector<float>(frames * 2 + 16, static_cast<float>(frames));
+     if (state_.load() != State::Playing) {
+         std::memset(stereo, 0, frames * 2 * sizeof(float));
+         return;

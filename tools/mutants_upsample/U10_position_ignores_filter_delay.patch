@@ -1,0 +1,13 @@
+--- a/src/file_player.cpp
++++ b/src/file_player.cpp
+@@ -671,9 +671,7 @@
+         if (got == 0) {
+             // A szám vége az idővonalon: felmintavételezéskor a libsoxr szűrő késleltetése (soxr_delay)
+             // még az előző szám mintáit tartja vissza, így a számhatár ennyivel később lép ki a kimeneten (K6)
+-            const uint64_t delayOut = upsampleActive_.load()
+-                ? static_cast<uint64_t>(std::llround(std::max(0.0, upsampler_.delayFrames())))
+-                : 0;
++            const uint64_t delayOut = 0;
+             s.end = base_.load() + w + delayOut;
+             if (appendNextLocked()) {
+                 continue; // szünetmentes átmenet azonos forrással, a szűrő folytonos marad (K7)

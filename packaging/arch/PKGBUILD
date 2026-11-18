@@ -32,7 +32,7 @@ build() {
 }
 
 check() {
-  for t in test_ringbuffer test_core test_dsp test_matrix test_player; do
+  for t in test_ringbuffer test_core test_dsp test_matrix test_player test_upsample; do
     (cd build && ./$t)
   done
 }
@@ -42,5 +42,6 @@ package() {
   rm -f "$pkgdir"/usr/bin/test_*
   cd "ee-phase-waterfall-analyzer-$pkgver"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 third_party/soxr/LICENCE "$pkgdir/usr/share/licenses/$pkgname/soxr-LICENCE"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
 }

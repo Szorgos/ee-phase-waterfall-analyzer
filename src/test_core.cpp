@@ -26,6 +26,7 @@
 #include "update_logic.hpp"
 #include "media_url.hpp"
 #include "multi_output_config.hpp"
+#include "audio_options.hpp"
 #ifndef _WIN32
 #include <cstdlib>
 #include <filesystem>
@@ -2725,6 +2726,57 @@ static void testBridgeMultiOutRemoteAuth() {
     bridge.stop();
 }
 
+template <class O>
+concept HasUpsampleOptions = requires(O& o) {
+    o.upsampleRule;
+    o.upsamplePhase;
+    o.upsamplePrecision;
+};
+
+template <class OptT = audioopt::AudioOptions>
+static void testUpsampleOptionsK17() {
+    std::printf("\n[K17] AudioOptions felmintavételezés beállítások és mentés (K17)\n");
+    if constexpr (HasUpsampleOptions<OptT>) {
+        // 1. Régi JSON betöltése (upsample kulcsok nélkül): alapértelmezett, kikapcsolt állapot
+        json::Value vLegacy;
+        json::parse("{\"buffer\":512,\"keepAwake\":true,\"rateMode\":\"follow\",\"fixedRate\":96000}", vLegacy);
+        OptT oLegacy = audioopt::fromJson(vLegacy);
+        CHECK(oLegacy.bufferFrames == 512 && oLegacy.keepAwake && oLegacy.fixedRate == 96000,
+              "Régi JSON betöltése: meglévő mezők épek");
+        CHECK(static_cast<int>(oLegacy.upsampleRule) == 0,
+              "Régi JSON: felmintavételezés kikapcsolva (alapértelmezett)");
+
+        // 2. Hibás értékek korrigálása (sanitize)
+        OptT oBad;
+        oBad.upsamplePhase = 75.0; // > 50 -> max 50
+        oBad.upsamplePrecision = 17; // 17 -> legközelebbi (20)
+        oBad.upsampleHeadroomDb = 5.0f; // > 0 -> 0 vagy -1
+        oBad.upsamplePassbandEnd = 1.2;
+        oBad.upsampleStopbandBegin = 1.0; // passband >= stopband -> hiba, korrigálva
+        audioopt::sanitize(oBad);
+        CHECK(oBad.upsamplePhase <= 50.0 && oBad.upsamplePrecision >= 20 &&
+              oBad.upsamplePassbandEnd < oBad.upsampleStopbandBegin,
+              "Érvénytelen értékek korrigálása: fázis <= 50, pontosság valid, passband < stopband");
+
+        // 3. Oda-vissza mentés és egyezés
+        OptT oGood;
+        oGood.upsampleRule = static_cast<decltype(oGood.upsampleRule)>(1); // x2
+        oGood.upsamplePreset = 1;
+        oGood.upsamplePhase = 25.0;
+        oGood.upsamplePrecision = 28;
+        oGood.upsamplePassbandEnd = 0.95;
+        oGood.upsampleStopbandBegin = 1.0;
+        oGood.upsampleHeadroomDb = -1.0f;
+        std::string j = audioopt::toJson(oGood);
+        json::Value vGood;
+        json::parse(j, vGood);
+        OptT oRestored = audioopt::fromJson(vGood);
+        CHECK(oGood == oRestored, "AudioOptions felmintavételezés oda-vissza mentés azonos");
+    } else {
+        CHECK(false, "K17: audioopt::AudioOptions felmintavételezés mezők nincsenek megvalósítva");
+    }
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
@@ -2755,6 +2807,7 @@ int main() {
 #endif
     testBridgeWayEqImpl();
     testBridgeMultiOutRemoteAuth();
+    testUpsampleOptionsK17();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

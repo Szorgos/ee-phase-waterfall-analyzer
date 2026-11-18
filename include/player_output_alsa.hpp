@@ -307,6 +307,45 @@ public:
     uint64_t consumedFrames() const override { return consumed_.load(); }
     bool settlesOnRateChange() const override { return open_.load(); }
 
+    /** A DAC / ALSA eszköz által támogatott mintavételi frekvenciák lekérdezése (K11). */
+    std::vector<uint32_t> supportedRates() const override {
+        static const uint32_t kCandidates[] = {
+            44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000
+        };
+        const std::string dev = device_.empty() ? defaultAlsaDevice() : device_;
+        std::vector<uint32_t> supported;
+        if (!dev.empty()) {
+            snd_pcm_t* pcm = nullptr;
+            if (snd_pcm_open(&pcm, dev.c_str(), SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK) == 0) {
+                snd_pcm_hw_params_t* hw = nullptr;
+                snd_pcm_hw_params_alloca(&hw);
+                if (snd_pcm_hw_params_any(pcm, hw) == 0) {
+                    for (uint32_t r : kCandidates) {
+                        if (snd_pcm_hw_params_test_rate(pcm, hw, r, 0) == 0) {
+                            supported.push_back(r);
+                        }
+                    }
+                }
+                snd_pcm_close(pcm);
+            }
+        }
+        if (supported.empty()) {
+            std::lock_guard<std::mutex> lk(infoMutex_);
+            if (!cachedRates_.empty()) return cachedRates_;
+            return { 44100, 48000, 88200, 96000, 176400, 192000 };
+        }
+        {
+            std::lock_guard<std::mutex> lk(infoMutex_);
+            cachedRates_ = supported;
+        }
+        return supported;
+    }
+
+    /** Az éppen futó ALSA kimenet tényleges mintavétele (Hz); 0 ha inaktív. */
+    uint32_t actualRate() const override {
+        return open_.load() ? rate_.load() : 0;
+    }
+
     bool isOpen() const { return open_.load(); }
     bool quantExact() const { return !quantLoss_.load(); }
     /** A legutóbbi megnyitás leírása (eszköz, formátum) vagy a hiba oka. */
@@ -583,6 +622,7 @@ private:
     std::condition_variable initCv_, wakeCv_;
     int initState_ = 0;
     mutable std::mutex infoMutex_;
+    mutable std::vector<uint32_t> cachedRates_;
     std::string info_, error_, openedDevice_, dopError_;
 };
 

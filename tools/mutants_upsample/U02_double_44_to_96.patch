@@ -1,0 +1,11 @@
+--- a/include/upsample_engine.hpp
++++ b/include/upsample_engine.hpp
+@@ -49,7 +49,7 @@
+         };
+ 
+         if (rule == audioopt::UpsampleRule::Double) {
+-            const uint32_t target = srcRate * 2;
++            const uint32_t target = (srcRate == 44100) ? 96000 : srcRate * 2;
+             if (isSupported(target)) { setReason(""); return target; }
+             setReason("dac_unsupported");
+             return srcRate;

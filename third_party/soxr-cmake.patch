@@ -1,0 +1,92 @@
+--- a/third_party/soxr/CMakeLists.txt
++++ b/third_party/soxr/CMakeLists.txt
+@@ -1,7 +1,7 @@
+ # SoX Resampler Library       Copyright (c) 2007-18 robs@users.sourceforge.net
+ # Licence for this file: LGPL v2.1                  See LICENCE for details.
+ 
+-cmake_minimum_required (VERSION 3.1 FATAL_ERROR)
++cmake_minimum_required (VERSION 3.5...3.31 FATAL_ERROR)
+ 
+ project (soxr C)
+ set (DESCRIPTION_SUMMARY
+@@ -70,7 +70,7 @@
+   "Use libavcodec (LGPL) for HQ SIMD DFT." OFF
+   "WITH_CR32S;NOT WITH_PFFFT" OFF)
+ cmake_dependent_option (BUILD_LSR_TESTS "Build LSR tests." OFF
+-  "UNIX;NOT CMAKE_CROSSCOMPILING;EXISTS ${PROJECT_SOURCE_DIR}/lsr-tests;WITH_LSR_BINDINGS" OFF)
++  "WITH_LSR_BINDINGS" OFF)
+ 
+ option (WITH_HI_PREC_CLOCK "Enable high-precision time-base." ON)
+ option (WITH_FLOAT_STD_PREC_CLOCK
+@@ -84,7 +84,7 @@
+ 
+ # Introspection:
+ 
+-list (APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
++list (APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/Modules")
+ 
+ include (CheckFunctionExists)
+ include (CheckIncludeFiles)
+@@ -260,7 +260,7 @@
+ configure_file (
+   ${PROJECT_SOURCE_DIR}/${PROJECT_NAME}-config.h.in
+   ${PROJECT_BINARY_DIR}/${PROJECT_NAME}-config.h)
+-include_directories (${PROJECT_BINARY_DIR})
++include_directories ("${PROJECT_BINARY_DIR}")
+ 
+ if (NOT CMAKE_CROSSCOMPILING AND (BUILD_TESTS OR BUILD_LSR_TESTS))
+   enable_testing ()
+@@ -276,7 +276,7 @@
+ 
+ # Subdirectories:
+ 
+-include_directories (${PROJECT_SOURCE_DIR}/src)
++include_directories ("${PROJECT_SOURCE_DIR}/src")
+ 
+ add_subdirectory (src)
+ if (BUILD_TESTS)
+--- a/third_party/soxr/src/CMakeLists.txt
++++ b/third_party/soxr/src/CMakeLists.txt
+@@ -41,31 +41,31 @@
+-set (SOURCES ${PROJECT_NAME}.c data-io)
++set (SOURCES ${PROJECT_NAME}.c data-io.c)
+ 
+ if (WITH_CR32 OR WITH_CR32S OR WITH_CR64 OR WITH_CR64S)
+-  list (APPEND SOURCES dbesi0 filter fft4g64 cr)
++  list (APPEND SOURCES dbesi0.c filter.c fft4g64.c cr.c)
+ endif ()
+ 
+ if (WITH_CR32)
+-  list (APPEND SOURCES cr32 ${RDFT32})
++  list (APPEND SOURCES cr32.c ${RDFT32}.c)
+ endif ()
+ 
+ if (WITH_CR64)
+-  list (APPEND SOURCES cr64)
++  list (APPEND SOURCES cr64.c)
+ endif ()
+ 
+ if (WITH_VR32)
+-  list (APPEND SOURCES vr32)
++  list (APPEND SOURCES vr32.c)
+ endif ()
+ 
+ if (WITH_CR32S)
+   foreach (source cr32s ${RDFT32S} util32s)
+-    list (APPEND SOURCES ${source})
+-    set_property (SOURCE ${source}
++    list (APPEND SOURCES ${source}.c)
++    set_property (SOURCE ${source}.c
+         APPEND_STRING PROPERTY COMPILE_FLAGS ${SIMD32_C_FLAGS})
+   endforeach ()
+ endif ()
+ 
+ if (WITH_CR64S)
+   foreach (source cr64s pffft64s util64s)
+-    list (APPEND SOURCES ${source})
+-    set_property (SOURCE ${source}
++    list (APPEND SOURCES ${source}.c)
++    set_property (SOURCE ${source}.c
+         APPEND_STRING PROPERTY COMPILE_FLAGS ${SIMD64_C_FLAGS})
+   endforeach ()
+ endif ()
