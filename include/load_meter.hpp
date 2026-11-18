@@ -13,6 +13,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
+#include <string>
 #include <thread>
 
 #if defined(_WIN32)
@@ -75,6 +77,20 @@ private:
     double lastCpu_;
     std::chrono::steady_clock::time_point lastWall_;
 };
+
+/** Raspberry Pi-n fut-e (Linux: /proc/device-tree/model). */
+inline bool isRaspberryPi() {
+#if defined(__linux__)
+    FILE* f = std::fopen("/proc/device-tree/model", "rb");
+    if (!f) return false;
+    char buf[128] = {};
+    const size_t n = std::fread(buf, 1, sizeof(buf) - 1, f);
+    std::fclose(f);
+    return std::string(buf, n).find("Raspberry Pi") != std::string::npos;
+#else
+    return false;
+#endif
+}
 
 /** Elérhető-e a szálrögzítés ezen a platformon. */
 inline bool affinitySupported() {

@@ -28,6 +28,7 @@
 
 #include "aq_i18n.hpp"
 #include "audio_options.hpp"
+#include "load_advisor.hpp"
 #include "linux_store.hpp"
 #include "mac_engine.hpp"
 #include "multi_output.hpp"
@@ -132,6 +133,8 @@ struct Core {
     // Core Audio kezeli; az IOProc folyamatosan fut, így a hangkártya nem alszik el)
     std::mutex audioMutex;
     audioopt::AudioOptions audioOpts;
+    // Terhelés-tanácsadó (a motor processzorterhelése, a lejátszó hangkimaradásai)
+    load::Tracker loadTracker{ load::defaultThresholdPct() };
 
     // Indításkori visszaállítás (startup_restore.hpp): a mentett állapot, és hogy a felület kérdez-e
     std::mutex restoreMutex;
@@ -349,7 +352,12 @@ struct Core {
                       static_cast<unsigned long long>(filePlayer.upsampleClippedSamples()),
                       static_cast<unsigned long long>(filePlayer.upsampleProcessedFrames()),
                       filePlayer.upsampleDelayMs());
-        return s + pb + ubuf;
+        audioopt::AudioOptions curOpts;
+        { std::lock_guard<std::mutex> lk(audioMutex); curOpts = audioOpts; }
+        const bool dspBypassed = engine.chain.dspBypassedForRate() || filePlayer.streamRate() > audioopt::kMaxDspRate;
+        return s + pb + ubuf +
+               loadTracker.json(curOpts, uActive ? uTgt : uSrc, filePlayer.underruns(), dspBypassed,
+                                filePlayer.upsampleThreadsInUse(), filePlayer.dedicatedCoreApplied());
     }
 
     void setOutput(const std::string& target) {

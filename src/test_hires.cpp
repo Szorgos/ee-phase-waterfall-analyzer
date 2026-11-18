@@ -375,8 +375,39 @@ static void testDedicatedCore() {
 #endif
 }
 
+// ---------------------------------------------------------------- [10]
+static void testTrackerJson() {
+    std::printf("[10] Terhelés-tanácsadó az állapotüzenetben\n");
+    load::Tracker t(30.0);
+    audioopt::AudioOptions o;
+    o.upsampleRule = audioopt::UpsampleRule::Double;
+    const std::string j = t.json(o, 88200, 0, false, 1, -1);
+    json::Value v;
+    const bool ok = j.size() > 2 && json::parse("{" + j.substr(1) + "}", v);
+    const json::Value* la = ok ? v.get("loadAdvisor") : nullptr;
+    CHECK(la && la->get("cpu") && la->get("warn") && la->get("step") && la->get("cores") && la->get("dspBypassed"),
+          "értelmezhető JSON a kötelező mezőkkel: %s", j.c_str());
+    CHECK(la && la->get("warn") && !la->get("warn")->b, "induláskor nincs figyelmeztetés");
+    // Hangkimaradás: a következő mérésnél (≥ 1 s) figyelmeztet
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    t.json(o, 88200, 0, false, 1, -1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    const std::string j2 = t.json(o, 88200, 3, false, 1, -1);
+    json::Value v2;
+    json::parse("{" + j2.substr(1) + "}", v2);
+    const json::Value* la2 = v2.get("loadAdvisor");
+    CHECK(la2 && la2->get("warn") && la2->get("warn")->b && la2->get("recentUnderruns") && la2->get("recentUnderruns")->num >= 3,
+          "3 új hangkimaradás után figyelmeztet: %s", j2.c_str());
+    audioopt::AudioOptions off = o;
+    off.loadAdvisor = false;
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    const std::string j3 = t.json(off, 88200, 9, false, 1, -1);
+    CHECK(j3.find("\"warn\":false") != std::string::npos, "kikapcsolt tanácsadó nem figyelmeztet");
+}
+
 int main() {
     std::printf("Aqulify – nagy felbontás, A rész\n");
+    testTrackerJson();
     testDspCap();
     testOutStageDelay();
     testOptions();
