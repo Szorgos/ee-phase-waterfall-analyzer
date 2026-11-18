@@ -156,6 +156,7 @@ int main() {
 
     std::printf("[K15] Szobamérés bekapcsolt felmintavételezés (×2, minimumfázis) mellett: megkerülő út\n");
     {
+        for (int i = 0; i < 100 && s.busy(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(50));
         { std::lock_guard<std::mutex> lk(g_mu); g_posts.clear(); }
         ee_analyzer::audioopt::AudioOptions uo;
         uo.upsampleRule = ee_analyzer::audioopt::UpsampleRule::Double;
