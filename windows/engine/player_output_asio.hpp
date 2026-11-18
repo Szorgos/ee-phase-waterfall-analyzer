@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <condition_variable>
 #include <cstdint>
@@ -62,6 +63,26 @@ public:
 
     AsioPlayerOutput(const AsioPlayerOutput&) = delete;
     AsioPlayerOutput& operator=(const AsioPlayerOutput&) = delete;
+
+    /**
+     * Meghajtó-azonosító (és opcionális teszt-gyár) módosítása zárt állapotban;
+     * új meghajtó választásakor érvényteleníti a támogatott mintavételek gyorsítótárát.
+     */
+    void setDriver(std::string driverIdOrName, DriverFactory factory = {}) {
+        close();
+        if (driverIdOrName_ != driverIdOrName || static_cast<bool>(factory)) {
+            invalidateRatesCache();
+        }
+        driverIdOrName_ = std::move(driverIdOrName);
+        if (factory) factory_ = std::move(factory);
+    }
+
+    /** A támogatott mintavételek gyorsítótárának kézi érvénytelenítése. */
+    void invalidateRatesCache() const {
+        std::lock_guard<std::mutex> lk(ratesCacheMutex_);
+        ratesCacheValid_ = false;
+        cachedRates_.clear();
+    }
 
     /**
      * A telepített ASIO-meghajtók felsorolása a Windows registryből (alapértelmezetten HKLM\SOFTWARE\ASIO),
@@ -165,10 +186,20 @@ public:
                         res.push_back(r);
                     }
                 }
+                std::lock_guard<std::mutex> clk(ratesCacheMutex_);
+                cachedRates_ = res;
+                cachedDriverId_ = driverIdOrName_;
+                ratesCacheValid_ = true;
                 return res;
             }
         }
-        // Zárt állapotban ideiglenesen példányosítjuk a meghajtót egy STA szálon és lekérdezzük a canSampleRate-et
+        {
+            std::lock_guard<std::mutex> clk(ratesCacheMutex_);
+            if (ratesCacheValid_ && cachedDriverId_ == driverIdOrName_) {
+                return cachedRates_;
+            }
+        }
+        // Zárt állapotban egyszer lekérdezzük egy STA szálon, majd meghajtónként gyorsítótárazzuk
         std::thread probeThread([&]() {
             const HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
             std::string err;
@@ -189,6 +220,12 @@ public:
             if (SUCCEEDED(hrCom)) CoUninitialize();
         });
         probeThread.join();
+        {
+            std::lock_guard<std::mutex> clk(ratesCacheMutex_);
+            cachedRates_ = res;
+            cachedDriverId_ = driverIdOrName_;
+            ratesCacheValid_ = true;
+        }
         return res;
     }
 
@@ -212,6 +249,11 @@ public:
     std::string lastError() const {
         std::lock_guard<std::mutex> lk(errMutex_);
         return lastError_;
+    }
+
+    std::string lastDriverMessage() const {
+        std::lock_guard<std::mutex> lk(errMutex_);
+        return lastDriverMessage_;
     }
 
 private:
@@ -246,9 +288,10 @@ private:
         return std::wstring(buf.data());
     }
 
-    void setLastError(std::string e) {
+    void setLastError(std::string e, std::string drvMsg = {}) {
         std::lock_guard<std::mutex> lk(errMutex_);
         lastError_ = std::move(e);
+        if (!drvMsg.empty()) lastDriverMessage_ = std::move(drvMsg);
     }
 
     IASIO* createDriverInstance(std::string* errorOut) const {
@@ -329,6 +372,7 @@ private:
             std::lock_guard<std::mutex> lk(initMutex_);
             initState_ = 0;
             initError_.clear();
+            initDriverMsg_.clear();
         }
         wake_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         thread_ = std::thread([this] { workerLoop(); });
@@ -337,11 +381,12 @@ private:
         initCv_.wait(lk, [this] { return initState_ != 0; });
         const int st = initState_;
         const std::string errStr = initError_;
+        const std::string drvMsg = initDriverMsg_;
         lk.unlock();
 
         if (st < 0) {
             close();
-            setLastError(errStr.empty() ? "open_failed" : errStr);
+            setLastError(errStr.empty() ? "open_failed" : errStr, drvMsg);
             if (error) *error = lastError();
             return false;
         }
@@ -353,23 +398,66 @@ private:
                t == ASIOSTFloat32LSB || t == ASIOSTFloat64LSB;
     }
 
-    static size_t bytesPerChannelSample(ASIOSampleType t) {
+    /**
+     * Egy csatorna egy félpufferének mérete bájtban a Steinberg ASIO 2.3 specifikáció szerint:
+     * - PCM módban: bufferSize (keret) * bájt/minta;
+     * - Natív DSD módban (common/asio.h, Sony DSD support): bufferSize 1-bites DSD-mintában értendő
+     *   ("8 samples per byte"), így a csatornánkénti pufferméret pontosan bufferSize / 8 bájt.
+     */
+    static size_t channelBufferBytes(long bufferSize, ASIOSampleType t) {
+        if (bufferSize <= 0) return 0;
+        const size_t sz = static_cast<size_t>(bufferSize);
         switch (t) {
-            case ASIOSTInt16LSB: return 2;
-            case ASIOSTInt24LSB: return 3;
+            case ASIOSTInt16LSB: return sz * 2u;
+            case ASIOSTInt24LSB: return sz * 3u;
             case ASIOSTInt32LSB:
             case ASIOSTInt32LSB24:
-            case ASIOSTFloat32LSB: return 4;
-            case ASIOSTFloat64LSB: return 8;
+            case ASIOSTFloat32LSB: return sz * 4u;
+            case ASIOSTFloat64LSB: return sz * 8u;
             case ASIOSTDSDInt8LSB1:
-            case ASIOSTDSDInt8MSB1: return 2;
+            case ASIOSTDSDInt8MSB1: return sz / 8u;
             default: return 0;
         }
     }
 
+    /**
+     * Natív DSD módban a meghajtó által adott [minSz, maxSz] és granularity korlátok között
+     * olyan pufferméretet (DSD-bitben) választ, amely 16-tal osztható (1 DoP-keret = 16 DSD-bit = 2 DSD-bájt).
+     * Ha nincs ilyen megengedett méret, 0-t ad vissza.
+     */
+    static long chooseDsdBufferSize(long minSz, long maxSz, long prefSz, long gran) {
+        if (minSz <= 0 || maxSz < minSz) return 0;
+        auto valid16 = [&](long s) { return s >= 16 && s >= minSz && s <= maxSz && (s % 16) == 0; };
+        if (gran == 0) {
+            return (prefSz == minSz && valid16(prefSz)) ? prefSz : 0;
+        }
+        if (gran < 0) {
+            long best = 0;
+            long bestDist = LONG_MAX;
+            for (long s = minSz; s > 0 && s <= maxSz; s *= 2) {
+                if (valid16(s)) {
+                    const long d = std::abs(s - prefSz);
+                    if (d < bestDist) { bestDist = d; best = s; }
+                }
+                if (s > maxSz / 2) break;
+            }
+            return best;
+        }
+        if (valid16(prefSz) && ((prefSz - minSz) % gran) == 0) return prefSz;
+        long best = 0;
+        long bestDist = LONG_MAX;
+        for (long s = minSz; s <= maxSz; s += gran) {
+            if (valid16(s)) {
+                const long d = std::abs(s - prefSz);
+                if (d < bestDist) { bestDist = d; best = s; }
+            }
+            if (maxSz - s < gran) break;
+        }
+        return best;
+    }
+
     void clearDriverBuffers() {
-        const size_t n = static_cast<size_t>(bufferSize_);
-        const size_t bytes = n * bytesPerChannelSample(sampleType_);
+        const size_t bytes = channelBufferBytes(bufferSize_, sampleType_);
         const uint8_t fillByte = nativeDsd_.load(std::memory_order_relaxed) ? dsd::kDsdSilenceByte : 0u;
         for (int ch = 0; ch < 2; ++ch) {
             for (int b = 0; b < 2; ++b) {
@@ -390,7 +478,7 @@ private:
         bool buffersCreated = false;
         bool started = false;
 
-        auto failInitAndNotify = [&](const std::string& reason) {
+        auto failInitAndNotify = [&](const std::string& reason, const std::string& drvMsg = {}) {
             if (drv) {
                 if (started) drv->stop();
                 if (buffersCreated) drv->disposeBuffers();
@@ -404,6 +492,7 @@ private:
             {
                 std::lock_guard<std::mutex> lk(initMutex_);
                 initError_ = reason;
+                initDriverMsg_ = drvMsg;
                 initState_ = -1;
             }
             initCv_.notify_all();
@@ -419,7 +508,7 @@ private:
         if (drv->init(nullptr) != ASIOTrue) {
             char msg[128]{};
             drv->getErrorMessage(msg);
-            failInitAndNotify(msg[0] ? std::string("init_failed") : "init_failed");
+            failInitAndNotify("init_failed", msg);
             if (mmcss) AvRevertMmThreadCharacteristics(mmcss);
             if (SUCCEEDED(hrCom)) CoUninitialize();
             return;
@@ -515,8 +604,13 @@ private:
             if (SUCCEEDED(hrCom)) CoUninitialize();
             return;
         }
-        const long bufSz = (prefSz > 0) ? prefSz : ((minSz > 0) ? minSz : 512);
-        if (bufSz <= 0 || bufSz > (1 << 20)) {
+        long bufSz = 0;
+        if (nativeDsd_.load(std::memory_order_relaxed)) {
+            bufSz = chooseDsdBufferSize(minSz, maxSz, prefSz, gran);
+        } else {
+            bufSz = (prefSz > 0) ? prefSz : ((minSz > 0) ? minSz : 512);
+        }
+        if (bufSz <= 0 || bufSz > (1 << 22)) {
             failInitAndNotify("buffer");
             if (mmcss) AvRevertMmThreadCharacteristics(mmcss);
             if (SUCCEEDED(hrCom)) CoUninitialize();
@@ -525,8 +619,11 @@ private:
         bufferSize_ = bufSz;
 
         // Előre lefoglaljuk a munkapuffereket a vezérlőszálon, hogy a bufferSwitch alatt 0 foglalás legyen
+        const size_t dopFramesPerBuf = nativeDsd_.load(std::memory_order_relaxed)
+            ? (static_cast<size_t>(bufSz) / 16u)
+            : static_cast<size_t>(bufSz);
         tmpFloat_.assign(static_cast<size_t>(bufSz) * 2, 0.0f);
-        tmpDop_.assign(static_cast<size_t>(bufSz) * 2, 0);
+        tmpDop_.assign(dopFramesPerBuf * 2, 0);
 
         std::memset(bufferInfos_, 0, sizeof(bufferInfos_));
         bufferInfos_[0].isInput = ASIOFalse;
@@ -563,6 +660,7 @@ private:
 
         while (!quit_.load(std::memory_order_acquire)) {
             if (resetRequested_.exchange(false, std::memory_order_acq_rel)) {
+                invalidateRatesCache();
                 setLastError("reset");
                 break;
             }
@@ -595,7 +693,6 @@ private:
                 }
             }
 
-            // STA COM üzenetsor kiszolgálása és várakozás a wake_ eseményre
             MSG msg{};
             while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
                 TranslateMessage(&msg);
@@ -645,10 +742,11 @@ private:
     static long cbAsioMessage(long selector, long value, void* /*message*/, double* /*opt*/) {
         switch (selector) {
             case kAsioSelectorSupported:
+                // A kAsioBufferSizeChange szándékosan nincs a támogatott listában (0L),
+                // így a meghajtó a specifikáció szerint kAsioResetRequest-et használ helyette.
                 if (value == kAsioSelectorSupported || value == kAsioEngineVersion ||
-                    value == kAsioResetRequest || value == kAsioBufferSizeChange ||
-                    value == kAsioResyncRequest || value == kAsioLatenciesChanged ||
-                    value == kAsioSupportsTimeInfo) {
+                    value == kAsioResetRequest || value == kAsioResyncRequest ||
+                    value == kAsioLatenciesChanged || value == kAsioSupportsTimeInfo) {
                     return 1L;
                 }
                 return 0L;
@@ -657,12 +755,15 @@ private:
             case kAsioResetRequest: {
                 AsioPlayerOutput* self = s_activeInstance.load(std::memory_order_acquire);
                 if (self) {
+                    self->invalidateRatesCache();
                     self->resetCount_.fetch_add(1, std::memory_order_relaxed);
                     self->resetRequested_.store(true, std::memory_order_release);
                     if (self->wake_) SetEvent(self->wake_);
                 }
                 return 1L;
             }
+            case kAsioBufferSizeChange:
+                return 0L;
             case kAsioResyncRequest:
             case kAsioLatenciesChanged:
             case kAsioSupportsTimeInfo:
@@ -682,7 +783,7 @@ private:
         std::lock_guard<std::mutex> lk(renderMutex_);
 
         if (!active_.load(std::memory_order_relaxed) || flushReq_.load(std::memory_order_relaxed)) {
-            const size_t bytes = n * bytesPerChannelSample(sampleType_);
+            const size_t bytes = channelBufferBytes(bufferSize_, sampleType_);
             const uint8_t fillByte = nativeDsd_.load(std::memory_order_relaxed) ? dsd::kDsdSilenceByte : 0u;
             std::memset(dstL, fillByte, bytes);
             std::memset(dstR, fillByte, bytes);
@@ -690,16 +791,17 @@ private:
         }
 
         if (nativeDsd_.load(std::memory_order_relaxed)) {
+            const size_t dopFrames = n / 16u;
             int32_t* dop = tmpDop_.data();
             if (renderDop_) {
-                renderDop_(dop, n);
+                renderDop_(dop, dopFrames);
             } else {
-                for (size_t i = 0; i < n * 2; ++i) {
+                for (size_t i = 0; i < dopFrames * 2; ++i) {
                     dop[i] = dsd::packDopSample(dsd::kDsdSilenceByte, dsd::kDsdSilenceByte, 0x05u);
                 }
             }
             const bool lsb1 = (sampleType_ == ASIOSTDSDInt8LSB1);
-            for (size_t i = 0; i < n; ++i) {
+            for (size_t i = 0; i < dopFrames; ++i) {
                 const uint32_t wL = static_cast<uint32_t>(dop[2 * i]);
                 const uint32_t wR = static_cast<uint32_t>(dop[2 * i + 1]);
                 uint8_t b0L = static_cast<uint8_t>((wL >> 8) & 0xFFu);
@@ -717,7 +819,12 @@ private:
                 dstR[2 * i]     = b0R;
                 dstR[2 * i + 1] = b1R;
             }
-        } else if (dopPcm_.load(std::memory_order_relaxed)) {
+            if (drv_) drv_->outputReady();
+            consumedFrames_.fetch_add(dopFrames, std::memory_order_release);
+            return;
+        }
+
+        if (dopPcm_.load(std::memory_order_relaxed)) {
             int32_t* dop = tmpDop_.data();
             if (renderDop_) {
                 renderDop_(dop, n);
@@ -816,6 +923,11 @@ private:
     mutable std::mutex drvQueryMutex_;
     IASIO* drv_ = nullptr;
 
+    mutable std::mutex ratesCacheMutex_;
+    mutable std::vector<uint32_t> cachedRates_;
+    mutable std::string cachedDriverId_;
+    mutable bool ratesCacheValid_ = false;
+
     std::thread thread_;
     HANDLE wake_ = nullptr;
     std::atomic<bool> active_{false};
@@ -833,9 +945,11 @@ private:
     std::condition_variable initCv_;
     int initState_ = 0;
     std::string initError_;
+    std::string initDriverMsg_;
 
     mutable std::mutex errMutex_;
     std::string lastError_;
+    std::string lastDriverMessage_;
 };
 
 } // namespace ee_analyzer::player
