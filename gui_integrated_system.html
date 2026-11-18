@@ -3532,12 +3532,15 @@ var qrcode = function() {
   .dev-sec[hidden] { display: none; }
   .dev-actions { display: flex; flex-direction: column; gap: 6px; }
   .dev-actions .adw-btn, .dev-sec > .adw-btn { justify-content: flex-start; width: 100%; height: 30px; }
+  /* Eszköz ablak: a képernyő közepén nyílik, a tartalom oszlopokba rendeződik (kevés görgetés). A háttér elsötétítése
+     árnyék, nem külön réteg: a kattintás kívül így is bezárja (pointerdown), a fejléc gombja is elérhető marad. */
   .sink-popover {
-    position: absolute;
-    top: calc(100% + 8px);
-    right: 0;
-    width: 290px;
-    max-height: calc(100vh - 74px);
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(1040px, calc(100vw - 32px));
+    max-height: calc(100vh - 48px);
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
@@ -3545,16 +3548,36 @@ var qrcode = function() {
     background: var(--aq-surface);
     border: 1px solid var(--aq-line-2);
     border-radius: var(--aq-radius-m);
-    padding: 12px 14px;
-    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.5);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    padding: 14px 22px 18px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+    display: block;
+    column-width: 300px;
+    column-gap: 28px;
+    column-rule: 1px solid var(--aq-line);
     z-index: 960;
   }
   :root[data-mode="light"] .sink-popover, :root[data-theme$="-light"] .sink-popover {
-    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.14);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.18), 0 0 0 100vmax rgba(0, 0, 0, 0.32);
   }
+  .sink-popover > * { margin-bottom: 8px; }
+  .sink-popover [hidden] { display: none !important; }
+  .sink-popover .sink-modal-head {
+    column-span: all;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--aq-line);
+    font-weight: 700;
+    color: var(--aq-text);
+  }
+  .sink-popover .sink-sec-title { break-after: avoid; }
+  .sink-popover .dev-sec { margin-top: 0; border-top: none; padding-top: 0; }
+  .sink-popover .dev-sec, .sink-popover .ao-row, .sink-popover .ao-hint, .sink-popover label,
+  .sink-popover .ao-path, .sink-popover .dev-actions, .sink-popover summary { break-inside: avoid; }
+  @media (max-width: 700px) { .sink-popover { column-width: auto; column-count: 1; } }
   .sink-popover[hidden] {
     display: none !important;
   }
@@ -4812,6 +4835,14 @@ var qrcode = function() {
   <symbol id="i-trap-wide" viewBox="0 0 24 24"><path d="M4 6h16l-4.5 12h-7z"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
   <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18h3M11 5.5h2"/></symbol>
+  <symbol id="i-network" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="2.2"/><circle cx="5.5" cy="18" r="2.2"/><circle cx="18.5" cy="18" r="2.2"/><path d="M12 7.7v4.3M12 12l-4.9 4.3M12 12l4.9 4.3"/></symbol>
+  <symbol id="i-magic" viewBox="0 0 24 24"><path d="M4.5 19.5L14.5 9.5M12.8 7.8l3.4 3.4"/><path d="M17.5 3.5v3M16 5h3M19.5 10v2.4M18.3 11.2h2.4M8.5 4v2.2M7.4 5.1h2.2"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19.5h14"/></symbol>
+  <symbol id="i-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5V6M12 18v2.5M3.5 12H6M18 12h2.5M6 6l1.8 1.8M16.2 16.2L18 18M6 18l1.8-1.8M16.2 7.8L18 6"/></symbol>
+  <symbol id="i-compress" viewBox="0 0 24 24"><path d="M4 6.5h16M6.5 12h11M9 17.5h6"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M7 3.5h6.5L18 8v12.5H7z"/><path d="M13.5 3.5V8H18"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5M6.5 10.5L12 5l5.5 5.5"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 7h11M9 12h11M9 17h11"/><path d="M4.5 7h.1M4.5 12h.1M4.5 17h.1"/></symbol>
 </svg>
 
 
@@ -4863,7 +4894,11 @@ var qrcode = function() {
           <span data-i18n="sink.btn">Eszköz</span>
         </button>
         <!-- ESZKÖZ PANEL: a kimeneti eszköz (DAC) és a fejhallgató-profil egy helyen (felhasználói visszajelzés alapján) -->
-        <div class="sink-popover" id="sinkPopover" hidden>
+        <div class="sink-popover" id="sinkPopover" hidden role="dialog" aria-modal="true" aria-labelledby="sinkModalTitle">
+          <div class="sink-modal-head">
+            <span id="sinkModalTitle" data-i18n="dev.title">Kimeneti eszköz (DAC) és fejhallgató-profil</span>
+            <button type="button" class="adw-btn" onclick="closeSinkMenu()" title="Bezárás" data-i18n-title="common.close" aria-label="Bezárás" data-i18n-aria-label="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+          </div>
           <div class="sink-sec-title" data-i18n="sink.label">Kimeneti eszköz (DAC)</div>
           <div id="physicalSinkWrap" style="display:none; align-items:center; gap:8px;">
             <select id="selectPhysicalSink" class="mini-select" onchange="onPhysicalSinkChanged(this.value)" style="width:100%; max-width:none;" title="Válassz kimeneti hangeszközt" data-i18n-title="sink.title"></select>
@@ -14472,9 +14507,9 @@ function renderRemotePanel() {
   }
   devs.forEach(dv => {
     const row = document.createElement("div");
-    row.style.cssText = "display:flex; align-items:center; gap:10px; background:var(--aq-input); border:1px solid var(--aq-line); border-radius:8px; padding:8px 12px;";
+    row.style.cssText = "display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; background:var(--aq-input); border:1px solid var(--aq-line); border-radius:8px; padding:8px 12px;";
     const info = document.createElement("div");
-    info.style.cssText = "flex:1; min-width:0;";
+    info.style.cssText = "flex:1 1 160px; min-width:0;";
     const name = document.createElement("div");
     name.style.cssText = "font-weight:600; color:var(--aq-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
     name.textContent = dv.name || dv.id;
@@ -14495,7 +14530,7 @@ function renderRemotePanel() {
       info.append(upd);
     }
     const adminLabel = document.createElement("label");
-    adminLabel.style.cssText = "display:flex; align-items:center; gap:6px; font-size:0.8rem; color:var(--aq-text-2); cursor:pointer; user-select:none;";
+    adminLabel.style.cssText = "order:3; flex:1 1 100%; display:flex; align-items:center; gap:6px; font-size:0.8rem; color:var(--aq-text-2); cursor:pointer; user-select:none;";
     const adminChk = document.createElement("input");
     adminChk.type = "checkbox";
     adminChk.checked = !!dv.admin;
@@ -14509,6 +14544,7 @@ function renderRemotePanel() {
     btn.className = "adw-btn";
     btn.textContent = t("remote.revoke");
     btn.onclick = () => remoteRevoke(dv.id);
+    btn.style.flex = "0 0 auto";
     row.append(info, adminLabel, btn);
     list.appendChild(row);
   });
@@ -15087,6 +15123,11 @@ document.addEventListener("pointerdown", (e) => {
   const pop = document.getElementById("sinkPopover");
   if (pop && !pop.hidden && wrap && !wrap.contains(e.target)) pop.hidden = true;
 }, true);
+// Az Eszköz ablak Esc-re is bezárul (ha nincs fölötte másik ablak nyitva)
+document.addEventListener("keydown", (e) => {
+  const pop = document.getElementById("sinkPopover");
+  if (e.key === "Escape" && pop && !pop.hidden) pop.hidden = true;
+});
 
 function toggleWfStripCollapse() {
   const strip = document.querySelector(".top-spectrum-strip");
