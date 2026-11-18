@@ -155,100 +155,123 @@ static void testK2RulesMatrix() {
     CHECK(allValid && testsCount >= 240, "K2 szabolymátrix: %zu eset ellenőrizve, lefelé soha, csak támogatott cél", testsCount);
 }
 
-// K3: Átvitel és elnyomás mérése FFT-vel
+// K3: Átvitel és elnyomás mérése FFT-vel mind a 4 kötelező mintavételi párra
 template <class EngT>
 static void testK3FrequencyResponseAndRejection() {
-    std::printf("\n[K3] Átvitel és elnyomás (passband flatness és stopband rejection)\n");
-    // 44100 -> 88200 Hz átalakítás VHQ (28 bit)
-    EngT eng;
-    bool okInit = eng.init(44100, 88200, 1, 28, 50.0, 0.95, 1.00, 0.0f);
-    CHECK(okInit, "K3: UpsampleEngine init 44.1k -> 88.2k");
-
-    // 1. Átviteli egyenesség (flatness) 20 Hz .. 20 kHz között
-    const std::vector<double> testFreqs = { 50.0, 100.0, 1000.0, 5000.0, 10000.0, 18000.0, 20000.0 };
-    double maxDeviationDb = 0.0;
-
-    for (double freq : testFreqs) {
-        const size_t inLen = 16384;
-        std::vector<float> inSig(inLen);
-        for (size_t i = 0; i < inLen; ++i) {
-            inSig[i] = static_cast<float>(std::sin(2.0 * kPi * freq * i / 44100.0) * 0.5);
-        }
-        std::vector<float> outSig(inLen * 2 + 8192);
-        size_t outFrames = 0;
-        eng.clear();
-        eng.process(inSig.data(), inLen, outSig.data(), outSig.size(), outFrames);
-        size_t flushFrames = 0;
-        eng.flush(outSig.data() + outFrames, outSig.size() - outFrames, flushFrames);
-        outFrames += flushFrames;
-
-        // Kiszámítjuk az RMS szintet a szűrő beállási fázisa után
-        double inRms = 0.0;
-        for (size_t i = 2000; i < 10000; ++i) inRms += inSig[i] * inSig[i];
-        inRms = std::sqrt(inRms / 8000.0);
-
-        double outRms = 0.0;
-        for (size_t i = 4000; i < 20000; ++i) outRms += outSig[i] * outSig[i];
-        outRms = std::sqrt(outRms / 16000.0);
-
-        double gainDb = 20.0 * std::log10(outRms / inRms);
-        if (std::abs(gainDb) > maxDeviationDb) maxDeviationDb = std::abs(gainDb);
-    }
-    CHECK(maxDeviationDb <= 0.01, "K3 passband flatness 20 Hz..20 kHz: max elteres = %.4f dB (<= 0.01 dB)", maxDeviationDb);
-    std::printf("K_METRIC: {\"test\":\"K3_flatness\",\"maxDevDb\":%.4f,\"limitDb\":0.01}\n", maxDeviationDb);
-    for (const auto& rp : std::vector<std::pair<uint32_t,uint32_t>>{{48000,96000},{44100,176400},{96000,192000}}) {
-        EngT er; CHECK(er.init(rp.first, rp.second, 1, 28, 25.0, 0.95, 1.00, 0.0f), "K3 par %u -> %u init", rp.first, rp.second);
-    }
-
-    // 2. Tükörkép-elnyomás mérése a Nyquist felett
+    std::printf("\n[K3] Átvitel és elnyomás (passband flatness és stopband rejection, 4 pár)\n");
+    struct RatePair {
+        uint32_t src;
+        uint32_t dst;
+        std::vector<double> passFreqs;
+        double aliasToneHz;
+        double stopLowHz;
+        double stopHighHz;
+    };
+    const std::vector<RatePair> pairs = {
+        { 44100,  88200, { 20.0, 50.0, 100.0, 1000.0, 5000.0, 10000.0, 18000.0, 20000.0 }, 18000.0, 24000.0, 43000.0 },
+        { 48000,  96000, { 20.0, 50.0, 100.0, 1000.0, 5000.0, 10000.0, 18000.0, 22000.0 }, 19000.0, 26000.0, 47000.0 },
+        { 44100, 176400, { 20.0, 50.0, 100.0, 1000.0, 5000.0, 10000.0, 18000.0, 20000.0 }, 18000.0, 24000.0, 87000.0 },
+        { 96000, 192000, { 20.0, 50.0, 100.0, 1000.0, 5000.0, 10000.0, 20000.0, 30000.0, 44000.0 }, 38000.0, 52000.0, 95000.0 },
+    };
     struct PrecisionCheck { int bits; double minRejectionDb; };
-    std::vector<PrecisionCheck> precisions = {
+    const std::vector<PrecisionCheck> precisions = {
         { 20, 110.0 },
         { 24, 130.0 },
-        { 28, 150.0 }
+        { 28, 150.0 },
     };
 
-    for (const auto& pc : precisions) {
-        EngT ePrec;
-        ePrec.init(44100, 88200, 1, pc.bits, 50.0, 0.95, 1.00, 0.0f);
-        const size_t inLen = 32768;
-        std::vector<float> inSig(inLen);
-        for (size_t i = 0; i < inLen; ++i) {
-            inSig[i] = static_cast<float>(std::sin(2.0 * kPi * 18000.0 * i / 44100.0) * 0.7071);
-        }
-        std::vector<float> outSig(inLen * 2 + 16384);
-        size_t outFrames = 0;
-        ePrec.process(inSig.data(), inLen, outSig.data(), outSig.size(), outFrames);
-        size_t fl = 0;
-        ePrec.flush(outSig.data() + outFrames, outSig.size() - outFrames, fl);
-        outFrames += fl;
+    for (const auto& rp : pairs) {
+        const size_t ratio = rp.dst / rp.src;
+        EngT eng;
+        bool okInit = eng.init(rp.src, rp.dst, 1, 28, 50.0, 0.95, 1.00, 0.0f);
+        CHECK(okInit, "K3: UpsampleEngine init %u -> %u", rp.src, rp.dst);
 
-        const size_t fftN = 16384;
-        std::vector<std::complex<double>> fftBuf(fftN);
-        const size_t startIdx = 8192;
-        for (size_t i = 0; i < fftN; ++i) {
-            double w = 0.5 * (1.0 - std::cos(2.0 * kPi * i / (fftN - 1)));
-            fftBuf[i] = outSig[startIdx + i] * w;
-        }
-        simpleFft(fftBuf, false);
-
-        double peakFund = 0.0;
-        double peakAlias = 0.0;
-        const double binHz = 88200.0 / fftN;
-
-        for (size_t k = 0; k < fftN / 2; ++k) {
-            double f = k * binHz;
-            double mag = std::abs(fftBuf[k]);
-            if (f >= 17500.0 && f <= 18500.0) {
-                if (mag > peakFund) peakFund = mag;
-            } else if (f >= 24000.0 && f <= 28000.0) {
-                if (mag > peakAlias) peakAlias = mag;
+        // 1. Átviteli egyenesség (flatness) 20 Hz .. sávszélesség határáig (<= 0.01 dB)
+        double maxDeviationDb = 0.0;
+        for (double freq : rp.passFreqs) {
+            // Egész számú periódus a mérési ablakban, hogy 20 Hz-en se legyen ablakolási hiba
+            const size_t cycles = std::max<size_t>(4, static_cast<size_t>(std::llround(freq * 0.2)));
+            const size_t winIn = static_cast<size_t>(std::llround(static_cast<double>(cycles) * rp.src / freq));
+            const size_t padIn = 4096;
+            const size_t inLen = winIn + 2 * padIn;
+            std::vector<float> inSig(inLen);
+            for (size_t i = 0; i < inLen; ++i) {
+                inSig[i] = static_cast<float>(std::sin(2.0 * kPi * freq * i / rp.src) * 0.5);
             }
+            std::vector<float> outSig(inLen * ratio + 16384);
+            size_t outFrames = 0;
+            eng.clear();
+            eng.process(inSig.data(), inLen, outSig.data(), outSig.size(), outFrames);
+            size_t flushFrames = 0;
+            eng.flush(outSig.data() + outFrames, outSig.size() - outFrames, flushFrames);
+            outFrames += flushFrames;
+
+            double inRms = 0.0;
+            for (size_t i = padIn; i < padIn + winIn; ++i) inRms += static_cast<double>(inSig[i]) * inSig[i];
+            inRms = std::sqrt(inRms / static_cast<double>(winIn));
+
+            const size_t padOut = padIn * ratio;
+            const size_t winOut = winIn * ratio;
+            double outRms = 0.0;
+            for (size_t i = padOut; i < padOut + winOut && i < outFrames; ++i) outRms += static_cast<double>(outSig[i]) * outSig[i];
+            outRms = std::sqrt(outRms / static_cast<double>(winOut));
+
+            double gainDb = 20.0 * std::log10(outRms / std::max(inRms, 1e-12));
+            if (std::abs(gainDb) > maxDeviationDb) maxDeviationDb = std::abs(gainDb);
         }
-        double rejDb = 20.0 * std::log10(peakFund / std::max(peakAlias, 1e-12));
-        CHECK(rejDb >= pc.minRejectionDb, "K3 stopband rejection %d bit: mert = %.1f dB (elvart >= %.0f dB)",
-              pc.bits, rejDb, pc.minRejectionDb);
-        std::printf("K_METRIC: {\"test\":\"K3_stopband_%db\",\"rejectionDb\":%.2f,\"minDb\":%.1f}\n", pc.bits, rejDb, pc.minRejectionDb);
+        CHECK(maxDeviationDb <= 0.01, "K3 passband flatness %u -> %u (20 Hz..%.0f Hz): max elteres = %.4f dB (<= 0.01 dB)",
+              rp.src, rp.dst, rp.passFreqs.back(), maxDeviationDb);
+        if (rp.src == 44100 && rp.dst == 88200) {
+            std::printf("K_METRIC: {\"test\":\"K3_flatness\",\"maxDevDb\":%.4f,\"limitDb\":0.01}\n", maxDeviationDb);
+        }
+        std::printf("K_METRIC: {\"test\":\"K3_flatness_%u_%u\",\"maxDevDb\":%.4f,\"limitDb\":0.01}\n", rp.src, rp.dst, maxDeviationDb);
+
+        // 2. Tükörkép-elnyomás mérése a forrás Nyquist-frekvenciája fölött minden pontossággal
+        for (const auto& pc : precisions) {
+            EngT ePrec;
+            ePrec.init(rp.src, rp.dst, 1, pc.bits, 50.0, 0.95, 1.00, 0.0f);
+            const size_t inLen = 32768;
+            std::vector<float> inSig(inLen);
+            for (size_t i = 0; i < inLen; ++i) {
+                inSig[i] = static_cast<float>(std::sin(2.0 * kPi * rp.aliasToneHz * i / rp.src) * 0.7071);
+            }
+            std::vector<float> outSig(inLen * ratio + 16384);
+            size_t outFrames = 0;
+            ePrec.process(inSig.data(), inLen, outSig.data(), outSig.size(), outFrames);
+            size_t fl = 0;
+            ePrec.flush(outSig.data() + outFrames, outSig.size() - outFrames, fl);
+            outFrames += fl;
+
+            const size_t fftN = 16384;
+            std::vector<std::complex<double>> fftBuf(fftN);
+            const size_t startIdx = 8192 * ratio;
+            for (size_t i = 0; i < fftN; ++i) {
+                double w = 0.5 * (1.0 - std::cos(2.0 * kPi * i / (fftN - 1)));
+                fftBuf[i] = outSig[startIdx + i] * w;
+            }
+            simpleFft(fftBuf, false);
+
+            double peakFund = 0.0;
+            double peakAlias = 0.0;
+            const double binHz = static_cast<double>(rp.dst) / fftN;
+            for (size_t k = 0; k < fftN / 2; ++k) {
+                double f = k * binHz;
+                double mag = std::abs(fftBuf[k]);
+                if (f >= rp.aliasToneHz - 500.0 && f <= rp.aliasToneHz + 500.0) {
+                    if (mag > peakFund) peakFund = mag;
+                } else if (f >= rp.stopLowHz && f <= rp.stopHighHz) {
+                    if (mag > peakAlias) peakAlias = mag;
+                }
+            }
+            double rejDb = 20.0 * std::log10(peakFund / std::max(peakAlias, 1e-12));
+            CHECK(rejDb >= pc.minRejectionDb, "K3 stopband rejection %u -> %u (%d bit): mert = %.1f dB (elvart >= %.0f dB)",
+                  rp.src, rp.dst, pc.bits, rejDb, pc.minRejectionDb);
+            if (rp.src == 44100 && rp.dst == 88200) {
+                std::printf("K_METRIC: {\"test\":\"K3_stopband_%db\",\"rejectionDb\":%.2f,\"minDb\":%.1f}\n", pc.bits, rejDb, pc.minRejectionDb);
+            }
+            std::printf("K_METRIC: {\"test\":\"K3_stopband_%u_%u_%db\",\"rejectionDb\":%.2f,\"minDb\":%.1f}\n",
+                        rp.src, rp.dst, pc.bits, rejDb, pc.minRejectionDb);
+        }
     }
 }
 
