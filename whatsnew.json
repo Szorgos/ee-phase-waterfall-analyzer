@@ -1,6 +1,35 @@
 {
   "versions": [
     {
+      "version": "2.6.2",
+      "date": "2026-11-19",
+      "notes": {
+        "hu": ["Linux és Raspberry Pi: DSD-fájl lejátszásakor már nem ragad be a lejátszás vezérlése, és a motor rendesen leáll."],
+        "en": ["Linux and Raspberry Pi: playing DSD files no longer freezes the playback controls, and the engine now stops cleanly."],
+        "es": ["Linux y Raspberry Pi: al reproducir archivos DSD ya no se bloquean los controles de reproducción y el motor se detiene correctamente."],
+        "fr": ["Linux et Raspberry Pi : la lecture de fichiers DSD ne bloque plus les commandes de lecture, et le moteur s'arrête correctement."],
+        "zh": ["Linux 和树莓派：播放 DSD 文件时，播放控制不再卡死，引擎也能正常停止。"],
+        "de": ["Linux und Raspberry Pi: Beim Abspielen von DSD-Dateien hängen die Wiedergabetasten nicht mehr, und die Engine beendet sich sauber."],
+        "it": ["Linux e Raspberry Pi: la riproduzione di file DSD non blocca più i comandi di riproduzione e il motore si arresta correttamente."],
+        "nl": ["Linux en Raspberry Pi: bij het afspelen van DSD-bestanden blijven de afspeelknoppen niet meer hangen en stopt de engine netjes."],
+        "pl": ["Linux i Raspberry Pi: odtwarzanie plików DSD nie blokuje już przycisków odtwarzania, a silnik poprawnie się zatrzymuje."],
+        "ru": ["Linux и Raspberry Pi: при воспроизведении файлов DSD кнопки управления больше не зависают, а движок корректно останавливается."],
+        "pt": ["Linux e Raspberry Pi: ao reproduzir ficheiros DSD, os controlos de reprodução já não bloqueiam e o motor para corretamente."],
+        "ro": ["Linux și Raspberry Pi: la redarea fișierelor DSD, comenzile de redare nu se mai blochează, iar motorul se oprește corect."],
+        "el": ["Linux και Raspberry Pi: κατά την αναπαραγωγή αρχείων DSD, τα χειριστήρια αναπαραγωγής δεν παγώνουν πλέον και η μηχανή σταματά σωστά."],
+        "tr": ["Linux ve Raspberry Pi: DSD dosyaları çalınırken oynatma düğmeleri artık donmuyor ve motor düzgün şekilde duruyor."],
+        "fi": ["Linux ja Raspberry Pi: DSD-tiedostojen toisto ei enää jumita toiston painikkeita, ja moottori pysähtyy siististi."],
+        "da": ["Linux og Raspberry Pi: Afspilning af DSD-filer fryser ikke længere afspilningsknapperne, og motoren stopper korrekt."],
+        "nb": ["Linux og Raspberry Pi: Avspilling av DSD-filer fryser ikke lenger avspillingsknappene, og motoren stopper ordentlig."],
+        "sv": ["Linux och Raspberry Pi: Uppspelning av DSD-filer låser inte längre uppspelningsknapparna, och motorn stoppas korrekt."],
+        "he": ["Linux ו-Raspberry Pi: בעת ניגון קובצי DSD פקדי הניגון כבר לא נתקעים, והמנוע נעצר כראוי."],
+        "ja": ["Linux と Raspberry Pi：DSD ファイルの再生中に再生ボタンが固まらなくなり、エンジンも正しく停止します。"],
+        "ko": ["Linux 및 Raspberry Pi: DSD 파일을 재생할 때 재생 컨트롤이 더 이상 멈추지 않으며, 엔진이 정상적으로 종료됩니다."],
+        "cs": ["Linux a Raspberry Pi: Přehrávání souborů DSD už nezasekává ovládání přehrávání a engine se správně ukončí."],
+        "uk": ["Linux і Raspberry Pi: під час відтворення файлів DSD кнопки керування більше не зависають, а рушій коректно зупиняється."]
+      }
+    },
+    {
       "version": "2.6.1",
       "date": "2026-11-18",
       "notes": {

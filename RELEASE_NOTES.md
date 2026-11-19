@@ -1,3 +1,17 @@
+### Újdonságok (2.6.2)
+
+**Letöltés (2.6.2):**
+- Windows 11: [Aqulify-Setup-2.6.2.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.2/Aqulify-Setup-2.6.2.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.2/Aqulify-Setup-2.6.2.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.6.2-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.2/Aqulify-2.6.2-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.2/Aqulify-2.6.2-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.6.2.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.2/Aqulify-Linux-2.6.2.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.2/Aqulify-Linux-2.6.2.tar.gz.sha256))
+- Fedora: [aqulify-2.6.2-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.2/aqulify-2.6.2-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.6.2-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.2/aqulify_2.6.2-1_amd64.deb) · Arch: [aqulify-2.6.2-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.2/aqulify-2.6.2-1-x86_64.pkg.tar.zst)
+- Raspberry Pi 4 / 5 (Raspberry Pi OS, 64 bit): [aqulify_2.6.2-1.pi1_arm64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.2/aqulify_2.6.2-1.pi1_arm64.deb) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.2/aqulify_2.6.2-1.pi1_arm64.deb.sha256)) · útmutató: `docs/pi.md`
+- Android-távirányító (Android 8+, változatlan): [Aqulify-Remote-1.1.0.apk](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.2/Aqulify-Remote-1.1.0.apk) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.6.2/Aqulify-Remote-1.1.0.apk.sha256))
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Linux és Raspberry Pi: DSD-lejátszás közben nem ragad be többé a vezérlés.** A 2.2.0–2.6.1 verziókban DSD-fájl lejátszásakor, natív DSD-nél és DoP-nál is, a Lejátszás / Szünet és a léptető gombok nem hatottak, és a program nem állt le rendesen (a hang közben szólt). A motor belső hanglehúzó ciklusa nem ért véget; most DSD alatt nincs mit lehúznia, és egy ciklus legfeljebb a valós időben keletkezett hang kétszeresét húzza le, legfeljebb 20 ms-ig, így semmi nem tudja többé kiéheztetni a parancsfeldolgozást és a leállítást. Windows és macOS nem érintett. A hibát egy tesztelő jelezte, valódi DAC-on (natív DSD256).
+- **Fordítás:** kilenc új felirat előkészítve a telefonos app következő verziójához (magyarul és angolul; a többi nyelven egyelőre angol).
+
 ### Újdonságok (2.6.1)
 
 **Letöltés (2.6.1):**
