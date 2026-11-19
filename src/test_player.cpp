@@ -429,6 +429,17 @@ static void testPlayer() {
 
     p.stop();
     CHECK(!p.hasTrack() && !out->opened && !p.info().available, "leállítás: nincs betöltött szám, a hangfolyam bezárult");
+
+    // A „stop” médiaparancs (a külön Stop gomb) ugyanezt teszi, és a kimenetet elengedi (szünet közben is)
+    CHECK(media::validAction("stop"), "a stop érvényes médiaművelet");
+    CHECK(p.open(path) && p.state() == FilePlayer::State::Playing, "újranyitás a stop próbájához");
+    p.command("pause", 0.0);
+    CHECK(p.state() == FilePlayer::State::Paused && out->opened, "szünet: a szám betöltve, a kimenet még nyitva");
+    p.command("stop", 0.0);
+    CHECK(!p.hasTrack() && !out->opened && !p.info().available, "stop parancs szünet után: a kimenet elengedve, nincs betöltött szám");
+    CHECK(p.open(path), "stop után újra lehet indítani");
+    p.command("stop", 0.0);
+    CHECK(!p.hasTrack() && !out->opened, "stop parancs lejátszás közben: a kimenet elengedve");
     std::error_code ec;
     fs::remove(path, ec);
 }

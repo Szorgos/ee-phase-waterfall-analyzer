@@ -652,7 +652,7 @@ struct Core {
     };
     cb.mediaCommand = [c](const std::string& action, double value) {
         if (c->filePlayer.hasTrack()) c->playQueue.command(action, value);
-        else c->media.command(action, value);
+        else c->media.command(action == "stop" ? "pause" : action, value);   // más lejátszót csak szüneteltetünk
     };
     cb.mediaArt = [c](const std::string& id, std::string& mime, std::string& bytes, std::string& url) {
         if (c->filePlayer.art(id, mime, bytes)) return true;

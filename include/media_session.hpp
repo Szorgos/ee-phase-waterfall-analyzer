@@ -32,7 +32,7 @@ struct Info {
 
 /** Engedélyezett parancsok a "media" üzenetben. */
 inline bool validAction(const std::string& a) {
-    return a == "play" || a == "pause" || a == "toggle" || a == "next" || a == "previous" || a == "seek";
+    return a == "play" || a == "pause" || a == "toggle" || a == "next" || a == "previous" || a == "seek" || a == "stop";
 }
 
 inline std::string jsonEscape(const std::string& in) {

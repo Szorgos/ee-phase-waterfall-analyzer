@@ -524,6 +524,7 @@ void FilePlayer::command(const std::string& action, double value) {
     if (action == "play") play();
     else if (action == "pause") pause();
     else if (action == "toggle") toggle();
+    else if (action == "stop") stop();   // leállít és elengedi a kimenetet (a sor megmarad: „Folytatás a sorból”)
     else if (action == "seek") seek(value);
 }
 
