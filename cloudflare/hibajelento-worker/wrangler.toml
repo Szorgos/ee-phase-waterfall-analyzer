@@ -18,5 +18,5 @@ MAX_BODY_BYTES = "65536"
 binding = "DB"
 database_name = "aqulify-hibajelentes"
 # A „wrangler d1 create aqulify-hibajelentes” kimenetéből kell ide másolni (README, 3. lépés).
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "efa598b7-9530-4626-a811-92fba562e461"
 migrations_dir = "migrations"
