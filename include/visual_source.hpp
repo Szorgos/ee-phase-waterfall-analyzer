@@ -23,15 +23,17 @@ inline VisualSource visualSourceFor(bool dsdDirectActive, bool playerExclusive) 
 
 /**
  * A híd `pullAudio` visszahívásának törzse. `readExclusive` és `readEngine`: (float* lr, size_t maxFrames) -> size_t.
- * Közvetlen DSD-kimenetnél csendet ad.
+ *
+ * Közvetlen DSD-kimenetnél **0 keretet** ad (nincs mit mutatni, mint szünetben). 2.2.0–2.6.1 között itt minden
+ * hívásra `maxFrames` keret csend ment, ezért a híd hanglehúzó ciklusa soha nem ért véget: a felület parancsai
+ * elakadtak, és a motor nem állt le (hibajelentés 2026-11-19, Fedora, FiiO BTR7).
  */
 template <class ReadExclusive, class ReadEngine>
 size_t pullVisualAudio(bool dsdDirectActive, bool playerExclusive, float* lr, size_t maxFrames, ReadExclusive&& readExclusive,
                        ReadEngine&& readEngine) {
     switch (visualSourceFor(dsdDirectActive, playerExclusive)) {
         case VisualSource::DsdDirect:
-            for (size_t i = 0; i < maxFrames * 2; ++i) lr[i] = 0.0f;
-            return maxFrames;
+            return 0;
         case VisualSource::PlayerExclusive:
             return readExclusive(lr, maxFrames);
         case VisualSource::Engine:
