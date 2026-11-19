@@ -518,6 +518,18 @@
   const svg = (name, size) =>
     `<svg viewBox="0 0 24 24" width="${size || 20}" height="${size || 20}" aria-hidden="true" fill="currentColor">${ICON[name]}</svg>`;
 
+  // A forrás formátuma egy sorban: PCM-nél „24 bit / 96 kHz” (ismeretlen bitmélységnél csak a kHz), DSD-nél „DSD256”
+  function formatLabel(f) {
+    if (!f) return "";
+    if (f.dsd > 0) {
+      const base = f.dsd % 44100 === 0 ? 44100 : 48000;
+      return "DSD" + Math.round(f.dsd / base);
+    }
+    if (!(f.rate > 0)) return "";
+    const khz = new Intl.NumberFormat(document.documentElement.lang || undefined, { maximumFractionDigits: 1 }).format(f.rate / 1000);
+    return (f.bits > 0 ? f.bits + " bit / " : "") + khz + " kHz";
+  }
+
   const CSS = `
 .aqnp { position: fixed; left: 0; right: 0; bottom: 0; z-index: 900; display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(280px, 2fr) minmax(120px, 1fr); align-items: center; gap: 16px;
@@ -532,7 +544,7 @@
 .aqnp-text { min-width: 0; }
 .aqnp-title { font-size: var(--aq-fs-head, 13px); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .aqnp-sub { color: var(--aq-text-2, #93a1b0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-.aqnp-app { color: var(--aq-text-2, #93a1b0); font-size: var(--aq-fs-sub, 11px); margin-top: 2px; }
+.aqnp-app { color: var(--aq-text-2, #93a1b0); font-size: var(--aq-fs-sub, 11px); margin-top: 2px; min-height: 1.3em; }
 .aqnp-center { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
 .aqnp-ctrls { display: flex; align-items: center; gap: 6px; }
 .aqnp-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
@@ -725,7 +737,8 @@ body.aqnp-on { padding-bottom: 72px; }
       } else {
         ui.title.textContent = m.title || m.app || "";
         ui.sub.textContent = [m.artist, m.album].filter(Boolean).join(" · ");
-        ui.app.textContent = m.app && m.app !== "Aqulify" ? t("from", { app: m.app }) : "";
+        // Egy sor: más lejátszónál a forrás neve, a beépített lejátszónál a forrás formátuma (pl. 24 bit / 96 kHz, DSD256)
+        ui.app.textContent = m.app && m.app !== "Aqulify" ? t("from", { app: m.app }) : formatLabel(m.fmt);
         if (m.art !== artShown) setArt(m.art || "");
       }
 
