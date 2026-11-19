@@ -30,6 +30,7 @@
 #include "media_url.hpp"
 #include "multi_output_config.hpp"
 #include "audio_options.hpp"
+#include "device_follow.hpp"
 #ifndef _WIN32
 #include <cstdlib>
 #include <filesystem>
@@ -2849,6 +2850,59 @@ static void testBridgeEndlessAudio() {
     guard.join();
 }
 
+// 2.7.0 hibajelentés (AQ-4, Windows): bedugott USB DAC lett az alapértelmezett eszköz, de a lejátszó a régi, továbbra
+// is érvényes beépített hangkártyán szólt tovább (csak az eszköz megszűnésére nyitott újra). A követés döntési logikája:
+static void testDefaultDeviceFollow() {
+    std::printf("[26] A lejátszó követi az alapértelmezett lejátszóeszközt (bedugott USB DAC), a villogást kivárja\n");
+    using F = player::DefaultDeviceFollow<std::string>;
+    using ms = std::chrono::milliseconds;
+    const auto t0 = F::Clock::time_point{} + std::chrono::hours(1);
+    {
+        F f(ms(1500));
+        f.opened("realtek");
+        CHECK(!f.observe("realtek", t0) && !f.observe("realtek", t0 + ms(5000)), "ugyanaz az eszköz: nincs váltás");
+        CHECK(!f.observe("dac", t0 + ms(6000)), "új alapértelmezett eszköz: az első észleléskor még nem vált");
+        CHECK(!f.observe("dac", t0 + ms(7000)), "1 s múlva még nem vált (a rendszer még válthat)");
+        CHECK(f.observe("dac", t0 + ms(7500)) && f.pending() == "dac", "1,5 s tartós változás után vált, az új eszközre");
+        f.opened("dac");
+        CHECK(!f.observe("dac", t0 + ms(9000)) && f.current() == "dac", "az új eszközön megnyitva: nincs további váltás");
+    }
+    {
+        // bedugáskor a rendszer oda-vissza vált (a hibajelentés naplójában: DAC → beépített → DAC)
+        F f(ms(1500));
+        f.opened("realtek");
+        bool any = false;
+        any |= f.observe("dac", t0);
+        any |= f.observe("realtek", t0 + ms(1000));   // vissza: a várakozás törlődik
+        any |= f.observe("dac", t0 + ms(2000));       // újra: innen számít
+        any |= f.observe("dac", t0 + ms(3000));
+        CHECK(!any, "villogó váltás közben nem nyit újra");
+        CHECK(f.observe("dac", t0 + ms(3500)), "a villogás után 1,5 s-mal vált (az utolsó változástól számítva)");
+    }
+    {
+        F f(ms(1500));
+        f.opened("realtek");
+        bool any = f.observe("dac", t0);
+        any |= f.observe("", t0 + ms(1000));           // pillanatnyilag nincs alapértelmezett eszköz
+        any |= f.observe("dac", t0 + ms(2000));
+        CHECK(!any && f.observe("dac", t0 + ms(3500)), "üres azonosító (nincs eszköz) nem vált ki váltást, a várakozás újraindul");
+    }
+    {
+        F f(ms(1500));
+        f.opened("realtek");
+        CHECK(!f.observe("", t0) && !f.observe("", t0 + ms(5000)), "tartósan nincs alapértelmezett eszköz: nem nyit újra");
+        bool any = f.observe("dac1", t0 + ms(6000));
+        any |= f.observe("dac2", t0 + ms(7000));      // másik új eszköz: a várakozás újraindul
+        any |= f.observe("dac2", t0 + ms(8000));
+        CHECK(!any && f.observe("dac2", t0 + ms(8500)) && f.pending() == "dac2",
+              "két új eszköz egymás után: az utolsótól számít, arra vált");
+    }
+    {
+        F f(ms(1500));   // még semmin nincs nyitva (a megnyitás nem sikerült): a követés nem kér újranyitást
+        CHECK(!f.observe("dac", t0) && !f.observe("dac", t0 + ms(5000)), "nyitott hangfolyam nélkül nincs váltás");
+    }
+}
+
 template <class OptT = audioopt::AudioOptions>
 static void testUpsampleOptionsK17() {
     std::printf("\n[K17] AudioOptions felmintavételezés beállítások és mentés (K17)\n");
@@ -2926,6 +2980,7 @@ int main() {
     testUpsampleOptionsK17();
     testVisualSourceDsd();
     testBridgeEndlessAudio();
+    testDefaultDeviceFollow();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

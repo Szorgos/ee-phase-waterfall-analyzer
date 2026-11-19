@@ -16,8 +16,10 @@
  * támogatott formátum vagy mintavétel), a kimenet a megosztott módra lép vissza, és ezt az állapot (statusJson) jelzi.
  *
  * Saját szál (MMCSS „Audio” / „Pro Audio”, eseményvezérelt puffer). A render a szál zárja alatt fut; a lejátszó
- * dekódoló szála a lock() / unlock() párral üríti a puffert tekeréskor. Ha az eszköz megszűnik vagy az alapértelmezett
- * eszköz változik (AUDCLNT_E_DEVICE_INVALIDATED), a szál az új alapértelmezett eszközön nyitja meg újra.
+ * dekódoló szála a lock() / unlock() párral üríti a puffert tekeréskor. Ha az eszköz megszűnik
+ * (AUDCLNT_E_DEVICE_INVALIDATED), a szál az új alapértelmezett eszközön nyitja meg újra. Ha a régi eszköz megmarad, de
+ * az alapértelmezett megváltozik (pl. bedugott USB DAC), azt a szál másodpercenként ellenőrzi, és ha az új eszköz
+ * tartósan az alapértelmezett (device_follow.hpp), arra vált át. A naplósorok az eszköz nevét is tartalmazzák.
  */
 #include <windows.h>
 #include <avrt.h>
@@ -37,6 +39,7 @@
 #include <thread>
 #include <vector>
 
+#include "device_follow.hpp"
 #include "exclusive_dsp.hpp"
 #include "file_player.hpp"
 #include "pcm_convert.hpp"
@@ -293,6 +296,8 @@ private:
         bool started = false;
         bool exclusive = false;
         bool dop = false;
+        std::wstring devId;           // az eszköz WASAPI-azonosítója (az eszközkövetéshez)
+        std::string devName;          // az eszköz neve (a naplóhoz)
         WasapiFormat fmt;
         std::vector<float> tmp;       // kizárólagos PCM módban: a lejátszó és a lánc puffere (float, sztereó)
         std::vector<int32_t> tmpDop;  // kizárólagos DoP módban: 24 bites DoP szavak puffere (int32_t, sztereó)
@@ -325,6 +330,43 @@ private:
                                     reinterpret_cast<void**>(en.put()))))
             return false;
         return SUCCEEDED(en->GetDefaultAudioEndpoint(eRender, eConsole, dev.put()));
+    }
+
+    static std::wstring deviceId(IMMDevice* dev) {
+        LPWSTR id = nullptr;
+        std::wstring out;
+        if (dev && SUCCEEDED(dev->GetId(&id)) && id) {
+            out = id;
+            CoTaskMemFree(id);
+        }
+        return out;
+    }
+
+    /** Az eszköz neve UTF-8-ban (a naplóhoz), pl. "Hangszórók (HIFI DSD)". */
+    static std::string deviceName(IMMDevice* dev) {
+        std::string name = "ismeretlen eszköz";
+        win::ComPtr<IPropertyStore> props;
+        if (dev && SUCCEEDED(dev->OpenPropertyStore(STGM_READ, props.put()))) {
+            PROPVARIANT pv;
+            PropVariantInit(&pv);
+            if (SUCCEEDED(props->GetValue(win::kPKEY_Device_FriendlyName, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal) {
+                const int n = WideCharToMultiByte(CP_UTF8, 0, pv.pwszVal, -1, nullptr, 0, nullptr, nullptr);
+                if (n > 1) {
+                    name.assign(static_cast<size_t>(n - 1), '\0');
+                    WideCharToMultiByte(CP_UTF8, 0, pv.pwszVal, -1, name.data(), n, nullptr, nullptr);
+                }
+            }
+            PropVariantClear(&pv);
+        }
+        return name;
+    }
+
+    /** A most alapértelmezett lejátszóeszköz azonosítója (üres, ha nincs). */
+    static std::wstring defaultDeviceIdNow(IMMDeviceEnumerator* en) {
+        if (!en) return {};
+        win::ComPtr<IMMDevice> dev;
+        if (FAILED(en->GetDefaultAudioEndpoint(eRender, eConsole, dev.put()))) return {};
+        return deviceId(dev.p);
     }
 
     /** Az esemény, a pufferméret és a render-szolgáltatás (az Initialize után). */
@@ -464,6 +506,8 @@ private:
     bool openStream(Stream& s) {
         win::ComPtr<IMMDevice> dev;
         if (!defaultDevice(dev)) return false;
+        s.devId = deviceId(dev.p);
+        s.devName = deviceName(dev.p);
         if (dopMode_) {
             if (!wantExclusive_ || !dsp_) return false;
             HRESULT why = S_OK;
@@ -472,7 +516,7 @@ private:
                 char hx[16];
                 std::snprintf(hx, sizeof(hx), "0x%08lX", static_cast<unsigned long>(why));
                 std::cout << "[Lejátszó] A natív DSD (DoP) nem indult el (" << fb << ", " << hx
-                          << "); PCM-re alakítva szól.\n";
+                          << ", eszköz: " << s.devName << "); PCM-re alakítva szól.\n";
                 {
                     std::lock_guard<std::mutex> lk(infoMutex_);
                     infoDopFallback_ = fb;
@@ -483,7 +527,8 @@ private:
                 return false;
             }
             std::cout << "[Lejátszó] Natív DSD (DoP, WASAPI exclusive): " << s.fmt.name << ", " << rate_ << " Hz, "
-                      << s.bufferFrames << " keret periódusonként (DSP és digitális hangerő kihagyva).\n";
+                      << s.bufferFrames << " keret periódusonként (DSP és digitális hangerő kihagyva), eszköz: "
+                      << s.devName << ".\n";
             {
                 std::lock_guard<std::mutex> lk(infoMutex_);
                 infoFallback_.clear();
@@ -503,18 +548,19 @@ private:
             if (openExclusive(s, dev.p, why)) {
                 dsp_->prepare(rate_, s.bufferFrames, s.fmt.ditherBits);
                 std::cout << "[Lejátszó] Kizárólagos mód (WASAPI exclusive): " << s.fmt.name << ", " << rate_ << " Hz, "
-                          << s.bufferFrames << " keret periódusonként.\n";
+                          << s.bufferFrames << " keret periódusonként, eszköz: " << s.devName << ".\n";
             } else {
                 fallback = fallbackName(why);
                 char hx[16];
                 std::snprintf(hx, sizeof(hx), "0x%08lX", static_cast<unsigned long>(why));
                 std::cout << "[Lejátszó] A kizárólagos mód nem indult el (" << fallback << ", " << hx
-                          << "); megosztott módban szól.\n";
+                          << ", eszköz: " << s.devName << "); megosztott módban szól.\n";
                 s.render.reset();
                 s.client.reset();
             }
         }
         if (!s.exclusive && !openShared(s, dev.p)) return false;
+        if (!s.exclusive) std::cout << "[Lejátszó] Megosztott mód (WASAPI shared), eszköz: " << s.devName << ".\n";
         {
             std::lock_guard<std::mutex> lk(infoMutex_);
             infoFallback_ = fallback;
@@ -598,7 +644,14 @@ private:
             initState_ = ok ? 1 : -1;
         }
         initCv_.notify_all();
-        if (!ok) stream.reset();
+        // Az alapértelmezett eszköz követése (bedugott USB DAC): másodpercenkénti ellenőrzés, váltás csak tartós változásra
+        DefaultDeviceFollow<std::wstring> follow;
+        win::ComPtr<IMMDeviceEnumerator> en;
+        CoCreateInstance(win::kCLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL, win::kIID_IMMDeviceEnumerator,
+                         reinterpret_cast<void**>(en.put()));
+        auto lastDeviceCheck = std::chrono::steady_clock::now();
+        if (ok) follow.opened(stream->devId);
+        else stream.reset();
         hb_.beat("wasapi: start");
         hbRunning_ = true;
         while (!quit_) {
@@ -608,14 +661,30 @@ private:
                 stream.reset();
                 SetEvent(wake_);                        // az újranyitás azonnal, várakozás nélkül
             }
+            // Natív DSD (DoP) alatt nem vált: az új eszköz nem biztos, hogy fogadja a DoP-ot, és a DoP-hangfolyam nem esik
+            // vissza PCM-re menet közben; a következő szám megnyitása már az új alapértelmezett eszközön történik.
+            const auto now = std::chrono::steady_clock::now();
+            if (stream && en && !dopMode_ && now - lastDeviceCheck >= std::chrono::seconds(1)) {
+                lastDeviceCheck = now;
+                hb_.beat("wasapi: device check");
+                if (follow.observe(defaultDeviceIdNow(en.p), now)) {
+                    std::cout << "[Lejátszó] Az alapértelmezett lejátszóeszköz megváltozott (eddig: " << stream->devName
+                              << "); a hangkimenet átvált.\n";
+                    std::lock_guard<std::mutex> lk(renderMutex_);
+                    stream.reset();
+                    SetEvent(wake_);
+                }
+            }
             if (!stream) {                              // újranyitás (eszközváltás után), kis szünetekkel
                 exclusiveOn_ = false;
                 dopOn_ = false;
                 if (WaitForSingleObject(wake_, 300) == WAIT_OBJECT_0 && quit_) break;
                 stream = std::make_unique<Stream>();
                 if (!openStream(*stream)) { stream.reset(); continue; }
+                follow.opened(stream->devId);
                 written_ = consumed_.load();           // a régi pufferben maradt rész elveszett: a pozíció nem ugrik vissza
-                std::cout << "[Lejátszó] A hangkimenet újranyitva (az alapértelmezett lejátszóeszközön).\n";
+                std::cout << "[Lejátszó] A hangkimenet újranyitva az alapértelmezett lejátszóeszközön: " << stream->devName
+                          << ".\n";
             }
             if (flushReq_) {                            // tekerés: a pufferben várakozó régi minták eldobása
                 std::lock_guard<std::mutex> lk(renderMutex_);
@@ -652,6 +721,7 @@ private:
         }
         hb_.beat("wasapi: close");
         stream.reset();
+        en.reset();
         exclusiveOn_ = false;
         dopOn_ = false;
         if (mmcss) AvRevertMmThreadCharacteristics(mmcss);
