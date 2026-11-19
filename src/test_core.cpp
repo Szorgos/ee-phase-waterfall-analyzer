@@ -8,7 +8,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <future>
 #include <iterator>
+#include <memory>
 #include <limits>
 #include <random>
 #include <thread>
@@ -21,6 +23,7 @@
 #include "dsp_state.hpp"
 #include "self_path.hpp"
 #include "ws_bridge.hpp"
+#include "visual_source.hpp"
 #include "pair_cli.hpp"
 #include "sha256.hpp"
 #include "update_logic.hpp"
@@ -561,7 +564,7 @@ static void testPushPairing() {
 }
 
 /** Élő WebSocket-kapcsolat a hídhoz (valódi socket, kézfogás); kInvalidSocket, ha nem sikerült. */
-static net::socket_t wsConnectLive(int port, const std::string& path, std::string* leftover = nullptr) {
+static net::socket_t wsConnectLive(int port, const std::string& path, std::string* leftover = nullptr, int timeoutMs = 0) {
     net::socket_t s = ::socket(AF_INET, SOCK_STREAM, 0);
     if (s == net::kInvalidSocket) return s;
     sockaddr_in a{};
@@ -569,6 +572,14 @@ static net::socket_t wsConnectLive(int port, const std::string& path, std::strin
     a.sin_port = htons(static_cast<uint16_t>(port));
     a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     if (::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof(a)) != 0) { net::closeSocket(s); return net::kInvalidSocket; }
+    if (timeoutMs > 0) {   // beragadt híd esetén a kézfogás ne várjon örökké
+#ifdef _WIN32
+        DWORD tv = static_cast<DWORD>(timeoutMs);
+#else
+        timeval tv{ timeoutMs / 1000, (timeoutMs % 1000) * 1000 };
+#endif
+        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv));
+    }
     const std::string req = "GET " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
                             "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n";
     ::send(s, req.data(), static_cast<int>(req.size()), 0);
@@ -2754,6 +2765,90 @@ concept HasUpsampleOptions = requires(O& o) {
     o.upsamplePrecision;
 };
 
+// Hibajelentés 2026-11-19 (Fedora, FiiO BTR7, 2.6.0): DSD lejátszásakor (DoP és natív) a lejátszásgombok nem hatottak,
+// és a motor nem állt le. Ok: a vizualizáció forrása DSD alatt minden hívásra „csendet” adott (mindig maxFrames keretet),
+// a híd hanglehúzó ciklusa ezért soha nem ért véget.
+
+static void testVisualSourceDsd() {
+    std::printf("[24] A vizualizáció forrása: közvetlen DSD-kimenetnél a híd nem kap hangot\n");
+    std::vector<float> buf(2 * 256, 1.0f);
+    int exclCalls = 0, engCalls = 0;
+    auto excl = [&](float* d, size_t n) -> size_t { ++exclCalls; std::fill_n(d, n * 2, 0.25f); return n; };
+    auto eng = [&](float* d, size_t n) -> size_t { ++engCalls; std::fill_n(d, n * 2, 0.5f); return n; };
+    for (bool ex : { false, true }) {
+        exclCalls = engCalls = 0;
+        const size_t got = pullVisualAudio(true, ex, buf.data(), 256, excl, eng);
+        CHECK(got == 0 && exclCalls == 0 && engCalls == 0,
+              "közvetlen DSD-kimenet (kizárólagos jelző: %d): 0 keret, egyik lehallgatópontot sem olvassa (kapott: %u)",
+              ex ? 1 : 0, static_cast<unsigned>(got));
+    }
+    exclCalls = engCalls = 0;
+    CHECK(pullVisualAudio(false, true, buf.data(), 256, excl, eng) == 256 && exclCalls == 1 && engCalls == 0 && buf[0] == 0.25f,
+          "kizárólagos PCM-kimenet: a lejátszó lehallgatópontja");
+    exclCalls = engCalls = 0;
+    CHECK(pullVisualAudio(false, false, buf.data(), 256, excl, eng) == 256 && engCalls == 1 && exclCalls == 0 && buf[0] == 0.5f,
+          "egyébként: a motor lehallgatópontja");
+}
+
+static void testBridgeEndlessAudio() {
+    std::printf("[25] Mindig adatot adó hangforrás mellett is válaszol a híd, és gyorsan leáll\n");
+    // Őrszem: ha a híd beragad, a teszt ne fusson örökké (a beragadt szálat leállítani nem lehet, ezért kilépés)
+    std::atomic<bool> done{ false };
+    std::thread guard([&done] {
+        for (int i = 0; i < 300 && !done.load(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        if (!done.load()) {
+            std::printf("  [HIBA] a híd 30 s után sem engedte tovább a tesztet (beragadt) – a teszt megszakítva\n");
+            std::fflush(stdout);
+            std::_Exit(2);
+        }
+    });
+    constexpr double kSr = 352800.0;   // a DSD256 keretrátája natív DSD_U32_BE kimenetnél (a bejelentő DAC-ja)
+    std::atomic<uint64_t> pulled{ 0 };
+    BridgeCallbacks cb;
+    cb.pullAudio = [&](float* lr, size_t maxFrames) -> size_t {   // soha nem fogy ki (mint a hibás DSD-ág)
+        std::fill_n(lr, maxFrames * 2, 0.0f);
+        pulled += maxFrames;
+        return maxFrames;
+    };
+    cb.sampleRate = [] { return 352800.0; };
+    cb.getParams = [] { return transparentParams(); };
+    cb.setParams = [](const ParamData&) {};
+    cb.loadRemote = [] { return std::string("{\"enabled\":false,\"port\":47931,\"bluetooth\":false,\"devices\":[]}"); };
+    cb.saveRemote = [](const std::string&) { return true; };
+    auto bridge = std::make_unique<WebSocketBridge>(47930);
+    const bool started = bridge->start(cb);
+    CHECK(started, "a híd elindul (127.0.0.1:47930)");
+    if (started) {
+        net::socket_t s = wsConnectLive(47930, "/", nullptr, 3000);
+        CHECK(s != net::kInvalidSocket, "a felület 3 s-on belül csatlakozik");
+        if (s != net::kInvalidSocket) {
+            wsSendText(s, "{\"type\":\"ping\",\"t\":42}");
+            CHECK(!wsWaitFor(s, "\"type\":\"pong\"", 2000).empty(), "parancs (ping) → válasz (pong) 2 s-on belül");
+            CHECK(!wsWaitFor(s, "\"type\":\"status\"", 2000).empty(), "az állapotüzenet (status) megjön");
+            // Valós idejű keret: a híd legfeljebb ~kétszer annyi hangot húz, amennyi valós időben keletkezik
+            const uint64_t p0 = pulled.load();
+            const auto t0 = std::chrono::steady_clock::now();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+            const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            const double rate = static_cast<double>(pulled.load() - p0) / secs;
+            CHECK(rate <= 2.5 * kSr && rate >= 0.5 * kSr,
+                  "a lehúzás üteme a valós időhöz kötött: %.0f keret/s (elvárt %.0f–%.0f)", rate, 0.5 * kSr, 2.5 * kSr);
+            net::closeSocket(s);
+        }
+        auto fut = std::async(std::launch::async, [&] { bridge->stop(); });
+        const bool stopped = fut.wait_for(std::chrono::seconds(2)) == std::future_status::ready;
+        CHECK(stopped, "a híd 2 s-on belül leáll (stop)");
+        if (!stopped) {
+            std::printf("  [HIBA] a híd leállítása beragadt – a teszt megszakítva\n");
+            std::fflush(stdout);
+            std::_Exit(2);
+        }
+    }
+    bridge.reset();
+    done = true;
+    guard.join();
+}
+
 template <class OptT = audioopt::AudioOptions>
 static void testUpsampleOptionsK17() {
     std::printf("\n[K17] AudioOptions felmintavételezés beállítások és mentés (K17)\n");
@@ -2829,6 +2924,8 @@ int main() {
     testBridgeWayEqImpl();
     testBridgeMultiOutRemoteAuth();
     testUpsampleOptionsK17();
+    testVisualSourceDsd();
+    testBridgeEndlessAudio();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

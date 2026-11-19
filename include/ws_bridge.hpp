@@ -233,6 +233,9 @@ constexpr int kPairWindowSeconds = 300;
 /** Egy kliens küldési sora legfeljebb ekkora lehet; ha nem olvas, a kapcsolat bomlik (a többi kliens nem vár rá). */
 constexpr size_t kBridgeMaxQueuedBytes = 16u << 20;
 
+/** A híd egy körében a hanglehúzás legfeljebb ennyi ideig tarthat (utána a parancsok és a leállítás jönnek). */
+constexpr std::chrono::milliseconds kBridgePullBudget{ 20 };
+
 namespace bridge_detail {
 
 inline std::string toHex(const uint8_t* p, size_t n) {
@@ -622,6 +625,7 @@ private:
         std::vector<float> chunk(8192 * 2);
         auto lastSpectrum = clock::now();
         auto lastStatus = clock::now();
+        auto lastPull = clock::now();
         bool freshAudio = false;
         std::string spectrumMsg;
         uint64_t spectrumSeq = 0;
@@ -641,14 +645,25 @@ private:
             reapAsync();
             drainOutbox();
 
-            // 1. Hang lehúzása a motorból (akkor is, ha nincs kliens, hogy ne torlódjon fel)
+            // 1. Hang lehúzása a motorból (akkor is, ha nincs kliens, hogy ne torlódjon fel).
+            // Körönként legfeljebb a valós időben keletkezett hang kétszerese, és legfeljebb kBridgePullBudget ideig:
+            // egy mindig adatot adó forrás sem tudja kiéheztetni a parancsfeldolgozást és a leállítást
+            // (hibajelentés 2026-11-19: DSD alatt a végtelen „csend” miatt a híd nem válaszolt, és nem állt le).
+            // A lemaradást a lehallgatógyűrű maga kezeli (túl nagy lemaradásnál a friss adatra ugrik).
             if (cb_.pullAudio) {
                 const double inSr = cb_.sampleRate ? cb_.sampleRate() : 48000.0;
-                analyzer.setSampleRate(inSr > 0 ? inSr : 48000.0);   // a mély sávok decimálásához
+                const double sr = inSr > 0 ? inSr : 48000.0;
+                analyzer.setSampleRate(sr);   // a mély sávok decimálásához
+                const auto pullStart = clock::now();
+                const double elapsed = std::min(0.25, std::chrono::duration<double>(pullStart - lastPull).count());
+                lastPull = pullStart;
+                size_t budget = static_cast<size_t>(elapsed * sr * 2.0) + 1;
                 size_t got;
-                while ((got = cb_.pullAudio(chunk.data(), chunk.size() / 2)) > 0) {
+                while (budget > 0 && (got = cb_.pullAudio(chunk.data(), std::min(chunk.size() / 2, budget))) > 0) {
                     analyzer.push(chunk.data(), got);
                     freshAudio = true;
+                    budget -= std::min(budget, got);
+                    if (clock::now() - pullStart >= kBridgePullBudget) break;
                 }
             }
 
