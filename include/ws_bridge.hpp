@@ -1651,6 +1651,12 @@ private:
                     break;
                 }
             }
+            // Az érintett, éppen csatlakozó eszköz azonnal megtudja az új jogot (különben csak újracsatlakozáskor látná)
+            for (auto& c : clients_) {
+                if (c->remote && c->deviceId == id)
+                    queueText(*c, "{\"type\":\"machine\",\"machine\":\"" + machineId() + "\",\"computer\":\"" +
+                                      jsonEscape(MdnsAnnouncer::computerName()) + "\",\"admin\":" + (adm ? "true" : "false") + "}");
+            }
             broadcastRemoteState();
         } else if (type == "remote_revoke") {
             const std::string id = msg.get("id") ? msg.get("id")->stringOr("") : "";
