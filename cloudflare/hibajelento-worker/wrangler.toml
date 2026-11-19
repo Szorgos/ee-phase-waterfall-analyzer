@@ -12,7 +12,13 @@ enabled = false
 RATE_PER_IP_PER_HOUR = "10"
 RATE_GLOBAL_PER_HOUR = "1000"
 MAX_BODY_BYTES = "65536"
+# A jelentések megőrzési ideje napokban; a felület „90 napig tárolva” szövege ehhez igazodik.
+RETENTION_DAYS = "90"
 # RATE_SALT: titok, nem ide kerül:  npx wrangler secret put RATE_SALT
+
+# Naponta egyszer (03:17 UTC): a RETENTION_DAYS napnál régebbi jelentések törlése (src/retention.ts).
+[triggers]
+crons = ["17 3 * * *"]
 
 [[d1_databases]]
 binding = "DB"

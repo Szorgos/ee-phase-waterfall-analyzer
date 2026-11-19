@@ -3,12 +3,14 @@
  *
  * POST /report  – egy tisztított jelentés (include/error_report.hpp, format 1) fogadása, második tisztítás, tárolás D1-ben
  * GET  /health  – él-e (D1-et nem érint)
+ * Naponta (Cron Trigger): a RETENTION_DAYS napnál (alap: 90) régebbi jelentések törlése (src/retention.ts)
  *
  * Nincs CORS (a kliens nem böngésző). A naplóba csak rögzített hibakód kerül, a kérés tartalma és az IP soha.
  * A végpont szerződése: README.md.
  */
 
 import { checkRate } from "./ratelimit";
+import { DEFAULT_RETENTION_DAYS, purgeOldReports } from "./retention";
 import { scrubValue } from "./scrub";
 import { stateField, validateReport } from "./validate";
 
@@ -19,6 +21,8 @@ export interface Env {
   RATE_PER_IP_PER_HOUR?: string;
   RATE_GLOBAL_PER_HOUR?: string;
   MAX_BODY_BYTES?: string;
+  /** A jelentések megőrzési ideje napokban (alap: 90). */
+  RETENTION_DAYS?: string;
 }
 
 const DEFAULTS = { perIp: 10, global: 1000, maxBytes: 64 * 1024 };
@@ -149,5 +153,14 @@ export default {
       return reply(200, { ok: true, format: [1] });
     }
     return fail(404, "not_found");
+  },
+
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    const days = num(env.RETENTION_DAYS, DEFAULT_RETENTION_DAYS);
+    ctx.waitUntil(
+      purgeOldReports(env.DB, controller.scheduledTime, days).catch(() => {
+        console.error("hibajelento: retention_error");
+      }),
+    );
   },
 } satisfies ExportedHandler<Env>;

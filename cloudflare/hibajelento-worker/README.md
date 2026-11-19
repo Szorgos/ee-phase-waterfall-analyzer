@@ -5,8 +5,8 @@ A program beépített hibajelentésének **fogadó oldala**: egy Cloudflare Work
 adatbázisba írja. Csak a tulajdonos látja. A programban nincs token vagy kulcs; a végpont nyilvános, a védelem a
 szigorú ellenőrzés, a méret- és a gyakoriságkorlát.
 
-**Állapot:** a kód és a tesztek készek, helyben futnak. **Nincs élesítve**: a telepítést a tulajdonos végzi a saját
-Cloudflare-fiókjával (lent, „Telepítés”). A kliens (motor) oldali küldés még nincs megírva (3. szakasz).
+**Állapot:** élesítve 2026-11-19-én (`https://aqulify-hibajelento.gergoeagle.workers.dev`), a napi megőrzési
+törléssel együtt. A kliens (motor) oldali küldés a 2.7.0-ban jelenik meg.
 
 ## Mit csinál
 
@@ -29,6 +29,9 @@ Cloudflare-fiókjával (lent, „Telepítés”). A kliens (motor) oldali küld�
      szervernek módosítania (ha a kliens jól tisztít: 0).
   6. Tárolás a D1 `reports` táblájában (`migrations/0001_init.sql`), IP nélkül.
 - `GET /health`: `{"ok":true,"format":[1]}` (D1-et nem érint).
+- **Megőrzés** (`src/retention.ts`): naponta 03:17 UTC-kor (Cron Trigger, `wrangler.toml` `[triggers]`) törli a
+  `RETENTION_DAYS` napnál (alap: 90) régebben fogadott jelentéseket, forgalomtól függetlenül. A felület és a kiadási
+  jegyzet „90 napig tárolva” ígérete erre épül; ha a `RETENTION_DAYS` változik, a szövegeket is módosítani kell.
 - CORS nincs (a kliens nem böngésző). A naplóba csak rögzített hibakód kerül (`hibajelento: d1_error` stb.), a
   kérés tartalma és az IP soha; a Cloudflare-naplózás (`[observability]`) ki van kapcsolva.
 
@@ -117,7 +120,7 @@ npx wrangler d1 execute aqulify-hibajelentes --remote --command \
   "SELECT id, datetime(received_unix,'unixepoch') AS fogadva, kind, symptom, version, platform, package, server_scrub_changes FROM reports ORDER BY id DESC LIMIT 20"
 # egy jelentés teljes szövege
 npx wrangler d1 execute aqulify-hibajelentes --remote --json --command "SELECT body FROM reports WHERE id = 42"
-# a 90 napnál régebbiek törlése
+# a 90 napnál régebbiek törlése (naponta magától is lefut; kézzel csak ellenőrzéshez kell)
 npx wrangler d1 execute aqulify-hibajelentes --remote --command "DELETE FROM reports WHERE received_unix < unixepoch() - 90*86400"
 ```
 

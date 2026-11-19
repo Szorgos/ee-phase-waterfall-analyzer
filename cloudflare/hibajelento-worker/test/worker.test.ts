@@ -245,6 +245,66 @@ describe("tömeges kérés (gyakoriságkorlát)", () => {
   });
 });
 
+describe("megőrzési idő (90 nap)", () => {
+  async function insertAt(receivedUnix: number, symptom: string): Promise<number> {
+    const r = await env.DB.prepare(
+      "INSERT INTO reports (received_unix, format, kind, symptom, server_scrub_changes, body) VALUES (?1, 1, 'manual', ?2, 0, '{}') RETURNING id",
+    )
+      .bind(receivedUnix, symptom)
+      .first<{ id: number }>();
+    return r!.id;
+  }
+  const exists = async (id: number) =>
+    (await env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE id = ?1").bind(id).first<{ n: number }>())!.n === 1;
+
+  it("a napi ütemezett futás pontosan a 90 napnál régebbieket törli", async () => {
+    const nowMs = 1_800_000_000_000;
+    const now = nowMs / 1000;
+    const cutoff = now - 90 * 86_400;
+    const tooOld = await insertAt(cutoff - 1, "retOld");
+    const atLimit = await insertAt(cutoff, "retLimit");
+    const recent = await insertAt(now - 86_400, "retRecent");
+
+    const { default: worker } = await import("../src/index");
+    const pending: Promise<unknown>[] = [];
+    const ctx = { waitUntil: (p: Promise<unknown>) => pending.push(p), passThroughOnException: () => {} };
+    await worker.scheduled(
+      { scheduledTime: nowMs, cron: "17 3 * * *", noRetry: () => {} } as unknown as ScheduledController,
+      { DB: env.DB, RATE_SALT: "tesztso-0123456789abcdef", RETENTION_DAYS: "90" },
+      ctx as unknown as ExecutionContext,
+    );
+    await Promise.all(pending);
+
+    expect(pending.length).toBe(1);
+    expect(await exists(tooOld)).toBe(false);
+    expect(await exists(atLimit)).toBe(true);
+    expect(await exists(recent)).toBe(true);
+  });
+
+  it("a megőrzési idő a RETENTION_DAYS-ből jön; hibás érték esetén 90 nap", async () => {
+    const { purgeOldReports, retentionCutoff } = await import("../src/retention");
+    const nowMs = 1_900_000_000_000;
+    const now = nowMs / 1000;
+    expect(retentionCutoff(nowMs, 90)).toBe(now - 90 * 86_400);
+    const a = await insertAt(now - 10 * 86_400, "ret10");
+    const b = await insertAt(now - 3 * 86_400, "ret3");
+    expect(await purgeOldReports(env.DB, nowMs, 7)).toBeGreaterThanOrEqual(1);
+    expect(await exists(a)).toBe(false);
+    expect(await exists(b)).toBe(true);
+
+    const { default: worker } = await import("../src/index");
+    const c = await insertAt(now - 89 * 86_400, "ret89");
+    const pending: Promise<unknown>[] = [];
+    await worker.scheduled(
+      { scheduledTime: nowMs, cron: "17 3 * * *", noRetry: () => {} } as unknown as ScheduledController,
+      { DB: env.DB, RETENTION_DAYS: "nem szám" },
+      { waitUntil: (p: Promise<unknown>) => pending.push(p) } as unknown as ExecutionContext,
+    );
+    await Promise.all(pending);
+    expect(await exists(c)).toBe(true); // hibás beállításnál is 90 nap, nem kevesebb
+  });
+});
+
 describe("beállítás nélkül", () => {
   it("RATE_SALT nélkül 503 not_configured, és nem tárol", async () => {
     const { default: worker } = await import("../src/index");
