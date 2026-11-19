@@ -39,6 +39,10 @@ public:
     virtual size_t read(float* interleaved, size_t frames) = 0;
     /** Ugrás a megadott keretre; false: nem sikerült (a pozíció ilyenkor határozatlan). */
     virtual bool seek(uint64_t frame) = 0;
+    /** A forrás bitmélysége (a kijelzéshez); 0: ismeretlen vagy veszteséges / nincs értelmezve. */
+    virtual uint32_t bitsPerSample() const { return 0; }
+    /** DSD-forrásnál az eredeti 1 bites mintavétel Hz-ben (pl. 2822400); egyébként 0. */
+    virtual uint32_t dsdSampleRate() const { return 0; }
     const TrackTags& tags() const { return tags_; }
 
 protected:

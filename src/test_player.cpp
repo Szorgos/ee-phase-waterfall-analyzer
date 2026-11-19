@@ -377,6 +377,14 @@ static void testPlayer() {
     std::string err;
     CHECK(p.open(path, &err) && out->rate == sr && out->active && p.state() == FilePlayer::State::Playing,
           "megnyitás: a kimenet %u Hz-en, lejátszás", out->rate);
+    {
+        // A „most szól” a forrás formátumát is közli (kijelzéshez): 32 bites lebegőpontos WAV, a fájl saját mintavételén
+        const media::Info fi = p.info();
+        const std::string fj = media::toJson(fi);
+        CHECK(fi.fmtBits == 32 && fi.fmtRate == sr && fi.fmtDsd == 0 &&
+                  fj.find("\"fmt\":{\"bits\":32,\"rate\":" + std::to_string(sr) + ",\"dsd\":0}") != std::string::npos,
+              "a most szól üzenet a forrás formátumát tartalmazza (bits %u, rate %u)", fi.fmtBits, fi.fmtRate);
+    }
 
     // fél másodperc: bitpontosan a forrás
     std::vector<float> a = pullFrames(p, *out, sr / 2);

@@ -575,6 +575,14 @@ media::Info FilePlayer::info() const {
     m.canPause = m.playing;
     m.canSeek = a->total > 0;
     m.artId = a->artId;
+    const uint32_t dsd = a->dsdRate > 0 ? a->dsdRate : a->dec->dsdSampleRate();
+    if (dsd > 0) {
+        m.fmtDsd = dsd;
+        m.fmtRate = dsd;
+    } else {
+        m.fmtBits = a->dec->bitsPerSample();
+        m.fmtRate = a->dec->sampleRate();   // a fájl saját mintavétele (nem a felmintavételezett kimeneté)
+    }
     return m;
 }
 

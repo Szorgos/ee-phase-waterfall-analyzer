@@ -196,6 +196,7 @@ public:
     }
     uint32_t sampleRate() const override { return wav_.sampleRate; }
     uint32_t channels() const override { return wav_.channels; }
+    uint32_t bitsPerSample() const override { return wav_.bitsPerSample; }
     uint64_t totalFrames() const override { return wav_.totalPCMFrameCount; }
     size_t read(float* out, size_t frames) override { return static_cast<size_t>(drwav_read_pcm_frames_f32(&wav_, frames, out)); }
     bool seek(uint64_t frame) override { return drwav_seek_to_pcm_frame(&wav_, frame); }
@@ -219,6 +220,7 @@ public:
     }
     uint32_t sampleRate() const override { return flac_->sampleRate; }
     uint32_t channels() const override { return flac_->channels; }
+    uint32_t bitsPerSample() const override { return flac_->bitsPerSample; }
     uint64_t totalFrames() const override { return flac_->totalPCMFrameCount; }
     size_t read(float* out, size_t frames) override { return static_cast<size_t>(drflac_read_pcm_frames_f32(flac_, frames, out)); }
     bool seek(uint64_t frame) override { return drflac_seek_to_pcm_frame(flac_, frame); }
@@ -378,6 +380,7 @@ public:
 
     uint32_t sampleRate() const override { return sampleRate_; }
     uint32_t channels() const override { return channels_; }
+    uint32_t bitsPerSample() const override { return bitDepth_; }
     uint64_t totalFrames() const override { return totalFrames_; }
 
     size_t read(float* out, size_t frames) override {
@@ -954,6 +957,10 @@ private:
     uint32_t rate_ = 0, ch_ = 0;
     uint64_t total_ = 0;
     int bytesPerSample_ = 0;
+public:
+    uint32_t bitsPerSample() const override { return bitsPerSample_ > 0 ? static_cast<uint32_t>(bitsPerSample_) : 0u; }
+
+private:
     int bitsPerSample_ = 0;
     bool isFloat_ = false;
     std::vector<int32_t> rawBuf_;
@@ -1090,6 +1097,7 @@ public:
 
     uint32_t sampleRate() const override { return raw_ ? raw_->info().pcmSampleRate : 0; }
     uint32_t channels() const override { return raw_ ? raw_->info().channels : 0; }
+    uint32_t dsdSampleRate() const override { return raw_ ? raw_->info().dsdSampleRate : 0; }
     uint64_t totalFrames() const override { return totalFrames_; }
 
     size_t read(float* interleaved, size_t frames) override {
