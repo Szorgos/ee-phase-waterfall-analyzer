@@ -1,0 +1,10 @@
+--- a/include/device_format.hpp
++++ b/include/device_format.hpp
+@@ -53,7 +53,6 @@
+         for (int i = 0; i < 12; ++i) baseGuid = baseGuid && sub[4 + i] == kBaseGuidTail[i];
+         const uint32_t subTag = le32(sub);
+         const uint32_t valid = le16(data + 18);
+-        if (valid != 0) bits = valid;
+         if (baseGuid && subTag == 1) kind = "PCM";
+         else if (baseGuid && subTag == 3) kind = "float";
+         else {

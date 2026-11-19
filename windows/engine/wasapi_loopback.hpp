@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "tap_ring.hpp"
+#include "watchdog.hpp"
 
 namespace ee_analyzer::win {
 
@@ -81,12 +82,19 @@ public:
 
 private:
     void threadMain() {
+        // Őrszem (beépített hibajelentés): a szál a rögzítés ciklusában 10 ms-onként, az újrapróbálkozás szünetében
+        // 100 ms-onként jelez; a regisztráció a szál élettartamára szól (leállítás után nem figyelt)
+        aq::wd::Heartbeat hb("loopback");
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         while (running_) {
-            if (!captureSession()) {
+            hb.beat("loopback: open");
+            if (!captureSession(hb)) {
                 active_ = false;
                 // Hiba vagy eszközváltás: rövid szünet, majd újrapróbálkozás
-                for (int i = 0; i < 10 && running_; ++i) Sleep(100);
+                for (int i = 0; i < 10 && running_; ++i) {
+                    hb.beat("loopback: retry");
+                    Sleep(100);
+                }
             }
         }
         active_ = false;
@@ -115,7 +123,7 @@ private:
     }
 
     /** Egy rögzítési munkamenet; false-szal tér vissza, ha újra kell indítani. */
-    bool captureSession() {
+    bool captureSession(aq::wd::Heartbeat& hb) {
         ComPtr<IMMDeviceEnumerator> en;
         if (FAILED(CoCreateInstance(kCLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL, kIID_IMMDeviceEnumerator,
                                     reinterpret_cast<void**>(en.put())))) {
@@ -194,6 +202,7 @@ private:
         auto lastDeviceCheck = lastData;
 
         while (running_) {
+            hb.beat("loopback: capture");
             Sleep(10);
 
             UINT32 packet = 0;

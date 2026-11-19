@@ -3429,6 +3429,58 @@ var qrcode = function() {
       z-index: 100;
     }
     .remote-banner[hidden] { display: none !important; }
+    .er-symptom-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    @media (max-width: 520px) {
+      .er-symptom-grid { grid-template-columns: 1fr; }
+    }
+    .er-sym-btn {
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--aq-line-2);
+      background: var(--aq-surface);
+      color: var(--aq-text);
+      font-size: 0.88rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .er-sym-btn:hover { border-color: var(--aq-accent); }
+    .er-sym-btn.active {
+      border-color: var(--aq-accent);
+      background: rgba(56, 139, 253, 0.16);
+      font-weight: 600;
+    }
+    .er-preview-box {
+      margin: 0;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--aq-line);
+      background: var(--aq-input);
+      color: var(--aq-text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.74rem;
+      line-height: 1.4;
+      max-height: 220px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .er-feedback {
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      border: 1px solid var(--aq-line);
+      background: var(--aq-surface);
+      color: var(--aq-text);
+    }
+    .er-feedback.ok { border-color: #2ea043; background: rgba(46, 160, 67, 0.14); }
+    .er-feedback.warn { border-color: #d29922; background: rgba(210, 153, 34, 0.14); }
+    .er-feedback.err { border-color: #f85149; background: rgba(248, 81, 73, 0.14); }
     .machine-select {
       max-width: 140px;
       font-weight: 500;
@@ -5103,6 +5155,15 @@ var qrcode = function() {
             <div id="upsAboutCredit" class="ao-hint" style="margin-top:6px;" data-i18n="ups.aboutCredit">Felmintavételezés: libsoxr, LGPL-2.1+</div>
             <div id="asioAboutCredit" class="ao-hint" style="margin-top:2px;" data-i18n="ao.asioCredit">ASIO-kimenet (Windows): Steinberg ASIO SDK 2.3.4, GPLv3. Az ASIO a Steinberg Media Technologies GmbH védjegye és szoftvere.</div>
           </div>
+          <div id="errRepWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:10px;">
+            <div class="sink-sec-title" data-i18n="er.section">Hibajelentés</div>
+            <label class="ao-row ao-check"><input type="checkbox" id="chkErrReports" onchange="errRepToggle(this.checked)"> <span data-i18n="er.setting">Névtelen hibajelentés</span></label>
+            <div class="ao-hint" data-i18n="er.privacyShort">Bekapcsolva csak a program verzióját, rendszeradatait, a lejátszási utat, a hangkártyák gyári típusát és a motor utolsó naplósorait küldi a projekt szerverére (90 napig tárolva). Nevet, gépnevet, útvonalat, IP-, MAC- vagy e-mail-címet nem küld. Bármikor kikapcsolható.</div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:6px;">
+              <button type="button" class="adw-btn primary" id="btnErrReportOpen" onclick="closeSinkMenu(); openErrorReportModal('manual')" data-i18n="er.reportBtn">Hibát jelentek</button>
+              <button type="button" class="adw-btn" id="btnErrReportWhat" onclick="closeSinkMenu(); openErrorReportPreviewOnly()" data-i18n="er.whatSends">Mit küld?</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -5147,6 +5208,21 @@ var qrcode = function() {
       <button type="button" id="btnRemoteUpdHide" class="mini-btn" hidden data-i18n="target.hideUpdate" onclick="hideRemoteUpdate()">Ne szólj erről a verzióról</button>
     </div>
     <button type="button" class="mini-btn" onclick="switchControlledMachine('')" data-i18n="target.switchBack">Vissza a saját géphez</button>
+  </div>
+  <div id="errRepFirstRunBanner" class="remote-banner" style="flex-wrap:wrap;" hidden>
+    <span style="flex:1 1 280px;" data-i18n="er.firstRunText">Küldhet-e az Aqulify névtelen hibajelentést, ha valami elromlik? Személyes adatot nem küld.</span>
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <button type="button" class="mini-btn" id="btnErFirstNo" onclick="errRepAnswerFirstRun(false)" data-i18n="er.no">Nem</button>
+      <button type="button" class="mini-btn" id="btnErFirstYes" onclick="errRepAnswerFirstRun(true)" data-i18n="er.yes">Igen</button>
+      <button type="button" class="mini-btn" id="btnErFirstWhat" onclick="openErrorReportPreviewOnly()" data-i18n="er.whatSends">Mit küld?</button>
+    </div>
+  </div>
+  <div id="errRepPrevBanner" class="remote-banner" style="flex-wrap:wrap;" hidden>
+    <span style="flex:1 1 280px; font-weight:500;" data-i18n="er.prevBannerText">Legutóbb az Aqulify nem állt le rendesen. Elküldjük, mi történt?</span>
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <button type="button" class="mini-btn" id="btnErPrevReview" onclick="openErrorReportModal('previous')" data-i18n="er.prevReviewBtn">Megnézem és elküldöm</button>
+      <button type="button" class="mini-btn" id="btnErPrevNo" onclick="errRepDismissPrevious()" data-i18n="er.no">Nem</button>
+    </div>
   </div>
   <div id="hiresDspNote" class="dsp-warn" hidden><span id="hiresDspNoteText"></span></div>
   <div id="loadAdvBanner" class="remote-banner" style="flex-wrap:wrap;" hidden>
@@ -6383,6 +6459,47 @@ var qrcode = function() {
         </div>
       </div>
     </div>
+<div id="errRepModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:10050; align-items:center; justify-content:center;" onclick="if (event.target === this) closeErrorReportModal()">
+    <div class="aq-modal" style="width:620px; max-width:calc(100vw - 24px); max-height:90vh; display:flex; flex-direction:column; gap:12px; overflow:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-line); padding-bottom:10px;">
+        <span id="errRepModalTitle" style="font-size:1.08rem; font-weight:600; color:var(--aq-text);" data-i18n="er.modalTitle">Hibát jelentek</span>
+        <button type="button" class="icon-btn" onclick="closeErrorReportModal()" title="Bezárás" data-i18n-title="common.close" data-i18n-aria-label="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+      <div id="errRepManualFields" style="display:flex; flex-direction:column; gap:10px;">
+        <div style="font-size:0.85rem; font-weight:600; color:var(--aq-text);" data-i18n="er.pickSymptom">Mi a probléma?</div>
+        <div class="er-symptom-grid" id="errRepSymptoms">
+          <button type="button" class="er-sym-btn active" data-symptom="noSound" onclick="errRepPickSymptom('noSound')" data-i18n="er.sym_noSound">Nem szól</button>
+          <button type="button" class="er-sym-btn" data-symptom="crackle" onclick="errRepPickSymptom('crackle')" data-i18n="er.sym_crackle">Recseg, szaggat</button>
+          <button type="button" class="er-sym-btn" data-symptom="buttonNoEffect" onclick="errRepPickSymptom('buttonNoEffect')" data-i18n="er.sym_buttonNoEffect">Nem reagál egy gomb</button>
+          <button type="button" class="er-sym-btn" data-symptom="freeze" onclick="errRepPickSymptom('freeze')" data-i18n="er.sym_freeze">Lefagyott / nem tudom bezárni</button>
+          <button type="button" class="er-sym-btn" data-symptom="badSound" onclick="errRepPickSymptom('badSound')" data-i18n="er.sym_badSound">Rossz a hangzás</button>
+          <button type="button" class="er-sym-btn" data-symptom="other" onclick="errRepPickSymptom('other')" data-i18n="er.sym_other">Más</button>
+        </div>
+        <label style="display:flex; flex-direction:column; gap:4px;">
+          <span style="font-size:0.82rem; color:var(--aq-text-2);" data-i18n="er.noteLabel">Mit csináltál közvetlenül előtte? (nem kötelező, max. 400 karakter)</span>
+          <textarea id="errRepNote" class="ee-input" rows="2" maxlength="400" oninput="errRepSchedulePreview()" data-i18n-placeholder="er.notePh" placeholder="Pl. DSD fájlra váltottam, vagy kizárólagos módot kapcsoltam be…" style="resize:vertical; width:100%; box-sizing:border-box;"></textarea>
+        </label>
+      </div>
+      <div id="errRepPrevIntro" class="ao-hint" hidden data-i18n="er.prevIntro">Az előző, rendellenesen megszakadt futás összefoglalója. A „Küldés” gomb egyszeri hozzájárulás.</div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span style="font-size:0.85rem; font-weight:600; color:var(--aq-text);" data-i18n="er.previewTitle">Ezt küldjük el</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span id="errRepBytes" class="ao-hint" style="margin:0;"></span>
+            <button type="button" class="mini-btn" id="errRepRefreshBtn" onclick="errRepRequestPreview()" data-i18n="er.previewRefresh">Előnézet frissítése</button>
+          </div>
+        </div>
+        <pre id="errRepPreviewBox" class="er-preview-box"></pre>
+      </div>
+      <div id="errRepFeedback" class="er-feedback" hidden></div>
+      <div id="errRepOneTimeHint" class="ao-hint" style="margin:0;" data-i18n="er.oneTimeHint">A „Küldés” egyszeri hozzájárulás ehhez a jelentéshez, akkor is, ha az automatikus jelentés ki van kapcsolva.</div>
+      <div style="display:flex; justify-content:flex-end; align-items:center; gap:8px; flex-wrap:wrap; border-top:1px solid var(--aq-line); padding-top:10px;">
+        <button type="button" class="adw-btn" id="errRepBtnCancel" onclick="closeErrorReportModal()" data-i18n="er.cancelBtn">Mégse</button>
+        <button type="button" class="adw-btn" id="errRepBtnSave" onclick="errRepSave()" data-i18n="er.saveBtn">Mentés fájlba</button>
+        <button type="button" class="adw-btn primary" id="errRepBtnSend" onclick="errRepSend()" data-i18n="er.sendBtn">Küldés</button>
+      </div>
+    </div>
+</div>
 <div id="modalImport" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:10000; align-items:center; justify-content:center;">
     <div class="aq-modal" style="width:650px; max-width:calc(100vw - 32px); max-height:90vh; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
       
@@ -10273,6 +10390,7 @@ function aoOnMessage(m) {
   document.getElementById("aoRowRgClip").hidden = !rgOn;
   upsApplyOptions(o, cp);
   aoRenderPath();
+  if (typeof errRepSyncOpts === "function") errRepSyncOpts(o);
 }
 
 /** ASIO (Windows): a kapcsoló és a telepített meghajtók listája a motor válaszából (caps.asioDrivers). */
@@ -10607,7 +10725,229 @@ function aoSend() {
       opts.dsdDop = dopChk.checked;
     }
   }
+  const erChk = document.getElementById("chkErrReports");
+  if (erChk) opts.errorReports = !!erChk.checked;
+  if (aoOpts && typeof aoOpts.errorReportsAsked === "boolean") opts.errorReportsAsked = aoOpts.errorReportsAsked;
   moSend({ type: "set_audio_opts", opts });
+}
+
+// --- Beépített hibajelentés (felület, előnézet, küldés, mentés fájlba, első indítás) ---
+let erMode = "manual";          // "manual" | "previous" | "previewOnly"
+let erSymptom = "noSound";
+let erConfigured = false;
+let erHasPrevious = false;
+let erPrevDismissed = false;
+let erSending = false;
+let erPreviewTimer = null;
+
+function errRepSyncOpts(o) {
+  const wrap = document.getElementById("errRepWrap");
+  if (wrap) wrap.hidden = false;
+  const chk = document.getElementById("chkErrReports");
+  if (chk) chk.checked = !!o.errorReports;
+  const firstBanner = document.getElementById("errRepFirstRunBanner");
+  if (firstBanner) firstBanner.hidden = !!o.errorReportsAsked;
+}
+
+function errRepToggle(on) {
+  if (!aoOpts) aoOpts = {};
+  aoOpts.errorReports = !!on;
+  aoOpts.errorReportsAsked = true;
+  const firstBanner = document.getElementById("errRepFirstRunBanner");
+  if (firstBanner) firstBanner.hidden = true;
+  moSend({ type: "set_audio_opts", opts: { errorReports: !!on, errorReportsAsked: true } });
+}
+
+function errRepAnswerFirstRun(allow) {
+  const chk = document.getElementById("chkErrReports");
+  if (chk) chk.checked = !!allow;
+  errRepToggle(!!allow);
+}
+
+function errRepOnStatus(er) {
+  if (!er || typeof er !== "object") return;
+  erConfigured = !!er.configured;
+  erHasPrevious = !!er.has_previous;
+  const b = document.getElementById("errRepPrevBanner");
+  if (b) b.hidden = !erHasPrevious || erPrevDismissed;
+}
+
+function errRepDismissPrevious() {
+  erPrevDismissed = true;
+  const b = document.getElementById("errRepPrevBanner");
+  if (b) b.hidden = true;
+  moSend({ type: "error_report_dismiss_previous" });
+}
+
+function errRepSetFeedback(kind, text, copyId) {
+  const fb = document.getElementById("errRepFeedback");
+  if (!fb) return;
+  if (!text) { fb.hidden = true; fb.innerHTML = ""; fb.className = "er-feedback"; return; }
+  fb.hidden = false;
+  fb.className = "er-feedback " + (kind || "");
+  fb.textContent = text;
+  if (copyId) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "mini-btn";
+    btn.style.marginLeft = "10px";
+    btn.textContent = t("er.copyId");
+    btn.onclick = () => {
+      const code = "AQ-" + copyId;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).catch(() => {});
+      }
+      btn.textContent = t("er.copied");
+    };
+    fb.appendChild(btn);
+  }
+}
+
+function errRepPickSymptom(sym) {
+  erSymptom = sym;
+  document.querySelectorAll("#errRepSymptoms .er-sym-btn").forEach(b => {
+    b.classList.toggle("active", b.getAttribute("data-symptom") === sym);
+  });
+  errRepRequestPreview();
+}
+
+function errRepSchedulePreview() {
+  if (erPreviewTimer) clearTimeout(erPreviewTimer);
+  erPreviewTimer = setTimeout(() => { errRepRequestPreview(); }, 250);
+}
+
+function errRepRequestPreview() {
+  const box = document.getElementById("errRepPreviewBox");
+  const bytesEl = document.getElementById("errRepBytes");
+  if (box) box.textContent = t("er.previewLoading");
+  if (bytesEl) bytesEl.textContent = "";
+  const noteEl = document.getElementById("errRepNote");
+  const kind = erMode === "previous" ? "previous" : "manual";
+  moSend({
+    type: "error_report_preview",
+    kind,
+    symptom: erMode === "manual" ? erSymptom : "",
+    note: erMode === "manual" && noteEl ? noteEl.value.slice(0, 400) : ""
+  });
+}
+
+function openErrorReportModal(mode) {
+  erMode = mode === "previous" ? "previous" : "manual";
+  erSending = false;
+  const modal = document.getElementById("errRepModal");
+  if (!modal) return;
+  const titleEl = document.getElementById("errRepModalTitle");
+  if (titleEl) {
+    titleEl.setAttribute("data-i18n", "er.modalTitle");
+    titleEl.textContent = t("er.modalTitle");
+  }
+  document.getElementById("errRepManualFields").hidden = erMode !== "manual";
+  document.getElementById("errRepPrevIntro").hidden = erMode !== "previous";
+  document.getElementById("errRepOneTimeHint").hidden = false;
+  document.getElementById("errRepBtnSend").hidden = false;
+  document.getElementById("errRepBtnSave").hidden = false;
+  document.getElementById("errRepBtnSend").textContent = t("er.sendBtn");
+  document.getElementById("errRepBtnSend").disabled = !erConfigured;
+  document.getElementById("errRepBtnSave").disabled = false;
+  errRepSetFeedback("", "");
+  modal.style.display = "flex";
+  errRepRequestPreview();
+}
+
+function openErrorReportPreviewOnly() {
+  erMode = "previewOnly";
+  erSending = false;
+  const modal = document.getElementById("errRepModal");
+  if (!modal) return;
+  const titleEl = document.getElementById("errRepModalTitle");
+  if (titleEl) {
+    titleEl.setAttribute("data-i18n", "er.previewTitle");
+    titleEl.textContent = t("er.previewTitle");
+  }
+  document.getElementById("errRepManualFields").hidden = true;
+  document.getElementById("errRepPrevIntro").hidden = true;
+  document.getElementById("errRepOneTimeHint").hidden = true;
+  document.getElementById("errRepBtnSend").hidden = true;
+  document.getElementById("errRepBtnSave").hidden = false;
+  errRepSetFeedback("", "");
+  modal.style.display = "flex";
+  errRepRequestPreview();
+}
+
+function closeErrorReportModal() {
+  const modal = document.getElementById("errRepModal");
+  if (modal) modal.style.display = "none";
+}
+
+function errRepSend() {
+  if (erSending || !erConfigured) return;
+  erSending = true;
+  const btn = document.getElementById("errRepBtnSend");
+  if (btn) { btn.disabled = true; btn.textContent = t("er.sending"); }
+  errRepSetFeedback("", "");
+  const noteEl = document.getElementById("errRepNote");
+  const kind = erMode === "previous" ? "previous" : "manual";
+  moSend({
+    type: "error_report_send",
+    kind,
+    symptom: erMode === "manual" ? erSymptom : "",
+    note: erMode === "manual" && noteEl ? noteEl.value.slice(0, 400) : ""
+  });
+}
+
+function errRepSave() {
+  const noteEl = document.getElementById("errRepNote");
+  const kind = erMode === "previous" ? "previous" : "manual";
+  moSend({
+    type: "error_report_save",
+    kind,
+    symptom: erMode === "manual" ? erSymptom : "",
+    note: erMode === "manual" && noteEl ? noteEl.value.slice(0, 400) : ""
+  });
+}
+
+function errRepOnPreview(m) {
+  erConfigured = !!m.configured;
+  const box = document.getElementById("errRepPreviewBox");
+  const bytesEl = document.getElementById("errRepBytes");
+  if (box) box.textContent = m.preview || "";
+  if (bytesEl && typeof m.bytes === "number") bytesEl.textContent = t("er.previewBytes", { bytes: fmtNum(m.bytes) });
+  const sendBtn = document.getElementById("errRepBtnSend");
+  if (sendBtn && erMode !== "previewOnly") sendBtn.disabled = erSending || !erConfigured;
+  if (!erConfigured && erMode !== "previewOnly") {
+    errRepSetFeedback("warn", t("er.notConfigured"));
+  }
+}
+
+function errRepOnResult(m) {
+  erSending = false;
+  const sendBtn = document.getElementById("errRepBtnSend");
+  if (sendBtn) {
+    sendBtn.textContent = t("er.sendBtn");
+    sendBtn.disabled = !erConfigured;
+  }
+  if (m && m.ok) {
+    const id = m.id || "";
+    errRepSetFeedback("ok", t("er.sentOk", { id }), id);
+    if (erMode === "previous") {
+      erHasPrevious = false;
+      const b = document.getElementById("errRepPrevBanner");
+      if (b) b.hidden = true;
+    }
+  } else {
+    const code = (m && m.error) ? String(m.error) : "other";
+    const key = "er.err_" + code;
+    const reason = t(key) !== key ? t(key) : t("er.err_other");
+    errRepSetFeedback("err", t("er.sendFailed", { reason }));
+  }
+}
+
+function errRepOnSaved(m) {
+  if (m && m.ok && m.filename) {
+    errRepSetFeedback("ok", t("er.savedOk", { file: m.filename }));
+  } else {
+    errRepSetFeedback("err", t("er.saveFailed"));
+  }
 }
 /** A jelút és a késleltetés (a motor állapotüzenetének "path" mezője). */
 function aoRenderPath() {
@@ -13412,6 +13752,16 @@ function initPipewireBridge() {
           updOnResult(data);
         } else if (data.type === "audio_opts") {
           aoOnMessage(data);
+        } else if (data.type === "error_report_preview") {
+          errRepOnPreview(data);
+        } else if (data.type === "error_report_result") {
+          errRepOnResult(data);
+        } else if (data.type === "error_report_saved") {
+          errRepOnSaved(data);
+        } else if (data.type === "error_report_dismissed") {
+          erHasPrevious = false;
+          const b = document.getElementById("errRepPrevBanner");
+          if (b) b.hidden = true;
         } else if (data.type === "state") {
           updateLibraryCaps(!!(data.caps && Array.isArray(data.caps) && data.caps.includes("library")));
           engineIrLibrary = data.irLibrary === true;
@@ -13477,6 +13827,7 @@ function initPipewireBridge() {
         } else if (data.type === "status") {
           engineStatus = data;
           updOnEngineStatus(data.update);
+          if (data.error_report) errRepOnStatus(data.error_report);
           updateEngineBadge();
           if (aoCaps) { aoRenderPath(); laRender(); upsRenderStatus(); }
           if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);

@@ -29,6 +29,7 @@
 #include "asio.h"
 #include "iasiodrv.h"
 #include "file_player.hpp"
+#include "watchdog.hpp"
 
 #if __has_include("../windows/engine/player_output_asio.hpp")
 #include "../windows/engine/player_output_asio.hpp"
@@ -1062,6 +1063,103 @@ static void testSeed40(uint64_t seed) {
                 static_cast<unsigned long long>(seed), passedCases);
 }
 
+// ---------------------------------------------------------------------------
+// K11: Őrszem (beépített hibajelentés, 1b): az ASIO-kimenet szála és a meghajtó visszahívása jelez, a megálló
+// visszahívást az őrszem észreveszi, leállítás után nincs beragadás
+// ---------------------------------------------------------------------------
+static const aq::wd::Slot* findHeartbeat(const char* name) {
+    const aq::wd::Slot* slots = aq::wd::Registry::global().slots();
+    for (int i = 0; i < aq::wd::kMaxSlots; ++i)
+        if (slots[i].used.load() && std::strncmp(slots[i].name, name, aq::wd::kNameLen) == 0) return &slots[i];
+    return nullptr;
+}
+
+static int countEvents(const std::vector<aq::wd::Event>& ev, const char* name, bool recovered) {
+    int n = 0;
+    for (const auto& e : ev) n += (e.thread == name && e.recovered == recovered) ? 1 : 0;
+    return n;
+}
+
+static void testK11Heartbeat() {
+    std::printf("\n[K11] Őrszem: az ASIO-kimenet szála és a meghajtó visszahívása jelez; leállítás után nincs beragadás\n");
+    auto st = std::make_shared<FakeAsioState>();
+    st->preferredBufferSize = 64;
+    AsioPlayerOutput out("Fake", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+    std::string err;
+    const bool opened = out.open(48000, [](float* s, size_t n) { std::memset(s, 0, n * 2 * sizeof(float)); }, &err);
+    out.setActive(true);
+    for (int w = 0; w < 200 && !out.isRunning(); ++w) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    CHECK(opened && out.isRunning(), "K11: a hamis meghajtó elindult (err='%s')", err.c_str());
+
+    // 1. A kimeneti szál regisztrált, és a hurok közben jelez
+    const aq::wd::Slot* w = findHeartbeat("player-asio");
+    CHECK(w != nullptr, "K11: a kimeneti szál regisztrált (player-asio)");
+    int64_t w1 = w ? w->lastNs.load() : 0;
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    int64_t w2 = w ? w->lastNs.load() : 0;
+    const char* wl = w ? w->label.load() : "";
+    CHECK(w1 > 0 && w2 > w1, "K11: a kimeneti szál a hurok közben jelez (%.0f ms alatt új szívverés)", (w2 - w1) / 1e6);
+    CHECK(wl && std::strncmp(wl, "asio:", 5) == 0, "K11: a címke a hurok helyét mondja (\"%s\")", wl ? wl : "");
+
+    // 2. A meghajtó visszahívása (bufferSwitch) külön jelez
+    const aq::wd::Slot* cb = findHeartbeat("player-asio-cb");
+    CHECK(cb != nullptr, "K11: a meghajtó visszahívása regisztrált (player-asio-cb)");
+    const int64_t c1 = cb ? cb->lastNs.load() : 0;
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    st->triggerBufferSwitch(0);
+    const int64_t c2 = cb ? cb->lastNs.load() : 0;
+    CHECK(c2 > c1, "K11: a bufferSwitch szívverést ad");
+
+    // 3. Futás közben (a visszahívás 20 ms-onként jön) az őrszem nem jelez
+    aq::wd::Watchdog wd(aq::wd::Registry::global(), 0.3);
+    std::vector<aq::wd::Event> ev;
+    for (int i = 0; i < 40; ++i) {
+        st->triggerBufferSwitch(i & 1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        for (auto& e : wd.check(aq::wd::nowNs())) ev.push_back(e);
+    }
+    CHECK(countEvents(ev, "player-asio", false) == 0 && countEvents(ev, "player-asio-cb", false) == 0,
+          "K11: rendes futás közben nincs beragadás (%zu esemény)", ev.size());
+
+    // 4. A meghajtó nem hív vissza (a hamis meghajtó „elhallgat”): az őrszem a visszahívást jelzi, a szálat nem
+    ev.clear();
+    for (int i = 0; i < 40; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        for (auto& e : wd.check(aq::wd::nowNs())) ev.push_back(e);
+    }
+    CHECK(countEvents(ev, "player-asio-cb", false) == 1, "K11: a megálló visszahívást az őrszem jelzi (player-asio-cb)");
+    CHECK(countEvents(ev, "player-asio", false) == 0, "K11: a kimeneti szál közben is jelez (nincs hamis riasztás)");
+
+    // 5. Szünet (a meghajtó leáll): a visszahívástól nem várunk jelzést
+    out.setActive(false);
+    for (int i = 0; i < 200 && out.isRunning(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    ev.clear();
+    for (int i = 0; i < 30; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        for (auto& e : wd.check(aq::wd::nowNs())) ev.push_back(e);
+    }
+    CHECK(!out.isRunning() && countEvents(ev, "player-asio-cb", false) == 0 && countEvents(ev, "player-asio", false) == 0,
+          "K11: szünetben nincs beragadás-jelzés");
+
+    // 6. Leállítás után a szálak nincsenek a regiszterben, és nem jeleznek beragadást
+    out.close();
+    ev.clear();
+    for (int i = 0; i < 30; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        for (auto& e : wd.check(aq::wd::nowNs())) ev.push_back(e);
+    }
+    // (a regiszterben maradhat, ha a kimenet objektuma él; ekkor a jelzője hamis: nem várunk tőle szívverést)
+    auto idle = [](const aq::wd::Slot* s) {
+        if (!s) return true;
+        const std::atomic<bool>* e = s->expect.load();
+        return e != nullptr && !e->load();
+    };
+    CHECK(idle(findHeartbeat("player-asio")) && idle(findHeartbeat("player-asio-cb")),
+          "K11: leállítás után az őrszem nem vár jelzést a szálaktól");
+    CHECK(countEvents(ev, "player-asio", false) == 0 && countEvents(ev, "player-asio-cb", false) == 0,
+          "K11: leállítás után nincs beragadás-jelzés");
+}
+
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     const char* seedEnv = std::getenv("AQ_CHECK_SEED");
@@ -1078,6 +1176,7 @@ int main() {
     testK8ErrorHandlingAndReset();
     testK9K10RealtimeAndConsumed();
     testSeed40(seed);
+    testK11Heartbeat();
 
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;

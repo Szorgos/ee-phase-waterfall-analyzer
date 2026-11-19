@@ -1,0 +1,22 @@
+# Aqulify hibajelentés-fogadó. Telepítés: README.md (a tulajdonos végzi, a saját Cloudflare-fiókjával).
+name = "aqulify-hibajelento"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+# Naplózás kikapcsolva: a kérés fejlécei (benne az IP) se kerüljenek a Cloudflare-naplóba.
+[observability]
+enabled = false
+
+[vars]
+RATE_PER_IP_PER_HOUR = "10"
+RATE_GLOBAL_PER_HOUR = "1000"
+MAX_BODY_BYTES = "65536"
+# RATE_SALT: titok, nem ide kerül:  npx wrangler secret put RATE_SALT
+
+[[d1_databases]]
+binding = "DB"
+database_name = "aqulify-hibajelentes"
+# A „wrangler d1 create aqulify-hibajelentes” kimenetéből kell ide másolni (README, 3. lépés).
+database_id = "efa598b7-9530-4626-a811-92fba562e461"
+migrations_dir = "migrations"

@@ -26,7 +26,7 @@ build-arch: check-version
 	cmake -B $(B) -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=ON \
 	  $(if $(RNN_TAR),-DAQULIFY_RNNOISE_MODEL_DIR=$(RNN_DIR),)
 	cmake --build $(B) -j$$(nproc)
-	for t in test_ringbuffer test_core test_dsp test_matrix test_player test_upsample test_hires_b test_src_ref; do (cd $(B) && ./$$t) || exit 1; done
+	for t in test_ringbuffer test_core test_dsp test_matrix test_player test_watchdog test_report_sender test_upsample test_hires_b test_src_ref; do (cd $(B) && ./$$t) || exit 1; done
 
 binary-indep:
 binary: binary-arch

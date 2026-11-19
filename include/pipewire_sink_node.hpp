@@ -80,6 +80,9 @@ public:
     uint32_t actualGraphRate() const { const uint32_t g = graphRate.load(std::memory_order_relaxed); return g > 0 ? g : sampleRate.load(std::memory_order_relaxed); }
     std::atomic<bool> playbackStreaming{false};
     std::atomic<bool> coreError{false};
+    // Őrszem (beépített hibajelentés): a kimeneti visszahívás csak időbélyeget ír (valós idejű szál); jelzést csak
+    // szóló hangfolyamnál várunk. A regisztráció és a címke itt, a létrehozó szálon.
+    aq::wd::Heartbeat outputHeartbeat{ "pw-output", &playbackStreaming };
 
     static constexpr int kExtraZones = multiout::kMaxOutputs - 1;
     static constexpr uint32_t kZoneRing = 32768;      // kb. 0,7 s 48 kHz-en
@@ -103,6 +106,7 @@ public:
     };
 
     explicit AetherSinkNode(uint32_t initialRate = 48000) {
+        outputHeartbeat.setLabel("pw-output: process");
         sampleRate.store(initialRate);
         chain.setSampleRate(initialRate);
         chain.startWorker();
@@ -702,6 +706,7 @@ private:
 
     static void onPlaybackProcess(void* data) {
         auto* self = static_cast<AetherSinkNode*>(data);
+        self->outputHeartbeat.beat();
         struct timespec t0;
         clock_gettime(CLOCK_MONOTONIC, &t0);
 

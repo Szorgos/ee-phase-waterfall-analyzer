@@ -89,4 +89,77 @@ inline bool looksLikeExe(const std::wstring& p) {
     return r == 2 && b[0] == 'M' && b[1] == 'Z' && sz.QuadPart > 2 * 1024 * 1024;
 }
 
+struct PostJsonResult {
+    int status = 0;            // HTTP státuszkód (0: hálózati hiba / időtúllépés)
+    std::string body;          // válasz törzse (legfeljebb 16 KB)
+    int retryAfterSec = 0;     // Retry-After fejléc (másodperc), ha volt
+    bool networkError = false; // nem sikerült kapcsolódni / válasz nélkül megszakadt
+};
+
+/**
+ * JSON POST kérés WinHTTP-vel (hibajelentés küldéséhez). Alapértelmezésben csak HTTPS;
+ * allowLocalHttp = true csak teszteléshez enged helyi (127.0.0.1 / localhost) HTTP-t.
+ */
+inline PostJsonResult postJson(const std::wstring& url, const std::string& jsonBody, int timeoutMs = kDownloadTimeoutMs,
+                               bool allowLocalHttp = false) {
+    PostJsonResult res;
+    URL_COMPONENTS uc{};
+    uc.dwStructSize = sizeof(uc);
+    wchar_t host[256] = {}, path[2048] = {};
+    uc.lpszHostName = host; uc.dwHostNameLength = 256;
+    uc.lpszUrlPath = path; uc.dwUrlPathLength = 2048;
+    if (!WinHttpCrackUrl(url.c_str(), 0, 0, &uc)) { res.networkError = true; return res; }
+
+    const bool isHttps = (uc.nScheme == INTERNET_SCHEME_HTTPS);
+    const std::wstring hostStr(host);
+    const bool isLocal = (hostStr == L"127.0.0.1" || hostStr == L"localhost");
+    if (!isHttps && !(allowLocalHttp && uc.nScheme == INTERNET_SCHEME_HTTP && isLocal)) {
+        res.networkError = true;
+        return res;
+    }
+
+    HINTERNET ses = WinHttpOpen(L"Aqulify/2", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!ses) ses = WinHttpOpen(L"Aqulify/2", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!ses) { res.networkError = true; return res; }
+    WinHttpSetTimeouts(ses, timeoutMs, timeoutMs, timeoutMs, timeoutMs);
+
+    HINTERNET con = WinHttpConnect(ses, host, uc.nPort, 0);
+    HINTERNET req = con ? WinHttpOpenRequest(con, L"POST", path[0] ? path : L"/", nullptr, WINHTTP_NO_REFERER,
+                                             WINHTTP_DEFAULT_ACCEPT_TYPES, isHttps ? WINHTTP_FLAG_SECURE : 0)
+                        : nullptr;
+    const wchar_t* hdr = L"Content-Type: application/json; charset=utf-8\r\n";
+    if (req && WinHttpSendRequest(req, hdr, static_cast<DWORD>(-1L),
+                                  const_cast<char*>(jsonBody.data()), static_cast<DWORD>(jsonBody.size()),
+                                  static_cast<DWORD>(jsonBody.size()), 0) &&
+        WinHttpReceiveResponse(req, nullptr)) {
+        DWORD status = 0, len = sizeof(status);
+        if (WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, nullptr, &status, &len, nullptr))
+            res.status = static_cast<int>(status);
+        wchar_t ra[64] = {};
+        DWORD raLen = sizeof(ra);
+        if (WinHttpQueryHeaders(req, WINHTTP_QUERY_RETRY_AFTER, nullptr, ra, &raLen, nullptr)) {
+            const long v = wcstol(ra, nullptr, 10);
+            if (v > 0 && v < 86400) res.retryAfterSec = static_cast<int>(v);
+        }
+        char buf[4096];
+        constexpr size_t kMaxResp = 16 * 1024;
+        for (;;) {
+            DWORD n = 0;
+            if (!WinHttpReadData(req, buf, sizeof(buf), &n) || n == 0) break;
+            const size_t take = (res.body.size() + n > kMaxResp) ? (kMaxResp - res.body.size()) : static_cast<size_t>(n);
+            res.body.append(buf, take);
+            if (res.body.size() >= kMaxResp) break;
+        }
+    } else {
+        res.networkError = true;
+    }
+
+    if (req) WinHttpCloseHandle(req);
+    if (con) WinHttpCloseHandle(con);
+    WinHttpCloseHandle(ses);
+    return res;
+}
+
 } // namespace ee_analyzer::win

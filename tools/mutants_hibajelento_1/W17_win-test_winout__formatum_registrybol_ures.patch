@@ -1,0 +1,11 @@
+--- a/include/device_format.hpp
++++ b/include/device_format.hpp
+@@ -89,7 +89,7 @@
+     if (RegGetValueW(root, propertiesKey.c_str(), L"{f19f064d-082c-4e27-bc73-6882a1bb8e4c},0", RRF_RT_REG_BINARY, nullptr, buf,
+                      &size) != ERROR_SUCCESS)
+         return {};
+-    return describe(buf, size);
++    return {};
+ }
+ #endif
+ 

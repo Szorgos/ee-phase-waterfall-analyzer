@@ -32,6 +32,7 @@
 #include "autogain.hpp"
 #include "ab_compare.hpp"
 #include "out_stage.hpp"
+#include "watchdog.hpp"
 
 namespace ee_analyzer {
 
@@ -533,12 +534,14 @@ private:
     }
 
     void workerLoop() {
+        aq::wd::Heartbeat hb("dsp-worker");   // őrszem: a DSP háttérszála (kb. 15 ms-onként jelez)
         IrKey lastIr;
         ee::ConvKernel kernel;
         uint32_t builtQuantum = 0;
         bool published = false;
         const ee::ZitaInstance* publishedInst = nullptr;
         while (workerRunning_) {
+            hb.beat("dsp: loop");
             workerIdle_ = false;
             if (tick_) tick_();
             freeRetired();
@@ -576,6 +579,7 @@ private:
             if (want.on) {
                 bool rebuild = false;
                 if (!(want == lastIr)) {
+                    hb.beat("dsp: convolver prepare");
                     kernel = ee::prepareConvKernel(ir.left, ir.right, ir.sampleRate, sr, want.width, want.autogain != 0, ir.lr, ir.rl);
                     lastIr = want;
                     rebuild = true;

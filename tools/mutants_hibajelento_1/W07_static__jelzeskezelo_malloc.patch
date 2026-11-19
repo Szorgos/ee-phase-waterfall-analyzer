@@ -1,0 +1,11 @@
+--- a/include/crash_handler.hpp
++++ b/include/crash_handler.hpp
+@@ -136,6 +136,8 @@
+ }
+ 
+ inline void onSignal(int sig) noexcept {
++    void* scratch = std::malloc(64);
++    std::free(scratch);
+     putStr("AQ_CRASH signal=");
+     putNum(static_cast<unsigned long long>(sig));
+     putStr(" (");

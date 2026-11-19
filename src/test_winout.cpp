@@ -31,6 +31,18 @@
 #include "mini_json.hpp"
 #include "player_output_win.hpp"
 #include "apo_detect.hpp"
+#include "wasapi_loopback.hpp"
+#include "watchdog.hpp"
+
+// A hangeszköz alapformátumának olvasója (1b, P3). A befagyasztott tesztcommitban még nincs meg: akkor a
+// helyettesítő üres szöveget ad, és a [12] csoport elbukik.
+#if __has_include("device_format.hpp")
+#include "device_format.hpp"
+#else
+namespace aq::devfmt {
+inline std::string readRegistry(HKEY, const std::wstring&) { return {}; }
+}
+#endif
 
 using namespace ee_analyzer;
 using namespace ee_analyzer::player;
@@ -511,6 +523,71 @@ int main() {
                         d.apo == ApoOnDevice::Yes ? "igen" : d.apo == ApoOnDevice::No ? "nem" : "?");
         }
         CHECK(consistent, "a lista és az egyenkénti lekérdezés egyezik (%zu eszköz)", devs.size());
+    }
+
+    std::printf("\n[11] Őrszem: a rendszerhang-figyelő (loopback) szála jelez; leállítás után nincs beragadás\n");
+    {
+        auto findHb = [](const char* name) -> const aq::wd::Slot* {
+            const aq::wd::Slot* slots = aq::wd::Registry::global().slots();
+            for (int i = 0; i < aq::wd::kMaxSlots; ++i)
+                if (slots[i].used.load() && std::strncmp(slots[i].name, name, aq::wd::kNameLen) == 0) return &slots[i];
+            return nullptr;
+        };
+        // Valódi WASAPI: hangeszközzel a rögzítés ciklusa, eszköz nélkül (pl. CI) az újrapróbálkozás ciklusa fut
+        win::WasapiLoopback lb;
+        aq::wd::Watchdog wd(aq::wd::Registry::global(), 0.5);
+        lb.start();
+        const aq::wd::Slot* s = nullptr;
+        for (int i = 0; i < 200 && !(s && s->lastNs.load() > 0); ++i) {
+            s = findHb("loopback");
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        CHECK(s != nullptr && s->lastNs.load() > 0, "a szál regisztrált és jelzett (loopback)");
+        int stalls = 0;
+        int64_t first = s ? s->lastNs.load() : 0;
+        for (int i = 0; i < 50; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            for (const auto& e : wd.check(aq::wd::nowNs())) stalls += (e.thread == "loopback" && !e.recovered) ? 1 : 0;
+        }
+        const int64_t last = s ? s->lastNs.load() : 0;
+        const char* label = s ? s->label.load() : "";
+        CHECK(last > first, "a ciklus közben jelez (1 s alatt %.0f ms-mal későbbi szívverés, címke: \"%s\", eszköz: %s)",
+              (last - first) / 1e6, label ? label : "", lb.active() ? "rögzít" : "nincs / újrapróbálkozik");
+        CHECK(label && std::strncmp(label, "loopback:", 9) == 0, "a címke a ciklus helyét mondja");
+        CHECK(stalls == 0, "futás közben nincs beragadás-jelzés (küszöb 0,5 s)");
+        lb.stop();
+        for (int i = 0; i < 40; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            for (const auto& e : wd.check(aq::wd::nowNs())) stalls += (e.thread == "loopback" && !e.recovered) ? 1 : 0;
+        }
+        CHECK(findHb("loopback") == nullptr, "leállítás után a szál kikerült a regiszterből");
+        CHECK(stalls == 0, "leállítás után nincs beragadás-jelzés");
+    }
+
+    std::printf("\n[12] A hangeszköz alapformátuma a regisztrációs adatbázisból ({f19f064d-…},0, COM nélkül)\n");
+    {
+        const wchar_t* sub = L"Software\\AqulifyDevFmtTest_1b\\{00000000-1111-2222-3333-444444444444}\\Properties";
+        RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\AqulifyDevFmtTest_1b");
+        HKEY k = nullptr;
+        bool made = RegCreateKeyExW(HKEY_CURRENT_USER, sub, 0, nullptr, 0, KEY_WRITE, nullptr, &k, nullptr) == ERROR_SUCCESS;
+        // Egy valódi végpont értéke: 8 bájtos fejléc + WAVEFORMATEXTENSIBLE (48 kHz, 24 bit 32 bites tárolóban, sztereó)
+        const uint8_t blob[] = { 0x41, 0, 0, 0, 1, 0, 0, 0, 0xfe, 0xff, 2, 0, 0x80, 0xbb, 0, 0, 0, 0xdc, 5, 0, 8, 0, 0x20, 0,
+                                 0x16, 0, 0x18, 0, 3, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xaa, 0, 0x38, 0x9b, 0x71 };
+        if (made) {
+            made = RegSetValueExW(k, L"{f19f064d-082c-4e27-bc73-6882a1bb8e4c},0", 0, REG_BINARY, blob, sizeof(blob)) == ERROR_SUCCESS;
+            RegCloseKey(k);
+        }
+        const std::string got = aq::devfmt::readRegistry(HKEY_CURRENT_USER, sub);
+        CHECK(made && got == "48000 Hz, 24 bit (32-bit container), 2 ch, PCM", "a bináris érték kiolvasva: \"%s\"", got.c_str());
+        const std::string none = aq::devfmt::readRegistry(HKEY_CURRENT_USER, L"Software\\AqulifyDevFmtTest_1b\\nincs\\Properties");
+        CHECK(none.empty(), "hiányzó kulcs: üres szöveg");
+        RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\AqulifyDevFmtTest_1b");
+        // A gép valódi aktív eszközei (csak kiírás: a formátum a beállítástól függ)
+        for (const auto& d : win::listRenderDevices()) {
+            if (!d.active) continue;
+            const std::string f = aq::devfmt::readRegistry(HKEY_LOCAL_MACHINE, std::wstring(win::apo_detail::renderBase()) + d.key + L"\\Properties");
+            std::printf("         %-60s %s\n", d.name.c_str(), f.empty() ? "?" : f.c_str());
+        }
     }
 
     std::printf("\n%s (%d hiba, %d rendben)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail, g_ok);

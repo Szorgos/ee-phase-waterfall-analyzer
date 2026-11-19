@@ -1,0 +1,10 @@
+--- a/include/health_monitor.hpp
++++ b/include/health_monitor.hpp
+@@ -221,6 +221,7 @@
+         fs::remove(cfg_.dir / "crash.txt", ec);
+         fs::remove(cfg_.dir / "state.json", ec);
+         writeAtomic(cfg_.dir / "running", std::to_string(pidNow()) + "\n");
++        fs::remove(cfg_.dir / "running", ec);
+         if (cfg_.crashHandlers) aq::crash::install(cfg_.dir / "crash.txt", reg_);
+ 
+         startedNs_ = aq::wd::nowNs();

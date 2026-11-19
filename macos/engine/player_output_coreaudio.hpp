@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "file_player.hpp"
+#include "watchdog.hpp"
 
 namespace ee_analyzer::player {
 
@@ -120,11 +121,13 @@ public:
             if (error) *error = "Az AudioUnit indítása sikertelen (hiba: " + std::to_string(st) + ").";
             return false;
         }
-
+        hb_.beat("coreaudio: render");   // a címke itt; a valós idejű visszahívás csak időbélyeget ír
+        hbRunning_ = true;
         return true;
     }
 
     void close() override {
+        hbRunning_ = false;
         if (unit_) {
             AudioOutputUnitStop(unit_);
             AudioUnitUninitialize(unit_);
@@ -156,6 +159,7 @@ private:
                              const AudioTimeStamp* /*inTimeStamp*/, UInt32 /*inBusNumber*/,
                              UInt32 inNumberFrames, AudioBufferList* ioData) {
         auto* self = static_cast<CoreAudioPlayerOutput*>(inRefCon);
+        self->hb_.beat();   // őrszem: csak atomikus időbélyeg
         if (!ioData || ioData->mNumberBuffers == 0) return noErr;
 
         float* outData = static_cast<float*>(ioData->mBuffers[0].mData);
@@ -208,6 +212,10 @@ private:
     std::mutex renderMutex_;
     RenderFn render_;
     std::vector<float> interleaved_;
+    // Őrszem (beépített hibajelentés): a Core Audio a render-visszahívást a kimenet futása alatt folyamatosan hívja
+    // (szünetben csendet ad), így csak a megnyitott, elindított kimenettől várunk jelzést
+    std::atomic<bool> hbRunning_{false};
+    aq::wd::Heartbeat hb_{ "player-coreaudio", &hbRunning_ };
 };
 
 } // namespace ee_analyzer::player

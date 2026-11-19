@@ -42,6 +42,7 @@
 #include "dsd.hpp"
 #include "file_player.hpp"
 #include "pcm_convert.hpp"
+#include "watchdog.hpp"
 
 namespace ee_analyzer::player {
 
@@ -655,7 +656,10 @@ private:
         }
         initCv_.notify_all();
 
+        hb_.beat("asio: start");
+        hbRunning_ = true;
         while (!quit_.load(std::memory_order_acquire)) {
+            hb_.beat("asio: loop");
             if (resetRequested_.exchange(false, std::memory_order_acq_rel)) {
                 invalidateRatesCache();
                 setLastError("reset");
@@ -668,13 +672,16 @@ private:
             }
             const bool wantActive = active_.load(std::memory_order_acquire);
             if (wantActive && !started) {
+                hb_.beat("asio: driver start");
                 if (drv->start() != ASE_OK) {
                     setLastError("start_failed");
                     break;
                 }
                 started = true;
+                cbHb_.beat();   // a visszahívás órája innen indul (a régi időbélyeg ne számítson kiesésnek)
                 running_.store(true, std::memory_order_release);
             } else if (!wantActive && started) {
+                hb_.beat("asio: driver stop");
                 drv->stop();
                 started = false;
                 running_.store(false, std::memory_order_release);
@@ -702,6 +709,7 @@ private:
             }
         }
 
+        hb_.beat("asio: close");
         running_.store(false, std::memory_order_release);
         isOpen_.store(false, std::memory_order_release);
         {
@@ -718,6 +726,7 @@ private:
         s_activeInstance.compare_exchange_strong(self, nullptr, std::memory_order_acq_rel);
         if (mmcss) AvRevertMmThreadCharacteristics(mmcss);
         if (SUCCEEDED(hrCom)) CoUninitialize();
+        hbRunning_ = false;
     }
 
     // -----------------------------------------------------------------------
@@ -771,6 +780,7 @@ private:
     }
 
     void processBufferSwitch(long idx) noexcept {
+        cbHb_.beat();   // őrszem: a valós idejű visszahívásban csak időbélyeg (foglalás- és zármentes)
         if ((idx != 0 && idx != 1) || !isOpen_.load(std::memory_order_acquire)) return;
         uint8_t* dstL = static_cast<uint8_t*>(bufferInfos_[0].buffers[idx]);
         uint8_t* dstR = static_cast<uint8_t*>(bufferInfos_[1].buffers[idx]);
@@ -933,6 +943,12 @@ private:
     std::atomic<bool> resetRequested_{false};
     std::atomic<bool> isOpen_{false};
     std::atomic<bool> running_{false};
+    // Őrszem (beépített hibajelentés): a vezérlőszál körönként jelez (legfeljebb 5 ms-onként ébred), csak futó
+    // szálnál várunk jelzést; a meghajtó visszahívása (bufferSwitch) külön, csak amíg a meghajtó fut (running_). A
+    // regisztráció a létrehozó szálon: a hangszálon csak atomikus írás van.
+    std::atomic<bool> hbRunning_{false};
+    aq::wd::Heartbeat hb_{ "player-asio", &hbRunning_ };
+    aq::wd::Heartbeat cbHb_{ "player-asio-cb", &running_ };
     std::atomic<bool> nativeDsd_{false};
     std::atomic<bool> dopPcm_{false};
     std::atomic<uint64_t> consumedFrames_{0};

@@ -40,6 +40,7 @@
 #include "exclusive_dsp.hpp"
 #include "file_player.hpp"
 #include "pcm_convert.hpp"
+#include "watchdog.hpp"
 #include "wasapi_loopback.hpp"   // GUID-ok és ComPtr
 
 namespace ee_analyzer::player {
@@ -598,7 +599,10 @@ private:
         }
         initCv_.notify_all();
         if (!ok) stream.reset();
+        hb_.beat("wasapi: start");
+        hbRunning_ = true;
         while (!quit_) {
+            hb_.beat("wasapi: loop");
             if (reopenReq_.exchange(false) && stream) {   // mód váltása (kizárólagos / megosztott): új hangfolyam
                 std::lock_guard<std::mutex> lk(renderMutex_);
                 stream.reset();
@@ -643,13 +647,16 @@ private:
                 if (w == WAIT_TIMEOUT && active_ && FAILED(stream->client->GetCurrentPadding(&pad))) stream.reset();
                 continue;
             }
+            hb_.beat("wasapi: fill");
             if (active_ && stream->started && !fill(*stream)) stream.reset();   // AUDCLNT_E_DEVICE_INVALIDATED stb.
         }
+        hb_.beat("wasapi: close");
         stream.reset();
         exclusiveOn_ = false;
         dopOn_ = false;
         if (mmcss) AvRevertMmThreadCharacteristics(mmcss);
         CoUninitialize();
+        hbRunning_ = false;
     }
 
     uint32_t rate_ = 48000;
@@ -657,6 +664,10 @@ private:
     RenderDopFn renderDop_;
     std::mutex renderMutex_;
     std::thread thread_;
+    // Őrszem (beépített hibajelentés): a kimeneti szál körönként jelez (legfeljebb 300 ms-onként); csak futó szálnál
+    // várunk jelzést. A regisztráció a létrehozó szálon: a hangszálon csak atomikus írás van.
+    std::atomic<bool> hbRunning_{false};
+    aq::wd::Heartbeat hb_{ "player-wasapi", &hbRunning_ };
     HANDLE wake_ = nullptr;
     std::atomic<bool> active_{false}, quit_{false}, flushReq_{false};
     uint64_t written_ = 0;                  // az eszköznek átadott keretek (a szál írja, a render zárja alatt)

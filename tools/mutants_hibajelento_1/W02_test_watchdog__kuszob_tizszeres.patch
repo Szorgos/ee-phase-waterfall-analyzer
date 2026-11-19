@@ -1,0 +1,11 @@
+--- a/include/watchdog.hpp
++++ b/include/watchdog.hpp
+@@ -186,7 +186,7 @@
+         bool reported = false;
+         int64_t since = 0;
+     };
+-    static int64_t toNs(double sec) { return static_cast<int64_t>(sec * 1e9); }
++    static int64_t toNs(double sec) { return static_cast<int64_t>(sec * 10.0 * 1e9); }
+     static std::string copyName(const Slot& s) {
+         char n[kNameLen];
+         std::memcpy(n, s.name, kNameLen);

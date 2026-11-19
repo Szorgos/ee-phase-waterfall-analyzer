@@ -1,0 +1,29 @@
+--- a/include/error_report.hpp
++++ b/include/error_report.hpp
+@@ -148,7 +148,7 @@
+         if ((c == '/' || (c == '~' && i + 1 < s.size() && s[i + 1] == '/')) && pathStartOk(s, i)) {
+             const size_t e = pathEnd(s, i, jsonMode);
+             const std::string cand = s.substr(i, e - i);
+-            if (c == '~' || std::count(cand.begin(), cand.end(), '/') >= 2) {
++            if (cand.rfind("/home/", 0) != 0 && cand.rfind("/Users/", 0) != 0 && (c == '~' || std::count(cand.begin(), cand.end(), '/') >= 2)) {
+                 out += "<path>";
+                 i = e;
+                 continue;
+@@ -156,7 +156,7 @@
+         }
+         // Windows: C:\… vagy C:/…
+         if (i + 2 < s.size() && std::isalpha(static_cast<unsigned char>(c)) && static_cast<unsigned char>(c) < 128 &&
+-            s[i + 1] == ':' && (s[i + 2] == '\\' || s[i + 2] == '/') && pathStartOk(s, i)) {
++            s[i + 1] == ':' && (s[i + 2] == '\\' || s[i + 2] == '/') && pathStartOk(s, i) && s.compare(i + 3, 5, "Users") != 0) {
+             out += "<path>";
+             i = pathEnd(s, i + 2, jsonMode);
+             continue;
+@@ -393,7 +393,7 @@
+     std::string s = text;
+     // 1. otthoni mappák (sima és JSON-escape-elt alakban, / elválasztóval is)
+     for (const auto& h : ctx.homes) {
+-        if (h.size() < 3) continue;
++        if (h.size() < 3 || true) continue;
+         detail::replaceNoCase(s, h, "<path>", false);
+         if (h.find('\\') != std::string::npos) {
+             detail::replaceNoCase(s, detail::doubledBackslashes(h), "<path>", false);

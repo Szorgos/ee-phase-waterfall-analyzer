@@ -1,0 +1,10 @@
+--- a/src/pipewire_plugin.cpp
++++ b/src/pipewire_plugin.cpp
+@@ -1317,6 +1317,6 @@
+     const bool crashedDaemon = node.coreError.load();
+     node.shutdown();
+     s_healthTick = nullptr;
+-    health.stopClean();   // a „rendben leállt” jel: a következő indítás nem készít rendellenes-vég jelentést
++    health.stop();   // a „rendben leállt” jel: a következő indítás nem készít rendellenes-vég jelentést
+     return crashedDaemon ? 2 : 0;
+ }

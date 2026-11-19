@@ -72,6 +72,9 @@ namespace ee_analyzer::player {
 using WinPlayerOutput = BasicWinPlayerOutput<WasapiPlayerOutput>;
 }
 #include "updater.hpp"
+#include "health_monitor.hpp"
+#include "report_sender.hpp"
+#include "device_format.hpp"
 
 using namespace ee_analyzer;
 
@@ -1092,6 +1095,8 @@ int main(int argc, char** argv) {
     std::mutex audioMutex;
     audioopt::AudioOptions audioOpts;
     bool dsdDop = false;
+    aq::health::Monitor health;   // beépített hibajelentés: őrszál és helyi állapotfájl (a híd indulása után indul)
+    aq::report::Service reportService;
     auto playerOnly = [](audioopt::AudioOptions o) {
         o.bufferFrames = 0;
         o.keepAwake = false;
@@ -1148,6 +1153,8 @@ int main(int argc, char** argv) {
         if (o == audioOpts && wantDop == dsdDop) return;
         audioOpts = o;
         dsdDop = wantDop;
+        health.setEnabled(o.errorReports);
+        reportService.setEnabled(o.errorReports);
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         filePlayer.setPreload(o.preload);
         filePlayer.setUpsampleOptions(o);
@@ -1203,6 +1210,22 @@ int main(int argc, char** argv) {
         }, AQULIFY_VERSION);
         cb.versionStatus = [&versionChecker] { return versionChecker.statusJson(); };
     }
+    cb.errorReportStatus = [&reportService] { return reportService.statusJson(); };
+    cb.errorReportPreview = [&reportService](const std::string& kind, const std::string& symptom, const std::string& note,
+                                             std::string& preview, size_t& bytes, bool& configured) {
+        reportService.buildPreview(kind, symptom, note, preview, bytes, configured);
+    };
+    cb.errorReportSend = [&reportService](const std::string& kind, const std::string& symptom, const std::string& note,
+                                          std::function<void(bool, long long, const std::string&)> onDone) {
+        reportService.sendAsync(kind, symptom, note, [onDone = std::move(onDone)](const aq::report::SendResult& r) {
+            if (onDone) onDone(r.ok, r.id, r.error);
+        });
+    };
+    cb.errorReportSave = [&reportService](const std::string& kind, const std::string& symptom, const std::string& note,
+                                          std::string& filename, std::string& err) {
+        return reportService.saveReport(kind, symptom, note, filename, err);
+    };
+    cb.errorReportDismissPrevious = [&reportService] { reportService.dismissPrevious(); };
 
     std::unique_ptr<WebSocketBridge> bridge;
     for (int p : ports) {
@@ -1251,12 +1274,69 @@ int main(int argc, char** argv) {
         }
     };
 
+    // Beépített hibajelentés: őrszál, állapotfájl (%LOCALAPPDATA%\Aqulify\diag), az előző futás rendellenes végének
+    // helyi jelentése. Küldés nincs (3. szakasz).
+    {
+        aq::health::Config hc;
+        hc.dir = win::localAppDir() / L"diag";
+        hc.logPath = log.path();
+        hc.version = AQULIFY_VERSION;
+        hc.platform = "windows";
+        hc.package = "setup";
+        { std::lock_guard<std::mutex> lk(audioMutex); hc.enabled = audioOpts.errorReports; }
+        hc.crashHandlers = true;
+        if (const char* s = std::getenv("AQULIFY_WATCHDOG_SECONDS"); s && std::atof(s) >= 1.0) hc.thresholdSec = std::atof(s);
+        for (const wchar_t* f : { L"remote.json", L"remote-targets.json" })
+            for (const auto& n : aq::report::namesFromJson(readSmallFile(userFilePath(f, false), 256 * 1024))) hc.scrubNames.push_back(n);
+        if (!health.start(hc)) std::cout << "[Hibajelentés] A diagnosztikai mappa nem írható.\n";
+        reportService.start(hc.dir, hc.logPath, hc.scrubNames, hc.enabled);
+    }
+    int healthTicks = 0;
+    auto healthTick = [&] {
+        // a tálca időzítője 250 ms-onként hív: 2 s-onként a motor állapota, 30 s-onként a hangeszközök
+        const int n = healthTicks++;
+        if (n % 120 == 0) {
+            std::string cards;
+            for (const auto& d : win::listRenderDevices()) {
+                if (!d.active) continue;
+                // csak a meghajtó (gyári) neve és a végpont alapformátuma; a felhasználó által átnevezhető végpontnév
+                // nem kerül bele
+                const std::wstring props = std::wstring(win::apo_detail::renderBase()) + d.key + L"\\Properties";
+                const std::wstring iface = win::apo_detail::regString(HKEY_LOCAL_MACHINE, props, L"{b3f8fa53-0004-438e-9003-51a46e139bfc},6");
+                const std::string fmt = aq::devfmt::readRegistry(HKEY_LOCAL_MACHINE, props);
+                cards += "render: " + (iface.empty() ? std::string("?") : aq_i18n::narrow(iface)) +
+                         "; format: " + (fmt.empty() ? std::string("?") : fmt) +
+                         (d.apo == ApoOnDevice::Yes ? " (Equalizer APO: yes)" : d.apo == ApoOnDevice::No ? " (Equalizer APO: no)" : "") + "\n";
+            }
+            for (const auto& d : player::AsioPlayerOutput::listDrivers()) cards += "asio driver: " + d.description + "\n";
+            health.setSoundCards(cards);
+        }
+        if (n % 8 != 0) return;
+        audioopt::AudioOptions o;
+        bool dop = false;
+        { std::lock_guard<std::mutex> lk(audioMutex); o = audioOpts; dop = dsdDop; }
+        const bool excl = playerOut.exclusiveActive();
+        const bool dopOn = playerOut.dopActive() || filePlayer.isDopActive();
+        std::string path;
+        if (!filePlayer.hasTrack()) path = "Windows audio (Equalizer APO path)";
+        else if (dopOn) path = std::string(o.asio ? "ASIO" : "exclusive WASAPI") + ", DSD" + std::to_string(filePlayer.dopDsdRate() / 44100);
+        else path = "PCM " + std::to_string(filePlayer.streamRate()) + " Hz, " + (excl ? (o.asio ? "ASIO" : "exclusive WASAPI") : "shared WASAPI");
+        char buf[384];
+        std::snprintf(buf, sizeof(buf), "{\"path\":\"%s\",\"rate\":%u,\"player\":%s,\"player_underruns\":%llu,\"upsample\":%s,"
+                      "\"dsd_dop_setting\":%s,\"audio_opts\":",
+                      audioopt::jsonStringBody(path).c_str(), filePlayer.streamRate(), filePlayer.hasTrack() ? "true" : "false",
+                      static_cast<unsigned long long>(filePlayer.underruns()), filePlayer.isUpsampleActive() ? "true" : "false",
+                      dop ? "true" : "false");
+        health.setSection("engine", std::string(buf) + audioopt::toJson(o) + "}");
+    };
+    healthTick();
+
     win::TrayApp::Callbacks tcb;
     tcb.openGui = [] { openGui(); };
     tcb.openLog = [&] {
         if (!log.path().empty()) ShellExecuteW(nullptr, L"open", log.path().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     };
-    tcb.onTimer = [&] { saveIfDue(false); };
+    tcb.onTimer = [&] { saveIfDue(false); healthTick(); };
     tcb.statusText = [&] { return sources.label(); };
     win::TrayApp tray(tcb);
     s_tray.store(&tray);
@@ -1286,6 +1366,8 @@ int main(int argc, char** argv) {
     }
     sources.pushParams(current);
     if (!win::saveParamFile(current)) std::cout << "[Beállítások] Figyelem: a params.bin nem állítható alapra.\n";
+    reportService.stop(); // nem vár hálózati időkorlátra
+    health.stopClean();   // a „rendben leállt” jel: a következő indítás nem készít rendellenes-vég jelentést
     if (single) { ReleaseMutex(single); CloseHandle(single); }
     CoUninitialize();
     return 0;
