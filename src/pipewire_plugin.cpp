@@ -47,6 +47,7 @@
 extern char** environ;
 #include "update_logic.hpp"
 #include "ws_bridge.hpp"
+#include "visual_source.hpp"
 
 using namespace ee_analyzer;
 
@@ -442,14 +443,15 @@ int main(int argc, char* argv[]) {
 #endif
     BridgeCallbacks cb;
     cb.pullAudio = [&](float* lr, size_t maxFrames) {
+        auto readEngine = [&](float* d, size_t n) { return readTapRing(node.visualizerTap, readPos, d, n); };
 #if defined(AQ_HAVE_ALSA)
-        if (playerFilePlayer && playerFilePlayer->isDopActive()) {
-            std::fill_n(lr, maxFrames * 2, 0.0f);
-            return maxFrames;
-        }
-        if (playerExclusive()) return readTapRing(playerDsp->tap(), playerReadPos, lr, maxFrames);
+        const bool dsdDirect = playerFilePlayer && playerFilePlayer->isDopActive();
+        const bool excl = !dsdDirect && playerExclusive();
+        return pullVisualAudio(dsdDirect, excl, lr, maxFrames,
+                               [&](float* d, size_t n) { return readTapRing(playerDsp->tap(), playerReadPos, d, n); }, readEngine);
+#else
+        return pullVisualAudio(false, false, lr, maxFrames, [](float*, size_t) -> size_t { return 0; }, readEngine);
 #endif
-        return readTapRing(node.visualizerTap, readPos, lr, maxFrames);
     };
     cb.sampleRate = [&]() {
 #if defined(AQ_HAVE_ALSA)
