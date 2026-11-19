@@ -18,6 +18,13 @@ on:
         required: false
         default: ""
 
+# Csomagletöltés (C1): letöltési hibánál és elakadásnál az apt újrapróbál, rövidebb időkorláttal. A csomaglista ettől
+# nem változik; a tools/check_ci_stabilitas.sh ellenőrzi, hogy minden apt-get update/install ezt használja.
+env:
+  APT_NET: "-o Acquire::Retries=10 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+  AQ_FETCH_MIN_BPS: "102400"   # RNNoise-letöltés: 20 mp-ig 100 kB/s alatt a következő tükör jön
+  AQ_FETCH_DEADLINE: "300"     # és legfeljebb 5 perc összesen (tools/fetch_rnnoise.sh)
+
 permissions:
   contents: read
 
@@ -30,8 +37,8 @@ jobs:
     steps:
       - name: Függőségek (docs/pi.md, 1. pont)
         run: |
-          apt-get update
-          apt-get install -y --no-install-recommends build-essential cmake ninja-build pkg-config xz-utils dpkg-dev \
+          apt-get $APT_NET update
+          apt-get $APT_NET install -y --no-install-recommends build-essential cmake ninja-build pkg-config xz-utils dpkg-dev \
             fakeroot git python3 curl ca-certificates libpipewire-0.3-dev libfftw3-dev libsystemd-dev libasound2-dev \
             libgtk-3-dev libwebkit2gtk-4.1-dev
       - uses: actions/checkout@v4
@@ -70,9 +77,19 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/ci
+          path: src
       - uses: actions/download-artifact@v4
         with:
           name: Aqulify-Pi
+      - name: Várakozás a kiadásra (legfeljebb 20 perc, ha még piszkozat vagy nincs közzétéve)
+        timeout-minutes: 25
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+        run: bash src/tools/ci/wait_release.sh "$TAG" "$GITHUB_REPOSITORY"
       - name: Feltöltés a kiadáshoz (meglévő, azonos nevű fájlt nem ír felül)
         env:
           GH_TOKEN: ${{ github.token }}

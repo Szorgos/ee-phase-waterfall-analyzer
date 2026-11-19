@@ -68,6 +68,22 @@ static double jsonNum(const std::string& j, const std::string& key) {
     return p == std::string::npos ? NAN : std::atof(j.c_str() + p + key.size() + 3);
 }
 
+/**
+ * Megvárja, amíg a munkamenet befejezi az előző mérést (busy() == false), legfeljebb maxSec-ig. A munkaszál az
+ * eredményt (measurement_result) előbb küldi el, és csak utána – a helyi változók felszabadítása után – jelzi, hogy
+ * szabad (finish()); ha a következő mérés ebben a résben indul, a startMeasurement "BUSY"-val elutasítja (T4,
+ * 2026-11-19). @return a várakozás ms-ban, vagy −1, ha maxSec alatt sem lett szabad.
+ */
+static double waitNotBusy(MeasurementSession& s, double maxSec) {
+    const auto t0 = std::chrono::steady_clock::now();
+    const auto until = t0 + std::chrono::milliseconds(static_cast<int>(maxSec * 1000));
+    while (s.busy()) {
+        if (std::chrono::steady_clock::now() > until) return -1.0;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+}
+
 static void lastErrors() {
     std::lock_guard<std::mutex> lk(g_mu);
     for (const auto& p : g_posts) if (p.find("measurement_error") != std::string::npos) std::printf("     %s\n", p.c_str());
@@ -97,8 +113,12 @@ int main() {
         cfg.targetType = "flat";
         cfg.smoothingFraction = 12;
         std::string err;
+        // Az előző mérés munkaszála az eredmény elküldése után még dolgozhat: a szabad állapotot várjuk meg
+        const double waitedMs = waitNotBusy(s, 10.0);
+        std::printf("     %s: a munkamenet szabad (%.1f ms várakozás)\n", ch, waitedMs);
+        CHECK(waitedMs >= 0.0, "%s: az előző mérés 10 s-on belül befejeződött", ch);
         const auto t0 = std::chrono::steady_clock::now();
-        CHECK(s.startMeasurement(cfg, "dac_st", err), "%s: a mérés elindul", ch);
+        CHECK(s.startMeasurement(cfg, "dac_st", err), "%s: a mérés elindul%s%s", ch, err.empty() ? "" : " – hiba: ", err.c_str());
         const std::string res = waitFor(s, "measurement_result", 30.0);
         const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         CHECK(!res.empty(), "%s: eredmény érkezett (%.1f s)", ch, secs);
@@ -124,7 +144,8 @@ int main() {
     {
         { std::lock_guard<std::mutex> lk(g_mu); g_posts.clear(); }
         std::string err;
-        CHECK(s.startLevelCheck("dac_st", -20.0f, "both", err), "a szintpróba elindul");
+        CHECK(waitNotBusy(s, 10.0) >= 0.0, "a szintpróba előtt az előző mérés befejeződött");
+        CHECK(s.startLevelCheck("dac_st", -20.0f, "both", err), "a szintpróba elindul%s%s", err.empty() ? "" : " – hiba: ", err.c_str());
         std::this_thread::sleep_for(std::chrono::milliseconds(2500));
         s.stop();
         for (int i = 0; i < 100 && s.busy(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(50));

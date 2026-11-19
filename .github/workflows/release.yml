@@ -19,6 +19,13 @@ on:
         required: false
         default: ""
 
+# Csomagletöltés (C1): letöltési hibánál és elakadásnál az apt újrapróbál, rövidebb időkorláttal. A csomaglista ettől
+# nem változik; a tools/check_ci_stabilitas.sh ellenőrzi, hogy minden apt-get update/install ezt használja.
+env:
+  APT_NET: "-o Acquire::Retries=10 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+  AQ_FETCH_MIN_BPS: "102400"   # RNNoise-letöltés: 20 mp-ig 100 kB/s alatt a következő tükör jön
+  AQ_FETCH_DEADLINE: "300"     # és legfeljebb 5 perc összesen (tools/fetch_rnnoise.sh)
+
 permissions:
   contents: write
 
@@ -48,14 +55,14 @@ jobs:
       - name: Függőségek
         timeout-minutes: 15
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config libpipewire-0.3-dev libsystemd-dev libasound2-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get $APT_NET update
+          sudo apt-get $APT_NET install -y ninja-build pkg-config libpipewire-0.3-dev libsystemd-dev libasound2-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Fordítások ellenőrzése (i18n/ és az előállított fájlok egyeznek)
         run: python3 tools/i18n_build.py --check
 
       - name: RNNoise modell (az Ubuntu forráscsomagjából, a tárolóban nincs)
-        timeout-minutes: 10
+        timeout-minutes: 7
         run: |
           bash tools/fetch_rnnoise.sh /tmp/rnnoise.tar.xz || { echo "::error title=RNNoise::a letöltés egyik tükörről sem sikerült"; exit 1; }
           mkdir -p "$RUNNER_TEMP/rnnoise-model"
@@ -145,10 +152,10 @@ jobs:
       - name: Függőségek
         timeout-minutes: 15
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential dpkg-dev fakeroot cmake ninja-build pkg-config g++ xz-utils libpipewire-0.3-dev libsystemd-dev libasound2-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get $APT_NET update
+          sudo apt-get $APT_NET install -y build-essential dpkg-dev fakeroot cmake ninja-build pkg-config g++ xz-utils libpipewire-0.3-dev libsystemd-dev libasound2-dev libfftw3-dev libgtk-3-dev libwebkit2gtk-4.1-dev
       - name: RNNoise modell (az Ubuntu forráscsomagjából)
-        timeout-minutes: 10
+        timeout-minutes: 7
         run: |
           bash tools/fetch_rnnoise.sh debian/rnnoise_0.2+ds.orig.tar.xz
       - name: DEB építése
@@ -166,7 +173,7 @@ jobs:
         run: |
           f=${{ steps.deb.outputs.file }}
           dpkg-deb -I "$f"; dpkg-deb -c "$f" | head -30
-          sudo apt-get install -y ./"$f"
+          sudo apt-get $APT_NET install -y ./"$f"
           dpkg -s aqulify | grep -E '^(Status|Version)'
           test -x /usr/bin/aqulify-engine && test -x /usr/bin/aqulify-gui && test -x /usr/bin/aqulify-play
           /usr/bin/aqulify-engine --help | head -5
@@ -246,8 +253,8 @@ jobs:
             https://github.com/mstorsjo/llvm-mingw/releases/download/20250924/${LLVM_MINGW}.tar.xz
           sudo tar -xf /tmp/llvm-mingw.tar.xz -C /opt
           sudo ln -s /opt/${LLVM_MINGW} /opt/llvm-mingw
-          sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config libfftw3-dev
+          sudo apt-get $APT_NET update
+          sudo apt-get $APT_NET install -y ninja-build pkg-config libfftw3-dev
 
       - name: FFTW 3.3.10 forrás (a Windows binárisokba statikusan épül)
         timeout-minutes: 10
@@ -259,7 +266,7 @@ jobs:
           tar -xzf /tmp/fftw.tar.gz -C "$RUNNER_TEMP"
 
       - name: RNNoise modell (az Ubuntu forráscsomagjából, a tárolóban nincs)
-        timeout-minutes: 10
+        timeout-minutes: 7
         run: |
           bash tools/fetch_rnnoise.sh /tmp/rnnoise.tar.xz || { echo "::error title=RNNoise::a letöltés egyik tükörről sem sikerült"; exit 1; }
           mkdir -p "$RUNNER_TEMP/rnnoise-model"

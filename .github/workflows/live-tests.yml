@@ -16,6 +16,13 @@ on:
       - ".github/workflows/live-tests.yml"
   workflow_dispatch:
 
+# Csomagletöltés (C1): letöltési hibánál és elakadásnál az apt újrapróbál, rövidebb időkorláttal. A csomaglista ettől
+# nem változik; a tools/check_ci_stabilitas.sh ellenőrzi, hogy minden apt-get update/install ezt használja.
+env:
+  APT_NET: "-o Acquire::Retries=10 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+  AQ_FETCH_MIN_BPS: "102400"   # RNNoise-letöltés: 20 mp-ig 100 kB/s alatt a következő tükör jön
+  AQ_FETCH_DEADLINE: "300"     # és legfeljebb 5 perc összesen (tools/fetch_rnnoise.sh)
+
 permissions:
   contents: read
 
@@ -29,12 +36,12 @@ jobs:
       - name: Függőségek
         timeout-minutes: 15
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q build-essential cmake pkg-config libpipewire-0.3-dev libfftw3-dev libsystemd-dev libasound2-dev \
+          sudo apt-get $APT_NET update -q
+          sudo apt-get $APT_NET install -y -q build-essential cmake pkg-config libpipewire-0.3-dev libfftw3-dev libsystemd-dev libasound2-dev \
             pipewire wireplumber pipewire-pulse pulseaudio-utils dbus python3-numpy
 
       - name: RNNoise modell (az Ubuntu forráscsomagjából)
-        timeout-minutes: 10
+        timeout-minutes: 7
         run: |
           bash tools/fetch_rnnoise.sh /tmp/rnnoise.tar.xz || { echo "::error title=RNNoise::a letöltés egyik tükörről sem sikerült"; exit 1; }
           mkdir -p "$RUNNER_TEMP/rnnoise-model"

@@ -466,6 +466,107 @@ std::complex<double> evalAnalyticXoverBand(const MultiConfig& c, int k, double f
     return h * sign;
 }
 
+/** Egy (első- vagy másodfokú) szakasz leglassabb pólusának |z| értéke (1 alatt stabil). */
+double poleRadius(const AnalyticBiquad& c) {
+    const double disc = c.a1 * c.a1 - 4.0 * c.a2;
+    if (disc < 0.0) return std::sqrt(c.a2);  // komplex póluspár: |z|² = a2
+    const double s = std::sqrt(disc);
+    return std::max(std::fabs((-c.a1 + s) * 0.5), std::fabs((-c.a1 - s) * 0.5));
+}
+
+/**
+ * 7.3: az impulzusválasz mérési hossza (minta). A teljes lánc (az összes keresztváltó LR-szakasza és az út
+ * EQ-sávjai) leglassabb pólusának amplitúdója a mérés végére `decayDb`-t csengjen le. A DFT a levágott
+ * impulzusválaszból számol: ha a lecsengés nem teljes, a farok hiánya a −90 dB közeli pontokon több
+ * század dB eltérést okoz (2026-11-19: AQ_CHECK_SEED=1795089109 tc=28, 1795030579 tc=45, mindkettő 1,5 s-nál).
+ * Legalább `minSec` (a korábbi fix 1,5 s). `maxSec` fölött 0-t ad: a hívó hibát jelez, nem vág le csendben.
+ */
+size_t impulseLenForDecay(const MultiConfig& c, int way, double sr, double decayDb, double minSec, double maxSec) {
+    double rMax = 0.0;
+    if (c.mode == Mode::Crossover) {
+        for (int j = 0; j < c.numCrossovers; ++j) {
+            const double fc = c.crossoverHz[j];
+            if (c.slopeDbPerOct == 12) rMax = std::max(rMax, poleRadius(makeAnalyticFirstOrder(false, fc, sr)));
+            else if (c.slopeDbPerOct == 48) {
+                rMax = std::max(rMax, poleRadius(makeAnalyticSecondOrder(false, fc, sr, 0.54119610014619698)));
+                rMax = std::max(rMax, poleRadius(makeAnalyticSecondOrder(false, fc, sr, 1.30656296487637652)));
+            } else rMax = std::max(rMax, poleRadius(makeAnalyticSecondOrder(false, fc, sr, 0.70710678118654752)));
+        }
+        const auto& w = c.outputs[way].way;
+        if (w.on) {
+            for (int b = 0; b < w.numBands; ++b)
+                rMax = std::max(rMax, poleRadius(makeAnalyticEq(static_cast<EqBandType>(w.bands[b].type),
+                                                                w.bands[b].freq, w.bands[b].gainDb, w.bands[b].q, sr)));
+        }
+    }
+    const size_t minLen = static_cast<size_t>(sr * minSec);
+    if (rMax <= 0.0) return minLen;
+    if (rMax >= 1.0) return 0;
+    const double n = std::ceil(std::log(std::pow(10.0, -decayDb / 20.0)) / std::log(rMax));
+    if (n > sr * maxSec) return 0;
+    return std::max(minLen, static_cast<size_t>(n));
+}
+
+/** Egy szakasz (DF-II transzponált, double) az x jelen, helyben. */
+void simSection(const AnalyticBiquad& s, std::vector<double>& x) {
+    double z1 = 0.0, z2 = 0.0;
+    for (auto& v : x) {
+        const double y = s.b0 * v + z1;
+        z1 = s.b1 * v - s.a1 * y + z2;
+        z2 = s.b2 * v - s.a2 * y;
+        v = y;
+    }
+}
+
+void simLR(bool hp, double fc, double sr, int slope, std::vector<double>& x) {
+    if (slope == 12) {
+        const auto s = makeAnalyticFirstOrder(hp, fc, sr);
+        simSection(s, x); simSection(s, x);
+    } else if (slope == 48) {
+        const auto s1 = makeAnalyticSecondOrder(hp, fc, sr, 0.54119610014619698);
+        const auto s2 = makeAnalyticSecondOrder(hp, fc, sr, 1.30656296487637652);
+        simSection(s1, x); simSection(s2, x); simSection(s1, x); simSection(s2, x);
+    } else {
+        const auto s = makeAnalyticSecondOrder(hp, fc, sr, 0.70710678118654752);
+        simSection(s, x); simSection(s, x);
+    }
+}
+
+/** 7.3 diagnosztika: az evalAnalyticXoverBand × út-EQ lánc impulzusválasza double pontossággal (a motor nélkül). */
+std::vector<double> simulateWayImpulse(const MultiConfig& c, int k, double sr, size_t len) {
+    std::vector<double> h(len, 0.0);
+    if (len == 0) return h;
+    h[0] = 1.0;
+    const int b = c.outputs[k].band;
+    if (c.mode == Mode::Crossover && b >= 0) {
+        const int N = c.numCrossovers;
+        const int slope = c.slopeDbPerOct;
+        const double apSign = (slope == 12) ? -1.0 : 1.0;
+        double sign = 1.0;
+        for (int j = 0; j < N; ++j) {
+            const double fc = c.crossoverHz[j];
+            int kind = 3;
+            if (b == N) kind = 2;
+            else if (j < b) kind = 2;
+            else if (j == b) kind = 1;
+            if (kind == 1) simLR(false, fc, sr, slope, h);
+            else if (kind == 2) { simLR(true, fc, sr, slope, h); if (slope == 12) sign = -sign; }
+            else {
+                std::vector<double> hp = h;
+                simLR(false, fc, sr, slope, h);
+                simLR(true, fc, sr, slope, hp);
+                for (size_t i = 0; i < len; ++i) h[i] += apSign * hp[i];
+            }
+        }
+        for (auto& v : h) v *= sign;
+        const auto& w = c.outputs[k].way;
+        if (w.on)
+            for (int i = 0; i < w.numBands; ++i)
+                simSection(makeAnalyticEq(static_cast<EqBandType>(w.bands[i].type), w.bands[i].freq, w.bands[i].gainDb, w.bands[i].q, sr), h);
+    }
+    return h;
+}
+
 double wrapDeg(double a, double b) {
     double d = a - b;
     while (d > 180.0) d -= 360.0;
@@ -1020,6 +1121,36 @@ static void testWayEqK8K9K10K12Impl() {
     }
 }
 
+/**
+ * 7.3: az út szintje egy frekvencián szinuszos gerjesztéssel, állandósult állapotban (a `settle` minta alatt a lánc
+ * tranziense lecseng), kétparaméteres legkisebb négyzetes illesztéssel (y ≈ a·sin + b·cos) egy 0,5 s-os ablakon.
+ * Miért: a motor kimenete float32. Impulzusgerjesztésnél a kimenet kerekítési zaja a teljes impulzusválasz
+ * energiájához mérhető, így ahol az út −60…−90 dB-en jár, de máshol közel 0 dB-en, a DFT-vel mért szint több
+ * század dB-t téved (2026-11-19: AQ_CHECK_SEED=1067 tc=31: analitikus −85,2035 dB, a double szimuláció float-ra
+ * kerekítve −85,1499 dB = a motor mérése). Szinusznál a kerekítés a hang saját szintjéhez mért.
+ */
+static double toneGainDb(const MultiConfig& cfg, int way, double sr, double f, size_t settle) {
+    const size_t win = static_cast<size_t>(sr * 0.5);
+    const size_t n = settle + win;
+    const double w = 2.0 * kPi * f / sr;
+    const double amp = 0.5;
+    std::vector<float> x(n);
+    for (size_t i = 0; i < n; ++i) x[i] = static_cast<float>(amp * std::sin(w * static_cast<double>(i)));
+    MultiOutputEngine e;
+    e.setSampleRate(sr);
+    e.applyConfigRT(cfg);
+    const Outs o = run(e, x, x, 1024);
+    double ss = 0, cc = 0, sc = 0, ys = 0, yc = 0;
+    for (size_t i = settle; i < n; ++i) {
+        const double s = std::sin(w * static_cast<double>(i)), c = std::cos(w * static_cast<double>(i));
+        const double y = o.L[way][i];
+        ss += s * s; cc += c * c; sc += s * c; ys += y * s; yc += y * c;
+    }
+    const double det = ss * cc - sc * sc;
+    const double a = (ys * cc - yc * sc) / det, b = (yc * ss - ys * sc) / det;
+    return 20.0 * std::log10(std::max(1e-30, std::hypot(a, b) / amp));
+}
+
 template <class CfgT = MultiConfig, class EngT = MultiOutputEngine>
 static void testWayEqSeed50Impl() {
     unsigned seed = static_cast<unsigned>(std::time(nullptr));
@@ -1068,7 +1199,13 @@ static void testWayEqSeed50Impl() {
                 band.q = static_cast<float>(std::uniform_real_distribution<double>(0.3, 10.0)(rng));
             }
 
-            const size_t len = static_cast<size_t>(sr * 1.5);
+            // A mérés hossza a leglassabb pólus 200 dB-es lecsengéséből (a −90 dB-es küszöbnél 0,05 dB-hez kb.
+            // −135 dB kell; a többi a többszörös pólusok – LR = négyzetre emelt Butterworth – tartaléka).
+            const size_t len = impulseLenForDecay(cEq, targetWay, sr, 200.0, 1.5, 10.0);
+            if (len == 0) {
+                CHECK(false, "7.3 tc=%d: a lánc impulzusválasza 10 s alatt nem cseng le 200 dB-t (sr=%.0f)", tc, sr);
+                continue;
+            }
             std::vector<float> imp(len, 0.0f);
             imp[0] = 1.0f;
 
@@ -1079,6 +1216,8 @@ static void testWayEqSeed50Impl() {
             const Outs oEq = run(eEq, imp, imp, 1024);
 
             bool caseOk = true;
+            double caseWorst = 0.0, caseWorstF = 0.0, caseWorstExp = 0.0, caseWorstMeas = 0.0;
+            bool caseWorstTone = false;
             for (double f : logFreqs(30.0, 16000.0, 24)) {
                 std::complex<double> hAna = evalAnalyticXoverBand(cEq, targetWay, f, sr);
                 for (int b = 0; b < nBands; ++b) {
@@ -1086,11 +1225,35 @@ static void testWayEqSeed50Impl() {
                     hAna *= makeAnalyticEq(static_cast<EqBandType>(bd.type), bd.freq, bd.gainDb, bd.q, sr).eval(f, sr);
                 }
                 const double expDb = db(hAna);
-                const double measDb = db(resp(oEq.L[targetWay], f, sr));
+                // −60 dB alatt a float32 kimenet kerekítése az impulzus-DFT-ben már század dB-ket jelenthet:
+                // ott szinuszos gerjesztéssel mérünk (a −90 dB-es küszöb és a 0,05 dB-es határ változatlan)
+                const bool deep = expDb < -60.0 && expDb > -90.0;
+                const double measDb = deep ? toneGainDb(cEq, targetWay, sr, f, len) : db(resp(oEq.L[targetWay], f, sr));
                 const double err = std::fabs(measDb - expDb);
                 if (expDb > -90.0) {
                     worstGlobalErr = std::max(worstGlobalErr, err);
                     if (err > 0.05) caseOk = false;
+                    if (err > caseWorst) { caseWorst = err; caseWorstF = f; caseWorstExp = expDb; caseWorstMeas = measDb; caseWorstTone = deep; }
+                }
+            }
+            if (!caseOk || std::getenv("AQ_73_VERBOSE")) {
+                std::printf("  7.3 eset tc=%d: sr=%.0f nOut=%d nXo=%d slope=%d út=%d sáv=%d; legrosszabb %.4f dB @ %.1f Hz (várt %.3f, mért %.3f dB, %s)\n",
+                            tc, sr, nOut, nXo, slope, targetWay, nBands, caseWorst, caseWorstF, caseWorstExp, caseWorstMeas,
+                            caseWorstTone ? "szinusz" : "impulzus");
+                // Bontás: a motor saját átviteli függvénye; ugyanaz a lánc double pontossággal az időtartományban
+                // szimulálva (a motor nélkül), majd float-ra kerekítve (a motor kimenete float).
+                const auto hd = simulateWayImpulse(cEq, targetWay, sr, len);
+                std::vector<float> hf(hd.begin(), hd.end());
+                std::complex<double> accD(0, 0);
+                for (size_t i = 0; i < len; ++i) accD += hd[i] * std::polar(1.0, -2.0 * kPi * caseWorstF * i / sr);
+                double engDb = 0.0;
+                if constexpr (HasWayResp<EngT>) engDb = db(eEq.wayResponse(targetWay, std::vector<double>{ caseWorstF })[0]);
+                std::printf("      hossz %.2f s; motor átviteli fv. %.4f dB; double szimuláció %.4f dB; float-ra kerekítve %.4f dB\n",
+                            len / sr, engDb, db(accD), db(resp(hf, caseWorstF, sr)));
+                for (int j = 0; j < nXo; ++j) std::printf("      xo[%d]=%.2f Hz\n", j, cEq.crossoverHz[j]);
+                for (int b = 0; b < nBands; ++b) {
+                    const auto& bd = cEq.outputs[targetWay].way.bands[b];
+                    std::printf("      eq[%d] típus=%d f=%.2f Hz g=%.2f dB Q=%.3f\n", b, int(bd.type), bd.freq, bd.gainDb, bd.q);
                 }
             }
             for (int k = 0; k < nOut; ++k) {

@@ -28,6 +28,12 @@ on:
         description: "A DMG fájl neve"
         value: ${{ jobs.macos-app.outputs.file }}
 
+# Külső letöltés (C1): az RNNoise-modell letöltése 20 mp-ig 100 kB/s alatt a következő tükörre vált, és legfeljebb
+# 5 percig tart összesen (tools/fetch_rnnoise.sh).
+env:
+  AQ_FETCH_MIN_BPS: "102400"   # RNNoise-letöltés: 20 mp-ig 100 kB/s alatt a következő tükör jön
+  AQ_FETCH_DEADLINE: "300"     # és legfeljebb 5 perc összesen (tools/fetch_rnnoise.sh)
+
 permissions:
   contents: read
 
@@ -59,7 +65,7 @@ jobs:
           tar -xzf /tmp/fftw.tar.gz -C "$RUNNER_TEMP"
 
       - name: RNNoise modell (az Ubuntu forráscsomagjából, a tárolóban nincs)
-        timeout-minutes: 10
+        timeout-minutes: 7
         run: |
           bash tools/fetch_rnnoise.sh /tmp/rnnoise.tar.xz || { echo "::error title=RNNoise::a letöltés egyik tükörről sem sikerült"; exit 1; }
           mkdir -p "$RUNNER_TEMP/rnnoise-model"
@@ -83,7 +89,7 @@ jobs:
         run: |
           arch -x86_64 /usr/bin/true 2>/dev/null || sudo softwareupdate --install-rosetta --agree-to-license
           fail=0
-          for t in test_ringbuffer test_core test_dsp test_multiout test_dsd test_upsample test_hires_b test_src_ref test_mic_basic; do
+          for t in test_ringbuffer test_core test_dsp test_matrix test_multiout test_dsd test_player test_upsample test_hires test_hires_b test_src_ref test_room test_mic_basic; do
             echo "::group::$t (arm64)"
             if ./build-arm64/$t; then echo "$t arm64: OK"; else echo "::error::$t (arm64) sikertelen"; fail=1; fi
             echo "::endgroup::"
