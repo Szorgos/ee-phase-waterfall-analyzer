@@ -24,6 +24,7 @@
 #include "audio_options.hpp"
 #include "file_player.hpp"
 #include "health_monitor.hpp"
+#include "report_sender.hpp"
 #include "library_bridge.hpp"
 #include "linux_store.hpp"
 #include "load_advisor.hpp"
@@ -430,6 +431,7 @@ int main(int argc, char* argv[]) {
     }
     aq::health::LogTee::install(diagDir + "/engine.log", !errorReportsSaved);
     aq::health::Monitor health;
+    aq::report::Service reportService;
     // Nyelv (a hangbeállításokban látszó kimenet neve): a felületen választott, különben a munkameneté
     aq_i18n::init();
     std::vector<int> ports(std::begin(kEnginePorts), std::end(kEnginePorts));
@@ -911,7 +913,8 @@ int main(int argc, char* argv[]) {
         }
         return true;
     }();
-    audioOpts.errorReports = savedAudio.errorReports;   // hozzájárulás: a visszaállítás módjától függetlenül él
+    audioOpts.errorReports = savedAudio.errorReports;           // hozzájárulás: a visszaállítás módjától függetlenül él
+    audioOpts.errorReportsAsked = savedAudio.errorReportsAsked; // első indításkori kérdés állapota
     auto optsToJsonWithDop = [](const audioopt::AudioOptions& o, bool dop) {
         std::string j = audioopt::toJson(o);
         if (!j.empty() && j.back() == '}') {
@@ -1113,6 +1116,7 @@ int main(int argc, char* argv[]) {
         audioOpts = o;
         dsdDop = wantDop;
         health.setEnabled(o.errorReports);
+        reportService.setEnabled(o.errorReports);
         applyAudio(o);
         const std::string savedJson = optsToJsonWithDop(o, dsdDop);
         if (!linux_store::saveAudioOptions(savedJson)) std::cerr << "[Hangkimenet] Figyelem: az audio.json nem írható.\n";
@@ -1211,6 +1215,22 @@ int main(int argc, char* argv[]) {
         versionChecker.start(vercheck::fetchWithCurl, AQULIFY_VERSION);
         cb.versionStatus = [&versionChecker] { return versionChecker.statusJson(); };
     }
+    cb.errorReportStatus = [&reportService] { return reportService.statusJson(); };
+    cb.errorReportPreview = [&reportService](const std::string& kind, const std::string& symptom, const std::string& note,
+                                             std::string& preview, size_t& bytes, bool& configured) {
+        reportService.buildPreview(kind, symptom, note, preview, bytes, configured);
+    };
+    cb.errorReportSend = [&reportService](const std::string& kind, const std::string& symptom, const std::string& note,
+                                          std::function<void(bool, long long, const std::string&)> onDone) {
+        reportService.sendAsync(kind, symptom, note, [onDone = std::move(onDone)](const aq::report::SendResult& r) {
+            if (onDone) onDone(r.ok, r.id, r.error);
+        });
+    };
+    cb.errorReportSave = [&reportService](const std::string& kind, const std::string& symptom, const std::string& note,
+                                          std::string& filename, std::string& err) {
+        return reportService.saveReport(kind, symptom, note, filename, err);
+    };
+    cb.errorReportDismissPrevious = [&reportService] { reportService.dismissPrevious(); };
 
     std::unique_ptr<WebSocketBridge> bridge;
     for (int p : ports) {
@@ -1247,6 +1267,7 @@ int main(int argc, char* argv[]) {
         for (const auto& n : aq::report::namesFromJson(linux_store::loadRemote())) hc.scrubNames.push_back(n);
         for (const auto& n : aq::report::namesFromJson(linux_store::loadRemoteTargets())) hc.scrubNames.push_back(n);
         if (!health.start(hc)) std::cerr << "[Hibajelentés] A diagnosztikai mappa nem írható: " << diagDir << "\n";
+        reportService.start(hc.dir, hc.logPath, hc.scrubNames, hc.enabled);
     }
     health.setSection("system", systemSectionJson());
     // A motor állapota az állapotfájlba (2 s-onként, a PipeWire fő szálán; az őrszál csak ezt a másolatot olvassa)
@@ -1317,6 +1338,7 @@ int main(int argc, char* argv[]) {
     const bool crashedDaemon = node.coreError.load();
     node.shutdown();
     s_healthTick = nullptr;
+    reportService.stop(); // nem vár hálózati időkorlátra
     health.stopClean();   // a „rendben leállt” jel: a következő indítás nem készít rendellenes-vég jelentést
     return crashedDaemon ? 2 : 0;
 }

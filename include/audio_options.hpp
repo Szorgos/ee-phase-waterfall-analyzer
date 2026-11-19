@@ -90,8 +90,10 @@ struct AudioOptions {
     bool asio = false;
     std::string asioDriver;                     // a meghajtó CLSID-je vagy neve (üres: az első telepített)
     // Névtelen hibajelentés (beépített hibajelentés): alapból KI. Kikapcsolva a helyi jelentés csak a következő rendes
-    // indításig marad meg; a küldés a 3. szakasz. Hozzájárulás, ezért az indításkori visszaállítástól függetlenül él.
+    // indításig marad meg; bekapcsolva a motor elküldi a rendellenes előző futás jelentését. Hozzájárulás, ezért az
+    // indításkori visszaállítástól függetlenül él.
     bool errorReports = false;
+    bool errorReportsAsked = false;   // az első indításkori kérdésre már válaszolt-e a felhasználó
 
     bool operator==(const AudioOptions& o) const {
         return bufferFrames == o.bufferFrames && keepAwake == o.keepAwake && rateMode == o.rateMode &&
@@ -106,7 +108,8 @@ struct AudioOptions {
                std::abs(upsampleHeadroomDb - o.upsampleHeadroomDb) < 1e-3f &&
                upsampleCustom == o.upsampleCustom && upsampleThreads == o.upsampleThreads &&
                upsampleMaxRate == o.upsampleMaxRate && dedicatedCore == o.dedicatedCore && loadAdvisor == o.loadAdvisor &&
-               asio == o.asio && asioDriver == o.asioDriver && errorReports == o.errorReports;
+               asio == o.asio && asioDriver == o.asioDriver && errorReports == o.errorReports &&
+               errorReportsAsked == o.errorReportsAsked;
     }
     bool operator!=(const AudioOptions& o) const { return !(*this == o); }
 };
@@ -236,7 +239,8 @@ inline std::string toJson(const AudioOptions& o) {
          ",\"loadAdvisor\":" + (o.loadAdvisor ? "true" : "false") +
          ",\"asio\":" + (o.asio ? "true" : "false") +
          ",\"asioDriver\":\"" + jsonStringBody(o.asioDriver) + "\"" +
-         ",\"errorReports\":" + (o.errorReports ? "true" : "false") + "}";
+         ",\"errorReports\":" + (o.errorReports ? "true" : "false") +
+         ",\"errorReportsAsked\":" + (o.errorReportsAsked ? "true" : "false") + "}";
     return s;
 }
 
@@ -290,6 +294,7 @@ inline AudioOptions fromJson(const json::Value& v, AudioOptions base = {}) {
     if (const json::Value* x = v.get("asio"); x && x->type == T::Bool) base.asio = x->b;
     if (const json::Value* x = v.get("asioDriver"); x && x->type == T::String) base.asioDriver = x->str;
     if (const json::Value* x = v.get("errorReports"); x && x->type == T::Bool) base.errorReports = x->b;
+    if (const json::Value* x = v.get("errorReportsAsked"); x && x->type == T::Bool) base.errorReportsAsked = x->b;
 
     sanitize(base);
     return base;

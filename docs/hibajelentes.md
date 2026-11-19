@@ -1,8 +1,6 @@
-# Beépített hibajelentés – 1. szakasz: a motor helyi része
+# Beépített hibajelentés – motor, küldő és felület
 
-Állapot: **a motor része Linuxon és Windowson elkészült; macOS-en be van kötve, de csak a CI fordítja, élőben nem
-próbált**. A felület (2. szakasz), a küldés (3. szakasz) és a telepítő kérdése (4. szakasz) még nincs. **Hálózatra
-semmi nem megy**: minden csak helyben, a motor saját mappájában van.
+Állapot: **a motor helyi része, a küldő (`include/report_sender.hpp`, `AQ_REPORT_URL` beállítva) és a felület (`gui_integrated_system.html`, hu + en; a többi nyelv angol helyettesítővel) elkészült**. A küldés alapértelmezésben ki van kapcsolva: csak a felhasználó kifejezett hozzájárulásával (`errorReports = true` vagy egyszeri kézi küldés) indul. A telepítő (Inno Setup) jelölőnégyzete és a 23 nyelv végleges fordítása külön lépés.
 
 ## Mit csinál
 
@@ -66,10 +64,29 @@ visszaállítás módjától függetlenül érvényes.
   Windows-only mutánsokat (`W*_win-*.patch`) csak alkalmazhatóságra nézi; ezeket natív Windows-futás igazolja.
 - `tools/check_signal_safe.py`: a jelzéskezelőben csak aszinkron-jelzésbiztos művelet van.
 
+## Küldés (motor)
+
+- **Fejléc:** `include/report_sender.hpp` (`aq::report::Sender`, `aq::report::Service`), mindhárom motorba bekötve (`src/pipewire_plugin.cpp`, `windows/engine/aether_engine.cpp`, `macos/app/main.mm`).
+- **Végpont:** fordítási állandó `AQ_REPORT_URL` (CMake-változó `-DAQ_REPORT_URL="https://..."`, alapérték: üres → nincs küldés). Token és kulcs nincs a programban.
+- **Szállítás:** Linux/Pi és macOS: a rendszer `curl` programja (`--proto =https`, `--max-time 15`, a törzs ideiglenes fájlból `--data-binary @...`, soha nem parancssori paraméterként); Windows: WinHTTP (`win::postJson`, HTTPS, 15 s időkorlát). A küldés külön háttérszálon fut, a leállítás nem vár hálózati időkorlátra.
+- **Méretkorlát és válaszkezelés:** a törzs legfeljebb 65 536 bájt (túllépésnél a `log` legrégebbi sorai elhagyva). `201` → siker (`AQ-<id>`, automatikus küldésnél `previous-run.json/.txt` törölve); `429` → `Retry-After` tiszteletben tartása; `413` → rövidítés és egyszeri újrapróbálás; `400`/`415` → nincs újrapróbálás; hálózati hiba / `5xx` → legfeljebb 3 próba indításonként, a jelentés helyben marad.
+- **Hozzájárulás:** kikapcsolt `errorReports` és kézi jóváhagyás nélkül 0 hálózati kérés.
+- **Hídüzenetek:** `error_report_preview` (előnézet), `error_report_send` (egyszeri kézi küldés), `error_report_save` (mentés a `diag/` mappába új néven `report-ÉÉÉÉHHNN-ÓÓPPMP.json`, soha nem ír felül, a felület csak a fájlnevet kapja meg), `error_report_dismiss_previous`. A felhasználói megjegyzés (`note`, max. 400 karakter) tisztítva, `[Felhasználó] …` előtaggal kerül a `log` utolsó sorába (a `format 1` séma változatlan).
+
+## Felület
+
+- **Beállítás:** „Névtelen hibajelentés” kapcsoló (`errorReports`, alapból ki), rövid adatvédelmi tájékoztatóval és „Mit küld?” előnézettel.
+- **Első indítás:** egyszeri kérdés a motor által tárolt `errorReportsAsked` alapján (nem `localStorage`): `[Nem]` (alapértelmezett) `[Igen]` `[Mit küld?]`.
+- **Rendellenes előző futás:** `diag/previous-run.json` esetén sáv induláskor: „Legutóbb az Aqulify nem állt le rendesen. Elküldjük, mi történt?” `[Megnézem és elküldöm]` `[Nem]`.
+- **„Hibát jelentek” ablak:** 6 tünetgomb (`noSound`, `crackle`, `buttonNoEffect`, `freeze`, `badSound`, `other`), opcionális megjegyzés, **kötelező előnézet küldés előtt**, `[Küldés]` (egyszeri hozzájárulás; üres `AQ_REPORT_URL`-nél tiltott, őszinte üzenettel), `[Mentés fájlba]`, `[Mégse]`. Siker esetén másolható `AQ-<id>` azonosító.
+
+## Mit nem küld, és hogyan olvassa a tulajdonos a jelentéseket
+
+- **Nem kerül a jelentésbe:** felhasználónév, teljes név, gépnév, otthoni mappa és fájlútvonalak (`<path>`), párosított eszközök felhasználói nevei (`<name>`), IP- (`<ip>`), MAC- (`<mac>`) és e-mail-cím (`<email>`). A teljes fájlútvonal a felületre sem kerül ki.
+- **Olvasás és 90 napos törlés:** a privát Cloudflare D1 adatbázisból a tulajdonos a `cloudflare/hibajelento-worker/README.md` **„A jelentések olvasása”** szakaszában szereplő `wrangler d1 execute` parancsokkal olvassa és törli a jelentéseket.
+
 ## Nincs benne (még)
 
-- macOS: élő próba nem volt (csak a CI fordítja, és ott a `test_watchdog` fut); a hangkártyák listája nincs az
-  állapotfájlban.
-- A felület, a „Hibát jelentek” gomb, a küldés, a telepítő kérdése: 2–4. szakasz.
-- A fogadó oldal (Cloudflare Worker, privát D1) kódja és a végpont szerződése: `cloudflare/hibajelento-worker/README.md`.
-  Még nincs élesítve (a tulajdonos telepíti), és a motor még nem küld.
+- Élő Cloudflare Worker élesítés és `AQ_REPORT_URL` beállítása (a tulajdonos végzi).
+- macOS és Windows élő futtatás, valamint valódi Raspberry Pi próba (a CI fordítja és futtatja az egységteszteket).
+- Telepítő (Inno Setup) jelölőnégyzete, a maradék 21 nyelv emberi fordítása, hídtól független `aqulify-gui` jelentésküldő.

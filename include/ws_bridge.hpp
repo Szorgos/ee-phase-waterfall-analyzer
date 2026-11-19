@@ -199,6 +199,22 @@ struct BridgeCallbacks {
      * adja (room/measurement_session.hpp).
      */
     std::function<std::unique_ptr<aqulify::room::MicCapture>()> makeMicCapture;
+    /**
+     * Hibajelentés állapota (report_sender.hpp, Service::statusJson): vesszővel kezdődő JSON-rész
+     * ("error_report":{"configured":…,"has_previous":…}), üres, ha nincs bekötve.
+     */
+    std::function<std::string()> errorReportStatus;
+    /** Hibajelentés előnézetének összeállítása (kind: "manual" | "previous"). */
+    std::function<void(const std::string& kind, const std::string& symptom, const std::string& note,
+                       std::string& preview, size_t& bytes, bool& configured)> errorReportPreview;
+    /** Hibajelentés aszinkron küldése külön szálon (egyszeri kézi hozzájárulás). */
+    std::function<void(const std::string& kind, const std::string& symptom, const std::string& note,
+                       std::function<void(bool ok, long long id, const std::string& error)> onDone)> errorReportSend;
+    /** Hibajelentés mentése a diag/ mappába új néven (csak fájlnév, teljes útvonal nélkül). */
+    std::function<bool(const std::string& kind, const std::string& symptom, const std::string& note,
+                       std::string& outFilename, std::string& outError)> errorReportSave;
+    /** Az előző rendellenes futás helyi jelentésének elutasítása (törlése). */
+    std::function<void()> errorReportDismissPrevious;
 };
 
 /**
@@ -2033,6 +2049,69 @@ private:
             sendText("{\"type\":\"audio_opts\"," + cb_.audioOptionsJson().substr(1));
             return;
         }
+        if (type == "error_report_preview" || type == "error_report_send" || type == "error_report_save" ||
+            type == "error_report_dismiss_previous") {
+            if (remote && !curIsAdmin()) {
+                sendText("{\"type\":\"error\",\"error\":\"remote\"}");
+                return;
+            }
+            auto getStr = [&](const char* k) -> std::string {
+                const json::Value* x = msg.get(k);
+                return (x && x->type == json::Value::Type::String) ? x->str : std::string();
+            };
+            const std::string rawKind = getStr("kind");
+            const std::string kind = (rawKind == "previous") ? "previous" : "manual";
+            const std::string symptom = getStr("symptom");
+            const std::string note = getStr("note");
+            if (type == "error_report_preview") {
+                if (!cb_.errorReportPreview) {
+                    sendText("{\"type\":\"error_report_preview\",\"kind\":\"" + kind +
+                             "\",\"preview\":\"\",\"bytes\":0,\"configured\":false}");
+                    return;
+                }
+                std::string preview;
+                size_t bytes = 0;
+                bool configured = false;
+                cb_.errorReportPreview(kind, symptom, note, preview, bytes, configured);
+                sendText("{\"type\":\"error_report_preview\",\"kind\":\"" + kind + "\",\"preview\":\"" +
+                         jsonEscape(preview) + "\",\"bytes\":" + std::to_string(bytes) + ",\"configured\":" +
+                         (configured ? "true" : "false") + "}");
+                return;
+            }
+            if (type == "error_report_send") {
+                if (!cb_.errorReportSend) {
+                    sendText("{\"type\":\"error_report_result\",\"ok\":false,\"error\":\"not_configured\"}");
+                    return;
+                }
+                cb_.errorReportSend(kind, symptom, note, [this](bool ok, long long id, const std::string& err) {
+                    std::string r = std::string("{\"type\":\"error_report_result\",\"ok\":") + (ok ? "true" : "false");
+                    if (ok && id > 0) r += ",\"id\":" + std::to_string(id);
+                    if (!ok && !err.empty()) r += ",\"error\":\"" + jsonEscape(err) + "\"";
+                    r += "}";
+                    postBroadcast(r);
+                });
+                return;
+            }
+            if (type == "error_report_save") {
+                if (!cb_.errorReportSave) {
+                    sendText("{\"type\":\"error_report_saved\",\"ok\":false,\"error\":\"not_ready\"}");
+                    return;
+                }
+                std::string filename, err;
+                const bool ok = cb_.errorReportSave(kind, symptom, note, filename, err);
+                std::string r = std::string("{\"type\":\"error_report_saved\",\"ok\":") + (ok ? "true" : "false");
+                if (ok && !filename.empty()) r += ",\"filename\":\"" + jsonEscape(filename) + "\"";
+                if (!ok && !err.empty()) r += ",\"error\":\"" + jsonEscape(err) + "\"";
+                r += "}";
+                sendText(r);
+                return;
+            }
+            if (type == "error_report_dismiss_previous") {
+                if (cb_.errorReportDismissPrevious) cb_.errorReportDismissPrevious();
+                sendText("{\"type\":\"error_report_dismissed\",\"ok\":true}");
+                return;
+            }
+        }
                 if (type == "start_measurement") {
             handleStartMeasurement(msg, remote);
             return;
@@ -2587,6 +2666,7 @@ private:
         s += ",\"version\":\"" AQULIFY_VERSION "\"";   // a felület ebből látja, ha a motor más verziójú
 #endif
         if (cb_.versionStatus) s += cb_.versionStatus();   // a legújabb kiadás (a gép saját ellenőrzése)
+        if (cb_.errorReportStatus) s += cb_.errorReportStatus();   // hibajelentés állapota (beállítva / előző futás)
         // A motor elérési útja: verzióeltérésnél a felület megnevezi a futó (régi) motort
         static const std::string exe = selfExePath();
         if (!exe.empty()) s += ",\"exe\":\"" + jsonEscape(exe) + "\"";

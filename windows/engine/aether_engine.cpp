@@ -73,6 +73,7 @@ using WinPlayerOutput = BasicWinPlayerOutput<WasapiPlayerOutput>;
 }
 #include "updater.hpp"
 #include "health_monitor.hpp"
+#include "report_sender.hpp"
 #include "device_format.hpp"
 
 using namespace ee_analyzer;
@@ -1095,6 +1096,7 @@ int main(int argc, char** argv) {
     audioopt::AudioOptions audioOpts;
     bool dsdDop = false;
     aq::health::Monitor health;   // beépített hibajelentés: őrszál és helyi állapotfájl (a híd indulása után indul)
+    aq::report::Service reportService;
     auto playerOnly = [](audioopt::AudioOptions o) {
         o.bufferFrames = 0;
         o.keepAwake = false;
@@ -1152,6 +1154,7 @@ int main(int argc, char** argv) {
         audioOpts = o;
         dsdDop = wantDop;
         health.setEnabled(o.errorReports);
+        reportService.setEnabled(o.errorReports);
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         filePlayer.setPreload(o.preload);
         filePlayer.setUpsampleOptions(o);
@@ -1207,6 +1210,22 @@ int main(int argc, char** argv) {
         }, AQULIFY_VERSION);
         cb.versionStatus = [&versionChecker] { return versionChecker.statusJson(); };
     }
+    cb.errorReportStatus = [&reportService] { return reportService.statusJson(); };
+    cb.errorReportPreview = [&reportService](const std::string& kind, const std::string& symptom, const std::string& note,
+                                             std::string& preview, size_t& bytes, bool& configured) {
+        reportService.buildPreview(kind, symptom, note, preview, bytes, configured);
+    };
+    cb.errorReportSend = [&reportService](const std::string& kind, const std::string& symptom, const std::string& note,
+                                          std::function<void(bool, long long, const std::string&)> onDone) {
+        reportService.sendAsync(kind, symptom, note, [onDone = std::move(onDone)](const aq::report::SendResult& r) {
+            if (onDone) onDone(r.ok, r.id, r.error);
+        });
+    };
+    cb.errorReportSave = [&reportService](const std::string& kind, const std::string& symptom, const std::string& note,
+                                          std::string& filename, std::string& err) {
+        return reportService.saveReport(kind, symptom, note, filename, err);
+    };
+    cb.errorReportDismissPrevious = [&reportService] { reportService.dismissPrevious(); };
 
     std::unique_ptr<WebSocketBridge> bridge;
     for (int p : ports) {
@@ -1270,6 +1289,7 @@ int main(int argc, char** argv) {
         for (const wchar_t* f : { L"remote.json", L"remote-targets.json" })
             for (const auto& n : aq::report::namesFromJson(readSmallFile(userFilePath(f, false), 256 * 1024))) hc.scrubNames.push_back(n);
         if (!health.start(hc)) std::cout << "[Hibajelentés] A diagnosztikai mappa nem írható.\n";
+        reportService.start(hc.dir, hc.logPath, hc.scrubNames, hc.enabled);
     }
     int healthTicks = 0;
     auto healthTick = [&] {
@@ -1346,6 +1366,7 @@ int main(int argc, char** argv) {
     }
     sources.pushParams(current);
     if (!win::saveParamFile(current)) std::cout << "[Beállítások] Figyelem: a params.bin nem állítható alapra.\n";
+    reportService.stop(); // nem vár hálózati időkorlátra
     health.stopClean();   // a „rendben leállt” jel: a következő indítás nem készít rendellenes-vég jelentést
     if (single) { ReleaseMutex(single); CloseHandle(single); }
     CoUninitialize();

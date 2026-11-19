@@ -49,6 +49,7 @@
 #include "phone_cache.hpp"
 #include "mac_updater.hpp"
 #include "health_monitor.hpp"
+#include "report_sender.hpp"
 
 using namespace ee_analyzer;
 using aq_i18n::Msg;
@@ -234,6 +235,7 @@ struct Core {
     // Beépített hibajelentés: őrszál, állapotfájl (~/Library/Application Support/Aqulify/diag), az előző futás
     // rendellenes végének helyi jelentése. Küldés nincs (3. szakasz).
     aq::health::Monitor health;
+    aq::report::Service reportService;
     int healthTicks = 0;
 
 
@@ -485,7 +487,8 @@ struct Core {
         json::Value v;
         c->hasAudio = !doc.empty() && json::parse(doc, v);
         if (c->hasAudio) c->savedAudio = audioopt::fromJson(v);
-        c->audioOpts.errorReports = c->savedAudio.errorReports;   // hozzájárulás: a visszaállítás módjától függetlenül él
+        c->audioOpts.errorReports = c->savedAudio.errorReports;           // hozzájárulás: a visszaállítás módjától függetlenül él
+        c->audioOpts.errorReportsAsked = c->savedAudio.errorReportsAsked; // első indításkori kérdés állapota
     }
     c->engine.params.write(c->current);
     c->presetDoc = linux_store::loadPresets();
@@ -524,6 +527,7 @@ struct Core {
         for (const auto& n : aq::report::namesFromJson(linux_store::loadRemote())) hc.scrubNames.push_back(n);
         for (const auto& n : aq::report::namesFromJson(linux_store::loadRemoteTargets())) hc.scrubNames.push_back(n);
         if (!c->health.start(hc)) std::cerr << "[Hibajelentés] A diagnosztikai mappa nem írható: " << diagDir << "\n";
+        c->reportService.start(hc.dir, hc.logPath, hc.scrubNames, hc.enabled);
     }
     c->healthTick();
 
@@ -716,6 +720,7 @@ struct Core {
         if (o == c->audioOpts) return;
         c->audioOpts = o;
         c->health.setEnabled(o.errorReports);
+        c->reportService.setEnabled(o.errorReports);
         c->engine.setBufferFrames(static_cast<uint32_t>(o.bufferFrames));
         c->filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         c->filePlayer.setPreload(o.preload);
@@ -843,6 +848,22 @@ struct Core {
         c->versionChecker.start(vercheck::fetchWithCurl, AQULIFY_VERSION);
         cb.versionStatus = [c] { return c->versionChecker.statusJson(); };
     }
+    cb.errorReportStatus = [c] { return c->reportService.statusJson(); };
+    cb.errorReportPreview = [c](const std::string& kind, const std::string& symptom, const std::string& note,
+                                std::string& preview, size_t& bytes, bool& configured) {
+        c->reportService.buildPreview(kind, symptom, note, preview, bytes, configured);
+    };
+    cb.errorReportSend = [c](const std::string& kind, const std::string& symptom, const std::string& note,
+                             std::function<void(bool, long long, const std::string&)> onDone) {
+        c->reportService.sendAsync(kind, symptom, note, [onDone = std::move(onDone)](const aq::report::SendResult& r) {
+            if (onDone) onDone(r.ok, r.id, r.error);
+        });
+    };
+    cb.errorReportSave = [c](const std::string& kind, const std::string& symptom, const std::string& note,
+                             std::string& filename, std::string& err) {
+        return c->reportService.saveReport(kind, symptom, note, filename, err);
+    };
+    cb.errorReportDismissPrevious = [c] { c->reportService.dismissPrevious(); };
 
     for (int p : kEnginePorts) {
         auto b = std::make_unique<WebSocketBridge>(p);
@@ -879,6 +900,7 @@ struct Core {
         if (core_->dirty) linux_store::saveParams(core_->current);
     }
     std::cout << "[Info] Leállítás.\n";
+    core_->reportService.stop(); // nem vár hálózati időkorlátra
     core_->health.stopClean();   // a „rendben leállt” jel: a következő indítás nem készít rendellenes-vég jelentést
 }
 

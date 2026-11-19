@@ -183,12 +183,24 @@ if(WIN32)
 endif()
 
 
+# Hibajelentő végpont (Cloudflare Worker POST /report). Üresre állítva a küldés kikapcsol, a felület ezt őszintén jelzi.
+set(AQ_REPORT_URL "https://aqulify-hibajelento.gergoeagle.workers.dev/report" CACHE STRING "Hibajelento vegpont URL (ures: nincs kuldes)")
+add_compile_definitions(AQ_REPORT_URL="${AQ_REPORT_URL}")
+
 # Beépített hibajelentés, 1. szakasz: őrszem (szívverés), állapotfájl, helyi jelentés, tisztítás, rendellenes vég
 add_executable(test_watchdog src/test_watchdog.cpp)
 target_link_libraries(test_watchdog PRIVATE ee_dsp_core Threads::Threads)
 target_include_directories(test_watchdog PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 if(WIN32)
     target_link_libraries(test_watchdog PRIVATE ws2_32 iphlpapi)
+endif()
+
+# Beépített hibajelentés, küldő: hozzájárulás, méretkorlát, tisztítás, helyi HTTP-próba (curl / WinHTTP)
+add_executable(test_report_sender src/test_report_sender.cpp)
+target_link_libraries(test_report_sender PRIVATE ee_dsp_core Threads::Threads)
+target_include_directories(test_report_sender PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+if(WIN32)
+    target_link_libraries(test_report_sender PRIVATE ws2_32 iphlpapi winhttp)
 endif()
 
 # 9b. Tesztalkalmazás: DSD (.dsf/.dff) fejléc, FIR szűrő, PCM dekódolás, tekerés, ID3v2, DST elutasítás, DoP 1.1

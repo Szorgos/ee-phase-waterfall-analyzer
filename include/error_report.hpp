@@ -13,6 +13,7 @@
  */
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -35,6 +36,7 @@
 #include <winsock2.h>
 #include <windows.h>
 #else
+#include <fcntl.h>
 #include <pwd.h>
 #include <unistd.h>
 #endif
@@ -504,24 +506,141 @@ struct Report {
     bool hasState = false; // volt-e állapotfájl
 };
 
+/** Tünetkulcs tisztítása a Worker szerződése szerint: csak [A-Za-z0-9_-], legfeljebb 64 karakter. */
+inline std::string sanitizeSymptom(const std::string& raw) {
+    std::string out;
+    out.reserve(std::min<size_t>(raw.size(), 64));
+    for (unsigned char c : raw) {
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
+            out += static_cast<char>(c);
+            if (out.size() >= 64) break;
+        }
+    }
+    return out;
+}
+
+/**
+ * Szabad felhasználói megjegyzés tisztítása küldés előtt: sortörések szóközre, személyes adatok eltávolítása
+ * (scrub), majd UTF-8-biztos vágás legfeljebb 400 karakterre.
+ */
+inline std::string cleanUserNote(const std::string& raw, const ScrubContext& ctx) {
+    if (raw.empty()) return {};
+    std::string s;
+    s.reserve(raw.size());
+    bool lastSpace = true;
+    for (unsigned char c : raw) {
+        if (c < 0x20 || c == 0x7f) {
+            if (!lastSpace) { s += ' '; lastSpace = true; }
+        } else if (c == ' ') {
+            if (!lastSpace) { s += ' '; lastSpace = true; }
+        } else {
+            s += static_cast<char>(c);
+            lastSpace = false;
+        }
+    }
+    while (!s.empty() && s.back() == ' ') s.pop_back();
+    if (s.empty()) return {};
+    // Előzetes tisztítás, hogy egy hosszú útvonal/e-mail ne szorítsa ki a tényleges leírást vágás előtt
+    s = scrub(s, ctx, false);
+    // UTF-8 karakterek számolása (legfeljebb 400 karakter és 900 bájt)
+    size_t chars = 0, i = 0;
+    while (i < s.size() && chars < 400) {
+        const unsigned char b = static_cast<unsigned char>(s[i]);
+        size_t step = 1;
+        if ((b & 0xE0) == 0xC0) step = 2;
+        else if ((b & 0xF0) == 0xE0) step = 3;
+        else if ((b & 0xF8) == 0xF0) step = 4;
+        if (i + step > s.size() || i + step > 900) break;
+        i += step;
+        ++chars;
+    }
+    s.resize(i);
+    while (!s.empty() && s.back() == ' ') s.pop_back();
+    return s;
+}
+
+/**
+ * Jelentés mentése a diagnosztikai mappába új néven (report-ÉÉÉÉHHNN-ÓÓPPMP.json; ütközéskor -1, -2…).
+ * Soha nem ír felül meglévő fájlt. Siker esetén outFilename csak a fájl nevét kapja meg (útvonal nélkül).
+ */
+inline bool saveReportUnique(const std::filesystem::path& dir, const std::string& json, std::string& outFilename) {
+    outFilename.clear();
+    if (dir.empty() || json.empty()) return false;
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    if (!std::filesystem::is_directory(dir, ec)) return false;
+
+    const std::time_t now = std::time(nullptr);
+    std::tm tmBuf{};
+#ifdef _WIN32
+    localtime_s(&tmBuf, &now);
+#else
+    localtime_r(&now, &tmBuf);
+#endif
+    char ts[32];
+    std::strftime(ts, sizeof(ts), "%Y%m%d-%H%M%S", &tmBuf);
+
+    for (int seq = 0; seq < 1000; ++seq) {
+        const std::string name = seq == 0 ? (std::string("report-") + ts + ".json")
+                                          : (std::string("report-") + ts + "-" + std::to_string(seq) + ".json");
+        const std::filesystem::path full = dir / name;
+#ifdef _WIN32
+        HANDLE h = CreateFileW(full.wstring().c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h == INVALID_HANDLE_VALUE) {
+            if (GetLastError() == ERROR_FILE_EXISTS) continue;
+            return false;
+        }
+        DWORD written = 0;
+        const BOOL ok = WriteFile(h, json.data(), static_cast<DWORD>(json.size()), &written, nullptr) &&
+                        written == static_cast<DWORD>(json.size());
+        CloseHandle(h);
+        if (!ok) { std::filesystem::remove(full, ec); return false; }
+        outFilename = name;
+        return true;
+#else
+        const int fd = ::open(full.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+        if (fd < 0) {
+            if (errno == EEXIST) continue;
+            return false;
+        }
+        size_t off = 0;
+        bool ok = true;
+        while (off < json.size()) {
+            const ssize_t w = ::write(fd, json.data() + off, json.size() - off);
+            if (w <= 0) { ok = false; break; }
+            off += static_cast<size_t>(w);
+        }
+        ::close(fd);
+        if (!ok) { std::filesystem::remove(full, ec); return false; }
+        outFilename = name;
+        return true;
+#endif
+    }
+    return false;
+}
+
 /**
  * A jelentés összeállítása a diagnosztikai mappából és a naplóból.
  * kind: "manual" (a felhasználó kéri), "previous_abnormal" (az előző futás rendellenes vége), "stall".
- * symptom: a felhasználó választotta tünet kulcsa (2. szakasz), lehet üres.
+ * symptom: a felhasználó választotta tünet kulcsa, lehet üres.
+ * note: opcionális felhasználói megjegyzés (tisztítva a log utolsó sorába kerül "[Felhasználó] …" előtaggal).
  */
 inline Report build(const std::filesystem::path& dir, const std::filesystem::path& logPath, const ScrubContext& ctx, const std::string& kind,
-                    const std::string& symptom, int logLines = 200, bool logBeforeLastBanner = false) {
+                    const std::string& symptom, int logLines = 200, bool logBeforeLastBanner = false, const std::string& note = "") {
     using ee_analyzer::json::Value;
     Report r;
+    const std::string cleanSymptom = sanitizeSymptom(symptom);
     const std::string stateText = detail::readAll(dir / "state.json", 512 * 1024);
     Value state;
     r.hasState = !stateText.empty() && ee_analyzer::json::parse(stateText, state);
     const std::string crash = detail::readAll(dir / "crash.txt", 16 * 1024);
-    const std::vector<std::string> log = tailLines(logPath, logLines, logBeforeLastBanner);
+    std::vector<std::string> log = tailLines(logPath, logLines, logBeforeLastBanner);
+    const std::string cleanNote = cleanUserNote(note, ctx);
+    if (!cleanNote.empty()) log.push_back(std::string("[Felhasználó] ") + cleanNote);
     const long long created = static_cast<long long>(std::time(nullptr));
 
     // JSON
-    std::string j = "{\"format\":1,\"kind\":\"" + detail::jsonEsc(kind) + "\",\"symptom\":\"" + detail::jsonEsc(symptom) +
+    std::string j = "{\"format\":1,\"kind\":\"" + detail::jsonEsc(kind) + "\",\"symptom\":\"" + detail::jsonEsc(cleanSymptom) +
                     "\",\"created_unix\":" + std::to_string(created) + ",\"state\":";
     j += r.hasState ? stateText : std::string("null");
     j += ",\"crash\":\"" + detail::jsonEsc(crash) + "\",\"log\":[";
@@ -532,7 +651,7 @@ inline Report build(const std::filesystem::path& dir, const std::filesystem::pat
     // Olvasható előnézet
     std::string p = "Aqulify error report\n";
     p += "kind: " + kind + "\n";
-    if (!symptom.empty()) p += "symptom: " + symptom + "\n";
+    if (!cleanSymptom.empty()) p += "symptom: " + cleanSymptom + "\n";
     if (r.hasState) {
         auto str = [&](const char* k) { const Value* x = state.get(k); return x ? (x->type == Value::Type::String ? x->str : (x->type == Value::Type::Bool ? std::string(x->b ? "true" : "false") : std::to_string(static_cast<long long>(x->num)))) : std::string("?"); };
         p += "version: " + str("version") + "  platform: " + str("platform") + "  package: " + str("package") + "\n";
