@@ -12,6 +12,7 @@ Fájl: `i18n/gui/<nyelv>.json`, összeállítás: `python tools/i18n_build.py`.
 
 - Natív DSD (B rész): `ao.dsdNativeOn`, `ao.exclRate` (új); **módosult a szövege** (a 21 nyelvben még a régi, csak DoP-ról szóló változat áll): `ao.dsdDop`, `ao.dsdDopHint`
 - Referencia előbeállítás (SRC): `ups.presetReference`, `ups.presetReferenceHint` (új)
+- Telefonos app 1.2.0, Hangkimenet képernyő (új): `ao.readOnlyTitle`, `ao.adminRequired`, `ao.replayGain`, `ao.enableBtn`, `ao.statusTitle`, `ao.dsdPathLabel`, `ao.dsdFallbackPcm`, `ups.errPassbandRange`, `ups.errStopbandRange`
 
 Az `ao.asioCredit` védjegy-feltüntetés: a cégnév és a „védjegye és szoftvere” szerkezet maradjon meg minden nyelven.
 

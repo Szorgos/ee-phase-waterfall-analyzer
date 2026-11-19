@@ -909,6 +909,8 @@
   "ups.presetMinimum": "Minimumfázis",
   "ups.presetReference": "Referencia",
   "ups.presetReferenceHint": "99,7% sávszélesség, 32 bites pontosság, lineáris fázis. A legpontosabb, de a legtöbb számítást igényli.",
+  "ups.errPassbandRange": "A sávszélesség 80% és 99,7% között lehet.",
+  "ups.errStopbandRange": "A záró sáv kezdete 100% és 150% között lehet.",
   "ups.headroom": "Fejtér",
   "ups.advanced": "Haladó szűrőbeállítások",
   "ups.passband": "Sávszélesség (%)",
@@ -990,5 +992,12 @@
   "ao.asioErr_open_failed": "a megnyitás nem sikerült",
   "ao.asioErr_other": "hibakód: {code}",
   "ao.dsdNativeOn": "Natív DSD: {dsd}, {format} – a DAC a fájl DSD-folyamát bitre változatlanul kapja",
+  "ao.readOnlyTitle": "Csak olvasható mód",
+  "ao.adminRequired": "A beállítások módosításához rendszergazdai jog kell. A jogot a gépen, a Távirányító menüben lehet megadni.",
+  "ao.replayGain": "ReplayGain",
+  "ao.enableBtn": "Bekapcsolás",
+  "ao.statusTitle": "Jelenlegi állapot",
+  "ao.dsdPathLabel": "DSD-jelút",
+  "ao.dsdFallbackPcm": "PCM-átalakítás ({reason})",
   "ao.exclRate": "ezt a DSD-mintavételt a DAC sem natívan, sem DoP-ban nem fogadja (DSD1024 DoP-ban egy DAC-on sem fér át); PCM-re alakítva szól"
 }
