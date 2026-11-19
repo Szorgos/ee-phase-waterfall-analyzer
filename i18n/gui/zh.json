@@ -909,6 +909,8 @@
   "ups.presetMinimum": "最小相位",
   "ups.presetReference": "Reference",
   "ups.presetReferenceHint": "99.7% bandwidth, 32-bit precision, linear phase. The most accurate, but needs the most computation.",
+  "ups.errPassbandRange": "Passband must be between 80% and 99.7%.",
+  "ups.errStopbandRange": "Stopband start must be between 100% and 150%.",
   "ups.headroom": "余量",
   "ups.advanced": "高级滤波器设置",
   "ups.passband": "通带宽度 (%)",
@@ -990,5 +992,12 @@
   "ao.asioErr_open_failed": "opening failed",
   "ao.asioErr_other": "error code: {code}",
   "ao.dsdNativeOn": "Native DSD: {dsd}, {format} – the DAC receives the file's DSD stream bit-for-bit unchanged",
+  "ao.readOnlyTitle": "Read-only mode",
+  "ao.adminRequired": "Changing these settings requires administrator permission. Grant it on the computer, in the Remote menu.",
+  "ao.replayGain": "ReplayGain",
+  "ao.enableBtn": "Enable",
+  "ao.statusTitle": "Current status",
+  "ao.dsdPathLabel": "DSD path",
+  "ao.dsdFallbackPcm": "PCM conversion ({reason})",
   "ao.exclRate": "the DAC accepts this DSD rate neither natively nor over DoP (DSD1024 does not fit into DoP on any DAC); playing converted to PCM"
 }
