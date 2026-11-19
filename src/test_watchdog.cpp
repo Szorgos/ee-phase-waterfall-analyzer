@@ -25,6 +25,16 @@
 #include "watchdog.hpp"
 #include "ws_bridge.hpp"
 
+// A hangeszköz alapformátumának szöveggé alakítója (1b, P3). A befagyasztott tesztcommitban még nincs meg: akkor a
+// helyettesítő üres szöveget ad, és a [7] csoport elbukik.
+#if __has_include("device_format.hpp")
+#include "device_format.hpp"
+#else
+namespace aq::devfmt {
+inline std::string describe(const uint8_t*, size_t) { return {}; }
+}
+#endif
+
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -494,6 +504,85 @@ static void testSetting() {
     CHECK(!audioopt::fromJson(bad, o).errorReports, "nem logikai érték: marad ki");
 }
 
+// ------------------------------------------------------------------------------------------------ [6]
+static void testScrubKernelVersion() {
+    std::printf("[6] Tisztítás: a négyrészes kernelverzió nem IP-cím, a valódi címek továbbra is eltűnnek\n");
+    const aq::report::ScrubContext ctx;
+    const std::string text =
+        "[Rendszer] Linux 6.6.87.2-microsoft-standard-WSL2 x86_64\n"
+        "[Hálózat] kliens 192.168.1.23 csatlakozott\n"
+        "[Hálózat] távoli cél 10.0.0.5:47820\n"
+        "[Hálózat] utolsó kliens: 192.168.1.23.\n"
+        "[Hálózat] a 192.168.1.23-hoz csatlakozik\n"
+        "[Híd] felület: ws://127.0.0.1:47899\n";
+    const std::string out = aq::report::scrub(text, ctx);
+    std::printf("%s", out.c_str());
+    CHECK(contains(out, "6.6.87.2-microsoft-standard-WSL2"), "a kernelverzió (6.6.87.2-microsoft-standard-WSL2) megmarad");
+    CHECK(!contains(out, "192.168.1.23"), "a 192.168.1.23 eltűnik (mondat közben, mondatvégi ponttal és -hoz raggal is)");
+    CHECK(!contains(out, "10.0.0.5"), "a 10.0.0.5:47820 címe eltűnik");
+    CHECK(contains(out, "<ip>:47820") && contains(out, "<ip>.") && contains(out, "<ip>-hoz"),
+          "a helyükön <ip> (a port, a mondatvégi pont és a rag megmarad)");
+    CHECK(contains(out, "ws://127.0.0.1:47899"), "a helyi visszacsatolási cím (ws://127.0.0.1:47899) megmarad");
+    const std::string remote = aq::report::scrub("[Híd] távoli: ws://192.168.1.23:47820/ws\n", ctx);
+    CHECK(!contains(remote, "192.168.1.23"), "nem helyi ws:// cím eltűnik (%s)", remote.c_str());
+}
+
+// ------------------------------------------------------------------------------------------------ [7]
+static std::vector<uint8_t> hexBytes(const char* hex) {
+    std::vector<uint8_t> out;
+    std::istringstream in(hex);
+    std::string tok;
+    while (in >> tok) out.push_back(static_cast<uint8_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+    return out;
+}
+
+static void testDeviceFormat() {
+    std::printf("[7] A hangeszköz alapformátuma (WAVEFORMATEX / WAVEFORMATEXTENSIBLE bájtsor) szövegként\n");
+    struct Case { const char* name; const char* hex; const char* want; };
+    // Az első négy minta a Windows regisztrációs adatbázisából (MMDevices\Audio\Render\{…}\Properties,
+    // {f19f064d-082c-4e27-bc73-6882a1bb8e4c},0): 8 bájtos fejléc (VT_BLOB) + WAVEFORMATEXTENSIBLE.
+    const Case cases[] = {
+        { "48 kHz, 24 bit 32 bites tárolóban, sztereó, PCM (fejléccel)",
+          "41 00 00 00 01 00 00 00 fe ff 02 00 80 bb 00 00 00 dc 05 00 08 00 20 00 16 00 18 00 03 00 00 00 "
+          "01 00 00 00 00 00 10 00 80 00 00 aa 00 38 9b 71",
+          "48000 Hz, 24 bit (32-bit container), 2 ch, PCM" },
+        { "44,1 kHz, 16 bit, sztereó, PCM (fejléccel)",
+          "41 00 00 00 01 00 00 00 fe ff 02 00 44 ac 00 00 10 b1 02 00 04 00 10 00 16 00 10 00 03 00 00 00 "
+          "01 00 00 00 00 00 10 00 80 00 00 aa 00 38 9b 71",
+          "44100 Hz, 16 bit, 2 ch, PCM" },
+        { "48 kHz, 24 bit 24 bites tárolóban (fejléccel)",
+          "41 00 00 00 01 00 00 00 fe ff 02 00 80 bb 00 00 00 65 04 00 06 00 18 00 16 00 18 00 03 00 00 00 "
+          "01 00 00 00 00 00 10 00 80 00 00 aa 00 38 9b 71",
+          "48000 Hz, 24 bit, 2 ch, PCM" },
+        { "8 kHz, 16 bit, monó (fejléccel)",
+          "41 00 00 00 01 00 00 00 fe ff 01 00 40 1f 00 00 80 3e 00 00 02 00 10 00 16 00 10 00 04 00 00 00 "
+          "01 00 00 00 00 00 10 00 80 00 00 aa 00 38 9b 71",
+          "8000 Hz, 16 bit, 1 ch, PCM" },
+        { "192 kHz, 32 bit lebegőpontos, WAVEFORMATEXTENSIBLE fejléc nélkül",
+          "fe ff 02 00 00 ee 02 00 00 70 17 00 08 00 20 00 16 00 20 00 03 00 00 00 "
+          "03 00 00 00 00 00 10 00 80 00 00 aa 00 38 9b 71",
+          "192000 Hz, 32 bit, 2 ch, float" },
+        { "96 kHz, 32 bit lebegőpontos, egyszerű WAVEFORMATEX (18 bájt)",
+          "03 00 02 00 00 77 01 00 00 b8 0b 00 08 00 20 00 00 00",
+          "96000 Hz, 32 bit, 2 ch, float" },
+        { "csonka bájtsor (a fejléc után 12 bájt)",
+          "41 00 00 00 01 00 00 00 fe ff 02 00 80 bb 00 00 00 dc 05 00",
+          "" },
+        { "csonka WAVEFORMATEXTENSIBLE (a kiterjesztés hiányzik)",
+          "41 00 00 00 01 00 00 00 fe ff 02 00 80 bb 00 00 00 dc 05 00 08 00 20 00 16 00 18 00",
+          "" },
+        { "0 csatorna: érvénytelen",
+          "01 00 00 00 80 bb 00 00 00 00 00 00 04 00 10 00 00 00",
+          "" },
+    };
+    for (const Case& c : cases) {
+        const std::vector<uint8_t> b = hexBytes(c.hex);
+        const std::string got = aq::devfmt::describe(b.data(), b.size());
+        CHECK(got == c.want, "%s: \"%s\" (elvárt: \"%s\")", c.name, got.c_str(), c.want);
+    }
+    CHECK(aq::devfmt::describe(nullptr, 0).empty(), "üres bemenet: üres szöveg");
+}
+
 int main(int argc, char** argv) {
     if (argc >= 5 && std::strcmp(argv[1], "--child") == 0) return runChild(argv[2], argv[3], argv[4]);
     uint32_t seed = static_cast<uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
@@ -504,6 +593,8 @@ int main(int argc, char** argv) {
     testScrub(seed);
     testAbnormalEnd(argv[0]);
     testSetting();
+    testScrubKernelVersion();
+    testDeviceFormat();
     std::printf("\n%s (%d hiba)\n", g_fail == 0 ? "MINDEN TESZT SIKERES" : "SIKERTELEN", g_fail);
     return g_fail == 0 ? 0 : 1;
 }

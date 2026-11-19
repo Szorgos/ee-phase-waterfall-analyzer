@@ -63,7 +63,7 @@ else
     tail -n 30 "$WORK/build.log"; echo "  [HIBA] a fordítás sikertelen"; exit 1
 fi
 # a hibajelentés új fájljai figyelmeztetés nélkül fordulnak
-if grep -E "(watchdog|health_monitor|error_report|crash_handler|test_watchdog)\.(hpp|cpp):[0-9]+:[0-9]+: warning" "$WORK/build.log"; then
+if grep -E "(watchdog|health_monitor|error_report|crash_handler|device_format|test_watchdog)\.(hpp|cpp):[0-9]+:[0-9]+: warning" "$WORK/build.log"; then
     echo "  [HIBA] fordítási figyelmeztetés az új fájlokban"; printf "warnings\tHIBA\t0\n" >> "$SUMMARY"; FAIL=1
 else
     printf "warnings\tOK\t0\n" >> "$SUMMARY"; echo "  [OK]   nincs fordítási figyelmeztetés az új fájlokban"
@@ -78,20 +78,24 @@ step "signal_safe" python3 "$SRC/tools/check_signal_safe.py" "$SRC/include/crash
 echo "[3/6] Tiltott minták..."
 ok=1
 repo_git diff -U0 "$BASE_REF"..HEAD -- include/ src/ windows/ macos/ gui_integrated_system.html \
-    ':!src/test_watchdog.cpp' | grep '^+' | grep -v '^+++' > "$WORK/prod.diff" || true
+    ':!src/test_*.cpp' | grep '^+' | grep -v '^+++' > "$WORK/prod.diff" || true
 if grep -nE '\b(TODO|FIXME|stub|fake|Math\.random)\b' "$WORK/prod.diff"; then echo "  [HIBA] tiltott minta a termékkódban"; ok=0; fi
-repo_git diff -U0 "$BASE_REF"..HEAD -- src/test_watchdog.cpp tests/live/hibajelento_live.py | grep '^+' | grep -v '^+++' > "$WORK/test.diff" || true
+repo_git diff -U0 "$BASE_REF"..HEAD -- 'src/test_*.cpp' tests/live/hibajelento_live.py | grep '^+' | grep -v '^+++' > "$WORK/test.diff" || true
 if grep -nE '\bskip\b|\bSKIP\b|#if 0|if \(false\)|// *CHECK' "$WORK/test.diff"; then echo "  [HIBA] kikapcsolt teszt"; ok=0; fi
 # hálózati küldés nincs (3. szakasz): az új fájlokban nincs socket, HTTP, curl
-for f in include/watchdog.hpp include/health_monitor.hpp include/error_report.hpp include/crash_handler.hpp; do
+for f in include/watchdog.hpp include/health_monitor.hpp include/error_report.hpp include/crash_handler.hpp include/device_format.hpp; do
     if repo_git show "HEAD:$f" 2>/dev/null | grep -nE '\b(socket|connect|sendto|curl|WinHttp|InternetOpen|getaddrinfo)\b|https?://'; then
         echo "  [HIBA] hálózati hívás: $f"; ok=0; fi
 done
 # token, kulcs nincs a programban
 if grep -inE '(api[_-]?key|token|secret|password)[[:space:]]*[=:]' "$WORK/prod.diff"; then echo "  [HIBA] kulcs / token a változásban"; ok=0; fi
-# a meglévő tesztek nem lazultak: a módosított régi tesztfájlok (az új test_watchdog kivételével) nincsenek
-if repo_git diff --name-only "$BASE_REF"..HEAD -- src/test_*.cpp tests/ | grep -vE '^(src/test_watchdog\.cpp|tests/live/hibajelento_live\.(py|sh))$'; then
+# a meglévő tesztek nem lazultak: a módosított régi tesztfájlok (az új test_watchdog kivételével) nincsenek; a
+# test_asio és a test_winout csak új csoportot kaphatott (1b: az őrszem a Windows-szálakon), törölt vagy átírt sort nem
+if repo_git diff --name-only "$BASE_REF"..HEAD -- src/test_*.cpp tests/ |
+    grep -vE '^(src/test_watchdog\.cpp|src/test_asio\.cpp|src/test_winout\.cpp|tests/live/hibajelento_live\.(py|sh))$'; then
     echo "  [HIBA] meglévő teszt módosult"; ok=0; fi
+if repo_git diff -U0 "$BASE_REF"..HEAD -- src/test_asio.cpp src/test_winout.cpp | grep '^-' | grep -v '^---'; then
+    echo "  [HIBA] a test_asio / test_winout meglévő sora törlődött vagy módosult"; ok=0; fi
 repo_git diff -U0 "$BASE_REF"..HEAD -- gui_integrated_system.html i18n/gui/ docs/ | grep '^+' | grep -v '^+++' > "$WORK/gui.diff" || true
 if grep -inE '\b(foobar2000|hqplayer|audirvana|roon|jriver|moode|volumio|deadbeef|clementine|aimp|winamp|spotify|tidal|apple)\b' "$WORK/gui.diff"; then
     echo "  [HIBA] más termék neve a felületen / dokumentációban"; ok=0; fi
@@ -121,7 +125,13 @@ if [ $QUICK -eq 0 ]; then
         if ! (cd "$MUT_SRC" && patch -p1 --silent < "$patch"); then
             echo "  [HIBA] $m nem alkalmazható"; printf "%s\tAPPLY_ERROR\t-\n" "$m" >> "$MUTLOG"; FAIL=1; continue; fi
         res="SURVIVED"
-        if [ "$killer" = "static" ]; then
+        if [ "${killer#win-}" != "$killer" ]; then
+            # Windows-only ölő (test_asio, test_winout): itt nem fut; a natív Windows-futás igazolja (a jelentésben)
+            (cd "$MUT_SRC" && patch -R -p1 --silent < "$patch") || { echo "  [HIBA] $m visszaállítása sikertelen"; FAIL=1; }
+            printf "%s\t%s\t%s\n" "$m" "WINDOWS_NATIVE" "$killer" >> "$MUTLOG"
+            echo "  [--]   $m -> natív Windows-futás kell (${killer#win-}); a patch alkalmazható"
+            continue
+        elif [ "$killer" = "static" ]; then
             if ! python3 "$MUT_SRC/tools/check_signal_safe.py" "$MUT_SRC/include/crash_handler.hpp" > "$WORK/mut_run.log" 2>&1; then res="KILLED"; fi
         elif [ "$killer" = "live" ]; then
             if ! nice -n 5 cmake --build "$MUT_BUILD" -j6 --target aqulify-engine > "$WORK/mut.log" 2>&1; then res="BUILD_ERROR"
@@ -135,7 +145,8 @@ if [ $QUICK -eq 0 ]; then
         if [ "$res" = "KILLED" ]; then echo "  [OK]   $m -> megölte: $killer"
         else echo "  [HIBA] $m: $res ($killer)"; tail -n 15 "$WORK/mut_run.log" "$WORK/mut.log" 2>/dev/null; FAIL=1; fi
     done
-    [ "$(wc -l < "$MUTLOG")" -ge 11 ] || { echo "  [HIBA] 11-nél kevesebb mutáns futott"; FAIL=1; }
+    [ "$(wc -l < "$MUTLOG")" -ge 17 ] || { echo "  [HIBA] 17-nél kevesebb mutáns futott"; FAIL=1; }
+    [ "$(grep -c $'\tKILLED\t' "$MUTLOG")" -ge 13 ] || { echo "  [HIBA] 13-nál kevesebb mutánst ölt meg a Linux-futás"; FAIL=1; }
 fi
 
 # 6. Eredményfájl és összegzés
