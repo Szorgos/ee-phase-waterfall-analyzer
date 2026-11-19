@@ -1,6 +1,6 @@
 --- a/include/error_report.hpp
 +++ b/include/error_report.hpp
-@@ -132,7 +132,7 @@
+@@ -148,7 +148,7 @@
          if ((c == '/' || (c == '~' && i + 1 < s.size() && s[i + 1] == '/')) && pathStartOk(s, i)) {
              const size_t e = pathEnd(s, i, jsonMode);
              const std::string cand = s.substr(i, e - i);
@@ -9,7 +9,7 @@
                  out += "<path>";
                  i = e;
                  continue;
-@@ -140,7 +140,7 @@
+@@ -156,7 +156,7 @@
          }
          // Windows: C:\… vagy C:/…
          if (i + 2 < s.size() && std::isalpha(static_cast<unsigned char>(c)) && static_cast<unsigned char>(c) < 128 &&
@@ -18,7 +18,7 @@
              out += "<path>";
              i = pathEnd(s, i + 2, jsonMode);
              continue;
-@@ -368,7 +368,7 @@
+@@ -393,7 +393,7 @@
      std::string s = text;
      // 1. otthoni mappák (sima és JSON-escape-elt alakban, / elválasztóval is)
      for (const auto& h : ctx.homes) {

@@ -45,6 +45,9 @@
 #include <streambuf>
 #include <iostream>
 #endif
+#ifdef __APPLE__
+#include <mach/mach.h>
+#endif
 
 namespace aq::health {
 
@@ -417,7 +420,7 @@ private:
 #endif
     }
 
-    /** A pillanatnyi memóriahasználat (Linux: rezidens; Windows: munkakészlet; macOS: csúcsérték). */
+    /** A pillanatnyi memóriahasználat (Linux, macOS: rezidens; Windows: munkakészlet; más rendszeren: csúcsérték). */
     static long long rssKb() {
 #ifdef _WIN32
         PROCESS_MEMORY_COUNTERS pmc{};
@@ -427,6 +430,12 @@ private:
         std::ifstream f("/proc/self/statm");
         long long size = 0, res = 0;
         if (f >> size >> res) return res * (sysconf(_SC_PAGESIZE) / 1024);
+        return -1;
+#elif defined(__APPLE__)
+        mach_task_basic_info_data_t info{};
+        mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+        if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info), &count) == KERN_SUCCESS)
+            return static_cast<long long>(info.resident_size / 1024);
         return -1;
 #else
         struct rusage ru{};

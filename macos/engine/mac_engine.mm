@@ -259,6 +259,7 @@ struct Engine::Impl {
     }
 
     void process(const AudioBufferList* in, AudioBufferList* out) {
+        owner->outputHeartbeat_.beat();   // őrszem: csak atomikus időbélyeg
         if (!out || out->mNumberBuffers == 0) return;
         struct timespec t0;
         clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -633,6 +634,7 @@ struct Engine::Impl {
         if (AudioDeviceStart(aggId, procId) != noErr) { fail(Problem::Device); return; }
 
         owner->problem_ = Problem::None;
+        owner->outputHeartbeat_.beat("mac-output: IOProc");   // az IOProc órája innen indul
         owner->processing_ = true;
         const std::string src = tapOk ? "Core Audio Tap" : deviceName(blackHole);
         setInfo(deviceUid(output), deviceName(output), src);

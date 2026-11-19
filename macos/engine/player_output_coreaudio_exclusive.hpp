@@ -46,6 +46,7 @@
 
 #include "exclusive_dsp.hpp"
 #include "file_player.hpp"
+#include "watchdog.hpp"
 
 namespace ee_analyzer::player {
 
@@ -226,6 +227,7 @@ public:
             return fail("az AudioUnit indítása sikertelen (hiba: " + std::to_string(st) + ")");
         }
 
+        hb_.beat("coreaudio-hog: render");   // a címke itt; a valós idejű visszahívás csak időbélyeget ír
         open_ = true;
         std::cout << "[Lejátszó] Core Audio kizárólagos kimenet (hog mode): "
                   << (devName.empty() ? std::string("alapértelmezett") : devName)
@@ -388,6 +390,7 @@ private:
                              const AudioTimeStamp* /*inTimeStamp*/, UInt32 /*inBusNumber*/,
                              UInt32 inNumberFrames, AudioBufferList* ioData) {
         auto* self = static_cast<CoreAudioExclusiveOutput*>(inRefCon);
+        self->hb_.beat();   // őrszem: csak atomikus időbélyeg
         if (!ioData || ioData->mNumberBuffers == 0) return noErr;
 
         float* outData = static_cast<float*>(ioData->mBuffers[0].mData);
@@ -444,6 +447,9 @@ private:
     std::mutex renderMutex_;
     RenderFn render_;
     std::vector<float> interleaved_;
+    // Őrszem (beépített hibajelentés): a render-visszahívás a megnyitott kimenet futása alatt folyamatosan jön
+    // (szünetben csendet ad), így csak a megnyitott kimenettől (open_) várunk jelzést
+    aq::wd::Heartbeat hb_{ "player-coreaudio-hog", &open_ };
 };
 
 } // namespace ee_analyzer::player

@@ -27,6 +27,7 @@
 #include "multi_output_config.hpp"
 #include "param_block.hpp"
 #include "tap_ring.hpp"
+#include "watchdog.hpp"
 
 namespace ee_analyzer::mac {
 
@@ -110,6 +111,9 @@ private:
     std::atomic<Source> source_{Source::None};
     std::atomic<Problem> problem_{Problem::None};
     std::atomic<bool> processing_{false};
+    // Őrszem (beépített hibajelentés): a motor IOProc-ja a feldolgozás alatt folyamatosan fut, így csak ekkor várunk
+    // jelzést (mint Linuxon a pw-output). A visszahívás csak időbélyeget ír.
+    aq::wd::Heartbeat outputHeartbeat_{ "mac-output", &processing_ };
     std::atomic<uint32_t> sampleRate_{48000};
     std::atomic<uint32_t> wantFrames_{0}, ioFrames_{0};
     std::atomic<float> loadAvg_{0.0f}, loadPeak_{0.0f};

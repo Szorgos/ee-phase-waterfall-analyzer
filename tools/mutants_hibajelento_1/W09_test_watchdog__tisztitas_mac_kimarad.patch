@@ -1,6 +1,6 @@
 --- a/include/error_report.hpp
 +++ b/include/error_report.hpp
-@@ -383,7 +383,6 @@
+@@ -408,7 +408,6 @@
      for (const auto& u : ctx.users) detail::replaceNoCase(s, u, "<user>", true);
      // 3. címek
      detail::scrubEmails(s);

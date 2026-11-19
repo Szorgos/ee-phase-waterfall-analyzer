@@ -128,6 +128,22 @@ inline void scrubPaths(std::string& s, bool jsonMode) {
             if (i < s.size() && (s[i] == '/' || s[i] == '\\')) i = pathEnd(s, i, jsonMode);
             continue;
         }
+        // Helyi visszacsatolási URL (ws://127.0.0.1:47899, http://localhost:8080): a gép és a port nem személyes, marad;
+        // az utána következő útvonal (/zene/…) viszont <path>
+        if (c == '/' && i > 0 && s[i - 1] == ':' && s.compare(i, 2, "//") == 0 &&
+            (s.compare(i + 2, 4, "127.") == 0 || s.compare(i + 2, 9, "localhost") == 0 || s.compare(i + 2, 5, "[::1]") == 0)) {
+            size_t e = i + 2;
+            while (e < s.size() && (isAsciiAlnum(static_cast<unsigned char>(s[e])) || s[e] == '.' || s[e] == ':' || s[e] == '[' ||
+                                    s[e] == ']' || s[e] == '-'))
+                ++e;
+            out.append(s, i, e - i);
+            i = e;
+            if (i < s.size() && s[i] == '/') {
+                const size_t pe = pathEnd(s, i, jsonMode);
+                if (pe - i > 1) { out += "<path>"; i = pe; }
+            }
+            continue;
+        }
         // Unix: /a/b… vagy ~/…
         if ((c == '/' || (c == '~' && i + 1 < s.size() && s[i + 1] == '/')) && pathStartOk(s, i)) {
             const size_t e = pathEnd(s, i, jsonMode);
@@ -232,7 +248,16 @@ inline void scrubIpv4(std::string& s) {
             const bool endOk = j >= s.size() ||
                                !(isWordish(static_cast<unsigned char>(s[j])) ||
                                  (s[j] == '.' && j + 1 < s.size() && isDigit(static_cast<unsigned char>(s[j + 1]))));
-            if (ok && parts == 4 && endOk) {
+            // Négyrészes kernelverzió (6.6.87.2-microsoft-standard-WSL2): a négyes után „-szó-” következik. Egy címhez
+            // fűzött magyar rag (192.168.1.23-hoz) után nincs második kötőjel, az továbbra is cím.
+            bool kernel = false;
+            if (ok && parts == 4 && j + 1 < s.size() && s[j] == '-' && std::isalpha(static_cast<unsigned char>(s[j + 1])) &&
+                static_cast<unsigned char>(s[j + 1]) < 128) {
+                size_t k = j + 1;
+                while (k < s.size() && isAsciiAlnum(static_cast<unsigned char>(s[k]))) ++k;
+                kernel = k + 1 < s.size() && s[k] == '-' && isAsciiAlnum(static_cast<unsigned char>(s[k + 1]));
+            }
+            if (ok && parts == 4 && endOk && !kernel) {
                 const bool loopback = oct[0] == 127 || (oct[0] == 0 && oct[1] == 0 && oct[2] == 0 && oct[3] == 0);
                 out += loopback ? s.substr(i, j - i) : std::string("<ip>");
                 i = j;

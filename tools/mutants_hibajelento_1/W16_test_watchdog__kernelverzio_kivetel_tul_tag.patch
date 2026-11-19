@@ -1,0 +1,11 @@
+--- a/include/error_report.hpp
++++ b/include/error_report.hpp
+@@ -255,7 +255,7 @@
+                 static_cast<unsigned char>(s[j + 1]) < 128) {
+                 size_t k = j + 1;
+                 while (k < s.size() && isAsciiAlnum(static_cast<unsigned char>(s[k]))) ++k;
+-                kernel = k + 1 < s.size() && s[k] == '-' && isAsciiAlnum(static_cast<unsigned char>(s[k + 1]));
++                kernel = true;
+             }
+             if (ok && parts == 4 && endOk && !kernel) {
+                 const bool loopback = oct[0] == 127 || (oct[0] == 0 && oct[1] == 0 && oct[2] == 0 && oct[3] == 0);

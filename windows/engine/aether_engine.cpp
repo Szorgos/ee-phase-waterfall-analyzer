@@ -73,6 +73,7 @@ using WinPlayerOutput = BasicWinPlayerOutput<WasapiPlayerOutput>;
 }
 #include "updater.hpp"
 #include "health_monitor.hpp"
+#include "device_format.hpp"
 
 using namespace ee_analyzer;
 
@@ -1278,10 +1279,13 @@ int main(int argc, char** argv) {
             std::string cards;
             for (const auto& d : win::listRenderDevices()) {
                 if (!d.active) continue;
-                // csak a meghajtó (gyári) neve; a felhasználó által átnevezhető végpontnév nem kerül bele
-                const std::wstring iface = win::apo_detail::regString(HKEY_LOCAL_MACHINE, std::wstring(win::apo_detail::renderBase()) + d.key + L"\\Properties",
-                                                                 L"{b3f8fa53-0004-438e-9003-51a46e139bfc},6");
+                // csak a meghajtó (gyári) neve és a végpont alapformátuma; a felhasználó által átnevezhető végpontnév
+                // nem kerül bele
+                const std::wstring props = std::wstring(win::apo_detail::renderBase()) + d.key + L"\\Properties";
+                const std::wstring iface = win::apo_detail::regString(HKEY_LOCAL_MACHINE, props, L"{b3f8fa53-0004-438e-9003-51a46e139bfc},6");
+                const std::string fmt = aq::devfmt::readRegistry(HKEY_LOCAL_MACHINE, props);
                 cards += "render: " + (iface.empty() ? std::string("?") : aq_i18n::narrow(iface)) +
+                         "; format: " + (fmt.empty() ? std::string("?") : fmt) +
                          (d.apo == ApoOnDevice::Yes ? " (Equalizer APO: yes)" : d.apo == ApoOnDevice::No ? " (Equalizer APO: no)" : "") + "\n";
             }
             for (const auto& d : player::AsioPlayerOutput::listDrivers()) cards += "asio driver: " + d.description + "\n";

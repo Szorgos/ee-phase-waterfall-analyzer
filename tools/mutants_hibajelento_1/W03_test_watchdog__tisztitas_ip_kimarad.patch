@@ -1,6 +1,6 @@
 --- a/include/error_report.hpp
 +++ b/include/error_report.hpp
-@@ -384,7 +384,6 @@
+@@ -409,7 +409,6 @@
      // 3. címek
      detail::scrubEmails(s);
      detail::scrubMacs(s);

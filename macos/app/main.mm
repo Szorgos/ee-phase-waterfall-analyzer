@@ -48,6 +48,7 @@
 #include "smart_lists.hpp"
 #include "phone_cache.hpp"
 #include "mac_updater.hpp"
+#include "health_monitor.hpp"
 
 using namespace ee_analyzer;
 using aq_i18n::Msg;
@@ -151,6 +152,33 @@ struct Core {
     audioopt::AudioOptions savedAudio;
     bool hasAudio = false;
 
+    /** Az állapotfájl motor-része (a fő szálon, 1 s-onként hívva: 2 s-onként; az őrszál csak ezt a másolatot olvassa). */
+    void healthTick() {
+        if (healthTicks++ % 2 != 0) return;
+        audioopt::AudioOptions o;
+        {
+            std::lock_guard<std::mutex> lk(audioMutex);
+            o = audioOpts;
+        }
+        std::string path;
+        if (filePlayer.hasTrack())
+            path = "PCM " + std::to_string(filePlayer.streamRate()) + " Hz, " +
+                   (playerExclusive() ? "exclusive Core Audio (hog mode)" : "player via Core Audio");
+        else if (engine.processing())
+            path = "Core Audio (system sound via " + engine.sourceName() + ")";
+        else
+            path = "Core Audio (not processing)";
+        char buf[512];
+        std::snprintf(buf, sizeof(buf),
+                      "{\"path\":\"%s\",\"rate\":%u,\"player\":%s,\"processing\":%s,\"problem\":%d,\"overruns\":%u,"
+                      "\"player_underruns\":%llu,\"upsample\":%s,\"audio_opts\":",
+                      jsonEscape(path).c_str(), static_cast<unsigned>(engine.sampleRate()), filePlayer.hasTrack() ? "true" : "false",
+                      engine.processing() ? "true" : "false", static_cast<int>(engine.problem()),
+                      static_cast<unsigned>(engine.overruns()), static_cast<unsigned long long>(filePlayer.underruns()),
+                      filePlayer.isUpsampleActive() ? "true" : "false");
+        health.setSection("engine", std::string(buf) + audioopt::toJson(o) + "}");
+    }
+
     /** A kért részek élesítése (indításkor „always” módban, vagy a felület kérésére). */
     void applyRestoreParts(const startup_restore::Parts& want) {
         if (want.chain) {
@@ -203,6 +231,10 @@ struct Core {
     std::unique_ptr<WebSocketBridge> bridge;
     std::function<void(const std::string&)> broadcast;
     mac::Updater updater;   // frissítés a felület „Frissítés” gombjára: a DMG letöltése, ellenőrzése, megnyitása
+    // Beépített hibajelentés: őrszál, állapotfájl (~/Library/Application Support/Aqulify/diag), az előző futás
+    // rendellenes végének helyi jelentése. Küldés nincs (3. szakasz).
+    aq::health::Monitor health;
+    int healthTicks = 0;
 
 
     // Beépített lejátszó és zenetár (2.x): megosztott (CoreAudio) vagy kizárólagos (hog mode + saját DSP-lánc)
@@ -420,6 +452,17 @@ struct Core {
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification*)note {
+    // Beépített hibajelentés: a diagnosztikai mappa és a napló tükre (a jelentés utolsó sorai ebből), a lehető
+    // legkorábban. A beállítás (errorReports, audio.json) az indításkori visszaállítástól független: kikapcsolva csak
+    // az előző futás naplója marad.
+    const std::string diagDir = linux_store::configDir(true) + "/diag";
+    {
+        bool errorReportsSaved = false;
+        json::Value v;
+        const std::string doc = linux_store::loadAudioOptions();
+        if (!doc.empty() && json::parse(doc, v)) errorReportsSaved = audioopt::fromJson(v).errorReports;
+        aq::health::LogTee::install(diagDir + "/engine.log", !errorReportsSaved);
+    }
     std::cout << "========================================================\n";
     std::cout << " Aqulify • Fázis & Akusztikai Vízesés – macOS (" AQULIFY_VERSION ")\n";
     std::cout << "========================================================\n";
@@ -442,6 +485,7 @@ struct Core {
         json::Value v;
         c->hasAudio = !doc.empty() && json::parse(doc, v);
         if (c->hasAudio) c->savedAudio = audioopt::fromJson(v);
+        c->audioOpts.errorReports = c->savedAudio.errorReports;   // hozzájárulás: a visszaállítás módjától függetlenül él
     }
     c->engine.params.write(c->current);
     c->presetDoc = linux_store::loadPresets();
@@ -463,6 +507,26 @@ struct Core {
         return;
     }
 
+    // Az őrszál és az állapotfájl a híd indulása után (a híd szála ekkor már jelez)
+    {
+        aq::health::Config hc;
+        hc.dir = diagDir;
+        hc.logPath = diagDir + "/engine.log";
+        hc.version = AQULIFY_VERSION;
+        hc.platform = "macos";
+        hc.package = "dmg";
+        {
+            std::lock_guard<std::mutex> lk(c->audioMutex);
+            hc.enabled = c->audioOpts.errorReports;
+        }
+        hc.crashHandlers = true;
+        if (const char* s = std::getenv("AQULIFY_WATCHDOG_SECONDS"); s && std::atof(s) >= 1.0) hc.thresholdSec = std::atof(s);
+        for (const auto& n : aq::report::namesFromJson(linux_store::loadRemote())) hc.scrubNames.push_back(n);
+        for (const auto& n : aq::report::namesFromJson(linux_store::loadRemoteTargets())) hc.scrubNames.push_back(n);
+        if (!c->health.start(hc)) std::cerr << "[Hibajelentés] A diagnosztikai mappa nem írható: " << diagDir << "\n";
+    }
+    c->healthTick();
+
     [self buildMainMenu];
     statusItem_ = [NSStatusBar.systemStatusBar statusItemWithLength:NSVariableStatusItemLength];
     NSImage* img = nil;
@@ -479,7 +543,11 @@ struct Core {
     menu.autoenablesItems = NO;
     statusItem_.menu = menu;
 
-    saveTimer_ = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer*) { c->saveTick(); c->saveMultiTick(); }];
+    saveTimer_ = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer*) {
+        c->saveTick();
+        c->saveMultiTick();
+        c->healthTick();
+    }];
 
     // killall / kijelentkezés: rendes leállítás (BlackHole módban a rendszer kimenete visszaáll)
     signal(SIGTERM, SIG_IGN);
@@ -647,6 +715,7 @@ struct Core {
         o.resampleQuality = -1;
         if (o == c->audioOpts) return;
         c->audioOpts = o;
+        c->health.setEnabled(o.errorReports);
         c->engine.setBufferFrames(static_cast<uint32_t>(o.bufferFrames));
         c->filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         c->filePlayer.setPreload(o.preload);
@@ -810,6 +879,7 @@ struct Core {
         if (core_->dirty) linux_store::saveParams(core_->current);
     }
     std::cout << "[Info] Leállítás.\n";
+    core_->health.stopClean();   // a „rendben leállt” jel: a következő indítás nem készít rendellenes-vég jelentést
 }
 
 - (BOOL)applicationShouldHandleReopen:(NSApplication*)app hasVisibleWindows:(BOOL)visible {

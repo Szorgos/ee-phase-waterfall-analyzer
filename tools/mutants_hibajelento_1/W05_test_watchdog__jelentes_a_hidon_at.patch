@@ -1,6 +1,6 @@
 --- a/include/health_monitor.hpp
 +++ b/include/health_monitor.hpp
-@@ -227,6 +227,7 @@
+@@ -230,6 +230,7 @@
          quit_ = false;
          writeState(false);
          thread_ = std::thread(&Monitor::loop, this);
@@ -8,7 +8,7 @@
          return true;
      }
  
-@@ -273,6 +274,8 @@
+@@ -276,6 +277,8 @@
          if (thread_.joinable()) thread_.join();
      }
  
@@ -17,7 +17,7 @@
      bool previousRunAbnormal() const { return prevAbnormal_; }
      fs::path previousReportPath() const { return cfg_.dir / "previous-run.json"; }
      fs::path statePath() const { return cfg_.dir / "state.json"; }
-@@ -321,7 +324,7 @@
+@@ -324,7 +327,7 @@
                  log(buf);
                  dirty_ = true;
              }
