@@ -128,7 +128,7 @@ inline void scrubPaths(std::string& s, bool jsonMode) {
             if (i < s.size() && (s[i] == '/' || s[i] == '\\')) i = pathEnd(s, i, jsonMode);
             continue;
         }
-        // Helyi visszacsatolási URL (ws://127.0.0.1:47899, http://localhost:8080): a gép és a port nem személyes, marad;
+        // Helyi visszacsatolási URL (ws://127.0.0.1:47899, localhost, [::1]): a gép és a port nem személyes, marad;
         // az utána következő útvonal (/zene/…) viszont <path>
         if (c == '/' && i > 0 && s[i - 1] == ':' && s.compare(i, 2, "//") == 0 &&
             (s.compare(i + 2, 4, "127.") == 0 || s.compare(i + 2, 9, "localhost") == 0 || s.compare(i + 2, 5, "[::1]") == 0)) {
