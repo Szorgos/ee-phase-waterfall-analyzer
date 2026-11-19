@@ -1,0 +1,10 @@
+--- a/include/error_report.hpp
++++ b/include/error_report.hpp
+@@ -383,7 +383,6 @@
+     for (const auto& u : ctx.users) detail::replaceNoCase(s, u, "<user>", true);
+     // 3. címek
+     detail::scrubEmails(s);
+-    detail::scrubMacs(s);
+     detail::scrubIpv4(s);
+     detail::scrubIpv6(s);
+     // 4. fájlútvonalak

@@ -1,0 +1,11 @@
+--- a/include/watchdog.hpp
++++ b/include/watchdog.hpp
+@@ -137,7 +137,7 @@
+             const bool expected = !ex || ex->load(std::memory_order_relaxed);
+             if (last == 0) continue;   // még nem kezdett el dolgozni
+             const int64_t age = now - last;
+-            if (expected && age > thresholdNs_ && !t.reported) {
++            if (false && expected && age > thresholdNs_ && !t.reported) {
+                 t.reported = true;
+                 t.since = last;
+                 out.push_back(Event{ copyName(s), copyLabel(s), static_cast<double>(age) / 1e9, false });

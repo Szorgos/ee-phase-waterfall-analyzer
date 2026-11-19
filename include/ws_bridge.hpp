@@ -52,6 +52,7 @@
 #include "room/measurement_session.hpp"
 #include "media_url.hpp"
 #include "bt_link.hpp"
+#include "watchdog.hpp"
 #include <fstream>
 
 namespace ee_analyzer {
@@ -625,8 +626,12 @@ private:
         bool freshAudio = false;
         std::string spectrumMsg;
         uint64_t spectrumSeq = 0;
+        // Őrszem (beépített hibajelentés): a híd szála minden körben jelez; ha valamelyik lépésnél beragad (pl. a hang
+        // lehúzásából nem jön ki), az őrszál az utolsó címkével jelzi
+        aq::wd::Heartbeat hb("bridge");
 
         while (running_) {
+            hb.beat("bridge: loop");
             acceptNew(listener_, false);
             if (remoteListener_ != net::kInvalidSocket) acceptNew(remoteListener_, true);
             progressPending();
@@ -643,6 +648,7 @@ private:
 
             // 1. Hang lehúzása a motorból (akkor is, ha nincs kliens, hogy ne torlódjon fel)
             if (cb_.pullAudio) {
+                hb.beat("bridge: pullAudio");
                 const double inSr = cb_.sampleRate ? cb_.sampleRate() : 48000.0;
                 analyzer.setSampleRate(inSr > 0 ? inSr : 48000.0);   // a mély sávok decimálásához
                 size_t got;
@@ -673,10 +679,12 @@ private:
                     c->lastSpectrum = now;
                 }
                 if (now - lastStatus >= std::chrono::milliseconds(500)) {
+                    hb.beat("bridge: status");
                     const std::string status = buildStatusMessage();
                     for (auto& c : clients_) queueText(*c, status, true);
                     lastStatus = now;
                 }
+                hb.beat("bridge: commands");
                 for (auto& c : clients_) {
                     if (c->dead) continue;
                     pumpIncoming(*c);

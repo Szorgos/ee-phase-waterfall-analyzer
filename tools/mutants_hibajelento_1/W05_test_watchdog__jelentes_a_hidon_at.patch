@@ -1,0 +1,46 @@
+--- a/include/health_monitor.hpp
++++ b/include/health_monitor.hpp
+@@ -227,6 +227,7 @@
+         quit_ = false;
+         writeState(false);
+         thread_ = std::thread(&Monitor::loop, this);
++        current() = this;
+         return true;
+     }
+ 
+@@ -273,6 +274,8 @@
+         if (thread_.joinable()) thread_.join();
+     }
+ 
++    void writeFromBridge() { if (dirty_.exchange(false)) writeState(false); }
++    static std::atomic<Monitor*>& current() { static std::atomic<Monitor*> m{ nullptr }; return m; }
+     bool previousRunAbnormal() const { return prevAbnormal_; }
+     fs::path previousReportPath() const { return cfg_.dir / "previous-run.json"; }
+     fs::path statePath() const { return cfg_.dir / "state.json"; }
+@@ -321,7 +324,7 @@
+                 log(buf);
+                 dirty_ = true;
+             }
+-            if (dirty_.exchange(false) || now - lastWrite >= static_cast<int64_t>(cfg_.writeIntervalMs) * 1000000) {
++            if (false) {
+                 writeState(false);
+                 lastWrite = now;
+             }
+--- a/include/ws_bridge.hpp
++++ b/include/ws_bridge.hpp
+@@ -53,6 +53,7 @@
+ #include "media_url.hpp"
+ #include "bt_link.hpp"
+ #include "watchdog.hpp"
++#include "health_monitor.hpp"
+ #include <fstream>
+ 
+ namespace ee_analyzer {
+@@ -632,6 +633,7 @@
+ 
+         while (running_) {
+             hb.beat("bridge: loop");
++            if (auto* m = aq::health::Monitor::current().load()) m->writeFromBridge();
+             acceptNew(listener_, false);
+             if (remoteListener_ != net::kInvalidSocket) acceptNew(remoteListener_, true);
+             progressPending();

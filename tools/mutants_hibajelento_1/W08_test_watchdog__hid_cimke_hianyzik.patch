@@ -1,0 +1,10 @@
+--- a/include/ws_bridge.hpp
++++ b/include/ws_bridge.hpp
+@@ -648,7 +648,6 @@
+ 
+             // 1. Hang lehúzása a motorból (akkor is, ha nincs kliens, hogy ne torlódjon fel)
+             if (cb_.pullAudio) {
+-                hb.beat("bridge: pullAudio");
+                 const double inSr = cb_.sampleRate ? cb_.sampleRate() : 48000.0;
+                 analyzer.setSampleRate(inSr > 0 ? inSr : 48000.0);   // a mély sávok decimálásához
+                 size_t got;

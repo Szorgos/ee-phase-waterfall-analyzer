@@ -38,6 +38,7 @@
 #include "exclusive_dsp.hpp"
 #include "file_player.hpp"
 #include "pcm_convert.hpp"
+#include "watchdog.hpp"
 
 namespace ee_analyzer::player {
 
@@ -659,7 +660,10 @@ private:
         std::vector<uint8_t> out(period * 2 * static_cast<size_t>(f.bits / 8));
         bool running = false, paused = false;
         uint64_t sinceFlush = 0;
+        hb_.beat("alsa: start");
+        hbRunning_ = true;
         while (!quit_) {
+            hb_.beat("alsa: loop");
             reservation_.process();
             if (flushReq_.exchange(false)) {
                 snd_pcm_drop(pcm);
@@ -719,6 +723,7 @@ private:
             }
             const uint8_t* p = out.data();
             snd_pcm_uframes_t left = period;
+            hb_.beat("alsa: writei");
             while (left > 0 && !quit_) {
                 snd_pcm_sframes_t n = snd_pcm_writei(pcm, p, left);
                 if (n == -EAGAIN) continue;
@@ -740,10 +745,12 @@ private:
             // a lejátszó DoP-keretben számol: natív DSD-nél egy ALSA-keret nb / 2 DoP-keret
             consumed_ = nativeDsd_ ? playedHw * nb / 2 : playedHw;
         }
+        hb_.beat("alsa: close");
         snd_pcm_drop(pcm);
         snd_pcm_close(pcm);
         reservation_.release();
         open_ = false;
+        hbRunning_ = false;
     }
 
     std::string device_;
@@ -755,6 +762,10 @@ private:
     std::thread thread_;
     std::atomic<uint32_t> rate_{0};
     std::atomic<bool> active_{false}, quit_{false}, flushReq_{false}, open_{false}, quantLoss_{false}, dopMode_{false};
+    // Őrszem (beépített hibajelentés): a kimeneti szál körönként jelez; csak futó szálnál várunk jelzést. A regisztráció
+    // itt, a létrehozó szálon történik: a valós idejű szálon csak atomikus írás van.
+    std::atomic<bool> hbRunning_{false};
+    aq::wd::Heartbeat hb_{ "player-alsa", &hbRunning_ };
     std::atomic<bool> nativeDsd_{false}, preferNative_{true};
     int nativeBytes_ = 4;
     bool nativeBigEndian_ = true;

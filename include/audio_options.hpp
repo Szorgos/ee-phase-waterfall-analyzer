@@ -89,6 +89,9 @@ struct AudioOptions {
     // Windows: ASIO-kimenet a beépített lejátszóhoz (a gyártó ASIO-meghajtóján át; a DSP a motorban fut)
     bool asio = false;
     std::string asioDriver;                     // a meghajtó CLSID-je vagy neve (üres: az első telepített)
+    // Névtelen hibajelentés (beépített hibajelentés): alapból KI. Kikapcsolva a helyi jelentés csak a következő rendes
+    // indításig marad meg; a küldés a 3. szakasz. Hozzájárulás, ezért az indításkori visszaállítástól függetlenül él.
+    bool errorReports = false;
 
     bool operator==(const AudioOptions& o) const {
         return bufferFrames == o.bufferFrames && keepAwake == o.keepAwake && rateMode == o.rateMode &&
@@ -103,7 +106,7 @@ struct AudioOptions {
                std::abs(upsampleHeadroomDb - o.upsampleHeadroomDb) < 1e-3f &&
                upsampleCustom == o.upsampleCustom && upsampleThreads == o.upsampleThreads &&
                upsampleMaxRate == o.upsampleMaxRate && dedicatedCore == o.dedicatedCore && loadAdvisor == o.loadAdvisor &&
-               asio == o.asio && asioDriver == o.asioDriver;
+               asio == o.asio && asioDriver == o.asioDriver && errorReports == o.errorReports;
     }
     bool operator!=(const AudioOptions& o) const { return !(*this == o); }
 };
@@ -232,7 +235,8 @@ inline std::string toJson(const AudioOptions& o) {
          ",\"dedicatedCore\":" + std::to_string(o.dedicatedCore) +
          ",\"loadAdvisor\":" + (o.loadAdvisor ? "true" : "false") +
          ",\"asio\":" + (o.asio ? "true" : "false") +
-         ",\"asioDriver\":\"" + jsonStringBody(o.asioDriver) + "\"}";
+         ",\"asioDriver\":\"" + jsonStringBody(o.asioDriver) + "\"" +
+         ",\"errorReports\":" + (o.errorReports ? "true" : "false") + "}";
     return s;
 }
 
@@ -285,6 +289,7 @@ inline AudioOptions fromJson(const json::Value& v, AudioOptions base = {}) {
     if (const json::Value* x = v.get("loadAdvisor"); x && x->type == T::Bool) base.loadAdvisor = x->b;
     if (const json::Value* x = v.get("asio"); x && x->type == T::Bool) base.asio = x->b;
     if (const json::Value* x = v.get("asioDriver"); x && x->type == T::String) base.asioDriver = x->str;
+    if (const json::Value* x = v.get("errorReports"); x && x->type == T::Bool) base.errorReports = x->b;
 
     sanitize(base);
     return base;

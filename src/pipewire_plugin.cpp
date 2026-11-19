@@ -23,6 +23,7 @@
 
 #include "audio_options.hpp"
 #include "file_player.hpp"
+#include "health_monitor.hpp"
 #include "library_bridge.hpp"
 #include "linux_store.hpp"
 #include "load_advisor.hpp"
@@ -42,7 +43,10 @@
 #endif
 #include <unistd.h>
 #include <spawn.h>
+#include <sys/utsname.h>
 #include <sys/wait.h>
+#include <dirent.h>
+#include <fstream>
 
 extern char** environ;
 #include "update_logic.hpp"
@@ -329,6 +333,54 @@ void setSinkVolume(const std::string& sink, double level, int mute) {
 /** A lánc érintetlenül engedi-e át a jelet (bitpontos): nincs bekapcsolt modul, a Magic Touch sem fut. */
 bool chainTransparent(const ParamData& d) { return !AetherChain::modifiesSignal(d); }
 
+// ---------------------------------------------------------------- beépített hibajelentés (helyi állapot)
+
+/** A hangkártyák gyári típusneve és formátumai (/proc/asound: cards és az USB-s kártyák stream0 fájlja). */
+std::string asoundSummary() {
+    auto readCapped = [](const std::string& path, size_t maxBytes) {
+        std::ifstream f(path, std::ios::binary);
+        std::string s;
+        if (!f) return s;
+        s.resize(maxBytes);
+        f.read(&s[0], static_cast<std::streamsize>(maxBytes));
+        s.resize(static_cast<size_t>(f.gcount()));
+        return s;
+    };
+    std::string out = readCapped("/proc/asound/cards", 4096);
+    if (DIR* d = opendir("/proc/asound")) {
+        std::vector<std::string> cards;
+        while (const dirent* e = readdir(d)) {
+            const std::string n = e->d_name;
+            if (n.rfind("card", 0) == 0 && n.size() > 4 && std::isdigit(static_cast<unsigned char>(n[4]))) cards.push_back(n);
+        }
+        closedir(d);
+        std::sort(cards.begin(), cards.end());
+        for (const auto& c : cards) {
+            const std::string s = readCapped("/proc/asound/" + c + "/stream0", 3072);
+            if (!s.empty()) out += "\n--- " + c + "/stream0 ---\n" + s;
+        }
+    }
+    return out;
+}
+
+/** A rendszer: a kernel, a gép architektúrája, az asztali környezet (a gép neve NEM). */
+std::string systemSectionJson() {
+    struct utsname u{};
+    std::string os, machine;
+    if (uname(&u) == 0) { os = std::string(u.sysname) + " " + u.release; machine = u.machine; }
+    std::string distro;
+    {
+        std::ifstream f("/etc/os-release");
+        std::string line;
+        while (std::getline(f, line))
+            if (line.rfind("PRETTY_NAME=", 0) == 0) { distro = line.substr(12); distro.erase(std::remove(distro.begin(), distro.end(), '"'), distro.end()); }
+    }
+    const char* de = std::getenv("XDG_CURRENT_DESKTOP");
+    const char* st = std::getenv("XDG_SESSION_TYPE");
+    return "{\"os\":\"" + jsonEscape(os) + "\",\"machine\":\"" + jsonEscape(machine) + "\",\"distro\":\"" + jsonEscape(distro) +
+           "\",\"desktop\":\"" + jsonEscape(de ? de : "") + "\",\"session\":\"" + jsonEscape(st ? st : "") + "\"}";
+}
+
 } // namespace
 
 #if defined(AQ_HAVE_SYSTEMD)
@@ -367,6 +419,17 @@ int main(int argc, char* argv[]) {
                      "(vagy: pactl set-default-sink aqulify_sink), és minden hang a DSP láncon át szól.\n";
         return 0;
     }
+    // Beépített hibajelentés: a diagnosztikai mappa és a napló tükre (a jelentés utolsó sorai ebből). A beállítás
+    // (errorReports, audio.json) az indításkori visszaállítástól független: kikapcsolva csak az előző futás naplója marad.
+    const std::string diagDir = linux_store::configDir(true) + "/diag";
+    bool errorReportsSaved = false;
+    {
+        json::Value v;
+        const std::string doc = linux_store::loadAudioOptions();
+        if (!doc.empty() && json::parse(doc, v)) errorReportsSaved = audioopt::fromJson(v).errorReports;
+    }
+    aq::health::LogTee::install(diagDir + "/engine.log", !errorReportsSaved);
+    aq::health::Monitor health;
     // Nyelv (a hangbeállításokban látszó kimenet neve): a felületen választott, különben a munkameneté
     aq_i18n::init();
     std::vector<int> ports(std::begin(kEnginePorts), std::end(kEnginePorts));
@@ -442,6 +505,15 @@ int main(int argc, char* argv[]) {
 #endif
     BridgeCallbacks cb;
     cb.pullAudio = [&](float* lr, size_t maxFrames) {
+#if defined(AQ_TEST_HOOKS)
+        // Csak tesztfordításban (AQ_TEST_HOOKS): AQ_TEST_STALL_PULL_AFTER=<s> után a híd szála itt beragad (élő próba)
+        static const double stallAfter = [] { const char* e = std::getenv("AQ_TEST_STALL_PULL_AFTER"); return e ? std::atof(e) : -1.0; }();
+        static const auto t0 = std::chrono::steady_clock::now();
+        if (stallAfter >= 0.0 && std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() > stallAfter) {
+            std::cout << "[Teszt] A híd szála szándékosan beragad (AQ_TEST_STALL_PULL_AFTER).\n";
+            for (;;) std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+#endif
 #if defined(AQ_HAVE_ALSA)
         if (playerFilePlayer && playerFilePlayer->isDopActive()) {
             std::fill_n(lr, maxFrames * 2, 0.0f);
@@ -839,6 +911,7 @@ int main(int argc, char* argv[]) {
         }
         return true;
     }();
+    audioOpts.errorReports = savedAudio.errorReports;   // hozzájárulás: a visszaállítás módjától függetlenül él
     auto optsToJsonWithDop = [](const audioopt::AudioOptions& o, bool dop) {
         std::string j = audioopt::toJson(o);
         if (!j.empty() && j.back() == '}') {
@@ -1039,6 +1112,7 @@ int main(int argc, char* argv[]) {
         if (o == audioOpts && wantDop == dsdDop) return;
         audioOpts = o;
         dsdDop = wantDop;
+        health.setEnabled(o.errorReports);
         applyAudio(o);
         const std::string savedJson = optsToJsonWithDop(o, dsdDop);
         if (!linux_store::saveAudioOptions(savedJson)) std::cerr << "[Hangkimenet] Figyelem: az audio.json nem írható.\n";
@@ -1159,6 +1233,61 @@ int main(int argc, char* argv[]) {
     Saver saver{ &paramMutex, &current, &dirty, &lastChange };
     node.addTimer(saveTick, &saver, 1000);
 
+    // Beépített hibajelentés: őrszál, állapotfájl, az előző futás rendellenes végének helyi jelentése (küldés nincs)
+    {
+        aq::health::Config hc;
+        hc.dir = diagDir;
+        hc.logPath = diagDir + "/engine.log";
+        hc.version = AQULIFY_VERSION;
+        hc.platform = "linux";
+        hc.package = installKind;
+        { std::lock_guard<std::mutex> lk(audioMutex); hc.enabled = audioOpts.errorReports; }
+        hc.crashHandlers = true;
+        if (const char* s = std::getenv("AQULIFY_WATCHDOG_SECONDS"); s && std::atof(s) >= 1.0) hc.thresholdSec = std::atof(s);
+        for (const auto& n : aq::report::namesFromJson(linux_store::loadRemote())) hc.scrubNames.push_back(n);
+        for (const auto& n : aq::report::namesFromJson(linux_store::loadRemoteTargets())) hc.scrubNames.push_back(n);
+        if (!health.start(hc)) std::cerr << "[Hibajelentés] A diagnosztikai mappa nem írható: " << diagDir << "\n";
+    }
+    health.setSection("system", systemSectionJson());
+    // A motor állapota az állapotfájlba (2 s-onként, a PipeWire fő szálán; az őrszál csak ezt a másolatot olvassa)
+    static std::function<void()> s_healthTick;
+    int healthTicks = 0;
+    s_healthTick = [&] {
+        if (healthTicks++ % 15 == 0) health.setSoundCards(asoundSummary());
+        audioopt::AudioOptions o;
+        bool dop = false;
+        { std::lock_guard<std::mutex> lk(audioMutex); o = audioOpts; dop = dsdDop; }
+        std::string path;
+        uint32_t rate = node.sampleRate.load();
+#if defined(AQ_HAVE_ALSA)
+        if (filePlayer.isDopActive()) {
+            const uint32_t dsd = filePlayer.dopDsdRate();
+            const bool native = alsaRaw && alsaRaw->isNativeDsd();
+            path = std::string(native ? "native DSD" : "DoP") + ", DSD" + std::to_string(dsd / 44100) + ", exclusive ALSA" +
+                   (native ? " (" + alsaRaw->nativeDsdFormat() + ")" : std::string());
+            rate = filePlayer.streamRate();
+        } else if (playerExclusive()) {
+            rate = playerDsp->sampleRate();
+            path = "PCM " + std::to_string(rate) + " Hz, exclusive ALSA";
+        } else
+#endif
+        {
+            path = filePlayer.hasTrack() ? "PCM " + std::to_string(filePlayer.streamRate()) + " Hz, player via PipeWire"
+                                         : "PipeWire (system sound through the Aqulify device)";
+        }
+        char buf[512];
+        std::snprintf(buf, sizeof(buf),
+                      "{\"path\":\"%s\",\"rate\":%u,\"player\":%s,\"dsp_streaming\":%s,\"dsp_load_pct\":%.1f,\"overruns\":%u,"
+                      "\"player_underruns\":%llu,\"upsample\":%s,\"dsd_dop_setting\":%s,\"audio_opts\":",
+                      jsonEscape(path).c_str(), rate, filePlayer.hasTrack() ? "true" : "false",
+                      node.playbackStreaming.load() ? "true" : "false", 100.0 * node.dspLoad(), node.overruns(),
+                      static_cast<unsigned long long>(filePlayer.underruns()), filePlayer.isUpsampleActive() ? "true" : "false",
+                      dop ? "true" : "false");
+        health.setSection("engine", std::string(buf) + audioopt::toJson(o) + "}");
+    };
+    s_healthTick();
+    node.addTimer([](void*, uint64_t) { if (s_healthTick) s_healthTick(); }, nullptr, 2000);
+
     std::cout << "Fut. Leállítás: Ctrl+C (vagy systemctl --user stop aqulify).\n";
     node.run();
 
@@ -1187,5 +1316,7 @@ int main(int argc, char* argv[]) {
 #endif
     const bool crashedDaemon = node.coreError.load();
     node.shutdown();
+    s_healthTick = nullptr;
+    health.stopClean();   // a „rendben leállt” jel: a következő indítás nem készít rendellenes-vég jelentést
     return crashedDaemon ? 2 : 0;
 }

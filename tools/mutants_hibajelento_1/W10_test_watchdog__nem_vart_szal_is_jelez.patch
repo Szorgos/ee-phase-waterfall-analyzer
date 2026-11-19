@@ -1,0 +1,11 @@
+--- a/include/watchdog.hpp
++++ b/include/watchdog.hpp
+@@ -134,7 +134,7 @@
+             if (gen != t.gen) t = Track{ gen, false, 0 };
+             const int64_t last = s.lastNs.load(std::memory_order_acquire);
+             const std::atomic<bool>* ex = s.expect.load(std::memory_order_relaxed);
+-            const bool expected = !ex || ex->load(std::memory_order_relaxed);
++            const bool expected = true || !ex || ex->load(std::memory_order_relaxed);
+             if (last == 0) continue;   // még nem kezdett el dolgozni
+             const int64_t age = now - last;
+             if (expected && age > thresholdNs_ && !t.reported) {

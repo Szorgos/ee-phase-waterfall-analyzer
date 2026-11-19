@@ -8,6 +8,7 @@
 
 #include "music_library.hpp"
 #include "load_meter.hpp"
+#include "watchdog.hpp"
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -840,10 +841,12 @@ void FilePlayer::renderDop(int32_t* stereoDop24, size_t frames) {
 }
 
 void FilePlayer::decodeLoop() {
+    aq::wd::Heartbeat hb("player-decoder");   // őrszem: a dekóder / sor szála (legalább 20 ms-onként jelez)
     std::unique_lock<std::mutex> lk(m_);
     while (!quit_) {
         cv_.wait_for(lk, std::chrono::milliseconds(20));
         if (quit_) break;
+        hb.beat("player: loop");
         // Dedikált mag (Linux / Windows): a beállítás változása a következő körben érvényes
         if (const int want = coreWanted_.load(); want != coreApplied_.load()) {
             if (load::pinCurrentThread(want)) coreApplied_ = (want >= 0 ? load::currentThreadAffinitySingle() : -1);
@@ -860,6 +863,7 @@ void FilePlayer::decodeLoop() {
                 // a sor következő száma más mintavétellel / móddal: új hangfolyam (ha nem nyitható, a lejátszás leáll)
                 std::unique_ptr<Segment> next = std::move(pending_);
                 const bool modeChanged = (dopActive_.load() != (next->dopRaw != nullptr));
+                hb.beat("player: next track (output reopen)");
                 out_->close();
                 dopActive_ = false;
                 if (!startStreamLocked(std::move(next), nullptr, modeChanged)) out_->close();
@@ -869,7 +873,10 @@ void FilePlayer::decodeLoop() {
             out_->setActive(false);
             continue;
         }
-        if (state_.load() == State::Playing || state_.load() == State::Paused) fillLocked();
+        if (state_.load() == State::Playing || state_.load() == State::Paused) {
+            hb.beat("player: decode");
+            fillLocked();
+        }
     }
 }
 
