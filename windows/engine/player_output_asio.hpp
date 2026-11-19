@@ -164,8 +164,12 @@ public:
 
     void flush() override {
         consumedFrames_.store(0, std::memory_order_release);
-        flushReq_.store(true, std::memory_order_release);
-        if (wake_) SetEvent(wake_);
+        // Futó ASIO-meghajtónál nem írjuk felül aszinkron módon a driver puffereit a worker szálról:
+        // a következő bufferSwitch folyamatosan, DoP-jelölő megszakítása nélkül kéri az új (csenddel induló) adatokat.
+        if (!running_.load(std::memory_order_acquire)) {
+            flushReq_.store(true, std::memory_order_release);
+            if (wake_) SetEvent(wake_);
+        }
     }
 
     uint64_t consumedFrames() const override {
@@ -457,15 +461,59 @@ private:
         return best;
     }
 
-    void clearDriverBuffers() {
-        const size_t bytes = channelBufferBytes(bufferSize_, sampleType_);
-        const uint8_t fillByte = nativeDsd_.load(std::memory_order_relaxed) ? dsd::kDsdSilenceByte : 0u;
-        for (int ch = 0; ch < 2; ++ch) {
-            for (int b = 0; b < 2; ++b) {
-                if (bufferInfos_[ch].buffers[b] && bytes > 0) {
-                    std::memset(bufferInfos_[ch].buffers[b], fillByte, bytes);
+    /**
+     * Formátumhelyes csend írása egy sztereó ASIO pufferpárba.
+     * - Natív DSD: kDsdSilenceByte (LSB1-nél bitfordítva).
+     * - DoP PCM: váltakozó 0x05/0xFA jelölő + kDsdSilenceByte (soha nem nulla PCM, hogy a DAC ne essen ki DoP-ból).
+     * - PCM: 0x00.
+     */
+    void writeSilenceToBuffers(uint8_t* dstL, uint8_t* dstR, size_t n, uint8_t& dopPhase) const noexcept {
+        if (!dstL || !dstR || n == 0) return;
+        if (nativeDsd_.load(std::memory_order_relaxed)) {
+            const size_t bytes = channelBufferBytes(static_cast<long>(n), sampleType_);
+            const uint8_t b = (sampleType_ == ASIOSTDSDInt8LSB1)
+                ? dsd::reverseBits8(dsd::kDsdSilenceByte)
+                : dsd::kDsdSilenceByte;
+            std::memset(dstL, b, bytes);
+            std::memset(dstR, b, bytes);
+            return;
+        }
+        if (dopPcm_.load(std::memory_order_relaxed)) {
+            for (size_t i = 0; i < n; ++i) {
+                const uint8_t marker = ((dopPhase + i) & 1u) ? 0xFAu : 0x05u;
+                const uint32_t dopWord = static_cast<uint32_t>(
+                    dsd::packDopSample(dsd::kDsdSilenceByte, dsd::kDsdSilenceByte, marker));
+                if (sampleType_ == ASIOSTInt32LSB) {
+                    const uint32_t w = (dopWord & 0x00FFFFFFu) << 8;
+                    std::memcpy(dstL + i * 4, &w, 4);
+                    std::memcpy(dstR + i * 4, &w, 4);
+                } else if (sampleType_ == ASIOSTInt24LSB) {
+                    dstL[i * 3]     = static_cast<uint8_t>(dopWord & 0xFFu);
+                    dstL[i * 3 + 1] = static_cast<uint8_t>((dopWord >> 8) & 0xFFu);
+                    dstL[i * 3 + 2] = static_cast<uint8_t>((dopWord >> 16) & 0xFFu);
+                    dstR[i * 3]     = dstL[i * 3];
+                    dstR[i * 3 + 1] = dstL[i * 3 + 1];
+                    dstR[i * 3 + 2] = dstL[i * 3 + 2];
+                } else if (sampleType_ == ASIOSTInt32LSB24) {
+                    const uint32_t w = dopWord & 0x00FFFFFFu;
+                    std::memcpy(dstL + i * 4, &w, 4);
+                    std::memcpy(dstR + i * 4, &w, 4);
                 }
             }
+            dopPhase = static_cast<uint8_t>((dopPhase + n) & 1u);
+            return;
+        }
+        const size_t bytes = channelBufferBytes(static_cast<long>(n), sampleType_);
+        std::memset(dstL, 0, bytes);
+        std::memset(dstR, 0, bytes);
+    }
+
+    void clearDriverBuffers() {
+        const size_t n = static_cast<size_t>(bufferSize_);
+        for (int b = 0; b < 2; ++b) {
+            uint8_t* dstL = static_cast<uint8_t*>(bufferInfos_[0].buffers[b]);
+            uint8_t* dstR = static_cast<uint8_t*>(bufferInfos_[1].buffers[b]);
+            writeSilenceToBuffers(dstL, dstR, n, dopSilencePhase_);
         }
     }
 
@@ -656,6 +704,32 @@ private:
         }
         initCv_.notify_all();
 
+        // DSD / DoP leállítása előtt 2 pufferváltásnyi tiszta DSD/DoP csendet engedünk ki (max. 40 ms),
+        // hogy a meghajtó leállítása és az órajelváltás ne vágjon bele aktív sigma-delta bitfolyamba.
+        auto stopDriverQuietly = [&]() {
+            if (!drv || !started) return;
+            if (nativeDsd_.load(std::memory_order_relaxed) || dopPcm_.load(std::memory_order_relaxed)) {
+                drainBuffersLeft_.store(2, std::memory_order_release);
+                drainSilence_.store(true, std::memory_order_release);
+                const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(40);
+                while (drainBuffersLeft_.load(std::memory_order_acquire) > 0 &&
+                       std::chrono::steady_clock::now() < deadline) {
+                    MSG msg{};
+                    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                        TranslateMessage(&msg);
+                        DispatchMessageW(&msg);
+                    }
+                    if (wake_) MsgWaitForMultipleObjects(1, &wake_, FALSE, 5, QS_ALLINPUT);
+                    else std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                }
+            }
+            drv->stop();
+            drainSilence_.store(false, std::memory_order_release);
+            drainBuffersLeft_.store(0, std::memory_order_release);
+            started = false;
+            running_.store(false, std::memory_order_release);
+        };
+
         hb_.beat("asio: start");
         hbRunning_ = true;
         while (!quit_.load(std::memory_order_acquire)) {
@@ -673,6 +747,7 @@ private:
             const bool wantActive = active_.load(std::memory_order_acquire);
             if (wantActive && !started) {
                 hb_.beat("asio: driver start");
+                drainSilence_.store(false, std::memory_order_release);
                 if (drv->start() != ASE_OK) {
                     setLastError("start_failed");
                     break;
@@ -682,9 +757,7 @@ private:
                 running_.store(true, std::memory_order_release);
             } else if (!wantActive && started) {
                 hb_.beat("asio: driver stop");
-                drv->stop();
-                started = false;
-                running_.store(false, std::memory_order_release);
+                stopDriverQuietly();
             }
 
             if (started) {
@@ -710,6 +783,7 @@ private:
         }
 
         hb_.beat("asio: close");
+        if (drv && started) stopDriverQuietly();
         running_.store(false, std::memory_order_release);
         isOpen_.store(false, std::memory_order_release);
         {
@@ -789,11 +863,16 @@ private:
         const size_t n = static_cast<size_t>(bufferSize_);
         std::lock_guard<std::mutex> lk(renderMutex_);
 
-        if (!active_.load(std::memory_order_relaxed) || flushReq_.load(std::memory_order_relaxed)) {
-            const size_t bytes = channelBufferBytes(bufferSize_, sampleType_);
-            const uint8_t fillByte = nativeDsd_.load(std::memory_order_relaxed) ? dsd::kDsdSilenceByte : 0u;
-            std::memset(dstL, fillByte, bytes);
-            std::memset(dstR, fillByte, bytes);
+        if (!active_.load(std::memory_order_relaxed) ||
+            flushReq_.load(std::memory_order_relaxed) ||
+            drainSilence_.load(std::memory_order_acquire)) {
+            writeSilenceToBuffers(dstL, dstR, n, dopSilencePhase_);
+            if (drainSilence_.load(std::memory_order_relaxed)) {
+                uint32_t left = drainBuffersLeft_.load(std::memory_order_relaxed);
+                while (left > 0 && !drainBuffersLeft_.compare_exchange_weak(left, left - 1, std::memory_order_acq_rel)) {}
+                if (left <= 1 && wake_) SetEvent(wake_);
+            }
+            if (drv_) drv_->outputReady();
             return;
         }
 
@@ -940,6 +1019,9 @@ private:
     std::atomic<bool> active_{false};
     std::atomic<bool> quit_{false};
     std::atomic<bool> flushReq_{false};
+    std::atomic<bool> drainSilence_{false};
+    std::atomic<uint32_t> drainBuffersLeft_{0};
+    uint8_t dopSilencePhase_ = 0;
     std::atomic<bool> resetRequested_{false};
     std::atomic<bool> isOpen_{false};
     std::atomic<bool> running_{false};

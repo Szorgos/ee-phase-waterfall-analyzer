@@ -270,9 +270,13 @@ void FilePlayer::replaceTrackLocked(std::unique_ptr<Segment> seg, bool streamSto
     wr_ = rd_ = played_ = base_ = 0;
     eof_ = finished_ = draining_ = false;
     out_->flush();                      // az előző szám pufferben maradt része ne szóljon
-    // Ha a kimenet állt (szünet / a szám vége), az újrainduláskor a DAC újra szinkronizál: csenddel kezd
+    // Ha a kimenet állt (szünet / a szám vége), az újrainduláskor a DAC újra szinkronizál: teljes csenddel kezd.
+    // Azonos DSD-fokozatú számok közötti lejátszás közbeni váltáskor a kimenet nem nyílik újra, de egy rövid,
+    // páros keretszámú DSD-csend elsimítja a két független sigma-delta bitfolyam közötti átmenetet.
     const uint64_t settleFrames = static_cast<uint64_t>(rate_) * kRateSettleMs / 1000;
-    leadTotal_ = streamStopped ? (dop ? (settleFrames & ~uint64_t(1)) : settleFrames) : 0;
+    const uint64_t dsdSwitchFrames = (static_cast<uint64_t>(rate_) * kDsdSwitchSilenceMs / 1000) & ~uint64_t(1);
+    leadTotal_ = streamStopped ? (dop ? (settleFrames & ~uint64_t(1)) : settleFrames)
+                               : (dop ? dsdSwitchFrames : 0);
     leadIn_ = leadTotal_.load();
     if (dop) dopPhase_ = dopRenderPhase_;
     out_->unlock();

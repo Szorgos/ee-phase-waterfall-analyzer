@@ -746,6 +746,26 @@ private:
             consumed_ = nativeDsd_ ? playedHw * nb / 2 : playedHw;
         }
         hb_.beat("alsa: close");
+        // DSD / DoP lezárása előtt 2 periódusnyi tiszta DSD/DoP csend (kDsdSilenceByte),
+        // hogy a hardveres leállítás ne vágjon bele aktív 1-bites bitfolyamba.
+        if (dopMode_ && running && !paused && period > 0) {
+            if (nativeDsd_) {
+                std::fill(out.begin(), out.end(), dsd::kDsdSilenceByte);
+            } else {
+                for (size_t i = 0; i < period; ++i) {
+                    const uint8_t marker = ((written_ + i) & 1u) ? 0xFAu : 0x05u;
+                    const int32_t w = dsd::packDopSample(dsd::kDsdSilenceByte, dsd::kDsdSilenceByte, marker);
+                    dopBuf[2 * i] = w;
+                    dopBuf[2 * i + 1] = w;
+                }
+                convertDop(dopBuf.data(), out.data(), period * 2, f);
+            }
+            for (int k = 0; k < 2; ++k) {
+                const snd_pcm_sframes_t n = snd_pcm_writei(pcm, out.data(), period);
+                if (n < 0) break;
+                written_ += static_cast<uint64_t>(n);
+            }
+        }
         snd_pcm_drop(pcm);
         snd_pcm_close(pcm);
         reservation_.release();

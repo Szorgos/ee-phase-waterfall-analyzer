@@ -192,6 +192,11 @@ public:
      * meglévőn folytatja), így a szóló zene közbeni számváltás azonnali és csend nélküli; a szünetmentes váltás is.
      */
     static constexpr uint32_t kRateSettleMs = 800;
+    /**
+     * Azonos DSD-fokozatú két DSD-fájl közötti kézi váltáskor (a kimenet újranyitása nélkül) beiktatott rövid
+     * DoP/DSD csend, hogy a két független 1-bites sigma-delta bitfolyam határán ne legyen hallható pattanás.
+     */
+    static constexpr uint32_t kDsdSwitchSilenceMs = 60;
     /** Az új hangfolyam elején még hátralévő csend kerete (tesztekhez). */
     uint64_t leadInFrames() const { return leadIn_.load(); }
     uint32_t decideTargetRate(uint32_t srcRate, bool bypassUpsample, bool isDsd) const;
