@@ -71,3 +71,5 @@ visszaállítás módjától függetlenül érvényes.
 - macOS: élő próba nem volt (csak a CI fordítja, és ott a `test_watchdog` fut); a hangkártyák listája nincs az
   állapotfájlban.
 - A felület, a „Hibát jelentek” gomb, a küldés, a telepítő kérdése: 2–4. szakasz.
+- A fogadó oldal (Cloudflare Worker, privát D1) kódja és a végpont szerződése: `cloudflare/hibajelento-worker/README.md`.
+  Még nincs élesítve (a tulajdonos telepíti), és a motor még nem küld.
