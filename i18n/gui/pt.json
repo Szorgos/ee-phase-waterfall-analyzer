@@ -164,7 +164,7 @@
   "cam.iso": "Isométrica",
   "cam.side": "Lateral",
   "cam.top": "Superior",
-  "cam.label": "Nézőpont: {name}",
+  "cam.label": "Vista: {name}",
   "cam.initial": "Inicial",
   "wf.on": "Ligado",
   "wf.off": "Desligado",
