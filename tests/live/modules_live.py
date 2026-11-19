@@ -169,9 +169,26 @@ def main():
     send({"type": "set_module_convolver", "val": 1})
     ws.send_binary(ir)
     time.sleep(1.0)
-    s = seg(record("conv", tone))
+    rec_conv = record("conv", tone)
+    s = seg(rec_conv)
     c100 = level(s[:, 0], 100)
-    check(abs(c100 + 18) < 0.4, f"100 Hz {c100:.2f} dBFS (elvárt −18)")
+    ok_conv = abs(c100 + 18) < 0.4
+    check(ok_conv, f"100 Hz {c100:.2f} dBFS (elvárt −18)")
+    if not ok_conv:
+        # Diagnosztika T5-höz: csak bukáskor, a várakozás és a tűrés változatlan
+        c4k = level(s[:, 0], 4000)
+        r100, r4k = level(s[:, 1], 100), level(s[:, 1], 4000)
+        st = engine_state()
+        print(f"     [DIAG] bal 4 kHz: {c4k:.2f} dBFS | jobb 100 Hz: {r100:.2f}, 4 kHz: {r4k:.2f} dBFS")
+        print(f"     [DIAG] motor állapot: convolver={st.get('convolver')}, ir={st.get('ir')}")
+        w20 = int(SR * 0.02)
+        n_win = min(100, len(rec_conv) // w20)
+        env = np.abs(rec_conv).max(axis=1)
+        loud = np.where(env > 1e-3)[0]
+        loud_ms = (loud[0] * 1000.0 / SR) if len(loud) else -1.0
+        prof = [f"{peak_db(rec_conv[i * w20:(i + 1) * w20, 0]):.1f}" for i in range(n_win)]
+        print(f"     [DIAG] felvétel hossza: {len(rec_conv) / SR:.2f} s, hang kezdete: {loud_ms:.1f} ms")
+        print(f"     [DIAG] 20 ms-os csúcsszintek az első 2 s-ban (bal, dBFS): {' '.join(prof)}")
     send({"type": "clear_ir"})
     all_off()
 

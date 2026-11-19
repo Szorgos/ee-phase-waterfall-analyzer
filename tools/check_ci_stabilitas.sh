@@ -104,6 +104,10 @@ mut_tree() { # név -> a fa másolata $WORK/m_<név>
   G archive HEAD | tar -x -C "$d"
   echo "$d"
 }
+mut_hash() { sha256sum "$1" | awk '{print $1}'; }
+mut_changed() { # előtte_hash, fájl -> 0 ha valóban megváltozott
+  [ "$1" != "$(mut_hash "$2")" ]
+}
 kill_rec() { # mutáns, megölve(0/1), részlet
   rec "mutant_$1" "$2" "$3"
 }
@@ -112,11 +116,16 @@ static_on() { # fa, ellenőrzés -> kód
 }
 
 # X1: a 7.3 határa 0,1 dB -> a statikus c3 ellenőrzésnek tiltott változásként kell jeleznie
-d=$(mut_tree X1); sed -i 's/if (err > 0.05) caseOk = false;/if (err > 0.1) caseOk = false;/; s/worstGlobalErr <= 0.05/worstGlobalErr <= 0.1/' "$d/src/test_multiout.cpp"
-static_on "$d" c3; rc=$?; kill_rec X1_hatar_0_1dB $([ $rc -ne 0 ] && echo 0 || echo 1) "$(tail -1 "$d.static.log" | cut -c1-120)"
+d=$(mut_tree X1); h=$(mut_hash "$d/src/test_multiout.cpp")
+sed -i 's/if (err > 0.05) caseOk = false;/if (err > 0.1) caseOk = false;/; s/worstGlobalErr <= 0.05/worstGlobalErr <= 0.1/' "$d/src/test_multiout.cpp"
+if ! mut_changed "$h" "$d/src/test_multiout.cpp"; then
+  kill_rec X1_hatar_0_1dB 1 "a mutáció nem változtatta meg a fájlt"
+else
+  static_on "$d" c3; rc=$?; kill_rec X1_hatar_0_1dB $([ $rc -ne 0 ] && echo 0 || echo 1) "$(tail -1 "$d.static.log" | cut -c1-120)"
+fi
 
 # X2: a C3 javítása visszaállítva (fix 1,5 s, csak impulzus) -> a bukott maggal piros
-d=$(mut_tree X2)
+d=$(mut_tree X2); h=$(mut_hash "$d/src/test_multiout.cpp")
 python3 -I - "$d/src/test_multiout.cpp" <<'PY'
 import sys
 p = sys.argv[1]; t = open(p, encoding="utf-8").read()
@@ -124,7 +133,9 @@ t = t.replace("const size_t len = impulseLenForDecay(cEq, targetWay, sr, 200.0, 
 t = t.replace("deep ? toneGainDb(cEq, targetWay, sr, f, len) : db(", "false ? 0.0 : db(")
 open(p, "w", encoding="utf-8").write(t)
 PY
-if build_multiout "$d" "$WORK/build_X2"; then
+if ! mut_changed "$h" "$d/src/test_multiout.cpp"; then
+  kill_rec X2_c3_visszaallitva 1 "a mutáció nem változtatta meg a fájlt"
+elif build_multiout "$d" "$WORK/build_X2"; then
   read -r p e rc <<< "$(seed_run "$WORK/build_X2/test_multiout" 1795089109)"
   kill_rec X2_c3_visszaallitva $([ "$rc" != 0 ] && echo 0 || echo 1) "mag 1795089109: $p/50, max $e dB, kód $rc"
 else
@@ -133,26 +144,51 @@ fi
 
 # X3: a T4-javítás (busy()-várakozás) kivéve a test_measure_live-ból -> a statikus c4 ellenőrzés jelzi.
 # (A konvolver-teszt [T5] okát nem sikerült bizonyítani, ott nincs javítás, amit vissza lehetne állítani.)
-d=$(mut_tree X3); sed -i 's/const double waitedMs = waitNotBusy(s, 10.0);/const double waitedMs = 0.0;/' "$d/src/test_measure_live.cpp"
-static_on "$d" c4; rc=$?; kill_rec X3_t4_varakozas_kiveve $([ $rc -ne 0 ] && echo 0 || echo 1) "$(tail -1 "$d.static.log" | cut -c1-120)"
+d=$(mut_tree X3); h=$(mut_hash "$d/src/test_measure_live.cpp")
+sed -i 's/const double waitedMs = waitNotBusy(s, 10.0);/const double waitedMs = 0.0;/' "$d/src/test_measure_live.cpp"
+if ! mut_changed "$h" "$d/src/test_measure_live.cpp"; then
+  kill_rec X3_t4_varakozas_kiveve 1 "a mutáció nem változtatta meg a fájlt"
+else
+  static_on "$d" c4; rc=$?; kill_rec X3_t4_varakozas_kiveve $([ $rc -ne 0 ] && echo 0 || echo 1) "$(tail -1 "$d.static.log" | cut -c1-120)"
+fi
 
 # X4: a C2 várakozás végtelen (nincs időkorlát) -> a hamis gh-s próba „soha” esete bukik
-d=$(mut_tree X4); sed -i 's/if \[ "$waited" -ge "$max" \]; then/if false; then/; s/sleep $(( step < rem ? step : rem ))/sleep "$step"/' "$d/tools/ci/wait_release.sh"
-bash "$ROOT/tools/ci/test_wait_release.sh" "$d/tools/ci/wait_release.sh" > "$d.s2.log" 2>&1; rc=$?
-kill_rec X4_c2_vegtelen $([ $rc -ne 0 ] && echo 0 || echo 1) "$(grep -m1 'HIBA' "$d.s2.log" | cut -c1-120)"
+d=$(mut_tree X4); h=$(mut_hash "$d/tools/ci/wait_release.sh")
+sed -i 's/if \[ "$waited" -ge "$max" \]; then/if false; then/; s/sleep $(( step < rem ? step : rem ))/sleep "$step"/' "$d/tools/ci/wait_release.sh"
+if ! mut_changed "$h" "$d/tools/ci/wait_release.sh"; then
+  kill_rec X4_c2_vegtelen 1 "a mutáció nem változtatta meg a fájlt"
+else
+  bash "$ROOT/tools/ci/test_wait_release.sh" "$d/tools/ci/wait_release.sh" > "$d.s2.log" 2>&1; rc=$?
+  kill_rec X4_c2_vegtelen $([ $rc -ne 0 ] && echo 0 || echo 1) "$(grep -m1 'HIBA' "$d.s2.log" | cut -c1-120)"
+fi
 
 # X5: a debian/rules listájából indok nélkül kimarad egy teszt -> check_test_lists.py jelzi
-d=$(mut_tree X5); sed -i 's/ test_room test_hires_b/ test_hires_b/' "$d/debian/rules"
-python3 -I "$ROOT/tools/check_test_lists.py" --root "$d" > "$d.s5.log" 2>&1; rc=$?
-kill_rec X5_debian_lista $([ $rc -ne 0 ] && echo 0 || echo 1) "$(grep -m1 'HIBA' "$d.s5.log" | cut -c1-120)"
+d=$(mut_tree X5); h=$(mut_hash "$d/debian/rules")
+sed -i 's/ test_room test_hires_b/ test_hires_b/' "$d/debian/rules"
+if ! mut_changed "$h" "$d/debian/rules"; then
+  kill_rec X5_debian_lista 1 "a mutáció nem változtatta meg a fájlt"
+else
+  python3 -I "$ROOT/tools/check_test_lists.py" --root "$d" > "$d.s5.log" 2>&1; rc=$?
+  kill_rec X5_debian_lista $([ $rc -ne 0 ] && echo 0 || echo 1) "$(grep -m1 'HIBA' "$d.s5.log" | cut -c1-120)"
+fi
 
 # X6: egy apt-get helyről kimarad az újrapróbálás -> a statikus apt ellenőrzés jelzi
-d=$(mut_tree X6); sed -i '0,/sudo apt-get \$APT_NET update/s//sudo apt-get update/' "$d/.github/workflows/release.yml"
-static_on "$d" apt; rc=$?; kill_rec X6_apt_ujraprobalas $([ $rc -ne 0 ] && echo 0 || echo 1) "$(tail -1 "$d.static.log" | cut -c1-120)"
+d=$(mut_tree X6); h=$(mut_hash "$d/.github/workflows/release.yml")
+sed -i '0,/sudo apt-get \$APT_NET update/s//sudo apt-get update/' "$d/.github/workflows/release.yml"
+if ! mut_changed "$h" "$d/.github/workflows/release.yml"; then
+  kill_rec X6_apt_ujraprobalas 1 "a mutáció nem változtatta meg a fájlt"
+else
+  static_on "$d" apt; rc=$?; kill_rec X6_apt_ujraprobalas $([ $rc -ne 0 ] && echo 0 || echo 1) "$(tail -1 "$d.static.log" | cut -c1-120)"
+fi
 
 # X7: az RNNoise-letöltés CI-korlátja kimarad a macos.yml-ből -> a statikus rnnoise ellenőrzés jelzi
-d=$(mut_tree X7); sed -i '/AQ_FETCH_MIN_BPS:/d' "$d/.github/workflows/macos.yml"
-static_on "$d" rnnoise; rc=$?; kill_rec X7_rnnoise_korlat $([ $rc -ne 0 ] && echo 0 || echo 1) "$(tail -1 "$d.static.log" | cut -c1-120)"
+d=$(mut_tree X7); h=$(mut_hash "$d/.github/workflows/macos.yml")
+sed -i '/AQ_FETCH_MIN_BPS:/d' "$d/.github/workflows/macos.yml"
+if ! mut_changed "$h" "$d/.github/workflows/macos.yml"; then
+  kill_rec X7_rnnoise_korlat 1 "a mutáció nem változtatta meg a fájlt"
+else
+  static_on "$d" rnnoise; rc=$?; kill_rec X7_rnnoise_korlat $([ $rc -ne 0 ] && echo 0 || echo 1) "$(tail -1 "$d.static.log" | cut -c1-120)"
+fi
 
 # ---------------------------------------------------------------- eredmény
 dur=$((SECONDS - t_start))

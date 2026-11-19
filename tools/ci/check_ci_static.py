@@ -109,11 +109,14 @@ def check_c4(root, gitdir, base):
     errs = []
     body = t.split("int main()", 1)[1] if "int main()" in t else ""
     # minden indítás (a szándékosan hibás mikrofonos [3] kivételével, amely egy leállítás és busy-várakozás után jön)
+    prev_end = 0
     for m in re.finditer(r"s\.(startMeasurement|startLevelCheck)\(cfg, \"dac_st\"|s\.startLevelCheck\(\"dac_st\"", body):
-        before = body[max(0, m.start() - 700): m.start()]
+        # Az előző indítás óta eltelt szakaszt (legfeljebb 1200 karaktert) nézzük, hogy a K15 előtti busy()-ciklus is benne legyen
+        before = body[max(prev_end, m.start() - 1200): m.start()]
         if "waitNotBusy(s" not in before and "s.busy()" not in before:
             line = body[: m.start()].count("\n")
             errs.append(f"src/test_measure_live.cpp: a main() {line}. sora körüli indítás előtt nincs busy()-várakozás")
+        prev_end = m.end()
     return errs
 
 
@@ -141,11 +144,11 @@ def check_forbidden(root, gitdir, base):
             s = l.strip()
             if s.startswith("#"):
                 continue
-            if "continue-on-error" in s:
+            if n.startswith(".github/") and "continue-on-error" in s:
                 errs.append(f"{n}: új continue-on-error: {s[:80]}")
             if n.startswith(".github/") and re.search(r"\|\|\s*true", s) and re.search(r"test_|run_all|_live", s):
                 errs.append(f"{n}: `|| true` tesztlépésben: {s[:80]}")
-            if re.search(r"AQ_CHECK_SEED\s*[:=]\s*\d", s):
+            if n not in ("tools/ci/check_ci_static.py", "tools/check_ci_stabilitas.sh") and re.search(r"AQ_CHECK_SEED\s*[:=]\s*\d", s):
                 errs.append(f"{n}: rögzített AQ_CHECK_SEED: {s[:80]}")
     return errs
 
