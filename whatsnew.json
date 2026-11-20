@@ -1,6 +1,35 @@
 {
   "versions": [
     {
+      "version": "2.8.3",
+      "date": "2026-11-20",
+      "notes": {
+        "hu": ["Windows: a program frissítésekor már nem megy el téves „rendellenes leállás” hibajelentés."],
+        "en": ["Windows: updating the app no longer sends a false “abnormal shutdown” error report."],
+        "es": ["Windows: al actualizar la aplicación ya no se envía un falso informe de error por «cierre anormal»."],
+        "fr": ["Windows : la mise à jour de l'application n'envoie plus de faux rapport d'erreur de « fermeture anormale »."],
+        "zh": ["Windows：更新应用时不再发送错误的“异常退出”错误报告。"],
+        "de": ["Windows: Beim Aktualisieren der App wird kein falscher Fehlerbericht über ein „abnormales Beenden“ mehr gesendet."],
+        "it": ["Windows: durante l'aggiornamento dell'app non viene più inviata una falsa segnalazione di errore per «chiusura anomala»."],
+        "nl": ["Windows: bij het bijwerken van de app wordt geen onterecht foutrapport over een „abnormale afsluiting” meer verstuurd."],
+        "pl": ["Windows: podczas aktualizacji aplikacji nie jest już wysyłany fałszywy raport o błędzie „nieprawidłowego zamknięcia”."],
+        "ru": ["Windows: при обновлении приложения больше не отправляется ложный отчёт об ошибке «аварийного завершения»."],
+        "pt": ["Windows: ao atualizar a aplicação, deixa de ser enviado um falso relatório de erro de «encerramento anormal»."],
+        "ro": ["Windows: la actualizarea aplicației nu se mai trimite un raport de eroare fals despre o „închidere anormală”."],
+        "el": ["Windows: κατά την ενημέρωση της εφαρμογής δεν αποστέλλεται πλέον ψευδής αναφορά σφάλματος «μη φυσιολογικού τερματισμού»."],
+        "tr": ["Windows: Uygulama güncellenirken artık yanlış bir “olağandışı kapanma” hata raporu gönderilmiyor."],
+        "fi": ["Windows: sovellusta päivitettäessä ei enää lähetetä virheellistä ”epänormaali sulkeutuminen” -virheraporttia."],
+        "da": ["Windows: Ved opdatering af appen sendes der ikke længere en falsk fejlrapport om „unormal lukning“."],
+        "nb": ["Windows: Ved oppdatering av appen sendes det ikke lenger en falsk feilrapport om «unormal avslutning»."],
+        "sv": ["Windows: Vid uppdatering av appen skickas inte längre en falsk felrapport om ”onormal avstängning”."],
+        "he": ["Windows: בעדכון האפליקציה כבר לא נשלח דוח שגיאה שגוי על \"כיבוי חריג\"."],
+        "ja": ["Windows：アプリの更新時に、誤った「異常終了」のエラーレポートが送信されなくなりました。"],
+        "ko": ["Windows: 앱을 업데이트할 때 잘못된 '비정상 종료' 오류 보고서가 더 이상 전송되지 않습니다."],
+        "cs": ["Windows: při aktualizaci aplikace se už neodesílá chybné hlášení o „neočekávaném ukončení“."],
+        "uk": ["Windows: під час оновлення застосунку більше не надсилається хибний звіт про помилку «аварійного завершення»."]
+      }
+    },
+    {
       "version": "2.8.2",
       "date": "2026-11-20",
       "notes": {
