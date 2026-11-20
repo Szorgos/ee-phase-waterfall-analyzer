@@ -1178,6 +1178,69 @@ int main() {
     testSeed40(seed);
     testK11Heartbeat();
 
+    // K12: DSD->DSD váltás és lezárás: DoP PCM pufferben soha nem 0x00 (mindig váltakozó 0x05/0xFA + 0xAA),
+    // futó ASIO flush() nem töri meg a DoP-jelölőt, close() előtt csendes lezárás fut.
+    {
+        auto st = std::make_shared<FakeAsioState>();
+        st->allowNativeDsd = false;   // DoP PCM ág (ASIOSTInt32LSB)
+        st->pcmType = ASIOSTInt32LSB;
+        st->preferredBufferSize = 128;
+        st->supportedRates.insert(176400);
+
+        AsioPlayerOutput out("FakeDopSwitch", [st](std::string*) -> IASIO* { return new FakeAsioDriver(st); });
+        std::string err;
+        uint8_t phase = 0;
+        const bool ok = out.openDop(176400, [&](int32_t* d, size_t n) {
+            for (size_t i = 0; i < n; ++i) {
+                const uint8_t m = ((phase + i) & 1u) ? 0xFAu : 0x05u;
+                const int32_t w = dsd::packDopSample(0x5Au, 0xA5u, m);
+                d[2 * i] = w;
+                d[2 * i + 1] = w;
+            }
+            phase = static_cast<uint8_t>((phase + n) & 1u);
+        }, &err);
+
+        // 1. Indulás előtti driver-pufferek (clearDriverBuffers) is érvényes DoP 1.1 csendet tartalmaznak (nem 0x00!)
+        auto checkDopSilenceBuf = [](const std::vector<uint8_t>& buf) {
+            if (buf.size() < 8 || (buf.size() % 4) != 0) return false;
+            const size_t n = buf.size() / 4;
+            uint8_t prev = 0;
+            for (size_t i = 0; i < n; ++i) {
+                uint32_t w = 0;
+                std::memcpy(&w, buf.data() + i * 4, 4);
+                const uint8_t m = static_cast<uint8_t>((w >> 24) & 0xFFu);
+                const uint16_t pay = static_cast<uint16_t>((w >> 8) & 0xFFFFu);
+                if ((m != 0x05u && m != 0xFAu) || pay != 0xAAAAu) return false;
+                if (i > 0 && m == prev) return false;
+                prev = m;
+            }
+            return true;
+        };
+        const bool initBufOk = checkDopSilenceBuf(st->payload(0, 0)) && checkDopSilenceBuf(st->payload(1, 0)) &&
+                               checkDopSilenceBuf(st->payload(0, 1)) && checkDopSilenceBuf(st->payload(1, 1));
+        CHECK(ok && out.isDopPcmActive() && initBufOk,
+              "K12: DoP PCM kezdeti driver-pufferekben érvényes 0x05/0xFA + 0xAAAA DoP-csend (soha nem 0x00)");
+
+        // 2. Futás közbeni flush(): nem törli nullára a puffert és nem szakítja meg a DoP-jelölőt
+        out.setActive(true);
+        for (int i = 0; i < 100 && !out.isRunning(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        st->triggerBufferSwitch(0);
+        out.flush();
+        st->triggerBufferSwitch(1);
+        const auto afterFlush = st->payload(0, 1);
+        bool flushDopOk = afterFlush.size() == 128 * 4;
+        for (size_t i = 0; i < 128 && flushDopOk; ++i) {
+            uint32_t w = 0;
+            std::memcpy(&w, afterFlush.data() + i * 4, 4);
+            const uint8_t m = static_cast<uint8_t>((w >> 24) & 0xFFu);
+            const uint16_t pay = static_cast<uint16_t>((w >> 8) & 0xFFFFu);
+            const uint8_t expM = (i & 1u) ? 0xFAu : 0x05u;
+            if (m != expM || pay != 0x5AA5u) flushDopOk = false;
+        }
+        CHECK(flushDopOk, "K12: futó ASIO flush() után folyamatos DoP-keretek (nincs 0x00-lyuk)");
+        out.close();
+    }
+
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

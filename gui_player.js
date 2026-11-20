@@ -25,14 +25,14 @@
 
   const STR = {
     hu: {
-      play: "Lejátszás", pause: "Szünet", prev: "Előző", next: "Következő",
+      play: "Lejátszás", pause: "Szünet", stop: "Leállítás", prev: "Előző", next: "Következő",
       shuffle: "Keverés", repeatOff: "Ismétlés: ki", repeatAll: "Ismétlés: az egész sor", repeatOne: "Ismétlés: ez a szám",
       queue: "Lejátszási sor", queueEmpty: "A sor üres.", nothing: "Nincs lejátszás",
       resume: "Folytatás a sorból ({n} szám)", from: "{app}", seek: "Pozíció", close: "Bezárás",
       loading: "Betöltés…", nowItem: "Most szól", volume: "Hangerő", mute: "Némítás", unmute: "Némítás ki"
     },
     en: {
-      play: "Play", pause: "Pause", prev: "Previous", next: "Next",
+      play: "Play", pause: "Pause", stop: "Stop", prev: "Previous", next: "Next",
       shuffle: "Shuffle", repeatOff: "Repeat: off", repeatAll: "Repeat: whole queue", repeatOne: "Repeat: this track",
       queue: "Play queue", queueEmpty: "The queue is empty.", nothing: "Nothing playing",
       resume: "Resume from the queue ({n} tracks)", from: "{app}", seek: "Position", close: "Close",
@@ -41,7 +41,7 @@
     es: {
       play: "Reproducir",
       pause: "Pausar",
-      prev: "Anterior",
+      stop: "Detener", prev: "Anterior",
       next: "Siguiente",
       shuffle: "Aleatorio",
       repeatOff: "Repetir: no",
@@ -63,7 +63,7 @@
     fr: {
       play: "Lecture",
       pause: "Pause",
-      prev: "Précédent",
+      stop: "Arrêter", prev: "Précédent",
       next: "Suivant",
       shuffle: "Aléatoire",
       repeatOff: "Répéter : off",
@@ -85,7 +85,7 @@
     zh: {
       play: "播放",
       pause: "暂停",
-      prev: "上一首",
+      stop: "停止", prev: "上一首",
       next: "下一首",
       shuffle: "随机播放",
       repeatOff: "循环：关",
@@ -107,7 +107,7 @@
     de: {
       play: "Wiedergabe",
       pause: "Pause",
-      prev: "Vorheriger",
+      stop: "Stopp", prev: "Vorheriger",
       next: "Nächster",
       shuffle: "Zufallswiedergabe",
       repeatOff: "Wiederholung: aus",
@@ -129,7 +129,7 @@
     it: {
       play: "Riproduci",
       pause: "Pausa",
-      prev: "Precedente",
+      stop: "Stop", prev: "Precedente",
       next: "Successivo",
       shuffle: "Casuale",
       repeatOff: "Ripeti: disattivato",
@@ -151,7 +151,7 @@
     nl: {
       play: "Afspelen",
       pause: "Pauze",
-      prev: "Vorige",
+      stop: "Stop", prev: "Vorige",
       next: "Volgende",
       shuffle: "Willekeurig",
       repeatOff: "Herhalen: uit",
@@ -173,7 +173,7 @@
     pl: {
       play: "Odtwarzaj",
       pause: "Pauza",
-      prev: "Poprzedni",
+      stop: "Zatrzymaj", prev: "Poprzedni",
       next: "Następny",
       shuffle: "Losowo",
       repeatOff: "Powtarzanie: wył.",
@@ -195,7 +195,7 @@
     ru: {
       play: "Воспроизведение",
       pause: "Пауза",
-      prev: "Предыдущий",
+      stop: "Стоп", prev: "Предыдущий",
       next: "Следующий",
       shuffle: "В случайном порядке",
       repeatOff: "Повтор: выкл",
@@ -217,7 +217,7 @@
     pt: {
       play: "Reproduzir",
       pause: "Pausar",
-      prev: "Anterior",
+      stop: "Parar", prev: "Anterior",
       next: "Próximo",
       shuffle: "Aleatório",
       repeatOff: "Repetir: desligado",
@@ -239,7 +239,7 @@
     ro: {
       play: "Redare",
       pause: "Pauză",
-      prev: "Anterior",
+      stop: "Oprește", prev: "Anterior",
       next: "Următor",
       shuffle: "Aleatoriu",
       repeatOff: "Repetare: oprită",
@@ -261,7 +261,7 @@
     el: {
       play: "Αναπαραγωγή",
       pause: "Παύση",
-      prev: "Προηγούμενο",
+      stop: "Διακοπή", prev: "Προηγούμενο",
       next: "Επόμενο",
       shuffle: "Τυχαία σειρά",
       repeatOff: "Επανάληψη: ανενεργή",
@@ -283,7 +283,7 @@
     tr: {
       play: "Oynat",
       pause: "Duraklat",
-      prev: "Önceki",
+      stop: "Durdur", prev: "Önceki",
       next: "Sonraki",
       shuffle: "Karışık",
       repeatOff: "Tekrar: kapalı",
@@ -305,7 +305,7 @@
     fi: {
       play: "Toista",
       pause: "Tauko",
-      prev: "Edellinen",
+      stop: "Pysäytä", prev: "Edellinen",
       next: "Seuraava",
       shuffle: "Sekoita",
       repeatOff: "Toisto: pois",
@@ -327,7 +327,7 @@
     da: {
       play: "Afspil",
       pause: "Pause",
-      prev: "Forrige",
+      stop: "Stop", prev: "Forrige",
       next: "Næste",
       shuffle: "Bland",
       repeatOff: "Gentag: fra",
@@ -349,7 +349,7 @@
     nb: {
       play: "Spill av",
       pause: "Pause",
-      prev: "Forrige",
+      stop: "Stopp", prev: "Forrige",
       next: "Neste",
       shuffle: "Bland",
       repeatOff: "Gjenta: av",
@@ -371,7 +371,7 @@
     sv: {
       play: "Spela",
       pause: "Pausa",
-      prev: "Föregående",
+      stop: "Stoppa", prev: "Föregående",
       next: "Nästa",
       shuffle: "Blanda",
       repeatOff: "Repetera: av",
@@ -393,7 +393,7 @@
     he: {
       play: "נגן",
       pause: "השהה",
-      prev: "הקודם",
+      stop: "עצור", prev: "הקודם",
       next: "הבא",
       shuffle: "ערבב",
       repeatOff: "חזרה: כבויה",
@@ -415,7 +415,7 @@
     ja: {
       play: "再生",
       pause: "一時停止",
-      prev: "前の曲",
+      stop: "停止", prev: "前の曲",
       next: "次の曲",
       shuffle: "シャッフル",
       repeatOff: "リピート: オフ",
@@ -437,7 +437,7 @@
     ko: {
       play: "재생",
       pause: "일시 정지",
-      prev: "이전 곡",
+      stop: "정지", prev: "이전 곡",
       next: "다음 곡",
       shuffle: "셔플",
       repeatOff: "반복: 끔",
@@ -459,7 +459,7 @@
     cs: {
       play: "Přehrát",
       pause: "Pozastavit",
-      prev: "Předchozí",
+      stop: "Zastavit", prev: "Předchozí",
       next: "Další",
       shuffle: "Náhodně",
       repeatOff: "Opakování: vypnuto",
@@ -481,7 +481,7 @@
     uk: {
       play: "Відтворити",
       pause: "Пауза",
-      prev: "Попередня",
+      stop: "Стоп", prev: "Попередня",
       next: "Наступна",
       shuffle: "Випадково",
       repeatOff: "Повтор: вимкнено",
@@ -513,10 +513,23 @@
     vol: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
     volLow: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
     volMute: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
+    stop: '<rect x="6.5" y="6.5" width="11" height="11" rx="1.5" fill="currentColor"/>',
     note: '<path d="M10 17.5a2.5 2.5 0 1 1-2.5-2.5c.9 0 1.7.3 2.5.8V5l9-2v11.5a2.5 2.5 0 1 1-2.5-2.5c.9 0 1.7.3 2.5.8V7l-9 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>'
   };
   const svg = (name, size) =>
     `<svg viewBox="0 0 24 24" width="${size || 20}" height="${size || 20}" aria-hidden="true" fill="currentColor">${ICON[name]}</svg>`;
+
+  // A forrás formátuma egy sorban: PCM-nél „24 bit / 96 kHz” (ismeretlen bitmélységnél csak a kHz), DSD-nél „DSD256”
+  function formatLabel(f) {
+    if (!f) return "";
+    if (f.dsd > 0) {
+      const base = f.dsd % 44100 === 0 ? 44100 : 48000;
+      return "DSD" + Math.round(f.dsd / base);
+    }
+    if (!(f.rate > 0)) return "";
+    const khz = new Intl.NumberFormat(document.documentElement.lang || undefined, { maximumFractionDigits: 1 }).format(f.rate / 1000);
+    return (f.bits > 0 ? f.bits + " bit / " : "") + khz + " kHz";
+  }
 
   const CSS = `
 .aqnp { position: fixed; left: 0; right: 0; bottom: 0; z-index: 900; display: grid;
@@ -532,7 +545,7 @@
 .aqnp-text { min-width: 0; }
 .aqnp-title { font-size: var(--aq-fs-head, 13px); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .aqnp-sub { color: var(--aq-text-2, #93a1b0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-.aqnp-app { color: var(--aq-text-2, #93a1b0); font-size: var(--aq-fs-sub, 11px); margin-top: 2px; }
+.aqnp-app { color: var(--aq-text-2, #93a1b0); font-size: var(--aq-fs-sub, 11px); margin-top: 2px; min-height: 1.3em; }
 .aqnp-center { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
 .aqnp-ctrls { display: flex; align-items: center; gap: 6px; }
 .aqnp-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
@@ -626,6 +639,7 @@ body.aqnp-on { padding-bottom: 72px; }
           <button type="button" class="aqnp-btn" data-k="shuffle">${svg("shuffle", 18)}</button>
           <button type="button" class="aqnp-btn" data-k="prev">${svg("prev")}</button>
           <button type="button" class="aqnp-btn aqnp-play" data-k="play">${svg("play", 22)}</button>
+          <button type="button" class="aqnp-btn" data-k="stop">${svg("stop", 18)}</button>
           <button type="button" class="aqnp-btn" data-k="next">${svg("next")}</button>
           <button type="button" class="aqnp-btn aqnp-rep" data-k="repeat">${svg("repeat", 18)}</button>
         </div>
@@ -649,7 +663,7 @@ body.aqnp-on { padding-bottom: 72px; }
       artImg: $("img.aqnp-art"), artEmpty: $(".aqnp-art-empty"),
       title: $(".aqnp-title"), sub: $(".aqnp-sub"), app: $(".aqnp-app"),
       shuffle: $('[data-k="shuffle"]'), prev: $('[data-k="prev"]'), play: $('[data-k="play"]'),
-      next: $('[data-k="next"]'), repeat: $('[data-k="repeat"]'), queue: $('[data-k="queue"]'),
+      stop: $('[data-k="stop"]'), next: $('[data-k="next"]'), repeat: $('[data-k="repeat"]'), queue: $('[data-k="queue"]'),
       ctrls: $(".aqnp-ctrls"), seekRow: $(".aqnp-seekrow"), seek: $(".aqnp-seek"),
       pos: $('[data-k="pos"]'), dur: $('[data-k="dur"]'), empty: $(".aqnp-empty"),
       vol: $(".aqnp-vol"), volBar: $(".aqnp-volbar"), volPct: $(".aqnp-volpct"), mute: $('[data-k="mute"]')
@@ -689,6 +703,7 @@ body.aqnp-on { padding-bottom: 72px; }
       label(ui.shuffle, t("shuffle"));
       label(ui.prev, t("prev"));
       label(ui.next, t("next"));
+      label(ui.stop, t("stop"));
       label(ui.queue, t("queue"));
       ui.seek.setAttribute("aria-label", t("seek"));
       label(popClose, t("close"));
@@ -725,7 +740,8 @@ body.aqnp-on { padding-bottom: 72px; }
       } else {
         ui.title.textContent = m.title || m.app || "";
         ui.sub.textContent = [m.artist, m.album].filter(Boolean).join(" · ");
-        ui.app.textContent = m.app && m.app !== "Aqulify" ? t("from", { app: m.app }) : "";
+        // Egy sor: más lejátszónál a forrás neve, a beépített lejátszónál a forrás formátuma (pl. 24 bit / 96 kHz, DSD256)
+        ui.app.textContent = m.app && m.app !== "Aqulify" ? t("from", { app: m.app }) : formatLabel(m.fmt);
         if (m.art !== artShown) setArt(m.art || "");
       }
 
@@ -736,6 +752,7 @@ body.aqnp-on { padding-bottom: 72px; }
       ui.play.disabled = has ? !(playing ? can.pause : can.play) : qCount === 0;
       ui.prev.disabled = !(has && can.previous);
       ui.next.disabled = !(has && can.next);
+      ui.stop.disabled = !has;   // a beépített lejátszót leállítja (elengedi a kimenetet), más lejátszót szüneteltet
       ui.seek.disabled = !(has && can.seek && m.duration > 0);
       if (!has || !m.duration || m.duration <= 0) {
         if (!dragging) {
@@ -855,6 +872,7 @@ body.aqnp-on { padding-bottom: 72px; }
     ui.play.onclick = togglePlay;
     ui.prev.onclick = () => send({ type: "media", action: "previous" });
     ui.next.onclick = () => send({ type: "media", action: "next" });
+    ui.stop.onclick = () => send({ type: "media", action: "stop" });
     ui.shuffle.onclick = () => send({ type: "queue_shuffle", on: !(queue && queue.shuffle) });
     ui.repeat.onclick = () => {
       const cur = (queue && queue.repeat) || "off";

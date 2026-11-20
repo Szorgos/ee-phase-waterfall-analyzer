@@ -377,6 +377,14 @@ static void testPlayer() {
     std::string err;
     CHECK(p.open(path, &err) && out->rate == sr && out->active && p.state() == FilePlayer::State::Playing,
           "megnyitás: a kimenet %u Hz-en, lejátszás", out->rate);
+    {
+        // A „most szól” a forrás formátumát is közli (kijelzéshez): 32 bites lebegőpontos WAV, a fájl saját mintavételén
+        const media::Info fi = p.info();
+        const std::string fj = media::toJson(fi);
+        CHECK(fi.fmtBits == 32 && fi.fmtRate == sr && fi.fmtDsd == 0 &&
+                  fj.find("\"fmt\":{\"bits\":32,\"rate\":" + std::to_string(sr) + ",\"dsd\":0}") != std::string::npos,
+              "a most szól üzenet a forrás formátumát tartalmazza (bits %u, rate %u)", fi.fmtBits, fi.fmtRate);
+    }
 
     // fél másodperc: bitpontosan a forrás
     std::vector<float> a = pullFrames(p, *out, sr / 2);
@@ -421,6 +429,17 @@ static void testPlayer() {
 
     p.stop();
     CHECK(!p.hasTrack() && !out->opened && !p.info().available, "leállítás: nincs betöltött szám, a hangfolyam bezárult");
+
+    // A „stop” médiaparancs (a külön Stop gomb) ugyanezt teszi, és a kimenetet elengedi (szünet közben is)
+    CHECK(media::validAction("stop"), "a stop érvényes médiaművelet");
+    CHECK(p.open(path) && p.state() == FilePlayer::State::Playing, "újranyitás a stop próbájához");
+    p.command("pause", 0.0);
+    CHECK(p.state() == FilePlayer::State::Paused && out->opened, "szünet: a szám betöltve, a kimenet még nyitva");
+    p.command("stop", 0.0);
+    CHECK(!p.hasTrack() && !out->opened && !p.info().available, "stop parancs szünet után: a kimenet elengedve, nincs betöltött szám");
+    CHECK(p.open(path), "stop után újra lehet indítani");
+    p.command("stop", 0.0);
+    CHECK(!p.hasTrack() && !out->opened, "stop parancs lejátszás közben: a kimenet elengedve");
     std::error_code ec;
     fs::remove(path, ec);
 }
@@ -1926,6 +1945,70 @@ static void testDsdDop() {
         CHECK(pcmFallback.size() == (pcmLead + 512) * 2,
               "PCM visszalépés: %zu csendkeret + 512 dekódolt PCM-keret", pcmLead);
         p.stop();
+    }
+
+    // 2b. DSD->DSD váltás: azonos DSD-fokozat (DSD64 -> DSD64) újranyitás nélkül, töretlen DoP-jelölővel
+    //     és rövid DSD-csenddel (kDsdSwitchSilenceMs); eltérő DSD-fokozat (DSD64 -> DSD128) újranyitással + kRateSettleMs csenddel.
+    {
+        std::vector<uint8_t> left2(kBytesPerCh, 0x3Cu), right2(kBytesPerCh, 0xC3u);
+        const std::string dsfPath2 = tmpPath("aq_dop_test2.dsf");
+        writeDsfTestFile(dsfPath2, kDsd64Rate, 2, { left2, right2 }, {});
+
+        const std::string dsf128Path = tmpPath("aq_dop_test128.dsf");
+        writeDsfTestFile(dsf128Path, kDsd64Rate * 2, 2, { left2, right2 }, {});
+
+        auto* out = new FakeOutput;
+        out->settle = true;
+        out->allowDop = true;
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        p.setDsdDop(true);
+
+        std::string err;
+        CHECK(p.open(dsfPath, &err) && out->opens == 1, "DSD->DSD: első DSD64 megnyitva (opens=%d)", out->opens.load());
+        const size_t initLead = static_cast<size_t>(p.leadInFrames());
+        // Páratlan keretszámot (initLead + 513) húzunk ki, hogy a DoP-fázis folytonossága szigorúan tesztelődjön
+        const std::vector<int32_t> part1 = pullDopFrames(p, *out, initLead + 513);
+        const uint8_t lastMarker1 = static_cast<uint8_t>((static_cast<uint32_t>(part1[(initLead + 512) * 2]) >> 16) & 0xFFu);
+
+        // Azonos DSD-fokozatú második fájl: NEM nyitja újra a kimenetet, rövid DSD-csenddel vált
+        CHECK(p.open(dsfPath2, &err) && out->opens == 1 && out->rate == kDopRate,
+              "DSD64->DSD64 váltás: kimenet újranyitás nélkül (opens=%d, rate=%u)", out->opens.load(), out->rate);
+        const size_t swLead = static_cast<size_t>(p.leadInFrames());
+        const size_t expectedSwLead = (kDopRate * FilePlayer::kDsdSwitchSilenceMs / 1000) & ~uint64_t{1};
+        CHECK(swLead == expectedSwLead && swLead > 0 && (swLead % 2) == 0,
+              "DSD64->DSD64 váltás: rövid, páros DSD-csend (%zu keret, várt %zu)", swLead, expectedSwLead);
+
+        const std::vector<int32_t> part2 = pullDopFrames(p, *out, swLead + 256);
+        bool markersOk = true, silenceOk = true, payload2Ok = true;
+        uint8_t prevMarker = lastMarker1;
+        for (size_t i = 0; i < swLead + 256; ++i) {
+            const uint32_t wL = static_cast<uint32_t>(part2[2 * i]);
+            const uint32_t wR = static_cast<uint32_t>(part2[2 * i + 1]);
+            const uint8_t mL = static_cast<uint8_t>((wL >> 16) & 0xFFu);
+            const uint8_t mR = static_cast<uint8_t>((wR >> 16) & 0xFFu);
+            const uint8_t expectedM = (prevMarker == 0x05u) ? 0xFAu : 0x05u;
+            if (mL != expectedM || mR != expectedM) markersOk = false;
+            prevMarker = mL;
+            if (i < swLead) {
+                if ((wL & 0xFFFFu) != 0xAAAAu || (wR & 0xFFFFu) != 0xAAAAu) silenceOk = false;
+            } else {
+                if ((wL & 0xFFFFu) != 0x3C3Cu || (wR & 0xFFFFu) != 0xC3C3u) payload2Ok = false;
+            }
+        }
+        CHECK(markersOk && silenceOk && payload2Ok,
+              "DSD64->DSD64: töretlen 0x05/0xFA jelölő=%d, 0xAAAA DSD-csend=%d, 2. szám adatai=%d",
+              markersOk ? 1 : 0, silenceOk ? 1 : 0, payload2Ok ? 1 : 0);
+
+        // Eltérő DSD-fokozat (DSD64 -> DSD128): újranyitás + teljes kRateSettleMs csend
+        CHECK(p.open(dsf128Path, &err) && out->opens == 2 && out->rate == kDopRate * 2 &&
+              p.leadInFrames() == (((kDopRate * 2) * FilePlayer::kRateSettleMs / 1000) & ~uint64_t{1}),
+              "DSD64->DSD128 váltás: újranyitás (opens=%d, rate=%u, lead=%llu)",
+              out->opens.load(), out->rate, static_cast<unsigned long long>(p.leadInFrames()));
+        p.stop();
+
+        std::error_code ec2;
+        fs::remove(dsfPath2, ec2);
+        fs::remove(dsf128Path, ec2);
     }
 
 #ifdef _WIN32

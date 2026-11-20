@@ -1913,6 +1913,12 @@ static void testRemoteAdmin() {
     wsSendText(sLocal, "{\"type\":\"remote_set_admin\",\"id\":\"" + dev1Id + "\",\"admin\":true}");
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     CHECK(!bridge.pairingOpen(), "az admin kapcsoló után a párosítási ablak nem nyílik meg (pairingOpen hamis)");
+    {
+        // A telefon azonnal megkapja az új jogot (machine üzenet, admin:true), nem csak újracsatlakozáskor
+        const std::string mAdm = wsWaitFor(sRemote1, "\"admin\":true", 2000);
+        CHECK(!mAdm.empty() && mAdm.find("\"type\":\"machine\"") != std::string::npos,
+              "admin megadásakor az élő távoli kliens machine üzenetet kap admin:true értékkel");
+    }
 
     wsSendText(sRemote1, "{\"type\":\"library_set_roots\",\"roots\":[\"/mnt/zene\"]}");
     std::string rAdmin1 = wsWaitFor(sRemote1, "\"type\":\"library_set_roots\"", 2000);

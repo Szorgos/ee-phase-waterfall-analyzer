@@ -53,7 +53,7 @@ inline constexpr std::array<int, 10> kRateChoices{ 44100, 48000, 88200, 96000, 1
 /** A DSP-lánc legnagyobb mintavétele: fölötte a lánc bitpontosan átenged (az LSP-modulok erre vannak méretezve). */
 inline constexpr uint32_t kMaxDspRate = 384000;
 /** A felmintavételezés felső korlátjának választható értékei (0: nincs korlát). */
-inline constexpr std::array<int, 5> kUpsampleMaxRateChoices{ 0, 176400, 192000, 352800, 384000 };
+inline constexpr std::array<int, 7> kUpsampleMaxRateChoices{ 0, 88200, 96000, 176400, 192000, 352800, 384000 };
 /** A választható szűrőpontosságok (bit). */
 inline constexpr std::array<int, 4> kPrecisionChoices{ 20, 24, 28, 32 };
 /** A választható fejtér értékek (dB). */

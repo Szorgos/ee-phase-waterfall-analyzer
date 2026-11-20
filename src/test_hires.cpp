@@ -161,6 +161,12 @@ static void testOptions() {
     json::parse("{\"upsampleThreads\":7,\"dedicatedCore\":-5,\"upsampleMaxRate\":12345}", bad);
     const auto s = audioopt::fromJson(bad);
     CHECK(s.upsampleThreads == 0 && s.dedicatedCore == -1 && s.upsampleMaxRate == 0, "érvénytelen értékek alapértékre igazítva");
+    // A legkisebb választható korlát a 44,1 / 48 kHz-es anyag kétszerezéséhez: 88,2 és 96 kHz
+    for (int r : { 88200, 96000 }) {
+        json::Value ok;
+        json::parse("{\"upsampleMaxRate\":" + std::to_string(r) + "}", ok);
+        CHECK(audioopt::fromJson(ok).upsampleMaxRate == static_cast<uint32_t>(r), "legnagyobb célmintavétel: %d Hz választható", r);
+    }
 }
 
 // ---------------------------------------------------------------- [4]

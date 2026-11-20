@@ -958,7 +958,7 @@ int main(int argc, char** argv) {
     cb.mediaJson = [&]() { return filePlayer.hasTrack() ? media::toJson(playQueue.mediaInfo()) : mediaSession.json(); };
     cb.mediaCommand = [&](const std::string& action, double value) {
         if (filePlayer.hasTrack()) playQueue.command(action, value);
-        else mediaSession.command(action, value);
+        else mediaSession.command(action == "stop" ? "pause" : action, value);   // más lejátszót csak szüneteltetünk
     };
     cb.mediaArt = [&](const std::string& id, std::string& mime, std::string& bytes, std::string& url) {
         if (filePlayer.art(id, mime, bytes)) return true;

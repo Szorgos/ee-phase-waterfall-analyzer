@@ -24,11 +24,15 @@ struct Info {
     bool playing = false;
     bool canPlay = false, canPause = false, canNext = false, canPrevious = false, canSeek = false;
     std::string artId;             // a borító azonosítója (üres: nincs); változik, ha a borító változik
+    // A forrás formátuma (csak a beépített lejátszó tudja): PCM-nél bitmélység + mintavétel, DSD-nél a DSD-mintavétel
+    uint32_t fmtBits = 0;          // 0: ismeretlen (pl. veszteséges forrás)
+    uint32_t fmtRate = 0;          // Hz; 0: nincs adat
+    uint32_t fmtDsd = 0;           // az eredeti DSD-mintavétel Hz-ben (pl. 2822400); 0: nem DSD
 };
 
 /** Engedélyezett parancsok a "media" üzenetben. */
 inline bool validAction(const std::string& a) {
-    return a == "play" || a == "pause" || a == "toggle" || a == "next" || a == "previous" || a == "seek";
+    return a == "play" || a == "pause" || a == "toggle" || a == "next" || a == "previous" || a == "seek" || a == "stop";
 }
 
 inline std::string jsonEscape(const std::string& in) {
@@ -70,7 +74,11 @@ inline std::string toJson(const Info& m) {
     s += m.canPrevious ? "true" : "false";
     s += ",\"seek\":";
     s += m.canSeek ? "true" : "false";
-    s += "},\"art\":\"" + jsonEscape(m.artId) + "\"}";
+    s += "},\"art\":\"" + jsonEscape(m.artId) + "\"";
+    if (m.fmtRate > 0 || m.fmtDsd > 0)
+        s += ",\"fmt\":{\"bits\":" + std::to_string(m.fmtBits) + ",\"rate\":" + std::to_string(m.fmtRate) +
+             ",\"dsd\":" + std::to_string(m.fmtDsd) + "}";
+    s += "}";
     return s;
 }
 
