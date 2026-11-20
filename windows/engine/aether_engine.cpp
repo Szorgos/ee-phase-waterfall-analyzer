@@ -1352,6 +1352,7 @@ int main(int argc, char** argv) {
     s_tray.store(nullptr);
 
     std::cout << "[Info] Leállítás...\n";
+    health.markClean(); // a „rendben leállt” jel már most: a telepítő a leállás közben is kilőhet (frissítés)
     bridge->stop();
     updater.stop();
     filePlayer.stop();

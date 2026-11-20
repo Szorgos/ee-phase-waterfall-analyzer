@@ -646,6 +646,12 @@ inline void closeRunningEngine(const std::wstring& exePath) {
             want = (sl == std::wstring::npos ? std::wstring() : want.substr(0, sl + 1)) + L"AqulifyGui.exe";
         }
         if (QueryFullProcessImageNameW(p, 0, img, &n) && (want.empty() || _wcsicmp(img, want.c_str()) == 0)) {
+            // A motor az ablaka eltűnése után még menti az állapotot és rendben leáll: addig várunk rá (legfeljebb
+            // 10 mp), különben a kilövés „rendellenes leállás” jelentést okozna a következő indításkor.
+            if (isEngine && WaitForSingleObject(p, 10000) == WAIT_OBJECT_0) {
+                CloseHandle(p);
+                continue;
+            }
             TerminateProcess(p, 0);
             WaitForSingleObject(p, 3000);
         }

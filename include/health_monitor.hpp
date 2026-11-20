@@ -257,13 +257,22 @@ public:
 
     /** Rendes leállás: utolsó állapot clean_exit = true-val, a „fut” jel törlése. */
     void stopClean() {
-        if (!thread_.joinable()) return;
+        markClean();
+        if (!cleanMarked_) return;
+        cleanMarked_ = false;
+        aq::crash::disarm();
+        closeLog();
+    }
+
+    /** A „rendben leállt” jel kiírása a leállás legelején (a hosszabb leállítási lépések előtt): ha a telepítő a
+     *  leállás közben kilövi a folyamatot, az nem számít rendellenes végnek. A stopClean() utána már csak lezár. */
+    void markClean() {
+        if (cleanMarked_ || !thread_.joinable()) return;
         stop();
         writeState(true);
-        aq::crash::disarm();
         std::error_code ec;
         fs::remove(cfg_.dir / "running", ec);
-        closeLog();
+        cleanMarked_ = true;
     }
 
     /** Az őrszál leállítása a „rendben leállt” jel nélkül. */
@@ -493,6 +502,7 @@ private:
     std::mutex cvMu_;
     std::condition_variable cv_;
     bool quit_ = false;
+    bool cleanMarked_ = false;
     std::thread thread_;
 #ifdef _WIN32
     HANDLE logHandle_ = INVALID_HANDLE_VALUE;

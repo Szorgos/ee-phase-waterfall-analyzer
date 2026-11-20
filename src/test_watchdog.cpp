@@ -197,6 +197,32 @@ static void testWatchdogBasic() {
     CHECK(!fs::exists(dir / "running"), "rendes leállás után a „fut” jel törölve");
     std::error_code ec;
     fs::remove_all(dir, ec);
+
+    // Korai jelölés: a leállás elején kiírt jel (markClean) után a stopClean már nem ír felül semmit, és kétszer is hívható
+    {
+        const fs::path dir2 = makeTempDir("clean");
+        aq::wd::Registry reg2;
+        aq::health::Monitor m2;
+        auto c2 = c;
+        c2.dir = dir2.string();
+        c2.logPath = (dir2 / "engine.log").string();
+        c2.registry = &reg2;
+        const bool started2 = m2.start(c2);
+        CHECK(started2, "a második őrszem elindul");
+        if (started2) {
+            m2.markClean();
+            json::Value s3;
+            CHECK(json::parse(readFile(dir2 / "state.json"), s3) && s3.get("clean_exit") && s3.get("clean_exit")->b,
+                  "markClean után azonnal clean_exit = true");
+            CHECK(!fs::exists(dir2 / "running"), "markClean után a „fut” jel törölve");
+            m2.stopClean();
+            m2.stopClean();
+            json::Value s4;
+            CHECK(json::parse(readFile(dir2 / "state.json"), s4) && s4.get("clean_exit") && s4.get("clean_exit")->b,
+                  "stopClean után is clean_exit = true");
+        }
+        fs::remove_all(dir2, ec);
+    }
 }
 
 // ------------------------------------------------------------------------------------------------ [2]
