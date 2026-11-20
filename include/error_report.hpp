@@ -500,6 +500,28 @@ inline std::vector<std::string> tailLines(const std::filesystem::path& path, int
     return lines;
 }
 
+/** A távirányítónak olvasható napló legkisebb, alap- és legnagyobb sorszáma (error_log hídüzenet). */
+inline constexpr int kLogReadDefaultLines = 500;
+inline constexpr int kLogReadMaxLines = 1000;
+
+/**
+ * A motor naplójának utolsó sorai olvasásra (pl. egy távirányítóról, fej nélküli gépnél): ugyanúgy tisztítva, mint a
+ * jelentés (útvonal, név, gépnév, IP-, MAC- és e-mail-cím nélkül). n a [1, kLogReadMaxLines] tartományba szorul;
+ * 0 vagy negatív: alapérték. outLines: a ténylegesen visszaadott sorok száma.
+ */
+inline std::string readLogScrubbed(const std::filesystem::path& logPath, const ScrubContext& ctx, int n, int* outLines = nullptr) {
+    if (n <= 0) n = kLogReadDefaultLines;
+    n = std::min(n, kLogReadMaxLines);
+    const std::vector<std::string> lines = tailLines(logPath, n);
+    std::string text;
+    for (const auto& l : lines) {
+        text += l;
+        text += '\n';
+    }
+    if (outLines) *outLines = static_cast<int>(lines.size());
+    return scrub(text, ctx, false);
+}
+
 struct Report {
     std::string json;      // a küldhető / menthető jelentés (tisztítva)
     std::string preview;   // ugyanez olvasható formában (tisztítva)

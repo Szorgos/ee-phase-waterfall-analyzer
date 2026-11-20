@@ -1385,6 +1385,7 @@ int main(int argc, char* argv[]) {
         return reportService.saveReport(kind, symptom, note, filename, err);
     };
     cb.errorReportDismissPrevious = [&reportService] { reportService.dismissPrevious(); };
+    cb.errorLogRead = [&reportService](int lines, int& outLines) { return reportService.readLog(lines, outLines); };
 
     // Boot-partíciós aqulify-reset ellenőrzése még a híd indulása előtt
     {

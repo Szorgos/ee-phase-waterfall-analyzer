@@ -501,6 +501,17 @@ public:
         outPreview = r.preview;
     }
 
+    /**
+     * A motor naplójának utolsó sorai tisztítva (távirányítóról olvasáshoz). Hálózati kérés nincs, a hozzájárulástól
+     * független: a szöveg csak a kérő felületre megy. outLines: a visszaadott sorok száma.
+     */
+    std::string readLog(int lines, int& outLines) const {
+        outLines = 0;
+        std::shared_ptr<State> st = getState();
+        if (!st) return {};
+        return readLogScrubbed(st->logPath, makeCtx(*st), lines, &outLines);
+    }
+
     /** Mentés fájlba a diag/ mappába (új név, soha nem ír felül; outFilename csak a fájlnév). */
     bool saveReport(const std::string& kind, const std::string& symptom, const std::string& note,
                     std::string& outFilename, std::string& outError) const {

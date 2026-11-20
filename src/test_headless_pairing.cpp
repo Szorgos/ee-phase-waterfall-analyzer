@@ -643,6 +643,116 @@ void testLiveClaimSecurityAndOwnerFlow() {
     std::filesystem::remove_all(bootDir, ec);
 }
 
+/** Az első olyan üzenet, amelynek típusa want (a közbeeső állapotüzenetek átugorva); üres, ha nem jön. */
+std::string recvType(WsClient& c, const std::string& want, int tries = 20) {
+    for (int i = 0; i < tries; ++i) {
+        std::string m;
+        if (!c.recvText(m, 1000)) return {};
+        if (m.find("\"type\":\"" + want + "\"") != std::string::npos) return m;
+    }
+    return {};
+}
+
+void testRemoteErrorLog() {
+    std::cout << "[7] Fej nélküli gép naplója és hibajelentése a távirányítóról (admin igen, nem admin nem)...\n";
+    std::string remoteStore = "{\"enabled\":true,\"port\":47981,\"machine\":\"0a1b2c3d4e5f6071\",\"devices\":[]}";
+    std::mutex codeMu;
+    std::string spokenCode;
+    int speakCalls = 0;
+    std::atomic<int> logCalls{ 0 }, wantedLines{ -1 };
+
+    BridgeCallbacks cb;
+    cb.pullAudio = [](float*, size_t) -> size_t { return 0; };
+    cb.sampleRate = [] { return 48000.0; };
+    cb.getParams = [] { return transparentParams(); };
+    cb.setParams = [](const ParamData&) {};
+    cb.loadRemote = [&] { return remoteStore; };
+    cb.saveRemote = [&](const std::string& d) { remoteStore = d; return true; };
+    cb.speakClaimCode = [&](const std::string& code, const std::string&) {
+        std::lock_guard<std::mutex> lk(codeMu);
+        spokenCode = code;
+        ++speakCalls;
+        return true;
+    };
+    // Egy 400 bájtnál elvágott ékezetes sor vége (hibás UTF-8) és egy idézőjel is van benne
+    cb.errorLogRead = [&](int lines, int& outLines) {
+        ++logCalls;
+        wantedLines = lines;
+        outLines = 3;
+        return std::string("első sor\n\"idézet\" sor\nvágott \xC3\n");
+    };
+    cb.errorReportPreview = [](const std::string&, const std::string&, const std::string&, std::string& preview, size_t& bytes,
+                               bool& configured) {
+        preview = "Aqulify error report\n[log: last 1 lines]\nsor\n";
+        bytes = 123;
+        configured = true;
+    };
+
+    WebSocketBridge bridge(47980);
+    check(bridge.start(cb), "[7] bridge elindult");
+    bridge.setClaimStartCooldownForTest(0);
+    httpRequest(47981, "POST /claim/start?client=aqulify_remote&lang=hu HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n");
+    std::string code;
+    for (int i = 0; i < 40 && code.empty(); ++i) {
+        { std::lock_guard<std::mutex> lk(codeMu); if (speakCalls >= 1) code = spokenCode; }
+        if (code.empty()) std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    }
+    check(code.size() == 4, "[7] párosítási kód megvan");
+
+    WsClient owner;
+    check(owner.connect(47981, "/?claim=1&client=aqulify_remote&name=Tulaj&app=3333333333333333"), "[7] tulajdonos csatlakozott");
+    owner.sendText("{\"type\":\"claim_submit\",\"code\":\"" + code + "\"}");
+    check(!recvType(owner, "paired").empty(), "[7] tulajdonos párosítva (admin)");
+
+    // Admin: a napló megjön, a sortörés megmarad, a hibás UTF-8 bájt '?' lesz
+    owner.sendText("{\"type\":\"error_log\",\"lines\":50}");
+    const std::string logMsg = recvType(owner, "error_log");
+    json::Value lv;
+    check(!logMsg.empty() && json::parse(logMsg, lv), "[7] error_log válasz érvényes JSON");
+    const std::string text = lv.get("text") ? lv.get("text")->stringOr("") : "";
+    check(text == "első sor\n\"idézet\" sor\nvágott ?\n", "[7] a napló szövege sortörésekkel, javított UTF-8-cal érkezik");
+    check(lv.get("lines") && lv.get("lines")->numberOr(0) == 3, "[7] a sorok száma a válaszban");
+    check(lv.get("available") && lv.get("available")->type == json::Value::Type::Bool && lv.get("available")->b,
+          "[7] available=true, ha a motor bekötötte");
+    check(wantedLines.load() == 50, "[7] a kért sorszám eljut a motorig");
+
+    // Az előnézet is sortörésekkel érkezik (eddig szóköz lett belőlük)
+    owner.sendText("{\"type\":\"error_report_preview\",\"kind\":\"manual\",\"symptom\":\"noSound\"}");
+    const std::string prevMsg = recvType(owner, "error_report_preview");
+    json::Value pv;
+    check(!prevMsg.empty() && json::parse(prevMsg, pv) && pv.get("preview") &&
+              pv.get("preview")->stringOr("") == "Aqulify error report\n[log: last 1 lines]\nsor\n",
+          "[7] az előnézet sortörései megmaradnak");
+
+    // Nem admin második telefon: a tulajdonos jóváhagyja, de naplót és jelentést nem kérhet
+    std::atomic<bool> secDone{ false };
+    std::string secLogReply, secSendReply;
+    std::thread secThread([&]() {
+        WsClient sec;
+        if (!sec.connect(47981, "/?pair=request&client=aqulify_remote&name=Vendeg&app=4444444444444444")) { secDone = true; return; }
+        if (recvType(sec, "paired", 10).empty()) { secDone = true; return; }
+        sec.sendText("{\"type\":\"error_log\"}");
+        secLogReply = recvType(sec, "error");
+        sec.sendText("{\"type\":\"error_report_send\",\"kind\":\"manual\",\"symptom\":\"other\"}");
+        secSendReply = recvType(sec, "error");
+        secDone = true;
+    });
+    const std::string req = recvType(owner, "pair_request");
+    json::Value rv;
+    const std::string reqId = (!req.empty() && json::parse(req, rv) && rv.get("requestId")) ? rv.get("requestId")->stringOr("") : "";
+    check(!reqId.empty(), "[7] tulajdonos megkapta a pair_request-et");
+    owner.sendText("{\"type\":\"pair_approve\",\"requestId\":\"" + reqId + "\",\"approve\":true}");
+    secThread.join();
+    check(secLogReply.find("\"error\":\"remote\"") != std::string::npos && secLogReply.find("\"request\":\"error_log\"") != std::string::npos,
+          "[7] nem admin telefon error_log kérése elutasítva");
+    check(secSendReply.find("\"request\":\"error_report_send\"") != std::string::npos,
+          "[7] nem admin telefon nem küldhet hibajelentést");
+    check(logCalls.load() == 1, "[7] a nem admin kérés nem olvasta a naplót");
+
+    owner.close();
+    bridge.stop();
+}
+
 void testClaimAudioWavBuild() {
     std::cout << "[6] Számjegy-hangminták (0-9) összefűzése és angol fallback...\n";
     // A forrásfa data/claim_audio mappáját keressük (a teszt build-wsl-ből vagy gyökérből is futhat)
@@ -680,6 +790,7 @@ int main() {
     testBootReset();
     testMigrationLegacyRemoteJson();
     testLiveClaimSecurityAndOwnerFlow();
+    testRemoteErrorLog();
     testClaimAudioWavBuild();
     net::cleanup();
 

@@ -223,6 +223,11 @@ struct BridgeCallbacks {
                        std::string& outFilename, std::string& outError)> errorReportSave;
     /** Az előző rendellenes futás helyi jelentésének elutasítása (törlése). */
     std::function<void()> errorReportDismissPrevious;
+    /**
+     * A motor naplójának utolsó sorai tisztítva (Service::readLog): a távirányító így a fej nélküli gép naplóját is
+     * olvashatja. lines: kért sorszám (0: alapérték); outLines: a visszaadott sorok száma.
+     */
+    std::function<std::string(int lines, int& outLines)> errorLogRead;
 };
 
 /**
@@ -2407,9 +2412,18 @@ private:
             return;
         }
         if (type == "error_report_preview" || type == "error_report_send" || type == "error_report_save" ||
-            type == "error_report_dismiss_previous") {
+            type == "error_report_dismiss_previous" || type == "error_log") {
             if (remote && !curIsAdmin()) {
-                sendText("{\"type\":\"error\",\"error\":\"remote\"}");
+                sendText("{\"type\":\"error\",\"error\":\"remote\",\"request\":\"" + type + "\"}");
+                return;
+            }
+            if (type == "error_log") {
+                // A motor naplója tisztítva (fej nélküli gépnél a távirányító csak így látja)
+                int got = 0;
+                const int want = static_cast<int>(num(msg, "lines", 0.0));
+                const std::string text = cb_.errorLogRead ? cb_.errorLogRead(want, got) : std::string();
+                sendText("{\"type\":\"error_log\",\"available\":" + std::string(cb_.errorLogRead ? "true" : "false") +
+                         ",\"lines\":" + std::to_string(got) + ",\"text\":\"" + jsonEscapeText(text) + "\"}");
                 return;
             }
             auto getStr = [&](const char* k) -> std::string {
@@ -2431,7 +2445,7 @@ private:
                 bool configured = false;
                 cb_.errorReportPreview(kind, symptom, note, preview, bytes, configured);
                 sendText("{\"type\":\"error_report_preview\",\"kind\":\"" + kind + "\",\"preview\":\"" +
-                         jsonEscape(preview) + "\",\"bytes\":" + std::to_string(bytes) + ",\"configured\":" +
+                         jsonEscapeText(preview) + "\",\"bytes\":" + std::to_string(bytes) + ",\"configured\":" +
                          (configured ? "true" : "false") + "}");
                 return;
             }
@@ -2940,6 +2954,50 @@ private:
         return out;
     }
 
+public:
+    /**
+     * Többsoros szöveg (napló, jelentés előnézete) JSON-karakterlánccá: a sortörés \n marad (a jsonEscape szóközzé
+     * tenné), a \r elmarad, a hibás UTF-8 bájt (pl. egy 400 bájtnál elvágott ékezetes sor vége) '?' lesz, mert a
+     * böngésző hibás UTF-8 szövegkeretnél bontja a kapcsolatot.
+     */
+    static std::string jsonEscapeText(const std::string& in) {
+        std::string out;
+        out.reserve(in.size() + 16);
+        const size_t n = in.size();
+        for (size_t i = 0; i < n;) {
+            const unsigned char c = static_cast<unsigned char>(in[i]);
+            if (c < 0x80) {
+                if (c == '"' || c == '\\') { out += '\\'; out += static_cast<char>(c); }
+                else if (c == '\n') out += "\\n";
+                else if (c == '\t') out += "\\t";
+                else if (c == '\r') {}
+                else if (c < 0x20 || c == 0x7f) out += ' ';
+                else out += static_cast<char>(c);
+                ++i;
+                continue;
+            }
+            size_t len = 0;
+            uint32_t cp = 0;
+            if ((c & 0xE0) == 0xC0) { len = 2; cp = c & 0x1F; }
+            else if ((c & 0xF0) == 0xE0) { len = 3; cp = c & 0x0F; }
+            else if ((c & 0xF8) == 0xF0) { len = 4; cp = c & 0x07; }
+            bool ok = len > 0 && i + len <= n;
+            for (size_t k = 1; ok && k < len; ++k) {
+                const unsigned char cc = static_cast<unsigned char>(in[i + k]);
+                if ((cc & 0xC0) != 0x80) ok = false;
+                else cp = (cp << 6) | (cc & 0x3F);
+            }
+            // Túl hosszú kódolás, helyettesítő tartomány és 0x10FFFF fölötti érték is hibás
+            if (ok && ((len == 2 && cp < 0x80) || (len == 3 && cp < 0x800) || (len == 4 && (cp < 0x10000 || cp > 0x10FFFF)) ||
+                       (cp >= 0xD800 && cp <= 0xDFFF)))
+                ok = false;
+            if (ok) { out.append(in, i, len); i += len; }
+            else { out += '?'; ++i; }
+        }
+        return out;
+    }
+
+private:
     static void appendFloat(std::string& s, double v, int decimals) {
         char tmp[32];
         std::snprintf(tmp, sizeof(tmp), "%.*f", decimals, v);

@@ -383,6 +383,40 @@ int main() {
         }
         fs::remove_all(dir);
 
+        // 6. Napló olvasása távirányítóról (Service::readLog): tisztítva, sorszám-korláttal, hálózati kérés nélkül
+        {
+            const fs::path ldir = makeTempDir("logread");
+            {
+                std::ofstream f(ldir / "engine.log", std::ios::binary);
+                for (int i = 1; i <= 1200; ++i) f << "sor " << i << "\n";
+                f << "Kapcsolat: valaki@pelda.hu 192.168.1.23 eszkoz: NappaliTelefon\n";
+                f << "utolso sor\n";
+            }
+            const int beforeLog = srv.requestCount();
+            aq::report::Service svc;
+            svc.start(ldir, ldir / "engine.log", { "NappaliTelefon" }, false, srv.url(), localTransport);
+            int got = 0;
+            const std::string def = svc.readLog(0, got);
+            CHECK(got == aq::report::kLogReadDefaultLines, "readLog(0): alapertelmezett sorszam");
+            CHECK(def.find("utolso sor\n") != std::string::npos, "readLog: az utolso sor benne van");
+            CHECK(def.find("sor 1\n") == std::string::npos, "readLog: a legregebbi sorok kimaradnak");
+            CHECK(def.find("valaki@pelda.hu") == std::string::npos && def.find("<email>") != std::string::npos,
+                  "readLog: e-mail-cim tisztitva");
+            CHECK(def.find("192.168.1.23") == std::string::npos && def.find("<ip>") != std::string::npos,
+                  "readLog: IP-cim tisztitva");
+            CHECK(def.find("NappaliTelefon") == std::string::npos && def.find("<name>") != std::string::npos,
+                  "readLog: parositott eszkoz neve tisztitva");
+            svc.readLog(5000, got);
+            CHECK(got == aq::report::kLogReadMaxLines, "readLog: a keres a felso korlatra szorul");
+            svc.readLog(3, got);
+            CHECK(got == 3, "readLog(3): pontosan 3 sor");
+            CHECK(srv.requestCount() == beforeLog, "readLog: nincs halozati keres");
+            svc.stop();
+            int none = -1;
+            CHECK(svc.readLog(10, none).empty() && none == 0, "leallitott Service: ures naplo");
+            fs::remove_all(ldir);
+        }
+
         // Hálózati hiba (leállított szerver portja)
         const std::string deadUrl = srv.url();
         srv.stop();
