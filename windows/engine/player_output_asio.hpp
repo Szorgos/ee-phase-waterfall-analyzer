@@ -183,21 +183,8 @@ public:
             44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000
         };
         std::vector<uint32_t> res;
-        if (isOpen_.load(std::memory_order_acquire)) {
-            std::lock_guard<std::mutex> lk(drvQueryMutex_);
-            if (drv_) {
-                for (uint32_t r : kCandidates) {
-                    if (drv_->canSampleRate(static_cast<ASIOSampleRate>(r)) == ASE_OK) {
-                        res.push_back(r);
-                    }
-                }
-                std::lock_guard<std::mutex> clk(ratesCacheMutex_);
-                cachedRates_ = res;
-                cachedDriverId_ = driverIdOrName_;
-                ratesCacheValid_ = true;
-                return res;
-            }
-        }
+        // Nyitott meghajtónál sosem hívunk át a meghajtóba más szálról (a meghajtó a vezérlőszál STA-jában él, és
+        // egy blokkoló hívás lefagyasztaná a hívót): a vezérlőszál megnyitáskor eltárolja a listát.
         {
             std::lock_guard<std::mutex> clk(ratesCacheMutex_);
             if (ratesCacheValid_ && cachedDriverId_ == driverIdOrName_) {
@@ -235,12 +222,9 @@ public:
     }
 
     uint32_t actualRate() const override {
+        // Szálközi meghajtóhívás nélkül: a vezérlőszál frissíti (megnyitáskor és indításkor).
         if (!isOpen_.load(std::memory_order_acquire)) return 0;
-        std::lock_guard<std::mutex> lk(drvQueryMutex_);
-        if (!drv_) return 0;
-        ASIOSampleRate sr = 0.0;
-        if (drv_->getSampleRate(&sr) != ASE_OK || sr <= 0.0) return 0;
-        return static_cast<uint32_t>(std::llround(sr));
+        return actualRate_.load(std::memory_order_acquire);
     }
 
     bool isOpen() const { return isOpen_.load(std::memory_order_acquire); }
@@ -571,6 +555,24 @@ private:
             return;
         }
 
+        // A támogatott sebességek listája itt, a meghajtó saját szálán (PCM formátumban, mint a zárt állapotú próba)
+        {
+            static constexpr uint32_t kCand[] = {
+                44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000
+            };
+            ASIOIoFormat probeFmt{};
+            probeFmt.FormatType = kASIOPCMFormat;
+            drv->future(kAsioSetIoFormat, &probeFmt);
+            std::vector<uint32_t> rates;
+            for (uint32_t r : kCand) {
+                if (drv->canSampleRate(static_cast<ASIOSampleRate>(r)) == ASE_OK) rates.push_back(r);
+            }
+            std::lock_guard<std::mutex> clk(ratesCacheMutex_);
+            cachedRates_ = std::move(rates);
+            cachedDriverId_ = driverIdOrName_;
+            ratesCacheValid_ = true;
+        }
+
         if (!dopMode_) {
             ASIOIoFormat pcmFmt{};
             pcmFmt.FormatType = kASIOPCMFormat;
@@ -697,6 +699,14 @@ private:
             std::lock_guard<std::mutex> qlk(drvQueryMutex_);
             drv_ = drv;
         }
+        auto refreshActualRate = [&]() {
+            ASIOSampleRate sr = 0.0;
+            const uint32_t v = (drv->getSampleRate(&sr) == ASE_OK && sr > 0.0)
+                                   ? static_cast<uint32_t>(std::llround(sr)) : 0u;
+            actualRate_.store(v, std::memory_order_release);
+        };
+        refreshActualRate();
+        outDrv_.store(drv, std::memory_order_release);
         isOpen_.store(true, std::memory_order_release);
         {
             std::lock_guard<std::mutex> lk(initMutex_);
@@ -753,6 +763,7 @@ private:
                     break;
                 }
                 started = true;
+                refreshActualRate();
                 cbHb_.beat();   // a visszahívás órája innen indul (a régi időbélyeg ne számítson kiesésnek)
                 running_.store(true, std::memory_order_release);
             } else if (!wantActive && started) {
@@ -786,6 +797,9 @@ private:
         if (drv && started) stopDriverQuietly();
         running_.store(false, std::memory_order_release);
         isOpen_.store(false, std::memory_order_release);
+        // A stop() után már nincs visszahívás: csak ezután vesszük el a visszahívás meghajtómutatóját
+        outDrv_.store(nullptr, std::memory_order_release);
+        actualRate_.store(0, std::memory_order_release);
         {
             std::lock_guard<std::mutex> qlk(drvQueryMutex_);
             drv_ = nullptr;
@@ -872,7 +886,7 @@ private:
                 while (left > 0 && !drainBuffersLeft_.compare_exchange_weak(left, left - 1, std::memory_order_acq_rel)) {}
                 if (left <= 1 && wake_) SetEvent(wake_);
             }
-            if (drv_) drv_->outputReady();
+            if (IASIO* od = outDrv_.load(std::memory_order_acquire)) od->outputReady();
             return;
         }
 
@@ -905,7 +919,7 @@ private:
                 dstR[2 * i]     = b0R;
                 dstR[2 * i + 1] = b1R;
             }
-            if (drv_) drv_->outputReady();
+            if (IASIO* od = outDrv_.load(std::memory_order_acquire)) od->outputReady();
             consumedFrames_.fetch_add(dopFrames, std::memory_order_release);
             return;
         }
@@ -985,7 +999,7 @@ private:
             }
         }
 
-        if (drv_) drv_->outputReady();
+        if (IASIO* od = outDrv_.load(std::memory_order_acquire)) od->outputReady();
         consumedFrames_.fetch_add(n, std::memory_order_release);
     }
 
@@ -1008,6 +1022,8 @@ private:
 
     mutable std::mutex drvQueryMutex_;
     IASIO* drv_ = nullptr;
+    std::atomic<IASIO*> outDrv_{nullptr};      // a visszahívás outputReady()-hez; a stop() után nullázzuk
+    std::atomic<uint32_t> actualRate_{0};      // a vezérlőszál tölti, más szál csak ezt olvassa
 
     mutable std::mutex ratesCacheMutex_;
     mutable std::vector<uint32_t> cachedRates_;
