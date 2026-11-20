@@ -37,7 +37,7 @@ bash tools/pi/pi_deb_build.sh [a motor forrásmappája, alap: a tároló gyöker
 A kész csomagot a Debian csomagkezelőjével (`apt`) telepítsd, hogy a futásidejű függőségeket (`pipewire`, `hicolor-icon-theme` és a szükséges megosztott könyvtárak – `debian/control` 12. sor) automatikusan feloldja:
 
 ```bash
-sudo apt install ./aqulify_2.7.0-1~pi1_arm64.deb
+sudo apt install ./aqulify_2.8.0-1~pi1_arm64.deb
 ```
 
 ### Telepített fájlok (`debian/rules`)
