@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <condition_variable>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -27,6 +28,7 @@
 #include "report_sender.hpp"
 #include "library_bridge.hpp"
 #include "linux_store.hpp"
+#include "live_upsample.hpp"
 #include "load_advisor.hpp"
 #include "media_mpris.hpp"
 #include "pair_cli.hpp"
@@ -965,6 +967,21 @@ int main(int argc, char* argv[]) {
     bool ratesTouched = false;
     std::atomic<bool> playerStreamOpenFlag{false};
     auto playerStreamOpen = [&]() { return playerStreamOpenFlag.load(); };
+    // Felmintavételezés az élő úton (más programból, pl. MPD-ből az Aqulify eszközre szóló hang; live_upsample.hpp):
+    // a gráf mintavétele a célra emelkedik (clock.force-rate), a forrást a PipeWire saját átalakítója hozza fel.
+    std::mutex liveMu;
+    std::condition_variable liveCv;
+    bool liveWake = false, liveQuit = false;          // liveMu alatt
+    uint32_t liveForced = 0;                          // az általunk kért force-rate (0: nincs); liveMu alatt
+    liveups::Decision liveState;                      // a felületnek; liveMu alatt
+    bool liveDacKnown = false;                        // liveMu alatt
+    // A kényszer feloldása: forrás-követésnél 0, rendszer-mintavételnél az eredeti érték. liveMu alatt hívandó.
+    auto liveReleaseLocked = [&](audioopt::RateMode rm) {
+        if (liveForced == 0) return;
+        pwSetSetting("clock.force-rate", rm == audioopt::RateMode::System && !origForceRate.empty() ? origForceRate : "0");
+        std::cout << "[Felmintavételezés] Élő út: a gráf mintavétele újra szabad.\n";
+        liveForced = 0;
+    };
     auto applyAudio = [&](const audioopt::AudioOptions& o) {
         audioopt::resampleQuality().store(o.resampleQuality);
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
@@ -984,6 +1001,14 @@ int main(int argc, char* argv[]) {
         const bool pauseForPlayer = o.rateMode == audioopt::RateMode::Follow && playerStreamOpen();
         node.setAudioOptions(o.bufferFrames, o.keepAwake && !pauseForPlayer, autoQ > 0 ? autoQ : 1024);
         node.setRateFollow(o.rateMode == audioopt::RateMode::Follow);
+        {
+            // Az alábbi ágak a force-rate-et felülírják (forrás-követés, fix, vagy visszaállítás): az élő út kényszere
+            // így megszűnik; a figyelő szál az új beállítás szerint azonnal újra dönt
+            std::lock_guard<std::mutex> lk(liveMu);
+            if (o.rateMode != audioopt::RateMode::System || ratesTouched) liveForced = 0;
+            liveWake = true;
+        }
+        liveCv.notify_all();
         if (o.rateMode == audioopt::RateMode::Follow) {
             pwSetSetting("clock.force-rate", "0");
             // A forrás (vagy a felmintavételezés célja) szerint vált a gráf; a hangkártya által nem tudott értéket a
@@ -1109,6 +1134,13 @@ int main(int argc, char* argv[]) {
     player::pwBeforeOpenHook() = [&](uint32_t) {
         s_playerTicket.fetch_add(1);
         s_playerOpen = true;
+        {
+            // A beépített lejátszó a saját (libsoxr-es) útján dönt a mintavételről: az élő út kényszere megszűnik
+            audioopt::RateMode rm = audioopt::RateMode::System;
+            { std::lock_guard<std::mutex> lk(audioMutex); rm = audioOpts.rateMode; }
+            std::lock_guard<std::mutex> lk(liveMu);
+            liveReleaseLocked(rm);
+        }
         bool paused = false;
         {
             std::lock_guard<std::mutex> lk(audioMutex);
@@ -1132,6 +1164,81 @@ int main(int argc, char* argv[]) {
             node.setAudioOptions(audioOpts.bufferFrames, true, autoQ);
         }).detach();
     };
+    // Az élő út figyelője: másodpercenként megnézi, milyen mintavételű külső hangfolyam szól az Aqulify eszközre, és
+    // bekapcsolt felmintavételezésnél a gráfot a célra állítja. Csak akkor kérdez (pactl), ha van mit eldönteni.
+    std::thread liveThread([&] {
+        std::string ownSinkId, dacSinkId;
+        std::vector<uint32_t> dacRates;
+        int idleTicks = 0;
+        const std::vector<uint32_t> fallback{ 44100, 48000, 88200, 96000, 176400, 192000 };
+        for (;;) {
+            audioopt::AudioOptions o;
+            { std::lock_guard<std::mutex> lk(audioMutex); o = audioOpts; }
+            const bool relevant = o.upsampleRule != audioopt::UpsampleRule::Off && o.rateMode != audioopt::RateMode::Fixed;
+            {
+                std::unique_lock<std::mutex> lk(liveMu);
+                liveCv.wait_for(lk, std::chrono::milliseconds(relevant ? 1000 : 5000), [&] { return liveWake || liveQuit; });
+                if (liveQuit) return;
+                liveWake = false;
+            }
+            { std::lock_guard<std::mutex> lk(audioMutex); o = audioOpts; }
+            uint32_t src = 0;
+            const bool playerOpen = s_playerOpen.load();
+            if (o.upsampleRule != audioopt::UpsampleRule::Off && o.rateMode != audioopt::RateMode::Fixed && !playerOpen) {
+                if (ownSinkId.empty()) ownSinkId = liveups::sinkIdByName(runCapture("pactl list short sinks"), "aqulify_sink");
+                const auto inputs = liveups::parseSinkInputs(runCapture("pactl list sink-inputs"));
+                src = liveups::liveSourceRate(inputs, ownSinkId);
+                std::string outSink;
+                for (const auto& s : inputs)
+                    if (s.nodeName == "aqulify_sink_output") outSink = s.sinkId;
+                if (src > 0 && outSink != dacSinkId) {   // a DAC (a mi kimenetünk célja) tudott mintavételei
+                    dacSinkId = outSink;
+                    dacRates.clear();
+                    const int card = liveups::alsaCardOfSink(runCapture("pactl list sinks"), outSink);
+                    if (card >= 0) {
+                        std::ifstream f("/proc/asound/card" + std::to_string(card) + "/stream0");
+                        const std::string txt((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+                        dacRates = liveups::parseStream0PlaybackRates(txt);
+                    }
+                }
+            }
+            const liveups::Decision d = liveups::decide(src, o, dacRates, fallback, playerOpen);
+            std::lock_guard<std::mutex> lk(liveMu);
+            if (liveQuit) return;
+            liveState = d;
+            liveDacKnown = !dacRates.empty();
+            // Szám közti szünetnél (nincs forrás) nem engedjük el rögtön: 3 s után
+            idleTicks = (d.reason == "no_source") ? idleTicks + 1 : 0;
+            if (d.forceRate > 0) {
+                if (d.forceRate != liveForced) {
+                    pwSetSetting("clock.force-rate", std::to_string(d.forceRate));
+                    std::cout << "[Felmintavételezés] Élő út: " << d.srcRate << " Hz -> " << d.forceRate
+                              << " Hz (a PipeWire átalakítójával; a DAC mintavételei: "
+                              << (dacRates.empty() ? std::string("ismeretlen") : std::to_string(dacRates.size()) + " db") << ").\n";
+                    liveForced = d.forceRate;
+                }
+            } else if (liveForced != 0 && (d.reason != "no_source" || idleTicks >= 3)) {
+                liveReleaseLocked(o.rateMode);
+            }
+        }
+    });
+    auto stopLiveThread = [&] {
+        {
+            std::lock_guard<std::mutex> lk(liveMu);
+            liveQuit = true;
+        }
+        liveCv.notify_all();
+        if (liveThread.joinable()) liveThread.join();
+        audioopt::RateMode rm = audioopt::RateMode::System;
+        { std::lock_guard<std::mutex> lk(audioMutex); rm = audioOpts.rateMode; }
+        std::lock_guard<std::mutex> lk(liveMu);
+        liveReleaseLocked(rm);
+    };
+    // Korai kilépésnél (pl. foglalt portok) is le kell állnia, különben a std::thread megszűnése leállítja a programot
+    struct LiveStopper {
+        std::function<void()> f;
+        ~LiveStopper() { if (f) f(); }
+    } liveStopper{ stopLiveThread };
     cb.audioOptionsJson = [&]() -> std::string {
         std::lock_guard<std::mutex> lk(audioMutex);
 #if defined(AQ_HAVE_ALSA)
@@ -1233,10 +1340,20 @@ int main(int argc, char* argv[]) {
                           uResampleWarn ? "true" : "false", uReason.c_str(),
                           static_cast<unsigned long long>(uClipped),
                           static_cast<unsigned long long>(uProcessed), uDelayMs);
+            // Élő út (más programból az Aqulify eszközre szóló hang): a PipeWire átalakítójával, nem a libsoxr-rel
+            char lbuf[256];
+            {
+                std::lock_guard<std::mutex> lk(liveMu);
+                std::snprintf(lbuf, sizeof(lbuf),
+                              ",\"liveUpsample\":{\"active\":%s,\"srcRate\":%u,\"targetRate\":%u,\"actualDacRate\":%u,"
+                              "\"reason\":\"%s\",\"dacRatesKnown\":%s,\"converter\":\"pipewire\"}",
+                              liveForced > 0 ? "true" : "false", liveState.srcRate, liveForced, node.actualGraphRate(),
+                              jsonEscape(liveState.reason).c_str(), liveDacKnown ? "true" : "false");
+            }
             audioopt::AudioOptions curOpts;
             { std::lock_guard<std::mutex> lk(audioMutex); curOpts = audioOpts; }
             const bool dspBypassed = node.chain.dspBypassedForRate() || filePlayer.streamRate() > audioopt::kMaxDspRate;
-            return s + buf + ubuf +
+            return s + buf + ubuf + lbuf +
                    loadTracker.json(curOpts, uActive ? uTgt : uSrc, filePlayer.underruns(), dspBypassed,
                                     filePlayer.upsampleThreadsInUse(), filePlayer.dedicatedCoreApplied());
         };
@@ -1381,6 +1498,7 @@ int main(int argc, char* argv[]) {
         std::lock_guard<std::mutex> lk(paramMutex);
         if (dirty) linux_store::saveParams(current);
     }
+    stopLiveThread();   // az élő út kényszere megszűnik, mielőtt az eredeti beállítás visszaáll
     {
         // A PipeWire mintavételi beállítása visszaáll (a program bezárása után a rendszer a régi)
         audioopt::AudioOptions off = audioOpts;

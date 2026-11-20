@@ -10610,11 +10610,20 @@ function upsRenderStatus() {
     parts.push(`<span>${t("ups.statusHighRate")}</span>`);
   } else if (u.reason === "bypass") {
     parts.push(`<span>${t("ups.statusBypass")}</span>`);
-  } else {
+  } else if (!(engineStatus.liveUpsample && engineStatus.liveUpsample.active)) {
     parts.push(`<span>${t("ups.statusOff")}</span>`);
   }
   if (u.clippedSamples > 0) {
     parts.push(`<span class="warn">${t("ups.statusClipped", { count: u.clippedSamples })}</span>`);
+  }
+  // Élő út (más programból, pl. MPD-ből az Aqulify eszközre szóló hang): a PipeWire alakít át, nem a libsoxr
+  const lu = engineStatus && engineStatus.liveUpsample;
+  if (lu && lu.active) {
+    parts.push(`<span class="ok">● ${t("ups.liveActive", { src: aoKhz(lu.srcRate), dst: aoKhz(lu.actualDacRate || lu.targetRate) })}</span>`);
+  } else if (lu && lu.reason === "dac_unsupported") {
+    parts.push(`<span class="warn">● ${t("ups.liveUnsupported", { src: aoKhz(lu.srcRate) })}</span>`);
+  } else if (lu && lu.reason === "rate_mode") {
+    parts.push(`<span>${t("ups.liveFixedRate")}</span>`);
   }
   const la = engineStatus && engineStatus.loadAdvisor;
   if (la && u.active) {

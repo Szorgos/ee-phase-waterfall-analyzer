@@ -15,6 +15,7 @@ run "Motor: útonkénti EQ" python3 -I "$HERE/way_eq_live.py"
 run "Motor: DSP-modulok" python3 -I "$HERE/modules_live.py"
 run "Motor: haladó hangkimenet" python3 -I "$HERE/audio_opts_live.py"
 run "Motor: felmintavételezés" python3 -I "$HERE/upsample_live.py"
+run "Motor: felmintavételezés az élő úton" python3 -I "$HERE/live_upsample_live.py"
 run "Motor: nagy felbontás (352,8–768 kHz)" python3 -I "$HERE/hires_live.py"
 if command -v node >/dev/null 2>&1 && node -e "require('playwright')" 2>/dev/null; then
     run "Felület: több kimenet" node "$HERE/gui_multiout_live.js"

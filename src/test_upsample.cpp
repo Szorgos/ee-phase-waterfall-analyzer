@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "upsample_engine.hpp"
+#include "live_upsample.hpp"
 
 static int g_fail = 0;
 #define CHECK(cond, ...) do { if (!(cond)) { ++g_fail; std::printf("  [HIBA] " __VA_ARGS__); } else { std::printf("  [OK]   " __VA_ARGS__); } std::printf("\n"); } while (0)
@@ -581,6 +582,113 @@ static void testRandomMatrixSeed(uint32_t seed) {
     CHECK(passCount == 60, "8.3 SEED: Mind a 60 véletlen konfiguráció sikeresen lefutott");
 }
 
+// K13: élő út (más programból, pl. MPD-ből az Aqulify eszközre szóló hang) – a pactl / /proc/asound szövegének
+// értelmezése és a gráf célmintavételének döntése (live_upsample.hpp)
+static void testK13LiveUpsample() {
+    using namespace ee_analyzer;
+    std::printf("\n[K13] Élő út: forrásmintavétel, DAC-mintavételek, döntés\n");
+    const std::string shortSinks =
+        "57\talsa_output.usb-BurrBrown_from_Texas_Instruments_USB_AUDIO_DAC-00.analog-stereo\tPipeWire\ts16le 2ch 44100Hz\tRUNNING\n"
+        "61\taqulify_sink\tPipeWire\tfloat32le 2ch 48000Hz\tRUNNING\n";
+    const std::string inputs =
+        "Sink Input #70\n"
+        "\tDriver: PipeWire\n"
+        "\tSink: 57\n"
+        "\tSample Specification: float32le 2ch 48000Hz\n"
+        "\tCorked: no\n"
+        "\tProperties:\n"
+        "\t\tnode.name = \"aqulify_sink_output\"\n"
+        "\t\tmedia.role = \"DSP\"\n"
+        "\n"
+        "Sink Input #75\n"
+        "\tDriver: PipeWire\n"
+        "\tSink: 61\n"
+        "\tSample Specification: s16le 2ch 44100Hz\n"
+        "\tCorked: no\n"
+        "\tProperties:\n"
+        "\t\tapplication.name = \"Music Player Daemon\"\n"
+        "\t\tnode.name = \"Music Player Daemon\"\n"
+        "\n"
+        "Sink Input #80\n"
+        "\tSink: 61\n"
+        "\tSample Specification: float32le 2ch 192000Hz\n"
+        "\tCorked: no\n"
+        "\tProperties:\n"
+        "\t\tapplication.name = \"Aqulify\"\n"
+        "\t\tnode.name = \"aqulify_sink_keepalive\"\n"
+        "\n"
+        "Sink Input #81\n"
+        "\tSink: 61\n"
+        "\tSample Specification: s32le 2ch 96000Hz\n"
+        "\tCorked: yes\n"
+        "\tProperties:\n"
+        "\t\tnode.name = \"Firefox\"\n";
+    const std::string own = liveups::sinkIdByName(shortSinks, "aqulify_sink");
+    CHECK(own == "61", "K13: a saját nyelő azonosítója a pactl short listából (%s)", own.c_str());
+    const auto in = liveups::parseSinkInputs(inputs);
+    CHECK(in.size() == 4 && in[1].rate == 44100 && in[1].sinkId == "61" && !in[1].corked && in[3].corked,
+          "K13: sink-inputs értelmezése (%zu db, MPD %u Hz)", in.size(), in.size() > 1 ? in[1].rate : 0u);
+    const uint32_t src = liveups::liveSourceRate(in, own);
+    CHECK(src == 44100, "K13: forrás = MPD 44100 (saját ébren tartó és szüneteltetett kihagyva): %u", src);
+    CHECK(liveups::liveSourceRate(in, "57") == 0, "K13: a DAC-ra közvetlenül szóló hang nem forrása az élő útnak");
+    CHECK(liveups::liveSourceRate(in, "") == 0, "K13: ismeretlen saját nyelőnél nincs forrás");
+
+    const std::string sinks =
+        "Sink #57\n\tState: RUNNING\n\tName: alsa_output.usb-BurrBrown\n\tProperties:\n"
+        "\t\talsa.card = \"1\"\n\t\tdevice.api = \"alsa\"\n"
+        "Sink #61\n\tName: aqulify_sink\n\tProperties:\n\t\tnode.virtual = \"true\"\n";
+    CHECK(liveups::alsaCardOfSink(sinks, "57") == 1, "K13: a DAC ALSA-kártyaszáma a pactl list sinks-ből");
+    CHECK(liveups::alsaCardOfSink(sinks, "61") == -1, "K13: virtuális nyelőnek nincs kártyaszáma");
+
+    // PCM2704-szerű USB DAC: csak 32/44,1/48 kHz (a Capture rész nem számít)
+    const std::string stream0Fixed =
+        "BurrBrown from Texas Instruments USB AUDIO  DAC at usb-3f980000.usb-1.3, full speed : USB Audio\n\n"
+        "Playback:\n  Status: Running\n  Interface 1\n    Altset 1\n    Format: S16_LE\n    Channels: 2\n"
+        "    Rates: 32000, 44100, 48000\n"
+        "Capture:\n  Interface 2\n    Altset 1\n    Rates: 8000, 16000, 96000\n";
+    const auto rFixed = liveups::parseStream0PlaybackRates(stream0Fixed);
+    CHECK((rFixed == std::vector<uint32_t>{ 32000, 44100, 48000 }), "K13: stream0 diszkrét lejátszási mintavételek (%zu db)", rFixed.size());
+    const std::string stream0Cont =
+        "Playback:\n  Interface 1\n    Altset 1\n    Rates: 44100 - 192000 (continuous)\n"
+        "    Altset 2\n    Rates: 44100, 48000, 88200, 96000\n";
+    const auto rCont = liveups::parseStream0PlaybackRates(stream0Cont);
+    CHECK((rCont == std::vector<uint32_t>{ 44100, 48000, 88200, 96000, 176400, 192000 }),
+          "K13: stream0 folytonos tartomány a szabványos mintavételekre bontva (%zu db)", rCont.size());
+
+    const std::vector<uint32_t> fallback{ 44100, 48000, 88200, 96000, 176400, 192000 };
+    audioopt::AudioOptions o;
+    o.rateMode = audioopt::RateMode::Follow;
+    o.upsampleRule = audioopt::UpsampleRule::Double;
+    auto d = liveups::decide(44100, o, rFixed, fallback, false);
+    CHECK(d.forceRate == 0 && d.reason == "dac_unsupported",
+          "K13: csak 48 kHz-ig tudó DAC-nál nincs kényszer (88,2 kHz-et a DAC nem tud): %u, %s", d.forceRate, d.reason.c_str());
+    d = liveups::decide(44100, o, rCont, fallback, false);
+    CHECK(d.forceRate == 88200 && d.reason.empty(), "K13: ×2 → 88200 a 192 kHz-es DAC-nál: %u", d.forceRate);
+    d = liveups::decide(44100, o, {}, fallback, false);
+    CHECK(d.forceRate == 88200, "K13: ismeretlen DAC-nál a beépített lejátszóéval azonos lista dönt: %u", d.forceRate);
+    o.upsampleRule = audioopt::UpsampleRule::PowerOfTwo;
+    o.upsampleMaxRate = 96000;
+    d = liveups::decide(48000, o, rCont, fallback, false);
+    CHECK(d.forceRate == 96000, "K13: legnagyobb ×2ⁿ a felső korláttal (96 kHz): %u", d.forceRate);
+    o.upsampleMaxRate = 0;
+    d = liveups::decide(48000, o, rCont, fallback, true);
+    CHECK(d.forceRate == 0 && d.reason == "player", "K13: amíg a beépített lejátszó szól, az élő út nem kényszerít");
+    d = liveups::decide(0, o, rCont, fallback, false);
+    CHECK(d.forceRate == 0 && d.reason == "no_source", "K13: forrás nélkül nincs kényszer");
+    o.rateMode = audioopt::RateMode::Fixed;
+    d = liveups::decide(44100, o, rCont, fallback, false);
+    CHECK(d.forceRate == 0 && d.reason == "rate_mode", "K13: fix mintavételnél a felhasználó választása erősebb");
+    o.rateMode = audioopt::RateMode::System;
+    d = liveups::decide(44100, o, rCont, fallback, false);
+    CHECK(d.forceRate == 176400, "K13: rendszer-mintavételnél is működik (×2ⁿ → 176400): %u", d.forceRate);
+    o.upsampleRule = audioopt::UpsampleRule::Off;
+    d = liveups::decide(44100, o, rCont, fallback, false);
+    CHECK(d.forceRate == 0 && d.reason == "off", "K13: kikapcsolva nincs kényszer");
+    o.upsampleRule = audioopt::UpsampleRule::Double;
+    d = liveups::decide(352800, o, rCont, fallback, false);
+    CHECK(d.forceRate == 0 && d.reason == "source_rate", "K13: 192 kHz fölötti forrásnál nincs átalakítás");
+}
+
 template <class EngT = ee_analyzer::UpsampleEngine>
 static void testUpsampleDspSuite() {
     testK2RulesMatrix();
@@ -609,6 +717,7 @@ int main() {
     std::printf("========================================================\n");
 
     testUpsampleDspSuite<ee_analyzer::UpsampleEngine>();
+    testK13LiveUpsample();
 
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
