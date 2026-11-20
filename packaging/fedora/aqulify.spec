@@ -91,6 +91,8 @@ fi
 %{_bindir}/aqulify-play
 %{_bindir}/aqulify-gui
 %{_datadir}/aqulify/
+%{_libdir}/aqulify/
+%{_unitdir}/aqulify-reset.service
 %{_datadir}/applications/io.github.szorgos.Aqulify.desktop
 %{_metainfodir}/io.github.szorgos.Aqulify.metainfo.xml
 %{_datadir}/icons/hicolor/256x256/apps/aqulify.png
