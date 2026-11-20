@@ -1,0 +1,9 @@
+Aqulify Headless Claim Audio (0-9 digits: en, hu)
+=================================================
+
+Source: Generated locally by tools/gen_claim_audio.py using a self-contained
+formant synthesizer written specifically for Aqulify (no external TTS engine,
+no external audio downloads, no third-party recordings).
+
+License: CC0-1.0 Universal (Public Domain Dedication) / same license as Aqulify.
+Fallback: Languages without dedicated digit samples fall back to English (en/).

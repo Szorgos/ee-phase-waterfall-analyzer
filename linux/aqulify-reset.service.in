@@ -1,0 +1,11 @@
+[Unit]
+Description=Aqulify headless boot-partition pairing reset (aqulify-reset)
+After=local-fs.target
+Before=user@.service
+
+[Service]
+Type=oneshot
+ExecStart=@RESET_HELPER@
+
+[Install]
+WantedBy=multi-user.target

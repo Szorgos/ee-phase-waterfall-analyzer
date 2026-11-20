@@ -636,6 +636,15 @@ int main(int argc, char* argv[]) {
         setSinkVolume(cachedCurrentSink, level, mute);
         lastSinkQuery = std::chrono::steady_clock::time_point{};   // a következő állapotüzenet már az új értéket mutatja
     };
+    std::atomic<bool> claimVolumeActive{ false };
+    cb.getVolume = [&](double& level, int& muted) -> bool {
+        bool mu = false;
+        if (sinkVolume(cachedCurrentSink, level, mu)) {
+            muted = mu ? 1 : 0;
+            return true;
+        }
+        return false;
+    };
     cb.setIr = [&](IrData&& ir) {
         if (!linux_store::saveIr(ir)) std::cerr << "[Konvolver] Figyelem: az IR nem menthető.\n";
 #if defined(AQ_HAVE_ALSA)
@@ -744,6 +753,32 @@ int main(int argc, char* argv[]) {
         return true;
     };
     cb.playerStop = [&] { filePlayer.stop(); };
+    cb.speakClaimCode = [&](const std::string& code, const std::string& lang) -> bool {
+        // RAII hangerő-őrző: hiba, megszakítás vagy kivétel esetén is visszaállítja az eredeti hangerőt
+        claim_audio::ClaimVolumeGuard volGuard(cb.getVolume, cb.setVolume, &claimVolumeActive);
+        const std::string tmpWav = "/tmp/aq-claim-" + bridge_detail::randomHex(8) + ".wav";
+        struct TmpCleanup {
+            std::string p;
+            ~TmpCleanup() { if (!p.empty()) std::remove(p.c_str()); }
+        } cleanup{ tmpWav };
+
+        const std::string exePath = selfExePath();
+        const std::string exeDir = exePath.empty() ? std::string() : std::filesystem::path(exePath).parent_path().string();
+        const std::vector<std::string> roots = claim_audio::defaultAudioSearchRoots(exeDir);
+        const int durMs = claim_audio::buildCodeWav(code, lang, roots, tmpWav);
+        if (durMs <= 0) {
+            std::cerr << "[Headless] A számjegy-hangminták nem találhatók.\n";
+            return false;
+        }
+        std::string err;
+        if (!filePlayer.open(tmpWav, &err, 0, /*bypassUpsample=*/true)) {
+            std::cerr << "[Headless] A beállítási kód hangja nem játszható le: " << err << "\n";
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(durMs + 300));
+        filePlayer.stop();
+        return true;
+    };
     // Szobamérés: mikrofonfelvétel PipeWire-rel (room/mic_capture_pipewire.hpp)
     cb.makeMicCapture = [] { return aqulify::room::createMicCapture(); };
     // Média-hivatkozás (URL) megnyitása: csak grafikus munkamenetben (DISPLAY / WAYLAND_DISPLAY)
@@ -1234,6 +1269,18 @@ int main(int argc, char* argv[]) {
     };
     cb.errorReportDismissPrevious = [&reportService] { reportService.dismissPrevious(); };
 
+    // Boot-partíciós aqulify-reset ellenőrzése még a híd indulása előtt
+    {
+        const auto resetRes = headless::applyBootReset(headless::defaultBootDirs(),
+                                                       linux_store::configDir(true) + "/remote.json");
+        if (resetRes.triggered) {
+            std::cout << "[Headless] aqulify-reset észlelve (" << resetRes.flagPath
+                      << "): párosítások törölve=" << (resetRes.configCleared ? "igen" : "nem")
+                      << ", jelzőfájl törölve=" << (resetRes.flagRemoved ? "igen" : "nem") << ".\n";
+            if (!resetRes.error.empty()) std::cerr << "[Headless] Figyelem: " << resetRes.error << "\n";
+        }
+    }
+
     std::unique_ptr<WebSocketBridge> bridge;
     for (int p : ports) {
         auto b = std::make_unique<WebSocketBridge>(p);
@@ -1247,9 +1294,15 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    const bool isHeadlessEnv = (!std::getenv("DISPLAY") || std::getenv("DISPLAY")[0] == '\0') &&
+                               (!std::getenv("WAYLAND_DISPLAY") || std::getenv("WAYLAND_DISPLAY")[0] == '\0');
     if (listenLan) {
-        bridge->setRemoteEnabled(true);
+        bridge->setRemoteEnabled(true, /*openPairCode=*/!isHeadlessEnv);
         std::cout << "[Hálózat] Távvezérlés parancssorból bekapcsolva (--listen lan).\n";
+    } else if (isHeadlessEnv && !bridge->remoteEnabled() && linux_store::loadRemote().empty()) {
+        // Képernyő nélküli (headless) első indítás: automatikusan gazdátlan (claimable) módban indul
+        bridge->setRemoteEnabled(true, /*openPairCode=*/false);
+        std::cout << "[Headless] Képernyő nélküli mód: gazdátlan beállítás aktív (mDNS claimable=1).\n";
     }
 
     Saver saver{ &paramMutex, &current, &dirty, &lastChange };

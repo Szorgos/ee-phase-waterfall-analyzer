@@ -53,6 +53,8 @@
 #include "media_url.hpp"
 #include "bt_link.hpp"
 #include "watchdog.hpp"
+#include "claim_audio.hpp"
+#include "headless_reset.hpp"
 #include <fstream>
 
 namespace ee_analyzer {
@@ -171,6 +173,12 @@ struct BridgeCallbacks {
      * mute 0 / 1 (< 0: nem változik). A pillanatnyi értéket a platform az állapotüzenet "volume" mezőjében küldi.
      */
     std::function<void(double level, int mute)> setVolume;
+    /** A kimeneti hangerő lekérdezése (0–1, mute 0/1): a headless első beállítás hangerő-visszaállításához. */
+    std::function<bool(double& level, int& muted)> getVolume;
+    /** Headless első beállítás: a 4 jegyű kód felmondása a DAC-on (soha nem naplózza a kódot). */
+    std::function<bool(const std::string& code, const std::string& lang)> speakClaimCode;
+    /** Opcionális boot-könyvtár lista (tesztekhez; alapból headless::defaultBootDirs()). */
+    std::function<std::vector<std::string>()> bootDirs;
     /**
      * Egykattintásos frissítés (Windows): a megadott kiadás telepítőjének letöltése, ellenőrzése és indítása. false:
      * nem indult (error: "version", "busy"). A haladást a platform az állapotüzenet "update" mezőjében küldi. Csak a
@@ -279,8 +287,15 @@ inline std::string randomHex(size_t bytes) {
 
 inline std::string randomDigits(int n) {
     std::random_device rd;
+    // Elutasításos mintavétel: nincs modulo-torzítás a 0–9 számjegyek között
+    constexpr uint32_t kLimit = (UINT32_MAX / 10u) * 10u;
     std::string s;
-    for (int i = 0; i < n; ++i) s += static_cast<char>('0' + rd() % 10);
+    s.reserve(static_cast<size_t>(std::max(0, n)));
+    for (int i = 0; i < n; ++i) {
+        uint32_t v = 0;
+        do { v = rd(); } while (v >= kLimit);
+        s += static_cast<char>('0' + (v % 10u));
+    }
     return s;
 }
 
@@ -332,6 +347,13 @@ inline std::string queryParam(const std::string& request, const char* name) {
         pos = amp + 1;
     }
     return {};
+}
+
+/** A kérés sorából a HTTP metódus (pl. "GET", "POST"). */
+inline std::string requestMethod(const std::string& request) {
+    const size_t sp1 = request.find(' ');
+    if (sp1 == std::string::npos || sp1 > 16) return {};
+    return request.substr(0, sp1);
 }
 
 /** A kérés sorából a kért útvonal (pl. GET /relay?target=... -> "/relay"). */
@@ -474,11 +496,11 @@ public:
     bool hasClient() const { return clientCount_.load() > 0; }
     bool hasRemoteClient() const { return remoteClientCount_.load() > 0; }
 
-    void setRemoteEnabled(bool on) {
+    void setRemoteEnabled(bool on, bool openPairCode = true) {
         if (remoteEnabled_ == on && (remoteListener_ != net::kInvalidSocket) == on) return;
         remoteEnabled_ = on;
         if (on) {
-            if (openRemoteListener()) newPairCode();
+            if (openRemoteListener() && openPairCode) newPairCode();
         } else {
             closeRemoteListener();
             pairCode_.clear();
@@ -489,6 +511,24 @@ public:
     bool remoteEnabled() const { return remoteEnabled_; }
     std::string currentPairCode() const { return pairCode_; }
     bool pairingOpen() const { return remoteListener_ != net::kInvalidSocket && !pairCode_.empty() && clock::now() < pairUntil_; }
+    /** Igaz, ha a motor hálózaton figyel és még nincs párosított tulajdonosa (gazdátlan mód). */
+    bool isClaimable() const { return remoteListener_ != net::kInvalidSocket && devices_.empty(); }
+    /** Igaz, ha a hibás claim-próbák miatt globális zárolás aktív. */
+    bool isClaimLocked() const { return clock::now() < claimLockUntil_; }
+    /** Igaz, ha a boot-partíciós `aqulify-claim-no-audio` tartalék aktív (gazdátlan + <10 perc + fájl létezik). */
+    bool isNoAudioFallbackActive() const {
+        if (!devices_.empty()) return false;
+        if ((clock::now() - startedAt_) >= std::chrono::seconds(kClaimNoAudioWindowSeconds)) return false;
+        return headless::hasNoAudioClaimFlag(getBootDirs());
+    }
+    /** CSAK TESZTHEZ: a /claim/start közötti várakozási idő felülírása (élesben mindig 30 mp). */
+    void setClaimStartCooldownForTest(int seconds) { claimStartCooldownSec_ = std::max(0, seconds); }
+    /** CSAK TESZTHEZ: a motor indulási idejének visszatolása a 10 perces ablak ellenőrzéséhez. */
+    void setStartedAtOffsetSecondsForTest(int secondsAgo) {
+        startedAt_ = clock::now() - std::chrono::seconds(std::max(0, secondsAgo));
+    }
+    /** CSAK TESZTHEZ: mDNS csomag ellenőrzése a claimable mezőhöz. */
+    bool mdnsClaimable() const { return mdnsAnnouncer_.isClaimable(); }
 
     /**
      * CSAK TESZTHEZ (a motor nem hívja): a start() a 127.0.0.1:port TCP-porton is fogad soros (Bluetooth-protokollú)
@@ -519,6 +559,10 @@ private:
         // Soros (Bluetooth) kliens: WebSocket-keretek helyett soronként egy JSON-üzenet (bt_link.hpp)
         bool line = false;
         btlink::LineSplitter lines;
+        // Első beállítás (claim) alatt álló, még nem hitelesített WebSocket kliens (a kódot az 1. üzenetben küldi)
+        bool claimPending = false;
+        clock::time_point claimDeadline{};
+        std::string pendingName, pendingApp;
     };
 
     /** Soros (Bluetooth) kapcsolat, amely még nem küldte el a hitelesítő első sort. */
@@ -557,6 +601,7 @@ private:
         std::string app;
         long long created = 0, last = 0;
         bool admin = false;
+        bool owner = false;             // tulajdonos: új telefont hagyhat jóvá és kezelheti a párosított eszközöket
         std::string ver, platform;      // a kliens legutóbb közölt verziója (X.Y.Z) és platformja (android / desktop)
     };
 
@@ -564,11 +609,27 @@ private:
 
     bool isClientAdmin(const Client& c) const {
         if (!c.remote) return true;
-        if (c.deviceId.empty()) return false;
-        for (const auto& d : devices_) if (d.id == c.deviceId) return d.admin;
+        if (c.claimPending || c.deviceId.empty()) return false;
+        for (const auto& d : devices_) if (d.id == c.deviceId) return d.admin || d.owner;
         return false;
     }
     bool curIsAdmin() const { return !cur_ || isClientAdmin(*cur_); }
+
+    bool isClientOwner(const Client& c) const {
+        if (!c.remote) return true;
+        if (c.claimPending || c.deviceId.empty()) return false;
+        for (const auto& d : devices_) if (d.id == c.deviceId) return d.owner;
+        return false;
+    }
+    bool curIsOwner() const { return !cur_ || isClientOwner(*cur_); }
+
+    std::vector<std::string> getBootDirs() const {
+        return cb_.bootDirs ? cb_.bootDirs() : headless::defaultBootDirs();
+    }
+
+    void updateMdnsClaimable() {
+        mdnsAnnouncer_.setClaimable(devices_.empty());
+    }
 
 
     /**
@@ -611,6 +672,7 @@ private:
         }
         devices_.push_back(d);
         if (devices_.size() > 32) devices_.erase(devices_.begin());
+        updateMdnsClaimable();
         saveRemoteConfig();
     }
 
@@ -702,6 +764,7 @@ private:
                 }
                 // Mindenki a saját ütemében kapja (pl. a telefon ritkábban): ha még az előzőt sem olvasta, kimarad
                 for (auto& c : clients_) {
+                    if (c->claimPending) continue;
                     if (!c->spectrum || c->spectrumSeq == spectrumSeq || spectrumMsg.empty() ||
                         now - c->lastSpectrum < std::chrono::milliseconds(c->spectrumMs))
                         continue;
@@ -712,14 +775,20 @@ private:
                 if (now - lastStatus >= std::chrono::milliseconds(500)) {
                     hb.beat("bridge: status");
                     const std::string status = buildStatusMessage();
-                    for (auto& c : clients_) queueText(*c, status, true);
+                    for (auto& c : clients_)
+                        if (!c->claimPending) queueText(*c, status, true);
                     lastStatus = now;
                 }
                 hb.beat("bridge: commands");
-                for (auto& c : clients_) {
-                    if (c->dead) continue;
-                    pumpIncoming(*c);
-                    flush(*c);
+                for (size_t i = 0; i < clients_.size(); ++i) {
+                    Client* cp = clients_[i].get();
+                    if (cp->dead) continue;
+                    if (cp->claimPending && now > cp->claimDeadline) {
+                        kill(*cp, "claim időtúllépés");
+                        continue;
+                    }
+                    pumpIncoming(*cp);
+                    flush(*cp);
                 }
                 flushSync();
                 removeDead();
@@ -954,11 +1023,81 @@ private:
      * gépen elutasították), busy (túl sok kapcsolat), closed (közben kikapcsolták a hálózati elérést), client
      * (nem az Aqulify Remote alkalmazás).
      */
-    static void reply(net::socket_t s, const char* status, const char* reason = nullptr) {
+    static void reply(net::socket_t s, const char* status, const char* reason = nullptr, int retryAfterSec = -1) {
         std::string r = std::string("HTTP/1.1 ") + status + "\r\n";
         if (reason) r += std::string("X-Aqulify-Reason: ") + reason + "\r\n";
+        if (retryAfterSec >= 0) r += "Retry-After: " + std::to_string(retryAfterSec) + "\r\n";
         r += "Content-Length: 0\r\nConnection: close\r\n\r\n";
         net::sendSome(s, r.data(), r.size());
+    }
+
+    static void replyJson(net::socket_t s, const char* status, const std::string& body) {
+        std::string r = std::string("HTTP/1.1 ") + status +
+                        "\r\nContent-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: " +
+                        std::to_string(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
+        net::sendSome(s, r.data(), r.size());
+    }
+
+    /** Headless első beállítás indítása (POST /claim/start): új 4 jegyű kód + hangos felmondás. */
+    void handleClaimStart(Pending& p, const std::string& request) {
+        if (bridge_detail::requestMethod(request) != "POST") {
+            std::string r = "HTTP/1.1 405 Method Not Allowed\r\nAllow: POST\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            net::sendSome(p.sock, r.data(), r.size());
+            return;
+        }
+        // Böngészőből jövő cross-origin kérés elutasítása (Origin fejléccel nem indítható mellékhatás)
+        if (!headerValue(request, "origin").empty()) {
+            reply(p.sock, "403 Forbidden", "origin");
+            return;
+        }
+        const std::string clientType = bridge_detail::cleanName(bridge_detail::queryParam(request, "client"));
+        if (clientType != "aqulify_remote" && clientType != "aqulify_desktop") {
+            reply(p.sock, "403 Forbidden", "client");
+            return;
+        }
+        if (!devices_.empty()) {
+            reply(p.sock, "409 Conflict", "already-claimed");
+            return;
+        }
+        const auto now = clock::now();
+        if (now < claimLockUntil_) {
+            const int rem = static_cast<int>(std::chrono::duration_cast<std::chrono::seconds>(claimLockUntil_ - now).count()) + 1;
+            reply(p.sock, "429 Too Many Requests", "locked", rem);
+            return;
+        }
+        if (claimHasStarted_ && claimStartCooldownSec_ > 0) {
+            const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - claimLastStart_).count();
+            if (elapsed < claimStartCooldownSec_) {
+                reply(p.sock, "429 Too Many Requests", "cooldown", static_cast<int>(claimStartCooldownSec_ - elapsed));
+                return;
+            }
+        }
+        claimHasStarted_ = true;
+        claimLastStart_ = now;
+
+        if (isNoAudioFallbackActive()) {
+            claimCode_.clear();
+            claimUntil_ = clock::time_point{};
+            std::cout << "[WS Bridge] Első beállítás elindítva (boot-partíciós hangmentes tartalék aktív).\n";
+            replyJson(p.sock, "200 OK", "{\"ok\":true,\"no_audio_fallback\":true,\"expires_sec\":" +
+                                        std::to_string(kClaimCodeWindowSeconds) + "}");
+            return;
+        }
+
+        // Egyszerre csak egy aktív kód: az új /claim/start érvényteleníti az előzőt; soha nem naplózódik
+        claimCode_ = bridge_detail::randomDigits(4);
+        claimUntil_ = now + std::chrono::seconds(kClaimCodeWindowSeconds);
+        const std::string lang = claim_audio::sanitizeLang(bridge_detail::queryParam(request, "lang"));
+        if (cb_.speakClaimCode) {
+            const std::string codeCopy = claimCode_;
+            auto speakFn = cb_.speakClaimCode;
+            startAsync([speakFn, codeCopy, lang]() {
+                speakFn(codeCopy, lang);
+            });
+        }
+        std::cout << "[WS Bridge] Első beállítás elindítva (4 jegyű hangos kód kiadva).\n";
+        replyJson(p.sock, "200 OK", "{\"ok\":true,\"no_audio_fallback\":false,\"expires_sec\":" +
+                                    std::to_string(kClaimCodeWindowSeconds) + "}");
     }
 
     bool handlePushPairRequest(Pending& p, const std::string& key, const std::string& request) {
@@ -969,8 +1108,12 @@ private:
             return false;
         }
 
-        const bool hasLocal = std::any_of(clients_.begin(), clients_.end(), [](const auto& c) { return !c->remote && !c->dead; });
-        if (!hasLocal) {
+        // Jóváhagyó: a helyi asztali ablak VAGY egy csatlakozott tulajdonos-telefon.
+        // Gazdátlan (tulajdonos nélküli) gépen nincs jóváhagyó -> 503 no-window.
+        const bool hasApprover = std::any_of(clients_.begin(), clients_.end(), [&](const auto& c) {
+            return !c->dead && !c->claimPending && (!c->remote || isClientOwner(*c));
+        });
+        if (!hasApprover) {
             reply(p.sock, "503 Service Unavailable", "no-window");
             return false;
         }
@@ -1012,7 +1155,7 @@ private:
         notice += "}";
 
         for (auto& c : clients_) {
-            if (!c->remote && !c->dead) queueText(*c, notice);
+            if (!c->dead && !c->claimPending && (!c->remote || isClientOwner(*c))) queueText(*c, notice);
         }
         std::cout << "[WS Bridge] Párosítási kérelem: " << name << " (" << p.clientIp << ", " << reqId << ")\n";
         return true;
@@ -1032,7 +1175,7 @@ private:
                 net::closeSocket(pr.sock);
                 const std::string cancelMsg = "{\"type\":\"pair_cancel\",\"requestId\":\"" + pr.requestId + "\"}";
                 for (auto& c : clients_)
-                    if (!c->remote && !c->dead) queueText(*c, cancelMsg);
+                    if (!c->dead && !c->claimPending && (!c->remote || isClientOwner(*c))) queueText(*c, cancelMsg);
                 pendingPairRequests_.erase(pendingPairRequests_.begin() + static_cast<std::ptrdiff_t>(i));
             } else {
                 ++i;
@@ -1043,6 +1186,17 @@ private:
     /** A kézfogás befejezése; true: a kapcsolat kliens lett (a socket hozzá került). */
     bool finishHandshake(Pending& p) {
         const std::string& request = p.buf;
+        const std::string reqPath = bridge_detail::requestPath(request);
+        if (p.remote && remoteListener_ == net::kInvalidSocket) {   // közben kikapcsolták
+            reply(p.sock, "503 Service Unavailable", "closed");
+            return false;
+        }
+        // Headless első beállítás indítása: sima HTTP POST /claim/start (nem WebSocket)
+        if (p.remote && reqPath == "/claim/start") {
+            handleClaimStart(p, request);
+            return false;
+        }
+
         const std::string key = headerValue(request, "sec-websocket-key");
         if (key.empty()) {
             reply(p.sock, "426 Upgrade Required");
@@ -1050,17 +1204,50 @@ private:
         }
 
         std::string deviceId, issuedToken;
-        if (p.remote && remoteListener_ == net::kInvalidSocket) {   // közben kikapcsolták
-            reply(p.sock, "503 Service Unavailable", "closed");
-            return false;
-        }
         if (p.remote) {
-            // A helyi hálózatról csak párosított eszköz (token) vagy érvényes párosító kód fogadható el
+            // A helyi hálózatról csak párosított eszköz (token), érvényes párosító kód vagy gazdátlan claim fogadható el
             const std::string token = bridge_detail::queryParam(request, "token");
             const std::string code = bridge_detail::queryParam(request, "pair");
+            const std::string claim = bridge_detail::queryParam(request, "claim");
             if (!token.empty()) {
                 deviceId = deviceForToken(token);
                 if (deviceId.empty()) { reply(p.sock, "401 Unauthorized"); return false; }
+            } else if (claim == "1") {
+                const std::string clientType = bridge_detail::cleanName(bridge_detail::queryParam(request, "client"));
+                if (clientType != "aqulify_remote" && clientType != "aqulify_desktop") {
+                    reply(p.sock, "403 Forbidden", "client");
+                    return false;
+                }
+                if (!devices_.empty()) {
+                    reply(p.sock, "409 Conflict", "already-claimed");
+                    return false;
+                }
+                const auto now = clock::now();
+                if (now < claimLockUntil_) {
+                    const int rem = static_cast<int>(std::chrono::duration_cast<std::chrono::seconds>(claimLockUntil_ - now).count()) + 1;
+                    reply(p.sock, "429 Too Many Requests", "locked", rem);
+                    return false;
+                }
+                if (clients_.size() >= kBridgeMaxClients) {
+                    reply(p.sock, "503 Service Unavailable", "busy");
+                    return false;
+                }
+                const std::string magicGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+                const std::string acceptKey = Base64::encode(Sha1::hash(key + magicGuid));
+                auto c = std::make_unique<Client>();
+                c->sock = p.sock;
+                c->remote = true;
+                c->spectrum = false;
+                c->claimPending = true;
+                c->claimDeadline = now + std::chrono::seconds(kClaimSubmitTimeoutSeconds);
+                c->pendingName = bridge_detail::cleanName(bridge_detail::queryParam(request, "name"));
+                c->pendingApp = cleanAppId(bridge_detail::queryParam(request, "app"));
+                c->out = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                         "Sec-WebSocket-Accept: " + acceptKey + "\r\n\r\n";
+                net::setNoDelay(c->sock);
+                clients_.push_back(std::move(c));
+                updateClientCountsLocked();
+                return true;
             } else if (!code.empty()) {
                 // Harmadik féltől származó távirányítók kizárása: csak a hitelesített Aqulify Remote kliens párosítható
                 const std::string clientType = bridge_detail::cleanName(bridge_detail::queryParam(request, "client"));
@@ -1084,7 +1271,6 @@ private:
             return false;
         }
 
-        const std::string reqPath = bridge_detail::requestPath(request);
         if (!p.remote && reqPath == "/relay") {
             const std::string targetId = bridge_detail::queryParam(request, "target");
             const std::string magicGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -1150,9 +1336,12 @@ private:
         const std::string computer = jsonEscape(MdnsAnnouncer::computerName());
         if (!issuedToken.empty())
             sendText("{\"type\":\"paired\",\"id\":\"" + cl.deviceId + "\",\"token\":\"" + issuedToken +
-                     "\",\"machine\":\"" + machineId() + "\",\"computer\":\"" + computer + "\"}");
+                     "\",\"machine\":\"" + machineId() + "\",\"computer\":\"" + computer + "\",\"admin\":" +
+                     (curIsAdmin() ? "true" : "false") + ",\"owner\":" + (curIsOwner() ? "true" : "false") + "}");
         else if (cl.remote)
-            sendText("{\"type\":\"machine\",\"machine\":\"" + machineId() + "\",\"computer\":\"" + computer + "\",\"admin\":" + (curIsAdmin() ? "true" : "false") + "}");
+            sendText("{\"type\":\"machine\",\"machine\":\"" + machineId() + "\",\"computer\":\"" + computer +
+                     "\",\"admin\":" + (curIsAdmin() ? "true" : "false") +
+                     ",\"owner\":" + (curIsOwner() ? "true" : "false") + "}");
         sendText(buildStateMessage());
         cur_ = nullptr;
         if (cl.remote) broadcastRemoteState();   // a helyi felület látja, hogy az eszköz csatlakozott
@@ -1457,7 +1646,7 @@ private:
             if (remoteListener_ == net::kInvalidSocket) continue;
             remoteListenPort_ = port;
             std::cout << "[WS Bridge] Hálózati elérés bekapcsolva: 0.0.0.0:" << port << "\n";
-            mdnsAnnouncer_.start(port, "", bridge_detail::localAddresses(), machineId());
+            mdnsAnnouncer_.start(port, "", bridge_detail::localAddresses(), machineId(), devices_.empty());
             openBt();   // a Bluetooth-csatorna csak bekapcsolt hálózati elérésnél fut
             return true;
         }
@@ -1507,15 +1696,35 @@ private:
                 d.created = static_cast<long long>(num(e, "created", 0.0));
                 d.last = static_cast<long long>(num(e, "last", 0.0));
                 d.admin = num(e, "admin", 0.0) != 0.0;
+                d.owner = num(e, "owner", 0.0) != 0.0;
                 d.ver = vercheck::cleanClientVersion(e.get("ver") ? e.get("ver")->stringOr("") : "");
                 d.platform = vercheck::cleanPlatform(e.get("platform") ? e.get("platform")->stringOr("") : "");
                 if (bridge_detail::isHex(d.id) && d.hash.size() == 40 && bridge_detail::isHex(d.hash)) devices_.push_back(d);
             }
         }
+        bool needSave = false;
         if (machineId_.empty()) {   // régebbi beállítás: az azonosító most jön létre, és megmarad
             machineId();
-            saveRemoteConfig();
+            needSave = true;
         }
+        // Migráció: régi remote.json-nál nincs owner mező -> legrégebbi admin, vagy ha nincs admin, legrégebbi eszköz
+        if (!devices_.empty() && std::none_of(devices_.begin(), devices_.end(), [](const RemoteDevice& d) { return d.owner; })) {
+            size_t bestIdx = devices_.size();
+            for (size_t i = 0; i < devices_.size(); ++i) {
+                if (!devices_[i].admin) continue;
+                if (bestIdx == devices_.size() || devices_[i].created < devices_[bestIdx].created) bestIdx = i;
+            }
+            if (bestIdx == devices_.size()) {
+                bestIdx = 0;
+                for (size_t i = 1; i < devices_.size(); ++i) {
+                    if (devices_[i].created < devices_[bestIdx].created) bestIdx = i;
+                }
+            }
+            devices_[bestIdx].owner = true;
+            devices_[bestIdx].admin = true;
+            needSave = true;
+        }
+        if (needSave) saveRemoteConfig();
         if (remoteEnabled_) openRemoteListener();
     }
 
@@ -1532,6 +1741,7 @@ private:
             s += "{\"id\":\"" + d.id + "\",\"name\":\"" + jsonEscape(d.name) + "\",\"hash\":\"" + d.hash + "\"";
             if (!d.app.empty()) s += ",\"app\":\"" + d.app + "\"";
             if (d.admin) s += ",\"admin\":true";
+            if (d.owner) s += ",\"owner\":true";
             if (!d.ver.empty()) s += ",\"ver\":\"" + d.ver + "\"";
             if (!d.platform.empty()) s += ",\"platform\":\"" + d.platform + "\"";
             s += ",\"created\":" + std::to_string(d.created) + ",\"last\":" + std::to_string(d.last) + "}";
@@ -1540,8 +1750,8 @@ private:
         if (!cb_.saveRemote(s)) std::cerr << "[WS Bridge] Figyelem: a távoli elérés beállításai nem menthetők.\n";
     }
 
-    /** A távoli elérés állapota a helyi felületnek (a párosító kódot csak a helyi kliensek kapják meg). */
-    std::string buildRemoteMessage() const {
+    /** A távoli elérés állapota (a párosító kódot csak a helyi kliensek kapják meg, távoli tulajdonos nem). */
+    std::string buildRemoteMessage(bool includeSecretCode = true) const {
         std::string s = "{\"type\":\"remote\",\"enabled\":";
         s += remoteEnabled_ ? "true" : "false";
         s += ",\"listening\":";
@@ -1549,12 +1759,14 @@ private:
         s += ",\"port\":" + std::to_string(remoteListenPort_ ? remoteListenPort_ : remotePort_);
         s += ",\"protocol\":" + std::to_string(kBridgeProtocol);
         const auto now = clock::now();
-        const bool open = pairingOpen();
+        const bool open = includeSecretCode && pairingOpen();
         s += ",\"code\":\"" + (open ? pairCode_ : std::string()) + "\"";
         s += ",\"codeSeconds\":" +
              std::to_string(open ? std::chrono::duration_cast<std::chrono::seconds>(pairUntil_ - now).count() : 0);
         s += ",\"locked\":";
         s += now < pairLockUntil_ ? "true" : "false";
+        s += ",\"claimable\":";
+        s += isClaimable() ? "true" : "false";
         s += ",\"bluetooth\":{\"enabled\":";
         s += btEnabled_ ? "true" : "false";
         s += ",\"listening\":";
@@ -1571,6 +1783,7 @@ private:
             if (i) s += ',';
             s += "{\"id\":\"" + d.id + "\",\"name\":\"" + jsonEscape(d.name) + "\",\"created\":" + std::to_string(d.created) +
                  ",\"last\":" + std::to_string(d.last) + ",\"admin\":" + (d.admin ? "true" : "false") +
+                 ",\"owner\":" + (d.owner ? "true" : "false") +
                  ",\"online\":" + (online ? "true" : "false");
             if (!d.ver.empty()) s += ",\"ver\":\"" + d.ver + "\"";
             if (!d.platform.empty()) s += ",\"platform\":\"" + d.platform + "\"";
@@ -1604,26 +1817,36 @@ private:
     }
 
     void broadcastRemoteState() {
-        bool any = false;
-        for (auto& c : clients_) any = any || (!c->remote && !c->dead);
-        if (!any) return;
-        const std::string msg = buildRemoteMessage();
-        for (auto& c : clients_)
-            if (!c->remote) queueText(*c, msg);
+        bool anyLocal = false, anyOwner = false;
+        for (auto& c : clients_) {
+            if (c->dead || c->claimPending) continue;
+            if (!c->remote) anyLocal = true;
+            else if (isClientOwner(*c)) anyOwner = true;
+        }
+        if (anyLocal) {
+            const std::string msg = buildRemoteMessage(true);
+            for (auto& c : clients_)
+                if (!c->remote && !c->dead) queueText(*c, msg);
+        }
+        if (anyOwner) {
+            const std::string msg = buildRemoteMessage(false);
+            for (auto& c : clients_)
+                if (c->remote && !c->dead && !c->claimPending && isClientOwner(*c)) queueText(*c, msg);
+        }
     }
 
-    /** A távoli elérés vezérlése: csak a saját gépről (helyi felület vagy segédprogram) érhető el. */
-    bool handleRemoteControl(const std::string& type, const json::Value& msg) {
+    /** A távoli elérés vezérlése: helyi felület teljes joggal, távoli tulajdonos eszközlistával / admin / revoke. */
+    bool handleRemoteControl(const std::string& type, const json::Value& msg, bool fromRemoteOwner = false) {
         if (type == "get_remote") {
-            sendText(buildRemoteMessage());
-        } else if (type == "set_remote" && msg.get("bluetooth") && !msg.get("enabled") && !msg.get("port")) {
+            sendText(buildRemoteMessage(!fromRemoteOwner));
+        } else if (!fromRemoteOwner && type == "set_remote" && msg.get("bluetooth") && !msg.get("enabled") && !msg.get("port")) {
             // Csak a Bluetooth-tartalék kapcsolója: a hálózati elérés (és a csatlakozott telefonok) nem változik
             btEnabled_ = num(msg, "bluetooth", 1.0) != 0.0;
             if (btEnabled_ && remoteListener_ != net::kInvalidSocket) openBt();
             else if (!btEnabled_) closeBt();
             saveRemoteConfig();
             broadcastRemoteState();
-        } else if (type == "set_remote") {
+        } else if (!fromRemoteOwner && type == "set_remote") {
             if (msg.get("bluetooth")) btEnabled_ = num(msg, "bluetooth", 1.0) != 0.0;
             const bool on = num(msg, "enabled", remoteEnabled_ ? 1.0 : 0.0) != 0.0;
             if (const json::Value* p = msg.get("port"))
@@ -1637,7 +1860,7 @@ private:
             }
             saveRemoteConfig();
             broadcastRemoteState();
-        } else if (type == "remote_new_code") {
+        } else if (!fromRemoteOwner && type == "remote_new_code") {
             const bool adm = msg.get("admin") ? (num(msg, "admin", 0.0) != 0.0) : false;
             if (remoteListener_ != net::kInvalidSocket) newPairCode(adm);
             broadcastRemoteState();
@@ -1646,6 +1869,8 @@ private:
             const bool adm = num(msg, "admin", 0.0) != 0.0;
             for (auto& d : devices_) {
                 if (d.id == id) {
+                    // A tulajdonos saját admin jogát távolról nem veheti el, nehogy kizárja magát
+                    if (fromRemoteOwner && d.owner && !adm) break;
                     d.admin = adm;
                     saveRemoteConfig();
                     break;
@@ -1654,12 +1879,18 @@ private:
             broadcastRemoteState();
         } else if (type == "remote_revoke") {
             const std::string id = msg.get("id") ? msg.get("id")->stringOr("") : "";
+            // Távoli tulajdonos nem törölheti saját magát (arra az unpair_self vagy az aqulify-reset való)
+            if (fromRemoteOwner && cur_ && cur_->deviceId == id) {
+                broadcastRemoteState();
+                return true;
+            }
             const auto before = devices_.size();
             devices_.erase(std::remove_if(devices_.begin(), devices_.end(), [&](const RemoteDevice& d) { return d.id == id; }),
                            devices_.end());
             if (devices_.size() != before) {
                 for (auto& c : clients_)
                     if (c->remote && c->deviceId == id) kill(*c, "párosítás visszavonva");
+                updateMdnsClaimable();
                 saveRemoteConfig();
                 std::cout << "[WS Bridge] Párosítás visszavonva: " << id << ".\n";
             }
@@ -1668,6 +1899,94 @@ private:
             return false;
         }
         return true;
+    }
+
+    /** Első beállítás (claim) kódjának vagy no-audio tartalékának ellenőrzése a WebSocket 1. üzenetéből. */
+    void handleClaimSubmit(const json::Value& msg) {
+        if (!cur_ || !cur_->claimPending) return;
+        const auto now = clock::now();
+        if (!devices_.empty()) {
+            sendText("{\"type\":\"claim_result\",\"ok\":false,\"reason\":\"already_claimed\"}");
+            kill(*cur_, "már van tulajdonos");
+            return;
+        }
+        if (now < claimLockUntil_) {
+            const int rem = static_cast<int>(std::chrono::duration_cast<std::chrono::seconds>(claimLockUntil_ - now).count()) + 1;
+            sendText("{\"type\":\"claim_result\",\"ok\":false,\"locked\":true,\"retry_after\":" + std::to_string(rem) + "}");
+            kill(*cur_, "claim zárolva");
+            return;
+        }
+
+        const bool wantFallback = msg.get("fallback") &&
+                                  ((msg.get("fallback")->type == json::Value::Type::Bool && msg.get("fallback")->b) ||
+                                   (msg.get("fallback")->type == json::Value::Type::Number && msg.get("fallback")->num != 0.0));
+        bool ok = false;
+        bool usedFallback = false;
+        if (wantFallback) {
+            // Szigorúan csak akkor fogadható el, ha a boot partíción ott az aqulify-claim-no-audio fájl és <10 perc telt el
+            if (isNoAudioFallbackActive()) {
+                ok = true;
+                usedFallback = true;
+            }
+        } else {
+            const std::string submitted = msg.get("code") ? msg.get("code")->stringOr("") : "";
+            if (!claimCode_.empty() && now <= claimUntil_ && submitted.size() == 4 &&
+                bridge_detail::sameSecret(submitted, claimCode_)) {
+                ok = true;
+            }
+        }
+
+        if (!ok) {
+            ++claimFails_;
+            if (claimFails_ >= kClaimMaxFails) {
+                // 5. hibás próbánál a kód érvénytelen és 10 perces globális zár indul
+                claimCode_.clear();
+                claimUntil_ = clock::time_point{};
+                claimLockUntil_ = now + std::chrono::seconds(kClaimLockSeconds);
+                claimFails_ = 0;
+                std::cout << "[WS Bridge] Túl sok hibás beállítási kód: 10 perces globális zárolás.\n";
+                sendText("{\"type\":\"claim_result\",\"ok\":false,\"locked\":true,\"retry_after\":" +
+                         std::to_string(kClaimLockSeconds) + "}");
+            } else {
+                sendText("{\"type\":\"claim_result\",\"ok\":false,\"locked\":false,\"remaining\":" +
+                         std::to_string(kClaimMaxFails - claimFails_) + "}");
+            }
+            kill(*cur_, "hibás claim kód");
+            return;
+        }
+
+        // Sikeres első beállítás: a kód érvénytelenné válik, a telefon lesz az első tulajdonos + admin
+        claimCode_.clear();
+        claimUntil_ = clock::time_point{};
+        claimFails_ = 0;
+        if (usedFallback) {
+            std::string rmErr;
+            if (!headless::removeNoAudioClaimFlag(getBootDirs(), &rmErr) && !rmErr.empty()) {
+                std::cerr << "[WS Bridge] " << rmErr << "\n";
+            }
+        }
+
+        RemoteDevice d;
+        d.id = bridge_detail::randomHex(4);
+        d.name = cur_->pendingName.empty() ? ("Eszköz (" + d.id + ")") : cur_->pendingName;
+        d.app = cur_->pendingApp;
+        const std::string token = bridge_detail::randomHex(32);
+        d.hash = bridge_detail::sha1Hex(token);
+        d.admin = true;
+        d.owner = true;
+        d.created = d.last = static_cast<long long>(std::time(nullptr));
+        addDevice(d);
+
+        cur_->claimPending = false;
+        cur_->deviceId = d.id;
+        cur_->deviceName = d.name;
+        const std::string computer = jsonEscape(MdnsAnnouncer::computerName());
+        std::cout << "[WS Bridge] Első tulajdonos beállítva: " << d.name << "\n";
+        sendText("{\"type\":\"paired\",\"id\":\"" + d.id + "\",\"token\":\"" + token +
+                 "\",\"machine\":\"" + machineId() + "\",\"computer\":\"" + computer +
+                 "\",\"admin\":true,\"owner\":true}");
+        sendText(buildStateMessage());
+        broadcastRemoteState();
     }
 
     void handlePairApprove(const json::Value& msg) {
@@ -1719,11 +2038,13 @@ private:
         updateClientCountsLocked();
         std::cout << "[WS Bridge] Távoli eszköz jóváhagyva és csatlakozott: " << cl.deviceName << "\n";
 
+        Client* prevCur = cur_;
         cur_ = &cl;
         sendText("{\"type\":\"paired\",\"id\":\"" + cl.deviceId + "\",\"token\":\"" + token + "\",\"machine\":\"" +
-                 machineId() + "\"}");
+                 machineId() + "\",\"computer\":\"" + jsonEscape(MdnsAnnouncer::computerName()) +
+                 "\",\"admin\":false,\"owner\":false}");
         sendText(buildStateMessage());
-        cur_ = nullptr;
+        cur_ = prevCur;
         broadcastRemoteState();
     }
 
@@ -1918,10 +2239,22 @@ private:
 
     void handleMessage(const std::string& text) {
         json::Value msg;
-        if (!json::parse(text, msg)) return;
+        if (!json::parse(text, msg)) {
+            if (cur_ && cur_->claimPending) kill(*cur_, "érvénytelen claim JSON");
+            return;
+        }
         const json::Value* typeV = msg.get("type");
-        if (!typeV) return;
+        if (!typeV) {
+            if (cur_ && cur_->claimPending) kill(*cur_, "hiányzó claim típus");
+            return;
+        }
         const std::string type = typeV->stringOr("");
+        // Első beállítás (claim) alatt a kliens kizárólag claim_submit üzenetet küldhet
+        if (cur_ && cur_->claimPending) {
+            if (type == "claim_submit") handleClaimSubmit(msg);
+            else kill(*cur_, "érvénytelen claim üzenet");
+            return;
+        }
         const json::Value* val = msg.get("val");
         const bool remote = cur_ && cur_->remote;
 
@@ -1971,6 +2304,7 @@ private:
                                devices_.end());
                 for (auto& c : clients_)
                     if (c->remote && c->deviceId == id) kill(*c, "a telefon törölte a párosítást");
+                updateMdnsClaimable();
                 saveRemoteConfig();
                 std::cout << "[WS Bridge] A telefon törölte a párosítását: " << id << ".\n";
                 broadcastRemoteState();
@@ -1978,13 +2312,15 @@ private:
             return;
         }
 
-        // A távoli elérés vezérlése csak a saját gépről
+        // A távoli elérés vezérlése: helyi felület teljes joggal, távoli tulajdonos eszközlistával / admin / revoke
         if (type == "get_remote" || type == "set_remote" || type.rfind("remote_", 0) == 0) {
-            if (!remote) handleRemoteControl(type, msg);
+            if (!remote) handleRemoteControl(type, msg, false);
+            else if (curIsOwner() && (type == "get_remote" || type == "remote_set_admin" || type == "remote_revoke"))
+                handleRemoteControl(type, msg, true);
             return;
         }
         if (type == "pair_approve") {
-            if (!remote) handlePairApprove(msg);
+            if (!remote || curIsOwner()) handlePairApprove(msg);
             return;
         }
         if (type == "set_edit_zone") {
@@ -2723,6 +3059,7 @@ public:
         s += "\",\"protocol\":" + std::to_string(kBridgeProtocol);
         s += ",\"min_client_protocol\":" + std::to_string(kBridgeMinClientProtocol);
         s += ",\"admin\":" + std::string(curIsAdmin() ? "true" : "false");
+        s += ",\"owner\":" + std::string(curIsOwner() ? "true" : "false");
         if (zoned) s += ",\"zone\":" + std::to_string(zone);   // a 2–4. kimenet lánca (a fő állapotot nem írja felül)
         // 2.x: zenetár (a telefon Zenetár füle), lejátszási sor, telefonos zeneátvitel
         std::string caps = "[";
@@ -3190,6 +3527,21 @@ private:
     clock::time_point pairUntil_{};     // eddig párosítható
     int pairFails_ = 0;
     clock::time_point pairLockUntil_{};
+    // Headless első beállítás (claim) állapota: 4 jegyű kód, 2 perc ablak, 5 hiba -> 10 perc globális zár
+    static constexpr int kClaimCodeWindowSeconds = 120;
+    static constexpr int kClaimMaxFails = 5;
+    static constexpr int kClaimLockSeconds = 600;
+    static constexpr int kClaimStartCooldownSeconds = 30;
+    static constexpr int kClaimNoAudioWindowSeconds = 600;
+    static constexpr int kClaimSubmitTimeoutSeconds = 15;
+    clock::time_point startedAt_{ clock::now() };
+    std::string claimCode_;
+    clock::time_point claimUntil_{};
+    clock::time_point claimLockUntil_{};
+    clock::time_point claimLastStart_{};
+    int claimFails_ = 0;
+    bool claimHasStarted_ = false;
+    int claimStartCooldownSec_ = kClaimStartCooldownSeconds;
     // Bluetooth (soros) csatorna: a távirányító tartaléka, ha a Wi-Fi nem stabil (bt_link.hpp)
     bool btEnabled_ = true;
     static constexpr int kBtRefreshSeconds = 30;

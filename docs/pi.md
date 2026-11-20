@@ -64,14 +64,14 @@ sudo apt install ./aqulify_2.7.0-1~pi1_arm64.deb
 
 ---
 
-## 4. Telefonos távirányító és párosítás
+## 4. Telefonos távirányító és első beállítás (képernyő nélkül is)
 
-- **Asztali felületen (HDMI-monitorral):** az `aqulify-gui` ablakában kattints a **Távirányító** gombra, és kapcsold be a **„Hálózati elérés a telefonos távirányítóhoz”** lehetőséget.
-- **Kijelző nélkül (SSH-n vagy terminálból):** a futó motor mellett kérj párosító kódot a következő paranccsal:
-  ```bash
-  aqulify-engine --pair
-  ```
-  A parancs a helyi vezérlőcsatornán csatlakozik a futó motorhoz, szükség esetén bekapcsolja a hálózati elérést, és kiírja a 6 jegyű párosító kódot, annak érvényességi idejét és a gép hálózati címeit.
+- **Első beállítás (képernyő nélkül, SSH nélkül):** tiszta telepítés után a Pi gazdátlan módban indul, és a helyi hálózaton megjelenik az **Aqulify Remote** telefonos alkalmazásban (*„Új Aqulify eszköz – beállítás”*). A **Beállítás** gombra nyomva a Pi a csatlakoztatott hangkimeneten (DAC) felmond egy 4 jegyű kódot; a kódot az alkalmazásba beírva a telefon lesz a tulajdonos.
+- **Új telefon hozzáadása:** további telefonokat a már párosított tulajdonos-telefonon megjelenő jóváhagyó ablakban (Igen/Nem) lehet engedélyezni, valamint ugyanott kezelhető az eszközlista és a távoli admin jogosultság.
+- **Elveszett vagy lecserélt telefon:** ha a tulajdonos-telefon már nem érhető el, vedd ki a Raspberry Pi SD-kártyáját, és a számítógépen hozz létre a boot partíción egy üres `aqulify-reset` nevű fájlt. A következő indításkor az Aqulify törli a régi párosításokat és a jelzőfájlt, majd újra beállítható állapotba lép.
+- **Hangeszköz nélküli tartalék (csak fizikai hozzáféréssel):** ha a beállítás idején nincs csatlakoztatott hangkimenet, a boot partícióra tett üres `aqulify-claim-no-audio` fájl az indítástól számított 10 percig engedélyezi az első beállítást kód nélkül (erről az alkalmazás figyelmeztet).
+- **Asztali felületen (HDMI-monitorral):** az `aqulify-gui` ablakában a **Távirányító** gombbal kezelhetők a párosított eszközök.
+- *(Fejlesztői / hibakereső opció: helyi terminálból az `aqulify-engine --pair` parancs továbbra is elérhető.)*
 - **Hálózati elérés:** Linuxon és Raspberry Pi OS-en a telefonos távirányító és a Pi között helyi Wi-Fi / Ethernet hálózat használható.
 
 ---

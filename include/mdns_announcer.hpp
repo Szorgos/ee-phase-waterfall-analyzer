@@ -45,11 +45,13 @@ public:
      *        tartozó hálózati kártyán kiküldjük a csomagot (különben csak az alapértelmezett kártyán – több
      *        kártyánál, pl. virtuális hálózat mellett, a Wi-Fi-re nem jutna ki).
      */
-    bool start(int servicePort, const std::string& customName = "", std::vector<std::string> addresses = {}, const std::string& machineId = "") {
+    bool start(int servicePort, const std::string& customName = "", std::vector<std::string> addresses = {}, const std::string& machineId = "", bool claimable = false) {
         if (running_) stop();
 
         servicePort_ = servicePort;
         machineId_ = machineId;
+        claimable_.store(claimable);
+        txtGen_.store(0);
         addresses_.clear();
         for (auto& a : addresses) {
             in_addr tmp{};
@@ -62,6 +64,15 @@ public:
         worker_ = std::thread(&MdnsAnnouncer::run, this);
         return true;
     }
+
+    /** Futás közbeni TXT-frissítés a gazdátlan (claimable) állapot változásakor. */
+    void setClaimable(bool on) {
+        if (claimable_.exchange(on) != on) {
+            txtGen_.fetch_add(1);
+        }
+    }
+
+    bool isClaimable() const { return claimable_.load(); }
 
     void stop() {
         if (!running_.exchange(false)) return;
@@ -151,6 +162,7 @@ public:
 #endif
         };
         if (!machineId_.empty()) txtEntries.push_back("id=" + machineId_);
+        txtEntries.push_back(claimable_.load() ? "claimable=1" : "claimable=0");
         if (!addresses_.empty()) {
             std::string addr = "addr=";
             for (size_t i = 0; i < addresses_.size(); ++i) addr += (i ? "," : "") + addresses_[i];
@@ -204,6 +216,8 @@ public:
 
 private:
     std::atomic<bool> running_{false};
+    std::atomic<bool> claimable_{false};
+    std::atomic<uint64_t> txtGen_{0};
     int servicePort_{47820};
     std::string hostname_;
     std::string instanceName_;
@@ -328,6 +342,7 @@ private:
         inet_pton(AF_INET, kMulticastGroup, &dest.sin_addr);
 
         // 1. Kezdeti bejelentés küldése (initial burst: 2 csomag, 1s különbséggel)
+        uint64_t seenGen = txtGen_.load();
         std::vector<uint8_t> annPkt = buildPacket(120);
         sendAll(sock, annPkt, dest);
 
@@ -336,6 +351,14 @@ private:
 
         uint8_t inBuf[2048];
         while (running_.load()) {
+            const uint64_t curGen = txtGen_.load();
+            if (curGen != seenGen) {
+                seenGen = curGen;
+                annPkt = buildPacket(120);
+                sendAll(sock, annPkt, dest);
+                lastAnnounce = std::chrono::steady_clock::now();
+            }
+
             // Lekérdezések figyelése
             if (bound) {
                 sockaddr_in srcAddr{};
@@ -350,6 +373,11 @@ private:
                     // Ha query (QR bit == 0) és szerepel benne az "_aqulify"
                     bool isQuery = ((inBuf[2] & 0x80) == 0);
                     if (isQuery && matchesQuery(inBuf, n, "_aqulify")) {
+                        const uint64_t g = txtGen_.load();
+                        if (g != seenGen) {
+                            seenGen = g;
+                            annPkt = buildPacket(120);
+                        }
                         sendAll(sock, annPkt, dest);
                     }
                 }
