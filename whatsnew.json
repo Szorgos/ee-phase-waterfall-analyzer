@@ -1,6 +1,35 @@
 {
   "versions": [
     {
+      "version": "2.8.1",
+      "date": "2026-11-20",
+      "notes": {
+        "hu": ["Windows, ASIO: egyes USB DAC-oknál (például mintavétel-váltás vagy DSD be- és kikapcsolása után) a program lefagyhatott, majd összeomolhatott. Ezt javítottuk; a hibát egy beküldött névtelen hibajelentés alapján találtuk meg."],
+        "en": ["Windows, ASIO: with some USB DACs (for example after changing the sample rate or turning DSD on and off) the app could freeze and then crash. This is fixed; we found it thanks to an anonymous error report."],
+        "es": ["Windows, ASIO: con algunos DAC USB (por ejemplo, tras cambiar la frecuencia de muestreo o activar y desactivar DSD) la aplicación podía bloquearse y luego cerrarse. Ya está corregido; lo encontramos gracias a un informe de errores anónimo."],
+        "fr": ["Windows, ASIO : avec certains DAC USB (par exemple après un changement de fréquence d'échantillonnage ou l'activation puis la désactivation du DSD), l'application pouvait se figer puis planter. C'est corrigé ; nous l'avons trouvé grâce à un rapport d'erreur anonyme."],
+        "zh": ["Windows，ASIO：使用部分 USB DAC 时（例如更改采样率或开关 DSD 之后），程序可能卡死并随后崩溃。此问题已修复；我们是通过一份匿名错误报告发现的。"],
+        "de": ["Windows, ASIO: Mit manchen USB-DACs (zum Beispiel nach einem Wechsel der Abtastrate oder dem Ein- und Ausschalten von DSD) konnte das Programm einfrieren und dann abstürzen. Das ist behoben; gefunden haben wir es dank eines anonymen Fehlerberichts."],
+        "it": ["Windows, ASIO: con alcuni DAC USB (ad esempio dopo un cambio di frequenza di campionamento o attivando e disattivando il DSD) l'app poteva bloccarsi e poi chiudersi in modo anomalo. Ora è risolto; l'abbiamo trovato grazie a una segnalazione di errore anonima."],
+        "nl": ["Windows, ASIO: met sommige USB-DAC's (bijvoorbeeld na het wijzigen van de samplefrequentie of het aan- en uitzetten van DSD) kon het programma vastlopen en daarna crashen. Dit is opgelost; we vonden het dankzij een anoniem foutrapport."],
+        "pl": ["Windows, ASIO: z niektórymi przetwornikami USB DAC (np. po zmianie częstotliwości próbkowania lub włączeniu i wyłączeniu DSD) program mógł się zawiesić, a potem zamknąć z błędem. Naprawione; znaleźliśmy to dzięki anonimowemu raportowi o błędzie."],
+        "ru": ["Windows, ASIO: с некоторыми USB-ЦАП (например, после смены частоты дискретизации или включения и выключения DSD) программа могла зависнуть, а затем аварийно завершиться. Исправлено; ошибку мы нашли благодаря анонимному отчёту об ошибке."],
+        "pt": ["Windows, ASIO: com alguns DACs USB (por exemplo, após mudar a taxa de amostragem ou ligar e desligar o DSD) a aplicação podia bloquear e depois fechar inesperadamente. Está corrigido; encontrámos o problema graças a um relatório de erro anónimo."],
+        "ro": ["Windows, ASIO: cu unele DAC-uri USB (de exemplu după schimbarea frecvenței de eșantionare sau pornirea și oprirea DSD) aplicația se putea bloca și apoi închide neașteptat. Problema este rezolvată; am găsit-o datorită unui raport de eroare anonim."],
+        "el": ["Windows, ASIO: με ορισμένους USB DAC (π.χ. μετά από αλλαγή συχνότητας δειγματοληψίας ή ενεργοποίηση και απενεργοποίηση του DSD) η εφαρμογή μπορούσε να παγώσει και μετά να κλείσει απροσδόκητα. Διορθώθηκε· το εντοπίσαμε χάρη σε μια ανώνυμη αναφορά σφάλματος."],
+        "tr": ["Windows, ASIO: Bazı USB DAC'lerde (örneğin örnekleme hızı değiştirildikten veya DSD açılıp kapatıldıktan sonra) uygulama donup ardından çökebiliyordu. Bu düzeltildi; sorunu anonim bir hata raporu sayesinde bulduk."],
+        "fi": ["Windows, ASIO: joidenkin USB-DA-muuntimien kanssa (esimerkiksi näytteenottotaajuuden vaihdon tai DSD:n päälle- ja poiskytkennän jälkeen) ohjelma saattoi jumiutua ja sitten kaatua. Tämä on korjattu; löysimme vian nimettömän virheraportin ansiosta."],
+        "da": ["Windows, ASIO: Med nogle USB-DAC'er (for eksempel efter skift af samplingfrekvens eller når DSD blev slået til og fra) kunne programmet fryse og derefter gå ned. Det er rettet; vi fandt fejlen takket være en anonym fejlrapport."],
+        "nb": ["Windows, ASIO: Med enkelte USB-DAC-er (for eksempel etter bytte av samplingsfrekvens eller når DSD ble slått av og på) kunne programmet fryse og deretter krasje. Dette er rettet; vi fant feilen takket være en anonym feilrapport."],
+        "sv": ["Windows, ASIO: Med vissa USB-DAC:ar (till exempel efter byte av samplingsfrekvens eller när DSD slogs på och av) kunde programmet frysa och sedan krascha. Det är åtgärdat; vi hittade felet tack vare en anonym felrapport."],
+        "he": ["Windows,‏ ASIO: עם חלק מממירי ה-USB DAC (למשל אחרי שינוי קצב הדגימה או הפעלה וכיבוי של DSD) התוכנה עלולה הייתה לקפוא ואז לקרוס. הבעיה תוקנה; מצאנו אותה בזכות דוח שגיאה אנונימי."],
+        "ja": ["Windows、ASIO：一部の USB DAC で（たとえばサンプリングレートの変更や DSD のオン／オフの後に）アプリがフリーズし、その後クラッシュすることがありました。これを修正しました。匿名のエラーレポートのおかげで見つけることができました。"],
+        "ko": ["Windows, ASIO: 일부 USB DAC에서(예: 샘플링 레이트를 바꾸거나 DSD를 켜고 끈 뒤) 앱이 멈춘 뒤 비정상 종료될 수 있었습니다. 이 문제를 수정했습니다. 익명 오류 보고 덕분에 찾을 수 있었습니다."],
+        "cs": ["Windows, ASIO: s některými převodníky USB DAC (například po změně vzorkovací frekvence nebo zapnutí a vypnutí DSD) mohl program zamrznout a pak spadnout. Opraveno; chybu jsme našli díky anonymnímu hlášení o chybě."],
+        "uk": ["Windows, ASIO: з деякими USB-ЦАП (наприклад, після зміни частоти дискретизації або вмикання й вимикання DSD) програма могла зависнути, а потім аварійно завершитися. Виправлено; помилку ми знайшли завдяки анонімному звіту про помилку."]
+      }
+    },
+    {
       "version": "2.8.0",
       "date": "2026-11-20",
       "notes": {
