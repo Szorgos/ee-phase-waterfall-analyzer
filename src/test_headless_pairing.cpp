@@ -646,7 +646,7 @@ void testLiveClaimSecurityAndOwnerFlow() {
 void testClaimAudioWavBuild() {
     std::cout << "[6] Számjegy-hangminták (0-9) összefűzése és angol fallback...\n";
     // A forrásfa data/claim_audio mappáját keressük (a teszt build-wsl-ből vagy gyökérből is futhat)
-    std::vector<std::string> roots = { "data/claim_audio", "../data/claim_audio" };
+    std::vector<std::string> roots = { "data/claim_audio", "../data/claim_audio", "../../data/claim_audio" };
     const std::string huDir = claim_audio::resolveDigitDir(roots, "hu");
     const std::string deDir = claim_audio::resolveDigitDir(roots, "de");
     check(!huDir.empty() && huDir.find("hu") != std::string::npos, "magyar számjegy-hangminták megtalálhatók");
