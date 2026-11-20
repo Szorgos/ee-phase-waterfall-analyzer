@@ -71,7 +71,8 @@ visszaállítás módjától függetlenül érvényes.
 - **Szállítás:** Linux/Pi és macOS: a rendszer `curl` programja (`--proto =https`, `--max-time 15`, a törzs ideiglenes fájlból `--data-binary @...`, soha nem parancssori paraméterként); Windows: WinHTTP (`win::postJson`, HTTPS, 15 s időkorlát). A küldés külön háttérszálon fut, a leállítás nem vár hálózati időkorlátra.
 - **Méretkorlát és válaszkezelés:** a törzs legfeljebb 65 536 bájt (túllépésnél a `log` legrégebbi sorai elhagyva). `201` → siker (`AQ-<id>`, automatikus küldésnél `previous-run.json/.txt` törölve); `429` → `Retry-After` tiszteletben tartása; `413` → rövidítés és egyszeri újrapróbálás; `400`/`415` → nincs újrapróbálás; hálózati hiba / `5xx` → legfeljebb 3 próba indításonként, a jelentés helyben marad.
 - **Hozzájárulás:** kikapcsolt `errorReports` és kézi jóváhagyás nélkül 0 hálózati kérés.
-- **Hídüzenetek:** `error_report_preview` (előnézet), `error_report_send` (egyszeri kézi küldés), `error_report_save` (mentés a `diag/` mappába új néven `report-ÉÉÉÉHHNN-ÓÓPPMP.json`, soha nem ír felül, a felület csak a fájlnevet kapja meg), `error_report_dismiss_previous`. A felhasználói megjegyzés (`note`, max. 400 karakter) tisztítva, `[Felhasználó] …` előtaggal kerül a `log` utolsó sorába (a `format 1` séma változatlan).
+- **Hídüzenetek:** `error_report_preview` (előnézet), `error_report_send` (egyszeri kézi küldés), `error_report_save` (mentés a `diag/` mappába új néven `report-ÉÉÉÉHHNN-ÓÓPPMP.json`, soha nem ír felül, a felület csak a fájlnevet kapja meg), `error_report_dismiss_previous`, `error_log` (a motor naplójának utolsó sorai, alapból 500, legfeljebb 1000, ugyanúgy tisztítva, mint a jelentés; válasz: `{"type":"error_log","available","lines","text"}`). A felhasználói megjegyzés (`note`, max. 400 karakter) tisztítva, `[Felhasználó] …` előtaggal kerül a `log` utolsó sorába (a `format 1` séma változatlan). Az előnézet és a napló szövegében a sortörés megmarad, a hibás UTF-8 bájt `?` lesz (`jsonEscapeText`).
+- **Távirányítóról (minden motoron: Linux/Pi, Windows, macOS):** a fenti üzeneteket a párosított eszköz is küldheti, ha rendszergazda (a fej nélküli gép első, kóddal párosított telefonja tulajdonos és rendszergazda). Jog nélkül a válasz `{"type":"error","error":"remote","request":"<üzenet>"}`, a napló nem olvasódik. A küldés mindig a vezérelt gépről megy a szerverre.
 
 ## Felület
 
@@ -79,6 +80,8 @@ visszaállítás módjától függetlenül érvényes.
 - **Első indítás:** egyszeri kérdés a motor által tárolt `errorReportsAsked` alapján (nem `localStorage`): `[Nem]` (alapértelmezett) `[Igen]` `[Mit küld?]`.
 - **Rendellenes előző futás:** `diag/previous-run.json` esetén sáv induláskor: „Legutóbb az Aqulify nem állt le rendesen. Elküldjük, mi történt?” `[Megnézem és elküldöm]` `[Nem]`.
 - **„Hibát jelentek” ablak:** 6 tünetgomb (`noSound`, `crackle`, `buttonNoEffect`, `freeze`, `badSound`, `other`), opcionális megjegyzés, **kötelező előnézet küldés előtt**, `[Küldés]` (egyszeri hozzájárulás; üres `AQ_REPORT_URL`-nél tiltott, őszinte üzenettel), `[Mentés fájlba]`, `[Mégse]`. Siker esetén másolható `AQ-<id>` azonosító.
+- **„Napló” gomb:** a motor tisztított naplója (utolsó 500 sor), másolható. Távoli gép vezérlésekor (relay) az a gép naplója és jelentése látszik; ilyenkor a „Mentés fájlba” rejtve van, mert a távoli gép mappájába írna.
+- **Telefonos alkalmazás** (külön tároló, Kimenetek fül alja): automatikus jelentés kapcsolója, „Hibát jelentek” (tünet, megjegyzés, előnézet, küldés, `AQ-<id>`), „Napló”, és az előző rendellenes futás sávja. Fej nélküli gépnél (Raspberry Pi) ez az egyetlen felület hozzá.
 
 ## Mit nem küld, és hogyan olvassa a tulajdonos a jelentéseket
 

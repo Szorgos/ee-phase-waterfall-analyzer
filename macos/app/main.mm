@@ -864,6 +864,7 @@ struct Core {
         return c->reportService.saveReport(kind, symptom, note, filename, err);
     };
     cb.errorReportDismissPrevious = [c] { c->reportService.dismissPrevious(); };
+    cb.errorLogRead = [c](int lines, int& outLines) { return c->reportService.readLog(lines, outLines); };
 
     for (int p : kEnginePorts) {
         auto b = std::make_unique<WebSocketBridge>(p);

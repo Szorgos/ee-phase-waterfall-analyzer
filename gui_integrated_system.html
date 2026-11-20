@@ -5183,6 +5183,7 @@ var qrcode = function() {
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:6px;">
               <button type="button" class="adw-btn primary" id="btnErrReportOpen" onclick="closeSinkMenu(); openErrorReportModal('manual')" data-i18n="er.reportBtn">Hibát jelentek</button>
               <button type="button" class="adw-btn" id="btnErrReportWhat" onclick="closeSinkMenu(); openErrorReportPreviewOnly()" data-i18n="er.whatSends">Mit küld?</button>
+              <button type="button" class="adw-btn" id="btnErrLog" onclick="closeSinkMenu(); openErrorLogModal()" data-i18n="er.logBtn">Napló</button>
             </div>
           </div>
         </div>
@@ -6506,9 +6507,10 @@ var qrcode = function() {
       <div id="errRepPrevIntro" class="ao-hint" hidden data-i18n="er.prevIntro">Az előző, rendellenesen megszakadt futás összefoglalója. A „Küldés” gomb egyszeri hozzájárulás.</div>
       <div style="display:flex; flex-direction:column; gap:6px;">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-          <span style="font-size:0.85rem; font-weight:600; color:var(--aq-text);" data-i18n="er.previewTitle">Ezt küldjük el</span>
+          <span id="errRepPreviewLabel" style="font-size:0.85rem; font-weight:600; color:var(--aq-text);" data-i18n="er.previewTitle">Ezt küldjük el</span>
           <div style="display:flex; align-items:center; gap:8px;">
             <span id="errRepBytes" class="ao-hint" style="margin:0;"></span>
+            <button type="button" class="mini-btn" id="errRepCopyBtn" hidden onclick="errRepCopyLog()" data-i18n="er.copyLog">Másolás</button>
             <button type="button" class="mini-btn" id="errRepRefreshBtn" onclick="errRepRequestPreview()" data-i18n="er.previewRefresh">Előnézet frissítése</button>
           </div>
         </div>
@@ -10873,11 +10875,38 @@ function errRepSchedulePreview() {
   erPreviewTimer = setTimeout(() => { errRepRequestPreview(); }, 250);
 }
 
+/** Távoli gépet vezérlünk (relay): a „Mentés fájlba” a távoli gép mappájába írna, ezért ott nem kínáljuk. */
+function errRepIsRelay() {
+  return typeof controlledTargetId !== "undefined" && !!controlledTargetId;
+}
+
+/** A modal közös részei módonként (manual / previous / previewOnly / log). */
+function errRepSetupModal(titleKey, labelKey) {
+  const titleEl = document.getElementById("errRepModalTitle");
+  if (titleEl) {
+    titleEl.setAttribute("data-i18n", titleKey);
+    titleEl.textContent = t(titleKey);
+  }
+  const lbl = document.getElementById("errRepPreviewLabel");
+  if (lbl) {
+    lbl.setAttribute("data-i18n", labelKey);
+    lbl.textContent = t(labelKey);
+  }
+  const isLog = erMode === "log";
+  const copyBtn = document.getElementById("errRepCopyBtn");
+  if (copyBtn) { copyBtn.hidden = !isLog; copyBtn.textContent = t("er.copyLog"); }
+  document.getElementById("errRepBtnSave").hidden = isLog || errRepIsRelay();
+}
+
 function errRepRequestPreview() {
   const box = document.getElementById("errRepPreviewBox");
   const bytesEl = document.getElementById("errRepBytes");
-  if (box) box.textContent = t("er.previewLoading");
+  if (box) box.textContent = t(erMode === "log" ? "er.logLoading" : "er.previewLoading");
   if (bytesEl) bytesEl.textContent = "";
+  if (erMode === "log") {
+    moSend({ type: "error_log", lines: 500 });
+    return;
+  }
   const noteEl = document.getElementById("errRepNote");
   const kind = erMode === "previous" ? "previous" : "manual";
   moSend({
@@ -10893,16 +10922,11 @@ function openErrorReportModal(mode) {
   erSending = false;
   const modal = document.getElementById("errRepModal");
   if (!modal) return;
-  const titleEl = document.getElementById("errRepModalTitle");
-  if (titleEl) {
-    titleEl.setAttribute("data-i18n", "er.modalTitle");
-    titleEl.textContent = t("er.modalTitle");
-  }
+  errRepSetupModal("er.modalTitle", "er.previewTitle");
   document.getElementById("errRepManualFields").hidden = erMode !== "manual";
   document.getElementById("errRepPrevIntro").hidden = erMode !== "previous";
   document.getElementById("errRepOneTimeHint").hidden = false;
   document.getElementById("errRepBtnSend").hidden = false;
-  document.getElementById("errRepBtnSave").hidden = false;
   document.getElementById("errRepBtnSend").textContent = t("er.sendBtn");
   document.getElementById("errRepBtnSend").disabled = !erConfigured;
   document.getElementById("errRepBtnSave").disabled = false;
@@ -10916,19 +10940,61 @@ function openErrorReportPreviewOnly() {
   erSending = false;
   const modal = document.getElementById("errRepModal");
   if (!modal) return;
-  const titleEl = document.getElementById("errRepModalTitle");
-  if (titleEl) {
-    titleEl.setAttribute("data-i18n", "er.previewTitle");
-    titleEl.textContent = t("er.previewTitle");
-  }
+  errRepSetupModal("er.previewTitle", "er.previewTitle");
   document.getElementById("errRepManualFields").hidden = true;
   document.getElementById("errRepPrevIntro").hidden = true;
   document.getElementById("errRepOneTimeHint").hidden = true;
   document.getElementById("errRepBtnSend").hidden = true;
-  document.getElementById("errRepBtnSave").hidden = false;
   errRepSetFeedback("", "");
   modal.style.display = "flex";
   errRepRequestPreview();
+}
+
+/** A motor naplója (tisztítva) – távoli gép vezérlésekor annak a gépnek a naplója. */
+function openErrorLogModal() {
+  erMode = "log";
+  erSending = false;
+  const modal = document.getElementById("errRepModal");
+  if (!modal) return;
+  errRepSetupModal("er.logTitle", "er.logHint");
+  document.getElementById("errRepManualFields").hidden = true;
+  document.getElementById("errRepPrevIntro").hidden = true;
+  document.getElementById("errRepOneTimeHint").hidden = true;
+  document.getElementById("errRepBtnSend").hidden = true;
+  errRepSetFeedback("", "");
+  modal.style.display = "flex";
+  errRepRequestPreview();
+}
+
+function errRepOnLog(m) {
+  if (erMode !== "log") return;
+  const box = document.getElementById("errRepPreviewBox");
+  const bytesEl = document.getElementById("errRepBytes");
+  const text = (m && typeof m.text === "string") ? m.text : "";
+  if (box) {
+    box.textContent = text || t("er.logEmpty");
+    box.scrollTop = box.scrollHeight;   // a legfrissebb sorok látszanak
+  }
+  if (bytesEl) bytesEl.textContent = t("er.logLines", { lines: fmtNum((m && m.lines) || 0) });
+}
+
+function errRepCopyLog() {
+  const box = document.getElementById("errRepPreviewBox");
+  const btn = document.getElementById("errRepCopyBtn");
+  if (!box || !navigator.clipboard || !navigator.clipboard.writeText) return;
+  navigator.clipboard.writeText(box.textContent || "").then(() => {
+    if (btn) btn.textContent = t("er.copied");
+  }).catch(() => {});
+}
+
+/** Távoli, nem rendszergazda eszköz: a gép elutasította a hibajelentés / napló kérését. */
+function errRepOnForbidden() {
+  erSending = false;
+  const box = document.getElementById("errRepPreviewBox");
+  if (box) box.textContent = "";
+  const sendBtn = document.getElementById("errRepBtnSend");
+  if (sendBtn) { sendBtn.textContent = t("er.sendBtn"); sendBtn.disabled = true; }
+  errRepSetFeedback("err", t("er.adminRequired"));
 }
 
 function closeErrorReportModal() {
@@ -10965,6 +11031,7 @@ function errRepSave() {
 
 function errRepOnPreview(m) {
   erConfigured = !!m.configured;
+  if (erMode === "log") return;   // közben a naplót nyitották meg: az előnézet nem írja felül
   const box = document.getElementById("errRepPreviewBox");
   const bytesEl = document.getElementById("errRepBytes");
   if (box) box.textContent = m.preview || "";
@@ -13815,6 +13882,11 @@ function initPipewireBridge() {
           errRepOnResult(data);
         } else if (data.type === "error_report_saved") {
           errRepOnSaved(data);
+        } else if (data.type === "error_log") {
+          errRepOnLog(data);
+        } else if (data.type === "error" && data.error === "remote" && typeof data.request === "string" &&
+                   /^error_(report|log)/.test(data.request)) {
+          errRepOnForbidden();
         } else if (data.type === "error_report_dismissed") {
           erHasPrevious = false;
           const b = document.getElementById("errRepPrevBanner");

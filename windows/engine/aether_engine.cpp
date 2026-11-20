@@ -1226,6 +1226,7 @@ int main(int argc, char** argv) {
         return reportService.saveReport(kind, symptom, note, filename, err);
     };
     cb.errorReportDismissPrevious = [&reportService] { reportService.dismissPrevious(); };
+    cb.errorLogRead = [&reportService](int lines, int& outLines) { return reportService.readLog(lines, outLines); };
 
     std::unique_ptr<WebSocketBridge> bridge;
     for (int p : ports) {
