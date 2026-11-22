@@ -4,8 +4,16 @@
  *        újracsatlakozás. A leírás: radio_stream.hpp.
  */
 #include "radio_stream.hpp"
+#include "mini_json.hpp"
+
+#ifdef AQULIFY_VERSION
+#define AQULIFY_RADIO_VERSION AQULIFY_VERSION
+#else
+#define AQULIFY_RADIO_VERSION "2"
+#endif
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <condition_variable>
 #include <cstdlib>
@@ -39,6 +47,7 @@ extern char** environ;
 #define STB_VORBIS_HEADER_ONLY
 #include "stb_vorbis.c"
 #include "opusfile.h"
+#include "neaacdec.h"
 
 namespace ee_analyzer::radio {
 
@@ -519,9 +528,19 @@ public:
     size_t read(uint8_t* dst, size_t n) {
         size_t got = 0;
         while (got < n) {
-            if (pos_ < base_ + buf_.size()) {
+            // Ogg-láncok (szétvágás mellett): a dekóder csak a saját láncának lapjait kapja; az új lánc kezdetén „vége”
+            uint64_t end = base_ + buf_.size();
+            if (track_) end = std::min(end, nextPage_);   // a még nem elemzett lapfejléc után nem adunk ki bájtot
+            if (split_) {
+                while (!bos_.empty() && bos_.front() <= chainStart_) bos_.pop_front();
+                if (!bos_.empty()) {
+                    if (pos_ >= bos_.front()) { chainBreak_ = true; break; }
+                    end = std::min(end, bos_.front());
+                }
+            }
+            if (pos_ < end) {
                 const size_t off = static_cast<size_t>(pos_ - base_);
-                const size_t k = std::min(n - got, buf_.size() - off);
+                const size_t k = static_cast<size_t>(std::min<uint64_t>(n - got, end - pos_));
                 std::memcpy(dst + got, buf_.data() + off, k);
                 pos_ += k;
                 got += k;
@@ -558,7 +577,46 @@ public:
     uint64_t tell() const { return pos_; }
     bool atEnd() const { return eof_ && pos_ >= base_ + buf_.size(); }
 
+    /**
+     * Ogg-lapok követése a folyam elejétől: az új logikai láncok (BOS-lap a lánc adatlapjai után) helye. split: a dekóder
+     * a lánc végén „fájlvéget” lát (chainBreak), és a hívó új dekódert indít a következő láncra (nextChain). A beépített
+     * FLAC-dekóder ugyanis a más sorozatszámú lapokat csendben átugorja (a rádió a szám végén elnémulna), a Vorbis pedig
+     * nem kezel láncot; az Opus (opusfile) maga kezeli, ott nem kell szétvágni.
+     */
+    void trackOgg(bool split) {
+        track_ = true;
+        split_ = split;
+        nextPage_ = pos_;      // pos_ mindig lap elején áll (a folyam, illetve egy lánc kezdete)
+        chainStart_ = pos_;
+        inBosGroup_ = true;
+        scanPages();
+    }
+    bool chainBreak() const { return chainBreak_; }
+    void nextChain() {
+        chainStart_ = pos_;
+        chainBreak_ = false;
+    }
+    /** Ugrás a mostani lánc (illetve a kapcsolat) elejéhez képest (a dekóderek SEEK_SET-je). */
+    bool seekRel(uint64_t off) { return seekTo(chainStart_ + off); }
+
 private:
+    void scanPages() {
+        while (track_) {
+            const uint64_t end = base_ + buf_.size();
+            if (nextPage_ < base_ || nextPage_ + 27 > end) break;
+            const size_t i = static_cast<size_t>(nextPage_ - base_);
+            if (std::memcmp(&buf_[i], "OggS", 4) != 0) { track_ = split_ = false; break; }   // szinkronvesztés: nem követjük
+            const size_t ns = buf_[i + 26];
+            if (nextPage_ + 27 + ns > end) break;
+            size_t body = 0;
+            for (size_t k = 0; k < ns; ++k) body += buf_[i + 27 + k];
+            const bool bos = (buf_[i + 5] & 0x02) != 0;
+            // a lánc eleji BOS-csoport (több logikai folyam is kezdődhet egyszerre) egy lánc; új lánc: adatlap utáni BOS
+            if (bos && !inBosGroup_ && bos_.size() < 64) bos_.push_back(nextPage_);
+            inBosGroup_ = bos;
+            nextPage_ += 27 + ns + body;
+        }
+    }
     bool fill() {
         if (eof_) return false;
         for (;;) {
@@ -576,6 +634,7 @@ private:
             }
             if (audio_.empty()) continue;
             buf_.insert(buf_.end(), audio_.begin(), audio_.end());
+            scanPages();
             return true;
         }
     }
@@ -596,6 +655,9 @@ private:
     std::vector<std::string> metas_;
     std::vector<size_t> metaAt_;
     std::deque<std::pair<uint64_t, std::string>> titles_;   // (hangbájt helye, cím)
+    bool track_ = false, split_ = false, chainBreak_ = false, inBosGroup_ = true;
+    uint64_t nextPage_ = 0, chainStart_ = 0;
+    std::deque<uint64_t> bos_;                              // az új láncok kezdete (bájthely)
     uint64_t base_ = 0, pos_ = 0;
     bool eof_ = false;
 };
@@ -638,7 +700,7 @@ private:
     static size_t onRead(void* u, void* out, size_t n) { return static_cast<Reader*>(u)->read(static_cast<uint8_t*>(out), n); }
     static drmp3_bool32 onSeek(void* u, int off, drmp3_seek_origin o) {
         auto* r = static_cast<Reader*>(u);
-        if (o == DRMP3_SEEK_SET) return off >= 0 && r->seekTo(static_cast<uint64_t>(off));
+        if (o == DRMP3_SEEK_SET) return off >= 0 && r->seekRel(static_cast<uint64_t>(off));
         if (o == DRMP3_SEEK_CUR) return r->skip(off);
         return DRMP3_FALSE;   // a folyam vége nem érhető el
     }
@@ -648,10 +710,14 @@ private:
 
 class FlacCodec final : public Codec {
 public:
+    explicit FlacCodec(Core& c) : c_(c) {}
     ~FlacCodec() override { if (f_) drflac_close(f_); }
     bool init(Reader& r) {
-        f_ = drflac_open(&FlacCodec::onRead, &FlacCodec::onSeek, nullptr, &r, nullptr);   // natív és Ogg FLAC
+        r_ = &r;
+        // natív és Ogg FLAC; a Vorbis-megjegyzés (Ogg-láncban számonként új) a „most szól”
+        f_ = drflac_open_with_metadata(&FlacCodec::onRead, &FlacCodec::onSeek, nullptr, &FlacCodec::onMeta, this, nullptr);
         if (!f_ || f_->channels == 0 || f_->sampleRate == 0) return false;
+        if (!title_.empty()) c_.addTitle(title_);
         rate = f_->sampleRate;
         ch = f_->channels;
         name = "flac";
@@ -662,14 +728,29 @@ public:
     }
 
 private:
-    static size_t onRead(void* u, void* out, size_t n) { return static_cast<Reader*>(u)->read(static_cast<uint8_t*>(out), n); }
+    static size_t onRead(void* u, void* out, size_t n) {
+        return static_cast<FlacCodec*>(u)->r_->read(static_cast<uint8_t*>(out), n);
+    }
     static drflac_bool32 onSeek(void* u, int off, drflac_seek_origin o) {
-        auto* r = static_cast<Reader*>(u);
-        if (o == DRFLAC_SEEK_SET) return off >= 0 && r->seekTo(static_cast<uint64_t>(off));
+        Reader* r = static_cast<FlacCodec*>(u)->r_;
+        if (o == DRFLAC_SEEK_SET) return off >= 0 && r->seekRel(static_cast<uint64_t>(off));
         if (o == DRFLAC_SEEK_CUR) return r->skip(off);
         return DRFLAC_FALSE;
     }
+    static void onMeta(void* u, drflac_metadata* m) {
+        auto* self = static_cast<FlacCodec*>(u);
+        if (m->type != DRFLAC_METADATA_BLOCK_TYPE_VORBIS_COMMENT) return;
+        drflac_vorbis_comment_iterator it;
+        drflac_init_vorbis_comment_iterator(&it, m->data.vorbis_comment.commentCount, m->data.vorbis_comment.pComments);
+        drflac_uint32 len = 0;
+        player::TrackTags tags;
+        while (const char* cm = drflac_next_vorbis_comment(&it, &len)) player::detail::applyVorbisComment(cm, len, tags);
+        self->title_ = commentTitle(tags);
+    }
+    Core& c_;
+    Reader* r_ = nullptr;
     drflac* f_ = nullptr;
+    std::string title_;
 };
 
 class OpusCodec final : public Codec {
@@ -836,13 +917,124 @@ private:
     size_t leftOff_ = 0;
 };
 
+/**
+ * AAC (ADTS-keretek, AAC-LC, HE-AAC / SBR, HE-AACv2 / PS) a FAAD2 könyvtárral (third_party/faad2, GPL-2.0-or-later).
+ * A mintavételt és a csatornaszámot az első dekódolt keret adja (SBR-nél a dupla, PS-nél sztereó); 5.1-et a FAAD2
+ * sztereóra keveri.
+ */
+class AacCodec final : public Codec {
+public:
+    ~AacCodec() override { if (h_) NeAACDecClose(h_); }
+    bool init(Reader& r) {
+        r_ = &r;
+        h_ = NeAACDecOpen();
+        if (!h_) return false;
+        NeAACDecConfigurationPtr cfg = NeAACDecGetCurrentConfiguration(h_);
+        cfg->outputFormat = FAAD_FMT_FLOAT;
+        cfg->downMatrix = 1;
+        NeAACDecSetConfiguration(h_, cfg);
+        if (!fillTo(kWant) || !syncAdts()) return false;
+        unsigned long sr = 0;
+        unsigned char chn = 0;
+        const long used = NeAACDecInit(h_, buf_.data(), static_cast<unsigned long>(buf_.size()), &sr, &chn);
+        if (used < 0) return false;
+        buf_.erase(buf_.begin(), buf_.begin() + used);
+        // az első hangot adó keret dönti el a formátumot
+        for (int i = 0; i < 64 && left_.empty(); ++i)
+            if (!decodeFrame(true)) return false;
+        name = "aac";
+        return rate > 0 && ch > 0 && !left_.empty();
+    }
+    size_t decode(float* out, size_t frames) override {
+        size_t got = 0;
+        int guard = 0;
+        while (got < frames) {
+            if (leftOff_ < left_.size()) {
+                const size_t k = std::min((left_.size() - leftOff_) / ch, frames - got);
+                std::memcpy(out + got * ch, left_.data() + leftOff_, k * ch * sizeof(float));
+                leftOff_ += k * ch;
+                got += k;
+                continue;
+            }
+            if (formatChanged || ++guard > 256 || !decodeFrame(false)) break;
+        }
+        return got;
+    }
+
+private:
+    static constexpr size_t kWant = 16 * 1024;   // legalább két teljes ADTS-keret (egy keret legfeljebb 8191 bájt)
+    bool fillTo(size_t n) {
+        uint8_t tmp[8192];
+        while (buf_.size() < n) {
+            const size_t k = r_->read(tmp, sizeof(tmp));
+            if (k == 0) return !buf_.empty();
+            buf_.insert(buf_.end(), tmp, tmp + k);
+        }
+        return true;
+    }
+    /** Az első ADTS-szinkronig eldobja a bájtokat (12 bit 0xFFF, layer 00). */
+    bool syncAdts() {
+        for (int guard = 0; guard < 64; ++guard) {
+            for (size_t i = 0; i + 1 < buf_.size(); ++i) {
+                if (buf_[i] == 0xFF && (buf_[i + 1] & 0xF6) == 0xF0) {
+                    buf_.erase(buf_.begin(), buf_.begin() + static_cast<std::ptrdiff_t>(i));
+                    return fillTo(kWant);
+                }
+            }
+            if (!buf_.empty()) buf_.erase(buf_.begin(), buf_.end() - 1);
+            if (!fillTo(kWant) || buf_.size() < 2) return false;
+        }
+        return false;
+    }
+    /** Egy keret dekódolása a left_-be; false: a kapcsolat vége vagy tartós hiba. */
+    bool decodeFrame(bool first) {
+        for (int errors = 0; errors < 64;) {
+            fillTo(kWant);
+            if (buf_.size() < 8) return false;
+            NeAACDecFrameInfo fi{};
+            void* pcm = NeAACDecDecode(h_, &fi, buf_.data(), static_cast<unsigned long>(buf_.size()));
+            if (fi.error || !pcm) {
+                // sérült keret: egy bájt eldobása és újraszinkronizálás a következő ADTS-fejlécre
+                ++errors;
+                buf_.erase(buf_.begin());
+                if (!syncAdts()) return false;
+                continue;
+            }
+            if (fi.bytesconsumed == 0) return false;
+            buf_.erase(buf_.begin(), buf_.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(fi.bytesconsumed, buf_.size())));
+            if (fi.samples == 0 || fi.channels == 0) continue;
+            if (first && rate == 0) {
+                rate = static_cast<uint32_t>(fi.samplerate);
+                ch = fi.channels;
+            } else if (fi.samplerate != rate || fi.channels != ch) {
+                formatChanged = true;
+                return false;
+            }
+            const float* s = static_cast<const float*>(pcm);
+            left_.assign(s, s + fi.samples);
+            leftOff_ = 0;
+            return true;
+        }
+        return false;
+    }
+    Reader* r_ = nullptr;
+    NeAACDecHandle h_ = nullptr;
+    std::vector<uint8_t> buf_;
+    std::vector<float> left_;
+    size_t leftOff_ = 0;
+};
+
 std::unique_ptr<Codec> makeCodec(StreamFormat f, Reader& r, Core& c) {
+    if (f == StreamFormat::Aac) {
+        auto d = std::make_unique<AacCodec>();
+        return d->init(r) ? std::move(d) : nullptr;
+    }
     if (f == StreamFormat::Mp3) {
         auto d = std::make_unique<Mp3Codec>();
         return d->init(r) ? std::move(d) : nullptr;
     }
     if (f == StreamFormat::Flac) {
-        auto d = std::make_unique<FlacCodec>();
+        auto d = std::make_unique<FlacCodec>(c);
         return d->init(r) ? std::move(d) : nullptr;
     }
     if (f == StreamFormat::Ogg) {
@@ -852,16 +1044,18 @@ std::unique_ptr<Codec> makeCodec(StreamFormat f, Reader& r, Core& c) {
         if (n < 28) return nullptr;
         const size_t payload = 27 + pg[26];
         auto at = [&](const char* sig, size_t len) { return payload + len <= n && std::memcmp(pg + payload, sig, len) == 0; };
-        if (at("OpusHead", 8)) {
+        if (at("OpusHead", 8)) {   // az opusfile maga kezeli a láncokat
             auto d = std::make_unique<OpusCodec>(c);
             return d->init(r) ? std::move(d) : nullptr;
         }
         if (at("\x01vorbis", 7)) {
+            r.trackOgg(true);
             auto d = std::make_unique<VorbisCodec>(c);
             return d->init(r) ? std::move(d) : nullptr;
         }
         if (at("\x7f" "FLAC", 5)) {
-            auto d = std::make_unique<FlacCodec>();
+            r.trackOgg(true);
+            auto d = std::make_unique<FlacCodec>(c);
             return d->init(r) ? std::move(d) : nullptr;
         }
     }
@@ -936,7 +1130,7 @@ void session(Core& c, std::string& err, bool& fatal, uint64_t& framesOut) {
             u = next;
             continue;
         }
-        if (f != StreamFormat::Mp3 && f != StreamFormat::Ogg && f != StreamFormat::Flac) {
+        if (f != StreamFormat::Mp3 && f != StreamFormat::Ogg && f != StreamFormat::Flac && f != StreamFormat::Aac) {
             err = f == StreamFormat::Unknown ? "format" : formatName(f);
             fatal = true;
             return;
@@ -967,6 +1161,16 @@ void session(Core& c, std::string& err, bool& fatal, uint64_t& framesOut) {
                 if (c.quit) break;
             }
             const size_t n = codec->decode(tmp.data(), 1024);
+            if (n == 0 && rd.chainBreak() && !codec->formatChanged) {
+                // új Ogg-lánc (a szerver a szám váltásakor új logikai folyamot kezd): új dekóder ugyanazon a kapcsolaton
+                rd.nextChain();
+                const uint32_t rate = codec->rate, ch = codec->ch;
+                codec.reset();
+                codec = makeCodec(f, rd, c);
+                if (!codec) { err = "decode"; return; }
+                if (codec->rate != rate || codec->ch != ch) { err = "formatChange"; fatal = true; return; }
+                continue;
+            }
             if (n == 0) break;
             c.push(tmp.data(), n);
             framesOut += n;
@@ -1129,6 +1333,7 @@ RadioStatus RadioDecoder::statusOf(const Core& c) {
     s.bitrate = c.bitrate;
     s.reconnects = c.reconnects;
     s.droppedFrames = c.dropped;
+    s.framesIn = c.wr;
     s.icyName = c.icyName;
     s.streamTitle = c.title;
     return s;
@@ -1140,5 +1345,88 @@ bool RadioDecoder::closed(const Core& c) {
 }
 
 RadioStatus RadioDecoder::status() const { return statusOf(*core_); }
+
+// =====================================================================================================================
+// Állomáskereső (közösségi katalógus)
+// =====================================================================================================================
+
+namespace {
+constexpr size_t kMaxCatalogBytes = 1u << 20;
+
+std::string urlEncode(const std::string& s) {
+    static const char* hex = "0123456789ABCDEF";
+    std::string out;
+    for (unsigned char c : s) {
+        if (std::isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~') out += static_cast<char>(c);
+        else { out += '%'; out += hex[c >> 4]; out += hex[c & 15]; }
+    }
+    return out;
+}
+} // namespace
+
+bool catalogSearch(const std::string& query, const NetOptions& net, std::vector<CatalogItem>& out, std::string& err,
+                   const std::function<void(HttpStream*)>& reg, const std::string& baseUrl) {
+    out.clear();
+    const std::string q = cleanText(query, 100);
+    if (q.empty()) { err = "query"; return false; }
+    const std::string url = (baseUrl.empty() ? std::string(kCatalogBase) : baseUrl) + "/json/stations/search?name=" +
+                            urlEncode(q) + "&limit=50&hidebroken=true&order=clickcount&reverse=true";
+    RadioUrl u;
+    if (!parseRadioUrl(url, u, nullptr)) { err = "url"; return false; }
+    NetOptions o = net;
+    o.userAgent = std::string("Aqulify/") + AQULIFY_RADIO_VERSION;   // a katalógus kéri a „beszélő” azonosítót
+    for (int attempt = 0; attempt < 2; ++attempt) {   // a DNS másik szervert adhat a második próbára
+        std::string body;
+        HttpHead head;
+        std::string e;
+        bool ok;
+        {
+            HttpStream hs;
+            if (reg) reg(&hs);
+            ok = hs.open(u, o, head, e);
+            if (ok && head.status == 200) {
+                uint8_t buf[16384];
+                while (body.size() <= kMaxCatalogBytes) {
+                    const size_t n = hs.read(buf, sizeof(buf));
+                    if (n == 0) break;
+                    body.append(reinterpret_cast<const char*>(buf), n);
+                }
+            }
+            if (reg) reg(nullptr);
+        }
+        if (!ok) {
+            err = e;
+            if (e == "aborted" || e == "blocked") return false;
+            continue;
+        }
+        if (head.status != 200) { err = "http"; continue; }
+        if (body.size() > kMaxCatalogBytes) { err = "size"; return false; }
+        json::Value v;
+        if (!json::parse(body, v) || v.type != json::Value::Type::Array) { err = "json"; continue; }
+        for (const auto& e2 : v.arr) {
+            if (out.size() >= 50) break;
+            auto s = [&](const char* k) { const json::Value* x = e2.get(k); return x ? x->stringOr("") : std::string(); };
+            CatalogItem it;
+            it.name = cleanText(s("name"), 120);
+            std::string link = s("url_resolved");
+            if (link.empty()) link = s("url");
+            while (!link.empty() && (link.back() == ' ' || link.back() == '\r' || link.back() == '\n')) link.pop_back();
+            RadioUrl ru;
+            if (it.name.empty() || !parseRadioUrl(link, ru, nullptr)) continue;
+            if (const json::Value* h = e2.get("hls"); h && h->numberOr(0) != 0) continue;   // szegmentált adás: nem játszható
+            it.url = link;
+            it.codec = cleanText(s("codec"), 16);
+            it.country = cleanText(s("countrycode"), 4);
+            it.tags = cleanText(s("tags"), 80);
+            const json::Value* br = e2.get("bitrate");
+            const double b = br ? br->numberOr(0) : 0;
+            it.bitrate = b > 0 && b < 100000 ? static_cast<int>(b) : 0;
+            out.push_back(std::move(it));
+        }
+        err.clear();
+        return true;
+    }
+    return false;
+}
 
 } // namespace ee_analyzer::radio

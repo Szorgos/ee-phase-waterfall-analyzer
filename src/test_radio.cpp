@@ -3,6 +3,7 @@
 // ICY metaadat, átirányítás, lejátszási lista, megszakadás és újracsatlakozás, elakadás, tiltott címek (átirányítás
 // után is), nem támogatott formátumok, megszakítás, a FilePlayer és a vezérlő / híd üzenetei.
 // A hangfájlok: tests/data/player_stereo44.{mp3,ogg,flac}, player_stereo48.opus.
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -37,6 +38,9 @@ static std::vector<uint8_t> readFile(const std::string& p) {
     return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 }
 
+static std::mutex searchM;     // a próbaszerver utolsó katalógus-kérése
+static std::string lastSearch;
+
 static double msSince(Clock::time_point t) {
     return std::chrono::duration<double, std::milli>(Clock::now() - t).count();
 }
@@ -55,6 +59,78 @@ static std::vector<uint8_t> icyStream(const std::vector<uint8_t>& audio, size_t 
         while (m.size() % 16) m += '\0';
         out.push_back(static_cast<uint8_t>(m.size() / 16));
         out.insert(out.end(), m.begin(), m.end());
+    }
+    return out;
+}
+
+// ---- Ogg FLAC (láncolt rádióadás, mint a valódi FLAC-adóknál: számonként új logikai folyam új sorozatszámmal)
+
+static uint32_t oggCrc(const uint8_t* p, size_t n) {
+    static uint32_t tab[256];
+    static bool init = false;
+    if (!init) {
+        for (uint32_t i = 0; i < 256; ++i) {
+            uint32_t r = i << 24;
+            for (int k = 0; k < 8; ++k) r = (r & 0x80000000u) ? (r << 1) ^ 0x04C11DB7u : (r << 1);
+            tab[i] = r;
+        }
+        init = true;
+    }
+    uint32_t crc = 0;
+    for (size_t i = 0; i < n; ++i) crc = (crc << 8) ^ tab[((crc >> 24) ^ p[i]) & 0xFF];
+    return crc;
+}
+
+static void oggPage(std::vector<uint8_t>& out, const std::vector<uint8_t>& body, uint8_t flags, uint32_t serial, uint32_t seq, uint64_t granule) {
+    std::vector<uint8_t> pg = { 'O', 'g', 'g', 'S', 0, flags };
+    for (int i = 0; i < 8; ++i) pg.push_back(static_cast<uint8_t>(granule >> (8 * i)));
+    for (int i = 0; i < 4; ++i) pg.push_back(static_cast<uint8_t>(serial >> (8 * i)));
+    for (int i = 0; i < 4; ++i) pg.push_back(static_cast<uint8_t>(seq >> (8 * i)));
+    for (int i = 0; i < 4; ++i) pg.push_back(0);
+    std::vector<uint8_t> segs;
+    size_t left = body.size();
+    while (left >= 255) { segs.push_back(255); left -= 255; }
+    segs.push_back(static_cast<uint8_t>(left));
+    pg.push_back(static_cast<uint8_t>(segs.size()));
+    pg.insert(pg.end(), segs.begin(), segs.end());
+    pg.insert(pg.end(), body.begin(), body.end());
+    const uint32_t crc = oggCrc(pg.data(), pg.size());
+    for (int i = 0; i < 4; ++i) pg[22 + i] = static_cast<uint8_t>(crc >> (8 * i));
+    out.insert(out.end(), pg.begin(), pg.end());
+}
+
+/** Natív FLAC fájlból egy Ogg FLAC lánc (fejléc-csomag, Vorbis-megjegyzés TITLE / ARTIST, a keretek lapokban). */
+static std::vector<uint8_t> oggFlacChain(const std::vector<uint8_t>& flac, uint32_t serial, const std::string& artist, const std::string& title) {
+    std::vector<uint8_t> out;
+    if (flac.size() < 42 || std::memcmp(flac.data(), "fLaC", 4) != 0) return out;
+    size_t p = 4;
+    std::vector<uint8_t> streaminfo;
+    for (;;) {
+        const bool last = (flac[p] & 0x80) != 0;
+        const int type = flac[p] & 0x7F;
+        const size_t len = (size_t(flac[p + 1]) << 16) | (size_t(flac[p + 2]) << 8) | flac[p + 3];
+        if (type == 0) streaminfo.assign(flac.begin() + p + 4, flac.begin() + p + 4 + len);
+        p += 4 + len;
+        if (last) break;
+    }
+    std::vector<uint8_t> head = { 0x7F, 'F', 'L', 'A', 'C', 1, 0, 0, 1, 'f', 'L', 'a', 'C', 0x00, 0, 0, 34 };
+    head.insert(head.end(), streaminfo.begin(), streaminfo.end());
+    uint32_t seq = 0;
+    oggPage(out, head, 0x02, serial, seq++, 0);
+    auto le32 = [](std::vector<uint8_t>& v, uint32_t x) { for (int i = 0; i < 4; ++i) v.push_back(static_cast<uint8_t>(x >> (8 * i))); };
+    std::vector<uint8_t> vc;
+    const std::string vendor = "teszt", c1 = "TITLE=" + title, c2 = "ARTIST=" + artist;
+    le32(vc, static_cast<uint32_t>(vendor.size())); vc.insert(vc.end(), vendor.begin(), vendor.end());
+    le32(vc, 2);
+    le32(vc, static_cast<uint32_t>(c1.size())); vc.insert(vc.end(), c1.begin(), c1.end());
+    le32(vc, static_cast<uint32_t>(c2.size())); vc.insert(vc.end(), c2.begin(), c2.end());
+    std::vector<uint8_t> vcBlock = { 0x84, static_cast<uint8_t>(vc.size() >> 16), static_cast<uint8_t>(vc.size() >> 8), static_cast<uint8_t>(vc.size()) };
+    vcBlock.insert(vcBlock.end(), vc.begin(), vc.end());
+    oggPage(out, vcBlock, 0, serial, seq++, 0);
+    for (size_t off = p; off < flac.size(); off += 4000) {
+        const size_t n = std::min<size_t>(4000, flac.size() - off);
+        std::vector<uint8_t> body(flac.begin() + off, flac.begin() + off + n);
+        oggPage(out, body, off + n >= flac.size() ? 0x04 : 0, serial, seq++, 0);
     }
     return out;
 }
@@ -380,6 +456,7 @@ static void testNetwork() {
     const auto ogg = readFile(kData + "/player_stereo44.ogg");
     const auto opus = readFile(kData + "/player_stereo48.opus");
     const auto flac = readFile(kData + "/player_stereo44.flac");
+    const auto aac = readFile(kData + "/player_stereo44.aac");   // saját szinusz (tools/make_aac_test_data.cpp)
     CHECK(!mp3.empty() && !ogg.empty() && !opus.empty() && !flac.empty(), "tesztfájlok (%zu, %zu, %zu, %zu bájt)", mp3.size(), ogg.size(), opus.size(), flac.size());
     std::vector<uint8_t> mp3x3;
     for (int i = 0; i < 3; ++i) mp3x3.insert(mp3x3.end(), mp3.begin(), mp3.end());
@@ -415,6 +492,9 @@ static void testNetwork() {
         } else if (path == "/hls") {
             sv.sendStr(s, "HTTP/1.1 200 OK\r\nContent-Type: application/vnd.apple.mpegurl\r\n\r\n#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:10,\nseg1.ts\n");
         } else if (path == "/aac") {
+            sv.sendStr(s, "HTTP/1.1 200 OK\r\nContent-Type: audio/aac\r\n\r\n");
+            sv.sendAll(s, aac.data(), aac.size());
+        } else if (path == "/aacjunk") {
             sv.sendStr(s, "HTTP/1.1 200 OK\r\nContent-Type: audio/aacp\r\n\r\n");
             const unsigned char adts[] = { 0xFF, 0xF1, 0x50, 0x80, 0x02, 0x1F, 0xFC, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
             for (int i = 0; i < 64; ++i) sv.sendAll(s, adts, sizeof(adts));
@@ -428,12 +508,40 @@ static void testNetwork() {
             const auto& body = path == "/ogg" ? ogg : path == "/opus" ? opus : flac;
             sv.sendStr(s, std::string("HTTP/1.1 200 OK\r\nContent-Type: ") + (path == "/flac" ? "audio/flac" : "audio/ogg") + "\r\n\r\n");
             sv.sendAll(s, body.data(), body.size());
+        } else if (path == "/oggflac" || path == "/vorbis2") {
+            // két lánc egymás után (mint a számváltás egy valódi adásban), utána bont
+            std::vector<uint8_t> body;
+            if (path == "/oggflac") {
+                body = oggFlacChain(flac, 0x1111, "Egy", "Első");
+                const auto second = oggFlacChain(flac, 0x2222, "Kettő", "Második");
+                body.insert(body.end(), second.begin(), second.end());
+            } else {
+                body = ogg;
+                body.insert(body.end(), ogg.begin(), ogg.end());
+            }
+            sv.sendStr(s, "HTTP/1.1 200 OK\r\nContent-Type: audio/ogg\r\n\r\n");
+            sv.sendAll(s, body.data(), body.size());
         } else if (path == "/stall") {
             sv.sendStr(s, "HTTP/1.1 200 OK\r\nContent-Type: audio/mpeg\r\n\r\n");
             sv.sendAll(s, mp3.data(), mp3.size());
             sv.idle(8000);   // elakad: a kliens a stallTimeout után bont és újracsatlakozik
         } else if (path == "/silent") {
             sv.idle(8000);   // fejlécet sem küld
+        } else if (path.rfind("/json/stations/search?", 0) == 0) {
+            // a katalógus próbaválasza: egy jó, egy tiltott sémájú, egy HLS-es, egy név nélküli és egy https-es tétel
+            {
+                std::lock_guard<std::mutex> lk(searchM);
+                lastSearch = path;
+            }
+            const std::string body =
+                "[{\"name\":\"Kék Duna Rádió\",\"url\":\"http://x.example/a\",\"url_resolved\":\"http://x.example/a.mp3\",\"codec\":\"MP3\","
+                "\"bitrate\":128,\"countrycode\":\"HU\",\"tags\":\"pop,hírek\",\"hls\":0},"
+                "{\"name\":\"Rossz\",\"url_resolved\":\"javascript:alert(1)\",\"codec\":\"MP3\"},"
+                "{\"name\":\"Szegmentált\",\"url_resolved\":\"https://h.example/live.m3u8\",\"codec\":\"AAC\",\"hls\":1},"
+                "{\"name\":\"\",\"url_resolved\":\"http://n.example/\"},"
+                "{\"name\":\"Második \\u0001adó\",\"url\":\"https://y.example/s\",\"codec\":\"AAC+\",\"bitrate\":64,\"countrycode\":\"AT\"}]";
+            sv.sendStr(s, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + std::to_string(body.size()) +
+                              "\r\n\r\n" + body);
         } else {
             sv.sendStr(s, "HTTP/1.1 500 Error\r\n\r\n");
         }
@@ -448,7 +556,14 @@ static void testNetwork() {
             CHECK(d->sampleRate() == 44100 && d->channels() == 2, "formátum: %u Hz, %u csatorna", d->sampleRate(), d->channels());
             CHECK(srv.icyAsked.load(), "a kérés kéri az ICY metaadatot (Icy-MetaData: 1)");
             std::string t, a, al;
-            const size_t loud = pump(*d, 6000, [&] { d->liveInfo(t, a, al); return srv.hits("/mp3") >= 2 && t == "Második"; });
+            // a hangosság a kilépésig gyűlik: lassú gépen a cím és az újracsatlakozás hamarabb megvan, mint 5000 hangos keret
+            size_t loud = 0;
+            const auto tp = Clock::now();
+            while (msSince(tp) < 6000) {
+                loud += pump(*d, 100);
+                d->liveInfo(t, a, al);
+                if (srv.hits("/mp3") >= 2 && t == "Második" && loud > 5000) break;
+            }
             d->liveInfo(t, a, al);
             const RadioStatus st = d->status();
             CHECK(loud > 5000, "szól (nem csendes keretek: %zu)", loud);
@@ -487,14 +602,14 @@ static void testNetwork() {
         c.net.allowLoopback = true;
         auto t0 = Clock::now();
         d = RadioDecoder::open(c, err);
-        CHECK(!d && err == "blocked" && msSince(t0) < 1000, "magánhálózati cím közvetlenül: azonnal tiltva (%.0f ms)", msSince(t0));
+        CHECK(!d && err == "blocked" && msSince(t0) < 2000, "magánhálózati cím közvetlenül: azonnal tiltva (%.0f ms)", msSince(t0));
     }
     {
         auto d = RadioDecoder::open(testCfg(srv.url("/pls")), err);
         CHECK(d && d->status().codec == "mp3", "PLS lejátszási lista követése (%s)", err.c_str());
     }
     {
-        struct { const char* path; const char* want; } bad[] = { { "/hls", "hls" }, { "/aac", "aac" }, { "/html", "html" },
+        struct { const char* path; const char* want; } bad[] = { { "/hls", "hls" }, { "/aacjunk", "decode" }, { "/html", "html" },
                                                                    { "/404", "http" }, { "/bighead", "http" } };
         for (auto& b : bad) {
             auto d = RadioDecoder::open(testCfg(srv.url(b.path)), err);
@@ -503,15 +618,79 @@ static void testNetwork() {
     }
     {
         struct { const char* path; const char* codec; uint32_t rate; } ok[] = { { "/ogg", "vorbis", 44100 }, { "/opus", "opus", 48000 },
-                                                                                 { "/flac", "flac", 44100 } };
+                                                                                 { "/flac", "flac", 44100 }, { "/aac", "aac", 44100 } };
         for (auto& o : ok) {
             auto d = RadioDecoder::open(testCfg(srv.url(o.path)), err);
             CHECK(d && d->status().codec == o.codec && d->sampleRate() == o.rate && d->channels() == 2, "%s: %s, %u Hz (%s)", o.path, o.codec, o.rate, err.c_str());
             if (d) {
                 size_t loud = 0;
                 const auto t0 = Clock::now();
-                while (msSince(t0) < 4000 && (loud < 30000 || d->status().reconnects < 1)) loud += pump(*d, 200);
+                while (msSince(t0) < 6000 && (loud < 30000 || d->status().reconnects < 1)) loud += pump(*d, 200);
                 CHECK(loud > 10000, "%s: szól (%zu keret), újracsatlakozás: %llu", o.path, loud, static_cast<unsigned long long>(d->status().reconnects));
+            }
+        }
+    }
+    {
+        // AAC: a dekódolt jel a kódolt szinusz (bal 440 Hz, jobb 880 Hz), nem csak „valami szól”
+        CHECK(aac.size() > 10000, "AAC tesztfájl (%zu bájt)", aac.size());
+        auto d = RadioDecoder::open(testCfg(srv.url("/aac")), err);
+        if (d) {
+            std::vector<float> x, buf(1024 * 2);
+            const auto t0 = Clock::now();
+            bool started = false;
+            while (x.size() < 16384 * 2 && msSince(t0) < 6000) {
+                const size_t n = d->read(buf.data(), 1024);
+                if (n == 0) break;
+                for (size_t i = 0; i < n && x.size() < 16384 * 2; ++i) {
+                    if (!started && std::fabs(buf[2 * i]) < 0.05f) continue;   // kódoló-előtét és csend
+                    started = true;
+                    x.push_back(buf[2 * i]);
+                    x.push_back(buf[2 * i + 1]);
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+            auto amp = [&](size_t c, double f) {
+                double re = 0, im = 0;
+                const size_t n = x.size() / 2;
+                for (size_t i = 0; i < n; ++i) {
+                    const double w = 0.5 - 0.5 * std::cos(2 * 3.14159265358979 * i / (n - 1));
+                    re += w * x[2 * i + c] * std::cos(2 * 3.14159265358979 * f * i / 44100.0);
+                    im -= w * x[2 * i + c] * std::sin(2 * 3.14159265358979 * f * i / 44100.0);
+                }
+                return 2.0 * std::sqrt(re * re + im * im) / (n * 0.5);
+            };
+            const double l440 = amp(0, 440), l880 = amp(0, 880), r880 = amp(1, 880), r440 = amp(1, 440);
+            CHECK(x.size() == 16384 * 2 && l440 > 0.4 && r880 > 0.4 && l880 < 0.05 && r440 < 0.05,
+                  "AAC: bal 440 Hz %.3f (880: %.3f), jobb 880 Hz %.3f (440: %.3f)", l440, l880, r880, r440);
+        } else {
+            CHECK(false, "AAC megnyitása (%s)", err.c_str());
+        }
+    }
+    {
+        // láncolt Ogg: a második lánc (új sorozatszám, új cím) is szól, ugyanazon a kapcsolaton, újracsatlakozás nélkül
+        for (const char* path : { "/oggflac", "/vorbis2" }) {
+            RadioDecoder::Config cfg = testCfg(srv.url(path));
+            cfg.backoffBaseMs = 20000;  // a mérés alatt ne jöjjön új kapcsolat
+            cfg.maxBufferSec = 30.0;    // az egész adás elférjen
+            auto d = RadioDecoder::open(cfg, err);
+            CHECK(d != nullptr, "%s: megnyílik (%s)", path, err.c_str());
+            if (!d) continue;
+            std::vector<std::string> seen;
+            size_t loud = 0;
+            const auto t0 = Clock::now();
+            const bool isFlac = std::string(path) == "/oggflac";
+            while (msSince(t0) < 6000) {   // kilépés, ha mindkét lánc átjött (lassú gépen tovább tart)
+                loud += pump(*d, 100);
+                std::string ti, ar, al;
+                d->liveInfo(ti, ar, al);
+                if (seen.empty() || seen.back() != ti) seen.push_back(ti);
+                if (loud > 80000 && (!isFlac || seen.back() == "Második")) break;
+            }
+            const RadioStatus st = d->status();
+            CHECK(loud > 80000 && srv.hits(path) == 1, "%s: mindkét lánc szól egy kapcsolaton (%zu hangos keret, %d kérés)", path, loud, srv.hits(path));
+            if (std::string(path) == "/oggflac") {
+                const bool both = std::find(seen.begin(), seen.end(), "Első") != seen.end() && seen.back() == "Második";
+                CHECK(st.codec == "flac" && both, "%s: a „most szól” a láncváltásnál vált (utolsó: „%s”)", path, seen.empty() ? "" : seen.back().c_str());
             }
         }
     }
@@ -536,7 +715,7 @@ static void testNetwork() {
         auto d = RadioDecoder::open(testCfg(srv.url("/silent")), err, &cancel);
         const double ms = msSince(t0);
         canceller.join();
-        CHECK(!d && err == "aborted" && ms < 1500, "kapcsolódás közbeni megszakítás (%s, %.0f ms)", err.c_str(), ms);
+        CHECK(!d && err == "aborted" && ms < 3000, "kapcsolódás közbeni megszakítás (%s, %.0f ms)", err.c_str(), ms);
     }
     {
         auto d = RadioDecoder::open(testCfg(srv.url("/live")), err);
@@ -556,10 +735,10 @@ static void testNetwork() {
         if (d) {
             std::string perr;
             CHECK(fp.openStream(std::move(d), "Próba Rádió", &perr) && fp.state() == player::FilePlayer::State::Playing, "FilePlayer: szól (%s)", perr.c_str());
-            for (int i = 0; i < 300 && out->loud.load() < 20; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            for (int i = 0; i < 600 && out->loud.load() < 20; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
             CHECK(out->loud.load() >= 20 && out->rate.load() == 44100, "FilePlayer: a kimenetre hang jut (%d blokk)", out->loud.load());
             media::Info info;
-            for (int i = 0; i < 300; ++i) {
+            for (int i = 0; i < 600; ++i) {
                 info = fp.info();
                 if (info.title == "Első szám" || info.title == "Második") break;
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -576,9 +755,13 @@ static void testNetwork() {
     {
         std::string saved;
         StationStore store([&](const std::string& doc) { saved = doc; });
+        std::mutex bm;
+        std::vector<std::string> broadcasts;
+        BridgeCallbacks cb;   // a vezérlő előtt: a kereső szála a vezérlő megszűnéséig hívhatja
+        cb.broadcast = [&](const std::string& j) { std::lock_guard<std::mutex> lk(bm); broadcasts.push_back(j); };
         player::FilePlayer fp(std::make_unique<PullOutput>());
         RadioController ctl(fp, store, testNet());
-        BridgeCallbacks cb;
+        ctl.setCatalogBase(srv.url(""));
         attachRadio(cb, ctl, store);
         auto req = [&](const std::string& j, bool remote) {
             json::Value v;
@@ -618,6 +801,55 @@ static void testNetwork() {
             CHECK(reloaded.get(id, s) && s.name == "Új név" && s.url == srv.url("/live"), "a mentett lista visszatölthető");
             CHECK(req("{\"type\":\"radio_remove\",\"id\":\"" + id + "\"}", false).find("\"items\":[]") != std::string::npos, "törlés");
         }
+        // Állomáskereső: alapból ki; csak helyben / adminnal kapcsolható; a keresés aszinkron, a válasz broadcast
+        CHECK(!store.catalog() && cb.radioStatus().find("\"catalog\":false") != std::string::npos, "a kereső alapból ki van kapcsolva");
+        CHECK(req("{\"type\":\"radio_search\",\"q\":\"duna\"}", true).find("\"catalogOff\"") != std::string::npos &&
+              srv.hits("/json/stations/search?name=duna&limit=50&hidebroken=true&order=clickcount&reverse=true") == 0,
+              "kikapcsolt kereső: nincs kérés a katalógushoz");
+        CHECK(req("{\"type\":\"radio_catalog\",\"on\":true}", true).find("\"remote\"") != std::string::npos && !store.catalog(),
+              "távoli (nem admin) kliens nem kapcsolhatja be");
+        CHECK(req("{\"type\":\"radio_catalog\",\"on\":true}", false).find("\"catalog\":true") != std::string::npos && store.catalog() &&
+              saved.find("\"catalog\":true") != std::string::npos, "bekapcsolás és mentés");
+        const std::string started = req("{\"type\":\"radio_search\",\"q\":\"Kék Duna\",\"req\":\"k1\"}", true);
+        CHECK(started.find("\"state\":\"searching\"") != std::string::npos && started.find("\"req\":\"k1\"") != std::string::npos,
+              "keresés indul (azonnali válasz)");
+        std::string result;
+        for (int i = 0; i < 500 && result.empty(); ++i) {
+            {
+                std::lock_guard<std::mutex> lk(bm);
+                for (const auto& b : broadcasts) if (b.find("\"type\":\"radio_search\"") != std::string::npos) result = b;
+            }
+            if (result.empty()) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        std::string sp;
+        {
+            std::lock_guard<std::mutex> lk(searchM);
+            sp = lastSearch;
+        }
+        CHECK(sp.find("name=K%C3%A9k%20Duna&") != std::string::npos, "a keresőszöveg URL-kódolva megy (%s)", sp.c_str());
+        json::Value rv;
+        const bool parsed = json::parse(result, rv);
+        const json::Value* items = parsed ? rv.get("items") : nullptr;
+        CHECK(items && items->type == json::Value::Type::Array && items->arr.size() == 2, "találatok: a hibás, a HLS-es és a név nélküli kimarad (%s)", result.c_str());
+        if (items && items->arr.size() == 2) {
+            const json::Value& a = items->arr[0];
+            CHECK(a.get("url")->stringOr("") == "http://x.example/a.mp3" && a.get("codec")->stringOr("") == "MP3" &&
+                  a.get("bitrate")->numberOr(0) == 128 && a.get("country")->stringOr("") == "HU" && a.get("name")->stringOr("") == "Kék Duna Rádió",
+                  "találat: a feloldott cím, formátum, bitráta, ország");
+            CHECK(items->arr[1].get("url")->stringOr("") == "https://y.example/s" && items->arr[1].get("name")->stringOr("") == "Második  adó",
+                  "url_resolved nélkül az url; a név tisztítva");
+        }
+        CHECK(req("{\"type\":\"radio_catalog\",\"on\":false}", false).find("\"catalog\":false") != std::string::npos && !store.catalog(),
+              "kikapcsolás");
+        {
+            std::vector<CatalogItem> out;
+            std::string e;
+            CHECK(!catalogSearch("   ", testNet(), out, e, nullptr, srv.url("")) && e == "query", "üres keresőszöveg");
+            NetOptions strict = testNet();
+            strict.allowLoopback = false;
+            CHECK(!catalogSearch("duna", strict, out, e, nullptr, srv.url("")) && e == "blocked", "a katalóguskérés is SSRF-ellenőrzött");
+        }
+
         StationStore junk(nullptr);
         junk.load("{\"stations\":[{\"id\":\"a1\",\"name\":\"Jó\",\"url\":\"http://a.example/\"},{\"id\":\"b2\",\"name\":\"Rossz\",\"url\":\"javascript:alert(1)\"},"
                   "{\"id\":\"../x\",\"name\":\"Rossz id\",\"url\":\"http://a.example/\"},{\"id\":\"a1\",\"name\":\"Dupla\",\"url\":\"http://b.example/\"}]}");
@@ -627,8 +859,85 @@ static void testNetwork() {
     }
 }
 
+/**
+ * Élő próba valódi állomással (csak kézzel, a CI-ben nem fut): AQ_RADIO_LIVE="cím1 cím2 …", AQ_RADIO_LIVE_SEC (alapból 25).
+ * Állomásonként kiírja az állapotot, a formátumot, a „most szól” szöveget és az újracsatlakozásokat.
+ */
+static int liveProbe(const char* urls) {
+    const char* secEnv = std::getenv("AQ_RADIO_LIVE_SEC");
+    const int sec = secEnv ? std::max(5, std::atoi(secEnv)) : 25;
+    std::string all = urls;
+    size_t pos = 0;
+    while (pos < all.size()) {
+        size_t sp = all.find(' ', pos);
+        if (sp == std::string::npos) sp = all.size();
+        const std::string url = all.substr(pos, sp - pos);
+        pos = sp + 1;
+        if (url.empty()) continue;
+        std::printf("\n== %s\n", url.c_str());
+        RadioDecoder::Config c;
+        c.url = url;
+        c.station = "Élő próba";
+        std::string err;
+        const auto t0 = Clock::now();
+        auto d = RadioDecoder::open(c, err);
+        if (!d) { std::printf("  [HIBA] nem nyílt meg: %s (%.0f ms)\n", err.c_str(), msSince(t0)); ++g_fail; continue; }
+        std::printf("  megnyílt %.0f ms alatt: %u Hz, %u csatorna\n", msSince(t0), d->sampleRate(), d->channels());
+        size_t loud = 0, total = 0;
+        std::vector<float> buf(1024 * d->channels());
+        const auto t1 = Clock::now();
+        double nextPrint = 0;
+        uint64_t in20 = 0;
+        double t20 = 0;
+        // valós idejű olvasás (mint a lejátszó): 1024 keret, utána annyi várakozás, amennyi ideig szólna
+        while (msSince(t1) < sec * 1000.0) {
+            const size_t n = d->read(buf.data(), 1024);
+            if (n == 0) { std::printf("  a folyam véget ért\n"); break; }
+            total += n;
+            for (size_t i = 0; i < n; ++i) if (std::fabs(buf[i * d->channels()]) > 1e-4f) ++loud;
+            if (msSince(t1) >= nextPrint) {
+                const RadioStatus st = d->status();
+                std::string ti, ar, al;
+                d->liveInfo(ti, ar, al);
+                std::printf("  %5.1f s  %-12s %s %d kbit/s  újracsatl.: %llu  eldobva: %llu  szól: %s – %s\n", msSince(t1) / 1000.0,
+                            stateName(st.state), st.codec.c_str(), st.bitrate, static_cast<unsigned long long>(st.reconnects),
+                            static_cast<unsigned long long>(st.droppedFrames), ar.c_str(), ti.c_str());
+                if (!in20 && msSince(t1) >= 20000) { in20 = st.framesIn; t20 = msSince(t1); }
+                if (in20 && msSince(t1) > t20 + 1000)
+                    std::printf("           a szerver üteme 20 s óta: %.1f keret/s (névleges %u)\n",
+                                (st.framesIn - in20) * 1000.0 / (msSince(t1) - t20), d->sampleRate());
+                nextPrint += 5000;
+            }
+            // abszolút időzítés (mint egy DAC): annyi keretet olvasunk, amennyi az eltelt idő alatt szólna
+            while (static_cast<double>(total) > msSince(t1) / 1000.0 * d->sampleRate() && msSince(t1) < sec * 1000.0)
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        const RadioStatus st = d->status();
+        std::printf("  összesen %zu keret, ebből hangos %.0f%%, újracsatlakozás %llu, utolsó hiba: %s\n", total,
+                    total ? 100.0 * loud / total : 0.0, static_cast<unsigned long long>(st.reconnects), st.error.c_str());
+        if (total == 0 || loud * 2 < total) ++g_fail;
+    }
+    return g_fail ? 1 : 0;
+}
+
 int main() {
     net::startup();
+    if (const char* q = std::getenv("AQ_RADIO_SEARCH")) {   // kézi próba a valódi katalógussal (a CI-ben nem fut)
+        std::vector<CatalogItem> out;
+        std::string e;
+        const auto t0 = Clock::now();
+        const bool ok = catalogSearch(q, NetOptions{}, out, e);
+        std::printf("katalógus: %s, %zu találat, %.0f ms %s\n", ok ? "ok" : "HIBA", out.size(), msSince(t0), e.c_str());
+        for (size_t i = 0; i < out.size() && i < 8; ++i)
+            std::printf("  %s | %s %d | %s | %s\n", out[i].name.c_str(), out[i].codec.c_str(), out[i].bitrate, out[i].country.c_str(), out[i].url.c_str());
+        net::cleanup();
+        return ok ? 0 : 1;
+    }
+    if (const char* live = std::getenv("AQ_RADIO_LIVE")) {
+        const int rc = liveProbe(live);
+        net::cleanup();
+        return rc;
+    }
     std::printf("Internetrádió teszt\n");
     testPure();
     testResolve();

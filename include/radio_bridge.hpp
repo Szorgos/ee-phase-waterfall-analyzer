@@ -12,6 +12,10 @@
  *   radio_update {id, name?, url?}   helyi / admin kliens -> radio
  *   radio_remove {id}                helyi / admin kliens -> radio
  *   radio_move {from, to}            helyi / admin kliens -> radio
+ *   radio_catalog {on}               helyi / admin kliens: az állomáskereső (külső katalógus) be / ki -> radio
+ *   radio_search {q, req?}           bárki, ha a kereső be van kapcsolva -> radio_search {req, state:"searching"},
+ *                                    majd mindenkinek: radio_search {req, items:[{name, url, codec, bitrate, country,
+ *                                    tags}]} vagy {req, error}; kikapcsolva radio_result {ok:false, error:"catalogOff"}
  *   Hibánál radio_result {ok:false, error}. Az állapotüzenet "radio" mezője: {rev, count, state, station, error,
  *   codec, bitrate, reconnects}; state: idle | connecting | buffering | playing | reconnecting | error.
  *   A „most szól” a meglévő "media" mezőben jön (live: true; title / artist a folyam címéből, album az állomás neve).
@@ -55,7 +59,9 @@ public:
         json::Value v;
         std::lock_guard<std::mutex> lk(m_);
         items_.clear();
+        catalog_ = false;
         if (doc.empty() || !json::parse(doc, v)) return;
+        if (const json::Value* c = v.get("catalog"); c && c->type == json::Value::Type::Bool) catalog_ = c->b;
         const json::Value* a = v.get("stations");
         if (!a || a->type != json::Value::Type::Array) return;
         for (const auto& e : a->arr) {
@@ -68,6 +74,20 @@ public:
             items_.push_back(std::move(st));
         }
         ++rev_;
+    }
+
+    /** Az állomáskereső (külső katalógus) engedélyezése; alapból ki. */
+    bool catalog() const { std::lock_guard<std::mutex> lk(m_); return catalog_; }
+    void setCatalog(bool on) {
+        std::string doc;
+        {
+            std::lock_guard<std::mutex> lk(m_);
+            if (catalog_ == on) return;
+            catalog_ = on;
+            ++rev_;
+            doc = docLocked();
+        }
+        if (save_) save_(doc);
     }
 
     std::vector<Station> all() const { std::lock_guard<std::mutex> lk(m_); return items_; }
@@ -156,7 +176,8 @@ public:
     /** A "radio" válaszüzenet (a lista). */
     std::string listJson() const {
         std::lock_guard<std::mutex> lk(m_);
-        std::string s = "{\"type\":\"radio\",\"rev\":" + std::to_string(rev_) + ",\"items\":[";
+        std::string s = "{\"type\":\"radio\",\"rev\":" + std::to_string(rev_) + ",\"catalog\":" + (catalog_ ? "true" : "false") +
+                        ",\"items\":[";
         for (size_t i = 0; i < items_.size(); ++i)
             s += (i ? ",{" : "{") + std::string("\"id\":\"") + media::jsonEscape(items_[i].id) + "\",\"name\":\"" +
                  media::jsonEscape(items_[i].name) + "\",\"url\":\"" + media::jsonEscape(items_[i].url) + "\"}";
@@ -183,7 +204,7 @@ private:
         return s;
     }
     std::string docLocked() const {
-        std::string s = "{\"version\":1,\"stations\":[";
+        std::string s = std::string("{\"version\":1,\"catalog\":") + (catalog_ ? "true" : "false") + ",\"stations\":[";
         for (size_t i = 0; i < items_.size(); ++i)
             s += (i ? ",{" : "{") + std::string("\"id\":\"") + media::jsonEscape(items_[i].id) + "\",\"name\":\"" +
                  media::jsonEscape(items_[i].name) + "\",\"url\":\"" + media::jsonEscape(items_[i].url) + "\"}";
@@ -194,6 +215,7 @@ private:
     mutable std::mutex m_;
     std::vector<Station> items_;
     uint64_t rev_ = 1;
+    bool catalog_ = false;
     std::mt19937_64 rng_{ std::random_device{}() };
 };
 
@@ -216,6 +238,59 @@ public:
         }
         cv_.notify_all();
         if (th_.joinable()) th_.join();
+        {
+            std::lock_guard<std::mutex> lk(searchM_);
+            ++searchGen_;
+            if (searchConn_) searchConn_->abort();
+        }
+        if (searchTh_.joinable()) searchTh_.join();
+    }
+
+    /** Más katalóguscím (a tesztek helyi próbaszervere); üres: a közösségi katalógus (kCatalogBase). */
+    void setCatalogBase(const std::string& url) { std::lock_guard<std::mutex> lk(searchM_); catalogBase_ = url; }
+
+    using SearchDone = std::function<void(const std::string& json)>;
+    /**
+     * Keresés a közösségi katalógusban, saját szálon (a híd nem vár a hálózatra); az újabb keresés a régit megszakítja.
+     * done: a "radio_search" válasz (találatok vagy hiba), a keresés szálán hívódik; a megszakított keresésnél nem.
+     */
+    void search(const std::string& query, const std::string& req, SearchDone done, const std::string& baseUrl = "") {
+        uint64_t gen;
+        std::string base = baseUrl;
+        {
+            std::lock_guard<std::mutex> lk(searchM_);
+            gen = ++searchGen_;
+            if (base.empty()) base = catalogBase_;
+            if (searchConn_) searchConn_->abort();
+        }
+        if (searchTh_.joinable()) searchTh_.join();
+        searchTh_ = std::thread([this, query, req, done, base, gen] {
+            std::vector<CatalogItem> items;
+            std::string err;
+            const bool ok = catalogSearch(query, net_, items, err, [this](HttpStream* h) {
+                std::lock_guard<std::mutex> lk(searchM_);
+                searchConn_ = h;
+            }, base);
+            {
+                std::lock_guard<std::mutex> lk(searchM_);
+                if (gen != searchGen_) return;   // közben újabb keresés indult (vagy leállás)
+            }
+            std::string s = "{\"type\":\"radio_search\",\"req\":\"" + media::jsonEscape(req) + "\"";
+            if (!ok) {
+                s += ",\"error\":\"" + media::jsonEscape(err) + "\"}";
+            } else {
+                s += ",\"items\":[";
+                for (size_t i = 0; i < items.size(); ++i) {
+                    const auto& it = items[i];
+                    s += (i ? ",{" : "{") + std::string("\"name\":\"") + media::jsonEscape(it.name) + "\",\"url\":\"" +
+                         media::jsonEscape(it.url) + "\",\"codec\":\"" + media::jsonEscape(it.codec) + "\",\"bitrate\":" +
+                         std::to_string(it.bitrate) + ",\"country\":\"" + media::jsonEscape(it.country) + "\",\"tags\":\"" +
+                         media::jsonEscape(it.tags) + "\"}";
+                }
+                s += "]}";
+            }
+            if (done) done(s);
+        });
     }
     RadioController(const RadioController&) = delete;
     RadioController& operator=(const RadioController&) = delete;
@@ -281,6 +356,7 @@ public:
         if (!error.empty()) s += ",\"error\":\"" + media::jsonEscape(error) + "\"";
         if (!codec.empty()) s += ",\"codec\":\"" + codec + "\",\"bitrate\":" + std::to_string(bitrate);
         if (reconnects) s += ",\"reconnects\":" + std::to_string(reconnects);
+        s += std::string(",\"catalog\":") + (store_.catalog() ? "true" : "false");
         return s + "}";
     }
 
@@ -352,12 +428,18 @@ private:
     uint64_t gen_ = 0;
     bool connecting_ = false;
     std::shared_ptr<RadioDecoder::Core> core_;
+    // állomáskereső
+    std::mutex searchM_;
+    uint64_t searchGen_ = 0;
+    HttpStream* searchConn_ = nullptr;
+    std::string catalogBase_;
+    std::thread searchTh_;
 };
 
 /** A rádió üzenetei a hídon. */
 inline void attachRadio(BridgeCallbacks& cb, RadioController& ctl, StationStore& store) {
     cb.radioStatus = [&ctl] { return ctl.statusJson(); };
-    cb.radioRequest = [&ctl, &store](const std::string& type, const json::Value& msg, bool remote) -> std::string {
+    cb.radioRequest = [&ctl, &store, &cb](const std::string& type, const json::Value& msg, bool remote) -> std::string {
         auto str = [&](const char* k) { const json::Value* v = msg.get(k); return v ? v->stringOr("") : std::string(); };
         auto fail = [](const std::string& e) {
             return "{\"type\":\"radio_result\",\"ok\":false,\"error\":\"" + media::jsonEscape(e) + "\"}";
@@ -369,7 +451,20 @@ inline void attachRadio(BridgeCallbacks& cb, RadioController& ctl, StationStore&
             return e.empty() ? ok : fail(e);
         }
         if (type == "radio_stop") { ctl.stop(); return ok; }
-        if (remote) return fail("remote");   // a listát csak a saját gép / admin távirányító szerkesztheti
+        if (type == "radio_search") {
+            // csak ha a gépen bekapcsolták (a külső katalógus látja a gép IP-címét és a keresett szöveget)
+            if (!store.catalog()) return fail("catalogOff");
+            const std::string req = cleanText(str("req"), 32);
+            ctl.search(str("q"), req, [&cb](const std::string& j) { if (cb.broadcast) cb.broadcast(j); });
+            return "{\"type\":\"radio_search\",\"req\":\"" + media::jsonEscape(req) + "\",\"state\":\"searching\"}";
+        }
+        if (remote) return fail("remote");
+        if (type == "radio_catalog") {
+            const json::Value* on = msg.get("on");
+            if (!on || on->type != json::Value::Type::Bool) return fail("on");
+            store.setCatalog(on->b);
+            return store.listJson();
+        }   // a listát csak a saját gép / admin távirányító szerkesztheti
         if (type == "radio_add") {
             std::string id;
             const std::string e = store.add(str("name"), str("url"), id);

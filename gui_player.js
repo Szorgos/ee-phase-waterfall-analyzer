@@ -1084,18 +1084,24 @@ body.aqnp-on { padding-bottom: 72px; }
       albums: "Albumok", folders: "Mappák", lists: "Listák", queue: "Sor", loading: "Betöltés...",
       radio: "Rádió", radioAdd: "Új állomás", radioName: "Az állomás neve", radioUrl: "Az állomás címe (http:// vagy https://)",
       radioEmpty: "Még nincs állomás. Vedd fel a kedvenc rádióid címét (a rádió honlapján általában „Hallgatás” vagy „Stream” néven található; .pls és .m3u is jó).",
-      radioNote: "A rádió a beépített lejátszón szól, az EQ-n és a teljes hangláncon át. Támogatott: MP3, Ogg Vorbis, Opus, FLAC; az AAC és a HLS még nem.",
+      radioNote: "A rádió a beépített lejátszón szól, az EQ-n és a teljes hangláncon át. Támogatott: MP3, AAC (HE-AAC is), Ogg Vorbis, Opus, FLAC; a szegmentált (HLS) adás még nem.",
       radioPlay: "Lejátszás", radioStop: "Leállítás", radioEditUrl: "Cím módosítása",
       rs_connecting: "Kapcsolódás…", rs_buffering: "Pufferelés…", rs_playing: "Szól", rs_reconnecting: "Újracsatlakozás…", rs_error: "Hiba: {e}",
       r_url: "Érvénytelen cím (http:// vagy https:// kell).", r_name: "Adj nevet az állomásnak.", r_full: "Az állomáslista megtelt.",
       r_blocked: "Ez a cím helyi vagy magánhálózati címre mutat, biztonsági okból nem nyitható meg.", r_dns: "A szerver neve nem található.",
       r_connect: "A szerver nem érhető el.", r_timeout: "A szerver nem válaszolt időben.", r_tls: "A biztonságos kapcsolat nem jött létre.",
-      r_http: "A szerver hibát adott.", r_aac: "Ez az adás AAC formátumú, ezt még nem támogatjuk. Próbáld az állomás MP3-as vagy Ogg-os címét.",
+      r_http: "A szerver hibát adott.",
       r_hls: "Ez szegmentált (HLS) adás, ezt még nem támogatjuk.", r_html: "Ez a cím egy weboldal, nem hangfolyam.", r_format: "Ismeretlen formátum.",
       r_decode: "Az adás nem dekódolható.", r_playlist: "A lejátszási listában nincs használható cím.", r_redirect: "Túl sok átirányítás.",
       r_nocurl: "A rádióhoz a curl program kell (telepítsd a csomagkezelővel).", r_formatChange: "Az adás formátuma megváltozott.",
       r_eof: "Az adás megszakadt.", r_empty: "Az adás üres.", r_unknown: "Ismeretlen állomás.", r_output: "A hangkimenet nem nyitható meg.",
       r_remote: "Az állomáslista csak a gépről (vagy adminisztrátor telefonról) szerkeszthető.",
+      radioSearch: "Állomás keresése", radioSearchQ: "Az állomás neve (vagy egy része)", radioCatalogOn: "Állomáskereső bekapcsolása",
+      radioCatalogOff: "Kereső kikapcsolása", radioCatalogOk: "Bekapcsolom",
+      radioCatalogText: "Az állomáskereső a radio-browser.info közösségi állomáskatalógust használja. Kereséskor ez a gép közvetlenül a katalógus szervereihez fordul: ezek látják a gép IP-címét és a keresett szöveget. A szervereket a katalógus közössége üzemelteti; adatvédelmi szabályzatot és az adatbázis licencét nem találtuk. Az Aqulify csak a keresést küldi el (kattintásszámlálást, a lejátszott állomásokat és más adatot nem). A kereső bármikor kikapcsolható.",
+      radioResults: "Találatok: „{q}”", radioSearching: "Keresés…", radioNoResults: "Nincs találat.", radioAddThis: "Felvétel a listába",
+      radioAdded: "Felvéve: {name}", r_catalogOff: "Az állomáskereső ki van kapcsolva.", r_query: "Adj meg keresőszöveget.",
+      r_json: "A katalógus válasza nem értelmezhető.", r_size: "A katalógus válasza túl nagy.",
       empty: "A zenetár üres. A zenei mappák a PC-n állíthatók be (alapból a Zene mappa).",
       scanning: "A PC most indexeli a zenetárat ({n} fájl)...", noAlbums: "Nincs album.",
       various: "Különböző előadók", tracks: "{n} szám", play: "Lejátszás", shuffle: "Keverve",
@@ -1151,18 +1157,24 @@ body.aqnp-on { padding-bottom: 72px; }
       albums: "Albums", folders: "Folders", lists: "Playlists", queue: "Queue", loading: "Loading...",
       radio: "Radio", radioAdd: "New station", radioName: "Station name", radioUrl: "Station address (http:// or https://)",
       radioEmpty: "No stations yet. Add the address of your favourite stations (on the station's website it is usually labelled “Listen” or “Stream”; .pls and .m3u work too).",
-      radioNote: "Radio plays through the built-in player, the EQ and the whole audio chain. Supported: MP3, Ogg Vorbis, Opus, FLAC; AAC and HLS not yet.",
+      radioNote: "Radio plays through the built-in player, the EQ and the whole audio chain. Supported: MP3, AAC (incl. HE-AAC), Ogg Vorbis, Opus, FLAC; segmented (HLS) streams not yet.",
       radioPlay: "Play", radioStop: "Stop", radioEditUrl: "Change address",
       rs_connecting: "Connecting…", rs_buffering: "Buffering…", rs_playing: "Playing", rs_reconnecting: "Reconnecting…", rs_error: "Error: {e}",
       r_url: "Invalid address (http:// or https:// required).", r_name: "Give the station a name.", r_full: "The station list is full.",
       r_blocked: "This address points to a local or private network address and cannot be opened for security reasons.", r_dns: "Server name not found.",
       r_connect: "The server cannot be reached.", r_timeout: "The server did not answer in time.", r_tls: "The secure connection could not be established.",
-      r_http: "The server returned an error.", r_aac: "This station streams AAC, which is not supported yet. Try the station's MP3 or Ogg address.",
+      r_http: "The server returned an error.",
       r_hls: "This is a segmented (HLS) stream, which is not supported yet.", r_html: "This address is a web page, not an audio stream.", r_format: "Unknown format.",
       r_decode: "The stream cannot be decoded.", r_playlist: "The playlist has no usable address.", r_redirect: "Too many redirects.",
       r_nocurl: "Radio needs the curl program (install it with your package manager).", r_formatChange: "The stream format changed.",
       r_eof: "The stream was interrupted.", r_empty: "The stream is empty.", r_unknown: "Unknown station.", r_output: "The audio output cannot be opened.",
       r_remote: "The station list can only be edited on the computer (or from an admin phone).",
+      radioSearch: "Find a station", radioSearchQ: "Station name (or part of it)", radioCatalogOn: "Turn on station search",
+      radioCatalogOff: "Turn off search", radioCatalogOk: "Turn on",
+      radioCatalogText: "Station search uses the radio-browser.info community station catalogue. When you search, this computer contacts the catalogue's servers directly: they see this computer's IP address and the search text. The servers are run by the catalogue's community; we could not find a privacy policy or a licence for the database. Aqulify only sends the search (no click counting, no played stations, no other data). You can turn search off at any time.",
+      radioResults: "Results for “{q}”", radioSearching: "Searching…", radioNoResults: "No results.", radioAddThis: "Add to list",
+      radioAdded: "Added: {name}", r_catalogOff: "Station search is turned off.", r_query: "Enter a search text.",
+      r_json: "The catalogue's answer could not be read.", r_size: "The catalogue's answer is too large.",
       empty: "The library is empty. Music folders are set on the PC (by default the Music folder).",
       scanning: "The PC is indexing the library ({n} files)...", noAlbums: "No albums.",
       various: "Various artists", tracks: "{n} tracks", play: "Play", shuffle: "Shuffle",
@@ -3015,7 +3027,8 @@ body.aqnp-on { padding-bottom: 72px; }
     const history = [];
     let info = null, albums = [], albumsTotal = -1, albumsLoading = false;
     let queue = null, queueRev = -1, queueIndex = -2, lists = null, listsRev = -1, statsRev = -1;
-    let radio = null, radioRev = -1, radioSt = null;
+    let radio = null, radioRev = -1, radioSt = null, radioSearch = null, radioReqN = 0;
+    const radioReqBase = Math.random().toString(36).slice(2, 8) + "-";   // a keresés jele (a válasz mindenkinek megy)
     let pendingOpenList = false;   // létrehozás / mentés után a válaszként jövő listát nyitjuk meg
     let pickFor = null;            // listához adás: a forrás (üzenetrész), amíg a felhasználó listát választ
     let lastRendered = null;       // a legutóbb kirajzolt album / mappa / lista (nyelvváltáskor újrarajzoláshoz)
@@ -3777,6 +3790,22 @@ body.aqnp-on { padding-bottom: 72px; }
         const u = await ask(t("radioUrl"), { input: true, value: "https://" });
         if (u && u.trim()) send({ type: "radio_add", name: n.trim(), url: u.trim() });
       }));
+      const catalogOn = !!((radio && radio.catalog) || (!radio && radioSt && radioSt.catalog));
+      if (catalogOn) {
+        actions.appendChild(btn("🔎 " + t("radioSearch"), "lib-btn", async () => {
+          const q = await ask(t("radioSearchQ"), { input: true, value: radioSearch ? radioSearch.q : "" });
+          if (!q || !q.trim()) return;
+          const req = radioReqBase + (++radioReqN);
+          radioSearch = { q: q.trim(), req, state: "searching", items: [], error: "" };
+          send({ type: "radio_search", q: q.trim(), req });
+          renderRadio();
+        }));
+      } else {
+        // a külső katalógus csak a tájékoztató elfogadása után (alapból ki)
+        actions.appendChild(btn("🔎 " + t("radioCatalogOn"), "lib-btn", async () => {
+          if (await ask(t("radioCatalogText"), { okLabel: t("radioCatalogOk") })) send({ type: "radio_catalog", on: true });
+        }));
+      }
       const active = radioSt && radioSt.state !== "idle" && radioSt.state !== "error";
       if (active) actions.appendChild(btn("■ " + t("radioStop"), "lib-btn", () => send({ type: "radio_stop" })));
       body.appendChild(actions);
@@ -3816,6 +3845,36 @@ body.aqnp-on { padding-bottom: 72px; }
       });
       body.appendChild(ul);
       body.appendChild(el("div", "hint", t("radioNote")));
+      if (catalogOn && radioSearch) {
+        body.appendChild(header(t("radioResults", { q: radioSearch.q }), null, false));
+        if (radioSearch.state === "searching") body.appendChild(el("div", "hint", t("radioSearching")));
+        else if (radioSearch.error) body.appendChild(el("div", "hint", radioErr(radioSearch.error)));
+        else if (!radioSearch.items.length) body.appendChild(el("div", "hint", t("radioNoResults")));
+        else {
+          const rl = el("ul", "lib-tracks");
+          radioSearch.items.forEach(it => {
+            const li = el("li", "lib-folder");
+            if (desktop) li.appendChild(el("span", "lib-no", "＋"));
+            const meta = el("div", "meta");
+            meta.appendChild(el("div", "title", (desktop ? "" : "＋ ") + it.name));
+            const det = [it.codec, it.bitrate ? it.bitrate + " kbit/s" : "", it.country, radioHost(it.url)].filter(Boolean).join(" · ");
+            meta.appendChild(el("div", "detail", det));
+            li.appendChild(meta);
+            li.title = t("radioAddThis");
+            // a sor kattintásra felveszi az állomást a saját listába
+            rl.appendChild(openRow(li, () => {
+              send({ type: "radio_add", name: it.name, url: it.url });
+              toast(t("radioAdded", { name: it.name }));
+            }));
+          });
+          body.appendChild(rl);
+        }
+      }
+      if (catalogOn) {
+        const off = el("div", "lib-actions");
+        off.appendChild(btn(t("radioCatalogOff"), "lib-btn", () => { radioSearch = null; send({ type: "radio_catalog", on: false }); }));
+        body.appendChild(off);
+      }
     }
 
     function renderList(p) {
@@ -4169,6 +4228,14 @@ body.aqnp-on { padding-bottom: 72px; }
         case "radio_result":
           if (m.ok === false) toast(radioErr(m.error));
           return true;
+        case "radio_search":
+          // a találatok minden kliensnek mennek: csak a saját (utolsó) keresésünkét vesszük át
+          if (!radioSearch || m.req !== radioSearch.req || m.state === "searching") return true;
+          radioSearch.state = "done";
+          radioSearch.items = Array.isArray(m.items) ? m.items : [];
+          radioSearch.error = m.error || "";
+          if (view.kind === "radio") renderRadio();
+          return true;
       }
       return false;
     }
@@ -4178,7 +4245,7 @@ body.aqnp-on { padding-bottom: 72px; }
       const r = st.radio;
       if (r) {
         const changed = !radioSt || r.state !== radioSt.state || r.station !== radioSt.station || r.error !== radioSt.error ||
-                        r.codec !== radioSt.codec;
+                        r.codec !== radioSt.codec || r.catalog !== radioSt.catalog;
         radioSt = r;
         if (r.rev !== radioRev && view.kind === "radio" && !root.hidden) { radioRev = r.rev; send({ type: "radio_list" }); }
         else if (changed && view.kind === "radio" && !root.hidden) renderRadio();

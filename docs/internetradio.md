@@ -6,8 +6,10 @@ felmintavételezés, mérők, vízesés), minden platformon (Windows, macOS, Lin
 - Állomáslista: a felhasználó saját listája (név + cím), előre betöltött állomás nincs. Mentés: `radio.json` a
   beállítások mellett (Linux / Pi / macOS: a konfigurációs mappa, Windows: `%APPDATA%\Aqulify`).
 - Felület: Zenetár panel → **Rádió** fül (új állomás, lejátszás, átnevezés, cím módosítása, sorrend, törlés).
-- Formátumok: MP3, Ogg Vorbis, Ogg Opus, FLAC (natív és Ogg); ICY metaadat („most szól”), PLS és M3U lista.
-  Nem támogatott (külön hibakóddal): AAC (`aac`) és HLS (`hls`).
+- Formátumok: MP3, AAC (ADTS-folyam; AAC-LC, HE-AAC, HE-AACv2, a FAAD2 2.11.4 könyvtárral, `third_party/faad2`),
+  Ogg Vorbis, Ogg Opus, FLAC (natív és Ogg); ICY metaadat („most szól”), PLS és M3U lista. A láncolt Ogg-adásnál (a
+  szerver számonként új logikai folyamot kezd, pl. FLAC-adóknál) a motor ugyanazon a kapcsolaton új dekódert indít, a
+  cím az új lánc Vorbis-megjegyzéséből jön. Nem támogatott (külön hibakóddal): HLS (`hls`), MP4-konténeres AAC.
 - Puffer: indulás előtt 2 s; ha kiürül, a lejátszó csendet ad és újrapufferel (nem áll le). Legfeljebb 10 s; túlcsorduláskor
   (szünet, órajel-eltérés) a legrégebbi rész kiesik, az adás élő marad.
 - Újracsatlakozás: a kapcsolat megszakadásakor magától, 1, 2, 4 … legfeljebb 30 s várakozással; 8 egymás utáni sikertelen
@@ -52,6 +54,8 @@ Képesség: az állapotüzenet `caps` tömbjében `"radio"`.
 | `{"type":"radio_update","id":"…","name"?:"…","url"?:"…"}` | helyi / admin | `radio` |
 | `{"type":"radio_remove","id":"…"}` | helyi / admin | `radio` |
 | `{"type":"radio_move","from":0,"to":2}` | helyi / admin | `radio` |
+| `{"type":"radio_catalog","on":true}` | helyi / admin | `radio` |
+| `{"type":"radio_search","q":"…","req":"…"}` | bárki, ha a kereső be van kapcsolva | `radio_search` (azonnal `state:"searching"`, utána a találatok) |
 
 ```json
 {"type":"radio","rev":7,"items":[{"id":"r3f9a0c12bd","name":"Kedvenc adó","url":"https://stream.example.org/live.mp3"}]}
@@ -69,13 +73,31 @@ A `radio_play` aszinkron: a válasz azonnal jön, a kapcsolódás állapota az �
 
 - `rev`: ha változik, a lista megváltozott (`radio_list` újra).
 - `state`: `idle` | `connecting` | `buffering` | `playing` | `reconnecting` | `error`.
-- `error` (hiba és újracsatlakozás esetén): `dns`, `blocked`, `connect`, `timeout`, `tls`, `http`, `aac`, `hls`, `html`,
+- `error` (hiba és újracsatlakozás esetén): `dns`, `blocked`, `connect`, `timeout`, `tls`, `http`, `hls`, `html`,
   `format`, `decode`, `playlist`, `redirect`, `nocurl`, `formatChange`, `eof`, `empty`, `output`, `url`, `aborted`.
 - `codec`, `bitrate` (kbit/s, az `icy-br` fejlécből; 0: ismeretlen), `reconnects` (ha nem 0).
 
 A „most szól” a meglévő `media` mezőben jön: `live: true`, `title` / `artist` az ICY `StreamTitle` („Előadó - Cím”)
 vagy az Ogg-megjegyzés alapján, `album` az állomás neve; `duration` 0, `can.seek` false. A lejátszás vezérlése (szünet,
 leállítás) a meglévő `media` paranccsal megy; a `stop` a rádiót is leállítja.
+
+## Állomáskereső
+
+Alapból **ki** van kapcsolva; a felület a bekapcsolás előtt elmondja, mi történik. Bekapcsolva a motor a
+radio-browser.info közösségi katalógusában keres (`https://all.api.radio-browser.info/json/stations/search`, név szerint,
+legfeljebb 50 találat, népszerűség szerint, a hibás és a szegmentált (HLS) adások nélkül). A katalógus szerverei látják a
+gép IP-címét és a keresett szöveget; a szervereket a katalógus közössége üzemelteti, adatvédelmi szabályzatot és az
+adatbázis licencét nem találtuk. Az Aqulify csak a keresést küldi el: a katalógus „kattintás”-végpontját (népszerűség
+számlálása) nem hívja, a lejátszott állomásokat nem jelenti. A kérés ugyanazon az SSRF-védett szállításon megy, mint az
+adás (időkorlát, legfeljebb 1 MB válasz). A találat a felhasználó saját listájába kerül (`radio_add`), onnan szól.
+
+```json
+{"type":"radio_search","req":"k1","items":[{"name":"…","url":"https://…","codec":"AAC","bitrate":128,"country":"HU","tags":"…"}]}
+{"type":"radio_search","req":"k1","error":"dns"}
+```
+
+A válasz minden kliensnek megy; a kliens a saját `req` jele szerint válogat. Kikapcsolt keresőnél `radio_result`
+`error:"catalogOff"`. Az állapotüzenet `radio` mezőjében `catalog: true|false`.
 
 ## Tesztek
 

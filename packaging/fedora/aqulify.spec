@@ -4,7 +4,7 @@ Version:        0.0.0
 Release:        1%{?dist}
 Summary:        Headphone EQ, convolver and limiter for PipeWire with a live 3D waterfall
 
-License:        GPL-3.0-or-later AND MIT AND LGPL-3.0-or-later AND LGPL-2.1-or-later AND BSD-3-Clause AND OFL-1.1
+License:        GPL-3.0-or-later AND GPL-2.0-or-later AND MIT AND LGPL-3.0-or-later AND LGPL-2.1-or-later AND BSD-3-Clause AND OFL-1.1
 URL:            https://github.com/Szorgos/ee-phase-waterfall-analyzer
 Source0:        %{name}-%{version}.tar.gz
 # Az RNNoise betanított modellje (a kód a third_party/rnnoise mappában van)
@@ -87,7 +87,7 @@ fi
 %systemd_user_postun_with_restart aqulify.service
 
 %files
-%license LICENSE third_party/soxr/LICENCE
+%license LICENSE third_party/soxr/LICENCE third_party/faad2/COPYING
 %doc README.md RELEASE_NOTES.md
 %{_bindir}/aqulify-engine
 %{_bindir}/aqulify-play

@@ -19,14 +19,16 @@
  * Időkorlátok: kapcsolódás 10 s, a fejléc 15 s, adat nélkül legfeljebb 20 s. Méretkorlátok: fejléc 16 KB, lejátszási
  * lista 64 KB, ICY-blokk 4080 bájt, PCM-puffer legfeljebb 10 s (a régebbi rész túlcsorduláskor kiesik).
  *
- * Formátumok: MP3, Ogg Vorbis, Ogg Opus, FLAC (natív és Ogg), ICY metaadat („most szól”), PLS / M3U lista. Nem: AAC
- * (nincs beépített dekóder) és HLS (szegmentált folyam); ezekre külön hibakód jön ("aac", "hls").
+ * Formátumok: MP3, AAC (ADTS; AAC-LC, HE-AAC, HE-AACv2 a FAAD2-vel), Ogg Vorbis, Ogg Opus, FLAC (natív és Ogg; a láncolt
+ * Ogg-adásnál számonként új dekóder), ICY metaadat („most szól”), PLS / M3U lista. Nem: HLS (szegmentált folyam, "hls").
  */
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "audio_decoder.hpp"
 #include "radio_net.hpp"
@@ -66,6 +68,24 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
+/** Az állomáskereső egy találata (a közösségi katalógusból; a mezők tisztítva, a cím ellenőrizve). */
+struct CatalogItem {
+    std::string name, url, codec, country, tags;
+    int bitrate = 0;
+};
+
+/** A közösségi állomáskatalógus (radio-browser.info) címe; a DNS a közösség szerverei közül választ. */
+constexpr const char* kCatalogBase = "https://all.api.radio-browser.info";
+
+/**
+ * Keresés név szerint a katalógusban (legfeljebb 50 találat, a népszerűség szerint; HLS nélkül). Csak olvas: kattintás-
+ * számlálót és más adatot nem küld. A kérés a rádió szállításán megy (SSRF-ellenőrzés, időkorlát), a válasz legfeljebb
+ * 1 MB. reg: a nyitott kapcsolat bejegyzése a megszakításhoz (nullptr: vége). baseUrl: más katalógus (a tesztekhez).
+ * false: err = "query", "json", "size", vagy a szállítás hibakódja.
+ */
+bool catalogSearch(const std::string& query, const NetOptions& net, std::vector<CatalogItem>& out, std::string& err,
+                   const std::function<void(HttpStream*)>& reg = nullptr, const std::string& baseUrl = "");
+
 enum class RadioState { Connecting, Buffering, Playing, Reconnecting, Ended, Failed };
 const char* stateName(RadioState s);
 
@@ -76,6 +96,7 @@ struct RadioStatus {
     int bitrate = 0;          // kbit/s az icy-br fejlécből (0: ismeretlen)
     uint64_t reconnects = 0;
     uint64_t droppedFrames = 0;
+    uint64_t framesIn = 0;       // a kapcsolat(ok)ból dekódolt összes keret (diagnosztika: a szerver üteme)
     std::string icyName;      // a szerver által küldött állomásnév (csak tájékoztató)
     std::string streamTitle;  // a hallott rész „most szól” szövege
 };
