@@ -44,7 +44,10 @@ jobs:
         run: |
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=OFF \
             -DAQULIFY_RNNOISE_MODEL_DIR="$RUNNER_TEMP/rnnoise-model"
-          cmake --build build -j"$(nproc)" --target aqulify-engine test_alsa test_room test_mic_live test_measure_live test_pw_reconnect test_linux_lock test_headless_pairing test_linux_pairing
+          cmake --build build -j"$(nproc)" --target aqulify-engine test_alsa test_room test_mic_live test_measure_live test_pw_reconnect test_linux_lock test_headless_pairing test_linux_pairing test_mpris_control
+
+      - name: MPRIS vezérlés egységtesztje
+        run: ./build/test_mpris_control
 
       - name: Párosítási és headless-észlelési tesztek
         run: |
