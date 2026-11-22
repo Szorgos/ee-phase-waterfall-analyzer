@@ -37,6 +37,7 @@ inline std::string describe(const uint8_t*, size_t) { return {}; }
 
 #ifdef _WIN32
 #include <windows.h>
+#include "../windows/engine/tray.hpp"
 #else
 #include <csignal>
 #include <unistd.h>
@@ -609,6 +610,109 @@ static void testDeviceFormat() {
     CHECK(aq::devfmt::describe(nullptr, 0).empty(), "üres bemenet: üres szöveg");
 }
 
+// ------------------------------------------------------------------------------------------------ [8]
+static void testCleanExitPaths() {
+    std::printf("[8] Tiszta leállási utak: párhuzamos markClean() és Windows tálca/munkamenet-vége üzenetek\n");
+    std::error_code ec;
+
+    // 8a. Több szálról egyidejűleg hívott markClean() + stopClean() (pl. konzol-vezérlő / WS-híd + fő szál)
+    {
+        const fs::path dir = makeTempDir("clean_mt");
+        aq::wd::Registry reg;
+        aq::health::Monitor mon;
+        aq::health::Config c;
+        c.dir = dir.string();
+        c.logPath = (dir / "engine.log").string();
+        c.version = "0.0.0-test";
+        c.platform = "test";
+        c.package = "test";
+        c.registry = &reg;
+        CHECK(mon.start(c), "párhuzamos teszt: őrszem elindul");
+        std::vector<std::thread> ths;
+        for (int i = 0; i < 4; ++i) {
+            ths.emplace_back([&, i] {
+                if (i % 2 == 0) mon.markClean();
+                else mon.stopClean();
+            });
+        }
+        for (auto& t : ths) t.join();
+        mon.stopClean();
+        json::Value sv;
+        CHECK(json::parse(readFile(dir / "state.json"), sv) && sv.get("clean_exit") && sv.get("clean_exit")->b,
+              "párhuzamos markClean/stopClean után clean_exit = true");
+        CHECK(!fs::exists(dir / "running"), "párhuzamos markClean/stopClean után a „fut” jel törölve");
+        bool abnormal = true;
+        std::string rep;
+        startNext(dir, dir / "engine.log", false, abnormal, rep);
+        CHECK(!abnormal, "párhuzamos markClean után a következő indítás nem lát rendellenes véget");
+        fs::remove_all(dir, ec);
+    }
+
+#ifdef _WIN32
+    // 8b. Valódi Win32 TrayApp: WM_QUERYENDSESSION + WM_ENDSESSION, WM_CLOSE és kCmdExit
+    auto runTrayCase = [&](const char* tag, const wchar_t* cls, auto sendExit) {
+        const fs::path dir = makeTempDir(tag);
+        aq::wd::Registry reg;
+        aq::health::Monitor mon;
+        aq::health::Config c;
+        c.dir = dir.string();
+        c.logPath = (dir / "engine.log").string();
+        c.version = "0.0.0-test";
+        c.platform = "windows";
+        c.package = "setup";
+        c.registry = &reg;
+        CHECK(mon.start(c), "%s: őrszem elindul", tag);
+        int endSessions = 0;
+        int quits = 0;
+        ee_analyzer::win::TrayApp::Callbacks tcb;
+        tcb.onQuit = [&] { ++quits; mon.markClean(); };
+        tcb.onEndSession = [&] { ++endSessions; mon.markClean(); };
+        ee_analyzer::win::TrayApp tray(tcb);
+        CHECK(tray.create(GetModuleHandleW(nullptr), cls, false), "%s: rejtett tálcaablak létrejön", tag);
+        if (tray.hwnd()) {
+            sendExit(tray.hwnd(), endSessions, quits);
+            // Ürítjük a WM_QUIT-et a szál üzenetsorából, hogy a következő eset tiszta lappal induljon
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {}
+        }
+        json::Value sv;
+        CHECK(json::parse(readFile(dir / "state.json"), sv) && sv.get("clean_exit") && sv.get("clean_exit")->b,
+              "%s: azonnal clean_exit = true (a Windows/telepítő kilövése előtt)", tag);
+        CHECK(!fs::exists(dir / "running"), "%s: a „fut” jel azonnal törölve", tag);
+        mon.stopClean();
+        bool abnormal = true;
+        std::string rep;
+        startNext(dir, dir / "engine.log", false, abnormal, rep);
+        CHECK(!abnormal, "%s: a következő indítás nem lát rendellenes véget", tag);
+        fs::remove_all(dir, ec);
+    };
+
+    runTrayCase("win_endsession", L"AqulifyTestTrayEndSession", [&](HWND h, int& endSessions, int& quits) {
+        const LRESULT q = SendMessageW(h, WM_QUERYENDSESSION, 0, 0);
+        CHECK(q == TRUE, "WM_QUERYENDSESSION válasza TRUE");
+        // Megszakított leállítás (wParam = FALSE): ne zárja be és ne hívja onEndSession-t
+        SendMessageW(h, WM_ENDSESSION, FALSE, 0);
+        CHECK(endSessions == 0 && quits == 0 && IsWindow(h), "WM_ENDSESSION(FALSE) nem állítja le a motort");
+        // Valódi leállítás / kijelentkezés (wParam = TRUE)
+        SendMessageW(h, WM_ENDSESSION, TRUE, 0);
+        CHECK(endSessions == 1, "WM_ENDSESSION(TRUE) pontosan egyszer hívja az onEndSession-t (%d)", endSessions);
+        CHECK(!IsWindow(h), "WM_ENDSESSION(TRUE) bezárja az ablakot");
+    });
+
+    runTrayCase("win_wmclose", L"AqulifyTestTrayClose", [&](HWND h, int&, int& quits) {
+        SendMessageW(h, WM_CLOSE, 0, 0);
+        CHECK(quits == 1, "WM_CLOSE pontosan egyszer hívja az onQuit-et (%d)", quits);
+        CHECK(!IsWindow(h), "WM_CLOSE bezárja az ablakot");
+    });
+
+    runTrayCase("win_cmdexit", L"AqulifyTestTrayExit", [&](HWND h, int&, int& quits) {
+        SendMessageW(h, WM_COMMAND, ee_analyzer::win::TrayApp::kCmdExit, 0);
+        CHECK(quits == 1, "tálca Kilépés (kCmdExit) pontosan egyszer hívja az onQuit-et (%d)", quits);
+        CHECK(!IsWindow(h), "tálca Kilépés bezárja az ablakot");
+    });
+#endif
+}
+
 int main(int argc, char** argv) {
     if (argc >= 5 && std::strcmp(argv[1], "--child") == 0) return runChild(argv[2], argv[3], argv[4]);
     uint32_t seed = static_cast<uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
@@ -621,6 +725,7 @@ int main(int argc, char** argv) {
     testSetting();
     testScrubKernelVersion();
     testDeviceFormat();
+    testCleanExitPaths();
     std::printf("\n%s (%d hiba)\n", g_fail == 0 ? "MINDEN TESZT SIKERES" : "SIKERTELEN", g_fail);
     return g_fail == 0 ? 0 : 1;
 }

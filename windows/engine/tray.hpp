@@ -140,27 +140,34 @@ public:
         std::function<void()> openLog;
         std::function<void()> onTimer;     // ~250 ms
         std::function<std::wstring()> statusText; // tooltip + menü első sora
+        std::function<void()> onQuit;      // tálca „Kilépés”, WM_CLOSE, WM_DESTROY: korai rendes-leállás jel
+        std::function<void()> onEndSession; // WM_ENDSESSION (Windows leállítás/kijelentkezés): szinkron lezárás
     };
 
     explicit TrayApp(Callbacks cb) : cb_(std::move(cb)) {}
 
-    bool create(HINSTANCE inst) {
+    bool create(HINSTANCE inst, const wchar_t* className = kEngineWindowClass, bool showIcon = true) {
+        showIcon_ = showIcon;
         WNDCLASSEXW wc{};
         wc.cbSize = sizeof(wc);
         wc.lpfnWndProc = &TrayApp::wndProc;
         wc.hInstance = inst;
-        wc.lpszClassName = kEngineWindowClass;
+        wc.lpszClassName = className;
         RegisterClassExW(&wc);
-        hwnd_ = CreateWindowExW(0, kEngineWindowClass, L"Aqulify", WS_OVERLAPPED, 0, 0, 0, 0, nullptr, nullptr, inst, this);
+        hwnd_ = CreateWindowExW(0, className, L"Aqulify", WS_OVERLAPPED, 0, 0, 0, 0, nullptr, nullptr, inst, this);
         if (!hwnd_) return false;
         taskbarCreated_ = RegisterWindowMessageW(L"TaskbarCreated");
-        icon_ = static_cast<HICON>(LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
-                                              GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR));
-        if (!icon_) icon_ = LoadIconW(nullptr, IDI_APPLICATION);
-        addIcon();
+        if (showIcon_) {
+            icon_ = static_cast<HICON>(LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+                                                  GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR));
+            if (!icon_) icon_ = LoadIconW(nullptr, reinterpret_cast<LPCWSTR>(IDI_APPLICATION));
+            addIcon();
+        }
         SetTimer(hwnd_, 1, 250, nullptr);
         return true;
     }
+
+    HWND hwnd() const { return hwnd_; }
 
     /** Üzenethurok; WM_QUIT-ig fut. */
     int run() {
@@ -184,9 +191,10 @@ public:
         Shell_NotifyIconW(NIM_MODIFY, &nid);
     }
 
-private:
     static constexpr UINT kTrayMsg = WM_APP + 1;
     enum : UINT { kCmdOpen = 100, kCmdAutostart, kCmdLog, kCmdExit };
+
+private:
 
     NOTIFYICONDATAW baseData() const {
         NOTIFYICONDATAW nid{};
@@ -208,6 +216,7 @@ private:
     }
 
     void removeIcon() {
+        if (!showIcon_) return;
         NOTIFYICONDATAW nid = baseData();
         Shell_NotifyIconW(NIM_DELETE, &nid);
     }
@@ -266,24 +275,48 @@ private:
                     case kCmdOpen: if (cb_.openGui) cb_.openGui(); break;
                     case kCmdAutostart: setAutostart(!autostartEnabled()); break;
                     case kCmdLog: if (cb_.openLog) cb_.openLog(); break;
-                    case kCmdExit: DestroyWindow(hwnd_); break;
+                    case kCmdExit: notifyQuit(); DestroyWindow(hwnd_); break;
                 }
                 return 0;
             case WM_TIMER:
                 if (cb_.onTimer) cb_.onTimer();
-                updateTip();
+                if (showIcon_) updateTip();
                 return 0;
-            case WM_CLOSE:          // a telepítő / eltávolító is ezt küldi
+            case WM_CLOSE:          // a telepítő / eltávolító / felület is ezt küldi
+                notifyQuit();
+                DestroyWindow(hwnd_);
+                return 0;
             case WM_QUERYENDSESSION:
-                if (msg == WM_CLOSE) DestroyWindow(hwnd_);
                 return TRUE;
+            case WM_ENDSESSION:     // Windows leállítás, újraindítás vagy kijelentkezés
+                if (wp) {
+                    notifyEndSession();
+                    removeIcon();
+                    DestroyWindow(hwnd_);
+                }
+                return 0;
             case WM_DESTROY:
+                notifyQuit();
                 KillTimer(hwnd_, 1);
                 removeIcon();
                 PostQuitMessage(0);
                 return 0;
         }
         return DefWindowProcW(hwnd_, msg, wp, lp);
+    }
+
+    void notifyQuit() {
+        if (quitNotified_) return;
+        quitNotified_ = true;
+        if (cb_.onQuit) cb_.onQuit();
+    }
+
+    void notifyEndSession() {
+        if (endSessionNotified_) return;
+        endSessionNotified_ = true;
+        quitNotified_ = true;
+        if (cb_.onEndSession) cb_.onEndSession();
+        else if (cb_.onQuit) cb_.onQuit();
     }
 
     static LRESULT CALLBACK wndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
@@ -301,6 +334,9 @@ private:
     HICON icon_ = nullptr;
     UINT taskbarCreated_ = 0;
     std::wstring lastTip_;
+    bool showIcon_ = true;
+    bool quitNotified_ = false;
+    bool endSessionNotified_ = false;
 };
 
 } // namespace ee_analyzer::win

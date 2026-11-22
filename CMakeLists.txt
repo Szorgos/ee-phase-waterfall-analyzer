@@ -192,7 +192,7 @@ add_executable(test_watchdog src/test_watchdog.cpp)
 target_link_libraries(test_watchdog PRIVATE ee_dsp_core Threads::Threads)
 target_include_directories(test_watchdog PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 if(WIN32)
-    target_link_libraries(test_watchdog PRIVATE ws2_32 iphlpapi)
+    target_link_libraries(test_watchdog PRIVATE ws2_32 iphlpapi shell32 ole32)
 endif()
 
 # Beépített hibajelentés, küldő: hozzájárulás, méretkorlát, tisztítás, helyi HTTP-próba (curl / WinHTTP)

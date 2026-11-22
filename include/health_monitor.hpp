@@ -255,34 +255,28 @@ public:
     }
     bool enabled() const { return enabled_.load(); }
 
-    /** Rendes leállás: utolsó állapot clean_exit = true-val, a „fut” jel törlése. */
+    /** Rendes leállás: utolsó állapot clean_exit = true-val, a „fut” jel törlése. Szálbiztos. */
     void stopClean() {
-        markClean();
+        std::lock_guard<std::mutex> lk(lifecycleMu_);
+        markCleanLocked();
         if (!cleanMarked_) return;
         cleanMarked_ = false;
         aq::crash::disarm();
         closeLog();
     }
 
-    /** A „rendben leállt” jel kiírása a leállás legelején (a hosszabb leállítási lépések előtt): ha a telepítő a
-     *  leállás közben kilövi a folyamatot, az nem számít rendellenes végnek. A stopClean() utána már csak lezár. */
+    /** A „rendben leállt” jel kiírása a leállás legelején (a hosszabb leállítási lépések előtt): ha a telepítő vagy
+     *  a rendszer a leállás közben kilövi a folyamatot, az nem számít rendellenes végnek. Szálbiztos és többször
+     *  hívható (pl. WM_ENDSESSION, konzol-vezérlő jel, WS-híd és fő szál felől); a stopClean() utána már csak lezár. */
     void markClean() {
-        if (cleanMarked_ || !thread_.joinable()) return;
-        stop();
-        writeState(true);
-        std::error_code ec;
-        fs::remove(cfg_.dir / "running", ec);
-        cleanMarked_ = true;
+        std::lock_guard<std::mutex> lk(lifecycleMu_);
+        markCleanLocked();
     }
 
     /** Az őrszál leállítása a „rendben leállt” jel nélkül. */
     void stop() {
-        {
-            std::lock_guard<std::mutex> lk(cvMu_);
-            quit_ = true;
-        }
-        cv_.notify_all();
-        if (thread_.joinable()) thread_.join();
+        std::lock_guard<std::mutex> lk(lifecycleMu_);
+        stopLocked();
     }
 
     bool previousRunAbnormal() const { return prevAbnormal_; }
@@ -499,6 +493,25 @@ private:
     std::mutex secMu_;
     std::map<std::string, Section> sections_;
     std::string soundCards_;
+    void markCleanLocked() {
+        if (cleanMarked_ || !thread_.joinable()) return;
+        stopLocked();
+        writeState(true);
+        std::error_code ec;
+        fs::remove(cfg_.dir / "running", ec);
+        cleanMarked_ = true;
+    }
+
+    void stopLocked() {
+        {
+            std::lock_guard<std::mutex> lk(cvMu_);
+            quit_ = true;
+        }
+        cv_.notify_all();
+        if (thread_.joinable()) thread_.join();
+    }
+
+    std::mutex lifecycleMu_;
     std::mutex cvMu_;
     std::condition_variable cv_;
     bool quit_ = false;
