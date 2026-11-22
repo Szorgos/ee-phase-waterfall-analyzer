@@ -379,6 +379,7 @@ if(WIN32)
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/soxr/LICENCE
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/faad2/COPYING
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/asiosdk/LICENSE.txt
             ${CMAKE_CURRENT_SOURCE_DIR}/windows/README_WINDOWS.md)
         add_custom_command(
@@ -395,6 +396,7 @@ if(WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/three.min.js ${EE_PAYLOAD_DIR}/three.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE ${EE_PAYLOAD_DIR}/threelic.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/third_party/soxr/LICENCE ${EE_PAYLOAD_DIR}/soxrlic.bin
+            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/third_party/faad2/COPYING ${EE_PAYLOAD_DIR}/faadlic.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/third_party/asiosdk/LICENSE.txt ${EE_PAYLOAD_DIR}/asiolic.bin
             COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/README_WINDOWS.md ${EE_PAYLOAD_DIR}/readme.bin
             COMMAND ${CMAKE_COMMAND} -E touch ${EE_PAYLOAD_DIR}/payload.stamp
@@ -412,6 +414,7 @@ if(WIN32)
             "FILE_THREE|gui\\three.min.js\n"
             "FILE_THREELIC|gui\\three.js-LICENSE.txt\n"
             "FILE_SOXRLIC|gui\\libsoxr-LICENSE.txt\n"
+            "FILE_FAADLIC|gui\\faad2-COPYING.txt\n"
             "FILE_ASIOLIC|gui\\asiosdk-LICENSE.txt\n"
             "FILE_README|OLVASS_EL.md\n")
         file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/setup_payload.rc
@@ -427,6 +430,7 @@ if(WIN32)
             "FILE_THREE RCDATA \"${EE_PAYLOAD_DIR}/three.bin\"\n"
             "FILE_THREELIC RCDATA \"${EE_PAYLOAD_DIR}/threelic.bin\"\n"
             "FILE_SOXRLIC RCDATA \"${EE_PAYLOAD_DIR}/soxrlic.bin\"\n"
+            "FILE_FAADLIC RCDATA \"${EE_PAYLOAD_DIR}/faadlic.bin\"\n"
             "FILE_ASIOLIC RCDATA \"${EE_PAYLOAD_DIR}/asiolic.bin\"\n"
             "FILE_README RCDATA \"${EE_PAYLOAD_DIR}/readme.bin\"\n")
         set_source_files_properties(${EE_RES_DIR}/setup.rc PROPERTIES OBJECT_DEPENDS ${EE_PAYLOAD_DIR}/payload.stamp)
@@ -493,7 +497,9 @@ if(APPLE)
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE
                 $<TARGET_BUNDLE_CONTENT_DIR:Aqulify>/Resources/gui/three.js-LICENSE.txt
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/third_party/soxr/LICENCE
-                $<TARGET_BUNDLE_CONTENT_DIR:Aqulify>/Resources/gui/libsoxr-LICENSE.txt)
+                $<TARGET_BUNDLE_CONTENT_DIR:Aqulify>/Resources/gui/libsoxr-LICENSE.txt
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/third_party/faad2/COPYING
+                $<TARGET_BUNDLE_CONTENT_DIR:Aqulify>/Resources/gui/faad2-COPYING.txt)
 
     # 2.x: a beépített lejátszó parancssori indítója macOS-en is
     add_executable(aqulify-play src/aqulify_play.cpp)
@@ -631,6 +637,7 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
             DESTINATION ${CMAKE_INSTALL_DATADIR}/aqulify/gui)
     install(FILES windows/third_party/three/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/aqulify/gui RENAME three.js-LICENSE.txt)
     install(FILES third_party/soxr/LICENCE DESTINATION ${CMAKE_INSTALL_DATADIR}/aqulify/gui RENAME libsoxr-LICENSE.txt)
+install(FILES third_party/faad2/COPYING DESTINATION ${CMAKE_INSTALL_DATADIR}/aqulify/gui RENAME faad2-COPYING.txt)
     install(FILES linux/io.github.szorgos.Aqulify.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.szorgos.Aqulify.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
     install(FILES linux/aqulify.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps)
