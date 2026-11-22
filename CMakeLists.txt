@@ -212,6 +212,10 @@ if(WIN32)
     target_link_libraries(test_headless_pairing PRIVATE ws2_32 iphlpapi)
 endif()
 
+# Állapotváltás-napló hiszterézis / debounce teszt
+add_executable(test_log_debounce src/test_log_debounce.cpp)
+target_include_directories(test_log_debounce PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # 9b. Tesztalkalmazás: DSD (.dsf/.dff) fejléc, FIR szűrő, PCM dekódolás, tekerés, ID3v2, DST elutasítás, DoP 1.1
 add_executable(test_dsd src/test_dsd.cpp)
 target_link_libraries(test_dsd PRIVATE aq_player Threads::Threads)

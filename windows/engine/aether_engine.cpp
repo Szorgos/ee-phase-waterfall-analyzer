@@ -61,6 +61,7 @@
 #include "tray.hpp"
 #include "media_smtc.hpp"
 #include "audio_options.hpp"
+#include "log_debounce.hpp"
 #include "load_advisor.hpp"
 #include "file_player.hpp"
 #include "library_bridge.hpp"
@@ -453,18 +454,26 @@ public:
         // A plugin csak akkor a forrás, ha a mostani eszköz hangját dolgozza fel: ha ezen az eszközön nincs Equalizer
         // APO (pl. új USB DAC), a plugin egy másik eszközön fut, a zene feldolgozás nélkül szól. Ilyenkor a vízesés a
         // loopbackből kap jelet, és a felület megmondja, mit kell bekapcsolni.
-        const bool alive = pluginServesDevice(pluginAliveLocked(), apoOnDevice_);
+        const bool rawPluginAlive = pluginAliveLocked();
+        const bool alive = pluginServesDevice(rawPluginAlive, apoOnDevice_);
         if (alive != pluginActive_) {
             pluginActive_ = alive;
-            if (!alive && pluginAliveLocked())
-                std::cout << "[Forrás] A mostani eszközön nincs bekapcsolva az Equalizer APO: WASAPI loopback (csak "
-                             "analízis); a plugin egy másik eszközön fut.\n";
-            else
-                std::cout << (alive ? "[Forrás] EQ APO plugin jel aktív (DSP élőben vezérelhető).\n"
-                                    : "[Forrás] WASAPI loopback (csak analízis; a DSP-hez az EQ APO plugin kell).\n");
             if (alive) pluginReadPos_ = mapping_.state()->tap.writePos.load();
             else loopbackReadPos_ = loopback_.ring().writePos.load();
             playback_.reset();   // a lejátszás mérése a plugin leállásától indul
+        }
+        // A [Forrás] naplósor hiszterézissel (2,5 s) íródik, hogy a pillanatnyi audiodg/plugin újrapéldányosítás
+        // ne szemetelje tele a naplót (a tényleges jelforrás-váltás fent azonnal megtörténik).
+        const int srcKind = alive ? kSrcApo : (rawPluginAlive ? kSrcLoopbackNoApo : kSrcLoopback);
+        int loggedKind = 0;
+        if (sourceLog_.update(srcKind, GetTickCount64(), loggedKind)) {
+            if (loggedKind == kSrcLoopbackNoApo)
+                std::cout << "[Forrás] A mostani eszközön nincs bekapcsolva az Equalizer APO: WASAPI loopback (csak "
+                             "analízis); a plugin egy másik eszközön fut.\n";
+            else if (loggedKind == kSrcApo)
+                std::cout << "[Forrás] EQ APO plugin jel aktív (DSP élőben vezérelhető).\n";
+            else
+                std::cout << "[Forrás] WASAPI loopback (csak analízis; a DSP-hez az EQ APO plugin kell).\n";
         }
         if (!loopback_.active()) playback_.reset();   // nincs lehallgatás (nincs eszköz): nincs lejátszás
         // Az eszköz, amelyen a plugin fut (az alapértelmezett lejátszóeszköz): ha később egy másik eszközre
@@ -746,6 +755,8 @@ private:
     uint64_t apoCheckedAt_ = 0;
     std::string apoDeviceHint_;
     PlaybackDetector playback_;
+    enum SourceLogKind { kSrcApo = 1, kSrcLoopbackNoApo = 2, kSrcLoopback = 3 };
+    aq::log::StableStateLogger sourceLog_{ 2500 };
     std::mutex irMutex_;
     IrData ir_;
 };
