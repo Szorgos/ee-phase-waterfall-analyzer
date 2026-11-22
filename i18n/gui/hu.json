@@ -583,7 +583,7 @@
   "ao.keepAwakeHint": "Csendben sem alszik el: nincs pattanás, és a számok eleje sem vész el.",
   "ao.netRecv": "Hálózati vevő",
   "ao.netRecvName": "Kijelzett név",
-  "ao.netRecvHint": "A telefon vagy a számítógép hálózati hangkimenetként látja az Aqulify-t, és a hang az EQ-n át szól. Kb. CD-minőség (44,1 kHz / 16 bit): nem bitpontos és nem hi-res.",
+  "ao.netRecvHint": "A telefon vagy a számítógép a hálózati hangkimenetek listájában ezen a néven látja az Aqulify-t, és a hang az EQ-n át szól. Kb. CD-minőség (44,1 kHz / 16 bit): nem bitpontos és nem hi-res.",
   "ao.netRecvRunning": "Fut: a hálózaton „{name}” néven látható.",
   "ao.netRecvStarting": "Indul…",
   "ao.netRecvRestarting": "Leállt, újraindul… ({detail})",

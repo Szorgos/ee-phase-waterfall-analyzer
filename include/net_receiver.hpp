@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file net_receiver.hpp
- * @brief Hálózati vevő (AirPlay-kompatibilis lejátszás telefonról / számítógépről), Linux és Raspberry Pi.
+ * @brief Hálózati vevő (lejátszás telefonról / számítógépről a hálózaton át), Linux és Raspberry Pi.
  *
  * A vevő a rendszer `shairport-sync` programja (MIT licenc, külön csomag), amelyet a motor gyermekfolyamatként indít
  * és felügyel. A hang a PipeWire „Aqulify” eszközére (aqulify_sink) megy, így a motor élő útja ugyanúgy EQ-zza, mint

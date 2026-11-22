@@ -485,7 +485,7 @@
   "ao.keepAwakeHint": "無音時にもスリープしません: ポップノイズを防ぎ、曲の先頭が途切れるのを防止します。",
   "ao.netRecv": "Network receiver",
   "ao.netRecvName": "Display name",
-  "ao.netRecvHint": "Phones and computers see Aqulify as a network audio output, and the sound goes through the EQ. About CD quality (44.1 kHz / 16 bit): not bit-perfect and not hi-res.",
+  "ao.netRecvHint": "Your phone or computer lists Aqulify under this name among its network audio outputs, and the sound goes through the EQ. About CD quality (44.1 kHz / 16 bit): not bit-perfect and not hi-res.",
   "ao.netRecvRunning": "Running: visible on the network as “{name}”.",
   "ao.netRecvStarting": "Starting…",
   "ao.netRecvRestarting": "Stopped, restarting… ({detail})",
