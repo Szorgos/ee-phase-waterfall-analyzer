@@ -1072,5 +1072,9 @@
   "hl.adminLabel": "Remote admin",
   "hl.removeBtn": "Remove",
   "hl.resetHelpTitle": "Lost access",
-  "hl.resetHelpText": "If the owner phone is lost or replaced, insert the SD card into a computer and create an empty aqulify-reset file on the boot partition. On the next startup, Aqulify clears old pairings and the file, and returns to setup mode."
+  "hl.resetHelpText": "If the owner phone is lost or replaced, insert the SD card into a computer and create an empty aqulify-reset file on the boot partition. On the next startup, Aqulify clears old pairings and the file, and returns to setup mode.",
+  "remote.bluetoothWindowsOnly": "Bluetooth remote control is currently available on Windows only.",
+  "remote.firewallHint": "If your phone sees this computer but cannot connect, the firewall may be blocking port {port}/tcp:",
+  "remote.firewallCopy": "Copy",
+  "remote.firewallCopied": "Command copied to clipboard."
 }

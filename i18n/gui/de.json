@@ -1072,5 +1072,9 @@
   "hl.adminLabel": "Fern-Admin",
   "hl.removeBtn": "Entfernen",
   "hl.resetHelpTitle": "Zugriff verloren",
-  "hl.resetHelpText": "Wenn das Eigentümer-Telefon verloren oder ersetzt wurde, legen Sie die SD-Karte in einen Computer ein und erstellen Sie eine leere Datei aqulify-reset auf der Boot-Partition. Beim nächsten Start löscht Aqulify die alten Kopplungen sowie die Datei und kehrt in den Einrichtungsmodus zurück."
+  "hl.resetHelpText": "Wenn das Eigentümer-Telefon verloren oder ersetzt wurde, legen Sie die SD-Karte in einen Computer ein und erstellen Sie eine leere Datei aqulify-reset auf der Boot-Partition. Beim nächsten Start löscht Aqulify die alten Kopplungen sowie die Datei und kehrt in den Einrichtungsmodus zurück.",
+  "remote.bluetoothWindowsOnly": "Bluetooth remote control is currently available on Windows only.",
+  "remote.firewallHint": "If your phone sees this computer but cannot connect, the firewall may be blocking port {port}/tcp:",
+  "remote.firewallCopy": "Copy",
+  "remote.firewallCopied": "Command copied to clipboard."
 }

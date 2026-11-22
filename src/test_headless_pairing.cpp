@@ -381,6 +381,7 @@ void testLiveClaimSecurityAndOwnerFlow() {
     };
 
     WebSocketBridge bridge(47970);
+    bridge.setHeadlessMode(true);
     check(bridge.start(cb), "élő teszt bridge elindult");
     check(bridge.isClaimable(), "gazdátlan módban indul (isClaimable=true)");
     check(bridge.mdnsClaimable(), "mDNS claimable=1 gazdátlan módban");
@@ -490,6 +491,7 @@ void testLiveClaimSecurityAndOwnerFlow() {
     // 5h. Friss indítás: sikeres claim -> tulajdonos + mDNS claimable=0 + 2. telefon jóváhagyása + revoke
     {
         WebSocketBridge b2(47972);
+        b2.setHeadlessMode(true);
         remoteStore = "{\"enabled\":true,\"port\":47973,\"machine\":\"abcdef0123456789\",\"devices\":[]}";
         { std::lock_guard<std::mutex> lk(codeMu); speakCalls = 0; spokenCode.clear(); }
         check(b2.start(cb), "2. élő teszt bridge elindult");
@@ -586,6 +588,7 @@ void testLiveClaimSecurityAndOwnerFlow() {
 
         // Újraindítás után a tulajdonos tokenje és owner joga megmarad
         WebSocketBridge b3(47974);
+        b3.setHeadlessMode(true);
         check(b3.start(cb), "újraindított bridge elindult");
         check(!b3.isClaimable(), "újraindítás után sem gazdátlan");
         {
@@ -607,6 +610,7 @@ void testLiveClaimSecurityAndOwnerFlow() {
 
         // 10 perc után: elutasítva
         WebSocketBridge bExp(47976);
+        bExp.setHeadlessMode(true);
         check(bExp.start(cb), "no-audio lejárt bridge elindult");
         bExp.setStartedAtOffsetSecondsForTest(601);
         check(!bExp.isNoAudioFallbackActive(), "10 perc után aqulify-claim-no-audio nem aktív");
@@ -621,6 +625,7 @@ void testLiveClaimSecurityAndOwnerFlow() {
 
         // 10 percen belül: elfogadva + jelzőfájl törölve
         WebSocketBridge bOk(47977);
+        bOk.setHeadlessMode(true);
         check(bOk.start(cb), "no-audio aktív bridge elindult");
         check(bOk.isNoAudioFallbackActive(), "10 percen belül aqulify-claim-no-audio aktív");
         const std::string rStart = httpRequest(47975, "POST /claim/start?client=aqulify_remote HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n");
@@ -689,6 +694,7 @@ void testRemoteErrorLog() {
     };
 
     WebSocketBridge bridge(47980);
+    bridge.setHeadlessMode(true);
     check(bridge.start(cb), "[7] bridge elindult");
     bridge.setClaimStartCooldownForTest(0);
     httpRequest(47981, "POST /claim/start?client=aqulify_remote&lang=hu HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n");
@@ -781,6 +787,32 @@ void testClaimAudioWavBuild() {
     std::filesystem::remove_all(tmpDir, ec);
 }
 
+void testDesktopNotClaimable() {
+    std::cout << "[8] Asztali (nem headless) mód: nincs claimable, /claim/start és ?claim=1 -> 403...\n";
+    std::string remoteStore = "{\"enabled\":true,\"port\":47983,\"machine\":\"deadbeef12345678\",\"devices\":[]}";
+    BridgeCallbacks cb;
+    cb.loadRemote = [&]() { return remoteStore; };
+    cb.saveRemote = [&](const std::string& doc) { remoteStore = doc; return true; };
+
+    WebSocketBridge bridge(47982);   // alapértelmezett: headlessMode_ == false
+    check(!bridge.headlessMode(), "[8] alapértelmezetten headlessMode=false");
+    check(bridge.start(cb), "[8] asztali bridge elindult");
+    check(!bridge.isClaimable(), "[8] asztali gépen isClaimable=false akkor is, ha devices üres");
+    check(!bridge.mdnsClaimable(), "[8] asztali gépen mDNS claimable=0");
+
+    const std::string rStart = httpRequest(47983, "POST /claim/start?client=aqulify_remote&lang=hu HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n");
+    check(rStart.find("403 Forbidden") != std::string::npos && rStart.find("not-headless") != std::string::npos,
+          "[8] asztali gépen POST /claim/start -> 403 not-headless");
+
+    WsClient ws;
+    const bool ok = ws.connect(47983, "/?claim=1&client=aqulify_remote&name=TesztTelefon");
+    check(!ok && ws.handshakeResp.find("403 Forbidden") != std::string::npos &&
+          ws.handshakeResp.find("not-headless") != std::string::npos,
+          "[8] asztali gépen ?claim=1 -> 403 not-headless");
+
+    bridge.stop();
+}
+
 } // namespace
 
 int main() {
@@ -792,6 +824,7 @@ int main() {
     testLiveClaimSecurityAndOwnerFlow();
     testRemoteErrorLog();
     testClaimAudioWavBuild();
+    testDesktopNotClaimable();
     net::cleanup();
 
     std::cout << "\nEredmény: " << g_pass << " OK, " << g_fail << " HIBA.\n";

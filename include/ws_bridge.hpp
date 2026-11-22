@@ -387,9 +387,93 @@ inline std::string cleanName(const std::string& in) {
     return out;
 }
 
+struct InterfaceAddr {
+    std::string name;
+    std::string ip;
+};
+
+inline bool startsWith(const std::string& s, const char* prefix) {
+    const size_t n = std::strlen(prefix);
+    return s.size() >= n && s.compare(0, n, prefix) == 0;
+}
+
+inline bool isLinkLocalIpv4(const std::string& ip) {
+    return startsWith(ip, "169.254.");
+}
+
+inline bool isLoopbackIpv4(const std::string& ip) {
+    return startsWith(ip, "127.");
+}
+
+inline bool isPrivateIpv4(const std::string& ip) {
+    if (startsWith(ip, "192.168.") || startsWith(ip, "10.")) return true;
+    if (startsWith(ip, "172.")) {
+        int second = 0;
+        size_t i = 4;
+        if (i >= ip.size() || ip[i] < '0' || ip[i] > '9') return false;
+        while (i < ip.size() && ip[i] >= '0' && ip[i] <= '9') {
+            second = second * 10 + (ip[i] - '0');
+            ++i;
+        }
+        return i < ip.size() && ip[i] == '.' && second >= 16 && second <= 31;
+    }
+    return false;
+}
+
+/** Virtuális / konténer / híd / VPN interfész felismerése név alapján (hátrasoroláshoz). */
+inline bool isVirtualInterface(const std::string& name) {
+    if (name.empty()) return false;
+    static const char* const kPrefixes[] = {
+        "docker", "virbr", "veth", "br-", "podman", "cni", "flannel",
+        "lxc", "lxd", "tun", "tap", "wg", "tailscale", "zt", "vmnet", "vboxnet", "lo"
+    };
+    for (const char* p : kPrefixes) {
+        if (startsWith(name, p)) return true;
+    }
+    return false;
+}
+
+/**
+ * Helyi IPv4-címek szűrése és rangsorolása:
+ * - kiszűri a loopback (127.*) és link-local (169.254.*) címeket, valamint a duplikátumokat;
+ * - előre sorolja a valódi fizikai LAN/Wi-Fi privát címeket (pl. wlp*, enp*, wlan*, eth*);
+ * - hátra sorolja a virtuális/konténer/bridge interfészeket (docker0, virbr0, veth*, br-*).
+ */
+inline std::vector<std::string> rankLocalAddresses(const std::vector<InterfaceAddr>& in) {
+    struct Entry {
+        int rank;
+        size_t index;
+        std::string ip;
+    };
+    std::vector<Entry> ranked;
+    ranked.reserve(in.size());
+    for (size_t i = 0; i < in.size(); ++i) {
+        const auto& a = in[i];
+        if (a.ip.empty() || isLoopbackIpv4(a.ip) || isLinkLocalIpv4(a.ip)) continue;
+        const bool virt = isVirtualInterface(a.name);
+        int r = 1;
+        if (virt) {
+            r = 2;
+        } else if (isPrivateIpv4(a.ip)) {
+            r = 0;
+        }
+        ranked.push_back({ r, i, a.ip });
+    }
+    std::stable_sort(ranked.begin(), ranked.end(), [](const Entry& a, const Entry& b) {
+        if (a.rank != b.rank) return a.rank < b.rank;
+        return a.index < b.index;
+    });
+    std::vector<std::string> out;
+    out.reserve(ranked.size());
+    for (const auto& e : ranked) {
+        if (std::find(out.begin(), out.end(), e.ip) == out.end()) out.push_back(e.ip);
+    }
+    return out;
+}
+
 /** A gép IPv4 címei a helyi hálózaton (a párosításhoz: ezen érhető el a motor). */
 inline std::vector<std::string> localAddresses() {
-    std::vector<std::string> out;
+    std::vector<InterfaceAddr> raw;
 #ifdef _WIN32
     ULONG size = 16 * 1024;
     std::vector<uint8_t> buf(size);
@@ -401,28 +485,30 @@ inline std::vector<std::string> localAddresses() {
         list = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buf.data());
         r = GetAdaptersAddresses(AF_INET, flags, nullptr, list, &size);
     }
-    if (r != NO_ERROR) return out;
+    if (r != NO_ERROR) return {};
     for (auto* a = list; a; a = a->Next) {
         if (a->OperStatus != IfOperStatusUp || a->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
         for (auto* u = a->FirstUnicastAddress; u; u = u->Next) {
             const auto* sin = reinterpret_cast<const sockaddr_in*>(u->Address.lpSockaddr);
             char ip[INET_ADDRSTRLEN] = {};
-            if (sin->sin_family == AF_INET && inet_ntop(AF_INET, &sin->sin_addr, ip, sizeof(ip))) out.emplace_back(ip);
+            if (sin->sin_family == AF_INET && inet_ntop(AF_INET, &sin->sin_addr, ip, sizeof(ip)))
+                raw.push_back({ a->AdapterName ? std::string(a->AdapterName) : std::string(), ip });
         }
     }
 #else
     ifaddrs* list = nullptr;
-    if (getifaddrs(&list) != 0) return out;
+    if (getifaddrs(&list) != 0) return {};
     for (ifaddrs* a = list; a; a = a->ifa_next) {
         if (!a->ifa_addr || a->ifa_addr->sa_family != AF_INET) continue;
         if (!(a->ifa_flags & IFF_UP) || (a->ifa_flags & IFF_LOOPBACK)) continue;
         char ip[INET_ADDRSTRLEN] = {};
         const auto* sin = reinterpret_cast<const sockaddr_in*>(a->ifa_addr);
-        if (inet_ntop(AF_INET, &sin->sin_addr, ip, sizeof(ip))) out.emplace_back(ip);
+        if (inet_ntop(AF_INET, &sin->sin_addr, ip, sizeof(ip)))
+            raw.push_back({ a->ifa_name ? std::string(a->ifa_name) : std::string(), ip });
     }
     freeifaddrs(list);
 #endif
-    return out;
+    return rankLocalAddresses(raw);
 }
 
 } // namespace bridge_detail
@@ -516,8 +602,15 @@ public:
     bool remoteEnabled() const { return remoteEnabled_; }
     std::string currentPairCode() const { return pairCode_; }
     bool pairingOpen() const { return remoteListener_ != net::kInvalidSocket && !pairCode_.empty() && clock::now() < pairUntil_; }
-    /** Igaz, ha a motor hálózaton figyel és még nincs párosított tulajdonosa (gazdátlan mód). */
-    bool isClaimable() const { return remoteListener_ != net::kInvalidSocket && devices_.empty(); }
+    /** Headless (kijelző nélküli Pi) mód bekapcsolása. Alapértelmezett: false (asztali gépen nincs claimable mód). */
+    void setHeadlessMode(bool on) {
+        if (headlessMode_ == on) return;
+        headlessMode_ = on;
+        if (remoteListener_ != net::kInvalidSocket) updateMdnsClaimable();
+    }
+    bool headlessMode() const { return headlessMode_; }
+    /** Igaz, ha a motor headless módban hálózaton figyel és még nincs párosított tulajdonosa (gazdátlan mód). */
+    bool isClaimable() const { return headlessMode_ && remoteListener_ != net::kInvalidSocket && devices_.empty(); }
     /** Igaz, ha a hibás claim-próbák miatt globális zárolás aktív. */
     bool isClaimLocked() const { return clock::now() < claimLockUntil_; }
     /** Igaz, ha a boot-partíciós `aqulify-claim-no-audio` tartalék aktív (gazdátlan + <10 perc + fájl létezik). */
@@ -633,7 +726,7 @@ private:
     }
 
     void updateMdnsClaimable() {
-        mdnsAnnouncer_.setClaimable(devices_.empty());
+        mdnsAnnouncer_.setClaimable(isClaimable());
     }
 
 
@@ -1060,6 +1153,10 @@ private:
             reply(p.sock, "403 Forbidden", "client");
             return;
         }
+        if (!headlessMode_) {
+            reply(p.sock, "403 Forbidden", "not-headless");
+            return;
+        }
         if (!devices_.empty()) {
             reply(p.sock, "409 Conflict", "already-claimed");
             return;
@@ -1221,6 +1318,10 @@ private:
                 const std::string clientType = bridge_detail::cleanName(bridge_detail::queryParam(request, "client"));
                 if (clientType != "aqulify_remote" && clientType != "aqulify_desktop") {
                     reply(p.sock, "403 Forbidden", "client");
+                    return false;
+                }
+                if (!headlessMode_) {
+                    reply(p.sock, "403 Forbidden", "not-headless");
                     return false;
                 }
                 if (!devices_.empty()) {
@@ -1651,7 +1752,7 @@ private:
             if (remoteListener_ == net::kInvalidSocket) continue;
             remoteListenPort_ = port;
             std::cout << "[WS Bridge] Hálózati elérés bekapcsolva: 0.0.0.0:" << port << "\n";
-            mdnsAnnouncer_.start(port, "", bridge_detail::localAddresses(), machineId(), devices_.empty());
+            mdnsAnnouncer_.start(port, "", bridge_detail::localAddresses(), machineId(), isClaimable());
             openBt();   // a Bluetooth-csatorna csak bekapcsolt hálózati elérésnél fut
             return true;
         }
@@ -1772,7 +1873,16 @@ private:
         s += now < pairLockUntil_ ? "true" : "false";
         s += ",\"claimable\":";
         s += isClaimable() ? "true" : "false";
-        s += ",\"bluetooth\":{\"enabled\":";
+#ifdef _WIN32
+        s += ",\"platform\":\"windows\"";
+#elif defined(__APPLE__)
+        s += ",\"platform\":\"macos\"";
+#else
+        s += ",\"platform\":\"linux\"";
+#endif
+        s += ",\"bluetooth\":{\"supported\":";
+        s += btlink::RfcommListener::isSupported() ? "true" : "false";
+        s += ",\"enabled\":";
         s += btEnabled_ ? "true" : "false";
         s += ",\"listening\":";
         s += bt_.isOpen() ? "true" : "false";
@@ -3598,6 +3708,7 @@ private:
     static constexpr int kClaimStartCooldownSeconds = 30;
     static constexpr int kClaimNoAudioWindowSeconds = 600;
     static constexpr int kClaimSubmitTimeoutSeconds = 15;
+    bool headlessMode_ = false;
     clock::time_point startedAt_{ clock::now() };
     std::string claimCode_;
     clock::time_point claimUntil_{};

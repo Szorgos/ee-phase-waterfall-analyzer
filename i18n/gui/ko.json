@@ -1072,5 +1072,9 @@
   "hl.adminLabel": "원격 관리자",
   "hl.removeBtn": "제거",
   "hl.resetHelpTitle": "접근 권한을 잃은 경우",
-  "hl.resetHelpText": "소유자 휴대전화를 분실하거나 교체한 경우 SD 카드를 컴퓨터에 넣고 부트 파티션에 빈 aqulify-reset 파일을 만드세요. 다음 시작 시 Aqulify가 기존 페어링과 파일을 삭제하고 설정 모드로 돌아갑니다."
+  "hl.resetHelpText": "소유자 휴대전화를 분실하거나 교체한 경우 SD 카드를 컴퓨터에 넣고 부트 파티션에 빈 aqulify-reset 파일을 만드세요. 다음 시작 시 Aqulify가 기존 페어링과 파일을 삭제하고 설정 모드로 돌아갑니다.",
+  "remote.bluetoothWindowsOnly": "Bluetooth remote control is currently available on Windows only.",
+  "remote.firewallHint": "If your phone sees this computer but cannot connect, the firewall may be blocking port {port}/tcp:",
+  "remote.firewallCopy": "Copy",
+  "remote.firewallCopied": "Command copied to clipboard."
 }

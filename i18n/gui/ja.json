@@ -1072,5 +1072,9 @@
   "hl.adminLabel": "リモート管理者",
   "hl.removeBtn": "削除",
   "hl.resetHelpTitle": "アクセスを失った場合",
-  "hl.resetHelpText": "所有者端末を紛失・機種変更した場合は、SDカードをPCに挿し、ブートパーティションに空の aqulify-reset ファイルを作成してください。次回起動時にAqulifyが古いペアリングとファイルを削除し、初期設定モードに戻ります。"
+  "hl.resetHelpText": "所有者端末を紛失・機種変更した場合は、SDカードをPCに挿し、ブートパーティションに空の aqulify-reset ファイルを作成してください。次回起動時にAqulifyが古いペアリングとファイルを削除し、初期設定モードに戻ります。",
+  "remote.bluetoothWindowsOnly": "Bluetooth remote control is currently available on Windows only.",
+  "remote.firewallHint": "If your phone sees this computer but cannot connect, the firewall may be blocking port {port}/tcp:",
+  "remote.firewallCopy": "Copy",
+  "remote.firewallCopied": "Command copied to clipboard."
 }

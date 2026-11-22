@@ -1072,5 +1072,9 @@
   "hl.adminLabel": "Vzdálený správce",
   "hl.removeBtn": "Odebrat",
   "hl.resetHelpTitle": "Ztráta přístupu",
-  "hl.resetHelpText": "Pokud je telefon vlastníka ztracen nebo vyměněn, vložte SD kartu do počítače a vytvořte prázdný soubor aqulify-reset na spouštěcím oddílu. Při dalším spuštění Aqulify smaže stará párování i tento soubor a vrátí se do režimu nastavení."
+  "hl.resetHelpText": "Pokud je telefon vlastníka ztracen nebo vyměněn, vložte SD kartu do počítače a vytvořte prázdný soubor aqulify-reset na spouštěcím oddílu. Při dalším spuštění Aqulify smaže stará párování i tento soubor a vrátí se do režimu nastavení.",
+  "remote.bluetoothWindowsOnly": "Bluetooth remote control is currently available on Windows only.",
+  "remote.firewallHint": "If your phone sees this computer but cannot connect, the firewall may be blocking port {port}/tcp:",
+  "remote.firewallCopy": "Copy",
+  "remote.firewallCopied": "Command copied to clipboard."
 }

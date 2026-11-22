@@ -1072,5 +1072,9 @@
   "hl.adminLabel": "Admin la distanță",
   "hl.removeBtn": "Elimină",
   "hl.resetHelpTitle": "Acces pierdut",
-  "hl.resetHelpText": "Dacă telefonul proprietar a fost pierdut sau înlocuit, introdu cardul SD într-un calculator și creează un fișier gol aqulify-reset pe partiția de boot. La următoarea pornire, Aqulify va șterge asocierile vechi și fișierul, revenind în modul de configurare."
+  "hl.resetHelpText": "Dacă telefonul proprietar a fost pierdut sau înlocuit, introdu cardul SD într-un calculator și creează un fișier gol aqulify-reset pe partiția de boot. La următoarea pornire, Aqulify va șterge asocierile vechi și fișierul, revenind în modul de configurare.",
+  "remote.bluetoothWindowsOnly": "Bluetooth remote control is currently available on Windows only.",
+  "remote.firewallHint": "If your phone sees this computer but cannot connect, the firewall may be blocking port {port}/tcp:",
+  "remote.firewallCopy": "Copy",
+  "remote.firewallCopied": "Command copied to clipboard."
 }

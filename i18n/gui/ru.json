@@ -1072,5 +1072,9 @@
   "hl.adminLabel": "Удалённый админ",
   "hl.removeBtn": "Удалить",
   "hl.resetHelpTitle": "Потеря доступа",
-  "hl.resetHelpText": "Если телефон владельца утерян или заменён, вставьте SD-карту в компьютер и создайте пустой файл aqulify-reset на загрузочном разделе. При следующем запуске Aqulify удалит старые сопряжения и этот файл и вернётся в режим настройки."
+  "hl.resetHelpText": "Если телефон владельца утерян или заменён, вставьте SD-карту в компьютер и создайте пустой файл aqulify-reset на загрузочном разделе. При следующем запуске Aqulify удалит старые сопряжения и этот файл и вернётся в режим настройки.",
+  "remote.bluetoothWindowsOnly": "Bluetooth remote control is currently available on Windows only.",
+  "remote.firewallHint": "If your phone sees this computer but cannot connect, the firewall may be blocking port {port}/tcp:",
+  "remote.firewallCopy": "Copy",
+  "remote.firewallCopied": "Command copied to clipboard."
 }

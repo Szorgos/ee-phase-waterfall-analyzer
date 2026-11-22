@@ -1072,5 +1072,9 @@
   "hl.adminLabel": "מנהל מרחוק",
   "hl.removeBtn": "הסרה",
   "hl.resetHelpTitle": "אובדן גישה",
-  "hl.resetHelpText": "אם טלפון הבעלים אבד או הוחלף, הכנס את כרטיס ה-SD למחשב וצור קובץ ריק בשם aqulify-reset במחיצת האתחול. בהפעלה הבאה Aqulify ימחק את השיוכים הישנים ואת הקובץ ויחזור למצב הגדרה."
+  "hl.resetHelpText": "אם טלפון הבעלים אבד או הוחלף, הכנס את כרטיס ה-SD למחשב וצור קובץ ריק בשם aqulify-reset במחיצת האתחול. בהפעלה הבאה Aqulify ימחק את השיוכים הישנים ואת הקובץ ויחזור למצב הגדרה.",
+  "remote.bluetoothWindowsOnly": "Bluetooth remote control is currently available on Windows only.",
+  "remote.firewallHint": "If your phone sees this computer but cannot connect, the firewall may be blocking port {port}/tcp:",
+  "remote.firewallCopy": "Copy",
+  "remote.firewallCopied": "Command copied to clipboard."
 }

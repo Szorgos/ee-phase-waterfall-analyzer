@@ -1072,5 +1072,9 @@
   "hl.adminLabel": "Fjernadmin",
   "hl.removeBtn": "Fjern",
   "hl.resetHelpTitle": "Mistet adgang",
-  "hl.resetHelpText": "Hvis ejertelefonen er mistet eller udskiftet, sætter du SD-kortet i en computer og opretter en tom fil aqulify-reset på boot-partitionen. Ved næste opstart sletter Aqulify gamle parringer samt filen og vender tilbage til opsætningstilstand."
+  "hl.resetHelpText": "Hvis ejertelefonen er mistet eller udskiftet, sætter du SD-kortet i en computer og opretter en tom fil aqulify-reset på boot-partitionen. Ved næste opstart sletter Aqulify gamle parringer samt filen og vender tilbage til opsætningstilstand.",
+  "remote.bluetoothWindowsOnly": "Bluetooth remote control is currently available on Windows only.",
+  "remote.firewallHint": "If your phone sees this computer but cannot connect, the firewall may be blocking port {port}/tcp:",
+  "remote.firewallCopy": "Copy",
+  "remote.firewallCopied": "Command copied to clipboard."
 }

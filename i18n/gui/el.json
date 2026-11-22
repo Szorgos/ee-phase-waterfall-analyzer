@@ -1072,5 +1072,9 @@
   "hl.adminLabel": "Απομακρυσμένος διαχειριστής",
   "hl.removeBtn": "Αφαίρεση",
   "hl.resetHelpTitle": "Απώλεια πρόσβασης",
-  "hl.resetHelpText": "Αν χαθεί ή αντικατασταθεί το τηλέφωνο του κατόχου, τοποθετήστε την κάρτα SD σε υπολογιστή και δημιουργήστε ένα κενό αρχείο aqulify-reset στο διαμέρισμα εκκίνησης. Στην επόμενη εκκίνηση, το Aqulify διαγράφει τις παλιές συζεύξεις και το αρχείο και επιστρέφει σε λειτουργία ρύθμισης."
+  "hl.resetHelpText": "Αν χαθεί ή αντικατασταθεί το τηλέφωνο του κατόχου, τοποθετήστε την κάρτα SD σε υπολογιστή και δημιουργήστε ένα κενό αρχείο aqulify-reset στο διαμέρισμα εκκίνησης. Στην επόμενη εκκίνηση, το Aqulify διαγράφει τις παλιές συζεύξεις και το αρχείο και επιστρέφει σε λειτουργία ρύθμισης.",
+  "remote.bluetoothWindowsOnly": "Bluetooth remote control is currently available on Windows only.",
+  "remote.firewallHint": "If your phone sees this computer but cannot connect, the firewall may be blocking port {port}/tcp:",
+  "remote.firewallCopy": "Copy",
+  "remote.firewallCopied": "Command copied to clipboard."
 }

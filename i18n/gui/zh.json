@@ -1072,5 +1072,9 @@
   "hl.adminLabel": "远程管理员",
   "hl.removeBtn": "移除",
   "hl.resetHelpTitle": "丢失访问权限",
-  "hl.resetHelpText": "如果所有者手机丢失或更换，请将 SD 卡插入电脑，并在启动分区创建一个空的 aqulify-reset 文件。下次启动时，Aqulify 会清除旧配对和该文件，并恢复到初始设置模式。"
+  "hl.resetHelpText": "如果所有者手机丢失或更换，请将 SD 卡插入电脑，并在启动分区创建一个空的 aqulify-reset 文件。下次启动时，Aqulify 会清除旧配对和该文件，并恢复到初始设置模式。",
+  "remote.bluetoothWindowsOnly": "Bluetooth remote control is currently available on Windows only.",
+  "remote.firewallHint": "If your phone sees this computer but cannot connect, the firewall may be blocking port {port}/tcp:",
+  "remote.firewallCopy": "Copy",
+  "remote.firewallCopied": "Command copied to clipboard."
 }

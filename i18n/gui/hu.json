@@ -1072,5 +1072,9 @@
   "hl.adminLabel": "Távoli admin",
   "hl.removeBtn": "Eltávolítás",
   "hl.resetHelpTitle": "Hozzáférés elvesztése",
-  "hl.resetHelpText": "Ha a tulajdonos-telefon elveszett vagy lecserélted, tedd az SD-kártyát a számítógépbe, és hozz létre a boot partíción egy üres aqulify-reset fájlt. A következő indításkor az Aqulify törli a régi párosításokat és a fájlt, majd újra beállítható."
+  "hl.resetHelpText": "Ha a tulajdonos-telefon elveszett vagy lecserélted, tedd az SD-kártyát a számítógépbe, és hozz létre a boot partíción egy üres aqulify-reset fájlt. A következő indításkor az Aqulify törli a régi párosításokat és a fájlt, majd újra beállítható.",
+  "remote.bluetoothWindowsOnly": "Bluetooth-távirányító jelenleg csak Windowson érhető el.",
+  "remote.firewallHint": "Ha a telefon látja a gépet, de nem kapcsolódik, a tűzfal blokkolhatja a {port}/tcp portot:",
+  "remote.firewallCopy": "Másolás",
+  "remote.firewallCopied": "Parancs a vágólapra másolva."
 }
