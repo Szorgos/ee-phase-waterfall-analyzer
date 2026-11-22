@@ -538,7 +538,7 @@ private:
      * Ébren tartás: csendes, nem passzív hangfolyam a saját virtuális eszközünkre (nem a link-group tagja, így a
      * WirePlumber rá köti). Amíg szól, a lánc fut, és a hangkártya nem függesztődik fel.
      */
-    void createKeepAlive() {
+    void createKeepAlive(bool silent = false) {
         if (keepAlive_ || !core) return;
         struct pw_properties* props = pw_properties_new(
             PW_KEY_MEDIA_TYPE, "Audio",
@@ -580,15 +580,15 @@ private:
             std::cerr << "[PipeWire] az ébren tartó hangfolyam nem csatlakoztatható\n";
             return;
         }
-        std::cout << "[PipeWire] Hangkártya ébren tartása: be\n";
+        if (!silent) std::cout << "[PipeWire] Hangkártya ébren tartása: be\n";
     }
 
-    void destroyKeepAlive() {
+    void destroyKeepAlive(bool silent = false) {
         if (!keepAlive_) return;
         pw_stream_destroy(keepAlive_);
         keepAlive_ = nullptr;
         keepAliveStreaming_ = false;
-        std::cout << "[PipeWire] Hangkártya ébren tartása: ki\n";
+        if (!silent) std::cout << "[PipeWire] Hangkártya ébren tartása: ki\n";
     }
 
     /** Ébren tartás szünetel-e (forrás-követés: új külső hangfolyam). A fő hurok szálán hívandó. */
@@ -688,7 +688,8 @@ private:
      * Új csomópont a gráfban (a fő hurok szálán):
      * - külső Audio/Sink: nyilvántartjuk (célválasztáshoz), és ha a lejátszó stream újracsatlakozásra vár,
      *   azonnal ütemezzük az újranyitást;
-     * - külső Stream/Output/Audio: forrás-követésnél az ébren tartás rövid szüneteltetése.
+     * - külső Stream/Output/Audio: forrás-követésnél az ébren tartás rövid szüneteltetése (némán;
+     *   csak a tényleges mintavétel-váltás naplózódik az onPlaybackParamChanged-ben).
      */
     static void onRegistryGlobal(void* data, uint32_t id, uint32_t, const char* type, uint32_t, const struct spa_dict* props) {
         auto* self = static_cast<AetherSinkNode*>(data);
@@ -717,8 +718,7 @@ private:
         if (appName && std::strcmp(appName, "Aqulify") == 0) return;
         if (!self->rateFollow_.load() || !self->keepAwakeWanted_.load()) return;
         self->keepAlivePauseUntil_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(kKeepAlivePauseMs);
-        if (self->keepAlive_) self->destroyKeepAlive();
-        std::cout << "[PipeWire] Külső hangfolyam: az ébren tartás rövid időre szünetel (mintavétel-követés)\n";
+        if (self->keepAlive_) self->destroyKeepAlive(/*silent=*/true);
     }
 
     static void onRegistryGlobalRemove(void* data, uint32_t id) {
@@ -734,7 +734,8 @@ private:
     /** Az ébren tartás visszakapcsolása a szünet végén (a fő hurok szálán). */
     static void onResumeTimer(void* data, uint64_t) {
         auto* self = static_cast<AetherSinkNode*>(data);
-        if (self->keepAwakeWanted_.load() && !self->keepAlive_ && !self->keepAlivePaused()) self->createKeepAlive();
+        if (self->keepAwakeWanted_.load() && !self->keepAlive_ && !self->keepAlivePaused())
+            self->createKeepAlive(/*silent=*/true);
     }
 
     static void onKeepAliveState(void* data, enum pw_stream_state, enum pw_stream_state state, const char*) {
@@ -803,8 +804,11 @@ private:
         if (!param || id != SPA_PARAM_Format) return;
         struct spa_audio_info_raw info{};
         if (spa_format_audio_raw_parse(param, &info) >= 0 && info.rate > 0) {
-            self->graphRate.store(info.rate, std::memory_order_relaxed);
+            const uint32_t prev = self->graphRate.exchange(info.rate, std::memory_order_relaxed);
             self->sampleRate.store(info.rate, std::memory_order_relaxed);
+            if (prev > 0 && prev != info.rate) {
+                std::cout << "[PipeWire] Mintavétel-követés: " << prev << " → " << info.rate << " Hz\n";
+            }
         }
     }
 
