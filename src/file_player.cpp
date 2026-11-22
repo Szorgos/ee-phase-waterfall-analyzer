@@ -230,6 +230,23 @@ bool FilePlayer::open(const std::string& path, std::string* error, uint64_t toke
         if (error) *error = err;
         return false;
     }
+    return openSegment(std::move(seg), error);
+}
+
+bool FilePlayer::openStream(std::unique_ptr<AudioDecoder> dec, const std::string& title, std::string* error) {
+    if (!dec || dec->channels() == 0 || dec->sampleRate() == 0) {
+        if (error) *error = "format";
+        return false;
+    }
+    auto s = std::make_unique<Segment>();
+    s->channels = dec->channels();
+    s->total = 0;           // ismeretlen hossz: nem tekerhető
+    s->title = title;
+    s->dec = std::move(dec);
+    return openSegment(std::move(s), error);
+}
+
+bool FilePlayer::openSegment(std::unique_ptr<Segment> seg, std::string* error) {
     std::lock_guard<std::mutex> lk(m_);
     const State st = state_.load();
     const bool curDop = dopActive_.load();
@@ -571,6 +588,15 @@ media::Info FilePlayer::info() const {
     m.title = a->title;
     m.artist = a->dec->tags().artist;
     m.album = a->dec->tags().album;
+    if (a->dec->isLive()) {
+        // internetrádió: a „most szól” menet közben változik (ICY / Vorbis-megjegyzés), az album az állomás neve
+        std::string t, ar, al;
+        a->dec->liveInfo(t, ar, al);
+        if (!t.empty()) m.title = t;
+        m.artist = ar;
+        m.album = al.empty() ? a->title : al;
+        m.live = true;
+    }
     m.duration = rate_ ? static_cast<double>(a->total) / rate_ : 0.0;
     m.position = rate_ ? static_cast<double>(t > a->start ? t - a->start : 0) / rate_ : 0.0;
     if (m.duration > 0.0) m.position = std::min(m.position, m.duration);

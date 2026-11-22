@@ -27,6 +27,7 @@
 #include "health_monitor.hpp"
 #include "report_sender.hpp"
 #include "library_bridge.hpp"
+#include "radio_bridge.hpp"
 #include "linux_headless.hpp"
 #include "linux_store.hpp"
 #include "linux_instance_lock.hpp"
@@ -898,6 +899,13 @@ int main(int argc, char* argv[]) {
     library::attachLibrary(cb, musicLibrary, playQueue, playlists, playStats, [](const std::string& doc) {
         if (!linux_store::saveLibrary(doc)) std::cerr << "[Zenetár] Figyelem: a library.json nem írható.\n";
     }, &phoneCache);
+    // Internetrádió: a felhasználó állomáslistája (radio.json); a lejátszás a beépített lejátszón, a DSP-láncon át
+    radio::StationStore radioStations([](const std::string& doc) {
+        if (!linux_store::saveRadio(doc)) std::cerr << "[Rádió] Figyelem: a radio.json nem írható.\n";
+    });
+    radioStations.load(linux_store::loadRadio());
+    radio::RadioController radioCtl(filePlayer, radioStations);
+    radio::attachRadio(cb, radioCtl, radioStations);
     cb.loadRemote = [] { return linux_store::loadRemote(); };
     cb.saveRemote = [](const std::string& doc) { return linux_store::saveRemote(doc); };
     cb.loadTargets = [] { return linux_store::loadRemoteTargets(); };

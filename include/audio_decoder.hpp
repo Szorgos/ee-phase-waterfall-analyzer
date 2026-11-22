@@ -43,6 +43,12 @@ public:
     virtual uint32_t bitsPerSample() const { return 0; }
     /** DSD-forrásnál az eredeti 1 bites mintavétel Hz-ben (pl. 2822400); egyébként 0. */
     virtual uint32_t dsdSampleRate() const { return 0; }
+    /** Élő hálózati folyam (internetrádió): a „most szól” adatai menet közben változnak (liveInfo). */
+    virtual bool isLive() const { return false; }
+    /** Élő folyamnál a hallott rész címe, előadója és az állomás neve (szálbiztos). */
+    virtual void liveInfo(std::string& title, std::string& artist, std::string& album) const {
+        (void)title; (void)artist; (void)album;
+    }
     const TrackTags& tags() const { return tags_; }
 
 protected:
