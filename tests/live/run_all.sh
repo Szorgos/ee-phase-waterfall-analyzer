@@ -17,6 +17,8 @@ run "Motor: haladó hangkimenet" python3 -I "$HERE/audio_opts_live.py"
 run "Motor: felmintavételezés" python3 -I "$HERE/upsample_live.py"
 run "Motor: felmintavételezés az élő úton" python3 -I "$HERE/live_upsample_live.py"
 run "Motor: nagy felbontás (352,8–768 kHz)" python3 -I "$HERE/hires_live.py"
+echo; echo "=================== Motor: PipeWire újracsatlakozás (AQ-19)"
+"$HERE/reconnect_live.sh" "$BUILD" || fail=1
 if command -v node >/dev/null 2>&1 && node -e "require('playwright')" 2>/dev/null; then
     run "Felület: több kimenet" node "$HERE/gui_multiout_live.js"
     run "Felület: útonkénti EQ" node "$HERE/gui_way_eq_live.js"

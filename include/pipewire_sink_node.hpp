@@ -40,6 +40,8 @@
 #include <mutex>
 #include <string>
 #include <unistd.h>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "aether_chain.hpp"
@@ -47,6 +49,7 @@
 #include "multi_output.hpp"
 #include "aq_i18n.hpp"
 #include "param_block.hpp"
+#include "pw_reconnect_policy.hpp"
 #include "tap_ring.hpp"
 
 namespace ee_analyzer {
@@ -160,6 +163,12 @@ public:
      */
     void setRateFollow(bool on) { rateFollow_.store(on); }
 
+    /** A felhasználó által választott kimeneti eszköz (bármely szálról). Saját aqulify* csomópont elutasítva. */
+    void setPreferredOutput(const std::string& target) {
+        std::lock_guard<std::mutex> lk(targetMu_);
+        if (target.empty() || !pw_reconnect::isOwnAqulifyNode(target, sinkName_)) preferredTarget_ = target;
+    }
+
     /** A legutóbbi feldolgozott blokk hossza (a gráf tényleges quantuma) mintában. */
     uint32_t actualQuantum() const { return lastQuantum_.load(std::memory_order_relaxed); }
     /** A feldolgozás átlagos terhelése a quantum idejéhez képest (0–1, csúszó átlag). */
@@ -229,22 +238,7 @@ public:
             nullptr);
         applyLatencyProp(cprops);
         capture = pw_stream_new(core, (sinkName + "_input").c_str(), cprops);
-
-        // 2. Lejátszó stream a valódi hangeszköz felé
-        struct pw_properties* pprops = pw_properties_new(
-            PW_KEY_MEDIA_CLASS, "Stream/Output/Audio",
-            PW_KEY_NODE_NAME, (sinkName + "_output").c_str(),
-            PW_KEY_NODE_DESCRIPTION, aq_i18n::fmt(aq_i18n::Msg::pw_outputNode, { { "name", description } }).c_str(),
-            PW_KEY_NODE_GROUP, group.c_str(),
-            PW_KEY_NODE_LINK_GROUP, group.c_str(),
-            PW_KEY_NODE_PASSIVE, "true",
-            PW_KEY_AUDIO_CHANNELS, "2",
-            SPA_KEY_AUDIO_POSITION, "FL,FR",
-            PW_KEY_MEDIA_ROLE, "DSP",
-            nullptr);
-        applyLatencyProp(pprops);
-        playback = pw_stream_new(core, (sinkName + "_output").c_str(), pprops);
-        if (!capture || !playback) return fail("a streamek nem hozhatók létre");
+        if (!capture) return fail("a virtuális eszköz nem hozható létre");
 
         static const struct pw_stream_events captureEvents = [] {
             pw_stream_events e{};
@@ -253,16 +247,7 @@ public:
             e.param_changed = onParamChanged;
             return e;
         }();
-        static const struct pw_stream_events playbackEvents = [] {
-            pw_stream_events e{};
-            e.version = PW_VERSION_STREAM_EVENTS;
-            e.process = onPlaybackProcess;
-            e.state_changed = onPlaybackState;
-            e.param_changed = onPlaybackParamChanged;
-            return e;
-        }();
         pw_stream_add_listener(capture, &captureListener, &captureEvents, this);
-        pw_stream_add_listener(playback, &playbackListener, &playbackEvents, this);
         group_ = group;
         sinkName_ = sinkName;
         description_ = description;
@@ -288,28 +273,25 @@ public:
                               static_cast<pw_stream_flags>(captureFlags), cparams, 1) < 0)
             return fail("a virtuális eszköz nem csatlakoztatható");
 
-        struct spa_pod_builder b2 = SPA_POD_BUILDER_INIT(buf, sizeof(buf));
-        const struct spa_pod* pparams[1] = { spa_format_audio_raw_build(&b2, SPA_PARAM_EnumFormat, &info) };
-        if (pw_stream_connect(playback, PW_DIRECTION_OUTPUT, PW_ID_ANY,
-                              static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
-                                                           PW_STREAM_FLAG_RT_PROCESS | PW_STREAM_FLAG_TRIGGER),
-                              pparams, 1) < 0)
-            return fail("a lejátszó stream nem csatlakoztatható");
+        // 2. Lejátszó stream a valódi hangeszköz felé (hiba után a fő hurok időzítője újracsatlakoztatja)
+        struct pw_loop* l = pw_main_loop_get_loop(loop);
+        reconnectTimer_ = pw_loop_add_timer(l, onReconnectTimer, this);
+        if (!createAndConnectPlayback()) return fail("a lejátszó stream nem csatlakoztatható");
         if (keepAwakeWanted_.load()) createKeepAlive();
 
-        // Regiszter: a külső Stream/Output/Audio csomópontok megjelenését figyeljük (forrás-követés, ébren tartás szünet)
+        // Regiszter: külső Stream/Output/Audio (forrás-követés) és külső Audio/Sink (DAC visszatérés) figyelése
         registry_ = pw_core_get_registry(core, PW_VERSION_REGISTRY, 0);
         if (registry_) {
             static const struct pw_registry_events regEvents = [] {
                 pw_registry_events e{};
                 e.version = PW_VERSION_REGISTRY_EVENTS;
                 e.global = onRegistryGlobal;
+                e.global_remove = onRegistryGlobalRemove;
                 return e;
             }();
             pw_registry_add_listener(registry_, &registryListener_, &regEvents, this);
         }
         // Az ébren tartás visszakapcsolása a szünet után (negyedmásodpercenként ellenőrzi)
-        struct pw_loop* l = pw_main_loop_get_loop(loop);
         resumeTimer_ = pw_loop_add_timer(l, onResumeTimer, this);
         struct timespec iv{ 0, 250 * 1000000L };
         pw_loop_update_timer(l, resumeTimer_, &iv, &iv, false);
@@ -333,6 +315,12 @@ public:
     }
 
     void shutdown() {
+        reconnect_.reset();
+        if (loop) {
+            struct pw_loop* l = pw_main_loop_get_loop(loop);
+            if (reconnectTimer_) { pw_loop_destroy_source(l, reconnectTimer_); reconnectTimer_ = nullptr; }
+            if (resumeTimer_) { pw_loop_destroy_source(l, resumeTimer_); resumeTimer_ = nullptr; }
+        }
         for (auto& z : zones_) if (z && z->stream) { pw_stream_destroy(z->stream); z->stream = nullptr; }
         destroyKeepAlive();
         chain.stopWorker();
@@ -340,6 +328,7 @@ public:
         if (capture) { pw_stream_destroy(capture); capture = nullptr; }
         if (playback) { pw_stream_destroy(playback); playback = nullptr; }
         if (registry_) { pw_proxy_destroy(reinterpret_cast<struct pw_proxy*>(registry_)); registry_ = nullptr; }
+        knownSinksById_.clear();
         if (core) { pw_core_disconnect(core); core = nullptr; }
         if (context) { pw_context_destroy(context); context = nullptr; }
         // a pw_deinit()-et a hívó végzi a legvégén (PwDeinitGuard): a lejátszó saját PipeWire-hurka ezután áll le
@@ -369,6 +358,11 @@ private:
     struct pw_registry* registry_ = nullptr;          // csak a fő hurok szála
     struct spa_hook registryListener_{};
     struct spa_source* resumeTimer_ = nullptr;        // csak a fő hurok szála
+    struct spa_source* reconnectTimer_ = nullptr;     // csak a fő hurok szála (lejátszó stream újracsatlakozás)
+    pw_reconnect::State reconnect_;                   // csak a fő hurok szála
+    std::unordered_map<uint32_t, std::string> knownSinksById_; // külső (nem aqulify*) Audio/Sink csomópontok
+    std::mutex targetMu_;
+    std::string preferredTarget_;                     // felhasználó által választott kimenet (ha van)
     std::atomic<uint32_t> lastQuantum_{0};
     std::atomic<float> loadAvg_{0.0f}, loadPeak_{0.0f};
     std::atomic<uint32_t> overruns_{0};
@@ -596,19 +590,119 @@ private:
     /** Ébren tartás szünetel-e (forrás-követés: új külső hangfolyam). A fő hurok szálán hívandó. */
     bool keepAlivePaused() const { return std::chrono::steady_clock::now() < keepAlivePauseUntil_; }
 
+    /** Lejátszó stream létrehozása és csatlakoztatása (a fő hurok szálán: induláskor és újracsatlakozáskor). */
+    bool createAndConnectPlayback() {
+        if (!core) return false;
+        std::string pref;
+        {
+            std::lock_guard<std::mutex> lk(targetMu_);
+            pref = preferredTarget_;
+        }
+        std::unordered_set<std::string> known;
+        known.reserve(knownSinksById_.size());
+        for (const auto& [id, name] : knownSinksById_) known.insert(name);
+        const std::string target = pw_reconnect::resolveTarget(pref, known, sinkName_);
+
+        struct pw_properties* pprops = pw_properties_new(
+            PW_KEY_MEDIA_CLASS, "Stream/Output/Audio",
+            PW_KEY_NODE_NAME, (sinkName_ + "_output").c_str(),
+            PW_KEY_NODE_DESCRIPTION, aq_i18n::fmt(aq_i18n::Msg::pw_outputNode, { { "name", description_ } }).c_str(),
+            PW_KEY_NODE_GROUP, group_.c_str(),
+            PW_KEY_NODE_LINK_GROUP, group_.c_str(),
+            PW_KEY_NODE_PASSIVE, "true",
+            PW_KEY_AUDIO_CHANNELS, "2",
+            SPA_KEY_AUDIO_POSITION, "FL,FR",
+            PW_KEY_MEDIA_ROLE, "DSP",
+            nullptr);
+        if (!target.empty()) pw_properties_set(pprops, PW_KEY_TARGET_OBJECT, target.c_str());
+        applyLatencyProp(pprops);
+        playback = pw_stream_new(core, (sinkName_ + "_output").c_str(), pprops);
+        if (!playback) return false;
+
+        static const struct pw_stream_events playbackEvents = [] {
+            pw_stream_events e{};
+            e.version = PW_VERSION_STREAM_EVENTS;
+            e.process = onPlaybackProcess;
+            e.state_changed = onPlaybackState;
+            e.param_changed = onPlaybackParamChanged;
+            return e;
+        }();
+        spa_zero(playbackListener);
+        pw_stream_add_listener(playback, &playbackListener, &playbackEvents, this);
+
+        uint8_t buf[1024];
+        struct spa_audio_info_raw info{};
+        info.format = SPA_AUDIO_FORMAT_F32P;
+        info.channels = 2;
+        info.position[0] = SPA_AUDIO_CHANNEL_FL;
+        info.position[1] = SPA_AUDIO_CHANNEL_FR;
+        struct spa_pod_builder b2 = SPA_POD_BUILDER_INIT(buf, sizeof(buf));
+        const struct spa_pod* pparams[1] = { spa_format_audio_raw_build(&b2, SPA_PARAM_EnumFormat, &info) };
+        if (pw_stream_connect(playback, PW_DIRECTION_OUTPUT, PW_ID_ANY,
+                              static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
+                                                           PW_STREAM_FLAG_RT_PROCESS | PW_STREAM_FLAG_TRIGGER),
+                              pparams, 1) < 0) {
+            pw_stream_destroy(playback);
+            playback = nullptr;
+            return false;
+        }
+        return true;
+    }
+
+    /** Egyszeri (one-shot) újracsatlakozási időzítő ütemezése a PipeWire fő hurkában. */
+    void scheduleReconnect(int delayMs) {
+        if (!loop || !reconnectTimer_ || delayMs <= 0) return;
+        struct pw_loop* l = pw_main_loop_get_loop(loop);
+        struct timespec val{ static_cast<time_t>(delayMs / 1000), static_cast<long>((delayMs % 1000) * 1000000L) };
+        struct timespec zero{ 0, 0 };
+        pw_loop_update_timer(l, reconnectTimer_, &val, &zero, false);
+    }
+
+    void cancelReconnectTimer() {
+        if (!loop || !reconnectTimer_) return;
+        struct pw_loop* l = pw_main_loop_get_loop(loop);
+        struct timespec zero{ 0, 0 };
+        pw_loop_update_timer(l, reconnectTimer_, &zero, &zero, false);
+    }
+
+    /** Fő hurkos időzítő: a hibás lejátszó stream megszüntetése és újranyitása (nem az onPlaybackState-ből!). */
+    static void onReconnectTimer(void* data, uint64_t) {
+        auto* self = static_cast<AetherSinkNode*>(data);
+        if (!self->reconnect_.pending() || !self->core) return;
+        if (self->playback) {
+            self->playbackStreaming = false;
+            pw_stream_destroy(self->playback);
+            self->playback = nullptr;
+        }
+        if (!self->createAndConnectPlayback()) {
+            const auto a = self->reconnect_.onAttemptFailed();
+            if (a.schedule) self->scheduleReconnect(a.delayMs);
+        }
+    }
+
     /**
-     * Új csomópont a gráfban (a fő hurok szálán). Külső Stream/Output/Audio (nem a saját folyamatunk) indulásakor,
-     * ha a forrás-követés és az ébren tartás be van kapcsolva, az ébren tartás kilép a gráfból kb. 1,5 s-ra: a tétlen
-     * gráf így át tud váltani a forrás mintavételére, mielőtt a külső hangfolyam elindul.
+     * Új csomópont a gráfban (a fő hurok szálán):
+     * - külső Audio/Sink: nyilvántartjuk (célválasztáshoz), és ha a lejátszó stream újracsatlakozásra vár,
+     *   azonnal ütemezzük az újranyitást;
+     * - külső Stream/Output/Audio: forrás-követésnél az ébren tartás rövid szüneteltetése.
      */
-    static void onRegistryGlobal(void* data, uint32_t, uint32_t, const char* type, uint32_t, const struct spa_dict* props) {
+    static void onRegistryGlobal(void* data, uint32_t id, uint32_t, const char* type, uint32_t, const struct spa_dict* props) {
         auto* self = static_cast<AetherSinkNode*>(data);
         if (!type || !props || std::strcmp(type, PW_TYPE_INTERFACE_Node) != 0) return;
         const char* cls = spa_dict_lookup(props, PW_KEY_MEDIA_CLASS);
-        if (!cls || std::strcmp(cls, "Stream/Output/Audio") != 0) return;
+        const char* nodeName = spa_dict_lookup(props, PW_KEY_NODE_NAME);
+        if (!cls) return;
+        if (std::strcmp(cls, "Audio/Sink") == 0) {
+            if (nodeName && !pw_reconnect::isOwnAqulifyNode(nodeName, self->sinkName_)) {
+                self->knownSinksById_[id] = nodeName;
+                const auto a = self->reconnect_.onNewExternalSink(nodeName, self->sinkName_);
+                if (a.schedule) self->scheduleReconnect(a.delayMs);
+            }
+            return;
+        }
+        if (std::strcmp(cls, "Stream/Output/Audio") != 0) return;
         // a saját streamjeink (fő kimenet, zónák, lejátszó, ébren tartás) nem számítanak: nevük „aqulify…”,
         // az ébren tartó és a lejátszó alkalmazásneve „Aqulify” (az application.process.id nem megbízható)
-        const char* nodeName = spa_dict_lookup(props, PW_KEY_NODE_NAME);
         const char* appName = spa_dict_lookup(props, PW_KEY_APP_NAME);
         if (nodeName && std::strncmp(nodeName, "aqulify", 7) == 0) return;
         if (appName && std::strcmp(appName, "Aqulify") == 0) return;
@@ -616,6 +710,10 @@ private:
         self->keepAlivePauseUntil_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(kKeepAlivePauseMs);
         if (self->keepAlive_) self->destroyKeepAlive();
         std::cout << "[PipeWire] Külső hangfolyam: az ébren tartás rövid időre szünetel (mintavétel-követés)\n";
+    }
+
+    static void onRegistryGlobalRemove(void* data, uint32_t id) {
+        static_cast<AetherSinkNode*>(data)->knownSinksById_.erase(id);
     }
 
     /** Az ébren tartás visszakapcsolása a szünet végén (a fő hurok szálán). */
@@ -668,7 +766,10 @@ private:
     static void onCoreError(void* data, uint32_t id, int seq, int res, const char* message) {
         auto* self = static_cast<AetherSinkNode*>(data);
         (void)seq;
-        std::cerr << "[PipeWire] hiba (id " << id << "): " << (message ? message : "") << " (" << spa_strerror(res) << ")\n";
+        // Ha a lejátszó stream épp újracsatlakozásra vár (nincs céleszköz), a köztes ENOENT próbákat nem naplózzuk újra
+        if (!(res == -ENOENT && self->reconnect_.errorLogged())) {
+            std::cerr << "[PipeWire] hiba (id " << id << "): " << (message ? message : "") << " (" << spa_strerror(res) << ")\n";
+        }
         if (id == PW_ID_CORE && res == -EPIPE) {
             self->coreError = true;
             self->quit(); // a démon leállt: kilépünk, a systemd újraindít
@@ -696,7 +797,17 @@ private:
         auto* self = static_cast<AetherSinkNode*>(data);
         (void)old;
         self->playbackStreaming = (state == PW_STREAM_STATE_STREAMING);
-        if (state == PW_STREAM_STATE_ERROR) std::cerr << "[PipeWire] lejátszó stream hiba: " << (error ? error : "") << "\n";
+        if (state == PW_STREAM_STATE_ERROR) {
+            // A streamet itt nem szabad törölni/újranyitni: csak jelezzük, és a fő hurok időzítője végzi el.
+            const auto a = self->reconnect_.onError();
+            if (a.logError) std::cerr << "[PipeWire] lejátszó stream hiba: " << (error ? error : "") << "\n";
+            if (a.schedule) self->scheduleReconnect(a.delayMs);
+        } else if (state == PW_STREAM_STATE_STREAMING) {
+            self->cancelReconnectTimer();
+            if (self->reconnect_.onStreaming()) {
+                std::cout << "[PipeWire] Lejátszó stream újracsatlakoztatva.\n" << std::flush;
+            }
+        }
     }
 
     static void onCaptureProcess(void* data) {
