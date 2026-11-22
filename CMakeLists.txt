@@ -177,9 +177,13 @@ target_include_directories(aqulify-src PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inclu
 add_executable(test_src_ref src/test_src_ref.cpp)
 target_link_libraries(test_src_ref PRIVATE aq_player soxr Threads::Threads)
 target_include_directories(test_src_ref PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+add_executable(test_live_upsample_bridge src/test_live_upsample_bridge.cpp)
+target_link_libraries(test_live_upsample_bridge PRIVATE aq_player soxr Threads::Threads)
+target_include_directories(test_live_upsample_bridge PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 if(WIN32)
     target_link_libraries(aqulify-src PRIVATE ws2_32 iphlpapi)
     target_link_libraries(test_src_ref PRIVATE ws2_32 iphlpapi)
+    target_link_libraries(test_live_upsample_bridge PRIVATE ws2_32 iphlpapi)
 endif()
 
 
@@ -628,5 +632,5 @@ if(WIN32)
         ${CMAKE_CURRENT_SOURCE_DIR}/windows/engine
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/asiosdk/common
     )
-    target_link_libraries(test_winout PRIVATE aq_player ee_dsp_core ole32 uuid advapi32 avrt)
+    target_link_libraries(test_winout PRIVATE aq_player ee_dsp_core ole32 oleaut32 uuid advapi32 avrt)
 endif()

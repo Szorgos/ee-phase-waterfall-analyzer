@@ -46,6 +46,7 @@
 
 #include "aether_chain.hpp"
 #include "audio_options.hpp"
+#include "live_upsample_bridge.hpp"
 #include "multi_output.hpp"
 #include "aq_i18n.hpp"
 #include "param_block.hpp"
@@ -118,6 +119,8 @@ public:
         multi_.startWorkers();
         inL_.assign(kScratch, 0.0f);
         inR_.assign(kScratch, 0.0f);
+        capInterleaved_.assign(kScratch * 2, 0.0f);
+        playInterleaved_.assign(kScratch * 2, 0.0f);
         for (int k = 0; k < kExtraZones; ++k) {
             zones_[k] = std::make_unique<ZoneStream>();
             zones_[k]->owner = this;
@@ -162,6 +165,28 @@ public:
      * mintavételére. Egyéb módban nincs szünet.
      */
     void setRateFollow(bool on) { rateFollow_.store(on); }
+
+    /**
+     * Saját motorral (libsoxr / Aqulify FFT64) történő élő rendszerhang-felmintavételezés be- vagy kikapcsolása
+     * (bármely szálról). A playback stream szétválasztása / újraösszekapcsolása a PipeWire fő hurkának szálán
+     * történik; a valós idejű szál nem foglal és nem zárol.
+     */
+    void setLiveUpsample(bool enable, uint32_t srcRate, uint32_t dstRate, const audioopt::AudioOptions& opts) {
+        {
+            std::lock_guard<std::mutex> lk(liveUpsMu_);
+            liveUpsWanted_.enable = enable && srcRate > 0 && dstRate > srcRate;
+            liveUpsWanted_.srcRate = srcRate;
+            liveUpsWanted_.dstRate = dstRate;
+            liveUpsWanted_.opts = opts;
+        }
+        if (loop && liveUpsEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), liveUpsEvent_);
+    }
+
+    /** Aktív-e a saját motorral működő élő rendszerhang-felmintavételezés. */
+    bool liveUpsampleActive() const { return liveUpsActive_.load(std::memory_order_acquire); }
+
+    /** A saját motoros élő felmintavételező híd telemetriája (szálbiztos). */
+    livebridge::BridgeStatus liveUpsampleStatus() const { return liveBridge_.status(); }
 
     /** A felhasználó által választott kimeneti eszköz (bármely szálról). Saját aqulify* csomópont elutasítva. */
     void setPreferredOutput(const std::string& target) {
@@ -255,6 +280,7 @@ public:
         description_ = description;
         zoneEvent_ = pw_loop_add_event(pw_main_loop_get_loop(loop), onZoneEvent, this);
         optsEvent_ = pw_loop_add_event(pw_main_loop_get_loop(loop), onOptsEvent, this);
+        liveUpsEvent_ = pw_loop_add_event(pw_main_loop_get_loop(loop), onLiveUpsEvent, this);
         appliedLatency_ = latencyReq_.load();
 
         // Formátum: 32 bites lebegőpontos, sztereó, nem-interleaved; a mintavételt a gráf adja (rate = 0)
@@ -318,10 +344,12 @@ public:
 
     void shutdown() {
         reconnect_.reset();
+        liveUpsActive_.store(false, std::memory_order_release);
         if (loop) {
             struct pw_loop* l = pw_main_loop_get_loop(loop);
             if (reconnectTimer_) { pw_loop_destroy_source(l, reconnectTimer_); reconnectTimer_ = nullptr; }
             if (resumeTimer_) { pw_loop_destroy_source(l, resumeTimer_); resumeTimer_ = nullptr; }
+            if (liveUpsEvent_) { pw_loop_destroy_source(l, liveUpsEvent_); liveUpsEvent_ = nullptr; }
         }
         for (auto& z : zones_) if (z && z->stream) { pw_stream_destroy(z->stream); z->stream = nullptr; }
         destroyKeepAlive();
@@ -329,6 +357,7 @@ public:
         multi_.stopWorkers();
         if (capture) { pw_stream_destroy(capture); capture = nullptr; }
         if (playback) { pw_stream_destroy(playback); playback = nullptr; }
+        liveBridge_.stop();
         if (registry_) { pw_proxy_destroy(reinterpret_cast<struct pw_proxy*>(registry_)); registry_ = nullptr; }
         knownSinksById_.clear();
         if (core) { pw_core_disconnect(core); core = nullptr; }
@@ -372,7 +401,98 @@ private:
     std::atomic<uint32_t> overruns_{0};
     std::string group_, sinkName_, description_;
     std::vector<float> inL_, inR_;
+    std::vector<float> capInterleaved_, playInterleaved_;
     std::array<std::vector<float>, kExtraZones> zoneL_, zoneR_;
+
+    // Saját motoros (libsoxr / Aqulify FFT64) élő rendszerhang-felmintavételezés
+    struct LiveUpsRequest {
+        bool enable = false;
+        uint32_t srcRate = 0;
+        uint32_t dstRate = 0;
+        audioopt::AudioOptions opts;
+    };
+    livebridge::LiveUpsampleBridge liveBridge_;
+    std::atomic<bool> liveUpsActive_{false};          // true: capture -> liveBridge_ -> playback (szétválasztott)
+    std::atomic<uint32_t> captureRate_{48000};        // a capture stream aktuális mintavétele
+    struct spa_source* liveUpsEvent_ = nullptr;       // csak a fő hurok szála
+    std::mutex liveUpsMu_;
+    LiveUpsRequest liveUpsWanted_;                    // liveUpsMu_ alatt
+    LiveUpsRequest liveUpsApplied_;                   // csak a fő hurok szála
+
+    static bool sameLiveUpsConfig(const LiveUpsRequest& a, const LiveUpsRequest& b) {
+        return a.enable == b.enable && a.srcRate == b.srcRate && a.dstRate == b.dstRate &&
+               a.opts.upsampleEngine == b.opts.upsampleEngine &&
+               a.opts.upsamplePreset == b.opts.upsamplePreset &&
+               a.opts.upsamplePrecision == b.opts.upsamplePrecision &&
+               std::abs(a.opts.upsamplePhase - b.opts.upsamplePhase) < 1e-4 &&
+               std::abs(a.opts.upsamplePassbandEnd - b.opts.upsamplePassbandEnd) < 1e-4 &&
+               std::abs(a.opts.upsampleStopbandBegin - b.opts.upsampleStopbandBegin) < 1e-4 &&
+               std::abs(a.opts.upsampleHeadroomDb - b.opts.upsampleHeadroomDb) < 1e-3f &&
+               a.opts.upsampleThreads == b.opts.upsampleThreads &&
+               a.opts.dedicatedCore == b.opts.dedicatedCore;
+    }
+
+    /** A fő hurok szálán: a saját motoros rendszerhang-felmintavételezés be-/kikapcsolása és újrakonfigurálása. */
+    static void onLiveUpsEvent(void* data, uint64_t) {
+        auto* self = static_cast<AetherSinkNode*>(data);
+        LiveUpsRequest want;
+        {
+            std::lock_guard<std::mutex> lk(self->liveUpsMu_);
+            want = self->liveUpsWanted_;
+        }
+        if (sameLiveUpsConfig(want, self->liveUpsApplied_)) return;
+
+        // Ha mindkét állapot aktív és a kimeneti mintavétel (dstRate) nem változott, a playback stream maradhat
+        if (want.enable && self->liveUpsApplied_.enable && want.dstRate == self->liveUpsApplied_.dstRate) {
+            self->liveUpsActive_.store(false, std::memory_order_release);
+            if (self->liveBridge_.configure(want.srcRate, want.dstRate, want.opts) && self->liveBridge_.start()) {
+                self->liveUpsApplied_ = want;
+                self->liveUpsActive_.store(true, std::memory_order_release);
+                std::cout << "[Felmintavételezés] Saját motor (rendszerhang) frissítve: " << want.srcRate << " -> "
+                          << want.dstRate << " Hz ("
+                          << (want.opts.upsampleEngine == 1 ? "Aqulify FFT64" : "libsoxr")
+                          << ").\n";
+                return;
+            }
+        }
+
+        // Üzemmód- vagy célmintavétel-váltás: a playback streamet szinkronban leállítjuk, majd az új módban nyitjuk újra
+        self->liveUpsActive_.store(false, std::memory_order_release);
+        if (self->playback) {
+            self->playbackStreaming = false;
+            pw_stream_destroy(self->playback);
+            self->playback = nullptr;
+        }
+        if (want.enable) {
+            self->liveUpsApplied_ = want;
+            const bool bridgeOk = self->liveBridge_.configure(want.srcRate, want.dstRate, want.opts) &&
+                                  self->liveBridge_.start();
+            if (!bridgeOk) {
+                self->liveUpsApplied_ = LiveUpsRequest{};
+                self->createAndConnectPlayback();
+                std::cerr << "[Felmintavételezés] A saját motoros híd nem indítható; visszatérés alapmódba.\n";
+                return;
+            }
+            self->liveUpsActive_.store(true, std::memory_order_release);
+            if (!self->createAndConnectPlayback()) {
+                self->liveUpsActive_.store(false, std::memory_order_release);
+                self->liveBridge_.stop();
+                self->liveUpsApplied_ = LiveUpsRequest{};
+                self->createAndConnectPlayback();
+                std::cerr << "[Felmintavételezés] A szétválasztott kimeneti stream nem indítható; visszatérés alapmódba.\n";
+                return;
+            }
+            std::cout << "[Felmintavételezés] Saját motor (rendszerhang): " << want.srcRate << " -> "
+                      << want.dstRate << " Hz ("
+                      << (want.opts.upsampleEngine == 1 ? "Aqulify FFT64" : "libsoxr")
+                      << ").\n";
+        } else {
+            self->liveBridge_.stop();
+            self->liveUpsApplied_ = LiveUpsRequest{};
+            self->createAndConnectPlayback();
+            std::cout << "[Felmintavételezés] Saját motor (rendszerhang): ki (visszatérés közvetlen módba).\n";
+        }
+    }
 
     /** A fő hurok szálán: a kívánt céleszközöknek megfelelő streamek létrehozása / megszüntetése. */
     static void onZoneEvent(void* data, uint64_t) {
@@ -607,17 +727,23 @@ private:
         for (const auto& [id, name] : knownSinksById_) known.insert(name);
         const std::string target = pw_reconnect::resolveTarget(pref, known, sinkName_);
 
+        const bool decoupled = liveUpsApplied_.enable && liveUpsApplied_.dstRate > 0;
         struct pw_properties* pprops = pw_properties_new(
             PW_KEY_MEDIA_CLASS, "Stream/Output/Audio",
             PW_KEY_NODE_NAME, (sinkName_ + "_output").c_str(),
             PW_KEY_NODE_DESCRIPTION, aq_i18n::fmt(aq_i18n::Msg::pw_outputNode, { { "name", description_ } }).c_str(),
-            PW_KEY_NODE_GROUP, group_.c_str(),
             PW_KEY_NODE_LINK_GROUP, group_.c_str(),
-            PW_KEY_NODE_PASSIVE, "true",
+            PW_KEY_NODE_PASSIVE, decoupled ? "false" : "true",
             PW_KEY_AUDIO_CHANNELS, "2",
             SPA_KEY_AUDIO_POSITION, "FL,FR",
             PW_KEY_MEDIA_ROLE, "DSP",
             nullptr);
+        if (!decoupled) {
+            pw_properties_set(pprops, PW_KEY_NODE_GROUP, group_.c_str());
+        } else {
+            // Szétválasztott mód: saját órajel és cél mintavétel (a capture maradhat a forrás natív mintavételén)
+            pw_properties_setf(pprops, PW_KEY_NODE_FORCE_RATE, "%u", liveUpsApplied_.dstRate);
+        }
         if (!target.empty()) pw_properties_set(pprops, PW_KEY_TARGET_OBJECT, target.c_str());
         applyLatencyProp(pprops);
         playback = pw_stream_new(core, (sinkName_ + "_output").c_str(), pprops);
@@ -640,11 +766,13 @@ private:
         info.channels = 2;
         info.position[0] = SPA_AUDIO_CHANNEL_FL;
         info.position[1] = SPA_AUDIO_CHANNEL_FR;
+        if (decoupled) info.rate = liveUpsApplied_.dstRate;
         struct spa_pod_builder b2 = SPA_POD_BUILDER_INIT(buf, sizeof(buf));
         const struct spa_pod* pparams[1] = { spa_format_audio_raw_build(&b2, SPA_PARAM_EnumFormat, &info) };
+        int pflags = PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS;
+        if (!decoupled) pflags |= PW_STREAM_FLAG_TRIGGER;
         if (pw_stream_connect(playback, PW_DIRECTION_OUTPUT, PW_ID_ANY,
-                              static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
-                                                           PW_STREAM_FLAG_RT_PROCESS | PW_STREAM_FLAG_TRIGGER),
+                              static_cast<pw_stream_flags>(pflags),
                               pparams, 1) < 0) {
             pw_stream_destroy(playback);
             playback = nullptr;
@@ -796,7 +924,12 @@ private:
         auto* self = static_cast<AetherSinkNode*>(data);
         if (!param || id != SPA_PARAM_Format) return;
         struct spa_audio_info_raw info{};
-        if (spa_format_audio_raw_parse(param, &info) >= 0 && info.rate > 0) self->sampleRate.store(info.rate);
+        if (spa_format_audio_raw_parse(param, &info) >= 0 && info.rate > 0) {
+            self->captureRate_.store(info.rate, std::memory_order_relaxed);
+            // Szétválasztott felmintavételezésnél a DSP lánc a playback mintavételén fut, nem a capture-én
+            if (!self->liveUpsActive_.load(std::memory_order_acquire))
+                self->sampleRate.store(info.rate, std::memory_order_relaxed);
+        }
     }
 
     static void onPlaybackParamChanged(void* data, uint32_t id, const struct spa_pod* param) {
@@ -831,7 +964,38 @@ private:
 
     static void onCaptureProcess(void* data) {
         auto* self = static_cast<AetherSinkNode*>(data);
-        pw_stream_trigger_process(self->playback);
+        if (!self->liveUpsActive_.load(std::memory_order_acquire)) {
+            if (self->playback) pw_stream_trigger_process(self->playback);
+            return;
+        }
+        // Szétválasztott mód (saját motoros rendszerhang-felmintavételezés): capture -> SPSC gyűrű (0 allokáció, 0 zár)
+        while (struct pw_buffer* in = pw_stream_dequeue_buffer(self->capture)) {
+            if (in->buffer->n_datas >= 2) {
+                struct spa_data* d0 = &in->buffer->datas[0];
+                struct spa_data* d1 = &in->buffer->datas[1];
+                const uint32_t off0 = std::min(d0->chunk->offset, d0->maxsize);
+                const uint32_t off1 = std::min(d1->chunk->offset, d1->maxsize);
+                const uint32_t size = std::min(std::min(d0->chunk->size, d0->maxsize - off0),
+                                               std::min(d1->chunk->size, d1->maxsize - off1));
+                const uint32_t total = size / sizeof(float);
+                if (d0->data && d1->data && total > 0) {
+                    const float* sL = SPA_PTROFF(d0->data, off0, float);
+                    const float* sR = SPA_PTROFF(d1->data, off1, float);
+                    uint32_t done = 0;
+                    while (done < total) {
+                        const uint32_t chunk = std::min<uint32_t>(total - done, kScratch);
+                        float* dst = self->capInterleaved_.data();
+                        for (uint32_t i = 0; i < chunk; ++i) {
+                            dst[i * 2]     = sL[done + i];
+                            dst[i * 2 + 1] = sR[done + i];
+                        }
+                        self->liveBridge_.pushInput(dst, chunk);
+                        done += chunk;
+                    }
+                }
+            }
+            pw_stream_queue_buffer(self->capture, in);
+        }
     }
 
     static void onPlaybackProcess(void* data) {
@@ -840,11 +1004,16 @@ private:
         struct timespec t0;
         clock_gettime(CLOCK_MONOTONIC, &t0);
 
-        // A legfrissebb bemeneti buffer (a régebbieket visszaadjuk)
+        const bool liveUps = self->liveUpsActive_.load(std::memory_order_acquire);
+
+        // Közvetlen módban a legfrissebb bemeneti buffer (a régebbieket visszaadjuk);
+        // szétválasztott módban a capture-t az onCaptureProcess üríti a hídba.
         struct pw_buffer* in = nullptr;
-        while (struct pw_buffer* t = pw_stream_dequeue_buffer(self->capture)) {
-            if (in) pw_stream_queue_buffer(self->capture, in);
-            in = t;
+        if (!liveUps) {
+            while (struct pw_buffer* t = pw_stream_dequeue_buffer(self->capture)) {
+                if (in) pw_stream_queue_buffer(self->capture, in);
+                in = t;
+            }
         }
         struct pw_buffer* out = pw_stream_dequeue_buffer(self->playback);
         if (!out) {
@@ -863,27 +1032,39 @@ private:
         uint32_t maxFrames = std::min(ob->datas[0].maxsize, ob->datas[1].maxsize) / sizeof(float);
 
         uint32_t n = 0;
-        if (in && in->buffer->n_datas >= 2) {
-            struct spa_data* d0 = &in->buffer->datas[0];
-            struct spa_data* d1 = &in->buffer->datas[1];
-            const uint32_t off0 = std::min(d0->chunk->offset, d0->maxsize);
-            const uint32_t off1 = std::min(d1->chunk->offset, d1->maxsize);
-            const uint32_t size = std::min(std::min(d0->chunk->size, d0->maxsize - off0),
-                                           std::min(d1->chunk->size, d1->maxsize - off1));
-            n = std::min<uint32_t>(size / sizeof(float), maxFrames);
-            if (d0->data && d1->data && n > 0) {
-                std::memcpy(outL, SPA_PTROFF(d0->data, off0, float), n * sizeof(float));
-                std::memcpy(outR, SPA_PTROFF(d1->data, off1, float), n * sizeof(float));
-            } else {
-                n = 0;
-            }
-        }
-        if (n == 0) {
-            // Nincs bemenet (senki nem játszik ide): csend, a gráf által kért hosszban
+        if (liveUps) {
             n = out->requested ? std::min<uint32_t>(static_cast<uint32_t>(out->requested), maxFrames) : 0;
             if (n == 0) n = std::min<uint32_t>(1024, maxFrames);
-            std::memset(outL, 0, n * sizeof(float));
-            std::memset(outR, 0, n * sizeof(float));
+            n = std::min<uint32_t>(n, kScratch);
+            float* buf = self->playInterleaved_.data();
+            self->liveBridge_.pullOutput(buf, n);
+            for (uint32_t i = 0; i < n; ++i) {
+                outL[i] = buf[i * 2];
+                outR[i] = buf[i * 2 + 1];
+            }
+        } else {
+            if (in && in->buffer->n_datas >= 2) {
+                struct spa_data* d0 = &in->buffer->datas[0];
+                struct spa_data* d1 = &in->buffer->datas[1];
+                const uint32_t off0 = std::min(d0->chunk->offset, d0->maxsize);
+                const uint32_t off1 = std::min(d1->chunk->offset, d1->maxsize);
+                const uint32_t size = std::min(std::min(d0->chunk->size, d0->maxsize - off0),
+                                               std::min(d1->chunk->size, d1->maxsize - off1));
+                n = std::min<uint32_t>(size / sizeof(float), maxFrames);
+                if (d0->data && d1->data && n > 0) {
+                    std::memcpy(outL, SPA_PTROFF(d0->data, off0, float), n * sizeof(float));
+                    std::memcpy(outR, SPA_PTROFF(d1->data, off1, float), n * sizeof(float));
+                } else {
+                    n = 0;
+                }
+            }
+            if (n == 0) {
+                // Nincs bemenet (senki nem játszik ide): csend, a gráf által kért hosszban
+                n = out->requested ? std::min<uint32_t>(static_cast<uint32_t>(out->requested), maxFrames) : 0;
+                if (n == 0) n = std::min<uint32_t>(1024, maxFrames);
+                std::memset(outL, 0, n * sizeof(float));
+                std::memset(outR, 0, n * sizeof(float));
+            }
         }
 
         // A gráf valódi órajele a playback stream pw_time szerkezetéből (K12 / U15)

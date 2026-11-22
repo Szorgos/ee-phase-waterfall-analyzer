@@ -210,6 +210,7 @@ struct Core {
             audioOpts.rateMode = audioopt::RateMode::System;
             audioOpts.resampleQuality = -1;
             engine.setBufferFrames(static_cast<uint32_t>(audioOpts.bufferFrames));
+            engine.setLiveUpsampleOptions(audioOpts);
             filePlayer.setReplayGain(audioOpts.replayGain, audioOpts.rgPreampDb, audioOpts.rgPreventClip);
             filePlayer.setPreload(audioOpts.preload);
             filePlayer.setUpsampleOptions(audioOpts);
@@ -386,10 +387,29 @@ struct Core {
                       static_cast<unsigned long long>(filePlayer.upsampleClippedSamples()),
                       static_cast<unsigned long long>(filePlayer.upsampleProcessedFrames()),
                       filePlayer.upsampleDelayMs());
+        const bool lActive = engine.liveUpsampleActive();
+        const auto lSt = lActive ? engine.liveUpsampleStatus() : livebridge::BridgeStatus{};
+        const char* lConv = lActive ? (lSt.engineType == 1 ? "fft64" : "libsoxr") : "none";
+        const std::string lReason = engine.liveUpsampleReason();
+        char lbuf[384];
+        std::snprintf(lbuf, sizeof(lbuf),
+                      ",\"liveUpsample\":{\"active\":%s,\"ownEngine\":%s,\"engine\":%d,"
+                      "\"srcRate\":%u,\"targetRate\":%u,\"actualDacRate\":%u,"
+                      "\"latencyMs\":%.1f,\"driftPpm\":%.1f,\"underruns\":%llu,"
+                      "\"reason\":\"%s\",\"converter\":\"%s\"}",
+                      lActive ? "true" : "false", lActive ? "true" : "false",
+                      lActive ? lSt.engineType : 0,
+                      lActive ? lSt.srcRate : 0u,
+                      lActive ? lSt.dstRate : 0u,
+                      engine.sampleRate(),
+                      lActive ? lSt.latencyMs : 0.0,
+                      lActive ? lSt.driftPpm : 0.0,
+                      static_cast<unsigned long long>(lActive ? lSt.underruns : 0),
+                      jsonEscape(lReason).c_str(), lConv);
         audioopt::AudioOptions curOpts;
         { std::lock_guard<std::mutex> lk(audioMutex); curOpts = audioOpts; }
         const bool dspBypassed = engine.chain.dspBypassedForRate() || filePlayer.streamRate() > audioopt::kMaxDspRate;
-        return s + pb + ubuf +
+        return s + pb + ubuf + lbuf +
                loadTracker.json(curOpts, uActive ? uTgt : uSrc, filePlayer.underruns(), dspBypassed,
                                 filePlayer.upsampleThreadsInUse(), filePlayer.dedicatedCoreApplied());
     }
@@ -715,7 +735,7 @@ struct Core {
         std::lock_guard<std::mutex> lk(c->audioMutex);
         return "{\"opts\":" + audioopt::toJson(c->audioOpts) +
                ",\"caps\":{\"buffer\":true,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true,\"upsample\":true,"
-               "\"exclusive\":true,\"exclusiveKind\":\"hog\"}}";
+               "\"systemUpsample\":true,\"exclusive\":true,\"exclusiveKind\":\"hog\"}}";
     };
     cb.setAudioOptions = [c](const json::Value& v) {
         std::lock_guard<std::mutex> lk(c->audioMutex);
@@ -728,6 +748,7 @@ struct Core {
         c->health.setEnabled(o.errorReports);
         c->reportService.setEnabled(o.errorReports);
         c->engine.setBufferFrames(static_cast<uint32_t>(o.bufferFrames));
+        c->engine.setLiveUpsampleOptions(o);
         c->filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         c->filePlayer.setPreload(o.preload);
         c->filePlayer.setUpsampleOptions(o);

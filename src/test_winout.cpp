@@ -32,6 +32,7 @@
 #include "player_output_win.hpp"
 #include "apo_detect.hpp"
 #include "wasapi_loopback.hpp"
+#include "win_live_bridge.hpp"
 #include "watchdog.hpp"
 
 // A hangeszköz alapformátumának olvasója (1b, P3). A befagyasztott tesztcommitban még nincs meg: akkor a
@@ -588,6 +589,35 @@ int main() {
             const std::string f = aq::devfmt::readRegistry(HKEY_LOCAL_MACHINE, std::wstring(win::apo_detail::renderBase()) + d.key + L"\\Properties");
             std::printf("         %-60s %s\n", d.name.c_str(), f.empty() ? "?" : f.c_str());
         }
+    }
+
+    std::printf("\n[13] Rendszerhang-felmintavételezés: virtuális kábel választás és visszacsatolás-védelem\n");
+    {
+        using win::WasapiEndpointInfo;
+        const std::vector<WasapiEndpointInfo> onlyReal = {
+            { L"dev-dac", "dev-dac", "Speakers (USB HiFi DAC)", false, true }
+        };
+        const auto pNoVirt = win::chooseWinBridgeDevices(onlyReal, "", false);
+        CHECK(!pNoVirt.ok && pNoVirt.reason == "no_virtual_device", "virtuális kábel nélkül: no_virtual_device");
+
+        const std::vector<WasapiEndpointInfo> virtAndDac = {
+            { L"dev-vb", "dev-vb", "CABLE Input (VB-Audio Virtual Cable)", true, true },
+            { L"dev-dac", "dev-dac", "Speakers (USB HiFi DAC)", false, false }
+        };
+        const auto pOk = win::chooseWinBridgeDevices(virtAndDac, "", false);
+        CHECK(pOk.ok && pOk.captureId == L"dev-vb" && pOk.outputId == L"dev-dac" && pOk.captureId != pOk.outputId,
+              "VB-Cable (default) -> USB HiFi DAC párosítás, visszacsatolás nélkül");
+
+        const std::vector<WasapiEndpointInfo> onlyVirt = {
+            { L"dev-vb", "dev-vb", "CABLE Input (VB-Audio Virtual Cable)", true, true }
+        };
+        const auto pLoop = win::chooseWinBridgeDevices(onlyVirt, "", false);
+        CHECK(!pLoop.ok && pLoop.reason == "no_output_device",
+              "csak virtuális kábel (fizikai DAC nélkül): nem indul visszacsatolásba");
+
+        const auto pAsio = win::chooseWinBridgeDevices(onlyVirt, "", true);
+        CHECK(pAsio.ok && pAsio.captureId == L"dev-vb" && pAsio.outputName == "ASIO",
+              "ASIO módban csak a virtuális kábel is elegendő a rögzítéshez");
     }
 
     std::printf("\n%s (%d hiba, %d rendben)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail, g_ok);

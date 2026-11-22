@@ -944,7 +944,7 @@
   "ups.infoRateH": "How high should I upsample?",
   "ups.infoRateP": "You do not need 384 kHz: ×2 (88.2/96 kHz) or “Output maximum” (e.g. 96 kHz on a 96 kHz DAC) already performs the main anti-imaging filtering at low CPU usage.",
   "ups.infoEngH": "Which engine should I choose?",
-  "ups.infoEngP": "libsoxr: fast, very low latency and light on CPU (great for everyday listening). Aqulify FFT64: built-in single-stage 64-bit FFT + Kaiser-sinc engine with no multi-stage polyphase images and laboratory precision (slightly higher buffer latency and CPU usage).",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — hızlı, çok düşük gecikmeli ve CPU dostu (günlük dinleme ve video için ideal). Aqulify FFT64: tek aşamalı 64-bit FFT + Kaiser-sinc motoru, çok aşamalı görüntüleme olmadan laboratuvar hassasiyeti sunar (biraz daha fazla gecikme ve CPU yüküyle).",
   "ups.infoPhaseH": "Phase and headroom",
   "ups.infoPhaseP": "Minimum phase (0): no pre-ringing, often preferred for natural transients. Intermediate (25, recommended): balanced compromise. Linear (50 / Reference): symmetric impulse response with zero phase distortion. −1 dB headroom prevents inter-sample peak clipping on loud masters.",
   "ups.aboutCredit": "Yukarı örnekleme: libsoxr, LGPL-2.1+",
@@ -1099,5 +1099,15 @@
   "remote.bluetoothWindowsOnly": "Bluetooth remote control is currently available on Windows only.",
   "remote.firewallHint": "If your phone sees this computer but cannot connect, the firewall may be blocking port {port}/tcp:",
   "remote.firewallCopy": "Copy",
-  "remote.firewallCopied": "Command copied to clipboard."
+  "remote.firewallCopied": "Command copied to clipboard.",
+  "ups.systemAudio": "Tüm sesler (sistem sesi dahil)",
+  "ups.systemAudioHint": "Tarayıcı, Spotify, YouTube ve diğer uygulamaları da seçilen motorla yükseltir (~100–250 ms gecikme). Video ve oyunlar için libsoxr önerilir.",
+  "ups.sysCapture": "Sistem sesi girişi",
+  "ups.sysAuto": "Otomatik (sanal kablo)",
+  "ups.sysNoCable": "Sanal ses kablosu (ör. VB-Cable) gerekir: Windows varsayılan çıkışı olarak seçin, Aqulify yükseltilmiş sesi gerçek DAC cihazınıza iletsin.",
+  "ups.infoSysH": "Sistem sesi (tüm uygulamalar)",
+  "ups.infoSysP": "“Tüm sesler” ile harici uygulamalar (tarayıcı, Spotify, YouTube) da seçilen motordan geçer. Saat senkronizasyonu ~100–250 ms gecikme ekler; video/oyun için libsoxr, müzik için Aqulify FFT64 önerilir.",
+  "ups.liveOwnActive": "Sistem sesi: {src} → {dst} · {engine} ({ms} ms)",
+  "ups.liveNoVirtual": "Sistem sesi yükseltme: kurulu sanal ses kablosu bulunamadı (ör. VB-Cable).",
+  "ups.liveNoOutput": "Sistem sesi yükseltme: ayrı bir fiziksel DAC/çıkış bulunamadı (geri besleme engellendi)."
 }

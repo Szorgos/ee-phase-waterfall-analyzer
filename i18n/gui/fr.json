@@ -944,7 +944,7 @@
   "ups.infoRateH": "How high should I upsample?",
   "ups.infoRateP": "You do not need 384 kHz: ×2 (88.2/96 kHz) or “Output maximum” (e.g. 96 kHz on a 96 kHz DAC) already performs the main anti-imaging filtering at low CPU usage.",
   "ups.infoEngH": "Which engine should I choose?",
-  "ups.infoEngP": "libsoxr: fast, very low latency and light on CPU (great for everyday listening). Aqulify FFT64: built-in single-stage 64-bit FFT + Kaiser-sinc engine with no multi-stage polyphase images and laboratory precision (slightly higher buffer latency and CPU usage).",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — rapide, très faible latence et économe en CPU (idéal au quotidien et pour la vidéo). Aqulify FFT64 : moteur interne FFT 64 bits + Kaiser-sinc en un seul étage, sans repliement multi-étages et de précision laboratoire (latence et charge CPU légèrement supérieures).",
   "ups.infoPhaseH": "Phase and headroom",
   "ups.infoPhaseP": "Minimum phase (0): no pre-ringing, often preferred for natural transients. Intermediate (25, recommended): balanced compromise. Linear (50 / Reference): symmetric impulse response with zero phase distortion. −1 dB headroom prevents inter-sample peak clipping on loud masters.",
   "ups.aboutCredit": "Suréchantillonnage : libsoxr, LGPL-2.1+",
@@ -1099,5 +1099,15 @@
   "remote.bluetoothWindowsOnly": "Bluetooth remote control is currently available on Windows only.",
   "remote.firewallHint": "If your phone sees this computer but cannot connect, the firewall may be blocking port {port}/tcp:",
   "remote.firewallCopy": "Copy",
-  "remote.firewallCopied": "Command copied to clipboard."
+  "remote.firewallCopied": "Command copied to clipboard.",
+  "ups.systemAudio": "Tout l'audio (audio système inclus)",
+  "ups.systemAudioHint": "Suréchantillonne aussi le navigateur, Spotify, YouTube et les autres applis avec le moteur choisi (~100–250 ms de latence). Pour la vidéo ou le jeu, libsoxr est recommandé.",
+  "ups.sysCapture": "Entrée audio système",
+  "ups.sysAuto": "Automatique (câble virtuel)",
+  "ups.sysNoCable": "Un câble audio virtuel (ex. VB-Cable) est requis : définissez-le comme sortie Windows par défaut, et Aqulify transmettra l'audio suréchantillonné vers votre vrai DAC.",
+  "ups.infoSysH": "Audio système (toutes les applications)",
+  "ups.infoSysP": "Activez « Tout l'audio » pour faire passer les applications externes (navigateur, Spotify, YouTube) par le moteur choisi. La synchronisation d'horloge ajoute ~100–250 ms de latence ; libsoxr est conseillé pour la vidéo/les jeux et Aqulify FFT64 pour l'écoute musicale.",
+  "ups.liveOwnActive": "Audio système : {src} → {dst} · {engine} ({ms} ms)",
+  "ups.liveNoVirtual": "Suréchantillonnage système : aucun câble audio virtuel détecté (ex. VB-Cable).",
+  "ups.liveNoOutput": "Suréchantillonnage système : aucun DAC/sortie physique distinct détecté (boucle évitée)."
 }
