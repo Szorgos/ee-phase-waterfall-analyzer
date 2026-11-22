@@ -1,6 +1,127 @@
 {
   "versions": [
     {
+      "version": "2.8.4",
+      "date": "2026-11-22",
+      "notes": {
+        "hu": [
+          "Linux: ha a kimeneti hangeszköz eltűnik majd visszatér, a motor magától újracsatlakozik; a dupla példányt zárolás és felületi figyelmeztető sáv előzi meg.",
+          "Linux: asztali gépen és kijelzős Pi-n már nem indul el a fej nélküli párosítás, a QR-kód a valódi LAN/Wi-Fi címeket teszi előre, és tűzfal-segédlet is megjelenik; külső lejátszóknál javult a Lejátszás/Szünet vezérlés.",
+          "Windows és adatvédelem: kijelentkezéskor és kilépéskor nincs téves rendellenes-leállás jelentés, a beépített lejátszó követi az alapértelmezett hangeszközt, és szigorodott a hibajelentések adatvédelmi szűrése."
+        ],
+        "en": [
+          "Linux: the engine now reconnects automatically when an output audio device disappears and returns; a single-instance lock and GUI banner prevent duplicate installations.",
+          "Linux: desktop machines and Pi units with a display no longer trigger headless pairing, the QR code puts real LAN/Wi-Fi addresses first with a firewall hint, and Play/Pause control for external players is improved.",
+          "Windows and privacy: clean exit on sign-out and quit no longer sends false abnormal-shutdown reports, the built-in player follows the default audio device, and error-report privacy scrubbing is tightened."
+        ],
+        "es": [
+          "Linux: el motor se reconecta automáticamente cuando un dispositivo de salida desaparece y vuelve; un bloqueo de instancia única y un aviso en la interfaz evitan instalaciones duplicadas.",
+          "Linux: los equipos de escritorio y Raspberry Pi con pantalla ya no activan el emparejamiento sin pantalla, el código QR prioriza las direcciones LAN/Wi-Fi reales con ayuda de cortafuegos y mejora Play/Pausa en reproductores externos.",
+          "Windows y privacidad: al cerrar sesión o salir ya no se envían falsos informes de cierre anormal, el reproductor integrado sigue el dispositivo predeterminado y se refuerza el filtrado de privacidad en los informes."
+        ],
+        "fr": [
+          "Linux : le moteur se reconnecte automatiquement lorsqu'un périphérique audio disparaît puis revient ; un verrou d'instance unique et un bandeau d'interface évitent les installations en double.",
+          "Linux : les ordinateurs de bureau et Pi avec écran ne déclenchent plus l'appairage sans écran, le QR code place les vraies adresses LAN/Wi-Fi en premier avec une aide pare-feu et la commande Lecture/Pause des lecteurs externes est améliorée.",
+          "Windows et confidentialité : la fermeture propre à la déconnexion ou à la sortie n'envoie plus de faux rapports, le lecteur intégré suit le périphérique par défaut et le filtrage de confidentialité des rapports est renforcé."
+        ],
+        "zh": [
+          "Linux：当输出音频设备断开并重新出现时，引擎会自动重连；单实例锁和界面提示条可防止重复安装。",
+          "Linux：桌面电脑和带显示器的 Pi 不再触发无头配对，二维码优先显示真实局域网/Wi-Fi 地址并提供防火墙提示，同时改进了外部播放器的播放/暂停控制。",
+          "Windows 与隐私：注销和退出时不再发送错误的异常关闭报告，内置播放器会自动跟随默认音频设备，并加强了错误报告的隐私脱敏。"
+        ],
+        "de": [
+          "Linux: Die Engine verbindet sich automatisch neu, wenn ein Ausgabegerät verschwindet und zurückkehrt; eine Einzelinstanz-Sperre und ein Hinweisbanner verhindern doppelte Installationen.",
+          "Linux: Desktop-Rechner und Pi mit Bildschirm starten kein Headless-Pairing mehr, der QR-Code priorisiert echte LAN/WLAN-Adressen samt Firewall-Hinweis, und Play/Pause für externe Player wurde verbessert.",
+          "Windows und Datenschutz: Abmelden und Beenden senden keine falschen Absturzberichte mehr, der integrierte Player folgt dem Standard-Audiogerät und die Datenschutzbereinigung der Fehlerberichte wurde verschärft."
+        ],
+        "it": [
+          "Linux: il motore si riconnette automaticamente quando un dispositivo audio scompare e ritorna; un blocco a istanza singola e un banner nell'interfaccia evitano installazioni duplicate.",
+          "Linux: i computer desktop e i Pi con schermo non attivano più l'abbinamento headless, il codice QR mette prima gli indirizzi LAN/Wi-Fi reali con un aiuto per il firewall e migliora Play/Pausa per i lettori esterni.",
+          "Windows e privacy: la chiusura pulita a disconnessione o uscita non invia più falsi rapporti, il lettore integrato segue il dispositivo predefinito e la pulizia privacy dei rapporti è stata rafforzata."
+        ],
+        "nl": [
+          "Linux: de engine verbindt automatisch opnieuw wanneer een audio-uitvoerapparaat verdwijnt en terugkeert; een enkelvoudige vergrendeling en banner voorkomen dubbele installaties.",
+          "Linux: desktops en Pi's met scherm starten geen headless-koppeling meer, de QR-code zet echte LAN/Wi-Fi-adressen vooraan met firewall-tip, en Afspelen/Pauzeren voor externe spelers is verbeterd.",
+          "Windows en privacy: netjes afsluiten bij afmelden of stoppen stuurt geen valse foutrapporten meer, de ingebouwde speler volgt het standaardaudiotoestel en de privacyfiltering van rapporten is aangescherpt."
+        ],
+        "pl": [
+          "Linux: silnik automatycznie łączy się ponownie po zniknięciu i powrocie urządzenia wyjściowego; blokada pojedynczej instancji i baner w interfejsie zapobiegają podwójnym instalacjom.",
+          "Linux: komputery stacjonarne i Pi z ekranem nie uruchamiają już parowania headless, kod QR stawia prawdziwe adresy LAN/Wi-Fi na początku wraz z podpowiedzią zapory, a sterowanie Odtwórz/Pauza dla zewnętrznych odtwarzaczy zostało poprawione.",
+          "Windows i prywatność: czyste zamykanie przy wylogowaniu i wyjściu nie wysyła już fałszywych raportów, wbudowany odtwarzacz podąża za domyślnym urządzeniem audio, a anonimizacja raportów błędów została wzmocniona."
+        ],
+        "ru": [
+          "Linux: движок автоматически переподключается при исчезновении и возвращении устройства вывода; блокировка единственного экземпляра и баннер предотвращают дублирующие установки.",
+          "Linux: на настольных ПК и Pi с экраном больше не запускается безэкранное сопряжение, QR-код ставит реальные адреса LAN/Wi-Fi первыми с подсказкой по брандмауэру, улучшено управление Воспроизведение/Пауза для внешних плееров.",
+          "Windows и конфиденциальность: корректное завершение при выходе из системы больше не шлёт ложных отчётов, встроенный плеер следует за устройством по умолчанию, усилена очистка отчётов от личных данных."
+        ],
+        "pt": [
+          "Linux: o motor reconecta-se automaticamente quando um dispositivo de saída desaparece e volta; um bloqueio de instância única e um aviso na interface evitam instalações duplicadas.",
+          "Linux: computadores desktop e Pi com ecrã já não ativam o emparelhamento sem ecrã, o código QR coloca primeiro os endereços LAN/Wi-Fi reais com ajuda de firewall e melhora Reproduzir/Pausar em leitores externos.",
+          "Windows e privacidade: o encerramento limpo ao terminar sessão ou sair já não envia falsos relatórios, o leitor integrado segue o dispositivo predefinido e a filtragem de privacidade dos relatórios foi reforçada."
+        ],
+        "ro": [
+          "Linux: motorul se reconectează automat când un dispozitiv de ieșire dispare și revine; un blocaj pentru instanță unică și un banner în interfață previn instalările duble.",
+          "Linux: calculatoarele desktop și Pi cu ecran nu mai pornesc asocierea fără ecran, codul QR pune primele adresele LAN/Wi-Fi reale cu ajutor pentru firewall, iar Redare/Pauză pentru playerele externe a fost îmbunătățit.",
+          "Windows și confidențialitate: închiderea curată la deconectare sau ieșire nu mai trimite rapoarte false, playerul integrat urmărește dispozitivul implicit, iar curățarea datelor private din rapoarte a fost întărită."
+        ],
+        "el": [
+          "Linux: η μηχανή επανασυνδέεται αυτόματα όταν μια συσκευή εξόδου εξαφανιστεί και επιστρέψει· κλείδωμα μοναδικής εκτέλεσης και ειδοποίηση αποτρέπουν διπλές εγκαταστάσεις.",
+          "Linux: οι επιτραπέζιοι υπολογιστές και τα Pi με οθόνη δεν ενεργοποιούν πλέον σύζευξη χωρίς οθόνη, ο κωδικός QR βάζει πρώτες τις πραγματικές διευθύνσεις LAN/Wi-Fi με οδηγία τείχους προστασίας και βελτιώθηκε το Play/Pause για εξωτερικά προγράμματα.",
+          "Windows και απόρρητο: η καθαρή έξοδος δεν στέλνει πλέον ψευδείς αναφορές σφάλματος, το ενσωματωμένο πρόγραμμα ακολουθεί την προεπιλεγμένη συσκευή ήχου και ενισχύθηκε η ανωνυμοποίηση αναφορών."
+        ],
+        "tr": [
+          "Linux: çıkış ses cihazı kaybolup geri geldiğinde motor otomatik olarak yeniden bağlanır; tek örnek kilidi ve arayüz uyarısı çift kurulumları önler.",
+          "Linux: masaüstü bilgisayarlar ve ekranlı Pi'ler artık ekransız eşleştirmeyi tetiklemez, QR kodu gerçek LAN/Wi-Fi adreslerini öne alır ve güvenlik duvarı ipucu sunar; harici oynatıcılarda Oynat/Duraklat iyileştirildi.",
+          "Windows ve gizlilik: oturum kapatma ve çıkışta artık yanlış hata raporu gönderilmez, yerleşik oynatıcı varsayılan ses cihazını izler ve hata raporlarının gizlilik temizliği güçlendirildi."
+        ],
+        "fi": [
+          "Linux: moottori yhdistää uudelleen automaattisesti, kun äänilaite katoaa ja palaa; yhden instanssin lukko ja käyttöliittymän palkki estävät kaksoisasennukset.",
+          "Linux: pöytäkoneet ja näytölliset Pi-laitteet eivät enää käynnistä näytötöntä paritusta, QR-koodi asettaa oikeat LAN/Wi-Fi-osoitteet kärkeen palomuuriohjeen kera ja ulkoisten soittimien Toisto/Tauko-ohjausta parannettiin.",
+          "Windows ja tietosuoja: siisti sulkeminen ei enää lähetä vääriä virheraportteja, sisäänrakennettu soitin seuraa oletusäänilaitetta ja virheraporttien tietosuojasiivousta tiukennettiin."
+        ],
+        "da": [
+          "Linux: motoren opretter automatisk forbindelse igen, når en lydudgang forsvinder og vender tilbage; enkeltinstanslås og banner forhindrer dobbelte installationer.",
+          "Linux: skrivebordscomputere og Pi med skærm udløser ikke længere hovedløs parring, QR-koden sætter rigtige LAN/Wi-Fi-adresser først med firewall-hjælp, og Afspil/Pause for eksterne afspillere er forbedret.",
+          "Windows og privatliv: ren afslutning ved logud og lukning sender ikke længere falske fejlrapporter, den indbyggede afspiller følger standardlydenheden, og privatlivsrensningen i fejlrapporter er strammet."
+        ],
+        "nb": [
+          "Linux: motoren kobler til på nytt automatisk når en lydenhet forsvinner og kommer tilbake; enkeltinstanslås og banner hindrer doble installasjoner.",
+          "Linux: skrivebordsmaskiner og Pi med skjerm utløser ikke lenger skjermløs paring, QR-koden setter ekte LAN/Wi-Fi-adresser først med brannmurtips, og Spill/Pause for eksterne avspillere er forbedret.",
+          "Windows og personvern: ren avslutning ved utlogging og lukking sender ikke lenger falske feilrapporter, den innebygde spilleren følger standard lydenhet og personvernrensingen i feilrapporter er skjerpet."
+        ],
+        "sv": [
+          "Linux: motorn återansluter automatiskt när en ljudutgång försvinner och kommer tillbaka; eninstanslås och banner förhindrar dubbla installationer.",
+          "Linux: skrivbordsdatorer och Pi med skärm triggar inte längre skärmlös parkoppling, QR-koden lägger riktiga LAN/Wi-Fi-adresser först med brandväggstips och Spela/Pausa för externa spelare har förbättrats.",
+          "Windows och integritet: ren avslutning vid utloggning och stängning skickar inte längre falska felrapporter, den inbyggda spelaren följer standardljudenheten och integritetsrensningen i felrapporter har skärpts."
+        ],
+        "he": [
+          "Linux: המנוע מתחבר מחדש אוטומטית כשהתקן שמע נעלם וחוזר; נעילת מופע יחיד והתראה בממשק מונעות התקנות כפולות.",
+          "Linux: מחשבי שולחן ו-Pi עם מסך כבר לא מפעילים צימוד ללא מסך, קוד ה-QR מציג קודם כתובות LAN/Wi-Fi אמיתיות עם עזרה לחומת אש, ושליטת נגן/השהה לנגנים חיצוניים שופרה.",
+          "Windows ופרטיות: יציאה נקייה כבר לא שולחת דוחות שגיאה שגויים, הנגן המובנה עוקב אחר התקן השמע ברירת המחדל וניקוי הפרטיות בדוחות שגיאה הוחמר."
+        ],
+        "ja": [
+          "Linux：出力オーディオ機器が切断されて復帰した際に自動再接続するようになりました。単一インスタンスロックと警告バーで重複インストールを防ぎます。",
+          "Linux：デスクトップPCや画面付きPiではヘッドレスペアリングが起動しなくなり、QRコードは実際のLAN/Wi-Fiアドレスを優先しファイアウォール案内を表示、外部プレーヤーの再生/一時停止操作も改善しました。",
+          "Windowsとプライバシー：サインアウトや終了時の誤った異常終了レポートを防止し、内蔵プレーヤーが既定のオーディオ機器に追従するようになり、エラーレポートのプライバシー除去を強化しました。"
+        ],
+        "ko": [
+          "Linux: 출력 오디오 장치가 사라졌다가 돌아오면 엔진이 자동으로 다시 연결되며, 단일 인스턴스 잠금과 안내 배너로 중복 설치를 방지합니다.",
+          "Linux: 데스크톱과 화면이 연결된 Pi에서는 더 이상 헤드리스 페어링이 시작되지 않으며, QR 코드가 실제 LAN/Wi-Fi 주소를 우선 표시하고 방화벽 안내를 제공합니다. 외부 플레이어의 재생/일시정지 제어도 개선되었습니다.",
+          "Windows 및 개인정보: 로그아웃 및 종료 시 잘못된 비정상 종료 보고서를 보내지 않으며, 내장 플레이어가 기본 오디오 장치를 자동으로 따르고 오류 보고서의 개인정보 제거가 강화되었습니다."
+        ],
+        "cs": [
+          "Linux: motor se automaticky znovu připojí, když výstupní zvukové zařízení zmizí a vrátí se; zámek jedné instance a lišta v rozhraní brání dvojí instalaci.",
+          "Linux: stolní počítače a Pi s displejem už nespouštějí párování bez obrazovky, QR kód řadí skutečné adresy LAN/Wi-Fi na začátek s nápovědou k firewallu a zlepšilo se ovládání Přehrát/Pozastavit u externích přehrávačů.",
+          "Windows a soukromí: čisté ukončení při odhlášení a zavření už neposílá falešná hlášení, vestavěný přehrávač sleduje výchozí zvukové zařízení a zpřísnilo se čištění soukromých údajů v hlášeních."
+        ],
+        "uk": [
+          "Linux: рушій автоматично перепідключається, коли аудіопристрій виводу зникає та повертається; блокування одного екземпляра і банер запобігають подвійному встановленню.",
+          "Linux: настільні ПК та Pi з екраном більше не запускають безекранне сполучення, QR-код ставить реальні адреси LAN/Wi-Fi першими з підказкою щодо брандмауера, покращено керування Відтворення/Пауза для зовнішніх плеєрів.",
+          "Windows і конфіденційність: коректне завершення при виході більше не надсилає хибних звітів, вбудований плеєр слідує за пристроєм за замовчуванням, посилено очищення звітів від приватних даних."
+        ]
+      }
+    },
+    {
       "version": "2.8.3",
       "date": "2026-11-20",
       "notes": {
