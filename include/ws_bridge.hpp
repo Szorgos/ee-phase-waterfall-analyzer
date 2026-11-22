@@ -1058,7 +1058,9 @@ private:
             btReported_ = true;
         } else if (btReported_) {
             // Csak állapotváltáskor írjuk ki (a karbantartás 30 mp-enként újra próbálja)
-            std::cout << "[WS Bridge] Bluetooth-csatorna nem érhető el ezen a gépen.\n";
+            const std::string why = bt_.lastError();
+            std::cout << "[WS Bridge] Bluetooth-csatorna nem érhető el ezen a gépen" << (why.empty() ? "" : " (" + why + ")")
+                      << ".\n";
             btReported_ = false;
         }
     }

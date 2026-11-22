@@ -167,10 +167,10 @@ void testRankLocalAddresses() {
 
 void testBluetoothSupportedFlag() {
     std::cout << "[3] Bluetooth platform-támogatás jelző...\n";
-#ifdef _WIN32
-    check(ee_analyzer::btlink::RfcommListener::isSupported(), "Windowson Bluetooth RFCOMM támogatott");
+#if defined(_WIN32) || defined(__linux__)
+    check(ee_analyzer::btlink::RfcommListener::isSupported(), "Windowson és Linuxon (BlueZ) a Bluetooth RFCOMM támogatott");
 #else
-    check(!ee_analyzer::btlink::RfcommListener::isSupported(), "Linux/macOS-en Bluetooth RFCOMM még nem támogatott");
+    check(!ee_analyzer::btlink::RfcommListener::isSupported(), "macOS-en a Bluetooth RFCOMM nem támogatott");
 #endif
 }
 

@@ -73,6 +73,11 @@ sudo apt install ./aqulify_2.8.4-1~pi1_arm64.deb
 - **Asztali felületen (HDMI-monitorral):** az `aqulify-gui` ablakában a **Távirányító** gombbal kezelhetők a párosított eszközök.
 - *(Fejlesztői / hibakereső opció: helyi terminálból az `aqulify-engine --pair` parancs továbbra is elérhető.)*
 - **Hálózati elérés:** Linuxon és Raspberry Pi OS-en a telefonos távirányító és a Pi között helyi Wi-Fi / Ethernet hálózat használható.
+- **Bluetooth-tartalék (Wi-Fi nélkül is vezérelhető):** ha a hálózati elérés be van kapcsolva, a motor a BlueZ-nál (D-Bus rendszerbusz) regisztrál egy RFCOMM-szolgáltatást (UUID: `43ad541b-d816-443a-a652-146cb5191139`, RFCOMM-csatorna: 22). A telefon ugyanazzal a tokennel hitelesít, mint a Wi-Fi-n; a Bluetooth nem párosít alkalmazásszinten (a 4 jegyű kódos párosítás és a tulajdonos/admin jogosultság változatlan). Feltételek:
+  - A telefont egyszer **rendszerszinten** párosítani kell a Pi-vel (pl. `bluetoothctl`: `scan on`, `pair <cím>`, `trust <cím>`). Az Aqulify nem regisztrál Bluetooth-párosító ügynököt, ezért fej nélküli gépen ezt a lépést a rendszerben kell elvégezni.
+  - Fusson a `bluetooth.service`, és legyen Bluetooth-adapter (`bluetoothctl list`).
+  - Az Aqulify-t futtató felhasználónak el kell érnie a BlueZ-t a rendszerbuszon (Raspberry Pi OS-en az alapértelmezett felhasználó a `bluetooth` csoport tagja; egyéb esetben: `sudo usermod -aG bluetooth <felhasználó>`).
+  - A naplóban („Bluetooth-csatorna bekapcsolva” vagy „nem érhető el ezen a gépen (ok)”) látszik, miért nem indult el. A zene átküldéséhez továbbra is Wi-Fi kell.
 
 ---
 
@@ -154,3 +159,4 @@ Az alábbi pontok valódi Raspberry Pi hiányában (eddig emulált környezetben
 - **Valós idejű CPU-mérés (`test_dsp`) valódi hardveren.**
 - **Grafikus felület (`aqulify-gui`) és 3D vízesés HDMI-n.**
 - **Kódos párosítás SSH-n (`aqulify-engine --pair`):** valódi Pi-n SSH-n keresztül, fizikai telefonnal.
+- **Bluetooth-tartalék Linuxon / Pi-n:** a protokoll és a D-Bus-réteg hamis szolgáltatással és valódi `dbus-daemon`-nal ellenőrzött, de **valódi BlueZ-zal, Bluetooth-rádióval és telefonnal nem**. Nem ismert még, hogy a BlueZ mely verzióin és a Pi OS alapértelmezett D-Bus-szabályai mellett (csoport / jogosultság) indul el hibátlanul, és hogy a telefon megtalálja-e a szolgáltatást.

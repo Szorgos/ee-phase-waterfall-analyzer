@@ -245,6 +245,15 @@ if(WIN32)
     target_link_libraries(test_linux_pairing PRIVATE ws2_32 iphlpapi)
 endif()
 
+# Linux Bluetooth RFCOMM szerver (BlueZ Profile1 a D-Bus-on): üzenetkódolás, állapotgép, hamis démon, híd
+add_executable(test_bt_bluez src/test_bt_bluez.cpp)
+target_compile_definitions(test_bt_bluez PRIVATE AQULIFY_VERSION="${PROJECT_VERSION}")
+target_link_libraries(test_bt_bluez PRIVATE ee_dsp_core Threads::Threads)
+target_include_directories(test_bt_bluez PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+if(WIN32)
+    target_link_libraries(test_bt_bluez PRIVATE ws2_32 iphlpapi)
+endif()
+
 # MPRIS lejátszásvezérlés metódus-választás, fallback és PII-mentes napló
 add_executable(test_mpris_control src/test_mpris_control.cpp)
 target_include_directories(test_mpris_control PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
