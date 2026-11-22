@@ -1087,7 +1087,29 @@ int main(int argc, char** argv) {
     cb.saveTargets = [](const std::string& doc) { return writeFileAtomic(userFilePath(L"remote-targets.json", true), doc); };
     // Ablak bezárása „Bezárás” választással: ugyanaz, mint a tálcamenü „Kilépés” pontja (rendes leállás)
     static std::atomic<win::TrayApp*> s_tray{ nullptr };
-    cb.quitEngine = [] { if (win::TrayApp* t = s_tray.load()) t->quit(); };
+    static std::atomic<aq::health::Monitor*> s_health{ nullptr };
+    // Konzol-vezérlő jelek (Ctrl+C, konzolablak bezárása, kijelentkezés, leállítás): külön rendszerszálon fut,
+    // ezért a szálbiztos markClean()-t azonnal hívja, majd zárja a tálcaablakot.
+    struct ConsoleCtrl {
+        static BOOL WINAPI handle(DWORD ctrlType) {
+            switch (ctrlType) {
+                case CTRL_C_EVENT:
+                case CTRL_BREAK_EVENT:
+                case CTRL_CLOSE_EVENT:
+                case CTRL_LOGOFF_EVENT:
+                case CTRL_SHUTDOWN_EVENT:
+                    if (auto* h = s_health.load()) h->markClean();
+                    if (win::TrayApp* t = s_tray.load()) t->quit();
+                    return TRUE;
+                default:
+                    return FALSE;
+            }
+        }
+    };
+    cb.quitEngine = [] {
+        if (auto* h = s_health.load()) h->markClean();
+        if (win::TrayApp* t = s_tray.load()) t->quit();
+    };
 
     // Haladó hangkimenet Windowson: csak a beépített lejátszó beállításai (ReplayGain, előbetöltés, kizárólagos mód).
     // A pufferméretet és a mintavételt a Windows hangmotorja határozza meg (az Equalizer APO abban fut); kizárólagos
@@ -1290,6 +1312,8 @@ int main(int argc, char** argv) {
         for (const wchar_t* f : { L"remote.json", L"remote-targets.json" })
             for (const auto& n : aq::report::namesFromJson(readSmallFile(userFilePath(f, false), 256 * 1024))) hc.scrubNames.push_back(n);
         if (!health.start(hc)) std::cout << "[Hibajelentés] A diagnosztikai mappa nem írható.\n";
+        s_health.store(&health);
+        SetConsoleCtrlHandler(&ConsoleCtrl::handle, TRUE);
         reportService.start(hc.dir, hc.logPath, hc.scrubNames, hc.enabled);
     }
     int healthTicks = 0;
@@ -1339,6 +1363,23 @@ int main(int argc, char** argv) {
     };
     tcb.onTimer = [&] { saveIfDue(false); healthTick(); };
     tcb.statusText = [&] { return sources.label(); };
+    // Tálca „Kilépés”, WM_CLOSE (telepítő / frissítő / GUI / taskkill) vagy WM_DESTROY: a rendben-leállt jel még
+    // az ablak eltűnése előtt lemezre kerül.
+    tcb.onQuit = [&] { health.markClean(); };
+    // Windows rendszerleállítás, újraindítás vagy kijelentkezés (WM_ENDSESSION): a Windows a visszatérés után
+    // kilőheti a folyamatot, ezért a rendes-leállás jel, a lánc mentése és a params.bin alapra állítása szinkron fut.
+    tcb.onEndSession = [&] {
+        std::cout << "[Info] Munkamenet vége (WM_ENDSESSION), leállítás...\n";
+        health.markClean();
+        saveIfDue(true);
+        {
+            std::lock_guard<std::mutex> lk(paramMutex);
+            current = transparentParams();
+            dirty = false;
+        }
+        sources.pushParams(current);
+        win::saveParamFile(current);
+    };
     win::TrayApp tray(tcb);
     s_tray.store(&tray);
     if (!tray.create(GetModuleHandleW(nullptr))) {
@@ -1353,6 +1394,8 @@ int main(int argc, char** argv) {
 
     std::cout << "[Info] Leállítás...\n";
     health.markClean(); // a „rendben leállt” jel már most: a telepítő a leállás közben is kilőhet (frissítés)
+    SetConsoleCtrlHandler(&ConsoleCtrl::handle, FALSE);
+    s_health.store(nullptr);
     bridge->stop();
     updater.stop();
     filePlayer.stop();
