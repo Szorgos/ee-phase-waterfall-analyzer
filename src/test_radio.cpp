@@ -38,6 +38,9 @@ static std::vector<uint8_t> readFile(const std::string& p) {
     return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 }
 
+static std::mutex searchM;     // a próbaszerver utolsó katalógus-kérése
+static std::string lastSearch;
+
 static double msSince(Clock::time_point t) {
     return std::chrono::duration<double, std::milli>(Clock::now() - t).count();
 }
@@ -524,6 +527,21 @@ static void testNetwork() {
             sv.idle(8000);   // elakad: a kliens a stallTimeout után bont és újracsatlakozik
         } else if (path == "/silent") {
             sv.idle(8000);   // fejlécet sem küld
+        } else if (path.rfind("/json/stations/search?", 0) == 0) {
+            // a katalógus próbaválasza: egy jó, egy tiltott sémájú, egy HLS-es, egy név nélküli és egy https-es tétel
+            {
+                std::lock_guard<std::mutex> lk(searchM);
+                lastSearch = path;
+            }
+            const std::string body =
+                "[{\"name\":\"Kék Duna Rádió\",\"url\":\"http://x.example/a\",\"url_resolved\":\"http://x.example/a.mp3\",\"codec\":\"MP3\","
+                "\"bitrate\":128,\"countrycode\":\"HU\",\"tags\":\"pop,hírek\",\"hls\":0},"
+                "{\"name\":\"Rossz\",\"url_resolved\":\"javascript:alert(1)\",\"codec\":\"MP3\"},"
+                "{\"name\":\"Szegmentált\",\"url_resolved\":\"https://h.example/live.m3u8\",\"codec\":\"AAC\",\"hls\":1},"
+                "{\"name\":\"\",\"url_resolved\":\"http://n.example/\"},"
+                "{\"name\":\"Második \\u0001adó\",\"url\":\"https://y.example/s\",\"codec\":\"AAC+\",\"bitrate\":64,\"countrycode\":\"AT\"}]";
+            sv.sendStr(s, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + std::to_string(body.size()) +
+                              "\r\n\r\n" + body);
         } else {
             sv.sendStr(s, "HTTP/1.1 500 Error\r\n\r\n");
         }
@@ -728,9 +746,13 @@ static void testNetwork() {
     {
         std::string saved;
         StationStore store([&](const std::string& doc) { saved = doc; });
+        std::mutex bm;
+        std::vector<std::string> broadcasts;
+        BridgeCallbacks cb;   // a vezérlő előtt: a kereső szála a vezérlő megszűnéséig hívhatja
+        cb.broadcast = [&](const std::string& j) { std::lock_guard<std::mutex> lk(bm); broadcasts.push_back(j); };
         player::FilePlayer fp(std::make_unique<PullOutput>());
         RadioController ctl(fp, store, testNet());
-        BridgeCallbacks cb;
+        ctl.setCatalogBase(srv.url(""));
         attachRadio(cb, ctl, store);
         auto req = [&](const std::string& j, bool remote) {
             json::Value v;
@@ -770,6 +792,55 @@ static void testNetwork() {
             CHECK(reloaded.get(id, s) && s.name == "Új név" && s.url == srv.url("/live"), "a mentett lista visszatölthető");
             CHECK(req("{\"type\":\"radio_remove\",\"id\":\"" + id + "\"}", false).find("\"items\":[]") != std::string::npos, "törlés");
         }
+        // Állomáskereső: alapból ki; csak helyben / adminnal kapcsolható; a keresés aszinkron, a válasz broadcast
+        CHECK(!store.catalog() && cb.radioStatus().find("\"catalog\":false") != std::string::npos, "a kereső alapból ki van kapcsolva");
+        CHECK(req("{\"type\":\"radio_search\",\"q\":\"duna\"}", true).find("\"catalogOff\"") != std::string::npos &&
+              srv.hits("/json/stations/search?name=duna&limit=50&hidebroken=true&order=clickcount&reverse=true") == 0,
+              "kikapcsolt kereső: nincs kérés a katalógushoz");
+        CHECK(req("{\"type\":\"radio_catalog\",\"on\":true}", true).find("\"remote\"") != std::string::npos && !store.catalog(),
+              "távoli (nem admin) kliens nem kapcsolhatja be");
+        CHECK(req("{\"type\":\"radio_catalog\",\"on\":true}", false).find("\"catalog\":true") != std::string::npos && store.catalog() &&
+              saved.find("\"catalog\":true") != std::string::npos, "bekapcsolás és mentés");
+        const std::string started = req("{\"type\":\"radio_search\",\"q\":\"Kék Duna\",\"req\":\"k1\"}", true);
+        CHECK(started.find("\"state\":\"searching\"") != std::string::npos && started.find("\"req\":\"k1\"") != std::string::npos,
+              "keresés indul (azonnali válasz)");
+        std::string result;
+        for (int i = 0; i < 500 && result.empty(); ++i) {
+            {
+                std::lock_guard<std::mutex> lk(bm);
+                for (const auto& b : broadcasts) if (b.find("\"type\":\"radio_search\"") != std::string::npos) result = b;
+            }
+            if (result.empty()) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        std::string sp;
+        {
+            std::lock_guard<std::mutex> lk(searchM);
+            sp = lastSearch;
+        }
+        CHECK(sp.find("name=K%C3%A9k%20Duna&") != std::string::npos, "a keresőszöveg URL-kódolva megy (%s)", sp.c_str());
+        json::Value rv;
+        const bool parsed = json::parse(result, rv);
+        const json::Value* items = parsed ? rv.get("items") : nullptr;
+        CHECK(items && items->type == json::Value::Type::Array && items->arr.size() == 2, "találatok: a hibás, a HLS-es és a név nélküli kimarad (%s)", result.c_str());
+        if (items && items->arr.size() == 2) {
+            const json::Value& a = items->arr[0];
+            CHECK(a.get("url")->stringOr("") == "http://x.example/a.mp3" && a.get("codec")->stringOr("") == "MP3" &&
+                  a.get("bitrate")->numberOr(0) == 128 && a.get("country")->stringOr("") == "HU" && a.get("name")->stringOr("") == "Kék Duna Rádió",
+                  "találat: a feloldott cím, formátum, bitráta, ország");
+            CHECK(items->arr[1].get("url")->stringOr("") == "https://y.example/s" && items->arr[1].get("name")->stringOr("") == "Második  adó",
+                  "url_resolved nélkül az url; a név tisztítva");
+        }
+        CHECK(req("{\"type\":\"radio_catalog\",\"on\":false}", false).find("\"catalog\":false") != std::string::npos && !store.catalog(),
+              "kikapcsolás");
+        {
+            std::vector<CatalogItem> out;
+            std::string e;
+            CHECK(!catalogSearch("   ", testNet(), out, e, nullptr, srv.url("")) && e == "query", "üres keresőszöveg");
+            NetOptions strict = testNet();
+            strict.allowLoopback = false;
+            CHECK(!catalogSearch("duna", strict, out, e, nullptr, srv.url("")) && e == "blocked", "a katalóguskérés is SSRF-ellenőrzött");
+        }
+
         StationStore junk(nullptr);
         junk.load("{\"stations\":[{\"id\":\"a1\",\"name\":\"Jó\",\"url\":\"http://a.example/\"},{\"id\":\"b2\",\"name\":\"Rossz\",\"url\":\"javascript:alert(1)\"},"
                   "{\"id\":\"../x\",\"name\":\"Rossz id\",\"url\":\"http://a.example/\"},{\"id\":\"a1\",\"name\":\"Dupla\",\"url\":\"http://b.example/\"}]}");
@@ -842,6 +913,17 @@ static int liveProbe(const char* urls) {
 
 int main() {
     net::startup();
+    if (const char* q = std::getenv("AQ_RADIO_SEARCH")) {   // kézi próba a valódi katalógussal (a CI-ben nem fut)
+        std::vector<CatalogItem> out;
+        std::string e;
+        const auto t0 = Clock::now();
+        const bool ok = catalogSearch(q, NetOptions{}, out, e);
+        std::printf("katalógus: %s, %zu találat, %.0f ms %s\n", ok ? "ok" : "HIBA", out.size(), msSince(t0), e.c_str());
+        for (size_t i = 0; i < out.size() && i < 8; ++i)
+            std::printf("  %s | %s %d | %s | %s\n", out[i].name.c_str(), out[i].codec.c_str(), out[i].bitrate, out[i].country.c_str(), out[i].url.c_str());
+        net::cleanup();
+        return ok ? 0 : 1;
+    }
     if (const char* live = std::getenv("AQ_RADIO_LIVE")) {
         const int rc = liveProbe(live);
         net::cleanup();

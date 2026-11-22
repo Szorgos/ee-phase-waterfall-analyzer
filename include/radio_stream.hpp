@@ -24,9 +24,11 @@
  */
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "audio_decoder.hpp"
 #include "radio_net.hpp"
@@ -65,6 +67,24 @@ private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
+
+/** Az állomáskereső egy találata (a közösségi katalógusból; a mezők tisztítva, a cím ellenőrizve). */
+struct CatalogItem {
+    std::string name, url, codec, country, tags;
+    int bitrate = 0;
+};
+
+/** A közösségi állomáskatalógus (radio-browser.info) címe; a DNS a közösség szerverei közül választ. */
+constexpr const char* kCatalogBase = "https://all.api.radio-browser.info";
+
+/**
+ * Keresés név szerint a katalógusban (legfeljebb 50 találat, a népszerűség szerint; HLS nélkül). Csak olvas: kattintás-
+ * számlálót és más adatot nem küld. A kérés a rádió szállításán megy (SSRF-ellenőrzés, időkorlát), a válasz legfeljebb
+ * 1 MB. reg: a nyitott kapcsolat bejegyzése a megszakításhoz (nullptr: vége). baseUrl: más katalógus (a tesztekhez).
+ * false: err = "query", "json", "size", vagy a szállítás hibakódja.
+ */
+bool catalogSearch(const std::string& query, const NetOptions& net, std::vector<CatalogItem>& out, std::string& err,
+                   const std::function<void(HttpStream*)>& reg = nullptr, const std::string& baseUrl = "");
 
 enum class RadioState { Connecting, Buffering, Playing, Reconnecting, Ended, Failed };
 const char* stateName(RadioState s);

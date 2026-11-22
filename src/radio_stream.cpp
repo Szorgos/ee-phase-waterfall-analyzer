@@ -4,8 +4,16 @@
  *        újracsatlakozás. A leírás: radio_stream.hpp.
  */
 #include "radio_stream.hpp"
+#include "mini_json.hpp"
+
+#ifdef AQULIFY_VERSION
+#define AQULIFY_RADIO_VERSION AQULIFY_VERSION
+#else
+#define AQULIFY_RADIO_VERSION "2"
+#endif
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <condition_variable>
 #include <cstdlib>
@@ -1337,5 +1345,88 @@ bool RadioDecoder::closed(const Core& c) {
 }
 
 RadioStatus RadioDecoder::status() const { return statusOf(*core_); }
+
+// =====================================================================================================================
+// Állomáskereső (közösségi katalógus)
+// =====================================================================================================================
+
+namespace {
+constexpr size_t kMaxCatalogBytes = 1u << 20;
+
+std::string urlEncode(const std::string& s) {
+    static const char* hex = "0123456789ABCDEF";
+    std::string out;
+    for (unsigned char c : s) {
+        if (std::isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~') out += static_cast<char>(c);
+        else { out += '%'; out += hex[c >> 4]; out += hex[c & 15]; }
+    }
+    return out;
+}
+} // namespace
+
+bool catalogSearch(const std::string& query, const NetOptions& net, std::vector<CatalogItem>& out, std::string& err,
+                   const std::function<void(HttpStream*)>& reg, const std::string& baseUrl) {
+    out.clear();
+    const std::string q = cleanText(query, 100);
+    if (q.empty()) { err = "query"; return false; }
+    const std::string url = (baseUrl.empty() ? std::string(kCatalogBase) : baseUrl) + "/json/stations/search?name=" +
+                            urlEncode(q) + "&limit=50&hidebroken=true&order=clickcount&reverse=true";
+    RadioUrl u;
+    if (!parseRadioUrl(url, u, nullptr)) { err = "url"; return false; }
+    NetOptions o = net;
+    o.userAgent = std::string("Aqulify/") + AQULIFY_RADIO_VERSION;   // a katalógus kéri a „beszélő” azonosítót
+    for (int attempt = 0; attempt < 2; ++attempt) {   // a DNS másik szervert adhat a második próbára
+        std::string body;
+        HttpHead head;
+        std::string e;
+        bool ok;
+        {
+            HttpStream hs;
+            if (reg) reg(&hs);
+            ok = hs.open(u, o, head, e);
+            if (ok && head.status == 200) {
+                uint8_t buf[16384];
+                while (body.size() <= kMaxCatalogBytes) {
+                    const size_t n = hs.read(buf, sizeof(buf));
+                    if (n == 0) break;
+                    body.append(reinterpret_cast<const char*>(buf), n);
+                }
+            }
+            if (reg) reg(nullptr);
+        }
+        if (!ok) {
+            err = e;
+            if (e == "aborted" || e == "blocked") return false;
+            continue;
+        }
+        if (head.status != 200) { err = "http"; continue; }
+        if (body.size() > kMaxCatalogBytes) { err = "size"; return false; }
+        json::Value v;
+        if (!json::parse(body, v) || v.type != json::Value::Type::Array) { err = "json"; continue; }
+        for (const auto& e2 : v.arr) {
+            if (out.size() >= 50) break;
+            auto s = [&](const char* k) { const json::Value* x = e2.get(k); return x ? x->stringOr("") : std::string(); };
+            CatalogItem it;
+            it.name = cleanText(s("name"), 120);
+            std::string link = s("url_resolved");
+            if (link.empty()) link = s("url");
+            while (!link.empty() && (link.back() == ' ' || link.back() == '\r' || link.back() == '\n')) link.pop_back();
+            RadioUrl ru;
+            if (it.name.empty() || !parseRadioUrl(link, ru, nullptr)) continue;
+            if (const json::Value* h = e2.get("hls"); h && h->numberOr(0) != 0) continue;   // szegmentált adás: nem játszható
+            it.url = link;
+            it.codec = cleanText(s("codec"), 16);
+            it.country = cleanText(s("countrycode"), 4);
+            it.tags = cleanText(s("tags"), 80);
+            const json::Value* br = e2.get("bitrate");
+            const double b = br ? br->numberOr(0) : 0;
+            it.bitrate = b > 0 && b < 100000 ? static_cast<int>(b) : 0;
+            out.push_back(std::move(it));
+        }
+        err.clear();
+        return true;
+    }
+    return false;
+}
 
 } // namespace ee_analyzer::radio

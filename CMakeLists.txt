@@ -154,6 +154,7 @@ if(WIN32)
     target_link_libraries(aq_player PUBLIC shell32 ole32)   # a Zene ismert mappa (SHGetKnownFolderPath)
     target_link_libraries(aq_player PUBLIC winhttp ws2_32)  # internetrádió (WinHTTP, névfeloldás)
 endif()
+target_compile_definitions(aq_player PRIVATE AQULIFY_VERSION="${PROJECT_VERSION}")   # a rádió-katalógus User-Agentje
 set_target_properties(aq_player PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # 9r. Tesztalkalmazás: internetrádió (helyi próbaszerverrel: ICY, átirányítás, megszakadás, tiltott címek)
