@@ -39,6 +39,7 @@ extern char** environ;
 #define STB_VORBIS_HEADER_ONLY
 #include "stb_vorbis.c"
 #include "opusfile.h"
+#include "neaacdec.h"
 
 namespace ee_analyzer::radio {
 
@@ -908,7 +909,118 @@ private:
     size_t leftOff_ = 0;
 };
 
+/**
+ * AAC (ADTS-keretek, AAC-LC, HE-AAC / SBR, HE-AACv2 / PS) a FAAD2 könyvtárral (third_party/faad2, GPL-2.0-or-later).
+ * A mintavételt és a csatornaszámot az első dekódolt keret adja (SBR-nél a dupla, PS-nél sztereó); 5.1-et a FAAD2
+ * sztereóra keveri.
+ */
+class AacCodec final : public Codec {
+public:
+    ~AacCodec() override { if (h_) NeAACDecClose(h_); }
+    bool init(Reader& r) {
+        r_ = &r;
+        h_ = NeAACDecOpen();
+        if (!h_) return false;
+        NeAACDecConfigurationPtr cfg = NeAACDecGetCurrentConfiguration(h_);
+        cfg->outputFormat = FAAD_FMT_FLOAT;
+        cfg->downMatrix = 1;
+        NeAACDecSetConfiguration(h_, cfg);
+        if (!fillTo(kWant) || !syncAdts()) return false;
+        unsigned long sr = 0;
+        unsigned char chn = 0;
+        const long used = NeAACDecInit(h_, buf_.data(), static_cast<unsigned long>(buf_.size()), &sr, &chn);
+        if (used < 0) return false;
+        buf_.erase(buf_.begin(), buf_.begin() + used);
+        // az első hangot adó keret dönti el a formátumot
+        for (int i = 0; i < 64 && left_.empty(); ++i)
+            if (!decodeFrame(true)) return false;
+        name = "aac";
+        return rate > 0 && ch > 0 && !left_.empty();
+    }
+    size_t decode(float* out, size_t frames) override {
+        size_t got = 0;
+        int guard = 0;
+        while (got < frames) {
+            if (leftOff_ < left_.size()) {
+                const size_t k = std::min((left_.size() - leftOff_) / ch, frames - got);
+                std::memcpy(out + got * ch, left_.data() + leftOff_, k * ch * sizeof(float));
+                leftOff_ += k * ch;
+                got += k;
+                continue;
+            }
+            if (formatChanged || ++guard > 256 || !decodeFrame(false)) break;
+        }
+        return got;
+    }
+
+private:
+    static constexpr size_t kWant = 16 * 1024;   // legalább két teljes ADTS-keret (egy keret legfeljebb 8191 bájt)
+    bool fillTo(size_t n) {
+        uint8_t tmp[8192];
+        while (buf_.size() < n) {
+            const size_t k = r_->read(tmp, sizeof(tmp));
+            if (k == 0) return !buf_.empty();
+            buf_.insert(buf_.end(), tmp, tmp + k);
+        }
+        return true;
+    }
+    /** Az első ADTS-szinkronig eldobja a bájtokat (12 bit 0xFFF, layer 00). */
+    bool syncAdts() {
+        for (int guard = 0; guard < 64; ++guard) {
+            for (size_t i = 0; i + 1 < buf_.size(); ++i) {
+                if (buf_[i] == 0xFF && (buf_[i + 1] & 0xF6) == 0xF0) {
+                    buf_.erase(buf_.begin(), buf_.begin() + static_cast<std::ptrdiff_t>(i));
+                    return fillTo(kWant);
+                }
+            }
+            if (!buf_.empty()) buf_.erase(buf_.begin(), buf_.end() - 1);
+            if (!fillTo(kWant) || buf_.size() < 2) return false;
+        }
+        return false;
+    }
+    /** Egy keret dekódolása a left_-be; false: a kapcsolat vége vagy tartós hiba. */
+    bool decodeFrame(bool first) {
+        for (int errors = 0; errors < 64;) {
+            fillTo(kWant);
+            if (buf_.size() < 8) return false;
+            NeAACDecFrameInfo fi{};
+            void* pcm = NeAACDecDecode(h_, &fi, buf_.data(), static_cast<unsigned long>(buf_.size()));
+            if (fi.error || !pcm) {
+                // sérült keret: egy bájt eldobása és újraszinkronizálás a következő ADTS-fejlécre
+                ++errors;
+                buf_.erase(buf_.begin());
+                if (!syncAdts()) return false;
+                continue;
+            }
+            if (fi.bytesconsumed == 0) return false;
+            buf_.erase(buf_.begin(), buf_.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(fi.bytesconsumed, buf_.size())));
+            if (fi.samples == 0 || fi.channels == 0) continue;
+            if (first && rate == 0) {
+                rate = static_cast<uint32_t>(fi.samplerate);
+                ch = fi.channels;
+            } else if (fi.samplerate != rate || fi.channels != ch) {
+                formatChanged = true;
+                return false;
+            }
+            const float* s = static_cast<const float*>(pcm);
+            left_.assign(s, s + fi.samples);
+            leftOff_ = 0;
+            return true;
+        }
+        return false;
+    }
+    Reader* r_ = nullptr;
+    NeAACDecHandle h_ = nullptr;
+    std::vector<uint8_t> buf_;
+    std::vector<float> left_;
+    size_t leftOff_ = 0;
+};
+
 std::unique_ptr<Codec> makeCodec(StreamFormat f, Reader& r, Core& c) {
+    if (f == StreamFormat::Aac) {
+        auto d = std::make_unique<AacCodec>();
+        return d->init(r) ? std::move(d) : nullptr;
+    }
     if (f == StreamFormat::Mp3) {
         auto d = std::make_unique<Mp3Codec>();
         return d->init(r) ? std::move(d) : nullptr;
@@ -1010,7 +1122,7 @@ void session(Core& c, std::string& err, bool& fatal, uint64_t& framesOut) {
             u = next;
             continue;
         }
-        if (f != StreamFormat::Mp3 && f != StreamFormat::Ogg && f != StreamFormat::Flac) {
+        if (f != StreamFormat::Mp3 && f != StreamFormat::Ogg && f != StreamFormat::Flac && f != StreamFormat::Aac) {
             err = f == StreamFormat::Unknown ? "format" : formatName(f);
             fatal = true;
             return;
@@ -1213,6 +1325,7 @@ RadioStatus RadioDecoder::statusOf(const Core& c) {
     s.bitrate = c.bitrate;
     s.reconnects = c.reconnects;
     s.droppedFrames = c.dropped;
+    s.framesIn = c.wr;
     s.icyName = c.icyName;
     s.streamTitle = c.title;
     return s;

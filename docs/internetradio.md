@@ -6,8 +6,10 @@ felmintavételezés, mérők, vízesés), minden platformon (Windows, macOS, Lin
 - Állomáslista: a felhasználó saját listája (név + cím), előre betöltött állomás nincs. Mentés: `radio.json` a
   beállítások mellett (Linux / Pi / macOS: a konfigurációs mappa, Windows: `%APPDATA%\Aqulify`).
 - Felület: Zenetár panel → **Rádió** fül (új állomás, lejátszás, átnevezés, cím módosítása, sorrend, törlés).
-- Formátumok: MP3, Ogg Vorbis, Ogg Opus, FLAC (natív és Ogg); ICY metaadat („most szól”), PLS és M3U lista.
-  Nem támogatott (külön hibakóddal): AAC (`aac`) és HLS (`hls`).
+- Formátumok: MP3, AAC (ADTS-folyam; AAC-LC, HE-AAC, HE-AACv2, a FAAD2 2.11.4 könyvtárral, `third_party/faad2`),
+  Ogg Vorbis, Ogg Opus, FLAC (natív és Ogg); ICY metaadat („most szól”), PLS és M3U lista. A láncolt Ogg-adásnál (a
+  szerver számonként új logikai folyamot kezd, pl. FLAC-adóknál) a motor ugyanazon a kapcsolaton új dekódert indít, a
+  cím az új lánc Vorbis-megjegyzéséből jön. Nem támogatott (külön hibakóddal): HLS (`hls`), MP4-konténeres AAC.
 - Puffer: indulás előtt 2 s; ha kiürül, a lejátszó csendet ad és újrapufferel (nem áll le). Legfeljebb 10 s; túlcsorduláskor
   (szünet, órajel-eltérés) a legrégebbi rész kiesik, az adás élő marad.
 - Újracsatlakozás: a kapcsolat megszakadásakor magától, 1, 2, 4 … legfeljebb 30 s várakozással; 8 egymás utáni sikertelen
@@ -69,7 +71,7 @@ A `radio_play` aszinkron: a válasz azonnal jön, a kapcsolódás állapota az �
 
 - `rev`: ha változik, a lista megváltozott (`radio_list` újra).
 - `state`: `idle` | `connecting` | `buffering` | `playing` | `reconnecting` | `error`.
-- `error` (hiba és újracsatlakozás esetén): `dns`, `blocked`, `connect`, `timeout`, `tls`, `http`, `aac`, `hls`, `html`,
+- `error` (hiba és újracsatlakozás esetén): `dns`, `blocked`, `connect`, `timeout`, `tls`, `http`, `hls`, `html`,
   `format`, `decode`, `playlist`, `redirect`, `nocurl`, `formatChange`, `eof`, `empty`, `output`, `url`, `aborted`.
 - `codec`, `bitrate` (kbit/s, az `icy-br` fejlécből; 0: ismeretlen), `reconnects` (ha nem 0).
 

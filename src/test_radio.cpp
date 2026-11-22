@@ -453,6 +453,7 @@ static void testNetwork() {
     const auto ogg = readFile(kData + "/player_stereo44.ogg");
     const auto opus = readFile(kData + "/player_stereo48.opus");
     const auto flac = readFile(kData + "/player_stereo44.flac");
+    const auto aac = readFile(kData + "/player_stereo44.aac");   // saját szinusz (tools/make_aac_test_data.cpp)
     CHECK(!mp3.empty() && !ogg.empty() && !opus.empty() && !flac.empty(), "tesztfájlok (%zu, %zu, %zu, %zu bájt)", mp3.size(), ogg.size(), opus.size(), flac.size());
     std::vector<uint8_t> mp3x3;
     for (int i = 0; i < 3; ++i) mp3x3.insert(mp3x3.end(), mp3.begin(), mp3.end());
@@ -488,6 +489,9 @@ static void testNetwork() {
         } else if (path == "/hls") {
             sv.sendStr(s, "HTTP/1.1 200 OK\r\nContent-Type: application/vnd.apple.mpegurl\r\n\r\n#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:10,\nseg1.ts\n");
         } else if (path == "/aac") {
+            sv.sendStr(s, "HTTP/1.1 200 OK\r\nContent-Type: audio/aac\r\n\r\n");
+            sv.sendAll(s, aac.data(), aac.size());
+        } else if (path == "/aacjunk") {
             sv.sendStr(s, "HTTP/1.1 200 OK\r\nContent-Type: audio/aacp\r\n\r\n");
             const unsigned char adts[] = { 0xFF, 0xF1, 0x50, 0x80, 0x02, 0x1F, 0xFC, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
             for (int i = 0; i < 64; ++i) sv.sendAll(s, adts, sizeof(adts));
@@ -580,7 +584,7 @@ static void testNetwork() {
         CHECK(d && d->status().codec == "mp3", "PLS lejátszási lista követése (%s)", err.c_str());
     }
     {
-        struct { const char* path; const char* want; } bad[] = { { "/hls", "hls" }, { "/aac", "aac" }, { "/html", "html" },
+        struct { const char* path; const char* want; } bad[] = { { "/hls", "hls" }, { "/aacjunk", "decode" }, { "/html", "html" },
                                                                    { "/404", "http" }, { "/bighead", "http" } };
         for (auto& b : bad) {
             auto d = RadioDecoder::open(testCfg(srv.url(b.path)), err);
@@ -589,7 +593,7 @@ static void testNetwork() {
     }
     {
         struct { const char* path; const char* codec; uint32_t rate; } ok[] = { { "/ogg", "vorbis", 44100 }, { "/opus", "opus", 48000 },
-                                                                                 { "/flac", "flac", 44100 } };
+                                                                                 { "/flac", "flac", 44100 }, { "/aac", "aac", 44100 } };
         for (auto& o : ok) {
             auto d = RadioDecoder::open(testCfg(srv.url(o.path)), err);
             CHECK(d && d->status().codec == o.codec && d->sampleRate() == o.rate && d->channels() == 2, "%s: %s, %u Hz (%s)", o.path, o.codec, o.rate, err.c_str());
@@ -599,6 +603,42 @@ static void testNetwork() {
                 while (msSince(t0) < 4000 && (loud < 30000 || d->status().reconnects < 1)) loud += pump(*d, 200);
                 CHECK(loud > 10000, "%s: szól (%zu keret), újracsatlakozás: %llu", o.path, loud, static_cast<unsigned long long>(d->status().reconnects));
             }
+        }
+    }
+    {
+        // AAC: a dekódolt jel a kódolt szinusz (bal 440 Hz, jobb 880 Hz), nem csak „valami szól”
+        CHECK(aac.size() > 10000, "AAC tesztfájl (%zu bájt)", aac.size());
+        auto d = RadioDecoder::open(testCfg(srv.url("/aac")), err);
+        if (d) {
+            std::vector<float> x, buf(1024 * 2);
+            const auto t0 = Clock::now();
+            bool started = false;
+            while (x.size() < 16384 * 2 && msSince(t0) < 3000) {
+                const size_t n = d->read(buf.data(), 1024);
+                if (n == 0) break;
+                for (size_t i = 0; i < n && x.size() < 16384 * 2; ++i) {
+                    if (!started && std::fabs(buf[2 * i]) < 0.05f) continue;   // kódoló-előtét és csend
+                    started = true;
+                    x.push_back(buf[2 * i]);
+                    x.push_back(buf[2 * i + 1]);
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+            auto amp = [&](size_t c, double f) {
+                double re = 0, im = 0;
+                const size_t n = x.size() / 2;
+                for (size_t i = 0; i < n; ++i) {
+                    const double w = 0.5 - 0.5 * std::cos(2 * 3.14159265358979 * i / (n - 1));
+                    re += w * x[2 * i + c] * std::cos(2 * 3.14159265358979 * f * i / 44100.0);
+                    im -= w * x[2 * i + c] * std::sin(2 * 3.14159265358979 * f * i / 44100.0);
+                }
+                return 2.0 * std::sqrt(re * re + im * im) / (n * 0.5);
+            };
+            const double l440 = amp(0, 440), l880 = amp(0, 880), r880 = amp(1, 880), r440 = amp(1, 440);
+            CHECK(x.size() == 16384 * 2 && l440 > 0.4 && r880 > 0.4 && l880 < 0.05 && r440 < 0.05,
+                  "AAC: bal 440 Hz %.3f (880: %.3f), jobb 880 Hz %.3f (440: %.3f)", l440, l880, r880, r440);
+        } else {
+            CHECK(false, "AAC megnyitása (%s)", err.c_str());
         }
     }
     {
@@ -767,6 +807,8 @@ static int liveProbe(const char* urls) {
         std::vector<float> buf(1024 * d->channels());
         const auto t1 = Clock::now();
         double nextPrint = 0;
+        uint64_t in20 = 0;
+        double t20 = 0;
         // valós idejű olvasás (mint a lejátszó): 1024 keret, utána annyi várakozás, amennyi ideig szólna
         while (msSince(t1) < sec * 1000.0) {
             const size_t n = d->read(buf.data(), 1024);
@@ -780,9 +822,15 @@ static int liveProbe(const char* urls) {
                 std::printf("  %5.1f s  %-12s %s %d kbit/s  újracsatl.: %llu  eldobva: %llu  szól: %s – %s\n", msSince(t1) / 1000.0,
                             stateName(st.state), st.codec.c_str(), st.bitrate, static_cast<unsigned long long>(st.reconnects),
                             static_cast<unsigned long long>(st.droppedFrames), ar.c_str(), ti.c_str());
+                if (!in20 && msSince(t1) >= 20000) { in20 = st.framesIn; t20 = msSince(t1); }
+                if (in20 && msSince(t1) > t20 + 1000)
+                    std::printf("           a szerver üteme 20 s óta: %.1f keret/s (névleges %u)\n",
+                                (st.framesIn - in20) * 1000.0 / (msSince(t1) - t20), d->sampleRate());
                 nextPrint += 5000;
             }
-            std::this_thread::sleep_for(std::chrono::microseconds(static_cast<long long>(1e6 * 1024 / d->sampleRate())));
+            // abszolút időzítés (mint egy DAC): annyi keretet olvasunk, amennyi az eltelt idő alatt szólna
+            while (static_cast<double>(total) > msSince(t1) / 1000.0 * d->sampleRate() && msSince(t1) < sec * 1000.0)
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
         const RadioStatus st = d->status();
         std::printf("  összesen %zu keret, ebből hangos %.0f%%, újracsatlakozás %llu, utolsó hiba: %s\n", total,

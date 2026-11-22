@@ -19,8 +19,8 @@
  * Időkorlátok: kapcsolódás 10 s, a fejléc 15 s, adat nélkül legfeljebb 20 s. Méretkorlátok: fejléc 16 KB, lejátszási
  * lista 64 KB, ICY-blokk 4080 bájt, PCM-puffer legfeljebb 10 s (a régebbi rész túlcsorduláskor kiesik).
  *
- * Formátumok: MP3, Ogg Vorbis, Ogg Opus, FLAC (natív és Ogg), ICY metaadat („most szól”), PLS / M3U lista. Nem: AAC
- * (nincs beépített dekóder) és HLS (szegmentált folyam); ezekre külön hibakód jön ("aac", "hls").
+ * Formátumok: MP3, AAC (ADTS; AAC-LC, HE-AAC, HE-AACv2 a FAAD2-vel), Ogg Vorbis, Ogg Opus, FLAC (natív és Ogg; a láncolt
+ * Ogg-adásnál számonként új dekóder), ICY metaadat („most szól”), PLS / M3U lista. Nem: HLS (szegmentált folyam, "hls").
  */
 #include <atomic>
 #include <cstdint>
@@ -76,6 +76,7 @@ struct RadioStatus {
     int bitrate = 0;          // kbit/s az icy-br fejlécből (0: ismeretlen)
     uint64_t reconnects = 0;
     uint64_t droppedFrames = 0;
+    uint64_t framesIn = 0;       // a kapcsolat(ok)ból dekódolt összes keret (diagnosztika: a szerver üteme)
     std::string icyName;      // a szerver által küldött állomásnév (csak tájékoztató)
     std::string streamTitle;  // a hallott rész „most szól” szövege
 };
