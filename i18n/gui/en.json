@@ -1081,5 +1081,9 @@
   "dual.kindPkg": "system package (/usr/bin)",
   "dual.copy": "Copy command",
   "dual.copied": "Copied",
-  "dual.dismiss": "Dismiss"
+  "dual.dismiss": "Dismiss",
+  "remote.bluetoothWindowsOnly": "Bluetooth remote control is currently available on Windows only.",
+  "remote.firewallHint": "If your phone sees this computer but cannot connect, the firewall may be blocking port {port}/tcp:",
+  "remote.firewallCopy": "Copy",
+  "remote.firewallCopied": "Command copied to clipboard."
 }

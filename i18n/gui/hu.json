@@ -1081,5 +1081,9 @@
   "dual.kindPkg": "rendszercsomag (/usr/bin)",
   "dual.copy": "Parancs másolása",
   "dual.copied": "Másolva",
-  "dual.dismiss": "Elrejtés"
+  "dual.dismiss": "Elrejtés",
+  "remote.bluetoothWindowsOnly": "Bluetooth-távirányító jelenleg csak Windowson érhető el.",
+  "remote.firewallHint": "Ha a telefon látja a gépet, de nem kapcsolódik, a tűzfal blokkolhatja a {port}/tcp portot:",
+  "remote.firewallCopy": "Másolás",
+  "remote.firewallCopied": "Parancs a vágólapra másolva."
 }

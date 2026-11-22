@@ -131,6 +131,14 @@ public:
     RfcommListener& operator=(const RfcommListener&) = delete;
 
     bool isOpen() const { return sock_ != net::kInvalidSocket; }
+    /** Igaz, ha a Bluetooth RFCOMM szerver támogatott ezen a platformon (jelenleg csak Windows). */
+    static constexpr bool isSupported() {
+#ifdef _WIN32
+        return true;
+#else
+        return false;
+#endif
+    }
     /** A gép Bluetooth-címe ("AA:BB:…"); üres, ha nem sikerült megállapítani. */
     const std::string& address() const { return addr_; }
 

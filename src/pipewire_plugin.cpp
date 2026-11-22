@@ -27,6 +27,7 @@
 #include "health_monitor.hpp"
 #include "report_sender.hpp"
 #include "library_bridge.hpp"
+#include "linux_headless.hpp"
 #include "linux_store.hpp"
 #include "linux_instance_lock.hpp"
 #include "live_upsample.hpp"
@@ -441,6 +442,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Használat: aqulify-engine [opciók]\n"
                      "  --port N         csak ezt a WebSocket portot próbálja (alapból: 47810-47814, majd 8080)\n"
                      "  --listen lan     hálózati távvezérlés bekapcsolása (47820-as port és mDNS hirdető)\n"
+                     "  --headless       fej nélküli (kijelző nélküli) párosítási mód kényszerítése\n"
                      "  --pair           párosító kód a telefonhoz a már futó motortól (kijelző nélkül, pl. SSH-n)\n"
                      "A motor egy \"Aqulify\" nevű kimeneti hangeszközt hoz létre. Válaszd ki a hangbeállításokban\n"
                      "(vagy: pactl set-default-sink aqulify_sink), és minden hang a DSP láncon át szól.\n";
@@ -485,6 +487,7 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i + 1 < argc; ++i)
         if (std::strcmp(argv[i], "--port") == 0) ports = { std::atoi(argv[i + 1]) };
 
+    const bool forceHeadless = hasArg(argc, argv, "--headless");
     bool listenLan = hasArg(argc, argv, "--remote");
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--listen") == 0 && i + 1 < argc && std::strcmp(argv[i + 1], "lan") == 0) {
@@ -1463,9 +1466,13 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    const auto headlessDec = aq::linux_headless::detect(forceHeadless);
+    std::cout << aq::linux_headless::formatLogLine(headlessDec) << "\n";
+
     std::unique_ptr<WebSocketBridge> bridge;
     for (int p : ports) {
         auto b = std::make_unique<WebSocketBridge>(p);
+        b->setHeadlessMode(headlessDec.headless);
         if (b->start(cb)) {
             if (ports.size() > 1 && p != kEnginePorts[0]) defaultPortBusy.store(true, std::memory_order_relaxed);
             bridge = std::move(b);
@@ -1480,12 +1487,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    const bool isHeadlessEnv = (!std::getenv("DISPLAY") || std::getenv("DISPLAY")[0] == '\0') &&
-                               (!std::getenv("WAYLAND_DISPLAY") || std::getenv("WAYLAND_DISPLAY")[0] == '\0');
     if (listenLan) {
-        bridge->setRemoteEnabled(true, /*openPairCode=*/!isHeadlessEnv);
+        bridge->setRemoteEnabled(true, /*openPairCode=*/!headlessDec.headless);
         std::cout << "[Hálózat] Távvezérlés parancssorból bekapcsolva (--listen lan).\n";
-    } else if (isHeadlessEnv && !bridge->remoteEnabled() && linux_store::loadRemote().empty()) {
+    } else if (headlessDec.headless && !bridge->remoteEnabled() && linux_store::loadRemote().empty()) {
         // Képernyő nélküli (headless) első indítás: automatikusan gazdátlan (claimable) módban indul
         bridge->setRemoteEnabled(true, /*openPairCode=*/false);
         std::cout << "[Headless] Képernyő nélküli mód: gazdátlan beállítás aktív (mDNS claimable=1).\n";

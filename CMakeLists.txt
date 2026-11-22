@@ -212,6 +212,15 @@ if(WIN32)
     target_link_libraries(test_headless_pairing PRIVATE ws2_32 iphlpapi)
 endif()
 
+# Linux párosítási mód (headless/normál), localAddresses() rangsorolás és Bluetooth platform-jelzés
+add_executable(test_linux_pairing src/test_linux_pairing.cpp)
+target_compile_definitions(test_linux_pairing PRIVATE AQULIFY_VERSION="${PROJECT_VERSION}")
+target_link_libraries(test_linux_pairing PRIVATE ee_dsp_core Threads::Threads)
+target_include_directories(test_linux_pairing PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+if(WIN32)
+    target_link_libraries(test_linux_pairing PRIVATE ws2_32 iphlpapi)
+endif()
+
 # 9b. Tesztalkalmazás: DSD (.dsf/.dff) fejléc, FIR szűrő, PCM dekódolás, tekerés, ID3v2, DST elutasítás, DoP 1.1
 add_executable(test_dsd src/test_dsd.cpp)
 target_link_libraries(test_dsd PRIVATE aq_player Threads::Threads)

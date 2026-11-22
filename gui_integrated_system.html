@@ -6080,9 +6080,10 @@ var qrcode = function() {
       <label class="ao-row ao-check"><input type="checkbox" id="chkRemoteEnable" onchange="remoteSetEnabled(this.checked)"> <span data-i18n="remote.enable">Hálózati elérés a telefonos távirányítóhoz</span></label>
       <div class="ao-hint" style="margin:0;" data-i18n="remote.enableHint">Csak megbízható otthoni hálózaton kapcsold be: a kapcsolat a helyi hálózaton titkosítatlan. Párosítás nélkül senki nem vezérelheti a gépet.</div>
       <div id="remoteBtRow" style="display:none; flex-direction:column; gap:6px;">
-        <label class="ao-row ao-check"><input type="checkbox" id="chkRemoteBt" onchange="remoteSetBluetooth(this.checked)"> <span data-i18n="remote.bluetooth">Bluetooth-tartalék: ha a Wi-Fi nem éri el a gépet, a telefon Bluetoothon folytatja</span></label>
+        <label id="remoteBtLabel" class="ao-row ao-check"><input type="checkbox" id="chkRemoteBt" onchange="remoteSetBluetooth(this.checked)"> <span data-i18n="remote.bluetooth">Bluetooth-tartalék: ha a Wi-Fi nem éri el a gépet, a telefon Bluetoothon folytatja</span></label>
         <div id="remoteBtHint" class="ao-hint" style="margin:0;" data-i18n="remote.bluetoothHint">A telefont egyszer párosítsd a géppel a Bluetooth-beállításokban. A zene átküldéséhez Wi-Fi kell.</div>
         <div id="remoteBtUnavailable" class="ao-hint" hidden style="margin:0;" data-i18n="remote.bluetoothUnavailable">Ezen a gépen most nem érhető el Bluetooth.</div>
+        <div id="remoteBtWinOnly" class="ao-hint" hidden style="margin:0;" data-i18n="remote.bluetoothWindowsOnly">Bluetooth-távirányító jelenleg csak Windowson érhető el.</div>
       </div>
       <div id="remotePairBox" style="display:none; gap:16px; align-items:center; flex-wrap:wrap;">
         <div id="remoteQr" style="background:#fff; padding:10px; border-radius:8px; line-height:0;"></div>
@@ -6093,6 +6094,19 @@ var qrcode = function() {
           <div id="remoteCodeTime" class="ao-hint" style="margin:0;"></div>
           <div><button type="button" class="adw-btn" onclick="remoteNewCode()" data-i18n="remote.newCode">Új kód</button></div>
           <div id="remoteLocked" class="ao-hint" hidden style="margin:0; color:#D9534F;" data-i18n="remote.locked">Túl sok hibás próbálkozás: a párosítás egy ideig szünetel.</div>
+        </div>
+      </div>
+      <div id="remoteFirewallBox" style="display:none; flex-direction:column; gap:8px; background:var(--aq-input); border:1px solid var(--aq-line); border-radius:8px; padding:10px 12px;">
+        <div id="remoteFirewallHint" class="ao-hint" style="margin:0;"></div>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span style="font-size:var(--aq-fs-sub); font-weight:600; color:var(--aq-text-2); min-width:58px;">Fedora:</span>
+          <code id="remoteFwFedora" style="flex:1 1 220px; font-size:0.78rem; padding:4px 6px; border-radius:4px; background:var(--aq-surface); border:1px solid var(--aq-line); color:var(--aq-text); word-break:break-all; user-select:all;"></code>
+          <button type="button" class="mini-btn" onclick="copyRemoteFwCmd('remoteFwFedora')" data-i18n="remote.firewallCopy">Másolás</button>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span style="font-size:var(--aq-fs-sub); font-weight:600; color:var(--aq-text-2); min-width:58px;">Ubuntu:</span>
+          <code id="remoteFwUbuntu" style="flex:1 1 220px; font-size:0.78rem; padding:4px 6px; border-radius:4px; background:var(--aq-surface); border:1px solid var(--aq-line); color:var(--aq-text); word-break:break-all; user-select:all;"></code>
+          <button type="button" class="mini-btn" onclick="copyRemoteFwCmd('remoteFwUbuntu')" data-i18n="remote.firewallCopy">Másolás</button>
         </div>
       </div>
       <div id="remoteNotListening" class="ao-hint" hidden style="margin:0; color:#D9534F;" data-i18n="remote.notListening">A hálózati elérés be van kapcsolva, de a port nem nyitható meg.</div>
@@ -14995,10 +15009,25 @@ function onRemoteState(st) {
   renderRemotePanel();
 }
 
-/** A helyi hálózati címek, a jellemző otthoni tartományok elöl (a virtuális hálózati kártyák címei hátul). */
+/** A helyi hálózati címek a motor által rangsorolt sorrendben (fizikai LAN/Wi-Fi elöl, virtuális interfészek hátul). */
 function remoteAddresses(st) {
-  const rank = a => /^192\.168\./.test(a) ? 0 : /^10\./.test(a) ? 1 : /^172\.(1[6-9]|2\d|3[01])\./.test(a) ? 3 : 2;
-  return (st.addresses || []).slice().sort((a, b) => rank(a) - rank(b)).slice(0, 4);
+  return (st.addresses || []).slice(0, 4);
+}
+
+function copyRemoteFwCmd(elId) {
+  const el = document.getElementById(elId);
+  const txt = el ? el.textContent.trim() : "";
+  if (!txt) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(() => showToast(t("remote.firewallCopied"), 2000)).catch(() => {});
+  } else {
+    const ta = document.createElement("textarea");
+    ta.value = txt;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); showToast(t("remote.firewallCopied"), 2000); } catch (e) {}
+    ta.remove();
+  }
 }
 
 function renderRemotePanel() {
@@ -15011,15 +15040,41 @@ function renderRemotePanel() {
   const show = !!(st.enabled && st.listening);
   document.getElementById("remotePairBox").style.display = show ? "flex" : "none";
   document.getElementById("remoteNotListening").hidden = !(st.enabled && !st.listening);
+  const fwBox = document.getElementById("remoteFirewallBox");
+  if (fwBox) {
+    const showFw = show && st.hostPlatform === "linux";
+    fwBox.style.display = showFw ? "flex" : "none";
+    if (showFw) {
+      const p = st.port || 47820;
+      document.getElementById("remoteFirewallHint").textContent = t("remote.firewallHint", { port: p });
+      document.getElementById("remoteFwFedora").textContent =
+        "sudo firewall-cmd --add-port=" + p + "/tcp --permanent && sudo firewall-cmd --reload";
+      document.getElementById("remoteFwUbuntu").textContent = "sudo ufw allow " + p + "/tcp";
+    }
+  }
   const btRow = document.getElementById("remoteBtRow");
   if (!st.bluetooth) {
     btRow.style.display = "none";
   } else {
     btRow.style.display = "flex";
     const btChk = document.getElementById("chkRemoteBt");
-    btChk.checked = !!st.bluetooth.enabled;
-    btChk.disabled = !engineWsOpen();
-    document.getElementById("remoteBtUnavailable").hidden = !(st.enabled && st.bluetooth.enabled && !st.bluetooth.listening);
+    const btLbl = document.getElementById("remoteBtLabel");
+    const btSupported = st.bluetooth.supported !== false;
+    if (!btSupported) {
+      btChk.checked = false;
+      btChk.disabled = true;
+      if (btLbl) { btLbl.style.opacity = "0.55"; btLbl.style.cursor = "default"; }
+      document.getElementById("remoteBtHint").hidden = true;
+      document.getElementById("remoteBtUnavailable").hidden = true;
+      document.getElementById("remoteBtWinOnly").hidden = false;
+    } else {
+      btChk.checked = !!st.bluetooth.enabled;
+      btChk.disabled = !engineWsOpen();
+      if (btLbl) { btLbl.style.opacity = ""; btLbl.style.cursor = ""; }
+      document.getElementById("remoteBtHint").hidden = false;
+      document.getElementById("remoteBtUnavailable").hidden = !(st.enabled && st.bluetooth.enabled && !st.bluetooth.listening);
+      document.getElementById("remoteBtWinOnly").hidden = true;
+    }
   }
   if (show) {
     const addrs = remoteAddresses(st);
