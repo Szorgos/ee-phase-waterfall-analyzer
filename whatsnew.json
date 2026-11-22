@@ -5,119 +5,119 @@
       "date": "2026-11-22",
       "notes": {
         "hu": [
-          "Új: internetrádió a beépített lejátszóban (MP3, Ogg Vorbis, Opus, FLAC, AAC), saját állomáslistával és opcionális, alapból kikapcsolt állomáskeresővel.",
+          "Új: internetrádió a beépített lejátszóban és a telefonos távirányítón (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC), saját állomáslistával és opcionális, alapból kikapcsolt állomáskeresővel.",
           "Új: saját felmintavételező motorok (Aqulify FFT64 és FFT-DD) választható fázissal, és a „Minden hang” mód, amely a más programok hangját is felmintavételezi (Linux, Windows, macOS); a HydrogenAudio SRC-összehasonlításban az FFT-DD 99,85 %-ot ért el.",
-          "Új Linuxon és Raspberry Pi-n: hálózati vevő (a haladó beállításokban kapcsolható) és Bluetooth-tartalék a telefonos távirányítóhoz; a 3D vízesés lefelé folyásának éle most lebukik a peremen."
+          "Új Linuxon és Raspberry Pi-n: hálózati vevő (a haladó beállításokban és a telefonos távirányítón kapcsolható) és Bluetooth-tartalék a telefonos távirányítóhoz; a 3D vízesés lefelé folyásának éle most lebukik a peremen."
         ],
         "en": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
+          "New: internet radio in the built-in player and on the phone remote (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
           "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "New on Linux and Raspberry Pi: a network receiver (switchable in advanced settings and on the phone remote) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
         ],
         "es": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Nuevo: radio por internet en el reproductor integrado y en el mando del teléfono (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC), con lista propia de emisoras y buscador opcional desactivado por defecto.",
+          "Nuevo: motores propios de remuestreo (Aqulify FFT64 y FFT-DD) con fase seleccionable y modo «Todo el audio» que también sobremuestrea el sonido de otros programas (Linux, Windows, macOS); en la comparativa SRC de HydrogenAudio, FFT-DD obtuvo un 99,85 %.",
+          "Nuevo en Linux y Raspberry Pi: receptor de red (activable en los ajustes avanzados y en el mando del teléfono) y respaldo Bluetooth para el mando del teléfono; el flujo descendente de la cascada 3D ahora cae suavemente por el borde."
         ],
         "fr": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Nouveau : radio Internet dans le lecteur intégré et sur la télécommande mobile (1.5.0 ; MP3, Ogg Vorbis, Opus, FLAC, AAC) avec votre liste de stations et une recherche de stations facultative désactivée par défaut.",
+          "Nouveau : moteurs de rééchantillonnage maison (Aqulify FFT64 et FFT-DD) avec phase au choix, et mode « Tout l’audio » qui suréchantillonne aussi le son des autres programmes (Linux, Windows, macOS) ; dans le comparatif SRC HydrogenAudio, FFT-DD a obtenu 99,85 %.",
+          "Nouveau sur Linux et Raspberry Pi : récepteur réseau (activable dans les paramètres avancés et sur la télécommande mobile) et secours Bluetooth pour la télécommande ; le flux descendant de la cascade 3D plonge désormais au bord."
         ],
         "zh": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "新增：内置播放器和手机遥控器（1.5.0）支持网络电台（MP3、Ogg Vorbis、Opus、FLAC、AAC），提供自定义电台列表以及默认关闭的可选电台搜索。",
+          "新增：自研重采样引擎（Aqulify FFT64 与 FFT-DD，可选相位）及“全部音频”模式，可同时对其他程序的音频升频（Linux、Windows、macOS）；在 HydrogenAudio SRC 对比评测中 FFT-DD 获得 99.85 %。",
+          "Linux 与 Raspberry Pi 新增：网络接收器（可在高级设置和手机遥控器中开启）与手机遥控器蓝牙备用连接；3D 瀑布图向下流动的边缘现在会自然垂落。"
         ],
         "de": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Neu: Internetradio im integrierten Player und in der Telefon-Fernbedienung (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) mit eigener Senderliste und optionaler, standardmäßig ausgeschalteter Sendersuche.",
+          "Neu: eigene Resampling-Engines (Aqulify FFT64 und FFT-DD) mit wählbarer Phase sowie der Modus „Gesamter Ton“, der auch den Ton anderer Programme hochrechnet (Linux, Windows, macOS); im HydrogenAudio-SRC-Vergleich erreichte FFT-DD 99,85 %.",
+          "Neu unter Linux und auf dem Raspberry Pi: Netzwerkempfänger (in den erweiterten Einstellungen und auf der Telefon-Fernbedienung schaltbar) und Bluetooth-Fallback für die Telefon-Fernbedienung; der abwärts fließende 3D-Wasserfall fällt nun weich über die Kante ab."
         ],
         "it": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Nuovo: radio Internet nel lettore integrato e sul telecomando del telefono (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) con elenco personale delle stazioni e ricerca facoltativa disattivata per impostazione predefinita.",
+          "Nuovo: motori di ricampionamento proprietari (Aqulify FFT64 e FFT-DD) con fase selezionabile e modalità «Tutto l’audio» che ricampiona anche l’audio degli altri programmi (Linux, Windows, macOS); nel confronto SRC di HydrogenAudio FFT-DD ha ottenuto il 99,85 %.",
+          "Nuovo su Linux e Raspberry Pi: ricevitore di rete (attivabile nelle impostazioni avanzate e sul telecomando) e riserva Bluetooth per il telecomando del telefono; il flusso verso il basso della cascata 3D ora scende morbido sul bordo."
         ],
         "nl": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Nieuw: internetradio in de ingebouwde speler en op de telefoonafstandsbediening (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) met eigen zenderlijst en een optionele, standaard uitgeschakelde zenderzoeker.",
+          "Nieuw: eigen resampling-engines (Aqulify FFT64 en FFT-DD) met kiesbare fase en een modus ‘Alle audio’ die ook het geluid van andere programma’s upsamplet (Linux, Windows, macOS); in de HydrogenAudio SRC-vergelijking scoorde FFT-DD 99,85 %.",
+          "Nieuw op Linux en Raspberry Pi: netwerkontvanger (in te schakelen in de geavanceerde instellingen en op de telefoon) en Bluetooth-terugval voor de telefoonafstandsbediening; de neerwaartse 3D-waterval buigt nu vloeiend over de rand."
         ],
         "pl": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Nowość: radio internetowe we wbudowanym odtwarzaczu i w pilocie na telefonie (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) z własną listą stacji oraz opcjonalną, domyślnie wyłączoną wyszukiwarką stacji.",
+          "Nowość: własne silniki przepróbkowania (Aqulify FFT64 i FFT-DD) z wyborem fazy oraz tryb „Cały dźwięk” przepróbkowujący także dźwięk z innych programów (Linux, Windows, macOS); w porównaniu SRC HydrogenAudio silnik FFT-DD uzyskał 99,85 %.",
+          "Nowość na Linuksie i Raspberry Pi: odbiornik sieciowy (włączany w ustawieniach zaawansowanych i na telefonie) oraz zapasowe połączenie Bluetooth dla pilota w telefonie; dolny przepływ wodospadu 3D łagodnie opada teraz na krawędzi."
         ],
         "ru": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Новое: интернет-радио во встроенном плеере и в пульте на телефоне (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) со своим списком станций и необязательным поиском станций (по умолчанию выключен).",
+          "Новое: собственные движки передискретизации (Aqulify FFT64 и FFT-DD) с выбором фазы и режим «Весь звук», повышающий частоту звука других программ (Linux, Windows, macOS); в сравнении SRC на HydrogenAudio FFT-DD набрал 99,85 %.",
+          "Новое в Linux и на Raspberry Pi: сетевой приёмник (включается в расширенных настройках и с телефона) и резервный канал Bluetooth для телефонного пульта; край нисходящего 3D-водопада теперь плавно уходит вниз."
         ],
         "pt": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Novo: rádio por internet no leitor integrado e no controlo remoto do telemóvel (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) com lista própria de estações e pesquisa opcional desativada por predefinição.",
+          "Novo: motores próprios de reamostragem (Aqulify FFT64 e FFT-DD) com fase selecionável e modo «Todo o áudio» que também faz upsampling do áudio de outros programas (Linux, Windows, macOS); na comparação SRC do HydrogenAudio o FFT-DD obteve 99,85 %.",
+          "Novo no Linux e Raspberry Pi: recetor de rede (ativável nas definições avançadas e no telemóvel) e alternativa Bluetooth para o controlo remoto; o fluxo descendente da cascata 3D agora curva suavemente na borda."
         ],
         "ro": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Nou: radio prin internet în playerul integrat și pe telecomanda din telefon (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC), cu listă proprie de posturi și căutare opțională oprită implicit.",
+          "Nou: motoare proprii de reeșantionare (Aqulify FFT64 și FFT-DD) cu fază selectabilă și modul «Tot sunetul» care supraeșantionează și sunetul altor programe (Linux, Windows, macOS); în comparația SRC HydrogenAudio, FFT-DD a obținut 99,85 %.",
+          "Nou pe Linux și Raspberry Pi: receptor de rețea (activabil în setările avansate și pe telefon) și rezervă Bluetooth pentru telecomanda din telefon; curgerea în jos a cascadei 3D coboară acum lin peste margine."
         ],
         "el": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Νέο: διαδικτυακό ραδιόφωνο στο ενσωματωμένο πρόγραμμα αναπαραγωγής και στο τηλεχειριστήριο τηλεφώνου (1.5.0· MP3, Ogg Vorbis, Opus, FLAC, AAC) με δική σας λίστα σταθμών και προαιρετική αναζήτηση σταθμών (απενεργοποιημένη από προεπιλογή).",
+          "Νέο: ιδιόκτητες μηχανές αναδειγματοληψίας (Aqulify FFT64 και FFT-DD) με επιλέξιμη φάση και λειτουργία «Όλος ο ήχος» που αναδειγματοληπτεί και τον ήχο άλλων προγραμμάτων (Linux, Windows, macOS)· στη σύγκριση SRC του HydrogenAudio το FFT-DD πέτυχε 99,85 %.",
+          "Νέο σε Linux και Raspberry Pi: δέκτης δικτύου (ενεργοποιείται στις σύνθετες ρυθμίσεις και από το τηλέφωνο) και εφεδρικό Bluetooth για το τηλεχειριστήριο τηλεφώνου· η καθοδική ροή του 3D καταρράκτη σβήνει πλέον ομαλά στο άκρο."
         ],
         "tr": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Yeni: yerleşik oynatıcıda ve telefon kumandasında (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) kendi istasyon listeniz ve varsayılan olarak kapalı isteğe bağlı istasyon aramasıyla internet radyosu.",
+          "Yeni: seçilebilir fazlı kendi yeniden örnekleme motorlarımız (Aqulify FFT64 ve FFT-DD) ve diğer programların sesini de yükselten “Tüm sesler” modu (Linux, Windows, macOS); HydrogenAudio SRC karşılaştırmasında FFT-DD %99,85 puan aldı.",
+          "Linux ve Raspberry Pi’de yeni: ağ alıcısı (gelişmiş ayarlarda ve telefon kumandasında açılabilir) ve telefon kumandası için Bluetooth yedeği; 3D şelalenin aşağı akışı artık kenardan yumuşakça süzülüyor."
         ],
         "fi": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Uutta: nettiradio sisäänrakennetussa soittimessa ja puhelinkaukosäätimessä (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) omalla asemalistalla ja valinnaisella, oletuksena pois päältä olevalla asemahaulla.",
+          "Uutta: omat uudelleennäytteistysmoottorit (Aqulify FFT64 ja FFT-DD) valittavalla vaiheella sekä ”Kaikki ääni” -tila, joka ylinäytteistää myös muiden ohjelmien äänen (Linux, Windows, macOS); HydrogenAudion SRC-vertailussa FFT-DD sai 99,85 %.",
+          "Uutta Linuxissa ja Raspberry Pi:ssä: verkkovastaanotin (kytkettävissä lisäasetuksista ja puhelimesta) ja Bluetooth-varayhteys puhelinkaukosäätimelle; 3D-vesiputouksen alaspäin virtaava reuna kaartuu nyt pehmeästi."
         ],
         "da": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Nyt: internetradio i den indbyggede afspiller og på telefonens fjernbetjening (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) med egen stationsliste og valgfri stationssøgning, der er slået fra som standard.",
+          "Nyt: egne resampling-motorer (Aqulify FFT64 og FFT-DD) med valgfri fase samt tilstanden “Al lyd”, der også upsampler andre programmers lyd (Linux, Windows, macOS); i HydrogenAudios SRC-sammenligning opnåede FFT-DD 99,85 %.",
+          "Nyt på Linux og Raspberry Pi: netværksmodtager (kan slås til i avancerede indstillinger og på telefonen) og Bluetooth-reserve til telefonens fjernbetjening; 3D-vandfaldets nedadgående flow falder nu blødt ud over kanten."
         ],
         "nb": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Nytt: nettradio i den innebygde spilleren og på telefonens fjernkontroll (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) med egen stasjonsliste og valgfritt stasjonssøk som er avslått som standard.",
+          "Nytt: egne resamplingsmotorer (Aqulify FFT64 og FFT-DD) med valgbar fase og «All lyd»-modus som også oppsampler lyden fra andre programmer (Linux, Windows, macOS); i HydrogenAudios SRC-sammenligning fikk FFT-DD 99,85 %.",
+          "Nytt på Linux og Raspberry Pi: nettverksmottaker (kan slås på i avanserte innstillinger og på telefonen) og Bluetooth-reserve for telefonens fjernkontroll; 3D-fossens nedadgående flyt faller nå mykt over kanten."
         ],
         "sv": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Nytt: internetradio i den inbyggda spelaren och i telefonens fjärrkontroll (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) med egen stationslista och valfri stationssökning som är avstängd som standard.",
+          "Nytt: egna omsamplingsmotorer (Aqulify FFT64 och FFT-DD) med valbar fas samt läget ”Allt ljud” som även uppsamplar andra programs ljud (Linux, Windows, macOS); i HydrogenAudios SRC-jämförelse fick FFT-DD 99,85 %.",
+          "Nytt på Linux och Raspberry Pi: nätverksmottagare (kan slås på i avancerade inställningar och i telefonen) och Bluetooth-reserv för telefonens fjärrkontroll; 3D-vattenfallets nedåtgående flöde faller nu mjukt över kanten."
         ],
         "he": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "חדש: רדיו אינטרנטי בנגן המובנה ובשלט הטלפון (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) עם רשימת תחנות משלך וחיפוש תחנות אופציונלי שכבוי כברירת מחדל.",
+          "חדש: מנועי דגימה מחדש עצמאיים (Aqulify FFT64 ו-FFT-DD) עם בחירת מופע ומצב \"כל השמע\" שמעלה את תדר הדגימה גם של תוכנות אחרות (Linux, Windows, macOS); בהשוואת ה-SRC של HydrogenAudio קיבל FFT-DD ציון של 99.85%.",
+          "חדש ב-Linux וב-Raspberry Pi: מקלט רשת (ניתן להפעלה בהגדרות המתקדמות ובשלט הטלפון) וגיבוי Bluetooth לשלט הטלפון; הזרימה כלפי מטה במפל התלת-ממדי נשפכת כעת ברכות מעבר לקצה."
         ],
         "ja": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "新機能：内蔵プレーヤーとスマートフォン用リモコン（1.5.0）にインターネットラジオ（MP3、Ogg Vorbis、Opus、FLAC、AAC）を追加。独自の放送局リストと、既定でオフのオプション局検索を備えています。",
+          "新機能：位相を選択できる独自リサンプリングエンジン（Aqulify FFT64 / FFT-DD）と、他アプリの音声もアップサンプリングする「すべての音声」モード（Linux、Windows、macOS）。HydrogenAudio SRC比較でFFT-DDは 99.85 % を記録しました。",
+          "Linux / Raspberry Pi の新機能：ネットワークレシーバー（詳細設定およびスマホリモコンで切替可能）とスマホリモコン用Bluetoothフォールバックを追加。3Dウォーターフォールの下向きフローの端が滑らかに落ち込むようになりました。"
         ],
         "ko": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "신규: 내장 플레이어와 휴대폰 리모컨(1.5.0)에서 인터넷 라디오(MP3, Ogg Vorbis, Opus, FLAC, AAC) 지원 — 나만의 방송국 목록과 기본 꺼짐 상태의 선택형 방송국 검색 제공.",
+          "신규: 위상 선택이 가능한 자체 리샘플링 엔진(Aqulify FFT64 및 FFT-DD)과 다른 프로그램의 오디오도 업샘플링하는 ‘모든 오디오’ 모드(Linux, Windows, macOS); HydrogenAudio SRC 비교에서 FFT-DD가 99.85 %를 기록했습니다.",
+          "Linux 및 Raspberry Pi 신규: 네트워크 리시버(고급 설정 및 휴대폰 리모컨에서 전환 가능)와 휴대폰 리모컨용 Bluetooth 예비 연결; 3D 폭포의 하향 흐름 가장자리가 이제 자연스럽게 떨어집니다."
         ],
         "cs": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Novinka: internetové rádio ve vestavěném přehrávači a v dálkovém ovladači v telefonu (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) s vlastním seznamem stanic a volitelným vyhledáváním stanic (ve výchozím stavu vypnutým).",
+          "Novinka: vlastní převzorkovací motory (Aqulify FFT64 a FFT-DD) s volitelnou fází a režim „Veškerý zvuk“, který převzorkuje i zvuk ostatních programů (Linux, Windows, macOS); ve srovnání SRC na HydrogenAudio dosáhl FFT-DD 99,85 %.",
+          "Novinka na Linuxu a Raspberry Pi: síťový přijímač (lze zapnout v pokročilých nastaveních i v telefonu) a záložní Bluetooth pro telefonní ovladač; spodní okraj 3D vodopádu při toku dolů nyní plynule klesá přes hranu."
         ],
         "uk": [
-          "New: internet radio in the built-in player (MP3, Ogg Vorbis, Opus, FLAC, AAC) with your own station list and an optional station search that is off by default.",
-          "New: own resampling engines (Aqulify FFT64 and FFT-DD) with selectable phase, and an \"All sound\" mode that also upsamples other programs' audio (Linux, Windows, macOS); in the HydrogenAudio SRC comparison FFT-DD scored 99.85 %.",
-          "New on Linux and Raspberry Pi: a network receiver (switch it on in the advanced settings) and a Bluetooth fallback for the phone remote; the 3D waterfall's downward flow now falls off an edge."
+          "Нове: інтернет-радіо у вбудованому плеєрі та в пульті на телефоні (1.5.0; MP3, Ogg Vorbis, Opus, FLAC, AAC) із власним списком станцій та необов’язковим пошуком станцій (типово вимкненим).",
+          "Нове: власні рушії передискретизації (Aqulify FFT64 і FFT-DD) з вибором фази та режим «Увесь звук», що підвищує частоту звуку й інших програм (Linux, Windows, macOS); у порівнянні SRC на HydrogenAudio FFT-DD набрав 99,85 %.",
+          "Нове в Linux і на Raspberry Pi: мережевий приймач (вмикається в додаткових налаштуваннях і з телефона) та резервний Bluetooth для телефонного пульта; край низхідного 3D-водоспаду тепер плавно спадає за межу."
         ]
       }
     },
