@@ -1874,11 +1874,11 @@ private:
         s += ",\"claimable\":";
         s += isClaimable() ? "true" : "false";
 #ifdef _WIN32
-        s += ",\"platform\":\"windows\"";
+        s += ",\"hostPlatform\":\"windows\"";
 #elif defined(__APPLE__)
-        s += ",\"platform\":\"macos\"";
+        s += ",\"hostPlatform\":\"macos\"";
 #else
-        s += ",\"platform\":\"linux\"";
+        s += ",\"hostPlatform\":\"linux\"";
 #endif
         s += ",\"bluetooth\":{\"supported\":";
         s += btlink::RfcommListener::isSupported() ? "true" : "false";

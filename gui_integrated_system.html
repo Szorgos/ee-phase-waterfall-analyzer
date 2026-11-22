@@ -14987,7 +14987,7 @@ function renderRemotePanel() {
   document.getElementById("remoteNotListening").hidden = !(st.enabled && !st.listening);
   const fwBox = document.getElementById("remoteFirewallBox");
   if (fwBox) {
-    const showFw = show && st.platform === "linux";
+    const showFw = show && st.hostPlatform === "linux";
     fwBox.style.display = showFw ? "flex" : "none";
     if (showFw) {
       const p = st.port || 47820;
