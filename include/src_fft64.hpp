@@ -60,6 +60,7 @@ struct DD {
     constexpr DD() = default;
     constexpr explicit DD(double h) : hi(h), lo(0.0) {}
     constexpr DD(double h, double l) : hi(h), lo(l) {}
+    constexpr double toDouble() const { return hi + lo; }
 };
 
 inline DD operator-(const DD& a) { return {-a.hi, -a.lo}; }
