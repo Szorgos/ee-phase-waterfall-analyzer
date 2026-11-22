@@ -7231,12 +7231,44 @@ try { wfKeystone = Math.max(WF_KEYSTONE_MIN, Math.min(WF_KEYSTONE_MAX, parseInt(
 function keystoneBack() { return Math.pow(2, wfKeystone / 6); }
 /** A z mélységű sor szélességének szorzója (elöl, z = +planeDepth / 2: 1; hátul: keystoneBack()). */
 function keystoneAt(z) { return 1 + (keystoneBack() - 1) * Math.max(0, Math.min(1, (planeDepth / 2 - z) / planeDepth)); }
+
+const WF_EDGE_START = 0.82;
+const WF_EDGE_DROP = 3.8;
+/**
+ * A vízesés egy sorának pozíció- és kifutás-profilja a mélység (normZ: 0 = hátul, 1 = elöl) függvényében.
+ * Lefelé folyásnál a legrégebbi sorok (normZ > WF_EDGE_START) a perem fölött ívesen lebuknak és elhalványulnak;
+ * felfelé folyásnál minden sor a vízszintes síkon marad.
+ */
+function wfRowEdgeProfile(normZ, flowUp) {
+  const nz = Math.max(0, Math.min(1, normZ));
+  const zLinear = -planeDepth / 2 + planeDepth * nz;
+  if (flowUp || nz <= WF_EDGE_START) {
+    return { z: zLinear, yDrop: 0, ampScale: 1, bgBlend: 0 };
+  }
+  const u = (nz - WF_EDGE_START) / (1 - WF_EDGE_START);
+  const u2 = u * u;
+  const edgeFrac = WF_EDGE_START + (1 - WF_EDGE_START) * Math.sin(u * Math.PI / 2);
+  return {
+    z: -planeDepth / 2 + planeDepth * edgeFrac,
+    yDrop: -WF_EDGE_DROP * u2,
+    ampScale: 1 - 0.72 * u2,
+    bgBlend: 0.88 * u2
+  };
+}
+
 function keystoneMesh() {
   if (!geometry) return;
   const pos = geometry.attributes.position.array;
+  const flowUp = typeof wfFlow !== "undefined" ? wfFlow.up : false;
+  const denom = Math.max(1, TIME_SLICES - 1);
   for (let r = 0; r < TIME_SLICES; r++) {
-    const k = keystoneAt(-planeDepth / 2 + planeDepth * r / (TIME_SLICES - 1));   // 0. sor: hátul
-    for (let c = 0; c < FREQ_BINS; c++) pos[(r * FREQ_BINS + c) * 3] = (-planeWidth / 2 + planeWidth * c / (FREQ_BINS - 1)) * k;
+    const edge = wfRowEdgeProfile(r / denom, flowUp);   // 0. sor: hátul
+    const k = keystoneAt(edge.z);
+    for (let c = 0; c < FREQ_BINS; c++) {
+      const i = (r * FREQ_BINS + c) * 3;
+      pos[i] = (-planeWidth / 2 + planeWidth * c / (FREQ_BINS - 1)) * k;
+      pos[i + 2] = edge.z;
+    }
   }
   geometry.attributes.position.needsUpdate = true;
 }
@@ -7315,8 +7347,10 @@ const skirtGeo = new THREE.BufferGeometry();
 const skirt = new THREE.Mesh(skirtGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
 skirt.frustumCulled = false;
 scene.add(skirt);
-/** A függöny követi az első sort (a háló utolsó sorát). */
+/** A függöny csak felfelé folyásnál látszik; lefelé folyásnál a háló maga bukik le a peremen. */
 function updateSkirt() {
+  skirt.visible = wfFlow.up;
+  if (!wfFlow.up) return;
   const mp = geometry.attributes.position.array, mc = geometry.attributes.color.array;
   const sp = skirtGeo.attributes.position.array, sc = skirtGeo.attributes.color.array;
   const base = (TIME_SLICES - 1) * FREQ_BINS * 3;
@@ -7339,6 +7373,7 @@ function updateSkirt() {
 const WF_COLLAPSE_MS = 420, WF_REBUILD_MS = 760, WF_STAGGER = 0.5;
 const wfFlow = { up: false, target: false, anim: null };
 try { wfFlow.up = wfFlow.target = localStorage.getItem("aqulify_wf_flow") === "up"; } catch (e) {}
+let wfLastEdgeUp = wfFlow.up;
 function wfFlowTick(now) {
   const a = wfFlow.anim;
   if (!a) return;
@@ -8272,23 +8307,36 @@ function drawWfFrame(nowMs) {
   const col = geometry.attributes.color.array;
 
   wfFlowTick(nowMs);
+  if (wfLastEdgeUp !== wfFlow.up) {
+    wfLastEdgeUp = wfFlow.up;
+    keystoneMesh();
+  }
+  const bg = scene.background;
+  const denom = Math.max(1, TIME_SLICES - 1);
   let peak = 0;                               // a háló legmagasabb pontja: ha jel nélkül lecsengett, jöhet az alvás
   for (let z = 0; z < TIME_SLICES; z++) {
     const src = wfFlow.up ? TIME_SLICES - 1 - z : z;   // felfelé folyásnál a legújabb sor (0.) elöl
     const sData = waterfallData[src];
     const sMask = preRingMask[src];
     const fz = wfRowFactor(z, nowMs);
+    const edge = wfRowEdgeProfile(z / denom, wfFlow.up);
     for (let x = 0; x < FREQ_BINS; x++) {
       const idx = z * FREQ_BINS + x;
       const y = sData[x] * fz;
       if (y > peak) peak = y;
       const isPre = (sMask[x] === 1);
 
-      pos[idx * 3 + 1] = y * WF_MAX_H;
-      const rgb = getHeatmapColor(Math.min(1, y), isPre);
-      col[idx * 3] = rgb[0];
-      col[idx * 3 + 1] = rgb[1];
-      col[idx * 3 + 2] = rgb[2];
+      pos[idx * 3 + 1] = y * edge.ampScale * WF_MAX_H + edge.yDrop * fz;
+      const rgb = getHeatmapColor(Math.min(1, y * edge.ampScale), isPre);
+      if (edge.bgBlend > 0 && bg) {
+        col[idx * 3] = rgb[0] + (bg.r - rgb[0]) * edge.bgBlend;
+        col[idx * 3 + 1] = rgb[1] + (bg.g - rgb[1]) * edge.bgBlend;
+        col[idx * 3 + 2] = rgb[2] + (bg.b - rgb[2]) * edge.bgBlend;
+      } else {
+        col[idx * 3] = rgb[0];
+        col[idx * 3 + 1] = rgb[1];
+        col[idx * 3 + 2] = rgb[2];
+      }
     }
   }
 
