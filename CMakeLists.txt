@@ -535,6 +535,10 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
     # Parancssori indító a beépített lejátszóhoz: aqulify-play <fájl> | play | pause | stop
     add_executable(aqulify-play src/aqulify_play.cpp)
 
+    # PipeWire lejátszó stream újracsatlakozási politika egységtesztje
+    add_executable(test_pw_reconnect src/test_pw_reconnect.cpp)
+    target_include_directories(test_pw_reconnect PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
     if(BUILD_LINUX_GUI)
         pkg_check_modules(WEBKITGTK IMPORTED_TARGET webkit2gtk-4.1)
         if(NOT WEBKITGTK_FOUND)

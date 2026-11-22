@@ -251,12 +251,14 @@ bool applyOutputSink(const std::string& targetSink, bool remember) {
     }
     if (resolved.empty() || !isSafeSinkName(resolved)) return false;
     if (resolvedId == curSinkId) {                    // már ott szól
+        if (g_node) g_node->setPreferredOutput(resolved);
         if (remember) linux_store::saveOutputSink(resolved);
         return true;
     }
     const std::string cmd = "LC_ALL=C pactl move-sink-input " + sinkInputId + " '" + resolved + "' >/dev/null 2>&1";
     if (std::system(cmd.c_str()) != 0) return false;
     std::cout << "[PipeWire] Kimeneti eszköz: " << resolved << " (sink-input #" << sinkInputId << ")\n";
+    if (g_node) g_node->setPreferredOutput(resolved);
     if (remember) linux_store::saveOutputSink(resolved);
     return true;
 }
@@ -507,6 +509,7 @@ int main(int argc, char* argv[]) {
     // alapértelmezett eszközén marad – nem kényszerítjük pl. a laptop hangszóróra.
     const std::string initialSink = linux_store::loadOutputSink();
     if (!initialSink.empty()) {
+        node.setPreferredOutput(initialSink);
         std::thread([initialSink]() {
             for (int i = 0; i < 25; ++i) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
