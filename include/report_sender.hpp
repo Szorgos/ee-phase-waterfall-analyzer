@@ -434,6 +434,8 @@ public:
     Service(const Service&) = delete;
     Service& operator=(const Service&) = delete;
 
+    using NamesProvider = std::function<std::vector<std::string>()>;
+
     void start(const std::filesystem::path& diagDir, const std::filesystem::path& logPath,
                std::vector<std::string> scrubNames, bool enabled, std::string url = AQ_REPORT_URL,
                TransportFn transport = nullptr) {
@@ -448,6 +450,14 @@ public:
             state_ = st;
         }
         if (enabled) triggerAutoSendPrevious();
+    }
+
+    /** Futás közben frissülő eszköznév-forrás (pl. újonnan párosított telefonok a remote.json-ból). */
+    void setNamesProvider(NamesProvider fn) {
+        std::shared_ptr<State> st = getState();
+        if (!st) return;
+        std::lock_guard<std::mutex> lk(st->namesMu);
+        st->namesProvider = std::move(fn);
     }
 
     void setEnabled(bool on) {
@@ -644,6 +654,8 @@ private:
         std::filesystem::path diagDir;
         std::filesystem::path logPath;
         std::vector<std::string> scrubNames;
+        mutable std::mutex namesMu;
+        NamesProvider namesProvider;
         std::atomic<bool> enabled{ false };
         std::atomic<bool> stopRequested{ false };
         std::atomic<bool> autoBusy{ false };
@@ -660,6 +672,14 @@ private:
     static ScrubContext makeCtx(const State& st) {
         ScrubContext ctx = systemScrubContext();
         ctx.names.insert(ctx.names.end(), st.scrubNames.begin(), st.scrubNames.end());
+        NamesProvider prov;
+        {
+            std::lock_guard<std::mutex> lk(st.namesMu);
+            prov = st.namesProvider;
+        }
+        if (prov) {
+            for (const auto& n : prov()) ctx.names.push_back(n);
+        }
         return ctx;
     }
 

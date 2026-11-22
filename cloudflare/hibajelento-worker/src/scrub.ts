@@ -180,7 +180,25 @@ export function scrubIpv4(s: string): string {
         while (k < s.length && isAsciiAlnum(code(s, k))) ++k;
         kernel = k + 1 < s.length && s[k] === "-" && isAsciiAlnum(code(s, k + 1));
       }
-      if (ok && parts === 4 && endOk && !kernel) {
+      // Linux USB-útvonal (usb-0000:00:14.0-4.1.2.3): a kötőjel előtt „usb-<pci>-” áll (benne legalább egy ':')
+      let usbPath = false;
+      if (ok && parts === 4 && i >= 6 && s[i - 1] === "-") {
+        let p = i - 1;
+        let hasColon = false;
+        while (p > 0) {
+          const ch = code(s, p - 1);
+          if (isHex(ch) || ch === 58 || ch === 46) {
+            if (ch === 58) hasColon = true;
+            --p;
+          } else {
+            break;
+          }
+        }
+        if (hasColon && p >= 4 && s.slice(p - 4, p).toLowerCase() === "usb-") {
+          usbPath = true;
+        }
+      }
+      if (ok && parts === 4 && endOk && !kernel && !usbPath) {
         const loopback = oct[0] === 127 || (oct[0] === 0 && oct[1] === 0 && oct[2] === 0 && oct[3] === 0);
         out += loopback ? s.slice(i, j) : "<ip>";
         i = j;
@@ -234,17 +252,128 @@ export function scrubIpv6(s: string): string {
   return out;
 }
 
+/** A [WS Bridge] naplósorokban szereplő távoli/párosított eszköznevek cseréje <name>-re. */
+export function scrubBridgeDeviceNames(s: string): string {
+  const rules: Array<{ prefix: string; untilParen: boolean }> = [
+    { prefix: "[WS Bridge] Új eszköz párosítva: ", untilParen: false },
+    { prefix: "[WS Bridge] Távoli eszköz csatlakozott Bluetoothon: ", untilParen: false },
+    { prefix: "[WS Bridge] Távoli eszköz csatlakozott: ", untilParen: false },
+    { prefix: "[WS Bridge] Távoli eszköz jóváhagyva és csatlakozott: ", untilParen: false },
+    { prefix: " korábbi párosítás lecserélve: ", untilParen: false },
+    { prefix: "[WS Bridge] Távoli eszköz lecsatlakozott: ", untilParen: true },
+    { prefix: "[WS Bridge] Párosítási kérelem: ", untilParen: true },
+  ];
+  for (const r of rules) {
+    let pos = 0;
+    while ((pos = s.indexOf(r.prefix, pos)) !== -1) {
+      const start = pos + r.prefix.length;
+      let lineEnd = start;
+      while (lineEnd < s.length && s[lineEnd] !== "\n" && s[lineEnd] !== "\r") ++lineEnd;
+      let end = lineEnd;
+      if (r.untilParen) {
+        const p = s.indexOf(" (", start);
+        if (p !== -1 && p < lineEnd) end = p;
+      }
+      if (end > start) {
+        const cur = s.slice(start, end);
+        if (cur !== "<name>") {
+          s = s.slice(0, start) + "<name>" + s.slice(end);
+          pos = start + 6;
+          continue;
+        }
+      }
+      pos = start;
+    }
+  }
+  return s;
+}
+
+/**
+ * Többtagú, nagybetűs DMI/sorozatszám-szerű gépazonosítók (pl. ALSA SOF kártyák longname mezője:
+ * ACMECOMPUTERLIMITED-NOTEBOOK1234-99887766554-ABCD1E2) cseréje <dmi>-re.
+ */
+export function scrubDmiStrings(s: string): string {
+  let out = "";
+  let i = 0;
+  while (i < s.length) {
+    const c = code(s, i);
+    const startOk =
+      c >= 65 &&
+      c <= 90 &&
+      (i === 0 || !(isWordish(code(s, i - 1)) || s[i - 1] === "-" || s[i - 1] === "."));
+    if (startOk) {
+      let j = i;
+      let parts = 1;
+      let curStart = i;
+      let firstUpperOnly = true;
+      let firstLen = 0;
+      let hasLongSerial = false;
+      let valid = true;
+      const finishPart = (a: number, b: number, partIdx: number) => {
+        const len = b - a;
+        if (len === 0) {
+          valid = false;
+          return;
+        }
+        let digits = 0;
+        let upperOnly = true;
+        for (let k = a; k < b; ++k) {
+          const ch = code(s, k);
+          if (isDigit(ch)) {
+            ++digits;
+            upperOnly = false;
+          } else if (!(ch >= 65 && ch <= 90)) {
+            upperOnly = false;
+          }
+        }
+        if (partIdx === 1) {
+          firstUpperOnly = upperOnly;
+          firstLen = len;
+        }
+        if (digits >= 6) hasLongSerial = true;
+      };
+      while (j < s.length) {
+        const ch = code(s, j);
+        if (isAsciiAlnum(ch) || ch === 95) {
+          ++j;
+        } else if (s[j] === "-" && j + 1 < s.length && (isAsciiAlnum(code(s, j + 1)) || s[j + 1] === "_")) {
+          finishPart(curStart, j, parts);
+          ++parts;
+          ++j;
+          curStart = j;
+        } else {
+          break;
+        }
+      }
+      finishPart(curStart, j, parts);
+      const endOk = j >= s.length || !(isWordish(code(s, j)) || s[j] === "." || s[j] === ":");
+      if (valid && endOk && parts >= 4 && j - i >= 20 && firstUpperOnly && firstLen >= 3 && hasLongSerial) {
+        out += "<dmi>";
+        i = j;
+        continue;
+      }
+      out += s.slice(i, j);
+      i = j;
+      continue;
+    }
+    out += s[i++];
+  }
+  return out;
+}
+
 export function collapseRepeats(s: string): string {
-  for (const tok of ["<path>", "<ip>", "<mac>"]) {
+  for (const tok of ["<path>", "<ip>", "<mac>", "<name>", "<dmi>"]) {
     const twice = tok + tok;
     while (s.includes(twice)) s = s.split(twice).join(tok);
   }
   return s;
 }
 
-/** Egy szöveg tisztítása (a C++ scrub() 3–4. lépése, ugyanabban a sorrendben). */
+/** Egy szöveg tisztítása (a C++ scrub() 2–4. lépésének mintaalapú része, ugyanabban a sorrendben). */
 export function scrubText(text: string): string {
   let s = text;
+  s = scrubBridgeDeviceNames(s);
+  s = scrubDmiStrings(s);
   s = scrubEmails(s);
   s = scrubMacs(s);
   s = scrubIpv4(s);

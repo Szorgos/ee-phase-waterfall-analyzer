@@ -143,3 +143,59 @@ describe("szerkezet tisztítása", () => {
     for (const s of samples) expect(scrubText(scrubText(s))).toBe(scrubText(s));
   });
 });
+
+describe("[9] adatvédelmi javítások: WS Bridge eszköznevek, DMI-lánc, USB-útvonal és negatív esetek", () => {
+  it("a [WS Bridge] távoli/párosított eszköznevei <name>-re cserélődnek", () => {
+    const text =
+      "[WS Bridge] Új eszköz párosítva: Teszttelefon\n" +
+      "[WS Bridge] Távoli eszköz csatlakozott: Teszttelefon\n" +
+      "[WS Bridge] Távoli eszköz csatlakozott Bluetoothon: PX12345AB\n" +
+      "[WS Bridge] Távoli eszköz jóváhagyva és csatlakozott: PX12345AB\n" +
+      "[WS Bridge] Távoli eszköz lecsatlakozott: Teszttelefon (close keret).\n" +
+      "[WS Bridge] Párosítási kérelem: PX12345AB (192.168.1.23, req_12345678)\n" +
+      "[WS Bridge] 2 korábbi párosítás lecserélve: Teszttelefon\n";
+    const out = scrubText(text);
+    expect(out).not.toContain("Teszttelefon");
+    expect(out).not.toContain("PX12345AB");
+    expect(out).not.toContain("192.168.1.23");
+    expect(out).toContain("[WS Bridge] Új eszköz párosítva: <name>");
+    expect(out).toContain("[WS Bridge] Távoli eszköz csatlakozott: <name>");
+    expect(out).toContain("[WS Bridge] Távoli eszköz csatlakozott Bluetoothon: <name>");
+    expect(out).toContain("[WS Bridge] Távoli eszköz jóváhagyva és csatlakozott: <name>");
+    expect(out).toContain("[WS Bridge] Távoli eszköz lecsatlakozott: <name> (close keret).");
+    expect(out).toContain("[WS Bridge] Párosítási kérelem: <name> (<ip>, req_12345678)");
+    expect(out).toContain("[WS Bridge] 2 korábbi párosítás lecserélve: <name>");
+  });
+
+  it("a SOF/DMI sorozatszám-szerű lánc <dmi>-re cserélődik, az USB-útvonal nem <ip>", () => {
+    const text =
+      " 0 [Audio          ]: USB-Audio - USB Audio\n" +
+      "                      Generic USB Audio at usb-0000:00:14.0-4.4, high speed\n" +
+      " 1 [DSD            ]: USB-Audio - HIFI DSD\n" +
+      "                      XMOS HIFI DSD at usb-0000:00:14.0-4.1.2.3, full speed\n" +
+      " 2 [sofhdadsp      ]: sof-hda-dsp - sof-hda-dsp\n" +
+      "                      ACMECOMPUTERLIMITED-NOTEBOOK1234-99887766554-ABCD1E2\n";
+    const out = scrubText(text);
+    expect(out).not.toContain("ACMECOMPUTERLIMITED");
+    expect(out).not.toContain("99887766554");
+    expect(out).toContain("<dmi>");
+    expect(out).toContain("usb-0000:00:14.0-4.1.2.3");
+    expect(out).toContain("Generic USB Audio at usb-0000:00:14.0-4.4");
+    expect(out).not.toContain("usb-0000:00:14.0-<ip>");
+  });
+
+  it("negatív esetek: gyári hangeszközök, kernelverzió és USB-útvonal változatlan, valódi IPv4 <ip>", () => {
+    const keepList = [
+      "TOPPING USB DAC",
+      "XMOS HIFI DSD",
+      "AMR HD+ USB Audio",
+      "FiiO K series",
+      "Realtek(R) Audio",
+      "HDA Intel HDMI at 0xf7d10000 irq 36",
+      "Generic USB Audio at usb-0000:00:14.0-4.4",
+      "6.6.87.2-microsoft-standard-WSL2",
+    ];
+    for (const s of keepList) expect(scrubText(s)).toBe(s);
+    expect(scrubText("192.168.1.23")).toBe("<ip>");
+  });
+});
