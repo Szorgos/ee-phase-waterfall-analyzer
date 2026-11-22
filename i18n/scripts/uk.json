@@ -44,5 +44,8 @@
   "inst.sumLog": "Журнали:       journalctl --user -u aqulify -f",
   "inst.sumUninstall": "Видалення:     ./uninstall.sh",
   "uninst.purged": "Aqulify та всі збережені налаштування видалено.",
-  "uninst.removed": "Aqulify видалено. (Налаштування збережено в: ~/.config/aqulify – видалити повністю: ./uninstall.sh --purge)"
+  "uninst.removed": "Aqulify видалено. (Налаштування збережено в: ~/.config/aqulify – видалити повністю: ./uninstall.sh --purge)",
+  "inst.systemPkgAsk": "Install alongside it under ~/.local anyway? [y/N] ",
+  "inst.systemPkgAbort": "Installation cancelled (the packaged Aqulify was left untouched).",
+  "inst.systemPkgNonInt": "Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force"
 }

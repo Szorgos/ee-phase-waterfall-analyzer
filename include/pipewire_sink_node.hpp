@@ -170,6 +170,8 @@ public:
     uint32_t overruns() const { return overruns_.load(std::memory_order_relaxed); }
     /** Fut-e az ébren tartó hangfolyam. */
     bool keepAwakeActive() const { return keepAliveStreaming_.load(); }
+    /** Van-e egynél több aqulify_sink csomópont a PipeWire-gráfban (pl. régi, zár nélküli motor is fut). */
+    bool hasDuplicateAqulifySink() const { return duplicateAqulifySink_.load(std::memory_order_relaxed); }
 
     /** A k-adik kimenet (1–3) saját lánca, pl. impulzusválasz egy zónának (submitIr szálbiztos). */
     AetherChain& zoneChain(int k) { return multi_.chain(k); }
@@ -304,6 +306,7 @@ public:
                 pw_registry_events e{};
                 e.version = PW_VERSION_REGISTRY_EVENTS;
                 e.global = onRegistryGlobal;
+                e.global_remove = onRegistryGlobalRemove;
                 return e;
             }();
             pw_registry_add_listener(registry_, &registryListener_, &regEvents, this);
@@ -369,6 +372,8 @@ private:
     struct pw_registry* registry_ = nullptr;          // csak a fő hurok szála
     struct spa_hook registryListener_{};
     struct spa_source* resumeTimer_ = nullptr;        // csak a fő hurok szála
+    std::vector<uint32_t> aqulifySinkIds_;            // látott aqulify_sink csomópontok (dupla példány jelzéséhez)
+    std::atomic<bool> duplicateAqulifySink_{false};
     std::atomic<uint32_t> lastQuantum_{0};
     std::atomic<float> loadAvg_{0.0f}, loadPeak_{0.0f};
     std::atomic<uint32_t> overruns_{0};
@@ -601,14 +606,22 @@ private:
      * ha a forrás-követés és az ébren tartás be van kapcsolva, az ébren tartás kilép a gráfból kb. 1,5 s-ra: a tétlen
      * gráf így át tud váltani a forrás mintavételére, mielőtt a külső hangfolyam elindul.
      */
-    static void onRegistryGlobal(void* data, uint32_t, uint32_t, const char* type, uint32_t, const struct spa_dict* props) {
+    static void onRegistryGlobal(void* data, uint32_t id, uint32_t, const char* type, uint32_t, const struct spa_dict* props) {
         auto* self = static_cast<AetherSinkNode*>(data);
         if (!type || !props || std::strcmp(type, PW_TYPE_INTERFACE_Node) != 0) return;
         const char* cls = spa_dict_lookup(props, PW_KEY_MEDIA_CLASS);
-        if (!cls || std::strcmp(cls, "Stream/Output/Audio") != 0) return;
+        const char* nodeName = spa_dict_lookup(props, PW_KEY_NODE_NAME);
+        if (!cls) return;
+        // Második Aqulify virtuális eszköz észlelése (régi, flock nélküli 2.7.0–2.8.3 motor)
+        if (std::strcmp(cls, "Audio/Sink") == 0 && nodeName && self->sinkName_ == nodeName) {
+            if (std::find(self->aqulifySinkIds_.begin(), self->aqulifySinkIds_.end(), id) == self->aqulifySinkIds_.end())
+                self->aqulifySinkIds_.push_back(id);
+            self->duplicateAqulifySink_.store(self->aqulifySinkIds_.size() > 1, std::memory_order_relaxed);
+            return;
+        }
+        if (std::strcmp(cls, "Stream/Output/Audio") != 0) return;
         // a saját streamjeink (fő kimenet, zónák, lejátszó, ébren tartás) nem számítanak: nevük „aqulify…”,
         // az ébren tartó és a lejátszó alkalmazásneve „Aqulify” (az application.process.id nem megbízható)
-        const char* nodeName = spa_dict_lookup(props, PW_KEY_NODE_NAME);
         const char* appName = spa_dict_lookup(props, PW_KEY_APP_NAME);
         if (nodeName && std::strncmp(nodeName, "aqulify", 7) == 0) return;
         if (appName && std::strcmp(appName, "Aqulify") == 0) return;
@@ -616,6 +629,15 @@ private:
         self->keepAlivePauseUntil_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(kKeepAlivePauseMs);
         if (self->keepAlive_) self->destroyKeepAlive();
         std::cout << "[PipeWire] Külső hangfolyam: az ébren tartás rövid időre szünetel (mintavétel-követés)\n";
+    }
+
+    static void onRegistryGlobalRemove(void* data, uint32_t id) {
+        auto* self = static_cast<AetherSinkNode*>(data);
+        auto it = std::find(self->aqulifySinkIds_.begin(), self->aqulifySinkIds_.end(), id);
+        if (it != self->aqulifySinkIds_.end()) {
+            self->aqulifySinkIds_.erase(it);
+            self->duplicateAqulifySink_.store(self->aqulifySinkIds_.size() > 1, std::memory_order_relaxed);
+        }
     }
 
     /** Az ébren tartás visszakapcsolása a szünet végén (a fő hurok szálán). */
