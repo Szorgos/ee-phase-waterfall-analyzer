@@ -212,6 +212,10 @@ if(WIN32)
     target_link_libraries(test_headless_pairing PRIVATE ws2_32 iphlpapi)
 endif()
 
+# MPRIS lejátszásvezérlés metódus-választás, fallback és PII-mentes napló
+add_executable(test_mpris_control src/test_mpris_control.cpp)
+target_include_directories(test_mpris_control PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # 9b. Tesztalkalmazás: DSD (.dsf/.dff) fejléc, FIR szűrő, PCM dekódolás, tekerés, ID3v2, DST elutasítás, DoP 1.1
 add_executable(test_dsd src/test_dsd.cpp)
 target_link_libraries(test_dsd PRIVATE aq_player Threads::Threads)

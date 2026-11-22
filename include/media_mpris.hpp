@@ -27,6 +27,7 @@
 #include <thread>
 #include <vector>
 
+#include "media_mpris_policy.hpp"
 #include "media_session.hpp"
 #include "mini_json.hpp"
 
@@ -264,29 +265,47 @@ private:
         if (pick) {
             info_ = pick->info;
             active_ = pick->name;
+            activeStatus_ = pick->status;
             trackId_ = pick->trackId;
             artUrl_ = pick->artUrl;
             if (pick->info.playing) lastActive_ = pick->name;
         } else {
             info_ = Info{};
             active_.clear();
+            activeStatus_.clear();
             trackId_.clear();
             artUrl_.clear();
         }
     }
 
-    void execute(const std::string& action, double value) {
-        std::string dest, track;
+    struct PendingLog {
+        bool active = false;
+        std::string app;
+        std::string action;
+        std::string beforeStatus;
+    };
+
+    void execute(const std::string& action, double value, PendingLog& logOut) {
+        std::string dest, track, app, beforeStatus;
+        bool wasPlaying = false;
         {
             std::lock_guard<std::mutex> lk(mutex_);
             dest = active_;
             track = trackId_;
+            app = info_.app;
+            beforeStatus = activeStatus_;
+            wasPlaying = info_.playing;
         }
         if (dest.empty()) return;
-        const char* method = action == "play" ? "Play" : action == "pause" ? "Pause" : action == "toggle" ? "PlayPause"
-                           : action == "next" ? "Next" : action == "previous" ? "Previous" : nullptr;
-        if (method) {
-            run({ "busctl", "--user", "call", dest, kPath, kPlayer, method });
+        const auto plan = planMprisMethod(action, wasPlaying);
+        if (!plan.primaryMethod.empty()) {
+            const bool ok = run({ "busctl", "--user", "call", dest, kPath, kPlayer, plan.primaryMethod });
+            if (!ok && !plan.fallbackMethod.empty()) {
+                run({ "busctl", "--user", "call", dest, kPath, kPlayer, plan.fallbackMethod });
+            }
+            if (action == "toggle" || action == "play" || action == "pause") {
+                logOut = { true, app, action, beforeStatus };
+            }
         } else if (action == "seek" && validObjectPath(track)) {
             const long long us = static_cast<long long>(std::max(0.0, value) * 1e6);
             run({ "busctl", "--user", "call", dest, kPath, kPlayer, "SetPosition", "ox", track, std::to_string(us) });
@@ -294,16 +313,44 @@ private:
     }
 
     void loop() {
+        using clock = std::chrono::steady_clock;
+        constexpr auto kPollInterval = std::chrono::milliseconds(1000);
+        constexpr auto kPostCmdDelay = std::chrono::milliseconds(150);
+
+        auto nextRefresh = clock::now();
+        PendingLog pendingLog;
+
         while (running_) {
             std::vector<std::pair<std::string, double>> todo;
             {
                 std::lock_guard<std::mutex> lk(mutex_);
                 todo.swap(pending_);
             }
-            for (const auto& [a, v] : todo) execute(a, v);
-            refresh();
-            for (int i = 0; i < 20 && running_ && !wake_.exchange(false); ++i)
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));   // kb. 1 s-onként, parancs után azonnal
+            if (!todo.empty()) {
+                for (const auto& [a, v] : todo) execute(a, v, pendingLog);
+                // Nem blokkolva, ~150 ms múlva frissítünk, hogy a külső lejátszó (pl. Electron/Chromium)
+                // frissíthesse a PlaybackStatus tulajdonságot; új parancs közben azonnal lefuthat.
+                nextRefresh = clock::now() + kPostCmdDelay;
+            }
+            const auto now = clock::now();
+            if (now >= nextRefresh) {
+                refresh();
+                if (pendingLog.active) {
+                    std::string afterStatus;
+                    {
+                        std::lock_guard<std::mutex> lk(mutex_);
+                        afterStatus = activeStatus_;
+                    }
+                    std::cout << formatMprisCommandLog(pendingLog.app, pendingLog.action,
+                                                       pendingLog.beforeStatus, afterStatus)
+                              << "\n" << std::flush;
+                    pendingLog = {};
+                }
+                nextRefresh = clock::now() + kPollInterval;
+            }
+            if (!running_) break;
+            if (wake_.exchange(false)) continue;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
     }
 
@@ -312,7 +359,7 @@ private:
     std::thread thread_;
     mutable std::mutex mutex_;
     Info info_;
-    std::string active_, trackId_, artUrl_;
+    std::string active_, activeStatus_, trackId_, artUrl_;
     std::vector<std::pair<std::string, double>> pending_;
     // csak a lekérdező szál
     std::string lastActive_;

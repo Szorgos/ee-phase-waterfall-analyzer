@@ -747,9 +747,10 @@ body.aqnp-on { padding-bottom: 72px; }
 
       const can = (has && m.can) || {};
       const playing = has && m.playing;
+      const external = has && m.app !== "Aqulify";
       ui.play.innerHTML = svg(playing ? "pause" : "play", 22);
       label(ui.play, t(playing ? "pause" : "play"));
-      ui.play.disabled = has ? !(playing ? can.pause : can.play) : qCount === 0;
+      ui.play.disabled = has ? (external ? !(can.play || can.pause) : !(playing ? can.pause : can.play)) : qCount === 0;
       ui.prev.disabled = !(has && can.previous);
       ui.next.disabled = !(has && can.next);
       ui.stop.disabled = !has;   // a beépített lejátszót leállítja (elengedi a kimenetet), más lejátszót szüneteltet
@@ -776,6 +777,7 @@ body.aqnp-on { padding-bottom: 72px; }
 
     // ---- hangerő: a kimeneti hangkártyáé (a motor a status.volume mezőben küldi; a csúszka a rendszer százaléka)
     let volume = null, volDragging = false, volSendTimer = 0, volLastSent = -1, volHoldUntil = 0;
+    let playHoldUntil = 0, playHoldVal = false;
     function renderVolume() {
       const v = volume;
       ui.vol.hidden = !v;
@@ -857,12 +859,21 @@ body.aqnp-on { padding-bottom: 72px; }
     function togglePlay() {
       if (!media || !media.available) { resume(); return; }
       const can = media.can || {};
-      const action = media.playing ? "pause" : "play";
-      if (!can[action]) return;
+      const external = media.app !== "Aqulify";
+      let action;
+      if (external) {
+        if (!(can.play || can.pause)) return;
+        action = "toggle";   // külső lejátszónál (pl. MPRIS Tidal/Electron) a PlayPause nem függ a késő PlaybackStatus-tól
+      } else {
+        action = media.playing ? "pause" : "play";
+        if (!can[action]) return;
+      }
       send({ type: "media", action });
       media.position = curPos();
       mediaAt = Date.now();
-      media.playing = !media.playing;   // azonnali visszajelzés; a következő állapotüzenet megerősíti
+      media.playing = !media.playing;   // azonnali visszajelzés; a 700 ms tartási ablak védi a régi status ellen
+      playHoldVal = media.playing;
+      playHoldUntil = Date.now() + 700;
       render();
     }
     function resume() {
@@ -1000,6 +1011,10 @@ body.aqnp-on { padding-bottom: 72px; }
         }
         renderVolume();
         media = (m && m.media) || { available: false };
+        if (media && media.available && Date.now() < playHoldUntil) {
+          if (!!media.playing === playHoldVal) playHoldUntil = 0;
+          else media.playing = playHoldVal;
+        }
         mediaAt = Date.now();
         queue = (m && m.queue) || null;
         if (queue && queue.rev !== queueRev) {
