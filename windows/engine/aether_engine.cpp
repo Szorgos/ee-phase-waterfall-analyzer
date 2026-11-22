@@ -65,6 +65,7 @@
 #include "load_advisor.hpp"
 #include "file_player.hpp"
 #include "library_bridge.hpp"
+#include "radio_bridge.hpp"
 #include "player_output_wasapi.hpp"
 #include "player_output_win.hpp"
 
@@ -1092,6 +1093,13 @@ int main(int argc, char** argv) {
     library::attachLibrary(cb, musicLibrary, playQueue, playlists, playStats, [](const std::string& doc) {
         if (!writeFileAtomic(userFilePath(L"library.json", true), doc)) std::cout << "[Zenetár] Figyelem: a library.json nem írható.\n";
     }, &phoneCache);
+    // Internetrádió: a felhasználó állomáslistája (%APPDATA%\Aqulify\radio.json); a lejátszás a beépített lejátszón
+    radio::StationStore radioStations([](const std::string& doc) {
+        if (!writeFileAtomic(userFilePath(L"radio.json", true), doc)) std::cout << "[Rádió] Figyelem: a radio.json nem írható.\n";
+    });
+    radioStations.load(readSmallFile(userFilePath(L"radio.json", false), 1u << 20));
+    radio::RadioController radioCtl(filePlayer, radioStations);
+    radio::attachRadio(cb, radioCtl, radioStations);
     cb.loadRemote = [] { return readSmallFile(userFilePath(L"remote.json", false), 256 * 1024); };
     cb.saveRemote = [](const std::string& doc) { return writeFileAtomic(userFilePath(L"remote.json", true), doc); };
     cb.loadTargets = [] { return readSmallFile(userFilePath(L"remote-targets.json", false), 256 * 1024); };

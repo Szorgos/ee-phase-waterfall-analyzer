@@ -108,6 +108,11 @@ public:
      * false: nem nyitható (error: a magyarázat).
      */
     bool open(const std::string& path, std::string* error = nullptr, uint64_t token = 0, bool bypassUpsample = false);
+    /**
+     * Már megnyitott, élő folyam lejátszása (internetrádió, radio_stream.hpp): ugyanazon a láncon szól, mint egy fájl,
+     * de nincs hossza, nem tekerhető és nincs ReplayGain. title: az állomás neve (amíg nincs „most szól” adat).
+     */
+    bool openStream(std::unique_ptr<AudioDecoder> dec, const std::string& title, std::string* error = nullptr);
     void setNextProvider(NextProvider next);
     /**
      * A sor megváltozott: az előre betöltött következő szám(ok) kiesnek, és a lejátszó a mostani szám végén újra
@@ -238,6 +243,8 @@ private:
     };
 
     std::unique_ptr<Segment> makeSegment(const std::string& path, std::string* error, uint64_t token, bool bypassUpsample = false);
+    /** A kész szakasz lejátszása (open és openStream közös része). */
+    bool openSegment(std::unique_ptr<Segment> seg, std::string* error);
     float gainFor(const TrackTags& t) const;
     void decodeLoop();
     void stopLocked();

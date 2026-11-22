@@ -129,6 +129,9 @@ struct BridgeCallbacks {
     std::function<std::string(const std::string& type, const json::Value& msg, bool remote)> queueRequest;
     std::function<std::string()> queueStatus;
     std::function<std::string()> playlistsStatus;
+    /** Internetrádió (radio_bridge.hpp): a "radio_*" üzenetek és az állapotüzenet "radio" mezője. */
+    std::function<std::string(const std::string& type, const json::Value& msg, bool remote)> radioRequest;
+    std::function<std::string()> radioStatus;
     /** Telefonos zeneátvitel (4b): "phone_track_*" üzenetek és bináris AEPF hangfolyam-keretek. */
     std::function<std::string(const std::string& type, const json::Value& msg, bool remote)> phoneTrackRequest;
     std::function<std::string(const std::string& data)> phoneTrackBinary;
@@ -2717,6 +2720,12 @@ private:
             if (!reply.empty()) sendText(reply);
             return;
         }
+        if (type.rfind("radio_", 0) == 0 && cb_.radioRequest) {
+            // a lista szerkesztése: a saját gépről vagy adminisztrátor távirányítóról (mint a zenetár mappái)
+            const std::string reply = cb_.radioRequest(type, msg, remote && !curIsAdmin());
+            if (!reply.empty()) sendText(reply);
+            return;
+        }
         if ((type.rfind("phone_track", 0) == 0) && cb_.phoneTrackRequest) {
             const std::string reply = cb_.phoneTrackRequest(type, msg, remote);
             if (!reply.empty()) sendText(reply);
@@ -3215,6 +3224,10 @@ private:
             const std::string p = cb_.playlistsStatus();
             if (!p.empty()) { s += ",\"playlists\":"; s += p; }
         }
+        if (cb_.radioStatus) {
+            const std::string r = cb_.radioStatus();
+            if (!r.empty()) { s += ",\"radio\":"; s += r; }
+        }
         s += '}';
         return s;
     }
@@ -3243,6 +3256,11 @@ public:
             hasCap = true;
             if (cb_.queueRequest) caps += ",\"queue\",\"playlists\"";
             if (cb_.phoneTrackRequest) caps += ",\"phone_track\"";
+        }
+        if (cb_.radioRequest) {
+            if (hasCap) caps += ",";
+            caps += "\"radio\"";
+            hasCap = true;
         }
         if (cb_.setMultiOut) {
             if (hasCap) caps += ",";

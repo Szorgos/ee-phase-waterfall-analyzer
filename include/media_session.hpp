@@ -28,6 +28,7 @@ struct Info {
     uint32_t fmtBits = 0;          // 0: ismeretlen (pl. veszteséges forrás)
     uint32_t fmtRate = 0;          // Hz; 0: nincs adat
     uint32_t fmtDsd = 0;           // az eredeti DSD-mintavétel Hz-ben (pl. 2822400); 0: nem DSD
+    bool live = false;             // élő folyam (internetrádió): nincs hossza, a cím menet közben változik
 };
 
 /** Engedélyezett parancsok a "media" üzenetben. */
@@ -78,6 +79,7 @@ inline std::string toJson(const Info& m) {
     if (m.fmtRate > 0 || m.fmtDsd > 0)
         s += ",\"fmt\":{\"bits\":" + std::to_string(m.fmtBits) + ",\"rate\":" + std::to_string(m.fmtRate) +
              ",\"dsd\":" + std::to_string(m.fmtDsd) + "}";
+    if (m.live) s += ",\"live\":true";
     s += "}";
     return s;
 }

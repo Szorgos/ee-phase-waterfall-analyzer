@@ -42,6 +42,7 @@
 #include "player_output_select.hpp"
 #include "music_library.hpp"
 #include "library_bridge.hpp"
+#include "radio_bridge.hpp"
 #include "play_queue.hpp"
 #include "playlists.hpp"
 #include "play_stats.hpp"
@@ -273,6 +274,11 @@ struct Core {
     player::PlaylistStore playlists{[](const std::string& doc) {
         if (!linux_store::savePlaylists(doc)) std::cerr << "[Lejátszó] Figyelem: a playlists.json nem írható.\n";
     }};
+    // Internetrádió: a felhasználó állomáslistája (radio.json); a vezérlő a lejátszó előtt szűnik meg
+    radio::StationStore radioStations{[](const std::string& doc) {
+        if (!linux_store::saveRadio(doc)) std::cerr << "[Rádió] Figyelem: a radio.json nem írható.\n";
+    }};
+    radio::RadioController radioCtl{filePlayer, radioStations};
 
     /** A felület kimenetválasztója: első a rendszer alapértelmezettje, utána az eszközök. */
     void refreshSinks() {
@@ -700,6 +706,8 @@ struct Core {
     library::attachLibrary(cb, c->musicLibrary, c->playQueue, c->playlists, c->playStats, [](const std::string& doc) {
         if (!linux_store::saveLibrary(doc)) std::cerr << "[Zenetár] Figyelem: a library.json nem írható.\n";
     }, &c->phoneCache);
+    c->radioStations.load(linux_store::loadRadio());
+    radio::attachRadio(cb, c->radioCtl, c->radioStations);
     cb.loadRemote = [] { return linux_store::loadRemote(); };
     cb.saveRemote = [](const std::string& doc) { return linux_store::saveRemote(doc); };
     cb.loadTargets = [] { return linux_store::loadRemoteTargets(); };

@@ -721,7 +721,7 @@ body.aqnp-on { padding-bottom: 72px; }
       if (!show) { pop.hidden = true; return; }
 
       ui.ctrls.hidden = false;
-      ui.seekRow.hidden = !has;
+      ui.seekRow.hidden = !has || !!m.live;   // élő folyam (rádió): nincs hossz, nincs tekerés
       ui.empty.hidden = has;
       if (!has) {
         ui.title.textContent = t("nothing");
@@ -1082,6 +1082,20 @@ body.aqnp-on { padding-bottom: 72px; }
   const STR = {
     hu: {
       albums: "Albumok", folders: "Mappák", lists: "Listák", queue: "Sor", loading: "Betöltés...",
+      radio: "Rádió", radioAdd: "Új állomás", radioName: "Az állomás neve", radioUrl: "Az állomás címe (http:// vagy https://)",
+      radioEmpty: "Még nincs állomás. Vedd fel a kedvenc rádióid címét (a rádió honlapján általában „Hallgatás” vagy „Stream” néven található; .pls és .m3u is jó).",
+      radioNote: "A rádió a beépített lejátszón szól, az EQ-n és a teljes hangláncon át. Támogatott: MP3, Ogg Vorbis, Opus, FLAC; az AAC és a HLS még nem.",
+      radioPlay: "Lejátszás", radioStop: "Leállítás", radioEditUrl: "Cím módosítása",
+      rs_connecting: "Kapcsolódás…", rs_buffering: "Pufferelés…", rs_playing: "Szól", rs_reconnecting: "Újracsatlakozás…", rs_error: "Hiba: {e}",
+      r_url: "Érvénytelen cím (http:// vagy https:// kell).", r_name: "Adj nevet az állomásnak.", r_full: "Az állomáslista megtelt.",
+      r_blocked: "Ez a cím helyi vagy magánhálózati címre mutat, biztonsági okból nem nyitható meg.", r_dns: "A szerver neve nem található.",
+      r_connect: "A szerver nem érhető el.", r_timeout: "A szerver nem válaszolt időben.", r_tls: "A biztonságos kapcsolat nem jött létre.",
+      r_http: "A szerver hibát adott.", r_aac: "Ez az adás AAC formátumú, ezt még nem támogatjuk. Próbáld az állomás MP3-as vagy Ogg-os címét.",
+      r_hls: "Ez szegmentált (HLS) adás, ezt még nem támogatjuk.", r_html: "Ez a cím egy weboldal, nem hangfolyam.", r_format: "Ismeretlen formátum.",
+      r_decode: "Az adás nem dekódolható.", r_playlist: "A lejátszási listában nincs használható cím.", r_redirect: "Túl sok átirányítás.",
+      r_nocurl: "A rádióhoz a curl program kell (telepítsd a csomagkezelővel).", r_formatChange: "Az adás formátuma megváltozott.",
+      r_eof: "Az adás megszakadt.", r_empty: "Az adás üres.", r_unknown: "Ismeretlen állomás.", r_output: "A hangkimenet nem nyitható meg.",
+      r_remote: "Az állomáslista csak a gépről (vagy adminisztrátor telefonról) szerkeszthető.",
       empty: "A zenetár üres. A zenei mappák a PC-n állíthatók be (alapból a Zene mappa).",
       scanning: "A PC most indexeli a zenetárat ({n} fájl)...", noAlbums: "Nincs album.",
       various: "Különböző előadók", tracks: "{n} szám", play: "Lejátszás", shuffle: "Keverve",
@@ -1135,6 +1149,20 @@ body.aqnp-on { padding-bottom: 72px; }
     },
     en: {
       albums: "Albums", folders: "Folders", lists: "Playlists", queue: "Queue", loading: "Loading...",
+      radio: "Radio", radioAdd: "New station", radioName: "Station name", radioUrl: "Station address (http:// or https://)",
+      radioEmpty: "No stations yet. Add the address of your favourite stations (on the station's website it is usually labelled “Listen” or “Stream”; .pls and .m3u work too).",
+      radioNote: "Radio plays through the built-in player, the EQ and the whole audio chain. Supported: MP3, Ogg Vorbis, Opus, FLAC; AAC and HLS not yet.",
+      radioPlay: "Play", radioStop: "Stop", radioEditUrl: "Change address",
+      rs_connecting: "Connecting…", rs_buffering: "Buffering…", rs_playing: "Playing", rs_reconnecting: "Reconnecting…", rs_error: "Error: {e}",
+      r_url: "Invalid address (http:// or https:// required).", r_name: "Give the station a name.", r_full: "The station list is full.",
+      r_blocked: "This address points to a local or private network address and cannot be opened for security reasons.", r_dns: "Server name not found.",
+      r_connect: "The server cannot be reached.", r_timeout: "The server did not answer in time.", r_tls: "The secure connection could not be established.",
+      r_http: "The server returned an error.", r_aac: "This station streams AAC, which is not supported yet. Try the station's MP3 or Ogg address.",
+      r_hls: "This is a segmented (HLS) stream, which is not supported yet.", r_html: "This address is a web page, not an audio stream.", r_format: "Unknown format.",
+      r_decode: "The stream cannot be decoded.", r_playlist: "The playlist has no usable address.", r_redirect: "Too many redirects.",
+      r_nocurl: "Radio needs the curl program (install it with your package manager).", r_formatChange: "The stream format changed.",
+      r_eof: "The stream was interrupted.", r_empty: "The stream is empty.", r_unknown: "Unknown station.", r_output: "The audio output cannot be opened.",
+      r_remote: "The station list can only be edited on the computer (or from an admin phone).",
       empty: "The library is empty. Music folders are set on the PC (by default the Music folder).",
       scanning: "The PC is indexing the library ({n} files)...", noAlbums: "No albums.",
       various: "Various artists", tracks: "{n} tracks", play: "Play", shuffle: "Shuffle",
@@ -2720,7 +2748,8 @@ body.aqnp-on { padding-bottom: 72px; }
   window.AqLibrary = function (opts) {
     const send = opts.send;
     let S = STR[opts.lang] || STR.en;
-    const t = (k, v) => (S[k] || k).replace(/\{(\w+)\}/g, (_, n) => (v && n in v ? v[n] : ""));
+    // hiányzó fordításnál az angol szöveg (az új kulcsok előbb csak magyarul és angolul készülnek)
+    const t = (k, v) => (S[k] || STR.en[k] || k).replace(/\{(\w+)\}/g, (_, n) => (v && n in v ? v[n] : ""));
     const root = opts.root;
     const desktop = opts.layout === "desktop";
 
@@ -2786,7 +2815,7 @@ body.aqnp-on { padding-bottom: 72px; }
     toastEl.hidden = true;
     root.append(srcNav, topbar, body, sheet, toastEl);
     const navBtns = {};
-    ["albums", "folders", "lists", "queue"].forEach(k => {
+    ["albums", "folders", "lists", "queue", "radio"].forEach(k => {
       navBtns[k] = btn("", "lib-tab", () => open({ kind: k }, true));
       nav.appendChild(navBtns[k]);
     });
@@ -2986,6 +3015,7 @@ body.aqnp-on { padding-bottom: 72px; }
     const history = [];
     let info = null, albums = [], albumsTotal = -1, albumsLoading = false;
     let queue = null, queueRev = -1, queueIndex = -2, lists = null, listsRev = -1, statsRev = -1;
+    let radio = null, radioRev = -1, radioSt = null;
     let pendingOpenList = false;   // létrehozás / mentés után a válaszként jövő listát nyitjuk meg
     let pickFor = null;            // listához adás: a forrás (üzenetrész), amíg a felhasználó listát választ
     let lastRendered = null;       // a legutóbb kirajzolt album / mappa / lista (nyelvváltáskor újrarajzoláshoz)
@@ -2996,14 +3026,14 @@ body.aqnp-on { padding-bottom: 72px; }
       else history.push(view);
       view = v;
       render();
-      if (source === "pc") fetchFor(v);
+      if (source === "pc" || v.kind === "radio") fetchFor(v);
     }
 
     function back() {
       closeCtx();
       view = history.pop() || { kind: "albums" };
       render();
-      if (source === "pc") fetchFor(view);
+      if (source === "pc" || view.kind === "radio") fetchFor(view);
     }
     function fetchFor(v) {
       if (v.kind === "albums") {
@@ -3014,6 +3044,7 @@ body.aqnp-on { padding-bottom: 72px; }
       else if (v.kind === "lists") send({ type: "playlist_list" });
       else if (v.kind === "list") send({ type: "playlist_get", id: v.id });
       else if (v.kind === "queue") send({ type: "queue_get" });
+      else if (v.kind === "radio") send({ type: "radio_list" });
     }
     function moreAlbums() {
       if (albumsLoading || (albumsTotal >= 0 && albums.length >= albumsTotal)) return;
@@ -3189,8 +3220,10 @@ body.aqnp-on { padding-bottom: 72px; }
         else if (view.kind === "list") body.appendChild(el("div", "hint", t("loading")));
         else if (view.kind === "queue") renderQueue();
         else if (view.kind === "smartEdit") renderSmartEditor();
+        else if (view.kind === "radio") renderRadio();
         return;
       }
+      if (view.kind === "radio") { renderRadio(); return; }
       if (view.kind === "albums") renderAlbums();
       else if (view.kind === "album") { if (lastRendered && lastRendered.kind === "album" && lastRendered.data.id === view.id) renderAlbum(lastRendered.data); else body.appendChild(el("div", "hint", t("loading"))); }
       else if (view.kind === "folders") open({ kind: "folder", id: "" }, true);
@@ -3719,6 +3752,72 @@ body.aqnp-on { padding-bottom: 72px; }
       body.appendChild(ul);
     }
 
+    // ---- Internetrádió: a felhasználó saját állomáslistája (radio_* üzenetek, status.radio)
+    const radioErr = e => {
+      const k = "r_" + String(e || "");
+      return S[k] || STR.en[k] || errText(e);
+    };
+    function radioStateText() {
+      if (!radioSt || radioSt.state === "idle") return "";
+      if (radioSt.state === "error") return t("rs_error", { e: radioErr(radioSt.error) });
+      const name = ((radio && radio.items) || []).find(s => s.id === radioSt.station);
+      const what = t("rs_" + radioSt.state);
+      const fmtTxt = radioSt.codec ? " · " + radioSt.codec.toUpperCase() + (radioSt.bitrate ? " " + radioSt.bitrate + " kbit/s" : "") : "";
+      return (name ? name.name + ": " : "") + what + fmtTxt;
+    }
+    function radioHost(u) {
+      try { return new URL(u).host; } catch (e) { return u; }
+    }
+    function renderRadio() {
+      body.replaceChildren();
+      const actions = el("div", "lib-actions");
+      actions.appendChild(btn("＋ " + t("radioAdd"), "lib-btn", async () => {
+        const n = await ask(t("radioName"), { input: true });
+        if (!n || !n.trim()) return;
+        const u = await ask(t("radioUrl"), { input: true, value: "https://" });
+        if (u && u.trim()) send({ type: "radio_add", name: n.trim(), url: u.trim() });
+      }));
+      const active = radioSt && radioSt.state !== "idle" && radioSt.state !== "error";
+      if (active) actions.appendChild(btn("■ " + t("radioStop"), "lib-btn", () => send({ type: "radio_stop" })));
+      body.appendChild(actions);
+      const st = radioStateText();
+      if (st) body.appendChild(el("div", "hint", st));
+      if (!radio) { body.appendChild(el("div", "hint", t("loading"))); return; }
+      if (!radio.items.length) body.appendChild(el("div", "hint", t("radioEmpty")));
+      const ul = el("ul", "lib-tracks");
+      radio.items.forEach((s, i) => {
+        const cur = active && radioSt.station === s.id;
+        const li = el("li", "lib-folder" + (cur ? " playing" : ""));
+        if (desktop) li.appendChild(el("span", "lib-no", cur ? "▶" : "📻"));
+        const meta = el("div", "meta");
+        meta.appendChild(el("div", "title", (desktop ? "" : (cur ? "▶ " : "📻 ")) + s.name));
+        meta.appendChild(el("div", "detail", radioHost(s.url)));
+        li.appendChild(meta);
+        li.appendChild(moreButton(e => {
+          e.stopPropagation();
+          menu(s.name, [
+            { label: t("radioPlay"), run: () => { send({ type: "radio_play", id: s.id }); opts.onPlay && opts.onPlay(); } },
+            { label: t("rename"), run: async () => {
+              const n = await ask(t("radioName"), { input: true, value: s.name });
+              if (n && n.trim()) send({ type: "radio_update", id: s.id, name: n.trim() });
+            } },
+            { label: t("radioEditUrl"), run: async () => {
+              const u = await ask(t("radioUrl"), { input: true, value: s.url });
+              if (u && u.trim()) send({ type: "radio_update", id: s.id, url: u.trim() });
+            } },
+            { label: t("moveUp"), run: () => i > 0 && send({ type: "radio_move", from: i, to: i - 1 }) },
+            { label: t("moveDown"), run: () => i + 1 < radio.items.length && send({ type: "radio_move", from: i, to: i + 1 }) },
+            { label: t("delete"), danger: true, run: async () => {
+              if (await ask(t("deleteConfirm", { name: s.name }), { okLabel: t("delete"), danger: true })) send({ type: "radio_remove", id: s.id });
+            } },
+          ], e);
+        }));
+        ul.appendChild(openRow(li, () => { send({ type: "radio_play", id: s.id }); opts.onPlay && opts.onPlay(); }));
+      });
+      body.appendChild(ul);
+      body.appendChild(el("div", "hint", t("radioNote")));
+    }
+
     function renderList(p) {
       lastRendered = { kind: "list", data: p };
       body.replaceChildren();
@@ -4062,12 +4161,28 @@ body.aqnp-on { padding-bottom: 72px; }
           pendingOpenList = false;
           if (m.ok === false) toast(t("error", { e: errText(m.error) }));
           return true;
+        case "radio":
+          radio = m;
+          radioRev = m.rev;
+          if (view.kind === "radio") renderRadio();
+          return true;
+        case "radio_result":
+          if (m.ok === false) toast(radioErr(m.error));
+          return true;
       }
       return false;
     }
 
     /** Az állapotüzenet: ha a sor vagy a listák változtak, a nyitott nézet frissül. */
     function onStatus(st) {
+      const r = st.radio;
+      if (r) {
+        const changed = !radioSt || r.state !== radioSt.state || r.station !== radioSt.station || r.error !== radioSt.error ||
+                        r.codec !== radioSt.codec;
+        radioSt = r;
+        if (r.rev !== radioRev && view.kind === "radio" && !root.hidden) { radioRev = r.rev; send({ type: "radio_list" }); }
+        else if (changed && view.kind === "radio" && !root.hidden) renderRadio();
+      }
       const q = st.queue;
       if (q && (q.rev !== queueRev || q.index !== queueIndex)) {
         queueRev = q.rev;
@@ -4092,7 +4207,7 @@ body.aqnp-on { padding-bottom: 72px; }
     return {
       show() {
         render();
-        if (source === "pc") fetchFor(view);
+        if (source === "pc" || view.kind === "radio") fetchFor(view);
       },
       onMessage,
       onStatus,

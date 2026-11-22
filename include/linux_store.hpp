@@ -336,6 +336,17 @@ inline std::string loadPlaylists() {
     return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
 }
 
+/** Az internetrádió állomáslistája: a radio.json-ban. */
+inline bool saveRadio(const std::string& doc) {
+    return writeAtomic(configDir(true) + "/radio.json", std::vector<char>(doc.begin(), doc.end()));
+}
+
+inline std::string loadRadio() {
+    std::ifstream f(configDir(false) + "/radio.json", std::ios::binary);
+    if (!f) return "";
+    return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+}
+
 /** A lejátszási napló (2.x, okos listák): a stats.json-ban. */
 inline bool saveStats(const std::string& doc) {
     return writeAtomic(configDir(true) + "/stats.json", std::vector<char>(doc.begin(), doc.end()));
