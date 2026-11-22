@@ -1,0 +1,11 @@
+--- a/include/src_convert.hpp
++++ b/include/src_convert.hpp
+@@ -610,7 +610,7 @@
+                 if (odone > 0) {
+                     const size_t ns = odone * ch;
+                     for (size_t i = 0; i < ns; ++i) {
+-                        double v = stage[i];
++                        double v = static_cast<double>(static_cast<float>(stage[i]));
+                         if (applyGain) v *= gain;
+                         fullOut.push_back(v);
+                     }

@@ -1,0 +1,11 @@
+--- a/include/src_convert.hpp
++++ b/include/src_convert.hpp
+@@ -661,7 +661,7 @@
+         // Egzakt levágás: padOut keret az elejéről, a kimeneti hossz a libsoxr saját kerekítése (llround)
+         const size_t targetOut = static_cast<size_t>(std::llround(static_cast<double>(totalInFrames) * ratio));
+         const size_t availFrames = ch ? (fullOut.size() / ch) : 0;
+-        const size_t startFrame = std::min(padOut, availFrames);
++        const size_t startFrame = std::min(padOut + 1, availFrames);
+         const size_t keepFrames = std::min(targetOut, availFrames - startFrame);
+         out.assign(fullOut.begin() + static_cast<std::ptrdiff_t>(startFrame * ch),
+                    fullOut.begin() + static_cast<std::ptrdiff_t>((startFrame + keepFrames) * ch));

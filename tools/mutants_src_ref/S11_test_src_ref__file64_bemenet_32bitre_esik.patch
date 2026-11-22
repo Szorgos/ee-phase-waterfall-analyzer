@@ -1,0 +1,15 @@
+--- a/include/src_convert.hpp
++++ b/include/src_convert.hpp
+@@ -286,7 +286,11 @@
+         double* dst = out.samples.data() + doneSamples;
+         const uint8_t* p = raw.data();
+         if (fmtTag == 3 && bitsPerSample == 64) {
+-            std::memcpy(dst, p, wantBytes);
++            for (size_t i = 0; i < want; ++i, p += 8) {
++                double v;
++                std::memcpy(&v, p, 8);
++                dst[i] = static_cast<double>(static_cast<float>(v));
++            }
+         } else if (fmtTag == 3 && bitsPerSample == 32) {
+             for (size_t i = 0; i < want; ++i, p += 4) {
+                 float v;
