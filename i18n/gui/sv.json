@@ -1105,7 +1105,7 @@
   "ups.infoRateH": "Hur högt bör jag uppsampla?",
   "ups.infoRateP": "Du behöver inte 384 kHz: ×2 (88,2/96 kHz) eller ”Utgångens maximum” (t.ex. 96 kHz på en 96 kHz-DAC) utför redan huvudfiltreringen med låg CPU-belastning.",
   "ups.infoEngH": "Vilken motor ska jag välja?",
-  "ups.infoEngP": "libsoxr, LGPL-2.1+ — snabb, mycket låg latens och snål med CPU (perfekt för vardagslyssning och video). Aqulify FFT64: egen enstegs 64-bitars FFT + Kaiser-sinc motor utan flerstegsspegling och med laboratorieprecision (något högre latens och CPU-last).",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — snabb, mycket låg latens och låg CPU-belastning (idealisk för vardagslyssning och video). Aqulify FFT64: egen enstegs 64-bitars FFT + Kaiser-sinc-motor utan flerstegsspeglingar. Aqulify FFT-DD: 106-bitars Double-Double FFT + Kaiser-sinc-motor (HydrogenAudio SRC: 99,85 %) för extrem matematisk precision (högre CPU-last).",
   "ups.infoPhaseH": "Fas och headroom",
   "ups.infoPhaseP": "Minimifas (0): ingen förringning (pre-ringing), föredras ofta för naturliga transienter. Mellan (25, rekommenderas): balanserad kompromiss. Linjär (50 / Referens): symmetriskt impulssvar utan fasdistorsion. −1 dB headroom förhindrar inter-sample-klippning på starka mastrar.",
   "ups.systemAudio": "Allt ljud (även systemljud)",
@@ -1117,5 +1117,7 @@
   "ups.infoSysP": "Med ”Allt ljud” passerar även externa appar (webbläsare, musik- och videospelare) genom vald motor. Klocksynkronisering ger ~100–250 ms latens; välj libsoxr för video/spel och Aqulify FFT64 för musik.",
   "ups.liveOwnActive": "Systemljud: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Systemljudsuppsampling: ingen virtuell ljudkabel hittades (t.ex. VB-Cable).",
-  "ups.liveNoOutput": "Systemljudsuppsampling: ingen separat fysisk DAC/utgång hittades (rundgång förhindrad)."
+  "ups.liveNoOutput": "Systemljudsuppsampling: ingen separat fysisk DAC/utgång hittades (rundgång förhindrad).",
+  "ups.engineFftDD": "Aqulify FFT-DD (106-bitars Double-Double)",
+  "ups.engineHintDD": "Enstegs 106-bitars Double-Double (~31 signifikanta siffror) FFT + Kaiser-sinc-motor (HydrogenAudio SRC: 99,85 %) med valbar fas och fördröjningsfritt filter."
 }

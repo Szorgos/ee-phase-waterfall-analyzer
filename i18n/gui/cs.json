@@ -1105,7 +1105,7 @@
   "ups.infoRateH": "Jak vysoko převzorkovávat?",
   "ups.infoRateP": "Není nutné chodit na 384 kHz: už ×2 (88,2/96 kHz) nebo „Maximum výstupu“ (např. 96 kHz na 96kHz DAC) provede hlavní filtraci při nízké zátěži CPU.",
   "ups.infoEngH": "Který motor zvolit?",
-  "ups.infoEngP": "libsoxr, LGPL-2.1+ — rychlý, velmi nízká latence a nízká zátěž CPU (ideální pro běžný poslech i video). Aqulify FFT64: vlastní jednostupňový 64bitový FFT + Kaiser-sinc motor bez vícestupňového zrcadlení s laboratorní přesností (mírně vyšší latence a zátěž CPU).",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — rychlý, velmi nízká latence a nízká zátěž CPU (ideální pro běžný poslech i video). Aqulify FFT64: vlastní jednostupňový 64bitový FFT + Kaiser-sinc motor bez vícestupňového zrcadlení. Aqulify FFT-DD: 106bitový Double-Double FFT + Kaiser-sinc motor (HydrogenAudio SRC: 99,85 %) s extrémní matematickou přesností (vyšší zátěž CPU).",
   "ups.infoPhaseH": "Fáze a rezerva (headroom)",
   "ups.infoPhaseP": "Minimální fáze (0): bez předzvuku (pre-ringing), často oblíbená pro přirozené tranzienty. Střední (25, doporučeno): vyvážený kompromis. Lineární (50 / Reference): symetrická impulzní odezva s nulovým fázovým zkreslením. Rezerva −1 dB brání mezivzorkovému přebuzení u hlasitých masterů.",
   "ups.systemAudio": "Veškerý zvuk (včetně systémového)",
@@ -1117,5 +1117,7 @@
   "ups.infoSysP": "S volbou „Veškerý zvuk“ projdou zvoleným motorem i externí aplikace (prohlížeč, hudební a video přehrávače). Synchronizace hodin přidává ~100–250 ms; pro video/hry použij libsoxr, pro hudbu Aqulify FFT64.",
   "ups.liveOwnActive": "Systémový zvuk: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Systémové převzorkování: nebyl nalezen virtuální audio kabel (např. VB-Cable).",
-  "ups.liveNoOutput": "Systémové převzorkování: nenalezen samostatný fyzický DAC/výstup (smyčka zablokována)."
+  "ups.liveNoOutput": "Systémové převzorkování: nenalezen samostatný fyzický DAC/výstup (smyčka zablokována).",
+  "ups.engineFftDD": "Aqulify FFT-DD (106bitový Double-Double)",
+  "ups.engineHintDD": "Jednostupňový 106bitový Double-Double (~31 platných číslic) motor FFT + Kaiser-sinc (HydrogenAudio SRC: 99,85 %) s volitelnou fází a filtrem s nulovým zpožděním."
 }

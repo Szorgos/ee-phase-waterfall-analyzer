@@ -1105,7 +1105,7 @@
   "ups.infoRateH": "Jak wysoko warto przepróbkowywać?",
   "ups.infoRateP": "Nie trzeba sięgać 384 kHz: już ×2 (88,2/96 kHz) lub „Maksimum wyjścia” (np. 96 kHz na przetworniku 96 kHz) wykonuje główne filtrowanie przy niskim obciążeniu CPU.",
   "ups.infoEngH": "Który silnik wybrać?",
-  "ups.infoEngP": "libsoxr, LGPL-2.1+ — szybki, bardzo niskie opóźnienie i niskie obciążenie CPU (idealny na co dzień i do wideo). Aqulify FFT64: własny jednoetapowy silnik 64-bit FFT + Kaiser-sinc bez zniekształceń wieloetapowych i o precyzji laboratoryjnej (nieco większe opóźnienie i obciążenie CPU).",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — szybki, bardzo niskie opóźnienie i małe obciążenie CPU (idealny na co dzień i do wideo). Aqulify FFT64: własny jednostopniowy 64-bitowy silnik FFT + Kaiser-sinc bez wielostopniowych odbić. Aqulify FFT-DD: 106-bitowy silnik Double-Double FFT + Kaiser-sinc (HydrogenAudio SRC: 99,85 %) o ekstremalnej precyzji matematycznej (wyższe obciążenie CPU).",
   "ups.infoPhaseH": "Faza i zapas głośności (headroom)",
   "ups.infoPhaseP": "Faza minimalna (0): brak dzwonienia wstępnego (pre-ringing), często wybierana dla naturalnych transjentów. Pośrednia (25, zalecana): zrównoważony kompromis. Liniowa (50 / Referencja): symetryczna odpowiedź impulsowa bez zniekształceń fazowych. Zapas −1 dB chroni przed przesterowaniem międzypróbkowym na głośnych masterach.",
   "ups.systemAudio": "Cały dźwięk (również systemowy)",
@@ -1117,5 +1117,7 @@
   "ups.infoSysP": "Opcja „Cały dźwięk” kieruje też zewnętrzne programy (przeglądarka, odtwarzacze muzyki i wideo) przez wybrany silnik. Synchronizacja zegarów dodaje ~100–250 ms; do wideo/gier wybierz libsoxr, do muzyki Aqulify FFT64.",
   "ups.liveOwnActive": "Dźwięk systemowy: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Upsampling systemowy: nie wykryto wirtualnego kabla audio (np. VB-Cable).",
-  "ups.liveNoOutput": "Upsampling systemowy: brak osobnego fizycznego DAC/wyjścia (zapobieżono pętli sprzężenia)."
+  "ups.liveNoOutput": "Upsampling systemowy: brak osobnego fizycznego DAC/wyjścia (zapobieżono pętli sprzężenia).",
+  "ups.engineFftDD": "Aqulify FFT-DD (106-bitowy Double-Double)",
+  "ups.engineHintDD": "Jednostopniowy 106-bitowy (Double-Double, ~31 cyfr znaczących) silnik FFT + Kaiser-sinc (HydrogenAudio SRC: 99,85 %) z wyborem fazy i filtrem bez opóźnienia."
 }

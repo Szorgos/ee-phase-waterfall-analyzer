@@ -395,7 +395,7 @@ struct Core {
                       filePlayer.upsampleDelayMs());
         const bool lActive = engine.liveUpsampleActive();
         const auto lSt = lActive ? engine.liveUpsampleStatus() : livebridge::BridgeStatus{};
-        const char* lConv = lActive ? (lSt.engineType == 1 ? "fft64" : "libsoxr") : "none";
+        const char* lConv = lActive ? audioopt::upsampleConverterCode(lSt.engineType) : "none";
         const std::string lReason = engine.liveUpsampleReason();
         char lbuf[384];
         std::snprintf(lbuf, sizeof(lbuf),

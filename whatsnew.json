@@ -1,6 +1,81 @@
 {
   "versions": [
     {
+      "version": "2.9.1",
+      "date": "2026-11-22",
+      "notes": {
+        "hu": [
+          "Új: a 106 bites Aqulify FFT-DD (Double-Double, ~31 értékes jegy; HydrogenAudio SRC: 99,85 %) felmintavételező motor közvetlenül választható az asztali felületen és a telefonos távirányítóban (1.5.1) a beépített lejátszóhoz és a „Minden hang” rendszerhanghoz is."
+        ],
+        "en": [
+          "New: the 106-bit Aqulify FFT-DD (Double-Double, ~31 significant digits; HydrogenAudio SRC: 99.85%) resampling engine is now directly selectable in the desktop UI and on the phone remote (1.5.1) for both the built-in player and “All audio” system sound."
+        ],
+        "es": [
+          "Nuevo: el motor de remuestreo Aqulify FFT-DD de 106 bits (Double-Double, ~31 dígitos significativos; HydrogenAudio SRC: 99,85 %) ya se puede elegir directamente en la interfaz de escritorio y en el mando del teléfono (1.5.1) tanto para el reproductor integrado como para «Todo el audio»."
+        ],
+        "fr": [
+          "Nouveau : le moteur de rééchantillonnage Aqulify FFT-DD 106 bits (Double-Double, ~31 chiffres significatifs ; HydrogenAudio SRC : 99,85 %) est désormais directement sélectionnable dans l’interface de bureau et sur la télécommande mobile (1.5.1) pour le lecteur intégré et le mode « Tout l’audio »."
+        ],
+        "zh": [
+          "新增：106 位 Aqulify FFT-DD（Double-Double，约 31 位有效数字；HydrogenAudio SRC：99.85 %）重采样引擎现已在桌面界面与手机遥控器（1.5.1）中开放直接选择，同时支持内置播放器与“全部音频”系统声音。"
+        ],
+        "de": [
+          "Neu: Die 106-Bit-Resampling-Engine Aqulify FFT-DD (Double-Double, ~31 signifikante Stellen; HydrogenAudio SRC: 99,85 %) ist nun direkt in der Desktop-Oberfläche und in der Telefon-Fernbedienung (1.5.1) für den integrierten Player und den Modus „Gesamter Ton“ wählbar."
+        ],
+        "it": [
+          "Nuovo: il motore di ricampionamento Aqulify FFT-DD a 106 bit (Double-Double, ~31 cifre significative; HydrogenAudio SRC: 99,85 %) è ora selezionabile direttamente nell’interfaccia desktop e sul telecomando del telefono (1.5.1) sia per il lettore integrato sia per «Tutto l’audio»."
+        ],
+        "nl": [
+          "Nieuw: de 106-bit Aqulify FFT-DD (Double-Double, ~31 significante cijfers; HydrogenAudio SRC: 99,85 %) resampling-engine is nu direct kiesbaar in de desktopinterface en op de telefoonafstandsbediening (1.5.1) voor zowel de ingebouwde speler als ‘Alle audio’."
+        ],
+        "pl": [
+          "Nowość: 106-bitowy silnik przepróbkowania Aqulify FFT-DD (Double-Double, ~31 cyfr znaczących; HydrogenAudio SRC: 99,85 %) można teraz wybrać bezpośrednio w interfejsie komputerowym i w pilocie na telefonie (1.5.1) dla wbudowanego odtwarzacza oraz trybu „Cały dźwięk”."
+        ],
+        "ru": [
+          "Новое: 106-битный движок передискретизации Aqulify FFT-DD (Double-Double, ~31 значащая цифра; HydrogenAudio SRC: 99,85 %) теперь можно выбрать напрямую в настольном интерфейсе и в пульте на телефоне (1.5.1) для встроенного плеера и режима «Весь звук»."
+        ],
+        "pt": [
+          "Novo: o motor de reamostragem Aqulify FFT-DD de 106 bits (Double-Double, ~31 dígitos significativos; HydrogenAudio SRC: 99,85 %) pode agora ser selecionado diretamente na interface de computador e no controlo remoto do telemóvel (1.5.1) para o leitor integrado e «Todo o áudio»."
+        ],
+        "ro": [
+          "Nou: motorul de reeșantionare Aqulify FFT-DD pe 106 biți (Double-Double, ~31 cifre semnificative; HydrogenAudio SRC: 99,85 %) poate fi acum selectat direct în interfața desktop și pe telecomanda din telefon (1.5.1) atât pentru playerul integrat, cât și pentru «Tot sunetul»."
+        ],
+        "el": [
+          "Νέο: η μηχανή αναδειγματοληψίας 106-bit Aqulify FFT-DD (Double-Double, ~31 σημαντικά ψηφία· HydrogenAudio SRC: 99,85 %) είναι πλέον άμεσα επιλέξιμη στην επιφάνεια εργασίας και στο τηλεχειριστήριο τηλεφώνου (1.5.0/1.5.1) για το ενσωματωμένο πρόγραμμα αναπαραγωγής και το «Όλος ο ήχος»."
+        ],
+        "tr": [
+          "Yeni: 106 bit Aqulify FFT-DD (Double-Double, ~31 anlamlı basamak; HydrogenAudio SRC: %99,85) yeniden örnekleme motoru artık hem yerleşik oynatıcı hem de “Tüm sesler” modu için masaüstü arayüzünde ve telefon kumandasında (1.5.1) doğrudan seçilebilir."
+        ],
+        "fi": [
+          "Uutta: 106-bittinen Aqulify FFT-DD (Double-Double, ~31 merkitsevää numeroa; HydrogenAudio SRC: 99,85 %) -uudelleennäytteistysmoottori on nyt suoraan valittavissa työpöytäkäyttöliittymässä ja puhelinkaukosäätimessä (1.5.1) sekä sisäänrakennetulle soittimelle että ”Kaikki ääni” -tilalle."
+        ],
+        "da": [
+          "Nyt: 106-bit Aqulify FFT-DD (Double-Double, ~31 betydende cifre; HydrogenAudio SRC: 99,85 %) resampling-motoren kan nu vælges direkte i computerens brugerflade og på telefonens fjernbetjening (1.5.1) til både den indbyggede afspiller og “Al lyd”."
+        ],
+        "nb": [
+          "Nytt: 106-bits Aqulify FFT-DD (Double-Double, ~31 signifikante sifre; HydrogenAudio SRC: 99,85 %) resamplingsmotor kan nå velges direkte i skrivebordsgrensesnittet og på telefonens fjernkontroll (1.5.1) for både den innebygde spilleren og «All lyd»."
+        ],
+        "sv": [
+          "Nytt: 106-bitars Aqulify FFT-DD (Double-Double, ~31 signifikanta siffror; HydrogenAudio SRC: 99,85 %) omsamplingsmotor kan nu väljas direkt i datorgränssnittet och i telefonens fjärrkontroll (1.5.1) för både den inbyggda spelaren och ”Allt ljud”."
+        ],
+        "he": [
+          "חדש: מנוע הדגימה מחדש Aqulify FFT-DD ב-106 סיביות (Double-Double, כ-31 ספרות משמעותיות; HydrogenAudio SRC: 99.85%) ניתן כעת לבחירה ישירה בממשק שולחן העבודה ובשלט הטלפון (1.5.1) הן עבור הנגן המובנה והן עבור מצב \"כל השמע\"."
+        ],
+        "ja": [
+          "新機能：106ビット Aqulify FFT-DD（Double-Double、有効数字 約31桁；HydrogenAudio SRC：99.85 %）リサンプリングエンジンが、内蔵プレーヤーと「すべての音声」モードの両方でデスクトップ画面およびスマホ用リモコン（1.5.1）から直接選択できるようになりました。"
+        ],
+        "ko": [
+          "신규: 106비트 Aqulify FFT-DD(Double-Double, 유효숫자 약 31자리; HydrogenAudio SRC: 99.85 %) 리샘플링 엔진을 이제 내장 플레이어와 ‘모든 오디오’ 모드 모두에서 데스크톱 화면과 휴대폰 리모컨(1.5.1)에서 직접 선택할 수 있습니다."
+        ],
+        "cs": [
+          "Novinka: 106bitový převzorkovací motor Aqulify FFT-DD (Double-Double, ~31 platných číslic; HydrogenAudio SRC: 99,85 %) lze nyní přímo zvolit v rozhraní počítače i v ovladači v telefonu (1.5.1) pro vestavěný přehrávač i režim „Veškerý zvuk“."
+        ],
+        "uk": [
+          "Нове: 106-бітний рушій передискретизації Aqulify FFT-DD (Double-Double, ~31 значуща цифра; HydrogenAudio SRC: 99,85 %) тепер можна безпосередньо обрати в настільному інтерфейсі та в пульті на телефоні (1.5.1) як для вбудованого плеєра, так і для режиму «Увесь звук»."
+        ]
+      }
+    },
+    {
       "version": "2.9.0",
       "date": "2026-11-22",
       "notes": {

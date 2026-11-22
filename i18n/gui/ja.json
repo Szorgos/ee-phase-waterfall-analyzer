@@ -1105,7 +1105,7 @@
   "ups.infoRateH": "どこまで上げるべきですか？",
   "ups.infoRateP": "384 kHzまで上げる必要はありません。×2（88.2/96 kHz）や「出力の最大値」（例：96 kHz対応DACなら96 kHz）で、低いCPU負荷のまま主要な折り返し除去フィルタリングが行われます。",
   "ups.infoEngH": "どちらのエンジンを選べばよいですか？",
-  "ups.infoEngP": "libsoxr, LGPL-2.1+ — 高速・超低遅延・低CPU負荷で普段聴きや動画に最適です。Aqulify FFT64 は独自の一段構成 64-bit FFT + Kaiser-sinc エンジンで、多段折り返し歪みのない実験室レベルの精度を実現します（遅延とCPU負荷はやや増加）。",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — 高速・超低遅延でCPU負荷が低い（日常のリスニングや動画に最適）。Aqulify FFT64：多段折り返しのない独自の単段64ビットFFT + Kaiser-sincエンジン。Aqulify FFT-DD：106ビット Double-Double（約31桁精度）FFT + Kaiser-sincエンジン（HydrogenAudio SRC：99.85 %、極限の数学的精度・CPU負荷は高め）。",
   "ups.infoPhaseH": "位相とヘッドルーム",
   "ups.infoPhaseP": "最小位相 (0)：プリリンギングがなく、自然なトランジェント向き。中間（25、推奨）：バランスの良い折衷。リニア（50 / リファレンス）：位相歪みのない対称インパルス応答。−1 dBのヘッドルームにより、音圧の高いマスターでのインターサンプル・クリッピングを防ぎます。",
   "ups.systemAudio": "すべての音声（システム音声も含む）",
@@ -1117,5 +1117,7 @@
   "ups.infoSysP": "「すべての音声」を有効にすると、外部アプリ（ブラウザー、音楽・動画プレーヤー）も選択したエンジンを経由します。クロック同期により約100–250 msの遅延が加わります。動画・ゲームには libsoxr、音楽鑑賞には Aqulify FFT64 を推奨します。",
   "ups.liveOwnActive": "システム音声: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "システム音声アップサンプリング: 仮想オーディオケーブル（VB-Cable 等）が見つかりません。",
-  "ups.liveNoOutput": "システム音声アップサンプリング: 別の物理 DAC / 出力デバイスが見つかりません（ループ防止）。"
+  "ups.liveNoOutput": "システム音声アップサンプリング: 別の物理 DAC / 出力デバイスが見つかりません（ループ防止）。",
+  "ups.engineFftDD": "Aqulify FFT-DD（106ビット Double-Double）",
+  "ups.engineHintDD": "106ビット Double-Double（有効数字 約31桁）単段FFT + Kaiser-sincエンジン（HydrogenAudio SRC：99.85 %）。位相選択可能・ゼロ遅延フィルター。"
 }

@@ -4958,7 +4958,7 @@ var qrcode = function() {
       <svg class="app-mark" viewBox="0 0 28 28" aria-hidden="true"><path d="M3 13c3-4 5-4 8 0s5 4 8 0 5-4 6-2" fill="none" stroke="var(--aq-accent)" stroke-width="2.2" stroke-linecap="round"/><path d="M3 19.5c3-3 5-3 8 0s5 3 8 0 5-3 6-1.5" fill="none" stroke="var(--aq-accent-2)" stroke-width="2" stroke-linecap="round"/></svg>
       <span class="app-brand" title="Aqulify • Audiofil DSP Rendszer" data-i18n-title="app.title">Aqulify</span>
       <span class="app-title" title="Aqulify • Audiofil DSP Rendszer" data-i18n-title="app.title"><span data-i18n="app.subtitle">Audiofil DSP Rendszer</span></span>
-      <span class="app-version" id="lblAppVersion" data-gui-version="2.9.0" title="Verziószám" data-i18n-title="ver.title">v2.9.0</span>
+      <span class="app-version" id="lblAppVersion" data-gui-version="2.9.1" title="Verziószám" data-i18n-title="ver.title">v2.9.1</span>
     </div>
 
     <!-- KÖZÉPSŐ ZÓNA: FŐ NÉZETVÁLTÓ CSÚSZÓ KAPSZULÁVAL -->
@@ -5107,6 +5107,7 @@ var qrcode = function() {
                     <select id="upsEngine" class="mini-select" onchange="upsOnEngineChange()">
                       <option value="0" data-i18n="ups.engineSoxr">libsoxr (gyors, alacsony késleltetés)</option>
                       <option value="1" data-i18n="ups.engineFft64">Aqulify FFT64 (64 bites Kaiser-sinc)</option>
+                      <option value="2" data-i18n="ups.engineFftDD">Aqulify FFT-DD (106 bites Double-Double)</option>
                     </select>
                   </label>
                   <div id="upsEngineHint" class="ao-hint" hidden data-i18n="ups.engineHint">Egylépcsős 64 bites FFT + Kaiser-sinc motor: tükörképek nélkül, választható fázissal (minimum / köztes / lineáris) és 0 késleltetésű szűrővel.</div>
@@ -5249,7 +5250,7 @@ var qrcode = function() {
           </div>
           <div class="ups-help-sec">
             <div class="ups-help-h" data-i18n="ups.infoEngH">Melyik motort válasszam?</div>
-            <p class="ups-help-p" data-i18n="ups.infoEngP">libsoxr, LGPL-2.1+ – gyors, nagyon alacsony késleltetésű és takarékos (mindennapi hallgatáshoz, videóhoz ideális). Aqulify FFT64: saját, egylépcsős 64 bites FFT + Kaiser-sinc motor, többlépcsős tükörképek nélkül, laboratóriumi pontossággal (kicsit nagyobb késleltetéssel és CPU-igénnyel).</p>
+            <p class="ups-help-p" data-i18n="ups.infoEngP">libsoxr, LGPL-2.1+ – gyors, nagyon alacsony késleltetésű és takarékos (mindennapi hallgatáshoz, videóhoz ideális). Aqulify FFT64: saját, egylépcsős 64 bites FFT + Kaiser-sinc motor, többlépcsős tükörképek nélkül. Aqulify FFT-DD: 106 bites Double-Double (~31 értékes jegy) FFT + Kaiser-sinc motor (HydrogenAudio SRC: 99,85 %), extrém matematikai pontossággal (nagyobb CPU-igénnyel).</p>
           </div>
           <div class="ups-help-sec">
             <div class="ups-help-h" data-i18n="ups.infoPhaseH">Fázis és fejtér</div>
@@ -10714,9 +10715,14 @@ function upsOnRuleChange() {
 }
 
 function upsUpdateEngineUi(eng) {
-  const isFft = eng === 1;
+  const isFft = eng === 1 || eng === 2;
   const hint = document.getElementById("upsEngineHint");
-  if (hint) hint.hidden = !isFft;
+  if (hint) {
+    hint.hidden = !isFft;
+    const key = eng === 2 ? "ups.engineHintDD" : "ups.engineHint";
+    hint.setAttribute("data-i18n", key);
+    hint.textContent = t(key);
+  }
 }
 
 function upsOnEngineChange() {
@@ -10825,7 +10831,7 @@ function upsRenderStatus() {
   const lu = engineStatus && engineStatus.liveUpsample;
   if (lu && lu.active) {
     if (lu.ownEngine) {
-      const engLabel = lu.converter === "fft64" ? "Aqulify FFT64" : "libsoxr";
+      const engLabel = lu.converter === "fftdd" ? "Aqulify FFT-DD" : lu.converter === "fft64" ? "Aqulify FFT64" : "libsoxr";
       parts.push(`<span class="ok">● ${t("ups.liveOwnActive", { src: aoKhz(lu.srcRate), dst: aoKhz(lu.actualDacRate || lu.targetRate), engine: engLabel, ms: Math.round(lu.latencyMs || 0) })}</span>`);
     } else {
       parts.push(`<span class="ok">● ${t("ups.liveActive", { src: aoKhz(lu.srcRate), dst: aoKhz(lu.actualDacRate || lu.targetRate) })}</span>`);

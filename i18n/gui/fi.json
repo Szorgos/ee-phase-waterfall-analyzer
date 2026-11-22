@@ -1105,7 +1105,7 @@
   "ups.infoRateH": "Kuinka korkealle kannattaa ylinäytteistää?",
   "ups.infoRateP": "384 kHz:iin ei tarvitse mennä: jo ×2 (88,2/96 kHz) tai ”Ulostulon maksimi” (esim. 96 kHz 96 kHz:n DACilla) hoitaa olennaisen suodatuksen pienellä suorittimen kuormalla.",
   "ups.infoEngH": "Mikä moottori kannattaa valita?",
-  "ups.infoEngP": "libsoxr, LGPL-2.1+ — nopea, erittäin pieni viive ja kevyt suorittimelle (ihanteellinen arkeen ja videoihin). Aqulify FFT64: oma yksivaiheinen 64-bittinen FFT + Kaiser-sinc -moottori ilman monivaihepeilautumia ja laboratoriotarkkuudella (hieman suurempi viive ja suoritinkuorma).",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — nopea, erittäin pieni viive ja kevyt suorittimelle (ihanteellinen arkikuunteluun ja videolle). Aqulify FFT64: oma yksivaiheinen 64-bittinen FFT + Kaiser-sinc -moottori ilman monivaihepeilauksia. Aqulify FFT-DD: 106-bittinen Double-Double FFT + Kaiser-sinc -moottori (HydrogenAudio SRC: 99,85 %) äärimmäiseen matemaattiseen tarkkuuteen (suurempi suoritinkuorma).",
   "ups.infoPhaseH": "Vaihe ja dynaaminen vara (headroom)",
   "ups.infoPhaseP": "Minimivaihe (0): ei esivärähtelyä (pre-ringing), usein luonnollisten transienttien vuoksi suosittu. Välimuoto (25, suositeltu): tasapainoinen kompromissi. Lineaarinen (50 / Referenssi): symmetrinen impulssivaste ilman vaihesäröä. −1 dB vara estää näytteiden välisen leikkautumisen kovaa masteroiduilla äänitteillä.",
   "ups.systemAudio": "Kaikki ääni (myös järjestelmä-ääni)",
@@ -1117,5 +1117,7 @@
   "ups.infoSysP": "”Kaikki ääni” -valinnalla myös ulkoiset sovellukset (selain, musiikki- ja videosoittimet) kulkevat valitun moottorin läpi. Kellosynkronointi lisää ~100–250 ms viivettä; valitse libsoxr videolle/peleihin ja Aqulify FFT64 musiikin kuunteluun.",
   "ups.liveOwnActive": "Järjestelmä-ääni: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Järjestelmä-äänen ylös-näytteistys: virtuaalista äänikaapelia ei löytynyt (esim. VB-Cable).",
-  "ups.liveNoOutput": "Järjestelmä-äänen ylös-näytteistys: erillistä fyysistä DAC/lähtölaitetta ei löytynyt (kierto estetty)."
+  "ups.liveNoOutput": "Järjestelmä-äänen ylös-näytteistys: erillistä fyysistä DAC/lähtölaitetta ei löytynyt (kierto estetty).",
+  "ups.engineFftDD": "Aqulify FFT-DD (106-bittinen Double-Double)",
+  "ups.engineHintDD": "Yksivaiheinen 106-bittinen Double-Double (~31 merkitsevää numeroa) FFT + Kaiser-sinc -moottori (HydrogenAudio SRC: 99,85 %), valittavalla vaiheella ja viiveettömällä suotimella."
 }

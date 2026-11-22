@@ -1105,7 +1105,7 @@
   "ups.infoRateH": "Ne kadar yükseğe çıkarmalıyım?",
   "ups.infoRateP": "384 kHz’e gerek yoktur: ×2 (88,2/96 kHz) veya “Çıkış maksimumu” (ör. 96 kHz DAC’ta 96 kHz) düşük CPU kullanımıyla ana filtrelemeyi zaten yapar.",
   "ups.infoEngH": "Hangi motoru seçmeliyim?",
-  "ups.infoEngP": "libsoxr, LGPL-2.1+ — hızlı, çok düşük gecikmeli ve CPU dostu (günlük dinleme ve video için ideal). Aqulify FFT64: tek aşamalı 64-bit FFT + Kaiser-sinc motoru, çok aşamalı görüntüleme olmadan laboratuvar hassasiyeti sunar (biraz daha fazla gecikme ve CPU yüküyle).",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — hızlı, çok düşük gecikmeli ve düşük CPU kullanımlı (günlük dinleme ve video için ideal). Aqulify FFT64: çok aşamalı yansıma içermeyen özel tek aşamalı 64 bit FFT + Kaiser-sinc motoru. Aqulify FFT-DD: en üst düzey matematiksel hassasiyet için 106 bit Double-Double FFT + Kaiser-sinc motoru (HydrogenAudio SRC: %99,85; daha yüksek CPU yükü).",
   "ups.infoPhaseH": "Faz ve tavan payı (headroom)",
   "ups.infoPhaseP": "Minimum faz (0): ön çınlama (pre-ringing) yoktur, doğal geçici tepkiler için sıkça tercih edilir. Orta (25, önerilen): dengeli uzlaşma. Doğrusal (50 / Referans): sıfır faz bozulmalı simetrik dürtü yanıtı. −1 dB tavan payı yüksek sesli kayıtlarda örnekler arası kırpılmayı önler.",
   "ups.systemAudio": "Tüm sesler (sistem sesi dahil)",
@@ -1117,5 +1117,7 @@
   "ups.infoSysP": "“Tüm sesler” ile harici uygulamalar (tarayıcı, müzik ve video oynatıcılar) da seçilen motordan geçer. Saat senkronizasyonu ~100–250 ms gecikme ekler; video/oyun için libsoxr, müzik için Aqulify FFT64 önerilir.",
   "ups.liveOwnActive": "Sistem sesi: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Sistem sesi yükseltme: kurulu sanal ses kablosu bulunamadı (ör. VB-Cable).",
-  "ups.liveNoOutput": "Sistem sesi yükseltme: ayrı bir fiziksel DAC/çıkış bulunamadı (geri besleme engellendi)."
+  "ups.liveNoOutput": "Sistem sesi yükseltme: ayrı bir fiziksel DAC/çıkış bulunamadı (geri besleme engellendi).",
+  "ups.engineFftDD": "Aqulify FFT-DD (106 bit Double-Double)",
+  "ups.engineHintDD": "106 bit Double-Double (~31 anlamlı basamak) tek aşamalı FFT + Kaiser-sinc motoru (HydrogenAudio SRC: %99,85), seçilebilir faz ve sıfır gecikmeli filtre ile."
 }

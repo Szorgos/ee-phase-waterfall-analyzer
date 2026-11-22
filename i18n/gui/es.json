@@ -1105,7 +1105,7 @@
   "ups.infoRateH": "¿Hasta qué frecuencia conviene subir?",
   "ups.infoRateP": "No hace falta llegar a 384 kHz: con ×2 (88,2/96 kHz) o «Máximo de la salida» (p. ej. 96 kHz en un DAC de 96 kHz) ya se realiza el filtrado principal con bajo uso de CPU.",
   "ups.infoEngH": "¿Qué motor debo elegir?",
-  "ups.infoEngP": "libsoxr, LGPL-2.1+ — rápido, latencia muy baja y ligero en CPU (ideal para uso diario y vídeo). Aqulify FFT64: motor propio FFT de 64 bits + Kaiser-sinc de una sola etapa, sin imágenes multietapa y precisión de laboratorio (latencia y uso de CPU algo mayores).",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — rápido, muy baja latencia y ligero para la CPU (ideal para uso diario y vídeo). Aqulify FFT64: motor FFT de 64 bits + Kaiser-sinc de una etapa sin imágenes polifásicas. Aqulify FFT-DD: motor FFT + Kaiser-sinc Double-Double de 106 bits (HydrogenAudio SRC: 99,85 %) con precisión matemática extrema (mayor carga de CPU).",
   "ups.infoPhaseH": "Fase y margen (headroom)",
   "ups.infoPhaseP": "Fase mínima (0): sin preoscilación (pre-ringing), a menudo preferida por sus transitorios naturales. Intermedia (25, recomendada): equilibrio compensado. Lineal (50 / Referencia): respuesta al impulso simétrica sin distorsión de fase. El margen de −1 dB evita el recorte entre muestras en grabaciones fuertes.",
   "ups.systemAudio": "Todo el audio (también del sistema)",
@@ -1117,5 +1117,7 @@
   "ups.infoSysP": "Con «Todo el audio», los programas externos (navegador, reproductores de música y vídeo) también pasan por el motor elegido. La sincronización de relojes añade ~100–250 ms; para vídeo/juegos elige libsoxr y para escuchar música, Aqulify FFT64.",
   "ups.liveOwnActive": "Audio del sistema: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Sobremuestreo del sistema: no se detectó ningún cable de audio virtual (p. ej. VB-Cable).",
-  "ups.liveNoOutput": "Sobremuestreo del sistema: no hay un DAC/salida física independiente (bucle evitado)."
+  "ups.liveNoOutput": "Sobremuestreo del sistema: no hay un DAC/salida física independiente (bucle evitado).",
+  "ups.engineFftDD": "Aqulify FFT-DD (Double-Double de 106 bits)",
+  "ups.engineHintDD": "Motor FFT + Kaiser-sinc de una etapa con precisión Double-Double de 106 bits (~31 dígitos significativos, HydrogenAudio SRC: 99,85 %), fase seleccionable y filtro sin retardo."
 }

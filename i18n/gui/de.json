@@ -1105,7 +1105,7 @@
   "ups.infoRateH": "Wie hoch sollte man upsampeln?",
   "ups.infoRateP": "384 kHz sind nicht nötig: Schon ×2 (88,2/96 kHz) oder „Maximum des Ausgangs“ (z. B. 96 kHz bei einem 96-kHz-DAC) übernimmt die wesentliche Filterung bei geringer CPU-Last.",
   "ups.infoEngH": "Welche Engine soll ich wählen?",
-  "ups.infoEngP": "libsoxr, LGPL-2.1+ – schnell, sehr geringe Latenz und ressourcenschonend (ideal für Alltag und Video). Aqulify FFT64: eigene einstufige 64-Bit-FFT + Kaiser-Sinc-Engine ohne mehrstufige Spiegelfrequenzen und mit Laborpräzision (etwas höhere Latenz und CPU-Last).",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — schnell, sehr geringe Latenz und niedrige CPU-Last (ideal für Alltag und Video). Aqulify FFT64: eigene einstufige 64-Bit-FFT + Kaiser-Sinc-Engine ohne mehrstufige Spiegelungen. Aqulify FFT-DD: 106-Bit-Double-Double-FFT + Kaiser-Sinc-Engine (HydrogenAudio SRC: 99,85 %) für höchste mathematische Präzision (höhere CPU-Last).",
   "ups.infoPhaseH": "Phase und Headroom",
   "ups.infoPhaseP": "Minimalphasig (0): kein Vorschwingen (Pre-Ringing), oft für natürliche Transienten bevorzugt. Mittel (25, empfohlen): ausgewogener Kompromiss. Linear (50 / Referenz): symmetrische Impulsantwort ohne Phasenverzerrung. −1 dB Headroom schützt vor Inter-Sample-Clipping bei lauten Mastern.",
   "ups.systemAudio": "Gesamter Ton (auch Systemaudio)",
@@ -1117,5 +1117,7 @@
   "ups.infoSysP": "Mit „Gesamter Ton“ laufen auch externe Programme (Browser, Musik- und Videoplayer) über die gewählte Engine. Die Taktsynchronisation fügt ~100–250 ms Latenz hinzu; für Video/Spiele empfiehlt sich libsoxr, für Musikgenuss Aqulify FFT64.",
   "ups.liveOwnActive": "Systemaudio: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Systemaudio-Upsampling: kein virtuelles Audiokabel gefunden (z. B. VB-Cable).",
-  "ups.liveNoOutput": "Systemaudio-Upsampling: kein separater physischer DAC/Ausgang gefunden (Rückkopplung verhindert)."
+  "ups.liveNoOutput": "Systemaudio-Upsampling: kein separater physischer DAC/Ausgang gefunden (Rückkopplung verhindert).",
+  "ups.engineFftDD": "Aqulify FFT-DD (106-Bit Double-Double)",
+  "ups.engineHintDD": "Einstufige 106-Bit-Double-Double-FFT + Kaiser-Sinc-Engine (~31 signifikante Stellen, HydrogenAudio SRC: 99,85 %) mit wählbarer Phase und verzögerungsfreiem Filter."
 }

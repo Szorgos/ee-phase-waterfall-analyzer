@@ -1461,7 +1461,7 @@ int main(int argc, char* argv[]) {
                 const bool ownOn = node.liveUpsampleActive() && liveOwnTarget > 0;
                 const auto bst = ownOn ? node.liveUpsampleStatus() : livebridge::BridgeStatus{};
                 const char* conv = ownOn
-                    ? (bst.engineType == 1 ? "fft64" : "libsoxr")
+                    ? audioopt::upsampleConverterCode(bst.engineType)
                     : "pipewire";
                 const uint32_t tgtRate = ownOn ? liveOwnTarget : liveForced;
                 std::snprintf(lbuf, sizeof(lbuf),

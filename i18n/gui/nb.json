@@ -1105,7 +1105,7 @@
   "ups.infoRateH": "Hvor høyt bør jeg oppsample?",
   "ups.infoRateP": "Du trenger ikke 384 kHz: ×2 (88,2/96 kHz) eller «Utgangens maksimum» (f.eks. 96 kHz på en 96 kHz-DAC) utfører allerede hovedfiltreringen med lav CPU-bruk.",
   "ups.infoEngH": "Hvilken motor bør jeg velge?",
-  "ups.infoEngP": "libsoxr, LGPL-2.1+ — rask, svært lav forsinkelse og lav CPU-bruk (ideell til hverdagslytting og video). Aqulify FFT64: egen ett-trinns 64-bits FFT + Kaiser-sinc motor uten flertrinnsspeiling og med laboratoriepresisjon (litt høyere forsinkelse og CPU-last).",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — rask, svært lav forsinkelse og lav CPU-bruk (ideell til daglig lytting og video). Aqulify FFT64: egen ett-trinns 64-bits FFT + Kaiser-sinc-motor uten flertrinns speilinger. Aqulify FFT-DD: 106-bits Double-Double FFT + Kaiser-sinc-motor (HydrogenAudio SRC: 99,85 %) for ekstrem matematisk presisjon (høyere CPU-last).",
   "ups.infoPhaseH": "Fase og takhøyde (headroom)",
   "ups.infoPhaseP": "Minimumsfase (0): ingen forringing (pre-ringing), ofte foretrukket for naturlige transienter. Mellom (25, anbefalt): balansert kompromiss. Lineær (50 / Referanse): symmetrisk impulsrespons uten faseforvrengning. −1 dB takhøyde hindrer inter-sample klipping på høye mastere.",
   "ups.systemAudio": "All lyd (også systemlyd)",
@@ -1117,5 +1117,7 @@
   "ups.infoSysP": "Med «All lyd» går også eksterne apper (nettleser, musikk- og videospillere) gjennom valgt motor. Klokkesynkronisering gir ~100–250 ms; velg libsoxr til video/spill og Aqulify FFT64 til musikk.",
   "ups.liveOwnActive": "Systemlyd: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Systemlyd-oppsampling: ingen virtuell lydkabel funnet (f.eks. VB-Cable).",
-  "ups.liveNoOutput": "Systemlyd-oppsampling: ingen separat fysisk DAC/utgang funnet (tilbakekobling forhindret)."
+  "ups.liveNoOutput": "Systemlyd-oppsampling: ingen separat fysisk DAC/utgang funnet (tilbakekobling forhindret).",
+  "ups.engineFftDD": "Aqulify FFT-DD (106-bits Double-Double)",
+  "ups.engineHintDD": "Ett-trinns 106-bits Double-Double (~31 signifikante sifre) FFT + Kaiser-sinc-motor (HydrogenAudio SRC: 99,85 %) med valgbar fase og filter uten forsinkelse."
 }

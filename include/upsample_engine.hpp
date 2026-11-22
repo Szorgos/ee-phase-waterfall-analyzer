@@ -116,8 +116,11 @@ public:
             return true;
         }
 
-        if (engineType == static_cast<int>(audioopt::UpsampleEngineType::Fft64)) {
-            if (fftStream_.init(srcRate, dstRate, channels, passbandEnd, 34.5, phase)) {
+        if (engineType == static_cast<int>(audioopt::UpsampleEngineType::Fft64) ||
+            engineType == static_cast<int>(audioopt::UpsampleEngineType::FftDD)) {
+            const bool isDD = (engineType == static_cast<int>(audioopt::UpsampleEngineType::FftDD));
+            const double beta = isDD ? 35.2 : 34.5;
+            if (fftStream_.init(srcRate, dstRate, channels, passbandEnd, beta, phase, isDD)) {
                 useFft64_ = true;
                 active_ = true;
                 return true;

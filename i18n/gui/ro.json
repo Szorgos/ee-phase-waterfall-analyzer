@@ -1105,7 +1105,7 @@
   "ups.infoRateH": "Până la ce frecvență merită urcat?",
   "ups.infoRateP": "Nu este nevoie de 384 kHz: ×2 (88,2/96 kHz) sau «Maximul ieșirii» (de ex. 96 kHz pe un DAC de 96 kHz) realizează deja filtrarea principală cu consum redus de CPU.",
   "ups.infoEngH": "Ce motor să aleg?",
-  "ups.infoEngP": "libsoxr, LGPL-2.1+ — rapid, latență foarte mică și consum redus de CPU (ideal pentru ascultare zilnică și video). Aqulify FFT64: motor propriu FFT 64-bit + Kaiser-sinc într-o singură etapă, fără imagini multietapă și cu precizie de laborator (latență și sarcină CPU ușor mai mari).",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — rapid, latență foarte mică și consum redus de CPU (ideal pentru ascultare zilnică și video). Aqulify FFT64: motor FFT pe 64 de biți + Kaiser-sinc într-o singură treaptă, fără imagini polifazice. Aqulify FFT-DD: motor FFT + Kaiser-sinc Double-Double pe 106 biți (HydrogenAudio SRC: 99,85 %) cu precizie matematică extremă (consum CPU mai mare).",
   "ups.infoPhaseH": "Fază și rezervă (headroom)",
   "ups.infoPhaseP": "Fază minimă (0): fără pre-oscilație (pre-ringing), adesea preferată pentru tranziente naturale. Intermediară (25, recomandată): compromis echilibrat. Liniară (50 / Referință): răspuns la impuls simetric, fără distorsiuni de fază. Rezerva de −1 dB previne limitarea inter-eșantion pe masterizări puternice.",
   "ups.systemAudio": "Tot sunetul (și audio de sistem)",
@@ -1117,5 +1117,7 @@
   "ups.infoSysP": "Cu «Tot sunetul», și aplicațiile externe (browser, playere audio și video) trec prin motorul selectat. Sincronizarea ceasurilor adaugă ~100–250 ms; libsoxr pentru video/jocuri, Aqulify FFT64 pentru muzică.",
   "ups.liveOwnActive": "Audio de sistem: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Supraeșantionare sistem: nu s-a detectat un cablu audio virtual (ex. VB-Cable).",
-  "ups.liveNoOutput": "Supraeșantionare sistem: nu există un DAC/ieșire fizică separată (buclă prevenită)."
+  "ups.liveNoOutput": "Supraeșantionare sistem: nu există un DAC/ieșire fizică separată (buclă prevenită).",
+  "ups.engineFftDD": "Aqulify FFT-DD (Double-Double pe 106 biți)",
+  "ups.engineHintDD": "Motor FFT + Kaiser-sinc într-o singură treaptă pe 106 biți Double-Double (~31 cifre semnificative, HydrogenAudio SRC: 99,85 %), cu fază selectabilă și filtru fără întârziere."
 }

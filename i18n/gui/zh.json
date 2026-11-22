@@ -1105,7 +1105,7 @@
   "ups.infoRateH": "升频到多高合适？",
   "ups.infoRateP": "无需升到 384 kHz：×2（88.2/96 kHz）或“输出最大值”（如 96 kHz DAC 设为 96 kHz）即可在低 CPU 占用下完成核心抗镜像滤波。",
   "ups.infoEngH": "该如何选择引擎？",
-  "ups.infoEngP": "libsoxr, LGPL-2.1+ — 速度快、延迟极低且 CPU 占用低（适合日常聆听和视频）。Aqulify FFT64：自研单级 64 位 FFT + Kaiser-sinc 引擎，无多级镜像失真，实验室级精度（延迟和 CPU 占用略高）。",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — 速度快、延迟极低且 CPU 占用低（适合日常聆听和视频）。Aqulify FFT64：自研单级 64 位 FFT + Kaiser-sinc 引擎，无多级镜像失真。Aqulify FFT-DD：106 位 Double-Double（约 31 位有效数字）FFT + Kaiser-sinc 引擎（HydrogenAudio SRC：99.85 %），极致数学精度（CPU 占用较高）。",
   "ups.infoPhaseH": "相位与动态余量",
   "ups.infoPhaseP": "最小相位 (0)：无预振铃（pre-ringing），瞬态更自然。中间相位（25，推荐）：均衡折中。线性相位（50 / 参考）：对称冲激响应，零相位失真。−1 dB 余量可防止高响度母带的采样间削波。",
   "ups.systemAudio": "全部音频（含系统音频）",
@@ -1117,5 +1117,7 @@
   "ups.infoSysP": "开启“全部音频”后，外部程序（浏览器、音乐与视频播放器）也会经过所选引擎。时钟同步会带来约 100–250 ms 延迟；视频/游戏推荐 libsoxr，专注听音乐推荐 Aqulify FFT64。",
   "ups.liveOwnActive": "系统音频：{src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "系统音频升频：未检测到已安装的虚拟音频线（如 VB-Cable）。",
-  "ups.liveNoOutput": "系统音频升频：未找到独立的物理 DAC/输出设备（已阻止回环）。"
+  "ups.liveNoOutput": "系统音频升频：未找到独立的物理 DAC/输出设备（已阻止回环）。",
+  "ups.engineFftDD": "Aqulify FFT-DD（106 位 Double-Double）",
+  "ups.engineHintDD": "106 位 Double-Double（约 31 位有效数字）单级 FFT + Kaiser-sinc 引擎（HydrogenAudio SRC：99.85 %），可选相位与零延迟滤波器。"
 }

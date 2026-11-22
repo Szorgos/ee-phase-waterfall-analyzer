@@ -862,7 +862,98 @@ inline std::vector<C64> designPhasedKaiserSincSpectrum(size_t nIn, uint32_t srcR
 }
 
 /**
- * Folyamatos (streaming) 64 bites Overlap-Save FFT + Kaiser-sinc átmintavételező a valós idejű lejátszóhoz.
+ * 106 bites (Double-Double) választható fázisú (0=minimum, 25=köztes, 50=lineáris) Kaiser-sinc spektrum tervezése.
+ * Lineáris fázisnál (phase >= 49.9) közvetlenül a 106 bites designKaiserSincSpectrumDD (99,85% HydrogenAudio) szűrőt adja.
+ */
+inline std::vector<CDD> designPhasedKaiserSincSpectrumDD(size_t nIn, uint32_t srcRate, uint32_t dstRate,
+                                                         double passbandFrac, double beta, double phase,
+                                                         size_t leadIn, const RealFftDD& fftIn) {
+    const size_t hTaps = (nIn * 15) / 64;
+    const std::vector<DD> hLin = designKaiserSincSpectrumDD(nIn, srcRate, dstRate, passbandFrac, beta, fftIn, hTaps);
+    const size_t nBins = hLin.size();
+    std::vector<CDD> out(nBins);
+
+    const double ph = std::clamp(phase, 0.0, 50.0);
+    if (ph >= 49.9) {
+        for (size_t k = 0; k < nBins; ++k) out[k] = {hLin[k], DD(0.0)};
+        return out;
+    }
+
+    const DD alpha(1.0 - ph / 50.0);
+    std::vector<CDD> logM(nBins);
+    std::vector<DD> mag(nBins);
+    for (size_t k = 0; k < nBins; ++k) {
+        const DD m2 = hLin[k] * hLin[k] + DD(1e-26);
+        const DD m = ddSqrt(m2);
+        mag[k] = m;
+        logM[k] = {DD(std::log(std::max(1e-300, m.toDouble()))), DD(0.0)};
+    }
+
+    std::vector<DD> cep(nIn, DD(0.0));
+    fftIn.inverse(logM.data(), cep.data());
+
+    for (size_t n = 1; n < nIn / 2; ++n) cep[n] = cep[n] * 2.0;
+    for (size_t n = nIn / 2 + 1; n < nIn; ++n) cep[n] = DD(0.0);
+
+    std::vector<CDD> Z(nBins);
+    fftIn.forward(cep.data(), Z.data());
+
+    std::vector<CDD> hPhSpec(nBins);
+    for (size_t k = 0; k < nBins; ++k) {
+        const DD ang = alpha * Z[k].i;
+        DD sn, cs;
+        ddSinCos(ang, sn, cs);
+        hPhSpec[k] = {mag[k] * cs, mag[k] * sn};
+    }
+    if ((nIn & 1u) == 0u) hPhSpec[nIn / 2].i = DD(0.0);
+
+    std::vector<DD> hPh(nIn, DD(0.0));
+    fftIn.inverse(hPhSpec.data(), hPh.data());
+
+    const size_t totalSpan = nIn / 2;
+    const size_t lPost = std::min(leadIn, totalSpan);
+    const size_t lPre = totalSpan - lPost;
+
+    std::vector<DD> hWin(nIn, DD(0.0));
+    for (size_t i = 0; i <= lPost; ++i) hWin[i] = hPh[i];
+    if (lPost >= 4) {
+        const size_t tLen = std::max<size_t>(1, lPost / 5);
+        const DD invT = DD(1.0) / DD(static_cast<double>(tLen));
+        for (size_t i = 0; i < tLen; ++i) {
+            DD sn, cs;
+            ddSinCos(kDdPi * DD(static_cast<double>(i)) * invT, sn, cs);
+            const DD ramp = (DD(1.0) + cs) * 0.5;
+            hWin[lPost + 1 - tLen + i] = hWin[lPost + 1 - tLen + i] * ramp;
+        }
+    }
+    if (lPre > 0) {
+        for (size_t i = 0; i < lPre; ++i) hWin[nIn - lPre + i] = hPh[nIn - lPre + i];
+        if (lPre >= 4) {
+            const size_t tLen = std::max<size_t>(1, lPre / 5);
+            const DD invT = DD(1.0) / DD(static_cast<double>(tLen));
+            for (size_t i = 0; i < tLen; ++i) {
+                DD sn, cs;
+                ddSinCos(kDdPi * DD(static_cast<double>(i)) * invT, sn, cs);
+                const DD ramp = (DD(1.0) - cs) * 0.5;
+                hWin[nIn - lPre + i] = hWin[nIn - lPre + i] * ramp;
+            }
+        }
+    }
+
+    DD dc(0.0);
+    for (const DD& v : hWin) dc += v;
+    if (std::abs(dc.toDouble()) > 1e-12) {
+        const DD invDc = DD(1.0) / dc;
+        for (DD& v : hWin) v = v * invDc;
+    }
+
+    fftIn.forward(hWin.data(), out.data());
+    return out;
+}
+
+/**
+ * Folyamatos (streaming) 64 bites vagy 106 bites (Double-Double) Overlap-Save FFT + Kaiser-sinc átmintavételező
+ * a valós idejű lejátszóhoz és a rendszerhang-felmintavételezéshez.
  * Támogatja a választható fázist (0 = minimum, 25 = köztes, 50 = lineáris), szünetmentesen (clear() nélkül)
  * fut tovább a számok között, és a végén flush()-sal pontosan kiüríthető.
  */
@@ -871,11 +962,14 @@ public:
     StreamResampler() = default;
 
     bool init(uint32_t srcRate, uint32_t dstRate, uint32_t channels, double passbandFrac = 0.9970,
-              double beta = 34.5, double phase = 50.0) {
+              double beta = 34.5, double phase = 50.0, bool useDD = false) {
         reset();
         if (srcRate == 0 || dstRate == 0 || srcRate == dstRate || channels == 0 || channels > 8) return false;
-        if (!computeBlockSizes(srcRate, dstRate, nIn_, nOut_)) return false;
+        const bool okSizes = useDD ? computeBlockSizesDD(srcRate, dstRate, nIn_, nOut_)
+                                   : computeBlockSizes(srcRate, dstRate, nIn_, nOut_);
+        if (!okSizes) return false;
 
+        useDD_ = useDD;
         srcRate_ = srcRate;
         dstRate_ = dstRate;
         ch_ = channels;
@@ -898,25 +992,39 @@ public:
         leadIn_ = leadBlocks * M;
         leadOut_ = leadBlocks * L;
 
-        fftIn_.init(nIn_);
-        fftOut_.init(nOut_);
         const double pb = std::clamp(passbandFrac, 0.5, 0.997);
         const double bClamped = std::clamp(beta, 4.0, 45.0);
-        // Felfelé mintavételezésnél (dstRate > srcRate) a nagyobb (kimeneti) rácson tervezzük a fázis-szűrőt,
-        // így a minimum- és köztes fázis a kimeneti mintavételen is szigorúan kauzális és tükörkép-mentes!
-        const auto hSpec = (dstRate_ > srcRate_)
-                               ? designPhasedKaiserSincSpectrum(nOut_, dstRate_, srcRate_, pb, bClamped, ph, leadOut_, fftOut_)
-                               : designPhasedKaiserSincSpectrum(nIn_, srcRate_, dstRate_, pb, bClamped, ph, leadIn_, fftIn_);
-
         nBinsOut_ = nOut_ / 2 + 1;
         nBinsCopy_ = std::min(nIn_ / 2 + 1, nBinsOut_);
-        const double scale = static_cast<double>(nOut_) / static_cast<double>(nIn_);
-        hScaled_.resize(nBinsCopy_);
-        for (size_t k = 0; k < nBinsCopy_; ++k) hScaled_[k] = {hSpec[k].r * scale, hSpec[k].i * scale};
 
-        X_.resize(nIn_ / 2 + 1);
-        Y_.resize(nBinsOut_);
-        yBlk_.resize(nOut_);
+        if (useDD_) {
+            fftInDD_.init(nIn_);
+            fftOutDD_.init(nOut_);
+            const auto hSpecDD = (dstRate_ > srcRate_)
+                                     ? designPhasedKaiserSincSpectrumDD(nOut_, dstRate_, srcRate_, pb, bClamped, ph, leadOut_, fftOutDD_)
+                                     : designPhasedKaiserSincSpectrumDD(nIn_, srcRate_, dstRate_, pb, bClamped, ph, leadIn_, fftInDD_);
+            const DD scaleDD = DD(static_cast<double>(nOut_)) / DD(static_cast<double>(nIn_));
+            hScaledDD_.resize(nBinsCopy_);
+            for (size_t k = 0; k < nBinsCopy_; ++k) hScaledDD_[k] = {hSpecDD[k].r * scaleDD, hSpecDD[k].i * scaleDD};
+            inBlkDD_.resize(nIn_);
+            XDD_.resize(nIn_ / 2 + 1);
+            YDD_.resize(nBinsOut_);
+            yBlkDD_.resize(nOut_);
+        } else {
+            fftIn_.init(nIn_);
+            fftOut_.init(nOut_);
+            // Felfelé mintavételezésnél (dstRate > srcRate) a nagyobb (kimeneti) rácson tervezzük a fázis-szűrőt,
+            // így a minimum- és köztes fázis a kimeneti mintavételen is szigorúan kauzális és tükörkép-mentes!
+            const auto hSpec = (dstRate_ > srcRate_)
+                                   ? designPhasedKaiserSincSpectrum(nOut_, dstRate_, srcRate_, pb, bClamped, ph, leadOut_, fftOut_)
+                                   : designPhasedKaiserSincSpectrum(nIn_, srcRate_, dstRate_, pb, bClamped, ph, leadIn_, fftIn_);
+            const double scale = static_cast<double>(nOut_) / static_cast<double>(nIn_);
+            hScaled_.resize(nBinsCopy_);
+            for (size_t k = 0; k < nBinsCopy_; ++k) hScaled_[k] = {hSpec[k].r * scale, hSpec[k].i * scale};
+            X_.resize(nIn_ / 2 + 1);
+            Y_.resize(nBinsOut_);
+            yBlk_.resize(nOut_);
+        }
         chOutBuf_.assign(ch_, std::vector<double>(stepOut_));
         inHist_.resize(ch_);
         for (auto& h : inHist_) {
@@ -934,6 +1042,7 @@ public:
 
     void reset() {
         active_ = false;
+        useDD_ = false;
         flushed_ = false;
         srcRate_ = dstRate_ = ch_ = 0;
         nIn_ = nOut_ = hIn_ = stepIn_ = hOut_ = stepOut_ = leadIn_ = leadOut_ = 0;
@@ -943,6 +1052,8 @@ public:
         totalInFrames_ = 0;
         emittedOutFrames_ = 0;
     }
+
+    bool isDD() const { return active_ && useDD_; }
 
     void clear() {
         if (!active_) return;
@@ -1012,15 +1123,27 @@ public:
 private:
     void runBlock() {
         for (uint32_t c = 0; c < ch_; ++c) {
-            fftIn_.forward(inHist_[c].data(), X_.data());
-            std::fill(Y_.begin(), Y_.end(), C64{0.0, 0.0});
-            for (size_t k = 0; k < nBinsCopy_; ++k) {
-                Y_[k] = X_[k] * hScaled_[k];
-            }
-            if ((nOut_ & 1u) == 0u) Y_[nOut_ / 2].i = 0.0;
-            fftOut_.inverse(Y_.data(), yBlk_.data());
             auto& dst = chOutBuf_[c];
-            for (size_t j = 0; j < stepOut_; ++j) dst[j] = yBlk_[leadOut_ + j];
+            if (useDD_) {
+                for (size_t i = 0; i < nIn_; ++i) inBlkDD_[i] = DD(inHist_[c][i]);
+                fftInDD_.forward(inBlkDD_.data(), XDD_.data());
+                std::fill(YDD_.begin(), YDD_.end(), CDD{DD(0.0), DD(0.0)});
+                for (size_t k = 0; k < nBinsCopy_; ++k) {
+                    YDD_[k] = XDD_[k] * hScaledDD_[k];
+                }
+                if ((nOut_ & 1u) == 0u) YDD_[nOut_ / 2].i = DD(0.0);
+                fftOutDD_.inverse(YDD_.data(), yBlkDD_.data());
+                for (size_t j = 0; j < stepOut_; ++j) dst[j] = yBlkDD_[leadOut_ + j].toDouble();
+            } else {
+                fftIn_.forward(inHist_[c].data(), X_.data());
+                std::fill(Y_.begin(), Y_.end(), C64{0.0, 0.0});
+                for (size_t k = 0; k < nBinsCopy_; ++k) {
+                    Y_[k] = X_[k] * hScaled_[k];
+                }
+                if ((nOut_ & 1u) == 0u) Y_[nOut_ / 2].i = 0.0;
+                fftOut_.inverse(Y_.data(), yBlk_.data());
+                for (size_t j = 0; j < stepOut_; ++j) dst[j] = yBlk_[leadOut_ + j];
+            }
             auto& h = inHist_[c];
             const size_t rem = h.size() - stepIn_;
             std::copy(h.begin() + static_cast<std::ptrdiff_t>(stepIn_), h.end(), h.begin());
@@ -1057,6 +1180,7 @@ private:
     }
 
     bool active_ = false;
+    bool useDD_ = false;
     bool flushed_ = false;
     uint32_t srcRate_ = 0, dstRate_ = 0, ch_ = 0;
     size_t nIn_ = 0, nOut_ = 0, hIn_ = 0, stepIn_ = 0, hOut_ = 0, stepOut_ = 0;
@@ -1067,6 +1191,11 @@ private:
     std::vector<C64> hScaled_;
     std::vector<C64> X_, Y_;
     std::vector<double> yBlk_;
+    RealFftDD fftInDD_, fftOutDD_;
+    std::vector<CDD> hScaledDD_;
+    std::vector<DD> inBlkDD_;
+    std::vector<CDD> XDD_, YDD_;
+    std::vector<DD> yBlkDD_;
     std::vector<std::vector<double>> inHist_;
     std::vector<std::vector<double>> chOutBuf_;
     std::vector<float> outQ_;

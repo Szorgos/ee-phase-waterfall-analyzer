@@ -878,7 +878,7 @@ struct Engine::Impl {
         if (decoupledOk) {
             std::cout << "[Felmintavételezés/macOS] Rendszerhang aktív: " << src << " (" << decSrcRate
                       << " Hz) -> " << deviceName(output) << " (" << decDstRate << " Hz, "
-                      << (liveOpts.upsampleEngine == 1 ? "Aqulify FFT64" : "libsoxr") << ").\n";
+                      << audioopt::upsampleEngineLabel(liveOpts.upsampleEngine) << ").\n";
         } else {
             std::cout << "[Core Audio] Forrás: " << src << ", kimenet: " << deviceName(output) << ", " << sr << " Hz\n";
         }

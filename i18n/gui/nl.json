@@ -1105,7 +1105,7 @@
   "ups.infoRateH": "Hoe hoog moet ik upsamplen?",
   "ups.infoRateP": "384 kHz is niet nodig: ×2 (88,2/96 kHz) of ‘Maximum van uitgang’ (bijv. 96 kHz op een 96 kHz-DAC) voert de belangrijkste filtering al uit met lage CPU-belasting.",
   "ups.infoEngH": "Welke engine moet ik kiezen?",
-  "ups.infoEngP": "libsoxr, LGPL-2.1+ — snel, zeer lage latentie en zuinig met CPU (ideaal voor dagelijks luisteren en video). Aqulify FFT64: eigen enkeltraps 64-bits FFT + Kaiser-sinc motor zonder meertraps spiegeling en met laboratoriumprecisie (iets hogere latentie en CPU-belasting).",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — snel, zeer lage latentie en lage CPU-belasting (ideaal voor dagelijks gebruik en video). Aqulify FFT64: eigen enkeltraps 64-bit FFT + Kaiser-sinc-engine zonder meertraps spiegelingen. Aqulify FFT-DD: 106-bit Double-Double FFT + Kaiser-sinc-engine (HydrogenAudio SRC: 99,85 %) voor extreme wiskundige precisie (hogere CPU-belasting).",
   "ups.infoPhaseH": "Fase en headroom",
   "ups.infoPhaseP": "Minimumfase (0): geen pre-ringing, vaak verkozen voor natuurlijke transiënten. Tussenliggend (25, aanbevolen): gebalanceerd compromis. Lineair (50 / Referentie): symmetrische impulsrespons zonder fasevervorming. −1 dB headroom voorkomt inter-sample clipping bij luide masters.",
   "ups.systemAudio": "Alle audio (ook systeemaudio)",
@@ -1117,5 +1117,7 @@
   "ups.infoSysP": "Met 'Alle audio' gaan ook externe apps (browser, muziek- en videospelers) door de gekozen motor. Kloksynchronisatie voegt ~100–250 ms latentie toe; libsoxr voor video/games, Aqulify FFT64 voor muziek.",
   "ups.liveOwnActive": "Systeemaudio: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Systeemaudio-upsampling: geen virtuele audiokabel gevonden (bijv. VB-Cable).",
-  "ups.liveNoOutput": "Systeemaudio-upsampling: geen aparte fysieke DAC/uitvoer gevonden (terugkoppeling voorkomen)."
+  "ups.liveNoOutput": "Systeemaudio-upsampling: geen aparte fysieke DAC/uitvoer gevonden (terugkoppeling voorkomen).",
+  "ups.engineFftDD": "Aqulify FFT-DD (106-bit Double-Double)",
+  "ups.engineHintDD": "Enkeltraps 106-bit Double-Double (~31 significante cijfers) FFT + Kaiser-sinc-engine (HydrogenAudio SRC: 99,85 %), met kiesbare fase en vertragingsvrij filter."
 }

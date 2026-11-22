@@ -997,16 +997,52 @@ int main() {
 
     std::printf("[21] R21 – beépített lejátszó FFT64 motor + választható fázis (0/25/50) + FilePlayer\n");
     {
-        // 21a. AudioOptions upsampleEngine JSON oda-vissza és sanitize
+        // 21a. AudioOptions upsampleEngine JSON oda-vissza és sanitize (0=libsoxr, 1=FFT64, 2=FFT-DD)
         audioopt::AudioOptions o;
         o.upsampleEngine = 1;
         json::Value jv;
         const bool parsed = json::parse(audioopt::toJson(o), jv);
         audioopt::AudioOptions o2 = audioopt::fromJson(jv);
-        CHECK(parsed && o2.upsampleEngine == 1, "AudioOptions::upsampleEngine JSON oda-vissza");
+        CHECK(parsed && o2.upsampleEngine == 1, "AudioOptions::upsampleEngine=1 JSON oda-vissza");
+        o.upsampleEngine = 2;
+        json::Value jvDD;
+        const bool parsedDD = json::parse(audioopt::toJson(o), jvDD);
+        audioopt::AudioOptions oDD = audioopt::fromJson(jvDD);
+        audioopt::sanitize(oDD);
+        CHECK(parsedDD && oDD.upsampleEngine == 2, "AudioOptions::upsampleEngine=2 (106 bites FFT-DD) JSON oda-vissza és sanitize");
         o2.upsampleEngine = 99;
         audioopt::sanitize(o2);
         CHECK(o2.upsampleEngine == 0, "AudioOptions::upsampleEngine érvénytelen érték visszaáll 0-ra");
+
+        // 21a-dd. UpsampleEngine streaming 106 bites FFT-DD (44,1 -> 88,2 kHz)
+        {
+            UpsampleEngine engDD;
+            const bool initDD = engDD.init(44100, 88200, 1, 32, 50.0, 0.9966, 1.00, 0.0f,
+                                           static_cast<int>(audioopt::UpsampleEngineType::FftDD));
+            CHECK(initDD && engDD.isActive() && engDD.isFft64(), "UpsampleEngine 106 bites FFT-DD init");
+            std::vector<float> inDD(44100);
+            for (size_t i = 0; i < inDD.size(); ++i)
+                inDD[i] = 0.5f * std::sin(2.0f * static_cast<float>(kPi) * 10000.0f * i / 44100.0f);
+            std::vector<float> outDD, chunkDD(8192);
+            size_t posDD = 0;
+            while (posDD < inDD.size()) {
+                const size_t n = std::min<size_t>(2048, inDD.size() - posDD);
+                size_t got = 0;
+                engDD.process(inDD.data() + posDD, n, chunkDD.data(), chunkDD.size(), got);
+                outDD.insert(outDD.end(), chunkDD.begin(), chunkDD.begin() + static_cast<std::ptrdiff_t>(got));
+                posDD += n;
+            }
+            for (int fstep = 0; fstep < 100; ++fstep) {
+                size_t got = 0;
+                engDD.flush(chunkDD.data(), chunkDD.size(), got);
+                if (got == 0) break;
+                outDD.insert(outDD.end(), chunkDD.begin(), chunkDD.begin() + static_cast<std::ptrdiff_t>(got));
+            }
+            const double a10DD = ampAt(outDD, 1, 0, 22050, 44100, 10000.0, 88200.0);
+            const double imgDD = ampAt(outDD, 1, 0, 22050, 44100, 34100.0, 88200.0);
+            CHECK(outDD.size() == 88200 && std::abs(db(a10DD / 0.5)) <= 0.01 && db(imgDD / 0.5) <= -135.0,
+                  "UpsampleEngine 106 bites FFT-DD streaming: egzakt hossz, 10 kHz átvitel ±0,01 dB és tükörkép ≤ −135 dB");
+        }
 
         // 21b. UpsampleEngine streaming FFT64 mindhárom fázissal (50=lineáris, 25=köztes, 0=minimum)
         for (double ph : {50.0, 25.0, 0.0}) {

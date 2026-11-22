@@ -450,7 +450,7 @@ private:
                 self->liveUpsActive_.store(true, std::memory_order_release);
                 std::cout << "[Felmintavételezés] Saját motor (rendszerhang) frissítve: " << want.srcRate << " -> "
                           << want.dstRate << " Hz ("
-                          << (want.opts.upsampleEngine == 1 ? "Aqulify FFT64" : "libsoxr")
+                          << audioopt::upsampleEngineLabel(want.opts.upsampleEngine)
                           << ").\n";
                 return;
             }
@@ -484,7 +484,7 @@ private:
             }
             std::cout << "[Felmintavételezés] Saját motor (rendszerhang): " << want.srcRate << " -> "
                       << want.dstRate << " Hz ("
-                      << (want.opts.upsampleEngine == 1 ? "Aqulify FFT64" : "libsoxr")
+                      << audioopt::upsampleEngineLabel(want.opts.upsampleEngine)
                       << ").\n";
         } else {
             self->liveBridge_.stop();

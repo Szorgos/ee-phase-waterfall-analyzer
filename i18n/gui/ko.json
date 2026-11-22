@@ -1105,7 +1105,7 @@
   "ups.infoRateH": "얼마나 높게 업샘플링해야 하나요?",
   "ups.infoRateP": "384 kHz까지 올릴 필요는 없습니다. ×2(88.2/96 kHz)나 ‘출력 최댓값’(예: 96 kHz DAC에서 96 kHz)만으로도 낮은 CPU 사용량으로 핵심 안티이미징 필터링을 수행합니다.",
   "ups.infoEngH": "어떤 엔진을 선택해야 하나요?",
-  "ups.infoEngP": "libsoxr, LGPL-2.1+ — 빠르고 지연 시간이 매우 낮으며 CPU 부담이 적어 일상 청취와 영상에 적합합니다. Aqulify FFT64는 다단 이미징 없는 자체 단일 단계 64비트 FFT + Kaiser-sinc 엔진으로 실험실 수준의 정밀도를 제공합니다(지연과 CPU 사용량이 약간 증가).",
+  "ups.infoEngP": "libsoxr, LGPL-2.1+ — 빠르고 지연 시간이 매우 짧으며 CPU 점유율이 낮습니다(일상 감상 및 동영상에 적합). Aqulify FFT64: 다단 이미지 왜곡이 없는 자체 단일 단계 64비트 FFT + Kaiser-sinc 엔진. Aqulify FFT-DD: 106비트 Double-Double(약 31자리 정밀도) FFT + Kaiser-sinc 엔진(HydrogenAudio SRC: 99.85 %, 극한의 수학적 정밀도, 높은 CPU 부하).",
   "ups.infoPhaseH": "위상 및 헤드룸",
   "ups.infoPhaseP": "최소 위상 (0): 프리링잉이 없어 자연스러운 트랜지언트에 적합합니다. 중간 (25, 권장): 균형 잡힌 절충안입니다. 선형 (50 / 레퍼런스): 위상 왜곡이 없는 대칭 임펄스 응답입니다. −1 dB 헤드룸은 음압이 높은 마스터에서 샘플 간 클리핑을 방지합니다.",
   "ups.systemAudio": "모든 오디오(시스템 오디오 포함)",
@@ -1117,5 +1117,7 @@
   "ups.infoSysP": "‘모든 오디오’를 켜면 외부 앱(브라우저, 음악·동영상 플레이어)도 선택한 엔진을 거칩니다. 클록 동기화로 약 100–250 ms가 추가되므로 동영상/게임에는 libsoxr, 음악 감상에는 Aqulify FFT64를 권장합니다.",
   "ups.liveOwnActive": "시스템 오디오: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "시스템 업샘플링: 설치된 가상 오디오 케이블(예: VB-Cable)이 없습니다.",
-  "ups.liveNoOutput": "시스템 업샘플링: 별도의 물리적 DAC/출력 장치가 없습니다(피드백 루프 방지)."
+  "ups.liveNoOutput": "시스템 업샘플링: 별도의 물리적 DAC/출력 장치가 없습니다(피드백 루프 방지).",
+  "ups.engineFftDD": "Aqulify FFT-DD (106비트 Double-Double)",
+  "ups.engineHintDD": "106비트 Double-Double(유효숫자 약 31자리) 단일 단계 FFT + Kaiser-sinc 엔진(HydrogenAudio SRC: 99.85 %), 위상 선택 및 제로 지연 필터."
 }

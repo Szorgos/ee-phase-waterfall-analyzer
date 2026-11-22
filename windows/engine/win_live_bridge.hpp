@@ -217,7 +217,7 @@ public:
             tgt = lastTargetRate_;
         }
         const char* conv = act
-            ? (st.engineType == 1 ? "fft64" : "libsoxr")
+            ? audioopt::upsampleConverterCode(st.engineType)
             : "none";
         char buf[512];
         std::snprintf(buf, sizeof(buf),
@@ -405,7 +405,7 @@ private:
             setStatus("", plan.captureName, plan.outputName, srcRate, dstRate);
             std::cout << "[Felmintavételezés/Win] Rendszerhang aktív: " << plan.captureName << " (" << srcRate
                       << " Hz) -> " << plan.outputName << " (" << dstRate << " Hz, "
-                      << (o.upsampleEngine == 1 ? "Aqulify FFT64" : "libsoxr")
+                      << audioopt::upsampleEngineLabel(o.upsampleEngine)
                       << ").\n";
         }
     }

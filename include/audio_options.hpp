@@ -35,11 +35,20 @@ enum class UpsampleRule : int {
     Custom = 4       // Egyéni táblázat
 };
 
-/** A felmintavételezés motorja (0 = libsoxr, 1 = saját 64 bites egylépcsős FFT + Kaiser-sinc). */
+/** A felmintavételezés motorja (0 = libsoxr, 1 = saját 64 bites FFT + Kaiser-sinc, 2 = saját 106 bites Double-Double FFT + Kaiser-sinc). */
 enum class UpsampleEngineType : int {
     Soxr = 0,
     Fft64 = 1,
+    FftDD = 2,
 };
+
+inline const char* upsampleEngineLabel(int e) {
+    return e == 2 ? "Aqulify FFT-DD" : e == 1 ? "Aqulify FFT64" : "libsoxr";
+}
+
+inline const char* upsampleConverterCode(int e) {
+    return e == 2 ? "fftdd" : e == 1 ? "fft64" : "libsoxr";
+}
 
 /** A felmintavételezés előbeállításai (3.3). */
 enum class UpsamplePreset : int {
@@ -80,9 +89,9 @@ struct AudioOptions {
     bool exclusive = false;      // kizárólagos mód (Windows: WASAPI exclusive; Linux: közvetlen ALSA); a DSP a motorban fut
     bool exclHwVolume = false;   // Windows, kizárólagos módban: a DAC hardveres hangereje (false: digitális, a lánc végén)
 
-    // Felmintavételezés a beépített lejátszóban és opcionálisan a rendszerhangon (libsoxr vagy saját 64 bites FFT)
+    // Felmintavételezés a beépített lejátszóban és opcionálisan a rendszerhangon (libsoxr, 64 bites FFT64 vagy 106 bites FFT-DD)
     UpsampleRule upsampleRule = UpsampleRule::Off;
-    int upsampleEngine = 0;                     // 0: libsoxr (alapértelmezett), 1: Aqulify FFT64 (64 bites Kaiser-sinc)
+    int upsampleEngine = 0;                     // 0: libsoxr (alapértelmezett), 1: Aqulify FFT64 (64 bit), 2: Aqulify FFT-DD (106 bit)
     bool upsampleSystemAudio = false;           // false: csak beépített lejátszó (alap); true: külső rendszerhang is
     std::string systemCaptureDevice;            // Windows virtuális kábel / választható forráseszköz (üres: automatikus)
     int upsamplePreset = 1;                     // 0: linear, 1: intermediate, 2: minimum, 3: custom, 4: reference
@@ -179,7 +188,7 @@ inline void sanitize(AudioOptions& o) {
     // Felmintavételezés beállításainak érvényesítése
     const int ur = static_cast<int>(o.upsampleRule);
     if (ur < 0 || ur > 4) o.upsampleRule = UpsampleRule::Off;
-    if (o.upsampleEngine != 0 && o.upsampleEngine != 1) o.upsampleEngine = 0;
+    if (o.upsampleEngine < 0 || o.upsampleEngine > 2) o.upsampleEngine = 0;
     if (o.systemCaptureDevice.size() > 255) o.systemCaptureDevice.clear();
     for (char c : o.systemCaptureDevice) {
         if (static_cast<unsigned char>(c) < 0x20) { o.systemCaptureDevice.clear(); break; }
