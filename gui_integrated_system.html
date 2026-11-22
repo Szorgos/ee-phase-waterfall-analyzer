@@ -5011,6 +5011,13 @@ var qrcode = function() {
               <select id="aoResample" class="mini-select" onchange="aoSend()"></select></label>
             <label class="ao-row ao-check" id="aoRowKeep"><input type="checkbox" id="aoKeepAwake" onchange="aoSend()"> <span data-i18n="ao.keepAwake">Hangkártya ébren tartása</span></label>
             <div class="ao-hint" id="aoKeepHint" data-i18n="ao.keepAwakeHint">Csendben sem alszik el: nincs pattanás, és a számok eleje sem vész el.</div>
+            <div id="aoNetRecvWrap" hidden>
+              <label class="ao-row ao-check"><input type="checkbox" id="aoNetRecv" onchange="aoSend()"> <span data-i18n="ao.netRecv">Hálózati vevő</span></label>
+              <label class="ao-row"><span data-i18n="ao.netRecvName">Kijelzett név</span>
+                <input type="text" id="aoNetRecvName" class="ee-input" style="width:150px;" maxlength="50" placeholder="Aqulify" onchange="aoSend()"></label>
+              <div class="ao-hint" data-i18n="ao.netRecvHint">A telefon vagy a számítógép hálózati hangkimenetként látja az Aqulify-t, és a hang az EQ-n át szól. Kb. CD-minőség (44,1 kHz / 16 bit): nem bitpontos és nem hi-res.</div>
+              <div class="ao-hint" id="aoNetRecvState" hidden></div>
+            </div>
             <div id="aoPlayerWrap" hidden>
               <div class="sink-sec-title" style="margin-top:10px;" data-i18n="ao.playerTitle">Beépített lejátszó</div>
               <label class="ao-row"><span>ReplayGain</span>
@@ -10400,6 +10407,8 @@ function aoOnMessage(m) {
   document.getElementById("aoRowKeep").hidden = cp.keepAwake === false;
   document.getElementById("aoKeepHint").hidden = cp.keepAwake === false;
   document.getElementById("aoPlayerWrap").hidden = cp.player !== true;
+  document.getElementById("aoNetRecvWrap").hidden = cp.netRecv !== true;
+  if (cp.netRecv === true) aoNetRecvRender(aoOpts, m.netRecvState);
   aoFillSelects();
   const o = aoOpts;
   document.getElementById("aoBuffer").value = String(o.buffer || 0);
@@ -10755,11 +10764,31 @@ function aoDopToggle(chk) {
   }
   aoSend();
 }
+// Hálózati vevő (Linux): be / ki, kijelzett név, állapot. Indulás közben 2,5 s múlva újra lekérdez.
+let aoNetRecvTimer = null;
+function aoNetRecvRender(o, st) {
+  document.getElementById("aoNetRecv").checked = !!o.netRecv;
+  const nm = document.getElementById("aoNetRecvName");
+  if (document.activeElement !== nm) nm.value = o.netRecvName || "";
+  let s = (st && st.state) || "off";
+  if (o.netRecv && s === "off") s = "starting";   // a motor a kérést a saját szálán hajtja végre
+  const key = { running: "ao.netRecvRunning", starting: "ao.netRecvStarting", restarting: "ao.netRecvRestarting",
+                failed: "ao.netRecvFailed", missing: "ao.netRecvMissing" }[s];
+  const el = document.getElementById("aoNetRecvState");
+  el.hidden = !o.netRecv || !key;
+  if (key) el.textContent = t(key, { name: (st && st.name) || "Aqulify", detail: (st && st.detail) || "-" });
+  if (o.netRecv && (s === "starting" || s === "restarting") && !aoNetRecvTimer)
+    aoNetRecvTimer = setTimeout(() => { aoNetRecvTimer = null; moSend({ type: "get_audio_opts" }); }, 2500);
+}
 function aoSend() {
   const rv = document.getElementById("aoRate").value;
   const opts = { buffer: parseInt(document.getElementById("aoBuffer").value, 10) || 0,
                  rateMode: rv.startsWith("fixed:") ? "fixed" : rv, keepAwake: document.getElementById("aoKeepAwake").checked,
                  resampleQuality: parseInt(document.getElementById("aoResample").value, 10) };
+  if (aoCapsDetail && aoCapsDetail.netRecv) {
+    opts.netRecv = document.getElementById("aoNetRecv").checked;
+    opts.netRecvName = document.getElementById("aoNetRecvName").value.trim();
+  }
   if (rv.startsWith("fixed:")) opts.fixedRate = parseInt(rv.slice(6), 10);
   if (aoCapsDetail && aoCapsDetail.player) {
     opts.replayGain = document.getElementById("aoRg").value;
