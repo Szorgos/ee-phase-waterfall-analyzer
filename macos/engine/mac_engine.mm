@@ -27,6 +27,7 @@
 
 #include "mac_engine.hpp"
 #include "multi_output.hpp"
+#include "upsample_engine.hpp"
 
 namespace ee_analyzer::mac {
 
@@ -88,6 +89,33 @@ bool getProp(AudioObjectID obj, AudioObjectPropertySelector sel, T& out, AudioOb
     const auto a = addr(sel, scope);
     UInt32 size = sizeof(T);
     return AudioObjectGetPropertyData(obj, &a, 0, nullptr, &size, &out) == noErr;
+}
+
+/** A Core Audio eszköz által támogatott szabványos mintavételi frekvenciák lekérdezése. */
+std::vector<uint32_t> availableSampleRates(AudioObjectID dev) {
+    static constexpr uint32_t kStdRates[] = { 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000 };
+    std::vector<uint32_t> out;
+    const auto a = addr(kAudioDevicePropertyAvailableNominalSampleRates);
+    UInt32 size = 0;
+    if (AudioObjectGetPropertyDataSize(dev, &a, 0, nullptr, &size) != noErr || size < sizeof(AudioValueRange)) return out;
+    std::vector<AudioValueRange> ranges(size / sizeof(AudioValueRange));
+    if (AudioObjectGetPropertyData(dev, &a, 0, nullptr, &size, ranges.data()) != noErr) return out;
+    ranges.resize(size / sizeof(AudioValueRange));
+    for (uint32_t r : kStdRates) {
+        for (const auto& rg : ranges) {
+            if (static_cast<double>(r) >= rg.mMinimum - 1.0 && static_cast<double>(r) <= rg.mMaximum + 1.0) {
+                out.push_back(r);
+                break;
+            }
+        }
+    }
+    return out;
+}
+
+bool setNominalSampleRate(AudioObjectID dev, uint32_t rate) {
+    Float64 target = static_cast<Float64>(rate);
+    const auto a = addr(kAudioDevicePropertyNominalSampleRate);
+    return AudioObjectSetPropertyData(dev, &a, 0, nullptr, sizeof(target), &target) == noErr;
 }
 
 AudioObjectID defaultOutputDevice() {
@@ -219,6 +247,16 @@ struct Engine::Impl {
     // a felületnek (bármely szálról)
     mutable std::mutex infoMutex;
     std::string activeUid, activeName, sourceName, selectedUidCopy;
+    std::string liveUpsReason = "off";
+
+    // Saját motoros (libsoxr / Aqulify FFT64) rendszerhang-felmintavételezés
+    livebridge::LiveUpsampleBridge liveBridge;
+    audioopt::AudioOptions liveOpts;                           // csak a sorban
+    std::atomic<bool> liveUpsActive{false};
+    AudioObjectID capAggId = kAudioObjectUnknown;              // Tap-only aggregált eszköz vagy BlackHole
+    bool capIsAggregate = false;
+    AudioDeviceIOProcID capProcId = nullptr;
+    std::vector<float> capInterleaved, playInterleaved;        // előre allokált RT pufferek (kMaxFrames * 2)
 
     // valós idejű állapot (csak az IOProc)
     UInt32 inputSkip = 0, outLeft = 0, outRight = 1;
@@ -251,6 +289,53 @@ struct Engine::Impl {
     }
 
     // ------------------------------------------------------------ IOProc
+
+    static OSStatus capIoProc(AudioObjectID, const AudioTimeStamp*, const AudioBufferList* in, const AudioTimeStamp*,
+                              AudioBufferList*, const AudioTimeStamp*, void* ctx) {
+        static_cast<Impl*>(ctx)->processCapture(in);
+        return noErr;
+    }
+
+    /** Szétválasztott felmintavételezés: a forrás (Tap / BlackHole) sztereó mintáinak átadása a hídnak (0 allokáció). */
+    void processCapture(const AudioBufferList* in) {
+        if (!in || in->mNumberBuffers == 0 || !liveUpsActive.load(std::memory_order_acquire)) return;
+        const UInt32 ch0 = std::max<UInt32>(1, in->mBuffers[0].mNumberChannels);
+        const UInt32 frames = in->mBuffers[0].mDataByteSize / (sizeof(float) * ch0);
+        if (frames == 0) return;
+
+        for (UInt32 off = 0; off < frames; off += kMaxFrames) {
+            const UInt32 n = std::min(kMaxFrames, frames - off);
+            float* dst = capInterleaved.data();
+            bool haveL = false, haveR = false;
+            UInt32 base = 0;
+            for (UInt32 b = 0; b < in->mNumberBuffers && !(haveL && haveR); ++b) {
+                const AudioBuffer& buf = in->mBuffers[b];
+                const UInt32 nch = std::max<UInt32>(1, buf.mNumberChannels);
+                const float* data = static_cast<const float*>(buf.mData);
+                const UInt32 avail = buf.mDataByteSize / (sizeof(float) * nch);
+                for (UInt32 c = 0; c < nch; ++c) {
+                    const UInt32 g = base + c;
+                    if (g == 0) {
+                        for (UInt32 i = 0; i < n; ++i)
+                            dst[i * 2] = (data && off + i < avail) ? data[(off + i) * nch + c] : 0.0f;
+                        haveL = true;
+                    } else if (g == 1) {
+                        for (UInt32 i = 0; i < n; ++i)
+                            dst[i * 2 + 1] = (data && off + i < avail) ? data[(off + i) * nch + c] : 0.0f;
+                        haveR = true;
+                    }
+                }
+                base += nch;
+            }
+            if (!haveL) {
+                for (UInt32 i = 0; i < n; ++i) dst[i * 2] = 0.0f;
+            }
+            if (!haveR) {
+                for (UInt32 i = 0; i < n; ++i) dst[i * 2 + 1] = dst[i * 2];
+            }
+            liveBridge.pushInput(dst, n);
+        }
+    }
 
     static OSStatus ioProc(AudioObjectID, const AudioTimeStamp*, const AudioBufferList* in, const AudioTimeStamp*,
                            AudioBufferList* out, const AudioTimeStamp*, void* ctx) {
@@ -290,9 +375,21 @@ struct Engine::Impl {
             }
         }
 
+        const bool liveUps = liveUpsActive.load(std::memory_order_acquire);
         for (UInt32 off = 0; off < frames; off += kMaxFrames) {
             const UInt32 n = std::min(kMaxFrames, frames - off);
-            readSource(in, off, n);
+            if (liveUps) {
+                liveBridge.pullOutput(playInterleaved.data(), n);
+                float* l = L.data();
+                float* r = R.data();
+                const float* src = playInterleaved.data();
+                for (UInt32 i = 0; i < n; ++i) {
+                    l[i] = src[i * 2];
+                    r[i] = src[i * 2 + 1];
+                }
+            } else {
+                readSource(in, off, n);
+            }
             if (multiOn) {
                 std::memcpy(inL.data(), L.data(), n * sizeof(float));
                 std::memcpy(inR.data(), R.data(), n * sizeof(float));
@@ -418,6 +515,16 @@ struct Engine::Impl {
     // ------------------------------------------------------------ felépítés (a sorban)
 
     void teardown() {
+        liveUpsActive.store(false, std::memory_order_release);
+        if (capAggId != kAudioObjectUnknown && capProcId) {
+            AudioDeviceStop(capAggId, capProcId);
+            AudioDeviceDestroyIOProcID(capAggId, capProcId);
+        }
+        capProcId = nullptr;
+        if (capIsAggregate && capAggId != kAudioObjectUnknown) AudioHardwareDestroyAggregateDevice(capAggId);
+        capAggId = kAudioObjectUnknown;
+        capIsAggregate = false;
+
         if (aggId != kAudioObjectUnknown && procId) {
             AudioDeviceStop(aggId, procId);
             AudioDeviceDestroyIOProcID(aggId, procId);
@@ -436,6 +543,7 @@ struct Engine::Impl {
         }
 #endif
         tapId = kAudioObjectUnknown;
+        liveBridge.stop();
         owner->processing_ = false;
     }
 
@@ -537,6 +645,55 @@ struct Engine::Impl {
         return true;
     }
 
+    bool createTapOnlyAggregate(const std::string& tapUid) {
+#if AQ_HAVE_TAP_SDK
+        if (!tapUid.empty()) {
+            if (@available(macOS 14.2, *)) {
+                NSDictionary* desc = @{
+                    @kAudioAggregateDeviceNameKey: @"Aqulify Tap",
+                    @kAudioAggregateDeviceUIDKey: [NSString stringWithFormat:@"io.github.szorgos.aqulify.tapagg.%@", NSUUID.UUID.UUIDString],
+                    @kAudioAggregateDeviceIsPrivateKey: @YES,
+                    @kAudioAggregateDeviceIsStackedKey: @NO,
+                    @kAudioAggregateDeviceSubDeviceListKey: @[],
+                    @kAudioAggregateDeviceTapListKey: @[ @{ @kAudioSubTapUIDKey: [NSString stringWithUTF8String:tapUid.c_str()], @kAudioSubTapDriftCompensationKey: @NO } ],
+                    @kAudioAggregateDeviceTapAutoStartKey: @YES,
+                };
+                AudioObjectID agg = kAudioObjectUnknown;
+                const OSStatus st = AudioHardwareCreateAggregateDevice((__bridge CFDictionaryRef)desc, &agg);
+                if (st == noErr && agg != kAudioObjectUnknown) {
+                    capAggId = agg;
+                    capIsAggregate = true;
+                    return true;
+                }
+                std::cerr << "[Core Audio] A csak-tap aggregált eszköz nem hozható létre (" << st << ").\n";
+            }
+        }
+#else
+        (void)tapUid;
+#endif
+        return false;
+    }
+
+    void setLiveReason(const std::string& r) {
+        std::lock_guard<std::mutex> lk(infoMutex);
+        liveUpsReason = r;
+    }
+
+    static bool sameLiveUpsOpts(const audioopt::AudioOptions& a, const audioopt::AudioOptions& b) {
+        return a.upsampleSystemAudio == b.upsampleSystemAudio &&
+               a.upsampleRule == b.upsampleRule &&
+               a.upsampleEngine == b.upsampleEngine &&
+               a.upsamplePreset == b.upsamplePreset &&
+               a.upsamplePrecision == b.upsamplePrecision &&
+               std::abs(a.upsamplePhase - b.upsamplePhase) < 1e-4 &&
+               std::abs(a.upsamplePassbandEnd - b.upsamplePassbandEnd) < 1e-4 &&
+               std::abs(a.upsampleStopbandBegin - b.upsampleStopbandBegin) < 1e-4 &&
+               std::abs(a.upsampleHeadroomDb - b.upsampleHeadroomDb) < 1e-3f &&
+               a.upsampleCustom == b.upsampleCustom &&
+               a.upsampleThreads == b.upsampleThreads &&
+               a.upsampleMaxRate == b.upsampleMaxRate;
+    }
+
     void fail(Problem p) {
         teardown();
         owner->problem_ = p;
@@ -576,7 +733,83 @@ struct Engine::Impl {
         std::string tapUid;
         if (tapOk && !createTap(tapUid)) { fail(Problem::Device); return; }
         const auto zones = zoneDevices(output);
-        if (!createAggregate(output, tapUid, tapOk ? kAudioObjectUnknown : blackHole, zones)) { fail(Problem::Device); return; }
+
+        // Saját motoros (libsoxr / Aqulify FFT64) élő rendszerhang-felmintavételezés:
+        // ha be van kapcsolva és a kimeneti DAC támogat a forrásnál magasabb cél mintavételt, a rögzítést (srcRate)
+        // és a lejátszást (dstRate) két független Core Audio IOProc-ra választjuk szét a LiveUpsampleBridge-en át.
+        bool decoupledOk = false;
+        uint32_t decSrcRate = 0, decDstRate = 0;
+        if (liveOpts.upsampleSystemAudio && liveOpts.upsampleRule != audioopt::UpsampleRule::Off) {
+            Float64 srcSrF = 48000.0;
+            if (!tapOk && blackHole != kAudioObjectUnknown) {
+                getProp(blackHole, kAudioDevicePropertyNominalSampleRate, srcSrF);
+            } else {
+                getProp(output, kAudioDevicePropertyNominalSampleRate, srcSrF);
+            }
+            if (!(srcSrF >= 8000.0)) srcSrF = 48000.0;
+            decSrcRate = static_cast<uint32_t>(std::lround(srcSrF));
+            const auto dacRates = availableSampleRates(output);
+            std::string reason;
+            decDstRate = UpsampleEngine::selectTargetRate(
+                decSrcRate, liveOpts.upsampleRule, dacRates, liveOpts.upsampleCustom,
+                /*bypassUpsample=*/false, /*isDsd=*/false, &reason, liveOpts.upsampleMaxRate);
+            if (decDstRate > decSrcRate) {
+                bool capReady = false;
+                if (tapOk) {
+                    capReady = createTapOnlyAggregate(tapUid);
+                    if (capReady) {
+                        Float64 tapSr = 0.0;
+                        if (getProp(capAggId, kAudioDevicePropertyNominalSampleRate, tapSr) && tapSr >= 8000.0) {
+                            decSrcRate = static_cast<uint32_t>(std::lround(tapSr));
+                        }
+                    }
+                } else {
+                    capAggId = blackHole;
+                    capIsAggregate = false;
+                    capReady = (capAggId != kAudioObjectUnknown);
+                }
+
+                if (capReady && decDstRate > decSrcRate &&
+                    createAggregate(output, /*tapUid=*/"", /*blackHole=*/kAudioObjectUnknown, zones)) {
+                    setNominalSampleRate(output, decDstRate);
+                    setNominalSampleRate(aggId, decDstRate);
+                    Float64 actualOutSr = 0.0;
+                    getProp(aggId, kAudioDevicePropertyNominalSampleRate, actualOutSr);
+                    if (std::abs(actualOutSr - static_cast<double>(decDstRate)) < 200.0 &&
+                        liveBridge.configure(decSrcRate, decDstRate, liveOpts) &&
+                        liveBridge.start()) {
+                        if (AudioDeviceCreateIOProcID(capAggId, &Impl::capIoProc, this, &capProcId) == noErr && capProcId) {
+                            decoupledOk = true;
+                            setLiveReason("");
+                        }
+                    }
+                }
+                if (!decoupledOk) {
+                    // Sikertelen szétválasztás: tiszta visszalépés a normál egy-aggregált útra
+                    liveBridge.stop();
+                    if (capAggId != kAudioObjectUnknown && capProcId) {
+                        AudioDeviceDestroyIOProcID(capAggId, capProcId);
+                        capProcId = nullptr;
+                    }
+                    if (capIsAggregate && capAggId != kAudioObjectUnknown) AudioHardwareDestroyAggregateDevice(capAggId);
+                    capAggId = kAudioObjectUnknown;
+                    capIsAggregate = false;
+                    if (aggId != kAudioObjectUnknown) {
+                        AudioHardwareDestroyAggregateDevice(aggId);
+                        aggId = kAudioObjectUnknown;
+                    }
+                    setLiveReason("decouple_failed");
+                }
+            } else {
+                setLiveReason(reason.empty() ? "same_rate" : reason);
+            }
+        } else {
+            setLiveReason("off");
+        }
+
+        if (!decoupledOk) {
+            if (!createAggregate(output, tapUid, tapOk ? kAudioObjectUnknown : blackHole, zones)) { fail(Problem::Device); return; }
+        }
 
         outputDev = output;
         sourceDev = blackHole;
@@ -588,7 +821,7 @@ struct Engine::Impl {
         for (int k = 0; k < 3; ++k) zoneActive[k] = false;
         {
             UInt32 base = channelCount(output, kAudioObjectPropertyScopeOutput);
-            if (!tapOk && blackHole != kAudioObjectUnknown) base += channelCount(blackHole, kAudioObjectPropertyScopeOutput);
+            if (!decoupledOk && !tapOk && blackHole != kAudioObjectUnknown) base += channelCount(blackHole, kAudioObjectPropertyScopeOutput);
             for (const auto& z : zones) {
                 const UInt32 nch = channelCount(z.second, kAudioObjectPropertyScopeOutput);
                 UInt32 l = 0, r = 1;
@@ -630,7 +863,11 @@ struct Engine::Impl {
         applyBufferFrames();
         if (AudioDeviceCreateIOProcID(aggId, &Impl::ioProc, this, &procId) != noErr || !procId) { fail(Problem::Device); return; }
         disableUnusedInputs(output);
-        for (const auto& z : zones) disableDeviceInputs(z.second, output, tapOk ? kAudioObjectUnknown : blackHole);
+        for (const auto& z : zones) disableDeviceInputs(z.second, output, (!decoupledOk && !tapOk) ? blackHole : kAudioObjectUnknown);
+        if (decoupledOk) {
+            liveUpsActive.store(true, std::memory_order_release);
+            if (AudioDeviceStart(capAggId, capProcId) != noErr) { fail(Problem::Device); return; }
+        }
         if (AudioDeviceStart(aggId, procId) != noErr) { fail(Problem::Device); return; }
 
         owner->problem_ = Problem::None;
@@ -638,7 +875,13 @@ struct Engine::Impl {
         owner->processing_ = true;
         const std::string src = tapOk ? "Core Audio Tap" : deviceName(blackHole);
         setInfo(deviceUid(output), deviceName(output), src);
-        std::cout << "[Core Audio] Forrás: " << src << ", kimenet: " << deviceName(output) << ", " << sr << " Hz\n";
+        if (decoupledOk) {
+            std::cout << "[Felmintavételezés/macOS] Rendszerhang aktív: " << src << " (" << decSrcRate
+                      << " Hz) -> " << deviceName(output) << " (" << decDstRate << " Hz, "
+                      << (liveOpts.upsampleEngine == 1 ? "Aqulify FFT64" : "libsoxr") << ").\n";
+        } else {
+            std::cout << "[Core Audio] Forrás: " << src << ", kimenet: " << deviceName(output) << ", " << sr << " Hz\n";
+        }
     }
 
     /** A kimeneti eszköz saját bemeneteit (pl. egy hangkártya mikrofonbemenetét) nem olvassuk. */
@@ -786,6 +1029,8 @@ Engine::Engine() : p_(std::make_unique<Impl>()) {
     p_->R.assign(kMaxFrames, 0.0f);
     p_->inL.assign(kMaxFrames, 0.0f);
     p_->inR.assign(kMaxFrames, 0.0f);
+    p_->capInterleaved.assign(kMaxFrames * 2, 0.0f);
+    p_->playInterleaved.assign(kMaxFrames * 2, 0.0f);
     for (int k = 0; k < 3; ++k) {
         p_->zL[k].assign(kMaxFrames, 0.0f);
         p_->zR[k].assign(kMaxFrames, 0.0f);
@@ -827,6 +1072,29 @@ std::string Engine::multiStatusJson() const {
 }
 
 AetherChain& Engine::zoneChain(int k) { return p_->multi.chain(k); }
+
+void Engine::setLiveUpsampleOptions(const audioopt::AudioOptions& opts) {
+    Impl* p = p_.get();
+    const audioopt::AudioOptions copy = opts;
+    dispatch_async(p->queue, ^{
+        if (Impl::sameLiveUpsOpts(p->liveOpts, copy)) return;
+        p->liveOpts = copy;
+        if (p->started) p->rebuild();
+    });
+}
+
+bool Engine::liveUpsampleActive() const {
+    return p_->liveUpsActive.load(std::memory_order_acquire);
+}
+
+livebridge::BridgeStatus Engine::liveUpsampleStatus() const {
+    return p_->liveBridge.status();
+}
+
+std::string Engine::liveUpsampleReason() const {
+    std::lock_guard<std::mutex> lk(p_->infoMutex);
+    return p_->liveUpsReason;
+}
 
 namespace {
 AudioObjectPropertyAddress volAddr(AudioObjectPropertySelector sel, UInt32 element) {

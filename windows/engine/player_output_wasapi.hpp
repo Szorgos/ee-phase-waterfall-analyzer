@@ -59,7 +59,21 @@ struct WasapiFormat {
 
 class WasapiPlayerOutput : public PlayerOutput {
 public:
+    explicit WasapiPlayerOutput(const char* hbName = "player-wasapi") : hb_(hbName ? hbName : "player-wasapi", &hbRunning_) {}
     ~WasapiPlayerOutput() override { close(); }
+
+    /** Opcionális céleszköz WASAPI-azonosítója (üres = alapértelmezett lejátszóeszköz). */
+    void setTargetDeviceId(const std::wstring& id) {
+        std::lock_guard<std::mutex> lk(targetMutex_);
+        if (targetDeviceId_ == id) return;
+        targetDeviceId_ = id;
+        reopenReq_ = true;
+        if (wake_) SetEvent(wake_);
+    }
+    std::wstring targetDeviceId() const {
+        std::lock_guard<std::mutex> lk(targetMutex_);
+        return targetDeviceId_;
+    }
 
     /** A kizárólagos mód DSP-je (a motor élettartamáig él). nullptr: nincs (ilyenkor nincs kizárólagos mód). */
     void setExclusiveDsp(ExclusiveDsp* dsp) { dsp_ = dsp; }
@@ -84,10 +98,10 @@ public:
     std::vector<uint32_t> supportedRates() const override {
         static const uint32_t kCandidates[] = { 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000 };
         if (wantExclusive_.load()) {
-            // Kizárólagos módban az alapértelmezett WASAPI eszköz támogatott mintavételei
+            // Kizárólagos módban a cél (vagy alapértelmezett) WASAPI eszköz támogatott mintavételei
             std::vector<uint32_t> res;
             win::ComPtr<IMMDevice> dev;
-            if (defaultDevice(dev)) {
+            if (openTargetDevice(dev)) {
                 win::ComPtr<IAudioClient> cli;
                 if (SUCCEEDED(dev->Activate(win::kIID_IAudioClient, CLSCTX_ALL, nullptr,
                                             reinterpret_cast<void**>(cli.put())))) {
@@ -324,6 +338,16 @@ private:
         return wf;
     }
 
+    bool openTargetDevice(win::ComPtr<IMMDevice>& dev) const {
+        const std::wstring target = targetDeviceId();
+        if (target.empty()) return defaultDevice(dev);
+        win::ComPtr<IMMDeviceEnumerator> en;
+        if (FAILED(CoCreateInstance(win::kCLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL, win::kIID_IMMDeviceEnumerator,
+                                    reinterpret_cast<void**>(en.put()))))
+            return false;
+        return SUCCEEDED(en->GetDevice(target.c_str(), dev.put()));
+    }
+
     static bool defaultDevice(win::ComPtr<IMMDevice>& dev) {
         win::ComPtr<IMMDeviceEnumerator> en;
         if (FAILED(CoCreateInstance(win::kCLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL, win::kIID_IMMDeviceEnumerator,
@@ -502,10 +526,10 @@ private:
         return "error";
     }
 
-    /** Megnyitás az alapértelmezett eszközön (kizárólagos, ha kérték és van DSP; különben / sikertelenül megosztott). */
+    /** Megnyitás a cél (vagy alapértelmezett) eszközön (kizárólagos, ha kérték és van DSP; különben / sikertelenül megosztott). */
     bool openStream(Stream& s) {
         win::ComPtr<IMMDevice> dev;
-        if (!defaultDevice(dev)) return false;
+        if (!openTargetDevice(dev)) return false;
         s.devId = deviceId(dev.p);
         s.devName = deviceName(dev.p);
         if (dopMode_) {
@@ -667,7 +691,7 @@ private:
             if (stream && en && !dopMode_ && now - lastDeviceCheck >= std::chrono::seconds(1)) {
                 lastDeviceCheck = now;
                 hb_.beat("wasapi: device check");
-                if (follow.observe(defaultDeviceIdNow(en.p), now)) {
+                if (targetDeviceId().empty() && follow.observe(defaultDeviceIdNow(en.p), now)) {
                     std::cout << "[Lejátszó] Az alapértelmezett lejátszóeszköz megváltozott (eddig: " << stream->devName
                               << "); a hangkimenet átvált.\n";
                     std::lock_guard<std::mutex> lk(renderMutex_);
@@ -737,7 +761,9 @@ private:
     // Őrszem (beépített hibajelentés): a kimeneti szál körönként jelez (legfeljebb 300 ms-onként); csak futó szálnál
     // várunk jelzést. A regisztráció a létrehozó szálon: a hangszálon csak atomikus írás van.
     std::atomic<bool> hbRunning_{false};
-    aq::wd::Heartbeat hb_{ "player-wasapi", &hbRunning_ };
+    aq::wd::Heartbeat hb_;
+    mutable std::mutex targetMutex_;
+    std::wstring targetDeviceId_;
     HANDLE wake_ = nullptr;
     std::atomic<bool> active_{false}, quit_{false}, flushReq_{false};
     uint64_t written_ = 0;                  // az eszköznek átadott keretek (a szál írja, a render zárja alatt)

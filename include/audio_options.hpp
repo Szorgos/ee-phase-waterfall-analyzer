@@ -35,6 +35,12 @@ enum class UpsampleRule : int {
     Custom = 4       // Egyéni táblázat
 };
 
+/** A felmintavételezés motorja (0 = libsoxr, 1 = saját 64 bites egylépcsős FFT + Kaiser-sinc). */
+enum class UpsampleEngineType : int {
+    Soxr = 0,
+    Fft64 = 1,
+};
+
 /** A felmintavételezés előbeállításai (3.3). */
 enum class UpsamplePreset : int {
     Linear = 0,        // Lineáris fázis (50)
@@ -74,8 +80,11 @@ struct AudioOptions {
     bool exclusive = false;      // kizárólagos mód (Windows: WASAPI exclusive; Linux: közvetlen ALSA); a DSP a motorban fut
     bool exclHwVolume = false;   // Windows, kizárólagos módban: a DAC hardveres hangereje (false: digitális, a lánc végén)
 
-    // Felmintavételezés a beépített lejátszóban (libsoxr)
+    // Felmintavételezés a beépített lejátszóban és opcionálisan a rendszerhangon (libsoxr vagy saját 64 bites FFT)
     UpsampleRule upsampleRule = UpsampleRule::Off;
+    int upsampleEngine = 0;                     // 0: libsoxr (alapértelmezett), 1: Aqulify FFT64 (64 bites Kaiser-sinc)
+    bool upsampleSystemAudio = false;           // false: csak beépített lejátszó (alap); true: külső rendszerhang is
+    std::string systemCaptureDevice;            // Windows virtuális kábel / választható forráseszköz (üres: automatikus)
     int upsamplePreset = 1;                     // 0: linear, 1: intermediate, 2: minimum, 3: custom, 4: reference
     double upsamplePassbandEnd = 0.95;          // 0.80 .. 0.997 (95%)
     double upsampleStopbandBegin = 1.00;        // 1.00 .. 1.50 (100%)
@@ -105,7 +114,9 @@ struct AudioOptions {
                fixedRate == o.fixedRate && resampleQuality == o.resampleQuality && replayGain == o.replayGain &&
                rgPreampDb == o.rgPreampDb && rgPreventClip == o.rgPreventClip && preload == o.preload &&
                exclusive == o.exclusive && exclHwVolume == o.exclHwVolume &&
-               upsampleRule == o.upsampleRule && upsamplePreset == o.upsamplePreset &&
+               upsampleRule == o.upsampleRule && upsampleEngine == o.upsampleEngine &&
+               upsampleSystemAudio == o.upsampleSystemAudio && systemCaptureDevice == o.systemCaptureDevice &&
+               upsamplePreset == o.upsamplePreset &&
                std::abs(upsamplePassbandEnd - o.upsamplePassbandEnd) < 1e-4 &&
                std::abs(upsampleStopbandBegin - o.upsampleStopbandBegin) < 1e-4 &&
                upsamplePrecision == o.upsamplePrecision &&
@@ -168,6 +179,11 @@ inline void sanitize(AudioOptions& o) {
     // Felmintavételezés beállításainak érvényesítése
     const int ur = static_cast<int>(o.upsampleRule);
     if (ur < 0 || ur > 4) o.upsampleRule = UpsampleRule::Off;
+    if (o.upsampleEngine != 0 && o.upsampleEngine != 1) o.upsampleEngine = 0;
+    if (o.systemCaptureDevice.size() > 255) o.systemCaptureDevice.clear();
+    for (char c : o.systemCaptureDevice) {
+        if (static_cast<unsigned char>(c) < 0x20) { o.systemCaptureDevice.clear(); break; }
+    }
     o.upsamplePreset = std::clamp(o.upsamplePreset, 0, kUpsamplePresetReference);
     o.upsamplePhase = std::clamp(o.upsamplePhase, 0.0, 50.0);
     o.upsamplePrecision = nearestInt(o.upsamplePrecision, kPrecisionChoices);
@@ -226,6 +242,9 @@ inline std::string toJson(const AudioOptions& o) {
            ",\"preload\":" + (o.preload ? "true" : "false") + ",\"exclusive\":" + (o.exclusive ? "true" : "false") +
            ",\"exclHwVolume\":" + (o.exclHwVolume ? "true" : "false") +
            ",\"upsampleRule\":" + std::to_string(static_cast<int>(o.upsampleRule)) +
+           ",\"upsampleEngine\":" + std::to_string(o.upsampleEngine) +
+           ",\"upsampleSystemAudio\":" + (o.upsampleSystemAudio ? "true" : "false") +
+           ",\"systemCaptureDevice\":\"" + jsonStringBody(o.systemCaptureDevice) + "\"" +
            ",\"upsamplePreset\":" + std::to_string(o.upsamplePreset) +
            ",\"upsamplePassbandEnd\":" + std::to_string(o.upsamplePassbandEnd) +
            ",\"upsampleStopbandBegin\":" + std::to_string(o.upsampleStopbandBegin) +
@@ -271,6 +290,12 @@ inline AudioOptions fromJson(const json::Value& v, AudioOptions base = {}) {
     // Felmintavételezés mezők beolvasása (ha hiányoznak, a base alapértékei maradnak)
     if (const json::Value* x = v.get("upsampleRule"); x && x->type == T::Number)
         base.upsampleRule = static_cast<UpsampleRule>(static_cast<int>(x->num));
+    if (const json::Value* x = v.get("upsampleEngine"); x && x->type == T::Number)
+        base.upsampleEngine = static_cast<int>(x->num);
+    if (const json::Value* x = v.get("upsampleSystemAudio"); x && x->type == T::Bool)
+        base.upsampleSystemAudio = x->b;
+    if (const json::Value* x = v.get("systemCaptureDevice"); x && x->type == T::String)
+        base.systemCaptureDevice = x->str;
     if (const json::Value* x = v.get("upsamplePreset"); x && x->type == T::Number)
         base.upsamplePreset = static_cast<int>(x->num);
     if (const json::Value* x = v.get("upsamplePassbandEnd"); x && x->type == T::Number)

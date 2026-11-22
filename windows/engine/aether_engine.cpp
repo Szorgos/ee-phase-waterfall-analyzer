@@ -68,6 +68,7 @@
 #include "radio_bridge.hpp"
 #include "player_output_wasapi.hpp"
 #include "player_output_win.hpp"
+#include "win_live_bridge.hpp"
 
 namespace ee_analyzer::player {
 /** A motor kimenete: WASAPI (megosztott / kizárólagos) vagy ASIO, a haladó hangkimenet beállítása szerint. */
@@ -934,6 +935,26 @@ int main(int argc, char** argv) {
     // a gépen futó lejátszót (SMTC).
     // Kizárólagos módban (Hangkimenet, haladó) a lejátszó egyedül használja az eszközt: az APO kimarad, a lánc a motorban fut.
     player::FilePlayer filePlayer(std::move(playerOutOwned));
+    // Windows rendszerhang-felmintavételező híd (virtuális kábel -> saját motor -> WASAPI Exclusive / ASIO)
+    win::WinLiveBridge winLiveBridge;
+    uint64_t liveBridgeReadPos = 0;
+    {
+        auto basePull = cb.pullAudio;
+        auto baseRate = cb.sampleRate;
+        cb.pullAudio = [&, basePull](float* lr, size_t maxFrames) -> size_t {
+            if (!filePlayer.hasTrack() && winLiveBridge.isActive()) {
+                return readTapRing(playerDsp.tap(), liveBridgeReadPos, lr, maxFrames);
+            }
+            return basePull(lr, maxFrames);
+        };
+        cb.sampleRate = [&, baseRate]() -> double {
+            if (!filePlayer.hasTrack() && winLiveBridge.isActive()) {
+                const uint32_t r = winLiveBridge.actualRate();
+                if (r > 0) return static_cast<double>(r);
+            }
+            return baseRate();
+        };
+    }
     // Zenetár (2.x): a mentett zenei mappák (%APPDATA%\Aqulify\library.json), különben a Zene mappa
     library::MusicLibrary musicLibrary;
     // A lejátszási napló (3c2, %APPDATA%\Aqulify\stats.json): a sor előtt, mert a sor mérőszála a megszűnéséig hívhatja
@@ -946,14 +967,22 @@ int main(int argc, char** argv) {
     // Lejátszási sor (3b): a zenetár azonosítóival; a queue.json-ból visszaáll, de magától nem indul el
     player::PlayQueue playQueue(
         filePlayer, [&](const std::string& id, std::string& path) -> bool {
+            // A beépített lejátszó sorból nyíló száma elsőbbséget élvez a rendszerhang-híddal szemben
+            winLiveBridge.suspendForPlayer();
+            bool ok = false;
             if (id.rfind("p_", 0) == 0) {
-                if (phoneCache.resolve(id, path)) return true;
-                if (cb.broadcast) {
-                    cb.broadcast("{\"type\":\"phone_track_demand\",\"id\":\"" + media::jsonEscape(id) + "\"}");
+                if (phoneCache.resolve(id, path)) ok = true;
+                else {
+                    if (cb.broadcast) {
+                        cb.broadcast("{\"type\":\"phone_track_demand\",\"id\":\"" + media::jsonEscape(id) + "\"}");
+                    }
+                    ok = phoneCache.waitForTrack(id, std::chrono::milliseconds(2500), path);
                 }
-                return phoneCache.waitForTrack(id, std::chrono::milliseconds(2500), path);
+            } else {
+                ok = musicLibrary.trackPath(id, path);
             }
-            return musicLibrary.trackPath(id, path);
+            if (!ok && !filePlayer.hasTrack()) winLiveBridge.resumeAfterPlayer();
+            return ok;
         },
         [](const std::string& doc) {
             if (!writeFileAtomic(userFilePath(L"queue.json", true), doc)) std::cout << "[Lejátszó] Figyelem: a queue.json nem írható.\n";
@@ -969,15 +998,21 @@ int main(int argc, char** argv) {
     playlists.seedOnce(library::defaultSmartLists(aq_i18n::code() == "hu"));
     cb.mediaJson = [&]() { return filePlayer.hasTrack() ? media::toJson(playQueue.mediaInfo()) : mediaSession.json(); };
     cb.mediaCommand = [&](const std::string& action, double value) {
-        if (filePlayer.hasTrack()) playQueue.command(action, value);
-        else mediaSession.command(action == "stop" ? "pause" : action, value);   // más lejátszót csak szüneteltetünk
+        if (filePlayer.hasTrack()) {
+            playQueue.command(action, value);
+            if (action == "stop" || !filePlayer.hasTrack()) winLiveBridge.resumeAfterPlayer();
+        } else {
+            mediaSession.command(action == "stop" ? "pause" : action, value);   // más lejátszót csak szüneteltetünk
+        }
     };
     cb.mediaArt = [&](const std::string& id, std::string& mime, std::string& bytes, std::string& url) {
         if (filePlayer.art(id, mime, bytes)) return true;
         return mediaSession.art(id, mime, bytes, url);
     };
     cb.playerOpen = [&](const std::string& path, std::string& error) {
+        winLiveBridge.suspendForPlayer();
         if (!filePlayer.open(path, &error)) {
+            winLiveBridge.resumeAfterPlayer();
             std::cout << "[Lejátszó] " << path << ": " << error << "\n";
             return false;
         }
@@ -985,13 +1020,18 @@ int main(int argc, char** argv) {
         return true;
     };
     cb.playerOpenBypass = [&](const std::string& path, std::string& error) {
+        winLiveBridge.suspendForPlayer();
         if (!filePlayer.open(path, &error, 0, /*bypassUpsample=*/true)) {
+            winLiveBridge.resumeAfterPlayer();
             std::cout << "[Lejátszó/Mérés] " << path << ": " << error << "\n";
             return false;
         }
         return true;
     };
-    cb.playerStop = [&] { filePlayer.stop(); };
+    cb.playerStop = [&] {
+        filePlayer.stop();
+        winLiveBridge.resumeAfterPlayer();
+    };
     // Szobamérés: mikrofonfelvétel WASAPI-val (room/mic_capture_wasapi.hpp)
     cb.makeMicCapture = [] { return aqulify::room::createMicCapture(); };
     // Egykattintásos frissítés (a felület „Új verzió érhető el” ablakából): letöltés, ellenőrzés, a telepítő indítása
@@ -1056,6 +1096,7 @@ int main(int argc, char** argv) {
                           static_cast<unsigned long long>(filePlayer.upsampleProcessedFrames()),
                           filePlayer.upsampleDelayMs());
             s += ubuf;
+            s += winLiveBridge.statusJson();
         }
         if (!filePlayer.hasTrack()) return s;
         // A jelút (Hangkimenet, haladó): megosztott módban a Windows hangmotorja keveri a jelet (nem bitpontos);
@@ -1163,6 +1204,8 @@ int main(int argc, char** argv) {
         filePlayer.setReplayGain(audioOpts.replayGain, audioOpts.rgPreampDb, audioOpts.rgPreventClip);
         filePlayer.setPreload(audioOpts.preload);
         filePlayer.setUpsampleOptions(audioOpts);
+        winLiveBridge.setOptions(audioOpts);
+        winLiveBridge.start(&playerDsp, [&]() { return filePlayer.hasTrack(); });
         playerOut.setExclusive(audioOpts.exclusive);
         playerOut.setAsio(audioOpts.asio, audioOpts.asioDriver);
         // natív DSD: kizárólagos WASAPI-n (DoP) vagy ASIO-n (natív DSD, ha a meghajtó tudja; különben DoP)
@@ -1184,7 +1227,8 @@ int main(int argc, char** argv) {
         drivers += "]";
         return "{\"opts\":" + optsToJsonWithDop(audioOpts, dsdDop) +
                ",\"caps\":{\"buffer\":false,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true,\"upsample\":true,"
-               "\"exclusive\":true,\"dop\":true,\"asio\":true,\"asioDrivers\":" + drivers + "}}";
+               "\"systemUpsample\":true,\"virtualCables\":" + win::WinLiveBridge::virtualCablesJson() +
+               ",\"exclusive\":true,\"dop\":true,\"asio\":true,\"asioDrivers\":" + drivers + "}}";
     };
     cb.setAudioOptions = [&](const json::Value& v) {
         std::lock_guard<std::mutex> lk(audioMutex);
@@ -1199,6 +1243,7 @@ int main(int argc, char** argv) {
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         filePlayer.setPreload(o.preload);
         filePlayer.setUpsampleOptions(o);
+        winLiveBridge.setOptions(o);
         playerDsp.setHardwarePref(o.exclHwVolume && !o.asio);
         if (o.exclusive != playerOut.wantExclusive()) {
             playerOut.setExclusive(o.exclusive);
@@ -1423,6 +1468,7 @@ int main(int argc, char** argv) {
     s_health.store(nullptr);
     bridge->stop();
     updater.stop();
+    winLiveBridge.stop();
     filePlayer.stop();
     mediaSession.stop();
     loopback->stop();

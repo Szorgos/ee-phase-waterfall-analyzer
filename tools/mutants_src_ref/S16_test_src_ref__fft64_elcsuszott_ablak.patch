@@ -1,0 +1,11 @@
+--- a/include/src_convert.hpp
++++ b/include/src_convert.hpp
+@@ -590,7 +590,7 @@
+             const size_t outBase = b * stepOut;
+             const size_t copyN = (outBase < targetOut) ? std::min(stepOut, targetOut - outBase) : 0;
+             for (size_t j = 0; j < copyN; ++j) {
+-                double v = yBlk[hOut + j];
++                double v = yBlk[hOut + j + 1];
+                 if (applyGain) v *= gain;
+                 out[(outBase + j) * ch + c] = v;
+             }

@@ -1,0 +1,11 @@
+--- a/include/src_convert.hpp
++++ b/include/src_convert.hpp
+@@ -682,7 +682,7 @@
+     // Szélkezelés előkészítése (csak akkor kér paddinget, ha aktív és legalább az egyik szél nem csendes)
+     size_t padIn = 0, padOut = 0;
+     std::vector<double> leftPad, rightPad;
+-    if (fileOpts.edge != EdgeMode::None && totalInFrames >= 4) {
++    if (false && fileOpts.edge != EdgeMode::None && totalInFrames >= 4) {
+         const size_t checkN = std::min<size_t>(totalInFrames, 64);
+         double edgePeak = 0.0;
+         for (size_t i = 0; i < checkN; ++i)

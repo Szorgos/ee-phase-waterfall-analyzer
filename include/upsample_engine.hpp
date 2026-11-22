@@ -17,6 +17,7 @@
 
 #include <soxr.h>
 #include "audio_options.hpp"
+#include "src_fft64.hpp"
 
 namespace ee_analyzer {
 
@@ -102,7 +103,7 @@ public:
     bool init(uint32_t srcRate, uint32_t dstRate, uint32_t channels = 2,
               int precision = 28, double phase = 25.0,
               double passbandEnd = 0.95, double stopbandBegin = 1.00,
-              float headroomDb = -1.0f) {
+              float headroomDb = -1.0f, int engineType = 0) {
         reset();
         srcRate_ = srcRate;
         dstRate_ = dstRate;
@@ -113,6 +114,15 @@ public:
         if (srcRate == 0 || dstRate == 0 || srcRate == dstRate) {
             active_ = false;
             return true;
+        }
+
+        if (engineType == static_cast<int>(audioopt::UpsampleEngineType::Fft64)) {
+            if (fftStream_.init(srcRate, dstRate, channels, passbandEnd, 34.5, phase)) {
+                useFft64_ = true;
+                active_ = true;
+                return true;
+            }
+            // Nem racionális / túl nagy aránynál biztonságos visszalépés libsoxr-re
         }
 
         soxr_quality_spec_t q_spec = soxr_quality_spec(SOXR_VHQ, 0);
@@ -148,7 +158,8 @@ public:
                     opts.upsamplePhase,
                     opts.upsamplePassbandEnd,
                     opts.upsampleStopbandBegin,
-                    opts.upsampleHeadroomDb);
+                    opts.upsampleHeadroomDb,
+                    opts.upsampleEngine);
     }
 
     void reset() {
@@ -160,6 +171,8 @@ public:
             soxr_delete(soxrR_);
             soxrR_ = nullptr;
         }
+        fftStream_.reset();
+        useFft64_ = false;
         split_ = false;
         active_ = false;
         srcRate_ = 0;
@@ -167,6 +180,7 @@ public:
     }
 
     void clear() {
+        if (useFft64_) fftStream_.clear();
         if (soxr_) soxr_clear(soxr_);
         if (soxrR_) soxr_clear(soxrR_);
     }
@@ -180,13 +194,22 @@ public:
      * outFrames: ténylegesen előállított kimeneti keretek
      */
     bool process(const float* in, size_t inFrames, float* out, size_t outCapacityFrames, size_t& outFrames) {
-        if (!active_ || soxr_ == nullptr) {
+        if (!active_ || (!useFft64_ && soxr_ == nullptr)) {
             size_t toCopy = std::min(inFrames, outCapacityFrames);
             if (in && out && toCopy > 0) {
                 std::memcpy(out, in, toCopy * channels_ * sizeof(float));
             }
             outFrames = toCopy;
             return true;
+        }
+
+        if (useFft64_) {
+            size_t odone = 0;
+            const bool ok = fftStream_.process(in, inFrames, out, outCapacityFrames, odone);
+            outFrames = odone;
+            processedFrames_ += odone;
+            applyHeadroom(out, odone * channels_);
+            return ok;
         }
 
         size_t odone = 0;
@@ -202,9 +225,17 @@ public:
      * Belső szűrő kiürítése (a forrásfolyam végén).
      */
     bool flush(float* out, size_t outCapacityFrames, size_t& outFrames) {
-        if (!active_ || soxr_ == nullptr) {
+        if (!active_ || (!useFft64_ && soxr_ == nullptr)) {
             outFrames = 0;
             return true;
+        }
+        if (useFft64_) {
+            size_t odone = 0;
+            const bool ok = fftStream_.flush(out, outCapacityFrames, odone);
+            outFrames = odone;
+            processedFrames_ += odone;
+            applyHeadroom(out, odone * channels_);
+            return ok;
         }
         size_t odone = 0;
         soxr_error_t err = split_ ? processSplit(nullptr, 0, out, outCapacityFrames, odone)
@@ -216,9 +247,10 @@ public:
     }
 
     /**
-     * Késleltetés kimeneti keretekben (a libsoxr belső szűrőjének állapota szerint).
+     * Késleltetés kimeneti keretekben (a belső szűrő állapota szerint).
      */
     double delayFrames() const {
+        if (active_ && useFft64_) return fftStream_.delayFrames();
         if (active_ && soxr_) {
             return soxr_delay(soxr_);
         }
@@ -226,6 +258,7 @@ public:
     }
 
     bool isActive() const { return active_; }
+    bool isFft64() const { return useFft64_; }
     uint32_t srcRate() const { return srcRate_; }
     uint32_t dstRate() const { return dstRate_; }
     uint32_t channels() const { return channels_; }
@@ -324,6 +357,8 @@ private:
     soxr_error_t jobErr_ = nullptr;
 
     soxr_t soxr_ = nullptr;
+    srcconv::fft64::StreamResampler fftStream_;
+    bool useFft64_ = false;
     bool active_ = false;
     uint32_t srcRate_ = 0;
     uint32_t dstRate_ = 0;

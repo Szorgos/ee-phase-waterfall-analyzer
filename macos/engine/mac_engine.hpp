@@ -24,6 +24,8 @@
 #include <vector>
 
 #include "aether_chain.hpp"
+#include "audio_options.hpp"
+#include "live_upsample_bridge.hpp"
 #include "multi_output_config.hpp"
 #include "param_block.hpp"
 #include "tap_ring.hpp"
@@ -78,6 +80,15 @@ public:
     std::string multiStatusJson() const;
     /** A k-adik kimenet (1–3) saját lánca (pl. impulzusválasz egy zónának). */
     AetherChain& zoneChain(int k);
+
+    /** Rendszerhang-felmintavételezés beállításai (bármely szálról; szükség esetén újraépíti az IO-t). */
+    void setLiveUpsampleOptions(const audioopt::AudioOptions& opts);
+    /** Aktív-e a saját motoros (libsoxr / Aqulify FFT64) rendszerhang-felmintavételezés. */
+    bool liveUpsampleActive() const;
+    /** A saját motoros élő felmintavételező híd állapota (szálbiztos). */
+    livebridge::BridgeStatus liveUpsampleStatus() const;
+    /** Az élő felmintavételezés utolsó oka/státusza (pl. "off", "dac_unsupported", ""). */
+    std::string liveUpsampleReason() const;
 
     /**
      * Pufferméret (mintában, 0: a rendszer alapértéke): az aggregált eszköz IO-puffere (kAudioDevicePropertyBufferFrameSize,

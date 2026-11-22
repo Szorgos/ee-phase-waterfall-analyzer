@@ -20,12 +20,14 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include "live_upsample_bridge.hpp"
 #include "tap_ring.hpp"
 #include "watchdog.hpp"
 
@@ -50,10 +52,21 @@ struct ComPtr {
     explicit operator bool() const { return p != nullptr; }
 };
 
+/** Egy aktív Windowsos WASAPI lejátszóeszköz adatai (pl. valódi DAC vagy virtuális hangkábel). */
+struct WasapiEndpointInfo {
+    std::wstring id;
+    std::string idUtf8;
+    std::string name;
+    bool isVirtual = false;
+    bool isDefault = false;
+};
+
 class WasapiLoopback {
 public:
     using Ring = StereoTapRing<65536>;
+    using FrameCallback = std::function<void(const float* lr, size_t frames, uint32_t rate)>;
 
+    explicit WasapiLoopback(std::string hbName = "loopback") : hbName_(std::move(hbName)) {}
     ~WasapiLoopback() { stop(); }
 
     void start() {
@@ -64,6 +77,83 @@ public:
     void stop() {
         if (!running_.exchange(false)) return;
         if (thread_.joinable()) thread_.join();
+    }
+
+    /** Céleszköz WASAPI-azonosítója (üres = rendszer alapértelmezett lejátszóeszköze). */
+    void setTargetDeviceId(const std::wstring& id) {
+        std::lock_guard<std::mutex> lk(targetMutex_);
+        targetDeviceId_ = id;
+    }
+
+    /** Visszahívás minden rögzített sztereó blokkra (a rögzítő szálról, valós időben). */
+    void setFrameCallback(FrameCallback cb) {
+        std::lock_guard<std::mutex> lk(cbMutex_);
+        frameCb_ = std::move(cb);
+    }
+
+    static std::string wideToUtf8(const wchar_t* w) {
+        if (!w) return {};
+        const int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
+        if (n <= 1) return {};
+        std::string s(static_cast<size_t>(n - 1), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, w, -1, s.data(), n, nullptr, nullptr);
+        return s;
+    }
+
+    static std::wstring utf8ToWide(const std::string& s) {
+        if (s.empty()) return {};
+        const int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
+        if (n <= 1) return {};
+        std::wstring w(static_cast<size_t>(n - 1), L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, w.data(), n);
+        return w;
+    }
+
+    /** Az összes aktív WASAPI lejátszóeszköz listázása (COM-biztos, bármely szálról hívható). */
+    static std::vector<WasapiEndpointInfo> listRenderEndpoints() {
+        std::vector<WasapiEndpointInfo> out;
+        const HRESULT comHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        const bool needUninit = (comHr == S_OK || comHr == S_FALSE);
+        {
+            ComPtr<IMMDeviceEnumerator> en;
+            if (SUCCEEDED(CoCreateInstance(kCLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL, kIID_IMMDeviceEnumerator,
+                                           reinterpret_cast<void**>(en.put())))) {
+                const std::wstring defId = defaultDeviceId(en.p);
+                ComPtr<IMMDeviceCollection> col;
+                if (SUCCEEDED(en->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, col.put()))) {
+                    UINT count = 0;
+                    if (SUCCEEDED(col->GetCount(&count))) {
+                        for (UINT i = 0; i < count; ++i) {
+                            ComPtr<IMMDevice> dev;
+                            if (FAILED(col->Item(i, dev.put())) || !dev) continue;
+                            WasapiEndpointInfo info;
+                            LPWSTR id = nullptr;
+                            if (SUCCEEDED(dev->GetId(&id)) && id) {
+                                info.id = id;
+                                CoTaskMemFree(id);
+                            }
+                            if (info.id.empty()) continue;
+                            info.idUtf8 = wideToUtf8(info.id.c_str());
+                            info.isDefault = (!defId.empty() && info.id == defId);
+                            ComPtr<IPropertyStore> props;
+                            if (SUCCEEDED(dev->OpenPropertyStore(STGM_READ, props.put()))) {
+                                PROPVARIANT pv;
+                                PropVariantInit(&pv);
+                                if (SUCCEEDED(props->GetValue(kPKEY_Device_FriendlyName, &pv)) && pv.vt == VT_LPWSTR) {
+                                    info.name = wideToUtf8(pv.pwszVal);
+                                }
+                                PropVariantClear(&pv);
+                            }
+                            if (info.name.empty()) info.name = info.idUtf8;
+                            info.isVirtual = livebridge::isVirtualCableName(info.name);
+                            out.push_back(std::move(info));
+                        }
+                    }
+                }
+            }
+        }
+        if (needUninit) CoUninitialize();
+        return out;
     }
 
     const Ring& ring() const { return ring_; }
@@ -81,10 +171,24 @@ public:
     }
 
 private:
+    std::wstring currentTargetId() const {
+        std::lock_guard<std::mutex> lk(targetMutex_);
+        return targetDeviceId_;
+    }
+
+    void dispatchFrames(const float* lr, size_t frames, uint32_t rate) {
+        FrameCallback cb;
+        {
+            std::lock_guard<std::mutex> lk(cbMutex_);
+            cb = frameCb_;
+        }
+        if (cb && frames > 0) cb(lr, frames, rate);
+    }
+
     void threadMain() {
         // Őrszem (beépített hibajelentés): a szál a rögzítés ciklusában 10 ms-onként, az újrapróbálkozás szünetében
         // 100 ms-onként jelez; a regisztráció a szál élettartamára szól (leállítás után nem figyelt)
-        aq::wd::Heartbeat hb("loopback");
+        aq::wd::Heartbeat hb(hbName_.c_str());
         CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         while (running_) {
             hb.beat("loopback: open");
@@ -99,15 +203,6 @@ private:
         }
         active_ = false;
         CoUninitialize();
-    }
-
-    static std::string wideToUtf8(const wchar_t* w) {
-        if (!w) return {};
-        const int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
-        if (n <= 1) return {};
-        std::string s(static_cast<size_t>(n - 1), '\0');
-        WideCharToMultiByte(CP_UTF8, 0, w, -1, s.data(), n, nullptr, nullptr);
-        return s;
     }
 
     static std::wstring defaultDeviceId(IMMDeviceEnumerator* en) {
@@ -130,7 +225,12 @@ private:
             return false;
         }
         ComPtr<IMMDevice> dev;
-        if (FAILED(en->GetDefaultAudioEndpoint(eRender, eConsole, dev.put()))) return false;
+        const std::wstring wantTarget = currentTargetId();
+        if (!wantTarget.empty()) {
+            if (FAILED(en->GetDevice(wantTarget.c_str(), dev.put()))) return false;
+        } else {
+            if (FAILED(en->GetDefaultAudioEndpoint(eRender, eConsole, dev.put()))) return false;
+        }
 
         std::wstring devId;
         {
@@ -230,6 +330,7 @@ private:
                     }
                 }
                 ring_.writeInterleaved(lr.data(), frames);
+                dispatchFrames(lr.data(), frames, rate);
                 capture->ReleaseBuffer(frames);
                 gotData = true;
 
@@ -242,19 +343,25 @@ private:
             if (gotData) {
                 lastData = now;
             } else if (now - lastData > std::chrono::milliseconds(50)) {
-                // Nincs lejátszás: a WASAPI nem ad csomagot -> csendet írunk, hogy a kijelző lecsengjen
+                // Nincs lejátszás: a WASAPI nem ad csomagot -> csendet írunk, hogy a kijelző lecsengjen és a híd órajele haladjon
                 const auto gap = std::chrono::duration_cast<std::chrono::microseconds>(now - lastData).count();
                 const uint32_t frames = static_cast<uint32_t>(std::min<long long>(gap * rate / 1000000LL, 8192));
                 if (frames > 0) {
                     lr.assign(static_cast<size_t>(frames) * 2, 0.0f);
                     ring_.writeInterleaved(lr.data(), frames);
+                    dispatchFrames(lr.data(), frames, rate);
                     lastData = now;
                 }
             }
 
             if (now - lastDeviceCheck > std::chrono::seconds(1)) {
                 lastDeviceCheck = now;
-                if (defaultDeviceId(en.p) != devId) {
+                const std::wstring curTarget = currentTargetId();
+                if (curTarget != wantTarget) {
+                    std::cout << "[Loopback] A rögzítési céleszköz megváltozott, újracsatlakozás...\n";
+                    break;
+                }
+                if (wantTarget.empty() && defaultDeviceId(en.p) != devId) {
                     std::cout << "[Loopback] Az alapértelmezett lejátszóeszköz megváltozott, újracsatlakozás...\n";
                     break;
                 }
@@ -283,12 +390,17 @@ private:
     }
 
     Ring ring_;
+    std::string hbName_;
     std::atomic<bool> running_{false};
     std::atomic<bool> active_{false};
     std::atomic<uint32_t> sampleRate_{48000};
     mutable std::mutex nameMutex_;
     std::string deviceName_;
     std::wstring deviceId_;
+    mutable std::mutex targetMutex_;
+    std::wstring targetDeviceId_;
+    mutable std::mutex cbMutex_;
+    FrameCallback frameCb_;
     std::thread thread_;
 };
 
