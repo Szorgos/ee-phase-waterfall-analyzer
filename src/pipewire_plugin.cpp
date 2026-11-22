@@ -1029,6 +1029,14 @@ int main(int argc, char* argv[]) {
     }();
     audioOpts.errorReports = savedAudio.errorReports;           // hozzájárulás: a visszaállítás módjától függetlenül él
     audioOpts.errorReportsAsked = savedAudio.errorReportsAsked; // első indításkori kérdés állapota
+    audioOpts.netRecv = savedAudio.netRecv;                     // hálózati vevő: szolgáltatás, mindig visszaáll
+    audioOpts.netRecvName = savedAudio.netRecvName;
+    // Hálózati vevő (net_receiver.hpp): a rendszer shairport-sync programja gyermekfolyamatként, a hangja az
+    // aqulify_sink eszközre megy (az élő út EQ-zza). Alapból ki; a beállítás az audio.json része.
+    aq::netrecv::Receiver::Config netRecvCfg;
+    netRecvCfg.configPath = linux_store::configDir(true) + "/netrecv.conf";
+    aq::netrecv::Receiver netReceiver(netRecvCfg);
+    netReceiver.setLineHandler([](const std::string& line) { std::cout << "[Hálózati vevő] " << line << std::endl; });
     auto optsToJsonWithDop = [](const audioopt::AudioOptions& o, bool dop) {
         std::string j = audioopt::toJson(o);
         if (!j.empty() && j.back() == '}') {
@@ -1059,6 +1067,7 @@ int main(int argc, char* argv[]) {
     };
     auto applyAudio = [&](const audioopt::AudioOptions& o) {
         audioopt::resampleQuality().store(o.resampleQuality);
+        netReceiver.requestApply(o.netRecv, o.netRecvName);
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         filePlayer.setPreload(o.preload);
         filePlayer.setUpsampleOptions(o);
@@ -1321,8 +1330,12 @@ int main(int argc, char* argv[]) {
 #else
         const char* exclCap = "";
 #endif
+        // nincs telepítve: minden lekérdezéskor újra keresi (a felhasználó közben telepíthette)
+        if (audioOpts.netRecv && netReceiver.state() == aq::netrecv::State::Missing)
+            netReceiver.requestApply(true, audioOpts.netRecvName);
         return "{\"opts\":" + optsToJsonWithDop(audioOpts, dsdDop) +
-               ",\"caps\":{\"buffer\":true,\"keepAwake\":true,\"rate\":true,\"resample\":true,\"player\":true,\"upsample\":true" + exclCap + "}}";
+               ",\"caps\":{\"buffer\":true,\"keepAwake\":true,\"rate\":true,\"resample\":true,\"player\":true,\"upsample\":true" +
+               exclCap + ",\"netRecv\":true},\"netRecvState\":" + netReceiver.statusJson() + "}";
     };
     cb.setAudioOptions = [&](const json::Value& v) {
         std::lock_guard<std::mutex> lk(audioMutex);
@@ -1591,12 +1604,14 @@ int main(int argc, char* argv[]) {
         // A PipeWire mintavételi beállítása visszaáll (a program bezárása után a rendszer a régi)
         audioopt::AudioOptions off = audioOpts;
         off.rateMode = audioopt::RateMode::System;
+        off.netRecv = false;
         applyAudio(off);
     }
 #if defined(AQ_HAVE_SYSTEMD)
     tray.stop();
 #endif
     const bool crashedDaemon = node.coreError.load();
+    netReceiver.apply(false, "");   // a vevő az Aqulify eszköz megszűnése előtt álljon le
     node.shutdown();
     s_healthTick = nullptr;
     reportService.stop(); // nem vár hálózati időkorlátra

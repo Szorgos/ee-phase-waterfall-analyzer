@@ -1,0 +1,13 @@
+#!/bin/sh
+# Hamis shairport-sync az élő teszthez (tests/live/netrecv_live.py): a -h listája olyan, mint a 4.x-é; indításkor a
+# PID-jét, a parancssorát és a hangcél környezeti változóit az AQ_FAKE_NETRECV_DIR mappába írja, aztán vár.
+if [ "$1" = "-h" ]; then
+    printf 'Usage: shairport-sync [options...]\n\nAvailable audio backends:\n    alsa (default)\n    pipewire\n    pulseaudio\n\n'
+    exit 0
+fi
+d="${AQ_FAKE_NETRECV_DIR:-/tmp}"
+echo "$*" > "$d/netrecv.args"
+echo "$PIPEWIRE_NODE|$PULSE_SINK" > "$d/netrecv.env"
+echo "$$" > "$d/netrecv.pid"
+echo "fake receiver started" >&2
+exec sleep 600

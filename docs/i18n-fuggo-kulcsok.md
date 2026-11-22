@@ -12,6 +12,7 @@ Fájl: `i18n/gui/<nyelv>.json`, összeállítás: `python tools/i18n_build.py`.
 
 - Natív DSD (B rész): `ao.dsdNativeOn`, `ao.exclRate` (új); **módosult a szövege** (a 21 nyelvben még a régi, csak DoP-ról szóló változat áll): `ao.dsdDop`, `ao.dsdDopHint`
 - Referencia előbeállítás (SRC): `ups.presetReference`, `ups.presetReferenceHint` (új)
+- Hálózati vevő (Linux): `ao.netRecv`, `ao.netRecvName`, `ao.netRecvHint`, `ao.netRecvRunning`, `ao.netRecvStarting`, `ao.netRecvRestarting`, `ao.netRecvFailed`, `ao.netRecvMissing` (új; a végleges felirat a tulajdonos jóváhagyására vár)
 - Felmintavételezés az élő úton (rendszerhang, pl. MPD; Linux): `ups.liveActive`, `ups.liveUnsupported`, `ups.liveFixedRate` (új). Őszinte maradjon: itt a PipeWire alakít át, a szűrőbeállítások nem érvényesek.
 - Telefonos app 1.2.0, Hangkimenet képernyő (új): `ao.readOnlyTitle`, `ao.adminRequired`, `ao.replayGain`, `ao.enableBtn`, `ao.statusTitle`, `ao.dsdPathLabel`, `ao.dsdFallbackPcm`, `ups.errPassbandRange`, `ups.errStopbandRange`
 

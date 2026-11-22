@@ -579,6 +579,11 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
     add_executable(test_linux_lock src/test_linux_lock.cpp)
     target_include_directories(test_linux_lock PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+    # Hálózati vevő (shairport-sync gyermekfolyamat): név, kimeneti modul, beállítófájl, felügyelő életciklusa
+    add_executable(test_net_receiver src/test_net_receiver.cpp)
+    target_include_directories(test_net_receiver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(test_net_receiver PRIVATE Threads::Threads)
+
     if(BUILD_LINUX_GUI)
         pkg_check_modules(WEBKITGTK IMPORTED_TARGET webkit2gtk-4.1)
         if(NOT WEBKITGTK_FOUND)
