@@ -157,6 +157,7 @@ Az Aqulify hálózati vevőként is megjelenhet: a telefon vagy a számítógép
 - **Hálózat:** TCP 7110, UDP 6110–6119 és az mDNS (UDP 5353, `avahi-daemon`). Tűzfal (pl. `ufw`) esetén ezeket engedélyezni kell. A saját portok miatt egy esetleg futó rendszerszintű vevővel sem ütközik.
 - **Újabb protokoll-változat (több szobás szinkron):** ha a `shairport-sync` így készült, ehhez a külön `nqptp` rendszerszolgáltatás kell (UDP 319/320). Nélküle a program a klasszikus módban fut, ez egy eszközről szóló lejátszáshoz elég.
 - **Napló:** `journalctl --user -u aqulify | grep "Hálózati vevő"`.
+- **Más rendszerek:** lásd docs/halozati-vevo.md.
 
 ---
 
@@ -179,4 +180,4 @@ Az alábbi pontok valódi Raspberry Pi hiányában (eddig emulált környezetben
 - **Grafikus felület (`aqulify-gui`) és 3D vízesés HDMI-n.**
 - **Kódos párosítás SSH-n (`aqulify-engine --pair`):** valódi Pi-n SSH-n keresztül, fizikai telefonnal.
 - **Bluetooth-tartalék Linuxon / Pi-n:** a protokoll és a D-Bus-réteg hamis szolgáltatással és valódi `dbus-daemon`-nal ellenőrzött, de **valódi BlueZ-zal, Bluetooth-rádióval és telefonnal nem**. Nem ismert még, hogy a BlueZ mely verzióin és a Pi OS alapértelmezett D-Bus-szabályai mellett (csoport / jogosultság) indul el hibátlanul, és hogy a telefon megtalálja-e a szolgáltatást.
-- **Hálózati vevő (6a):** valódi telefonról valódi Pi-re még nem próbáltuk; az automatikus teszt hamis programmal ellenőrzi az indítást, az újraindítást és a leállítást.
+- **Hálózati vevő (6a):** valódi telefonról valódi Pi-re még nem próbáltuk; az automatikus teszt hamis programmal ellenőrzi az indítást, az újraindítást és a leállítást. A generált beállítófájl kulcsait (general.port, udp_port_base, udp_port_range, dbus_service_bus, mpris_service_bus, pipewire.sink_target, pulseaudio.sink) a shairport-sync 2026-11-10-i forrásával egyeztettem: mind létezik, az értékek érvényesek. **Nem ellenőrzött:** a régebbi (3.x) kiadások pa szakasza, és hogy a disztribúciók csomagja mely kimeneti modulokkal készült.
