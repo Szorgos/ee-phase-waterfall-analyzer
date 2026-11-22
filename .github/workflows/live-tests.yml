@@ -31,7 +31,7 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q build-essential cmake pkg-config libpipewire-0.3-dev libfftw3-dev libsystemd-dev libasound2-dev \
-            pipewire wireplumber pipewire-pulse pulseaudio-utils dbus python3-numpy
+            pipewire wireplumber pipewire-pulse pulseaudio-utils dbus python3-numpy python3-dbus python3-gi
 
       - name: RNNoise modell (az Ubuntu forráscsomagjából)
         timeout-minutes: 10
@@ -44,7 +44,7 @@ jobs:
         run: |
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=OFF \
             -DAQULIFY_RNNOISE_MODEL_DIR="$RUNNER_TEMP/rnnoise-model"
-          cmake --build build -j"$(nproc)" --target aqulify-engine test_alsa test_room test_mic_live test_measure_live test_pw_reconnect test_linux_lock test_headless_pairing test_linux_pairing test_mpris_control test_log_debounce
+          cmake --build build -j"$(nproc)" --target aqulify-engine test_alsa test_room test_mic_live test_measure_live test_pw_reconnect test_linux_lock test_headless_pairing test_linux_pairing test_bt_bluez test_mpris_control test_log_debounce
 
       - name: Napló-hiszterézis egységteszt
         run: ./build/test_log_debounce
@@ -56,6 +56,11 @@ jobs:
         run: |
           ./build/test_headless_pairing
           ./build/test_linux_pairing
+
+      - name: Bluetooth RFCOMM (BlueZ) egységtesztek és próba valódi dbus-daemon ellen (hamis BlueZ-zal)
+        run: |
+          ./build/test_bt_bluez
+          bash tests/live/bt_bluez_live.sh build
 
       - name: ALSA-kimenet, PipeWire újracsatlakozás és Linux példányzár egységtesztje
         run: |
