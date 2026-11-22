@@ -57,7 +57,7 @@ jobs:
           ./build/test_headless_pairing
           ./build/test_linux_pairing
 
-      - name: Bluetooth RFCOMM (BlueZ): egységtesztek és próba valódi dbus-daemon ellen (hamis BlueZ-zal)
+      - name: Bluetooth RFCOMM (BlueZ) egységtesztek és próba valódi dbus-daemon ellen (hamis BlueZ-zal)
         run: |
           ./build/test_bt_bluez
           bash tests/live/bt_bluez_live.sh build
