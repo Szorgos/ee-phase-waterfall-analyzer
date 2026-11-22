@@ -45,7 +45,7 @@
   "inst.sumUninstall": "Odinstalace:    ./uninstall.sh",
   "uninst.purged": "Aqulify a veškerá uložená nastavení byla odstraněna.",
   "uninst.removed": "Aqulify bylo odstraněno. (Nastavení zůstává v: ~/.config/aqulify – pro úplné smazání: ./uninstall.sh --purge)",
-  "inst.systemPkgAsk": "Install alongside it under ~/.local anyway? [y/N] ",
-  "inst.systemPkgAbort": "Installation cancelled (the packaged Aqulify was left untouched).",
-  "inst.systemPkgNonInt": "Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force"
+  "inst.systemPkgAsk": "Přesto nainstalovat vedle, do ~/.local? [y/N]",
+  "inst.systemPkgAbort": "Instalace zrušena (Aqulify nainstalované z balíčku zůstalo nedotčeno).",
+  "inst.systemPkgNonInt": "Odmítám instalovat vedle systémového balíčku v neinteraktivním režimu. Vynutíte to příkazem: ./install.sh --force"
 }

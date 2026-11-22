@@ -1,21 +1,9 @@
-# Függő fordítások (nagy felbontás, A rész)
+# Függő fordítások
 
-A következő kulcsok magyarul és angolul készek; a másik 21 nyelvben (es, fr, zh, de, it, nl, pl, ru, pt, ro, el, tr, fi, da, nb, sv, he, ja, ko, cs, uk) **ideiglenesen az angol szöveg** áll bent. A 23 nyelvű fordítás a nagy felbontás A–B–C részei után következik; addig ez a lista a teendő.
+Jelenleg **nincs** függő kulcs: minden felületi (`i18n/gui/`), telepítő-script (`i18n/scripts/`) és zenetári/rádió (`gui_player.js`, zenetár `STR`) szöveg mind a 23 nyelven le van fordítva (a 21 nem magyar/angol nyelv fordítása 2.9.0 előtt készült el, gépi/AI fordítás, anyanyelvi átnézés nélkül).
 
-Fájl: `i18n/gui/<nyelv>.json`, összeállítás: `python tools/i18n_build.py`.
+Új kulcs felvételekor, ha egyelőre csak magyarul és angolul készül el, sorold fel ide a kulcsokat, a többi nyelvben az angol szöveg álljon helyőrzőként (`python tools/i18n_build.py` lefuttatja az ellenőrzést), és a lista legyen a teendő a fordításig.
 
-- Terhelés-tanácsadó: `la.title`, `la.whyCpu`, `la.whyXrun`, `la.step.two_threads`, `la.step.precision24`, `la.step.lower_target`, `la.step.upsample_off`, `la.step.none`, `la.optimize`, `la.keep`, `la.never`, `la.undo`, `la.doneTitle`, `la.doneText`, `la.setting`, `la.settingHint`
-- DSP-korlát: `hires.dspOff`
-- Felmintavételezés: `ups.maxRate`, `ups.maxRateNone`, `ups.threads`, `ups.threadsAuto`, `ups.threads1`, `ups.threads2`, `ups.threadsHint`, `ups.core`, `ups.coreOff`, `ups.coreN`, `ups.coreHint`, `ups.statusThreads`, `ups.statusCore`
+Fájlok: `i18n/gui/<nyelv>.json`, `i18n/scripts/<nyelv>.json`, a zenetár/rádió szövegei a `gui_player.js` második `STR` blokkjában; összeállítás: `python tools/i18n_build.py` (a `--check` csak ellenőriz).
 
-- ASIO-kimenet (C rész bekötése): `ao.asio`, `ao.asioDriver`, `ao.asioHint`, `ao.asioNone`, `ao.asioFirst`, `ao.asioMissing`, `ao.asioCredit`, `ao.asioOn`, `ao.asioDsdNative`, `ao.asioDsdDop`, `ao.asioFallback`, valamint az `ao.asioErr_*` hibaokok (`not_open`, `no_driver`, `driver_not_found`, `invalid_clsid`, `com_create_failed`, `init_failed`, `channels`, `rate`, `format`, `buffer`, `create_buffers`, `busy`, `start_failed`, `reset`, `device_lost`, `hw_malfunction`, `no_dsp`, `open_failed`, `other`)
-
-- Natív DSD (B rész): `ao.dsdNativeOn`, `ao.exclRate` (új); **módosult a szövege** (a 21 nyelvben még a régi, csak DoP-ról szóló változat áll): `ao.dsdDop`, `ao.dsdDopHint`
-- Referencia előbeállítás (SRC): `ups.presetReference`, `ups.presetReferenceHint` (új)
-- Hálózati vevő (Linux): `ao.netRecv`, `ao.netRecvName`, `ao.netRecvHint`, `ao.netRecvRunning`, `ao.netRecvStarting`, `ao.netRecvRestarting`, `ao.netRecvFailed`, `ao.netRecvMissing` (új; a végleges felirat a tulajdonos jóváhagyására vár)
-- Felmintavételezés az élő úton (rendszerhang, pl. MPD; Linux): `ups.liveActive`, `ups.liveUnsupported`, `ups.liveFixedRate` (új). Őszinte maradjon: itt a PipeWire alakít át, a szűrőbeállítások nem érvényesek.
-- Telefonos app 1.2.0, Hangkimenet képernyő (új): `ao.readOnlyTitle`, `ao.adminRequired`, `ao.replayGain`, `ao.enableBtn`, `ao.statusTitle`, `ao.dsdPathLabel`, `ao.dsdFallbackPcm`, `ups.errPassbandRange`, `ups.errStopbandRange`
-
-Az `ao.asioCredit` védjegy-feltüntetés: a cégnév és a „védjegye és szoftvere” szerkezet maradjon meg minden nyelven.
-
-Fordításnál ügyelj a változókra (`{rate}`, `{cpu}`, `{n}`), és hogy a szálak / dedikált mag szövege őszinte maradjon: nem ígér hangminőség-javulást.
+Fordításkor ügyelj a változókra (`{rate}`, `{cpu}`, `{n}`, `{name}`, `{q}`, `{e}`), a HTML-jelekre és a márkanév-szabályra: a felületen nincs más cég/termék neve, csak az adatforrás (pl. radio-browser.info) és a kötelező jogi feltüntetés (`ao.asioCredit`: a „Steinberg ASIO SDK” és a védjegy-mondat szerkezete maradjon meg). A telepítő `[y/N]` válasza minden nyelven `y` marad, mert a script `i`/`y` betűt fogad el.

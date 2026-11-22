@@ -45,7 +45,7 @@
   "inst.sumUninstall": "הסרת התקנה:   ./uninstall.sh",
   "uninst.purged": "Aqulify וכל ההגדרות שנשמרו הוסרו.",
   "uninst.removed": "Aqulify הוסר. (הגדרות נשמרו בנתיב: ~/.config/aqulify – למחיקה: ./uninstall.sh --purge)",
-  "inst.systemPkgAsk": "Install alongside it under ~/.local anyway? [y/N] ",
-  "inst.systemPkgAbort": "Installation cancelled (the packaged Aqulify was left untouched).",
-  "inst.systemPkgNonInt": "Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force"
+  "inst.systemPkgAsk": "להתקין בכל זאת לצדה ב-~/.local? [y/N]",
+  "inst.systemPkgAbort": "ההתקנה בוטלה (ה-Aqulify שהותקן מהחבילה לא שונה).",
+  "inst.systemPkgNonInt": "מסרב להתקין לצד חבילת מערכת במצב לא אינטראקטיבי. כדי לכפות: ./install.sh --force"
 }

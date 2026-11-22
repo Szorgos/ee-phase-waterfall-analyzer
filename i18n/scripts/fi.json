@@ -45,7 +45,7 @@
   "inst.sumUninstall": "Asennuksen poisto: ./uninstall.sh",
   "uninst.purged": "Aqulify ja tallennetut asetukset on poistettu.",
   "uninst.removed": "Aqulify on poistettu. (Asetukset säilytetty: ~/.config/aqulify – poistaaksesi ne: ./uninstall.sh --purge)",
-  "inst.systemPkgAsk": "Install alongside it under ~/.local anyway? [y/N] ",
-  "inst.systemPkgAbort": "Installation cancelled (the packaged Aqulify was left untouched).",
-  "inst.systemPkgNonInt": "Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force"
+  "inst.systemPkgAsk": "Asennetaanko silti sen rinnalle hakemistoon ~/.local? [y/N]",
+  "inst.systemPkgAbort": "Asennus peruttu (paketista asennettuun Aqulifyyn ei koskettu).",
+  "inst.systemPkgNonInt": "Kieltäydyn asentamasta järjestelmäpaketin rinnalle ei-interaktiivisessa tilassa. Pakota: ./install.sh --force"
 }

@@ -45,7 +45,7 @@
   "inst.sumUninstall": "Deinstallation: ./uninstall.sh",
   "uninst.purged": "Aqulify und alle gespeicherten Einstellungen wurden entfernt.",
   "uninst.removed": "Aqulify wurde entfernt. (Einstellungen beibehalten: ~/.config/aqulify – zum Löschen: ./uninstall.sh --purge)",
-  "inst.systemPkgAsk": "Install alongside it under ~/.local anyway? [y/N] ",
-  "inst.systemPkgAbort": "Installation cancelled (the packaged Aqulify was left untouched).",
-  "inst.systemPkgNonInt": "Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force"
+  "inst.systemPkgAsk": "Trotzdem daneben unter ~/.local installieren? [y/N]",
+  "inst.systemPkgAbort": "Installation abgebrochen (das als Paket installierte Aqulify blieb unberührt).",
+  "inst.systemPkgNonInt": "Installation neben einem Systempaket im nicht interaktiven Modus verweigert. Zum Erzwingen: ./install.sh --force"
 }

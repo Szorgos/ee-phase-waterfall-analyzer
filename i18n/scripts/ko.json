@@ -45,7 +45,7 @@
   "inst.sumUninstall": "제거:          ./uninstall.sh",
   "uninst.purged": "Aqulify 및 저장된 모든 설정이 제거되었습니다.",
   "uninst.removed": "Aqulify가 제거되었습니다. (설정은 ~/.config/aqulify 에 보존됨 – 삭제하려면: ./uninstall.sh --purge)",
-  "inst.systemPkgAsk": "Install alongside it under ~/.local anyway? [y/N] ",
-  "inst.systemPkgAbort": "Installation cancelled (the packaged Aqulify was left untouched).",
-  "inst.systemPkgNonInt": "Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force"
+  "inst.systemPkgAsk": "그래도 ~/.local 아래에 함께 설치하시겠습니까? [y/N]",
+  "inst.systemPkgAbort": "설치를 취소했습니다(패키지로 설치된 Aqulify는 건드리지 않았습니다).",
+  "inst.systemPkgNonInt": "비대화형 모드에서는 시스템 패키지와 함께 설치하지 않습니다. 강제하려면: ./install.sh --force"
 }

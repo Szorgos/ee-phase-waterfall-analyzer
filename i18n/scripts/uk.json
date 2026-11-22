@@ -45,7 +45,7 @@
   "inst.sumUninstall": "Видалення:     ./uninstall.sh",
   "uninst.purged": "Aqulify та всі збережені налаштування видалено.",
   "uninst.removed": "Aqulify видалено. (Налаштування збережено в: ~/.config/aqulify – видалити повністю: ./uninstall.sh --purge)",
-  "inst.systemPkgAsk": "Install alongside it under ~/.local anyway? [y/N] ",
-  "inst.systemPkgAbort": "Installation cancelled (the packaged Aqulify was left untouched).",
-  "inst.systemPkgNonInt": "Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force"
+  "inst.systemPkgAsk": "Усе одно встановити поруч, у ~/.local? [y/N]",
+  "inst.systemPkgAbort": "Встановлення скасовано (Aqulify, встановлений із пакета, не зачеплено).",
+  "inst.systemPkgNonInt": "Відмова встановлювати поруч із системним пакетом у неінтерактивному режимі. Щоб примусово: ./install.sh --force"
 }

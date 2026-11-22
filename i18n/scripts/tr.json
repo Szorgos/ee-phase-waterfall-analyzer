@@ -45,7 +45,7 @@
   "inst.sumUninstall": "Kaldırma:       ./uninstall.sh",
   "uninst.purged": "Aqulify ve kaydedilen ayarlar kaldırıldı.",
   "uninst.removed": "Aqulify kaldırıldı. (Ayarlar korundu: ~/.config/aqulify – silmek için: ./uninstall.sh --purge)",
-  "inst.systemPkgAsk": "Install alongside it under ~/.local anyway? [y/N] ",
-  "inst.systemPkgAbort": "Installation cancelled (the packaged Aqulify was left untouched).",
-  "inst.systemPkgNonInt": "Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force"
+  "inst.systemPkgAsk": "Yine de yanına, ~/.local altına kurulsun mu? [y/N]",
+  "inst.systemPkgAbort": "Kurulum iptal edildi (paketten kurulan Aqulify'a dokunulmadı).",
+  "inst.systemPkgNonInt": "Etkileşimsiz modda sistem paketinin yanına kurulum reddediliyor. Zorlamak için: ./install.sh --force"
 }
