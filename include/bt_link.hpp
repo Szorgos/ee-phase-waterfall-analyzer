@@ -6,8 +6,9 @@
  * - Keretezés: UTF-8, minden üzenet egy sor, "\n" zárja; egy sor legfeljebb kMaxLineBytes bájt.
  * - Hitelesítés: az első sor {"type":"hello","token":"<64 hex>",...}; a token ugyanaz, amit a telefon a Wi-Fi-s
  *   párosításkor kapott. Bluetoothon párosítani nem lehet.
- * - A szerver (RfcommListener) most csak Windowson van megvalósítva (Winsock AF_BTH, SDP-bejegyzés a kServiceUuid
- *   szolgáltatás-azonosítóval). Linuxon és macOS-en az open() false-t ad: ott nincs Bluetooth-csatorna.
+ * - A szerver (RfcommListener): Windowson Winsock AF_BTH + SDP-bejegyzés a kServiceUuid azonosítóval; Linuxon a BlueZ
+ *   Profile1 regisztrációja a D-Bus-on (bt_bluez.hpp), ugyanazzal az azonosítóval. macOS-en az open() false-t ad.
+ *   A protokoll, a hitelesítés és a jogosultság mindenhol ugyanaz: a híd (ws_bridge.hpp) csak a kész socketet kapja.
  */
 #include <chrono>
 #include <cstdint>
@@ -22,6 +23,8 @@
 #ifdef _WIN32
 #include <ws2bth.h>
 #include <bluetoothapis.h>
+#elif defined(__linux__)
+#include "bt_bluez.hpp"
 #endif
 
 namespace ee_analyzer::btlink {
@@ -130,10 +133,19 @@ public:
     RfcommListener(const RfcommListener&) = delete;
     RfcommListener& operator=(const RfcommListener&) = delete;
 
-    bool isOpen() const { return sock_ != net::kInvalidSocket; }
-    /** Igaz, ha a Bluetooth RFCOMM szerver támogatott ezen a platformon (jelenleg csak Windows). */
+    bool isOpen() const {
+#if defined(__linux__) && !defined(_WIN32)
+        return impl_.isOpen();
+#else
+        return sock_ != net::kInvalidSocket;
+#endif
+    }
+    /**
+     * Igaz, ha a Bluetooth RFCOMM szerver ezen a platformon megvalósított (Windows: mindig; Linux: ha a program a
+     * BlueZ-os ággal készült – hogy a gépen van-e BlueZ és rádió, azt az open() mutatja meg). macOS-en nincs.
+     */
     static constexpr bool isSupported() {
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__linux__)
         return true;
 #else
         return false;
@@ -210,6 +222,9 @@ public:
         return registered_;
     }
 
+    /** Windowson nincs külön hibaszöveg (az open() a stderr-re ír); a híd egységes hívásához üres. */
+    const std::string& lastError() const { return lastErr_; }
+
 private:
     static GUID serviceGuid() {
         return GUID{ 0x43ad541b, 0xd816, 0x443a, { 0xa6, 0x52, 0x14, 0x6c, 0xb5, 0x19, 0x11, 0x39 } };
@@ -261,22 +276,54 @@ private:
 
     SOCKADDR_BTH local_{};
     bool registered_ = false;
+#elif defined(__linux__)
+    /**
+     * BlueZ-profil regisztrálása a rendszerbuszon (legfeljebb ~3 mp-ig vár a válaszra). false: nincs BlueZ / rádió /
+     * jogosultság; az okot a lastError() adja.
+     */
+    bool open() {
+        addr_.clear();
+        if (!impl_.open()) return false;
+        addr_ = impl_.address();
+        return true;
+    }
+    void close() { impl_.close(); addr_.clear(); }
+    /** Egy várakozó kapcsolat (a BlueZ-tól kapott, már csatlakozott RFCOMM socket, nem blokkoló); kInvalidSocket, ha nincs. */
+    net::socket_t acceptOne() {
+        const int fd = impl_.acceptOne();
+        return fd >= 0 ? static_cast<net::socket_t>(fd) : net::kInvalidSocket;
+    }
+    /** A regisztráció él-e még (a BlueZ újraindulását a szál észleli és újraregisztrál); false: nyissa újra a hívó. */
+    bool refresh() { return impl_.isOpen(); }
+    /** Az utolsó sikertelen open() oka (üres, ha nincs). */
+    const std::string& lastError() const { return impl_.lastError(); }
+
+private:
+    bluez::BluezListener impl_;
 #else
-    /** NINCS MEGVALÓSÍTVA ezen a platformon (Linux: a terv 2. lépése; macOS: nincs tervben). */
+    /** NINCS MEGVALÓSÍTVA ezen a platformon (macOS: nincs tervben). */
     bool open() { return false; }
     void close() {}
     net::socket_t acceptOne() { return net::kInvalidSocket; }
     bool refresh() { return false; }
+    const std::string& lastError() const { return lastErr_; }
 #endif
 
 public:
     /** A figyelő socket hibát adott (nem csak „nincs várakozó kapcsolat”): újra kell nyitni. */
-    bool broken() const { return broken_; }
+    bool broken() const {
+#if defined(__linux__) && !defined(_WIN32)
+        return impl_.broken();
+#else
+        return broken_;
+#endif
+    }
 
 private:
     bool broken_ = false;
     net::socket_t sock_ = net::kInvalidSocket;
     std::string addr_;
+    std::string lastErr_;
 };
 
 } // namespace ee_analyzer::btlink
