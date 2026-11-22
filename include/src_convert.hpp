@@ -26,6 +26,7 @@
 
 #include "audio_decoder.hpp"
 #include "audio_options.hpp"
+#include "src_fft64.hpp"
 #include "upsample_engine.hpp"
 
 namespace ee_analyzer::srcconv {
@@ -350,12 +351,23 @@ enum class EdgeMode {
     Lpc,   // Burg-módszerű lineáris előrejelzéses (AR) kiterjesztés, ablakolt lecsengéssel
 };
 
+/** Fájlátalakító motor választása (--mode file): libsoxr, 64 bites FFT vagy 106 bites double-double FFT. */
+enum class FileEngine {
+    Soxr,   // libsoxr SOXR_FLOAT64_I (alacsony késleltetésű többlépcsős polifázisos szűrő)
+    Fft64,  // egylépcsős 64 bites Overlap-Save FFT + Kaiser-sinc (nulla többlépcsős tükörkép, −300 dB elnyomás)
+    FftDD,  // egylépcsős 106 bites (double-double) Overlap-Save FFT + Kaiser-sinc (utolsó 64 bites bitig egzakt)
+};
+
 /** Fájlátalakító mód (64 bites lebegőpontos út) kiegészítő beállításai. */
 struct FileOptions {
-    double precision = 0.0;      // 0 = az AudioOptions pontossága (pl. 32 bit); [15..33] között felülírható
-    double passbandEnd = 0.0;    // 0 = az AudioOptions sávszélessége; (0.5..0.997] között felülírható
-    double stopbandBegin = 0.0;  // 0 = az AudioOptions záró sávja; [1.0..1.5] között felülírható
-    double phase = -1.0;         // <0 = az AudioOptions fázisa; [0..100] között felülírható
+    FileEngine engine = FileEngine::Soxr;
+    double precision = 0.0;      // 0 = az AudioOptions pontossága (pl. 32 bit); [15..33] között felülírható (Soxr)
+    double passbandEnd = 0.0;    // 0 = alapértelmezett (Soxr: preset; Fft64: 0.9970; FftDD: 0.9978); (0.5..0.999]
+    double stopbandBegin = 0.0;  // 0 = az AudioOptions záró sávja; [1.0..1.5] között felülírható (Soxr)
+    double phase = -1.0;         // <0 = az AudioOptions fázisa; [0..100] között felülírható (Soxr)
+    double fftBeta = 34.5;       // Kaiser-ablak beta paramétere Fft64 motorhoz (~320 dB elnyomás)
+    double fftDdBeta = 35.2;     // Kaiser-ablak beta paramétere FftDD motorhoz (~328 dB elnyomás, rövid lecsengés)
+    size_t fftDdTaps = 0;        // 0 = automatikus (hIn * 15 / 16 = 14400 96->44,1 kHz-nél)
     EdgeMode edge = EdgeMode::None;
 };
 
@@ -485,6 +497,234 @@ inline void computeExactEdgePad(uint32_t srcRate, uint32_t dstRate, size_t minPa
     padOut = k * stepOut;
 }
 
+/**
+ * Egylépcsős 64 bites Overlap-Save FFT + Kaiser-sinc átmintavételezés (nulla többlépcsős tükörkép).
+ * A bemeneti minták a WavDoubleData struktúrából jönnek, a széleket az EdgeMode szerint kezeli.
+ */
+inline bool convertFile64Fft(const WavDoubleData& wav, uint32_t dstRate, const audioopt::AudioOptions& opts,
+                             const FileOptions& fileOpts, std::vector<double>& out, Result& res, std::string* err) {
+    const uint32_t ch = wav.channels;
+    const uint32_t srcRate = wav.sampleRate;
+    const size_t totalInFrames = ch ? (wav.samples.size() / ch) : 0;
+
+    size_t nIn = 0, nOut = 0;
+    if (!fft64::computeBlockSizes(srcRate, dstRate, nIn, nOut)) {
+        if (err) *err = "az fft64 motorhoz túl nagy racionális arány (" + std::to_string(srcRate) + " -> " + std::to_string(dstRate) + ")";
+        return false;
+    }
+
+    const double pb = (fileOpts.passbandEnd > 0.0) ? std::clamp(fileOpts.passbandEnd, 0.5, 0.999) : 0.9970;
+    const double beta = std::clamp(fileOpts.fftBeta, 4.0, 45.0);
+
+    fft64::RealFft fftIn(nIn);
+    fft64::RealFft fftOut(nOut);
+    const std::vector<double> hSpec = fft64::designKaiserSincSpectrum(nIn, srcRate, dstRate, pb, beta, fftIn);
+
+    const size_t hIn = nIn / 4;
+    const size_t stepIn = nIn / 2;
+    const size_t hOut = nOut / 4;
+    const size_t stepOut = nOut / 2;
+    const size_t targetOut = static_cast<size_t>(std::llround(static_cast<double>(totalInFrames) *
+                                                              static_cast<double>(dstRate) / static_cast<double>(srcRate)));
+    const size_t nBlocks = totalInFrames ? ((totalInFrames + stepIn - 1) / stepIn) : 0;
+    const size_t rightNeed = (nBlocks > 0) ? (nBlocks * stepIn + hIn - totalInFrames) : 0;
+
+    const size_t nBinsOut = nOut / 2 + 1;
+    const size_t nBinsCopy = std::min(nIn / 2 + 1, nBinsOut);
+    const double scale = static_cast<double>(nOut) / static_cast<double>(nIn);
+    std::vector<double> hScaled(nBinsCopy);
+    for (size_t k = 0; k < nBinsCopy; ++k) hScaled[k] = hSpec[k] * scale;
+
+    const bool applyGain = (opts.upsampleHeadroomDb != 0.0f);
+    const double gain = applyGain ? std::pow(10.0, static_cast<double>(opts.upsampleHeadroomDb) / 20.0) : 1.0;
+
+    out.assign(targetOut * ch, 0.0);
+
+    std::vector<double> blk(nIn);
+    std::vector<fft64::C64> X(nIn / 2 + 1);
+    std::vector<fft64::C64> Y(nBinsOut);
+    std::vector<double> yBlk(nOut);
+    std::vector<double> leftPad(hIn), rightPad(rightNeed);
+
+    for (uint32_t c = 0; c < ch; ++c) {
+        // Teljesen csendes csatorna: pontosan 0.0 marad
+        bool allZero = true;
+        for (size_t i = 0; i < totalInFrames; ++i) {
+            if (wav.samples[i * ch + c] != 0.0) { allZero = false; break; }
+        }
+        if (allZero || nBlocks == 0) continue;
+
+        if (fileOpts.edge != EdgeMode::None && totalInFrames >= 4) {
+            const size_t winLen = std::min<size_t>(totalInFrames, 512);
+            std::vector<double> tail(winLen);
+            // Bal szél fordított sorrendben előrejelezve, majd visszafordítva
+            for (size_t i = 0; i < winLen; ++i) tail[i] = wav.samples[(winLen - 1 - i) * ch + c];
+            const auto extL = extrapolateTail(tail, hIn, fileOpts.edge);
+            for (size_t i = 0; i < hIn; ++i) leftPad[hIn - 1 - i] = extL[i];
+            // Jobb szél előrejelezve
+            for (size_t i = 0; i < winLen; ++i) tail[i] = wav.samples[(totalInFrames - winLen + i) * ch + c];
+            rightPad = extrapolateTail(tail, rightNeed, fileOpts.edge);
+        } else {
+            std::fill(leftPad.begin(), leftPad.end(), 0.0);
+            std::fill(rightPad.begin(), rightPad.end(), 0.0);
+        }
+
+        for (size_t b = 0; b < nBlocks; ++b) {
+            const size_t base = b * stepIn;
+            for (size_t j = 0; j < nIn; ++j) {
+                const size_t idx = base + j;
+                if (idx < hIn) {
+                    blk[j] = leftPad[idx];
+                } else if (idx < hIn + totalInFrames) {
+                    blk[j] = wav.samples[(idx - hIn) * ch + c];
+                } else {
+                    const size_t rIdx = idx - hIn - totalInFrames;
+                    blk[j] = (rIdx < rightPad.size()) ? rightPad[rIdx] : 0.0;
+                }
+            }
+            fftIn.forward(blk.data(), X.data());
+            std::fill(Y.begin(), Y.end(), fft64::C64{0.0, 0.0});
+            for (size_t k = 0; k < nBinsCopy; ++k) {
+                Y[k] = {X[k].r * hScaled[k], X[k].i * hScaled[k]};
+            }
+            if ((nOut & 1u) == 0u) Y[nOut / 2].i = 0.0;
+            fftOut.inverse(Y.data(), yBlk.data());
+
+            const size_t outBase = b * stepOut;
+            const size_t copyN = (outBase < targetOut) ? std::min(stepOut, targetOut - outBase) : 0;
+            for (size_t j = 0; j < copyN; ++j) {
+                double v = yBlk[hOut + j];
+                if (applyGain) v *= gain;
+                out[(outBase + j) * ch + c] = v;
+            }
+        }
+    }
+
+    for (double v : out)
+        if (v > 1.0 || v < -1.0) ++res.clipped;
+    res.outFrames = targetOut;
+    res.flushSteps = 0;
+    res.flushFrames = 0;
+    res.leftoverFrames = 0;
+    return true;
+}
+
+/**
+ * Egylépcsős, 106 bites (double-double) Overlap-Save FFT + Kaiser-sinc fájlátalakítás.
+ * A teljes FFT, spektrumszorzás és inverz FFT double-double pontossággal fut, így a 64 bites
+ * kimeneti WAV az utolsó IEEE-754 bitig kerekítési zajtól mentes (−330 dB+ zajszint).
+ */
+inline bool convertFile64FftDD(const WavDoubleData& wav, uint32_t dstRate, const audioopt::AudioOptions& opts,
+                               const FileOptions& fileOpts, std::vector<double>& out, Result& res, std::string* err) {
+    using fft64::DD;
+    using fft64::CDD;
+    const uint32_t ch = wav.channels;
+    const uint32_t srcRate = wav.sampleRate;
+    const size_t totalInFrames = ch ? (wav.samples.size() / ch) : 0;
+
+    size_t nIn = 0, nOut = 0;
+    if (!fft64::computeBlockSizesDD(srcRate, dstRate, nIn, nOut)) {
+        if (err) *err = "az fftdd motorhoz túl nagy racionális arány (" + std::to_string(srcRate) + " -> " + std::to_string(dstRate) + ")";
+        return false;
+    }
+
+    const double pb = (fileOpts.passbandEnd > 0.0) ? std::clamp(fileOpts.passbandEnd, 0.5, 0.999) : 0.9966;
+    const double beta = std::clamp(fileOpts.fftDdBeta, 4.0, 45.0);
+
+    fft64::RealFftDD fftIn(nIn);
+    fft64::RealFftDD fftOut(nOut);
+    const size_t hIn = nIn / 4;
+    const size_t hTaps = (fileOpts.fftDdTaps > 0) ? std::min(fileOpts.fftDdTaps, hIn) : ((hIn * 15) / 16);
+    const std::vector<DD> hSpec = fft64::designKaiserSincSpectrumDD(nIn, srcRate, dstRate, pb, beta, fftIn, hTaps);
+
+    const size_t stepIn = nIn / 2;
+    const size_t hOut = nOut / 4;
+    const size_t stepOut = nOut / 2;
+    const size_t targetOut = static_cast<size_t>(std::llround(static_cast<double>(totalInFrames) *
+                                                              static_cast<double>(dstRate) / static_cast<double>(srcRate)));
+    const size_t nBlocks = totalInFrames ? ((totalInFrames + stepIn - 1) / stepIn) : 0;
+    const size_t rightNeed = (nBlocks > 0) ? (nBlocks * stepIn + hIn - totalInFrames) : 0;
+
+    const size_t nBinsOut = nOut / 2 + 1;
+    const size_t nBinsCopy = std::min(nIn / 2 + 1, nBinsOut);
+    const DD scale = DD(static_cast<double>(nOut)) / DD(static_cast<double>(nIn));
+    std::vector<DD> hScaled(nBinsCopy);
+    for (size_t k = 0; k < nBinsCopy; ++k) hScaled[k] = hSpec[k] * scale;
+
+    const bool applyGain = (opts.upsampleHeadroomDb != 0.0f);
+    const double gain = applyGain ? std::pow(10.0, static_cast<double>(opts.upsampleHeadroomDb) / 20.0) : 1.0;
+
+    out.assign(targetOut * ch, 0.0);
+
+    std::vector<DD> blk(nIn);
+    std::vector<CDD> X(nIn / 2 + 1);
+    std::vector<CDD> Y(nBinsOut);
+    std::vector<DD> yBlk(nOut);
+    std::vector<double> leftPad(hIn), rightPad(rightNeed);
+
+    for (uint32_t c = 0; c < ch; ++c) {
+        bool allZero = true;
+        for (size_t i = 0; i < totalInFrames; ++i) {
+            if (wav.samples[i * ch + c] != 0.0) { allZero = false; break; }
+        }
+        if (allZero || nBlocks == 0) continue;
+
+        if (fileOpts.edge != EdgeMode::None && totalInFrames >= 4) {
+            const size_t winLen = std::min<size_t>(totalInFrames, 512);
+            std::vector<double> tail(winLen);
+            for (size_t i = 0; i < winLen; ++i) tail[i] = wav.samples[(winLen - 1 - i) * ch + c];
+            const auto extL = extrapolateTail(tail, hIn, fileOpts.edge);
+            for (size_t i = 0; i < hIn; ++i) leftPad[hIn - 1 - i] = extL[i];
+            for (size_t i = 0; i < winLen; ++i) tail[i] = wav.samples[(totalInFrames - winLen + i) * ch + c];
+            rightPad = extrapolateTail(tail, rightNeed, fileOpts.edge);
+        } else {
+            std::fill(leftPad.begin(), leftPad.end(), 0.0);
+            std::fill(rightPad.begin(), rightPad.end(), 0.0);
+        }
+
+        for (size_t b = 0; b < nBlocks; ++b) {
+            const size_t base = b * stepIn;
+            for (size_t j = 0; j < nIn; ++j) {
+                const size_t idx = base + j;
+                double sv = 0.0;
+                if (idx < hIn) {
+                    sv = leftPad[idx];
+                } else if (idx < hIn + totalInFrames) {
+                    sv = wav.samples[(idx - hIn) * ch + c];
+                } else {
+                    const size_t rIdx = idx - hIn - totalInFrames;
+                    sv = (rIdx < rightPad.size()) ? rightPad[rIdx] : 0.0;
+                }
+                blk[j] = DD(sv);
+            }
+            fftIn.forward(blk.data(), X.data());
+            const CDD zeroC{DD(0.0), DD(0.0)};
+            std::fill(Y.begin(), Y.end(), zeroC);
+            for (size_t k = 0; k < nBinsCopy; ++k) {
+                Y[k] = {X[k].r * hScaled[k], X[k].i * hScaled[k]};
+            }
+            if ((nOut & 1u) == 0u) Y[nOut / 2].i = DD(0.0);
+            fftOut.inverse(Y.data(), yBlk.data());
+
+            const size_t outBase = b * stepOut;
+            const size_t copyN = (outBase < targetOut) ? std::min(stepOut, targetOut - outBase) : 0;
+            for (size_t j = 0; j < copyN; ++j) {
+                double v = yBlk[hOut + j].hi;
+                if (applyGain) v *= gain;
+                out[(outBase + j) * ch + c] = v;
+            }
+        }
+    }
+
+    for (double v : out)
+        if (v > 1.0 || v < -1.0) ++res.clipped;
+    res.outFrames = targetOut;
+    res.flushSteps = 0;
+    res.flushFrames = 0;
+    res.leftoverFrames = 0;
+    return true;
+}
+
 }  // namespace detail
 
 /**
@@ -522,6 +762,13 @@ inline bool convertFile64(const std::string& in, uint32_t dstRate, const audioop
         }
         res.outFrames = totalInFrames;
         return true;
+    }
+
+    if (fileOpts.engine == FileEngine::Fft64) {
+        return detail::convertFile64Fft(wav, dstRate, opts, fileOpts, out, res, err);
+    }
+    if (fileOpts.engine == FileEngine::FftDD) {
+        return detail::convertFile64FftDD(wav, dstRate, opts, fileOpts, out, res, err);
     }
 
     const double prec = (fileOpts.precision > 0.0)

@@ -1,6 +1,6 @@
 --- a/include/src_convert.hpp
 +++ b/include/src_convert.hpp
-@@ -538,7 +538,7 @@
+@@ -663,7 +663,7 @@
                            : std::clamp(opts.upsamplePhase, 0.0, 100.0);
  
      soxr_quality_spec_t q_spec = soxr_quality_spec(SOXR_32_BITQ, SOXR_DOUBLE_PRECISION | SOXR_HI_PREC_CLOCK);

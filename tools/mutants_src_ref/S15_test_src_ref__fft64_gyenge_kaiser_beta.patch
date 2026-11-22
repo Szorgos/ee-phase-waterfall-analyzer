@@ -1,0 +1,11 @@
+--- a/include/src_convert.hpp
++++ b/include/src_convert.hpp
+@@ -511,7 +511,7 @@
+     }
+ 
+     const double pb = (fileOpts.passbandEnd > 0.0) ? std::clamp(fileOpts.passbandEnd, 0.5, 0.999) : 0.9970;
+-    const double beta = std::clamp(fileOpts.fftBeta, 4.0, 45.0);
++    const double beta = 10.0;
+ 
+     fft64::RealFft fftIn(nIn);
+     fft64::RealFft fftOut(nOut);

@@ -6,13 +6,15 @@
 //
 // Beállítások:
 //   --mode M          player (32 bit, a lejátszó kódútja; alap) | file (64 bites lebegőpontos fájlátalakító)
+//   --engine E        fft64 (egylépcsős 64 bit FFT; alap --mode file-ban) | fftdd (106 bit double-double FFT) | soxr (libsoxr 64 bit)
 //   --rate N          célmintavétel (alap: 44100)
 //   --preset P        reference | linear | intermediate | minimum (alap: reference)
 //   --edge E          none | odd | lpc (csak --mode file esetén; alap: lpc)
-//   --precision N     pontosság bitben (15..33; csak --mode file esetén, alap: a preset pontossága)
-//   --passband P      sávszélesség % (50..99.7; csak --mode file esetén, alap: a preset értéke)
-//   --stopband S      záró sáv kezdete % (100..150; csak --mode file esetén, alap: 100)
-//   --phase PH        fázisválasz 0..100 (0=min, 25=köztes, 50=lineáris; csak --mode file esetén)
+//   --precision N     pontosság bitben (15..33; csak --mode file --engine soxr esetén, alap: a preset pontossága)
+//   --passband P      sávszélesség % (50..99.9 fft64/fftdd-nél, 50..99.7 soxr-nál; csak --mode file esetén)
+//   --beta B          Kaiser beta paraméter (4..45; csak --mode file --engine fft64|fftdd esetén)
+//   --stopband S      záró sáv kezdete % (100..150; csak --mode file --engine soxr esetén, alap: 100)
+//   --phase PH        fázisválasz 0..100 (0=min, 25=köztes, 50=lineáris; csak --mode file --engine soxr esetén)
 //   --headroom D      0 | -1 | -3 | -6 dB (alap: 0)
 //   --threads N       1 | 2 (a lejátszó két szálas módja; a kimenet bitre azonos)
 #include <algorithm>
@@ -29,9 +31,10 @@ using namespace ee_analyzer;
 
 static int usage() {
     std::fprintf(stderr,
-                 "Használat: aqulify-src [--mode player|file] [--rate N] [--preset reference|linear|intermediate|minimum]\n"
-                 "                       [--edge none|odd|lpc] [--precision 15..33] [--passband 50..99.7]\n"
-                 "                       [--stopband 100..150] [--phase 0..100] [--headroom 0|-1|-3|-6]\n"
+                 "Használat: aqulify-src [--mode player|file] [--engine fft64|fftdd|soxr] [--rate N]\n"
+                 "                       [--preset reference|linear|intermediate|minimum] [--edge none|odd|lpc]\n"
+                 "                       [--precision 15..33] [--passband 50..99.9] [--beta 4..45] [--stopband 100..150]\n"
+                 "                       [--phase 0..100] [--headroom 0|-1|-3|-6]\n"
                  "                       <bemenet> <kimenet>  |  --dir <bemeneti mappa> <kimeneti mappa>\n");
     return 64;
 }
@@ -73,10 +76,12 @@ static int convertOne(const std::string& in, const std::string& out, uint32_t ra
 int main(int argc, char** argv) {
     uint32_t rate = 44100;
     std::string mode = "player";
+    std::string engineStr;
     std::string preset = "reference";
     std::string edgeStr;
     double precisionOverride = 0.0;
     double passbandOverride = 0.0;
+    double betaOverride = 0.0;
     double stopbandOverride = 0.0;
     double phaseOverride = -1.0;
     float headroom = 0.0f;
@@ -87,11 +92,13 @@ int main(int argc, char** argv) {
         const std::string a = argv[i];
         auto next = [&]() -> const char* { return i + 1 < argc ? argv[++i] : nullptr; };
         if (a == "--mode") { const char* v = next(); if (!v) return usage(); mode = v; }
+        else if (a == "--engine") { const char* v = next(); if (!v) return usage(); engineStr = v; }
         else if (a == "--rate") { const char* v = next(); if (!v) return usage(); rate = static_cast<uint32_t>(std::strtoul(v, nullptr, 10)); }
         else if (a == "--preset") { const char* v = next(); if (!v) return usage(); preset = v; }
         else if (a == "--edge") { const char* v = next(); if (!v) return usage(); edgeStr = v; }
         else if (a == "--precision") { const char* v = next(); if (!v) return usage(); precisionOverride = std::strtod(v, nullptr); }
         else if (a == "--passband") { const char* v = next(); if (!v) return usage(); passbandOverride = std::strtod(v, nullptr); }
+        else if (a == "--beta") { const char* v = next(); if (!v) return usage(); betaOverride = std::strtod(v, nullptr); }
         else if (a == "--stopband") { const char* v = next(); if (!v) return usage(); stopbandOverride = std::strtod(v, nullptr); }
         else if (a == "--phase") { const char* v = next(); if (!v) return usage(); phaseOverride = std::strtod(v, nullptr); }
         else if (a == "--headroom") { const char* v = next(); if (!v) return usage(); headroom = std::strtof(v, nullptr); }
@@ -106,10 +113,20 @@ int main(int argc, char** argv) {
     if (passbandOverride > 1.0) passbandOverride /= 100.0;
     if (stopbandOverride > 2.0) stopbandOverride /= 100.0;
 
-    if (!fileMode && (!edgeStr.empty() || precisionOverride != 0.0 || passbandOverride != 0.0 ||
-                      stopbandOverride != 0.0 || phaseOverride >= 0.0)) return usage();
+    if (!fileMode && (!engineStr.empty() || !edgeStr.empty() || precisionOverride != 0.0 ||
+                      passbandOverride != 0.0 || betaOverride != 0.0 || stopbandOverride != 0.0 || phaseOverride >= 0.0)) return usage();
+
+    srcconv::FileEngine engine = srcconv::FileEngine::Fft64;
+    if (!engineStr.empty()) {
+        if (engineStr == "fft64") engine = srcconv::FileEngine::Fft64;
+        else if (engineStr == "fftdd") engine = srcconv::FileEngine::FftDD;
+        else if (engineStr == "soxr") engine = srcconv::FileEngine::Soxr;
+        else return usage();
+    }
+    const double maxPb = (engine == srcconv::FileEngine::Soxr) ? 0.997 : 0.999;
     if (precisionOverride != 0.0 && (precisionOverride < 15.0 || precisionOverride > 33.0)) return usage();
-    if (passbandOverride != 0.0 && (passbandOverride < 0.5 || passbandOverride > 0.997)) return usage();
+    if (passbandOverride != 0.0 && (passbandOverride < 0.5 || passbandOverride > maxPb)) return usage();
+    if (betaOverride != 0.0 && (betaOverride < 4.0 || betaOverride > 45.0)) return usage();
     if (stopbandOverride != 0.0 && (stopbandOverride < 1.0 || stopbandOverride > 1.5)) return usage();
     if (phaseOverride >= 0.0 && phaseOverride > 100.0) return usage();
 
@@ -133,20 +150,33 @@ int main(int argc, char** argv) {
     audioopt::sanitize(o);
 
     srcconv::FileOptions fileOpts;
+    fileOpts.engine = engine;
     fileOpts.precision = precisionOverride;
     fileOpts.passbandEnd = passbandOverride;
     fileOpts.stopbandBegin = stopbandOverride;
     fileOpts.phase = phaseOverride;
+    if (betaOverride > 0.0) {
+        fileOpts.fftBeta = betaOverride;
+        fileOpts.fftDdBeta = betaOverride;
+    }
     fileOpts.edge = edge;
 
-    const double shownPrec = (fileMode && precisionOverride > 0.0) ? precisionOverride : static_cast<double>(o.upsamplePrecision);
-    const double shownPb = (fileMode && passbandOverride > 0.0) ? passbandOverride : o.upsamplePassbandEnd;
-    const double shownSb = (fileMode && stopbandOverride > 0.0) ? stopbandOverride : o.upsampleStopbandBegin;
-    const double shownPh = (fileMode && phaseOverride >= 0.0) ? phaseOverride : o.upsamplePhase;
     const char* edgeName = (edge == srcconv::EdgeMode::Lpc) ? "lpc" : (edge == srcconv::EdgeMode::Odd ? "odd" : "none");
-    std::printf("Mód: %s (%s, szél: %s), beállítás: %s, sávszélesség %.1f%%, záró sáv %.0f%%, %.0f bit, fázis %.0f, fejtér %.0f dB\n",
-                mode.c_str(), fileMode ? "64 bit float WAV" : "32 bit float WAV", edgeName, preset.c_str(),
-                shownPb * 100.0, shownSb * 100.0, shownPrec, shownPh, static_cast<double>(o.upsampleHeadroomDb));
+    if (fileMode && (engine == srcconv::FileEngine::Fft64 || engine == srcconv::FileEngine::FftDD)) {
+        const bool isDD = (engine == srcconv::FileEngine::FftDD);
+        const double shownPb = (passbandOverride > 0.0) ? passbandOverride : (isDD ? 0.9966 : 0.9970);
+        const double shownBeta = isDD ? fileOpts.fftDdBeta : fileOpts.fftBeta;
+        std::printf("Mód: file (64 bit float WAV, motor: %s, szél: %s), sávszélesség %.2f%%, Kaiser beta %.1f, lineáris fázis, fejtér %.0f dB\n",
+                    isDD ? "fftdd (106 bit)" : "fft64", edgeName, shownPb * 100.0, shownBeta, static_cast<double>(o.upsampleHeadroomDb));
+    } else {
+        const double shownPrec = (fileMode && precisionOverride > 0.0) ? precisionOverride : static_cast<double>(o.upsamplePrecision);
+        const double shownPb = (fileMode && passbandOverride > 0.0) ? passbandOverride : o.upsamplePassbandEnd;
+        const double shownSb = (fileMode && stopbandOverride > 0.0) ? stopbandOverride : o.upsampleStopbandBegin;
+        const double shownPh = (fileMode && phaseOverride >= 0.0) ? phaseOverride : o.upsamplePhase;
+        std::printf("Mód: %s (%s, motor: soxr, szél: %s), beállítás: %s, sávszélesség %.1f%%, záró sáv %.0f%%, %.0f bit, fázis %.0f, fejtér %.0f dB\n",
+                    mode.c_str(), fileMode ? "64 bit float WAV" : "32 bit float WAV", edgeName, preset.c_str(),
+                    shownPb * 100.0, shownSb * 100.0, shownPrec, shownPh, static_cast<double>(o.upsampleHeadroomDb));
+    }
 
     if (!dir) return convertOne(pos[0], pos[1], rate, o, fileMode, fileOpts);
     std::error_code ec;

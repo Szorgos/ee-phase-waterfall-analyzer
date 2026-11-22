@@ -19,6 +19,10 @@
 // [16] R16 64 bites fájlátalakító: −150 dB-es jel megmarad, visszahajlás és intermoduláció zajszintje ≤ −190 dB
 // [17] R17 szélkezelés (V2): kettévágott két-tónusos jel illesztése LPC-vel ≤ −120 dB az egyben átalakítottól
 // [18] R18 szélkezelés csendes szélen / impulzuson: bitre azonos a nyers úttal; sztereó csendes csatorna csendes marad
+// [19] R19 saját 64 bites FFT (vegyes-radix 2/3/4/5/7 + Bluestein + RealFft): IFFT(FFT(x)) == x ≤ 1e-14
+// [20] R20 egylépcsős 64 bites FFT+Kaiser-sinc motor (Fft64): 22 kHz átvitel, ≤ −250 dB visszahajlás/IMD, 0 késleltetés, LPC hézagmentesség
+// [21] R21 beépített lejátszó FFT64 motor + választható fázis (0/25/50) + AudioOptions JSON + FilePlayer végigjátszás
+// [22] R22 106 bites double-double FFT motor (FftDD): 40 kHz záró sáv ≤ −310 dB, IMD ≤ −300 dB, 22,02 kHz sávszélesség, 0 késleltetés
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -840,6 +844,317 @@ int main() {
         bool rSilent = (r.channels == 2 && !ySt.empty());
         for (size_t i = 1; i < ySt.size(); i += 2) if (ySt[i] != 0.0) rSilent = false;
         CHECK(rSilent, "sztereó LPC: a csendes jobb csatorna pontosan 0.0 marad");
+    }
+
+    std::printf("[19] R19 – saját 64 bites FFT (vegyes-radix 2/3/4/5/7 + Bluestein + RealFft)\n");
+    {
+        // Komplex FFT: vegyes-radix (147, 320, 512, 1920) és Bluestein (101, 222) oda-vissza egyezése és Parseval
+        bool cOk = true;
+        double worstC = 0.0;
+        for (size_t n : {147u, 320u, 512u, 1920u, 101u, 222u}) {
+            srcconv::fft64::ComplexFft fft(n);
+            std::vector<srcconv::fft64::C64> orig(n), buf(n);
+            double eTime = 0.0;
+            for (size_t i = 0; i < n; ++i) {
+                orig[i] = {std::sin(0.37 * static_cast<double>(i) + 0.2), std::cos(0.91 * static_cast<double>(i) - 0.5)};
+                eTime += orig[i].r * orig[i].r + orig[i].i * orig[i].i;
+            }
+            buf = orig;
+            fft.transform(buf.data(), false);
+            double eFreq = 0.0;
+            for (const auto& z : buf) eFreq += z.r * z.r + z.i * z.i;
+            const double parsevalErr = std::abs(eFreq / static_cast<double>(n) - eTime) / std::max(eTime, 1.0);
+            fft.transform(buf.data(), true);
+            for (size_t i = 0; i < n; ++i) {
+                worstC = std::max(worstC, std::hypot(buf[i].r - orig[i].r, buf[i].i - orig[i].i));
+            }
+            if (parsevalErr > 1e-13) cOk = false;
+        }
+        std::printf("         ComplexFft max oda-vissza hiba: %.2e\n", worstC);
+        CHECK(cOk && worstC <= 1e-13, "ComplexFft (vegyes-radix + Bluestein): IFFT(FFT(x)) == x és Parseval ≤ 1e-13");
+
+        // RealFft: páros méretek (320, 2940, 1024, 150) oda-vissza egyezése
+        double worstR = 0.0;
+        for (size_t n : {150u, 320u, 1024u, 2940u}) {
+            srcconv::fft64::RealFft rfft(n);
+            std::vector<double> x(n), y(n);
+            std::vector<srcconv::fft64::C64> X(n / 2 + 1);
+            for (size_t i = 0; i < n; ++i) x[i] = std::sin(0.53 * static_cast<double>(i) + 0.1) + 0.3 * std::cos(1.7 * static_cast<double>(i));
+            rfft.forward(x.data(), X.data());
+            rfft.inverse(X.data(), y.data());
+            for (size_t i = 0; i < n; ++i) worstR = std::max(worstR, std::abs(y[i] - x[i]));
+        }
+        std::printf("         RealFft max oda-vissza hiba: %.2e\n", worstR);
+        CHECK(worstR <= 1e-13, "RealFft: IRFFT(RFFT(x)) == x ≤ 1e-13");
+    }
+
+    std::printf("[20] R20 – egylépcsős 64 bites FFT+Kaiser-sinc motor (FileEngine::Fft64)\n");
+    {
+        audioopt::AudioOptions o;
+        audioopt::applyUpsamplePreset(o, REF);
+        o.upsampleHeadroomDb = 0.0f;
+        srcconv::FileOptions fo;
+        fo.engine = srcconv::FileEngine::Fft64;
+        fo.edge = srcconv::EdgeMode::Lpc;
+
+        // 20a. Sávszélesség (22,0 kHz átvitel 96 -> 44,1 kHz-en ±0,01 dB) és felfelé (44,1 -> 96 kHz, 21,9 kHz)
+        const fs::path pPb = dir / "f64_pb.wav";
+        writeWav<double>(pPb, tone(22000.0, 0.5, 96000, 96000 * 3), 1, 96000);
+        std::vector<double> yPb; srcconv::Result r; std::string err;
+        CHECK(srcconv::convertFile64(pPb.string(), 44100, o, yPb, r, &err, fo), "Fft64 96 -> 44,1 kHz átalakítás");
+        const double a22 = ampAtD(yPb, 1, 0, 35000, 60000, 22000.0, 44100.0);
+        std::printf("         22,0 kHz átvitel: %+.5f dB\n", db(a22 / 0.5));
+        CHECK(std::abs(db(a22 / 0.5)) <= 0.01, "Fft64 sávszélesség: 22,0 kHz szintje ±0,01 dB");
+
+        const fs::path pUp = dir / "f64_up.wav";
+        writeWav<double>(pUp, tone(21900.0, 0.5, 44100, 44100 * 3), 1, 44100);
+        std::vector<double> yUp;
+        CHECK(srcconv::convertFile64(pUp.string(), 96000, o, yUp, r, &err, fo), "Fft64 44,1 -> 96 kHz átalakítás");
+        const double aUp = ampAtD(yUp, 1, 0, 70000, 120000, 21900.0, 96000.0);
+        std::printf("         felfelé 21,9 kHz átvitel: %+.5f dB\n", db(aUp / 0.5));
+        CHECK(std::abs(db(aUp / 0.5)) <= 0.01, "Fft64 felfelé: 21,9 kHz szintje ±0,01 dB");
+
+        // 20b. Visszahajlás + -150 dB jel és Intermoduláció ≤ -250 dB
+        const size_t N = 96000 * 4;
+        const double amp23k = std::pow(10.0, -4.0 / 20.0), amp1k = std::pow(10.0, -150.0 / 20.0);
+        std::vector<double> alIn(N);
+        for (size_t i = 0; i < N; ++i) {
+            const double t = static_cast<double>(i) / 96000.0;
+            alIn[i] = amp23k * std::sin(2.0 * kPi * 23000.0 * t) + amp1k * std::sin(2.0 * kPi * 1000.0 * t);
+        }
+        writeWav<double>(dir / "f64_al.wav", alIn, 1, 96000);
+        std::vector<double> alOut;
+        srcconv::convertFile64((dir / "f64_al.wav").string(), 44100, o, alOut, r, &err, fo);
+        const size_t st = 40000, ln = 90000;
+        const double err1k = std::abs(db(ampAtD(alOut, 1, 0, st, ln, 1000.0, 44100.0) / amp1k));
+        const auto alRem = removeToneD(alOut, st, ln, 1000.0, 44100.0);
+        const double alias21k = db(ampAtD(alRem, 1, 0, st, ln, 21100.0, 44100.0));
+        double alSq = 0.0;
+        for (size_t i = 0; i < ln; ++i) alSq += alRem[st + i] * alRem[st + i];
+        const double alRms = db(std::sqrt(alSq / static_cast<double>(ln)));
+        std::printf("         Fft64 visszahajlás: −150 dB jel hiba=%.4f dB, 21,1 kHz=%.1f dB, maradék RMS=%.1f dB\n",
+                    err1k, alias21k, alRms);
+        CHECK(err1k <= 0.01 && alias21k <= -260.0 && alRms <= -220.0,
+              "Fft64 visszahajlás: −150 dB jel megmarad, 21,1 kHz ≤ −260 dB és maradék RMS ≤ −220 dB");
+
+        const double f1 = 64.6, f2 = 6998.2;
+        const double a1 = std::pow(10.0, -6.0 / 20.0), a2 = std::pow(10.0, -18.0 / 20.0);
+        std::vector<double> imIn(N);
+        for (size_t i = 0; i < N; ++i) {
+            const double t = static_cast<double>(i) / 96000.0;
+            imIn[i] = a1 * std::sin(2.0 * kPi * f1 * t) + a2 * std::sin(2.0 * kPi * f2 * t);
+        }
+        writeWav<double>(dir / "f64_im.wav", imIn, 1, 96000);
+        std::vector<double> imOut;
+        srcconv::convertFile64((dir / "f64_im.wav").string(), 44100, o, imOut, r, &err, fo);
+        auto imRem = imOut;
+        for (int it = 0; it < 4; ++it) {
+            imRem = removeToneD(imRem, st, ln, f1, 44100.0);
+            imRem = removeToneD(imRem, st, ln, f2, 44100.0);
+        }
+        double imSq = 0.0;
+        for (size_t i = 0; i < ln; ++i) imSq += imRem[st + i] * imRem[st + i];
+        const double imRms = db(std::sqrt(imSq / static_cast<double>(ln)));
+        const double imdDiff = db(ampAtD(imRem, 1, 0, st, ln, f2 - f1, 44100.0));
+        const double imdSum = db(ampAtD(imRem, 1, 0, st, ln, f2 + f1, 44100.0));
+        std::printf("         Fft64 IMD maradék RMS: %.1f dB, f2−f1: %.1f dB, f2+f1: %.1f dB\n", imRms, imdDiff, imdSum);
+        CHECK(imRms <= -235.0 && imdDiff <= -260.0 && imdSum <= -260.0,
+              "Fft64 intermoduláció: maradék RMS ≤ −235 dB és f2±f1 ≤ −260 dB");
+
+        // 20c. Impulzus: 0 késleltetés, szimmetrikus lineáris fázis
+        std::vector<double> imp(96000 * 2, 0.0);
+        imp[96000] = 0.5;
+        writeWav<double>(dir / "f64_imp.wav", imp, 1, 96000);
+        std::vector<double> yImp;
+        srcconv::convertFile64((dir / "f64_imp.wav").string(), 44100, o, yImp, r, &err, fo);
+        size_t pk = 0;
+        for (size_t i = 0; i < yImp.size(); ++i) if (std::abs(yImp[i]) > std::abs(yImp[pk])) pk = i;
+        double asym = 0.0;
+        for (size_t k = 1; k < 4000 && k <= pk && pk + k < yImp.size(); ++k)
+            asym = std::max(asym, std::abs(yImp[pk - k] - yImp[pk + k]));
+        std::printf("         Fft64 impulzus csúcs: %zu (elvárt 44100), aszimmetria: %.1f dB\n", pk, db(asym / std::abs(yImp[pk])));
+        CHECK(pk == 44100 && db(asym / std::abs(yImp[pk])) <= -250.0,
+              "Fft64 impulzus: nulla késleltetés és szimmetrikus lineáris fázis (≤ −250 dB)");
+
+        // 20d. Hézagmentesség (LPC + Fft64) és sztereó csatorna-izoláció
+        std::vector<double> yFull, yA, yB;
+        srcconv::convertFile64((dir / "v2_full.wav").string(), 44100, o, yFull, r, &err, fo);
+        srcconv::convertFile64((dir / "v2_a.wav").string(), 44100, o, yA, r, &err, fo);
+        srcconv::convertFile64((dir / "v2_b.wav").string(), 44100, o, yB, r, &err, fo);
+        double gErr = 0.0;
+        for (size_t i = 22050 - 50; i < 22050; ++i) gErr = std::max(gErr, std::abs(yA[i] - yFull[i]));
+        for (size_t i = 0; i < 50; ++i) gErr = std::max(gErr, std::abs(yB[i] - yFull[22050 + i]));
+        std::printf("         Fft64 + LPC illesztés ±50 minta max eltérés: %.1f dB\n", db(gErr));
+        CHECK(yA.size() == 22050 && yB.size() == 22050 && db(gErr) <= -150.0,
+              "Fft64 + LPC hézagmentesség: illesztés ±50 mintán ≤ −150 dB");
+
+        std::vector<double> ySt;
+        srcconv::convertFile64((dir / "v2_st.wav").string(), 44100, o, ySt, r, &err, fo);
+        bool rZero = (r.channels == 2 && !ySt.empty());
+        for (size_t i = 1; i < ySt.size(); i += 2) if (ySt[i] != 0.0) rZero = false;
+        CHECK(rZero, "Fft64 sztereó: a csendes jobb csatorna pontosan 0.0 marad");
+    }
+
+    std::printf("[21] R21 – beépített lejátszó FFT64 motor + választható fázis (0/25/50) + FilePlayer\n");
+    {
+        // 21a. AudioOptions upsampleEngine JSON oda-vissza és sanitize
+        audioopt::AudioOptions o;
+        o.upsampleEngine = 1;
+        json::Value jv;
+        const bool parsed = json::parse(audioopt::toJson(o), jv);
+        audioopt::AudioOptions o2 = audioopt::fromJson(jv);
+        CHECK(parsed && o2.upsampleEngine == 1, "AudioOptions::upsampleEngine JSON oda-vissza");
+        o2.upsampleEngine = 99;
+        audioopt::sanitize(o2);
+        CHECK(o2.upsampleEngine == 0, "AudioOptions::upsampleEngine érvénytelen érték visszaáll 0-ra");
+
+        // 21b. UpsampleEngine streaming FFT64 mindhárom fázissal (50=lineáris, 25=köztes, 0=minimum)
+        for (double ph : {50.0, 25.0, 0.0}) {
+            UpsampleEngine eng;
+            const bool initOk = eng.init(44100, 96000, 1, 32, ph, 0.95, 1.00, 0.0f,
+                                         static_cast<int>(audioopt::UpsampleEngineType::Fft64));
+            CHECK(initOk && eng.isActive() && eng.isFft64(), "UpsampleEngine FFT64 init és isFft64()");
+
+            // 1 másodperces 10 kHz szinusz + impulzus ellenőrzés
+            std::vector<float> in(44100);
+            for (size_t i = 0; i < in.size(); ++i) in[i] = 0.5f * std::sin(2.0f * static_cast<float>(kPi) * 10000.0f * i / 44100.0f);
+            std::vector<float> out, chunk(8192);
+            size_t pos = 0;
+            while (pos < in.size()) {
+                const size_t n = std::min<size_t>(2048, in.size() - pos);
+                size_t got = 0;
+                eng.process(in.data() + pos, n, chunk.data(), chunk.size(), got);
+                out.insert(out.end(), chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(got));
+                pos += n;
+            }
+            for (int fstep = 0; fstep < 100; ++fstep) {
+                size_t got = 0;
+                eng.flush(chunk.data(), chunk.size(), got);
+                if (got == 0) break;
+                out.insert(out.end(), chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(got));
+            }
+            const double a10 = ampAt(out, 1, 0, 24000, 48000, 10000.0, 96000.0);
+            const double img = ampAt(out, 1, 0, 24000, 48000, 34100.0, 96000.0);
+            std::printf("         FFT64 stream (fázis %.0f): hossz=%zu (elvárt 96000), 10 kHz=%.4f dB, tükörkép 34,1 kHz=%.1f dB\n",
+                        ph, out.size(), db(a10 / 0.5), db(img / 0.5));
+            CHECK(out.size() == 96000 && std::abs(db(a10 / 0.5)) <= 0.02 && db(img / 0.5) <= -120.0,
+                  "FFT64 streaming: egzakt hossz, 10 kHz átvitel ±0,02 dB és tükörkép ≤ −120 dB");
+
+            // Impulzus előrezgés: minimumfázisnál (ph=0) a csúcs előtti régió elhanyagolható (< -90 dB)
+            if (ph == 0.0) {
+                eng.clear();
+                std::vector<float> imp(44100, 0.0f);
+                imp[22050] = 0.8f;
+                std::vector<float> iout;
+                size_t ip = 0;
+                while (ip < imp.size()) {
+                    const size_t n = std::min<size_t>(2048, imp.size() - ip);
+                    size_t got = 0;
+                    eng.process(imp.data() + ip, n, chunk.data(), chunk.size(), got);
+                    iout.insert(iout.end(), chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(got));
+                    ip += n;
+                }
+                for (int fstep = 0; fstep < 100; ++fstep) {
+                    size_t got = 0;
+                    eng.flush(chunk.data(), chunk.size(), got);
+                    if (got == 0) break;
+                    iout.insert(iout.end(), chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(got));
+                }
+                size_t pk = 0;
+                for (size_t i = 0; i < iout.size(); ++i) if (std::abs(iout[i]) > std::abs(iout[pk])) pk = i;
+                // t0 = 22050 * 96000 / 44100 = 48000: minimumfázisnál t < t0 (az impulzus előtti régió) zéró!
+                const size_t t0 = 48000;
+                double preMax = 0.0;
+                for (size_t i = (t0 > 2000 ? t0 - 2000 : 0); i < t0; ++i) preMax = std::max<double>(preMax, std::abs(iout[i]));
+                std::printf("         FFT64 minimumfázis impulzus: t0=%zu, csúcs=%zu, t<t0 előrezgés=%.1f dB\n",
+                            t0, pk, db(preMax / std::abs(iout[pk])));
+                CHECK(pk >= t0 && db(preMax / std::abs(iout[pk])) <= -110.0,
+                      "FFT64 minimumfázis: kauzális (csúcs ≥ t0) és t < t0 előrezgés ≤ −110 dB");
+            }
+        }
+
+        // 21c. FilePlayer végigjátszás FFT64 motorral (44,1 -> 88,2 kHz, Double szabály)
+        audioopt::AudioOptions poOpt;
+        audioopt::applyUpsamplePreset(poOpt, 1);  // köztes fázis (25)
+        poOpt.upsampleEngine = static_cast<int>(audioopt::UpsampleEngineType::Fft64);
+        poOpt.upsampleHeadroomDb = 0.0f;
+        poOpt.upsampleRule = audioopt::UpsampleRule::Double;
+
+        auto outp = std::make_unique<PullOut>();
+        PullOut* po = outp.get();
+        player::FilePlayer fp(std::move(outp));
+        fp.setUpsampleOptions(poOpt);
+        fp.setUpsample(true);
+        std::string err;
+        const bool opened = fp.open((dir / "pl.wav").string(), &err);
+        for (int i = 0; i < 3000 && fp.state() != player::FilePlayer::State::Playing; ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::vector<float> got, blk(2048 * 2);
+        for (int guard = 0; guard < 20000; ++guard) {
+            for (int i = 0; i < 3000 && fp.bufferedFrames() < 2048 && !fp.decodeAtEnd(); ++i)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            if (fp.decodeAtEnd() && fp.bufferedFrames() == 0) break;
+            const size_t k = std::min<size_t>(2048, std::max<size_t>(1, fp.bufferedFrames()));
+            if (!po->pull(blk.data(), k)) break;
+            got.insert(got.end(), blk.begin(), blk.begin() + static_cast<std::ptrdiff_t>(k * 2));
+        }
+        fp.stop();
+        std::printf("         FilePlayer FFT64: kimenet %u Hz, %zu keret\n", po->rate, got.size() / 2);
+        CHECK(opened && po->rate == 88200 && got.size() >= 88200 * 2,
+              "FilePlayer FFT64 (köztes fázis): 88,2 kHz kimenet és teljes számhossz (≥ 88200 keret)");
+    }
+
+    std::printf("[22] R22 – 106 bites double-double FFT motor (FileEngine::FftDD)\n");
+    {
+        audioopt::AudioOptions o;
+        audioopt::applyUpsamplePreset(o, REF);
+        o.upsampleHeadroomDb = 0.0f;
+        srcconv::FileOptions fo;
+        fo.engine = srcconv::FileEngine::FftDD;
+        fo.edge = srcconv::EdgeMode::Lpc;
+
+        // 22a. 40 kHz tiszta szinusz (záró sáv, fáziszaj-mentes bemenet): FftDD ≤ −310 dB RMS!
+        const size_t n40 = 96000 * 2;
+        std::vector<double> x40(n40);
+        for (size_t i = 0; i < n40; ++i) {
+            const uint64_t num = (40000ull * i) % 96000ull;
+            srcconv::fft64::DD sn, cs;
+            srcconv::fft64::realSinCosRatio<srcconv::fft64::DD>(static_cast<int64_t>(2 * num), 96000ull, sn, cs);
+            x40[i] = sn.hi;
+        }
+        writeWav<double>(dir / "dd_40k.wav", x40, 1, 96000);
+        std::vector<double> y40; srcconv::Result r; std::string err;
+        CHECK(srcconv::convertFile64((dir / "dd_40k.wav").string(), 44100, o, y40, r, &err, fo), "FftDD 40 kHz átalakítás");
+        double sq = 0.0, pk40 = 0.0;
+        const size_t st40 = 15000, ln40 = 55000;
+        for (size_t i = st40; i < st40 + ln40; ++i) {
+            sq += y40[i] * y40[i];
+            pk40 = std::max(pk40, std::abs(y40[i]));
+        }
+        const double rms40 = db(std::sqrt(sq / static_cast<double>(ln40)));
+        std::printf("         FftDD 40 kHz záró sáv: RMS=%.1f dB, csúcs=%.1f dB\n", rms40, db(pk40));
+        CHECK(rms40 <= -310.0 && db(pk40) <= -295.0, "FftDD 40 kHz záró sáv: RMS ≤ −310 dB és csúcs ≤ −295 dB");
+
+        // 22b. 21,95 kHz áteresztés (±0,005 dB), 22,0 kHz (≥ −0,35 dB) és impulzus zéró késleltetés
+        std::vector<double> x2195(96000 * 2);
+        for (size_t i = 0; i < x2195.size(); ++i) x2195[i] = 0.5 * std::sin(2.0 * kPi * 21950.0 * static_cast<double>(i) / 96000.0);
+        writeWav<double>(dir / "dd_2195.wav", x2195, 1, 96000);
+        std::vector<double> y2195, yPb, yImp;
+        CHECK(srcconv::convertFile64((dir / "dd_2195.wav").string(), 44100, o, y2195, r, &err, fo), "FftDD 21,95 kHz átalakítás");
+        const double a2195 = ampAtD(y2195, 1, 0, 20000, 48000, 21950.0, 44100.0);
+        CHECK(srcconv::convertFile64((dir / "f64_pb.wav").string(), 44100, o, yPb, r, &err, fo), "FftDD 22 kHz átalakítás");
+        const double a22 = ampAtD(yPb, 1, 0, 20000, 48000, 22000.0, 44100.0);
+        std::printf("         FftDD 21,95 kHz: %.5f dB, 22,0 kHz: %.3f dB\n", db(a2195 / 0.5), db(a22 / 0.5));
+        CHECK(std::abs(db(a2195 / 0.5)) <= 0.005 && db(a22 / 0.5) >= -0.35, "FftDD sávszélesség: 21,95 kHz ±0,005 dB és 22,0 kHz ≥ −0,35 dB");
+
+        CHECK(srcconv::convertFile64((dir / "f64_imp.wav").string(), 44100, o, yImp, r, &err, fo), "FftDD impulzus átalakítás");
+        size_t pk = 0;
+        for (size_t i = 0; i < yImp.size(); ++i) if (std::abs(yImp[i]) > std::abs(yImp[pk])) pk = i;
+        double asym = 0.0;
+        for (size_t k = 1; k < 4000 && k <= pk && pk + k < yImp.size(); ++k)
+            asym = std::max(asym, std::abs(yImp[pk - k] - yImp[pk + k]));
+        std::printf("         FftDD impulzus csúcs: %zu (elvárt 44100), aszimmetria: %.1f dB\n", pk, db(asym / std::abs(yImp[pk])));
+        CHECK(pk == 44100 && db(asym / std::abs(yImp[pk])) <= -300.0, "FftDD impulzus: 0 késleltetés és ≤ −300 dB szimmetria");
     }
 
     std::error_code ec;

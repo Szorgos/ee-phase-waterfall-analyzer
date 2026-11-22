@@ -3578,17 +3578,39 @@ var qrcode = function() {
   .ups-help-pop {
     position: fixed;
     z-index: 980;
-    width: min(320px, calc(100vw - 32px));
+    width: min(400px, calc(100vw - 32px));
+    max-height: min(72vh, 520px);
+    overflow-y: auto;
     margin: 0;
-    padding: 8px 10px;
+    padding: 12px 14px;
     background: var(--aq-surface);
     color: var(--aq-text-2);
     border: 1px solid var(--aq-line-2);
-    border-radius: 8px;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
-    font-size: 0.75rem;
-    line-height: 1.4;
+    border-radius: 10px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+    font-size: 0.76rem;
+    line-height: 1.48;
   }
+  .ups-help-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--aq-line);
+    color: var(--aq-text);
+    font-weight: 700;
+    font-size: 0.82rem;
+  }
+  .ups-help-sec { margin-top: 8px; }
+  .ups-help-sec:first-of-type { margin-top: 0; }
+  .ups-help-h {
+    color: var(--aq-text);
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .ups-help-p { margin: 0; color: var(--aq-text-2); }
   .ups-help-pop[hidden] { display: none !important; }
   :root[data-mode="light"] .ups-help-pop, :root[data-theme$="-light"] .ups-help-pop {
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
@@ -5054,7 +5076,7 @@ var qrcode = function() {
               <div id="aoUpsampleWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:8px;">
                 <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:4px;">
                   <div class="sink-sec-title" style="margin:0;" data-i18n="ups.title">Felmintavételezés (beépített lejátszó)</div>
-                  <button type="button" id="upsHelpBtn" class="mini-btn" style="min-width:24px; padding:1px 7px; font-weight:700;" onclick="upsToggleHelp(event)" title="Súgó a felmintavételezéshez" data-i18n-title="ups.helpBtn" aria-label="i" aria-expanded="false" aria-controls="upsHelpBox">i</button>
+                  <button type="button" id="upsHelpBtn" class="mini-btn" style="padding:1px 8px; font-weight:600; font-size:11px;" onclick="upsToggleHelp(event)" title="Súgó a felmintavételezéshez" data-i18n="ups.infoBtn" data-i18n-title="ups.helpBtn" aria-expanded="false" aria-controls="upsHelpBox">Infó</button>
                 </div>
                 <label class="ao-row"><span data-i18n="ups.rule">Szabály</span>
                   <select id="upsRule" class="mini-select" onchange="upsOnRuleChange()">
@@ -5074,7 +5096,14 @@ var qrcode = function() {
                     <label class="ao-row"><span>176,4 kHz</span><select id="upsCust176400" class="mini-select" onchange="aoSend()"></select></label>
                     <label class="ao-row"><span>192 kHz</span><select id="upsCust192000" class="mini-select" onchange="aoSend()"></select></label>
                   </div>
-                  <div class="ao-row" style="flex-direction:column; align-items:stretch; gap:4px; margin-top:4px;">
+                  <label class="ao-row" style="margin-top:4px;"><span data-i18n="ups.engine">Átalakító motor</span>
+                    <select id="upsEngine" class="mini-select" onchange="upsOnEngineChange()">
+                      <option value="0" data-i18n="ups.engineSoxr">libsoxr (gyors, alacsony késleltetés)</option>
+                      <option value="1" data-i18n="ups.engineFft64">Aqulify FFT64 (64 bites Kaiser-sinc)</option>
+                    </select>
+                  </label>
+                  <div id="upsEngineHint" class="ao-hint" hidden data-i18n="ups.engineHint">Egylépcsős 64 bites FFT + Kaiser-sinc motor: tükörképek nélkül, választható fázissal (minimum / köztes / lineáris) és 0 késleltetésű szűrővel.</div>
+                  <div id="upsPresetWrap" class="ao-row" style="flex-direction:column; align-items:stretch; gap:4px; margin-top:4px;">
                     <span data-i18n="ups.preset">Szűrő előbeállítás</span>
                     <div style="display:flex; gap:4px; flex-wrap:wrap;">
                       <button type="button" id="upsPreset0" class="adw-btn" style="flex:1; font-size:11px; padding:4px 6px;" onclick="upsSelectPreset(0)" data-i18n="ups.presetLinear">Lineáris fázis</button>
@@ -5187,8 +5216,29 @@ var qrcode = function() {
             </div>
           </div>
         </div>
-        <!-- A felmintavételezés súgója lebegő ablakként, az eszközmenü oszlopain kívül, hogy megnyitáskor ne ugráljon az elrendezés -->
-        <div id="upsHelpBox" class="ups-help-pop" hidden role="tooltip" data-i18n="ups.helpText"></div>
+        <!-- A felmintavételezés információs panele lebegő ablakként, az eszközmenü oszlopain kívül -->
+        <div id="upsHelpBox" class="ups-help-pop" hidden role="dialog" aria-labelledby="upsHelpTitle">
+          <div class="ups-help-head">
+            <span id="upsHelpTitle" data-i18n="ups.infoTitle">Felmintavételezés – Kell ez egyáltalán?</span>
+            <button type="button" class="mini-btn" style="min-width:22px; padding:0 6px;" onclick="upsCloseHelp()" aria-label="×">×</button>
+          </div>
+          <div class="ups-help-sec">
+            <div class="ups-help-h" data-i18n="ups.infoNeedH">Kell-e és hallható-e a különbség?</div>
+            <p class="ups-help-p" data-i18n="ups.infoNeedP">Nem kötelező – ezért alapból ki van kapcsolva. A zenéből nem hoz létre új részleteket, hanem a DAC beépített, egyszerűbb szűrője helyett a számítógépen végez sokkal pontosabb szűrést. Főleg régebbi vagy NOS/R2R DAC-okon és 44,1 kHz-es felvételeknél lehet hallható; modern delta-szigma DAC-okon gyakran alig vagy egyáltalán nem. Próbáld ki füllel: ha nem hallasz előnyt, kapcsold ki.</p>
+          </div>
+          <div class="ups-help-sec">
+            <div class="ups-help-h" data-i18n="ups.infoRateH">Meddig érdemes felskálázni?</div>
+            <p class="ups-help-p" data-i18n="ups.infoRateP">Nem kell 384 kHz-ig menni: már a ×2 (88,2/96 kHz) vagy a „Kimenet maximuma” (pl. 96 kHz-es DAC-nál 96 kHz) elvégzi a lényegi szűrést, alacsony CPU-terheléssel.</p>
+          </div>
+          <div class="ups-help-sec">
+            <div class="ups-help-h" data-i18n="ups.infoEngH">Melyik motort válasszam?</div>
+            <p class="ups-help-p" data-i18n="ups.infoEngP">libsoxr: gyors, nagyon alacsony késleltetésű és takarékos (mindennapi hallgatáshoz ideális). Aqulify FFT64: saját, egylépcsős 64 bites FFT + Kaiser-sinc motor, többlépcsős tükörképek nélkül, laboratóriumi pontossággal (kicsit nagyobb késleltetéssel és CPU-igénnyel).</p>
+          </div>
+          <div class="ups-help-sec">
+            <div class="ups-help-h" data-i18n="ups.infoPhaseH">Fázis és fejtér</div>
+            <p class="ups-help-p" data-i18n="ups.infoPhaseP">Minimumfázis (0): nincs előrezgés (pre-ringing), sokak szerint természetesebb ütések. Köztes (25, ajánlott): jó egyensúly. Lineáris (50 / Referencia): szimmetrikus impulzusválasz, nulla fázistorzítás. A −1 dB fejtér véd a minták közötti túlvezérléstől hangos mastereknél.</p>
+          </div>
+        </div>
       </div>
 
       <button type="button" class="mini-btn" id="btnBurnIn" onclick="openBurnIn()">
@@ -10553,6 +10603,10 @@ function upsApplyOptions(o, cp) {
   document.getElementById("upsRule").value = String(rule);
   document.getElementById("upsSettingsWrap").hidden = rule === 0;
   document.getElementById("upsCustomWrap").hidden = rule !== 4;
+  const eng = typeof o.upsampleEngine === "number" ? o.upsampleEngine : 0;
+  const engEl = document.getElementById("upsEngine");
+  if (engEl) engEl.value = String(eng);
+  upsUpdateEngineUi(eng);
   const preset = typeof o.upsamplePreset === "number" ? o.upsamplePreset : 1;
   upsUpdatePresetButtons(preset);
   const pb = typeof o.upsamplePassbandEnd === "number" ? Math.round(o.upsamplePassbandEnd * 1000) / 10 : 95;
@@ -10578,6 +10632,19 @@ function upsOnRuleChange() {
   const rule = parseInt(document.getElementById("upsRule").value, 10) || 0;
   document.getElementById("upsSettingsWrap").hidden = rule === 0;
   document.getElementById("upsCustomWrap").hidden = rule !== 4;
+  aoSend();
+}
+
+function upsUpdateEngineUi(eng) {
+  const isFft = eng === 1;
+  const hint = document.getElementById("upsEngineHint");
+  if (hint) hint.hidden = !isFft;
+}
+
+function upsOnEngineChange() {
+  const engEl = document.getElementById("upsEngine");
+  const eng = engEl ? (parseInt(engEl.value, 10) || 0) : 0;
+  upsUpdateEngineUi(eng);
   aoSend();
 }
 
@@ -10770,6 +10837,8 @@ function aoSend() {
     const ruleEl = document.getElementById("upsRule");
     if (ruleEl) {
       opts.upsampleRule = parseInt(ruleEl.value, 10) || 0;
+      const engEl = document.getElementById("upsEngine");
+      opts.upsampleEngine = engEl ? (parseInt(engEl.value, 10) || 0) : 0;
       opts.upsamplePreset = upsPresetState;
       const pbVal = parseFloat(document.getElementById("upsPassband").value);
       const sbVal = parseFloat(document.getElementById("upsStopband").value);

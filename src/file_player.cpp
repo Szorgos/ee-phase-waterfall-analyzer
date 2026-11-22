@@ -763,8 +763,9 @@ bool FilePlayer::fillLocked() {
         if (upsampleActive_.load()) {
             size_t neededOut = static_cast<size_t>(std::ceil(got * (static_cast<double>(rate_) / s.dec->sampleRate()))) + 256;
             if (upsampleOutBuf_.size() < neededOut * 2) upsampleOutBuf_.resize(neededOut * 2);
+            const size_t cap = std::min(free, upsampleOutBuf_.size() / 2);
             size_t outFrames = 0;
-            upsampler_.process(stereoMixBuf_.data(), got, upsampleOutBuf_.data(), upsampleOutBuf_.size() / 2, outFrames);
+            upsampler_.process(stereoMixBuf_.data(), got, upsampleOutBuf_.data(), cap, outFrames);
             for (size_t i = 0; i < outFrames; ++i) {
                 const size_t idx = static_cast<size_t>((w + i) % ringFrames_) * 2;
                 ring_[idx] = upsampleOutBuf_[2 * i];
