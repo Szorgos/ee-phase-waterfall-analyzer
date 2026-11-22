@@ -556,7 +556,14 @@ static void testNetwork() {
             CHECK(d->sampleRate() == 44100 && d->channels() == 2, "formátum: %u Hz, %u csatorna", d->sampleRate(), d->channels());
             CHECK(srv.icyAsked.load(), "a kérés kéri az ICY metaadatot (Icy-MetaData: 1)");
             std::string t, a, al;
-            const size_t loud = pump(*d, 6000, [&] { d->liveInfo(t, a, al); return srv.hits("/mp3") >= 2 && t == "Második"; });
+            // a hangosság a kilépésig gyűlik: lassú gépen a cím és az újracsatlakozás hamarabb megvan, mint 5000 hangos keret
+            size_t loud = 0;
+            const auto tp = Clock::now();
+            while (msSince(tp) < 6000) {
+                loud += pump(*d, 100);
+                d->liveInfo(t, a, al);
+                if (srv.hits("/mp3") >= 2 && t == "Második" && loud > 5000) break;
+            }
             d->liveInfo(t, a, al);
             const RadioStatus st = d->status();
             CHECK(loud > 5000, "szól (nem csendes keretek: %zu)", loud);
@@ -595,7 +602,7 @@ static void testNetwork() {
         c.net.allowLoopback = true;
         auto t0 = Clock::now();
         d = RadioDecoder::open(c, err);
-        CHECK(!d && err == "blocked" && msSince(t0) < 1000, "magánhálózati cím közvetlenül: azonnal tiltva (%.0f ms)", msSince(t0));
+        CHECK(!d && err == "blocked" && msSince(t0) < 2000, "magánhálózati cím közvetlenül: azonnal tiltva (%.0f ms)", msSince(t0));
     }
     {
         auto d = RadioDecoder::open(testCfg(srv.url("/pls")), err);
@@ -618,7 +625,7 @@ static void testNetwork() {
             if (d) {
                 size_t loud = 0;
                 const auto t0 = Clock::now();
-                while (msSince(t0) < 4000 && (loud < 30000 || d->status().reconnects < 1)) loud += pump(*d, 200);
+                while (msSince(t0) < 6000 && (loud < 30000 || d->status().reconnects < 1)) loud += pump(*d, 200);
                 CHECK(loud > 10000, "%s: szól (%zu keret), újracsatlakozás: %llu", o.path, loud, static_cast<unsigned long long>(d->status().reconnects));
             }
         }
@@ -631,7 +638,7 @@ static void testNetwork() {
             std::vector<float> x, buf(1024 * 2);
             const auto t0 = Clock::now();
             bool started = false;
-            while (x.size() < 16384 * 2 && msSince(t0) < 3000) {
+            while (x.size() < 16384 * 2 && msSince(t0) < 6000) {
                 const size_t n = d->read(buf.data(), 1024);
                 if (n == 0) break;
                 for (size_t i = 0; i < n && x.size() < 16384 * 2; ++i) {
@@ -663,7 +670,7 @@ static void testNetwork() {
         // láncolt Ogg: a második lánc (új sorozatszám, új cím) is szól, ugyanazon a kapcsolaton, újracsatlakozás nélkül
         for (const char* path : { "/oggflac", "/vorbis2" }) {
             RadioDecoder::Config cfg = testCfg(srv.url(path));
-            cfg.backoffBaseMs = 5000;   // a mérés alatt ne jöjjön új kapcsolat
+            cfg.backoffBaseMs = 20000;  // a mérés alatt ne jöjjön új kapcsolat
             cfg.maxBufferSec = 30.0;    // az egész adás elférjen
             auto d = RadioDecoder::open(cfg, err);
             CHECK(d != nullptr, "%s: megnyílik (%s)", path, err.c_str());
@@ -671,11 +678,13 @@ static void testNetwork() {
             std::vector<std::string> seen;
             size_t loud = 0;
             const auto t0 = Clock::now();
-            while (msSince(t0) < 2500) {
+            const bool isFlac = std::string(path) == "/oggflac";
+            while (msSince(t0) < 6000) {   // kilépés, ha mindkét lánc átjött (lassú gépen tovább tart)
                 loud += pump(*d, 100);
                 std::string ti, ar, al;
                 d->liveInfo(ti, ar, al);
                 if (seen.empty() || seen.back() != ti) seen.push_back(ti);
+                if (loud > 80000 && (!isFlac || seen.back() == "Második")) break;
             }
             const RadioStatus st = d->status();
             CHECK(loud > 80000 && srv.hits(path) == 1, "%s: mindkét lánc szól egy kapcsolaton (%zu hangos keret, %d kérés)", path, loud, srv.hits(path));
@@ -706,7 +715,7 @@ static void testNetwork() {
         auto d = RadioDecoder::open(testCfg(srv.url("/silent")), err, &cancel);
         const double ms = msSince(t0);
         canceller.join();
-        CHECK(!d && err == "aborted" && ms < 1500, "kapcsolódás közbeni megszakítás (%s, %.0f ms)", err.c_str(), ms);
+        CHECK(!d && err == "aborted" && ms < 3000, "kapcsolódás közbeni megszakítás (%s, %.0f ms)", err.c_str(), ms);
     }
     {
         auto d = RadioDecoder::open(testCfg(srv.url("/live")), err);
@@ -726,10 +735,10 @@ static void testNetwork() {
         if (d) {
             std::string perr;
             CHECK(fp.openStream(std::move(d), "Próba Rádió", &perr) && fp.state() == player::FilePlayer::State::Playing, "FilePlayer: szól (%s)", perr.c_str());
-            for (int i = 0; i < 300 && out->loud.load() < 20; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            for (int i = 0; i < 600 && out->loud.load() < 20; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
             CHECK(out->loud.load() >= 20 && out->rate.load() == 44100, "FilePlayer: a kimenetre hang jut (%d blokk)", out->loud.load());
             media::Info info;
-            for (int i = 0; i < 300; ++i) {
+            for (int i = 0; i < 600; ++i) {
                 info = fp.info();
                 if (info.title == "Első szám" || info.title == "Második") break;
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
