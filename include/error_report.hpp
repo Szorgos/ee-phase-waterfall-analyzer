@@ -259,7 +259,30 @@ inline void scrubIpv4(std::string& s) {
                 while (k < s.size() && isAsciiAlnum(static_cast<unsigned char>(s[k]))) ++k;
                 kernel = k + 1 < s.size() && s[k] == '-' && isAsciiAlnum(static_cast<unsigned char>(s[k + 1]));
             }
-            if (ok && parts == 4 && endOk && !kernel) {
+            // Linux USB-útvonal (usb-0000:00:14.0-4.1.2.3): a kötőjel előtt „usb-<pci>-” áll (benne legalább egy ':'),
+            // a 4-részes hub-port nem IPv4-cím.
+            bool usbPath = false;
+            if (ok && parts == 4 && i >= 6 && s[i - 1] == '-') {
+                size_t p = i - 1;
+                bool hasColon = false;
+                while (p > 0) {
+                    const unsigned char ch = static_cast<unsigned char>(s[p - 1]);
+                    if (isHex(ch) || ch == ':' || ch == '.') {
+                        if (ch == ':') hasColon = true;
+                        --p;
+                    } else {
+                        break;
+                    }
+                }
+                if (hasColon && p >= 4 &&
+                    (s[p - 4] == 'u' || s[p - 4] == 'U') &&
+                    (s[p - 3] == 's' || s[p - 3] == 'S') &&
+                    (s[p - 2] == 'b' || s[p - 2] == 'B') &&
+                    s[p - 1] == '-') {
+                    usbPath = true;
+                }
+            }
+            if (ok && parts == 4 && endOk && !kernel && !usbPath) {
                 const bool loopback = oct[0] == 127 || (oct[0] == 0 && oct[1] == 0 && oct[2] == 0 && oct[3] == 0);
                 out += loopback ? s.substr(i, j - i) : std::string("<ip>");
                 i = j;
@@ -315,8 +338,123 @@ inline void scrubIpv6(std::string& s) {
     s.swap(out);
 }
 
+/**
+ * A [WS Bridge] naplósorokban szereplő távoli/párosított eszköznevek mintaalapú tisztítása (akkor is elkapja, ha
+ * az eszközt futás közben párosították vagy azóta törölték a remote.json-ból).
+ */
+inline void scrubBridgeDeviceNames(std::string& s, bool jsonMode) {
+    struct Rule { const char* prefix; bool untilParen; };
+    static const Rule kRules[] = {
+        { "[WS Bridge] Új eszköz párosítva: ", false },
+        { "[WS Bridge] Távoli eszköz csatlakozott Bluetoothon: ", false },
+        { "[WS Bridge] Távoli eszköz csatlakozott: ", false },
+        { "[WS Bridge] Távoli eszköz jóváhagyva és csatlakozott: ", false },
+        { " korábbi párosítás lecserélve: ", false },
+        { "[WS Bridge] Távoli eszköz lecsatlakozott: ", true },
+        { "[WS Bridge] Párosítási kérelem: ", true },
+    };
+    auto findLineEnd = [&](size_t pos) {
+        size_t e = pos;
+        while (e < s.size()) {
+            const char ch = s[e];
+            if (ch == '\n' || ch == '\r') break;
+            if (jsonMode) {
+                if (ch == '"') break;
+                if (ch == '\\' && e + 1 < s.size() && (s[e + 1] == 'n' || s[e + 1] == 'r')) break;
+            }
+            ++e;
+        }
+        return e;
+    };
+    for (const Rule& r : kRules) {
+        const size_t plen = std::char_traits<char>::length(r.prefix);
+        size_t pos = 0;
+        while ((pos = s.find(r.prefix, pos)) != std::string::npos) {
+            const size_t start = pos + plen;
+            const size_t lineEnd = findLineEnd(start);
+            size_t end = lineEnd;
+            if (r.untilParen) {
+                const size_t p = s.find(" (", start);
+                if (p != std::string::npos && p < lineEnd) end = p;
+            }
+            if (end > start) {
+                const std::string cur = s.substr(start, end - start);
+                if (cur != "<name>") {
+                    s.replace(start, end - start, "<name>");
+                    pos = start + 6;
+                    continue;
+                }
+            }
+            pos = start;
+        }
+    }
+}
+
+/**
+ * Többtagú, nagybetűs DMI/sorozatszám-szerű gépazonosítók (pl. ALSA SOF kártyák longname mezője:
+ * ACMECOMPUTERLIMITED-NOTEBOOK1234-99887766554-ABCD1E2) cseréje <dmi>-re.
+ * Feltétel: legalább 4 kötőjellel elválasztott [A-Za-z0-9_] tag, összhossz >= 20, az első tag csupa nagybetű (>=3),
+ * és van legalább egy >=6 számjegyet tartalmazó tag (valódi DAC-neveket, USB-útvonalakat és kernelverziókat nem érint).
+ */
+inline void scrubDmiStrings(std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    size_t i = 0;
+    while (i < s.size()) {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        const bool startOk = (c >= 'A' && c <= 'Z') && (i == 0 || !(isWordish(static_cast<unsigned char>(s[i - 1])) || s[i - 1] == '-' || s[i - 1] == '.'));
+        if (startOk) {
+            size_t j = i;
+            int parts = 1;
+            size_t curStart = i;
+            bool firstUpperOnly = true;
+            size_t firstLen = 0;
+            bool hasLongSerial = false;
+            bool valid = true;
+            auto finishPart = [&](size_t a, size_t b, int partIdx) {
+                const size_t len = b - a;
+                if (len == 0) { valid = false; return; }
+                int digits = 0;
+                bool upperOnly = true;
+                for (size_t k = a; k < b; ++k) {
+                    const unsigned char ch = static_cast<unsigned char>(s[k]);
+                    if (isDigit(ch)) { ++digits; upperOnly = false; }
+                    else if (!(ch >= 'A' && ch <= 'Z')) upperOnly = false;
+                }
+                if (partIdx == 1) { firstUpperOnly = upperOnly; firstLen = len; }
+                if (digits >= 6) hasLongSerial = true;
+            };
+            while (j < s.size()) {
+                const unsigned char ch = static_cast<unsigned char>(s[j]);
+                if (isAsciiAlnum(ch) || ch == '_') {
+                    ++j;
+                } else if (ch == '-' && j + 1 < s.size() && (isAsciiAlnum(static_cast<unsigned char>(s[j + 1])) || s[j + 1] == '_')) {
+                    finishPart(curStart, j, parts);
+                    ++parts;
+                    ++j;
+                    curStart = j;
+                } else {
+                    break;
+                }
+            }
+            finishPart(curStart, j, parts);
+            const bool endOk = j >= s.size() || !(isWordish(static_cast<unsigned char>(s[j])) || s[j] == '.' || s[j] == ':');
+            if (valid && endOk && parts >= 4 && (j - i) >= 20 && firstUpperOnly && firstLen >= 3 && hasLongSerial) {
+                out += "<dmi>";
+                i = j;
+                continue;
+            }
+            out.append(s, i, j - i);
+            i = j;
+            continue;
+        }
+        out += s[i++];
+    }
+    s.swap(out);
+}
+
 inline void collapseRepeats(std::string& s) {
-    for (const char* tok : { "<path>", "<ip>", "<mac>" }) {
+    for (const char* tok : { "<path>", "<ip>", "<mac>", "<name>", "<dmi>" }) {
         const std::string twice = std::string(tok) + tok;
         size_t p;
         while ((p = s.find(twice)) != std::string::npos) s.erase(p, std::char_traits<char>::length(tok));
@@ -404,8 +542,10 @@ inline std::string scrub(const std::string& text, const ScrubContext& ctx, bool 
             detail::replaceNoCase(s, fwd, "<path>", false);
         }
     }
-    // 2. nevek (egész szóként, kis- és nagybetűtől függetlenül)
+    // 2. nevek (egész szóként, kis- és nagybetűtől függetlenül) + [WS Bridge] eszköznevek + DMI-láncok
     for (const auto& n : ctx.names) detail::replaceNoCase(s, n, "<name>", true);
+    detail::scrubBridgeDeviceNames(s, jsonMode);
+    detail::scrubDmiStrings(s);
     for (const auto& h : ctx.hosts) detail::replaceNoCase(s, h, "<host>", true);
     for (const auto& u : ctx.users) detail::replaceNoCase(s, u, "<user>", true);
     // 3. címek

@@ -1291,6 +1291,12 @@ int main(int argc, char** argv) {
             for (const auto& n : aq::report::namesFromJson(readSmallFile(userFilePath(f, false), 256 * 1024))) hc.scrubNames.push_back(n);
         if (!health.start(hc)) std::cout << "[Hibajelentés] A diagnosztikai mappa nem írható.\n";
         reportService.start(hc.dir, hc.logPath, hc.scrubNames, hc.enabled);
+        reportService.setNamesProvider([] {
+            std::vector<std::string> names;
+            for (const wchar_t* f : { L"remote.json", L"remote-targets.json" })
+                for (const auto& n : aq::report::namesFromJson(readSmallFile(userFilePath(f, false), 256 * 1024))) names.push_back(n);
+            return names;
+        });
     }
     int healthTicks = 0;
     auto healthTick = [&] {

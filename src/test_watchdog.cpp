@@ -609,6 +609,75 @@ static void testDeviceFormat() {
     CHECK(aq::devfmt::describe(nullptr, 0).empty(), "üres bemenet: üres szöveg");
 }
 
+// ------------------------------------------------------------------------------------------------ [8]
+static void testPrivacyBridgeDmiUsb() {
+    std::printf("[8] Adatvédelem: [WS Bridge] eszköznevek, DMI-lánc, USB-útvonal és negatív esetek\n");
+    const aq::report::ScrubContext ctx;
+
+    // 8a. [WS Bridge] eszköznevek (mintaalapon, üres ctx.names mellett is, sima és JSON módban)
+    const std::string bridgeText =
+        "[WS Bridge] Új eszköz párosítva: Teszttelefon\n"
+        "[WS Bridge] Távoli eszköz csatlakozott: Teszttelefon\n"
+        "[WS Bridge] Távoli eszköz csatlakozott Bluetoothon: PX12345AB\n"
+        "[WS Bridge] Távoli eszköz jóváhagyva és csatlakozott: PX12345AB\n"
+        "[WS Bridge] Távoli eszköz lecsatlakozott: Teszttelefon (close keret).\n"
+        "[WS Bridge] Párosítási kérelem: PX12345AB (192.168.1.23, req_12345678)\n"
+        "[WS Bridge] 2 korábbi párosítás lecserélve: Teszttelefon\n";
+    const std::string bridgeOut = aq::report::scrub(bridgeText, ctx, false);
+    CHECK(!contains(bridgeOut, "Teszttelefon") && !contains(bridgeOut, "PX12345AB") && !contains(bridgeOut, "192.168.1.23"),
+          "[WS Bridge] eszköznevek és IP eltűnnek (sima szöveg)");
+    CHECK(contains(bridgeOut, "[WS Bridge] Új eszköz párosítva: <name>") &&
+          contains(bridgeOut, "[WS Bridge] Távoli eszköz csatlakozott: <name>") &&
+          contains(bridgeOut, "[WS Bridge] Távoli eszköz csatlakozott Bluetoothon: <name>") &&
+          contains(bridgeOut, "[WS Bridge] Távoli eszköz jóváhagyva és csatlakozott: <name>") &&
+          contains(bridgeOut, "[WS Bridge] Távoli eszköz lecsatlakozott: <name> (close keret).") &&
+          contains(bridgeOut, "[WS Bridge] Párosítási kérelem: <name> (<ip>, req_12345678)") &&
+          contains(bridgeOut, "[WS Bridge] 2 korábbi párosítás lecserélve: <name>"),
+          "[WS Bridge] mind a 7 naplóminta pontosan <name>-re cserélődik");
+
+    const std::string bridgeJson = "{\"log\":[\"[WS Bridge] Távoli eszköz csatlakozott: Teszttelefon\",\"[WS Bridge] Távoli eszköz lecsatlakozott: PX12345AB (kapcsolat bontva).\"]}";
+    const std::string bridgeJsonOut = aq::report::scrub(bridgeJson, ctx, true);
+    json::Value parsed;
+    CHECK(json::parse(bridgeJsonOut, parsed), "JSON módban tisztított [WS Bridge] napló érvényes JSON");
+    CHECK(!contains(bridgeJsonOut, "Teszttelefon") && !contains(bridgeJsonOut, "PX12345AB"),
+          "JSON módban is eltűnnek az eszköznevek");
+    CHECK(contains(bridgeJsonOut, "[WS Bridge] Távoli eszköz csatlakozott: <name>") &&
+          contains(bridgeJsonOut, "[WS Bridge] Távoli eszköz lecsatlakozott: <name> (kapcsolat bontva)."),
+          "JSON módban a zárójel és az idézőjel sértetlen marad");
+
+    // 8b. DMI-lánc és USB-útvonal
+    const std::string cardsText =
+        " 0 [Audio          ]: USB-Audio - USB Audio\n"
+        "                      Generic USB Audio at usb-0000:00:14.0-4.4, high speed\n"
+        " 1 [DSD            ]: USB-Audio - HIFI DSD\n"
+        "                      XMOS HIFI DSD at usb-0000:00:14.0-4.1.2.3, full speed\n"
+        " 2 [sofhdadsp      ]: sof-hda-dsp - sof-hda-dsp\n"
+        "                      ACMECOMPUTERLIMITED-NOTEBOOK1234-99887766554-ABCD1E2\n";
+    const std::string cardsOut = aq::report::scrub(cardsText, ctx, false);
+    CHECK(!contains(cardsOut, "ACMECOMPUTERLIMITED") && !contains(cardsOut, "99887766554"),
+          "SOF/DMI sorozatszám-szerű lánc eltűnik");
+    CHECK(contains(cardsOut, "<dmi>"), "a DMI-lánc helyén <dmi>");
+    CHECK(contains(cardsOut, "usb-0000:00:14.0-4.1.2.3") && !contains(cardsOut, "usb-0000:00:14.0-<ip>"),
+          "a 4-részes USB-útvonal (usb-0000:00:14.0-4.1.2.3) nem válik <ip>-vé");
+
+    // 8c. Negatív esetek (nem szabad átírni) + valódi IPv4
+    const char* keepList[] = {
+        "TOPPING USB DAC",
+        "XMOS HIFI DSD",
+        "AMR HD+ USB Audio",
+        "FiiO K series",
+        "Realtek(R) Audio",
+        "HDA Intel HDMI at 0xf7d10000 irq 36",
+        "Generic USB Audio at usb-0000:00:14.0-4.4",
+        "6.6.87.2-microsoft-standard-WSL2",
+    };
+    for (const char* s : keepList) {
+        const std::string got = aq::report::scrub(s, ctx, false);
+        CHECK(got == s, "negatív eset változatlan: \"%s\" (kapott: \"%s\")", s, got.c_str());
+    }
+    CHECK(aq::report::scrub("192.168.1.23", ctx, false) == "<ip>", "valódi IPv4 (192.168.1.23) -> <ip>");
+}
+
 int main(int argc, char** argv) {
     if (argc >= 5 && std::strcmp(argv[1], "--child") == 0) return runChild(argv[2], argv[3], argv[4]);
     uint32_t seed = static_cast<uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
@@ -621,6 +690,7 @@ int main(int argc, char** argv) {
     testSetting();
     testScrubKernelVersion();
     testDeviceFormat();
+    testPrivacyBridgeDmiUsb();
     std::printf("\n%s (%d hiba)\n", g_fail == 0 ? "MINDEN TESZT SIKERES" : "SIKERTELEN", g_fail);
     return g_fail == 0 ? 0 : 1;
 }

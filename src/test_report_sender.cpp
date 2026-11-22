@@ -425,6 +425,34 @@ int main() {
         CHECK(!netRes.ok && netRes.retryable && netRes.error == "network", "halozati hiba retryable=true");
     }
 
+    // 7. Futás közben frissülő eszköznév-forrás (setNamesProvider): az indulás után párosított eszköz neve is <name>
+    {
+        const fs::path dynDir = makeTempDir("dyn_names");
+        const fs::path dynLog = dynDir / "engine.log";
+        {
+            std::ofstream f(dynLog, std::ios::binary | std::ios::trunc);
+            f << "[Info] Kapcsolat: UjonnanParositottTelefon csatlakozott\n";
+        }
+        std::vector<std::string> liveNames;
+        aq::report::Service svc;
+        svc.start(dynDir, dynLog, {}, false, "");
+        svc.setNamesProvider([&] { return liveNames; });
+        liveNames.push_back("UjonnanParositottTelefon");
+        int nLines = 0;
+        const std::string scrubbedLog = svc.readLog(20, nLines);
+        CHECK(scrubbedLog.find("UjonnanParositottTelefon") == std::string::npos && scrubbedLog.find("<name>") != std::string::npos,
+              "readLog frissiti a futas kozben parositott eszkozneveket");
+        std::string preview;
+        size_t bytes = 0;
+        bool conf = false;
+        svc.buildPreview("manual", "noSound", "", preview, bytes, conf);
+        CHECK(preview.find("UjonnanParositottTelefon") == std::string::npos && preview.find("<name>") != std::string::npos,
+              "buildPreview frissiti a futas kozben parositott eszkozneveket");
+        svc.stop();
+        std::error_code ec;
+        fs::remove_all(dynDir, ec);
+    }
+
     cleanup();
     if (g_failures > 0) {
         std::cerr << "[test_report_sender] " << g_failures << " hiba.\n";

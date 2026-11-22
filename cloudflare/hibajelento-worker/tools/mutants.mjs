@@ -21,6 +21,9 @@ const MUTANTS = [
   ["M12", "src/scrub.ts", "a helyi URL utáni útvonal megmarad", "if (pe - i > 1) {", "if (false) {"],
   ["M13", "src/scrub.ts", "e-mail: a pont és a + nem a név része (a név eleje szivárog)", '"._%+-".includes(s[l - 1])', '"_%-".includes(s[l - 1])'],
   ["M14", "src/index.ts", "a tisztítatlan jelentés kerül a D1-be", "const body = JSON.stringify(clean);", "const body = JSON.stringify(v.report);"],
+  ["M15", "src/scrub.ts", "[WS Bridge] eszköznevek tisztítása kimarad", "  s = scrubBridgeDeviceNames(s);\n", ""],
+  ["M16", "src/scrub.ts", "DMI-lánc tisztítása kimarad", "  s = scrubDmiStrings(s);\n", ""],
+  ["M17", "src/scrub.ts", "USB-útvonal kivétel kimarad az IPv4-ből", "if (ok && parts === 4 && endOk && !kernel && !usbPath)", "if (ok && parts === 4 && endOk && !kernel)"],
 ];
 
 let failed = 0;

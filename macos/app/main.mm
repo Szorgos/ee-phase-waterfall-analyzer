@@ -528,6 +528,12 @@ struct Core {
         for (const auto& n : aq::report::namesFromJson(linux_store::loadRemoteTargets())) hc.scrubNames.push_back(n);
         if (!c->health.start(hc)) std::cerr << "[Hibajelentés] A diagnosztikai mappa nem írható: " << diagDir << "\n";
         c->reportService.start(hc.dir, hc.logPath, hc.scrubNames, hc.enabled);
+        c->reportService.setNamesProvider([] {
+            std::vector<std::string> names;
+            for (const auto& n : aq::report::namesFromJson(linux_store::loadRemote())) names.push_back(n);
+            for (const auto& n : aq::report::namesFromJson(linux_store::loadRemoteTargets())) names.push_back(n);
+            return names;
+        });
     }
     c->healthTick();
 

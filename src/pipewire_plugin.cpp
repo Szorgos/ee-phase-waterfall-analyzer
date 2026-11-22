@@ -350,7 +350,27 @@ std::string asoundSummary() {
         s.resize(static_cast<size_t>(f.gcount()));
         return s;
     };
-    std::string out = readCapped("/proc/asound/cards", 4096);
+    std::string rawCards = readCapped("/proc/asound/cards", 4096);
+    // Az ALSA SOF meghajtók (sof-hda-dsp, sof-soundwire stb.) a 2. sorba (longname) a gép teljes DMI-láncát
+    // (gyártó-típus-sorozatszám-alaplap) írják: ezt nem tesszük bele a diagnosztikai állapotba.
+    std::string out;
+    out.reserve(rawCards.size());
+    bool redactNext = false;
+    size_t pos = 0;
+    while (pos < rawCards.size()) {
+        const size_t nl = rawCards.find('\n', pos);
+        const size_t end = (nl == std::string::npos) ? rawCards.size() : nl;
+        const std::string line = rawCards.substr(pos, end - pos);
+        if (redactNext && !line.empty() && (line[0] == ' ' || line[0] == '\t')) {
+            out += "                      <dmi>";
+            redactNext = false;
+        } else {
+            out += line;
+            redactNext = (line.find("]: sof-") != std::string::npos || line.find("]: SOF") != std::string::npos);
+        }
+        if (nl != std::string::npos) { out += '\n'; pos = nl + 1; }
+        else break;
+    }
     if (DIR* d = opendir("/proc/asound")) {
         std::vector<std::string> cards;
         while (const dirent* e = readdir(d)) {
@@ -1441,6 +1461,12 @@ int main(int argc, char* argv[]) {
         for (const auto& n : aq::report::namesFromJson(linux_store::loadRemoteTargets())) hc.scrubNames.push_back(n);
         if (!health.start(hc)) std::cerr << "[Hibajelentés] A diagnosztikai mappa nem írható: " << diagDir << "\n";
         reportService.start(hc.dir, hc.logPath, hc.scrubNames, hc.enabled);
+        reportService.setNamesProvider([] {
+            std::vector<std::string> names;
+            for (const auto& n : aq::report::namesFromJson(linux_store::loadRemote())) names.push_back(n);
+            for (const auto& n : aq::report::namesFromJson(linux_store::loadRemoteTargets())) names.push_back(n);
+            return names;
+        });
     }
     health.setSection("system", systemSectionJson());
     // A motor állapota az állapotfájlba (2 s-onként, a PipeWire fő szálán; az őrszál csak ezt a másolatot olvassa)
