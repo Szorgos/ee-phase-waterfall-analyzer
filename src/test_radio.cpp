@@ -3,6 +3,7 @@
 // ICY metaadat, átirányítás, lejátszási lista, megszakadás és újracsatlakozás, elakadás, tiltott címek (átirányítás
 // után is), nem támogatott formátumok, megszakítás, a FilePlayer és a vezérlő / híd üzenetei.
 // A hangfájlok: tests/data/player_stereo44.{mp3,ogg,flac}, player_stereo48.opus.
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -55,6 +56,78 @@ static std::vector<uint8_t> icyStream(const std::vector<uint8_t>& audio, size_t 
         while (m.size() % 16) m += '\0';
         out.push_back(static_cast<uint8_t>(m.size() / 16));
         out.insert(out.end(), m.begin(), m.end());
+    }
+    return out;
+}
+
+// ---- Ogg FLAC (láncolt rádióadás, mint a valódi FLAC-adóknál: számonként új logikai folyam új sorozatszámmal)
+
+static uint32_t oggCrc(const uint8_t* p, size_t n) {
+    static uint32_t tab[256];
+    static bool init = false;
+    if (!init) {
+        for (uint32_t i = 0; i < 256; ++i) {
+            uint32_t r = i << 24;
+            for (int k = 0; k < 8; ++k) r = (r & 0x80000000u) ? (r << 1) ^ 0x04C11DB7u : (r << 1);
+            tab[i] = r;
+        }
+        init = true;
+    }
+    uint32_t crc = 0;
+    for (size_t i = 0; i < n; ++i) crc = (crc << 8) ^ tab[((crc >> 24) ^ p[i]) & 0xFF];
+    return crc;
+}
+
+static void oggPage(std::vector<uint8_t>& out, const std::vector<uint8_t>& body, uint8_t flags, uint32_t serial, uint32_t seq, uint64_t granule) {
+    std::vector<uint8_t> pg = { 'O', 'g', 'g', 'S', 0, flags };
+    for (int i = 0; i < 8; ++i) pg.push_back(static_cast<uint8_t>(granule >> (8 * i)));
+    for (int i = 0; i < 4; ++i) pg.push_back(static_cast<uint8_t>(serial >> (8 * i)));
+    for (int i = 0; i < 4; ++i) pg.push_back(static_cast<uint8_t>(seq >> (8 * i)));
+    for (int i = 0; i < 4; ++i) pg.push_back(0);
+    std::vector<uint8_t> segs;
+    size_t left = body.size();
+    while (left >= 255) { segs.push_back(255); left -= 255; }
+    segs.push_back(static_cast<uint8_t>(left));
+    pg.push_back(static_cast<uint8_t>(segs.size()));
+    pg.insert(pg.end(), segs.begin(), segs.end());
+    pg.insert(pg.end(), body.begin(), body.end());
+    const uint32_t crc = oggCrc(pg.data(), pg.size());
+    for (int i = 0; i < 4; ++i) pg[22 + i] = static_cast<uint8_t>(crc >> (8 * i));
+    out.insert(out.end(), pg.begin(), pg.end());
+}
+
+/** Natív FLAC fájlból egy Ogg FLAC lánc (fejléc-csomag, Vorbis-megjegyzés TITLE / ARTIST, a keretek lapokban). */
+static std::vector<uint8_t> oggFlacChain(const std::vector<uint8_t>& flac, uint32_t serial, const std::string& artist, const std::string& title) {
+    std::vector<uint8_t> out;
+    if (flac.size() < 42 || std::memcmp(flac.data(), "fLaC", 4) != 0) return out;
+    size_t p = 4;
+    std::vector<uint8_t> streaminfo;
+    for (;;) {
+        const bool last = (flac[p] & 0x80) != 0;
+        const int type = flac[p] & 0x7F;
+        const size_t len = (size_t(flac[p + 1]) << 16) | (size_t(flac[p + 2]) << 8) | flac[p + 3];
+        if (type == 0) streaminfo.assign(flac.begin() + p + 4, flac.begin() + p + 4 + len);
+        p += 4 + len;
+        if (last) break;
+    }
+    std::vector<uint8_t> head = { 0x7F, 'F', 'L', 'A', 'C', 1, 0, 0, 1, 'f', 'L', 'a', 'C', 0x00, 0, 0, 34 };
+    head.insert(head.end(), streaminfo.begin(), streaminfo.end());
+    uint32_t seq = 0;
+    oggPage(out, head, 0x02, serial, seq++, 0);
+    auto le32 = [](std::vector<uint8_t>& v, uint32_t x) { for (int i = 0; i < 4; ++i) v.push_back(static_cast<uint8_t>(x >> (8 * i))); };
+    std::vector<uint8_t> vc;
+    const std::string vendor = "teszt", c1 = "TITLE=" + title, c2 = "ARTIST=" + artist;
+    le32(vc, static_cast<uint32_t>(vendor.size())); vc.insert(vc.end(), vendor.begin(), vendor.end());
+    le32(vc, 2);
+    le32(vc, static_cast<uint32_t>(c1.size())); vc.insert(vc.end(), c1.begin(), c1.end());
+    le32(vc, static_cast<uint32_t>(c2.size())); vc.insert(vc.end(), c2.begin(), c2.end());
+    std::vector<uint8_t> vcBlock = { 0x84, static_cast<uint8_t>(vc.size() >> 16), static_cast<uint8_t>(vc.size() >> 8), static_cast<uint8_t>(vc.size()) };
+    vcBlock.insert(vcBlock.end(), vc.begin(), vc.end());
+    oggPage(out, vcBlock, 0, serial, seq++, 0);
+    for (size_t off = p; off < flac.size(); off += 4000) {
+        const size_t n = std::min<size_t>(4000, flac.size() - off);
+        std::vector<uint8_t> body(flac.begin() + off, flac.begin() + off + n);
+        oggPage(out, body, off + n >= flac.size() ? 0x04 : 0, serial, seq++, 0);
     }
     return out;
 }
@@ -428,6 +501,19 @@ static void testNetwork() {
             const auto& body = path == "/ogg" ? ogg : path == "/opus" ? opus : flac;
             sv.sendStr(s, std::string("HTTP/1.1 200 OK\r\nContent-Type: ") + (path == "/flac" ? "audio/flac" : "audio/ogg") + "\r\n\r\n");
             sv.sendAll(s, body.data(), body.size());
+        } else if (path == "/oggflac" || path == "/vorbis2") {
+            // két lánc egymás után (mint a számváltás egy valódi adásban), utána bont
+            std::vector<uint8_t> body;
+            if (path == "/oggflac") {
+                body = oggFlacChain(flac, 0x1111, "Egy", "Első");
+                const auto second = oggFlacChain(flac, 0x2222, "Kettő", "Második");
+                body.insert(body.end(), second.begin(), second.end());
+            } else {
+                body = ogg;
+                body.insert(body.end(), ogg.begin(), ogg.end());
+            }
+            sv.sendStr(s, "HTTP/1.1 200 OK\r\nContent-Type: audio/ogg\r\n\r\n");
+            sv.sendAll(s, body.data(), body.size());
         } else if (path == "/stall") {
             sv.sendStr(s, "HTTP/1.1 200 OK\r\nContent-Type: audio/mpeg\r\n\r\n");
             sv.sendAll(s, mp3.data(), mp3.size());
@@ -512,6 +598,32 @@ static void testNetwork() {
                 const auto t0 = Clock::now();
                 while (msSince(t0) < 4000 && (loud < 30000 || d->status().reconnects < 1)) loud += pump(*d, 200);
                 CHECK(loud > 10000, "%s: szól (%zu keret), újracsatlakozás: %llu", o.path, loud, static_cast<unsigned long long>(d->status().reconnects));
+            }
+        }
+    }
+    {
+        // láncolt Ogg: a második lánc (új sorozatszám, új cím) is szól, ugyanazon a kapcsolaton, újracsatlakozás nélkül
+        for (const char* path : { "/oggflac", "/vorbis2" }) {
+            RadioDecoder::Config cfg = testCfg(srv.url(path));
+            cfg.backoffBaseMs = 5000;   // a mérés alatt ne jöjjön új kapcsolat
+            cfg.maxBufferSec = 30.0;    // az egész adás elférjen
+            auto d = RadioDecoder::open(cfg, err);
+            CHECK(d != nullptr, "%s: megnyílik (%s)", path, err.c_str());
+            if (!d) continue;
+            std::vector<std::string> seen;
+            size_t loud = 0;
+            const auto t0 = Clock::now();
+            while (msSince(t0) < 2500) {
+                loud += pump(*d, 100);
+                std::string ti, ar, al;
+                d->liveInfo(ti, ar, al);
+                if (seen.empty() || seen.back() != ti) seen.push_back(ti);
+            }
+            const RadioStatus st = d->status();
+            CHECK(loud > 80000 && srv.hits(path) == 1, "%s: mindkét lánc szól egy kapcsolaton (%zu hangos keret, %d kérés)", path, loud, srv.hits(path));
+            if (std::string(path) == "/oggflac") {
+                const bool both = std::find(seen.begin(), seen.end(), "Első") != seen.end() && seen.back() == "Második";
+                CHECK(st.codec == "flac" && both, "%s: a „most szól” a láncváltásnál vált (utolsó: „%s”)", path, seen.empty() ? "" : seen.back().c_str());
             }
         }
     }
@@ -627,8 +739,66 @@ static void testNetwork() {
     }
 }
 
+/**
+ * Élő próba valódi állomással (csak kézzel, a CI-ben nem fut): AQ_RADIO_LIVE="cím1 cím2 …", AQ_RADIO_LIVE_SEC (alapból 25).
+ * Állomásonként kiírja az állapotot, a formátumot, a „most szól” szöveget és az újracsatlakozásokat.
+ */
+static int liveProbe(const char* urls) {
+    const char* secEnv = std::getenv("AQ_RADIO_LIVE_SEC");
+    const int sec = secEnv ? std::max(5, std::atoi(secEnv)) : 25;
+    std::string all = urls;
+    size_t pos = 0;
+    while (pos < all.size()) {
+        size_t sp = all.find(' ', pos);
+        if (sp == std::string::npos) sp = all.size();
+        const std::string url = all.substr(pos, sp - pos);
+        pos = sp + 1;
+        if (url.empty()) continue;
+        std::printf("\n== %s\n", url.c_str());
+        RadioDecoder::Config c;
+        c.url = url;
+        c.station = "Élő próba";
+        std::string err;
+        const auto t0 = Clock::now();
+        auto d = RadioDecoder::open(c, err);
+        if (!d) { std::printf("  [HIBA] nem nyílt meg: %s (%.0f ms)\n", err.c_str(), msSince(t0)); ++g_fail; continue; }
+        std::printf("  megnyílt %.0f ms alatt: %u Hz, %u csatorna\n", msSince(t0), d->sampleRate(), d->channels());
+        size_t loud = 0, total = 0;
+        std::vector<float> buf(1024 * d->channels());
+        const auto t1 = Clock::now();
+        double nextPrint = 0;
+        // valós idejű olvasás (mint a lejátszó): 1024 keret, utána annyi várakozás, amennyi ideig szólna
+        while (msSince(t1) < sec * 1000.0) {
+            const size_t n = d->read(buf.data(), 1024);
+            if (n == 0) { std::printf("  a folyam véget ért\n"); break; }
+            total += n;
+            for (size_t i = 0; i < n; ++i) if (std::fabs(buf[i * d->channels()]) > 1e-4f) ++loud;
+            if (msSince(t1) >= nextPrint) {
+                const RadioStatus st = d->status();
+                std::string ti, ar, al;
+                d->liveInfo(ti, ar, al);
+                std::printf("  %5.1f s  %-12s %s %d kbit/s  újracsatl.: %llu  eldobva: %llu  szól: %s – %s\n", msSince(t1) / 1000.0,
+                            stateName(st.state), st.codec.c_str(), st.bitrate, static_cast<unsigned long long>(st.reconnects),
+                            static_cast<unsigned long long>(st.droppedFrames), ar.c_str(), ti.c_str());
+                nextPrint += 5000;
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(static_cast<long long>(1e6 * 1024 / d->sampleRate())));
+        }
+        const RadioStatus st = d->status();
+        std::printf("  összesen %zu keret, ebből hangos %.0f%%, újracsatlakozás %llu, utolsó hiba: %s\n", total,
+                    total ? 100.0 * loud / total : 0.0, static_cast<unsigned long long>(st.reconnects), st.error.c_str());
+        if (total == 0 || loud * 2 < total) ++g_fail;
+    }
+    return g_fail ? 1 : 0;
+}
+
 int main() {
     net::startup();
+    if (const char* live = std::getenv("AQ_RADIO_LIVE")) {
+        const int rc = liveProbe(live);
+        net::cleanup();
+        return rc;
+    }
     std::printf("Internetrádió teszt\n");
     testPure();
     testResolve();
