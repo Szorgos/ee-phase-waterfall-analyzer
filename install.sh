@@ -42,7 +42,10 @@ msg_text() {
         inst.unknownDistro2) f='a saját ablakhoz: gtk3 és webkit2gtk-4.1 (vagy 4.0) fejlesztői csomag.' ;;
         inst.noWebkit) f='A WebKitGTK csomag nem települt: a felület böngészőben fog megnyílni.' ;;
         inst.noPwCli) f='A pw-cli nem található. Biztosan PipeWire a hangrendszered?' ;;
-        inst.systemPkg) f='Csomagból telepített Aqulify is van a gépen (/usr/bin). Ez a telepítés (~/.local) mostantól elsőbbséget kap; ha a csomagost használnád, utána futtasd az ./uninstall.sh-t.' ;;
+        inst.systemPkg) f='Csomagból telepített Aqulify is van a gépen (/usr/bin/aqulify-engine). A két párhuzamos telepítés összeakadhat; javasolt a csomagkezelővel frissíteni a script helyett.' ;;
+        inst.systemPkgAsk) f='Biztosan mellé telepíted a ~/.local alá? [i/N] ' ;;
+        inst.systemPkgAbort) f='Telepítés megszakítva (a csomagból telepített Aqulify érintetlen maradt).' ;;
+        inst.systemPkgNonInt) f='Nem interaktív futásnál nem telepítünk csomag mellé. Ha mégis szeretnéd: ./install.sh --force' ;;
         inst.step2) f='[2/6] Fordítás...' ;;
         inst.rnnSystem) f='RNNoise (beszéd zajcsökkentés): a rendszer csomagja.' ;;
         inst.rnnDownload) f='RNNoise modell letöltése (Ubuntu archívum, kb. 19 MB)...' ;;
@@ -89,6 +92,9 @@ msg_text() {
         inst.noWebkit) f='El paquete WebKitGTK no está instalado: la interfaz se abrirá en un navegador.' ;;
         inst.noPwCli) f='No se encontró pw-cli. ¿Tu sistema de sonido es realmente PipeWire?' ;;
         inst.systemPkg) f='También hay un paquete de Aqulify instalado (/usr/bin). Esta instalación (~/.local) tendrá prioridad a partir de ahora; para usar la empaquetada, ejecuta ./uninstall.sh después.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Compilando...' ;;
         inst.rnnSystem) f='RNNoise (reducción de ruido de voz): paquete del sistema.' ;;
         inst.rnnDownload) f='Descargando el modelo RNNoise (archivo de Ubuntu, unos 19 MB)...' ;;
@@ -135,6 +141,9 @@ msg_text() {
         inst.noWebkit) f='Le paquet WebKitGTK n'"'"'est pas installé : l'"'"'interface s'"'"'ouvrira dans un navigateur.' ;;
         inst.noPwCli) f='pw-cli est introuvable. Votre système audio est-il bien PipeWire ?' ;;
         inst.systemPkg) f='Une version empaquetée d'"'"'Aqulify est également installée (/usr/bin). Cette installation (~/.local) est désormais prioritaire ; pour utiliser la version empaquetée, lancez ./uninstall.sh par la suite.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Compilation...' ;;
         inst.rnnSystem) f='RNNoise (réduction du bruit de la voix) : paquet système.' ;;
         inst.rnnDownload) f='Téléchargement du modèle RNNoise (archive Ubuntu, environ 19 Mo)...' ;;
@@ -181,6 +190,9 @@ msg_text() {
         inst.noWebkit) f='未安装 WebKitGTK 软件包：界面将在浏览器中打开。' ;;
         inst.noPwCli) f='未找到 pw-cli。你的声音系统确实是 PipeWire 吗？' ;;
         inst.systemPkg) f='系统还安装了打包版 Aqulify（/usr/bin）。此安装（~/.local）自此具有更高优先级；如需使用打包版，请在此后运行 ./uninstall.sh。' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] 正在编译...' ;;
         inst.rnnSystem) f='RNNoise（语音降噪）：系统软件包。' ;;
         inst.rnnDownload) f='正在下载 RNNoise 模型（Ubuntu 归档，约 19 MB）...' ;;
@@ -227,6 +239,9 @@ msg_text() {
         inst.noWebkit) f='Das WebKitGTK-Paket wurde nicht installiert: Die Benutzeroberfläche wird im Browser geöffnet.' ;;
         inst.noPwCli) f='pw-cli wurde nicht gefunden. Ist PipeWire wirklich Ihr Soundsystem?' ;;
         inst.systemPkg) f='Ein paketiertes Aqulify ist ebenfalls installiert (/usr/bin). Diese Installation (~/.local) hat ab jetzt Vorrang; um die paketierte Version zu nutzen, führen Sie danach ./uninstall.sh aus.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Erstellung...' ;;
         inst.rnnSystem) f='RNNoise (Sprach-Rauschunterdrückung): Systempaket.' ;;
         inst.rnnDownload) f='RNNoise-Modell wird heruntergeladen (Ubuntu-Archiv, ca. 19 MB)...' ;;
@@ -273,6 +288,9 @@ msg_text() {
         inst.noWebkit) f='Il pacchetto WebKitGTK non è installato: l'"'"'interfaccia si aprirà nel browser.' ;;
         inst.noPwCli) f='pw-cli non trovato. Il tuo sistema audio è davvero PipeWire?' ;;
         inst.systemPkg) f='È installata anche una versione di sistema di Aqulify (/usr/bin). Questa installazione (~/.local) ha la priorità d'"'"'ora in avanti; per usare quella di sistema, esegui successivamente ./uninstall.sh.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Compilazione...' ;;
         inst.rnnSystem) f='RNNoise (riduzione del rumore vocale): pacchetto di sistema.' ;;
         inst.rnnDownload) f='Download del modello RNNoise (archivio Ubuntu, circa 19 MB)...' ;;
@@ -319,6 +337,9 @@ msg_text() {
         inst.noWebkit) f='Het WebKitGTK-pakket is niet geïnstalleerd: de interface wordt geopend in een browser.' ;;
         inst.noPwCli) f='pw-cli niet gevonden. Is PipeWire werkelijk uw geluidssysteem?' ;;
         inst.systemPkg) f='Er is ook een pakketversie van Aqulify geïnstalleerd (/usr/bin). Deze installatie (~/.local) heeft vanaf nu voorrang; om de pakketversie te gebruiken, voert u daarna ./uninstall.sh uit.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Compileren...' ;;
         inst.rnnSystem) f='RNNoise (spraakruisonderdrukking): systeempakket.' ;;
         inst.rnnDownload) f='RNNoise-model downloaden (Ubuntu-archief, circa 19 MB)...' ;;
@@ -365,6 +386,9 @@ msg_text() {
         inst.noWebkit) f='Pakiet WebKitGTK nie został zainstalowany: interfejs otworzy się w przeglądarce.' ;;
         inst.noPwCli) f='Nie znaleziono pw-cli. Czy Twoim serwerem dźwięku na pewno jest PipeWire?' ;;
         inst.systemPkg) f='W systemie zainstalowany jest również Aqulify z pakietu (/usr/bin). Ta instalacja (~/.local) ma od teraz pierwszeństwo; aby używać wersji z pakietu, uruchom potem ./uninstall.sh.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Kompilacja...' ;;
         inst.rnnSystem) f='RNNoise (redukcja szumu mowy): pakiet systemowy.' ;;
         inst.rnnDownload) f='Pobieranie modelu RNNoise (archiwum Ubuntu, ok. 19 MB)...' ;;
@@ -411,6 +435,9 @@ msg_text() {
         inst.noWebkit) f='Пакет WebKitGTK не установлен: интерфейс откроется в браузере.' ;;
         inst.noPwCli) f='Утилита pw-cli не найдена. Ваша звуковая система точно PipeWire?' ;;
         inst.systemPkg) f='В системе также установлен пакет Aqulify (/usr/bin). Эта установка (~/.local) теперь имеет приоритет; чтобы использовать пакетную версию, выполните затем ./uninstall.sh.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Сборка...' ;;
         inst.rnnSystem) f='RNNoise (шумоподавление речи): системный пакет.' ;;
         inst.rnnDownload) f='Загрузка модели RNNoise (архив Ubuntu, около 19 МБ)...' ;;
@@ -457,6 +484,9 @@ msg_text() {
         inst.noWebkit) f='O pacote WebKitGTK não foi instalado: a interface será aberta no navegador.' ;;
         inst.noPwCli) f='pw-cli não encontrado. O PipeWire é realmente o seu sistema de som?' ;;
         inst.systemPkg) f='Um Aqulify empacotado também está instalado (/usr/bin). Esta instalação (~/.local) tem precedência; para usar a versão empacotada, execute ./uninstall.sh depois.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Compilação...' ;;
         inst.rnnSystem) f='RNNoise (redução de ruído de voz): pacote do sistema.' ;;
         inst.rnnDownload) f='Baixando modelo RNNoise (arquivo Ubuntu, aprox. 19 MB)...' ;;
@@ -503,6 +533,9 @@ msg_text() {
         inst.noWebkit) f='Pachetul WebKitGTK nu a fost instalat: interfața se va deschide în browser.' ;;
         inst.noPwCli) f='pw-cli nu a fost găsit. PipeWire este într-adevăr sistemul dvs. de sunet?' ;;
         inst.systemPkg) f='Este instalat și un Aqulify din pachet (/usr/bin). Această instalare (~/.local) are prioritate; pentru a utiliza versiunea împachetată, rulați ./uninstall.sh ulterior.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Compilare...' ;;
         inst.rnnSystem) f='RNNoise (reducerea zgomotului vocal): pachet de sistem.' ;;
         inst.rnnDownload) f='Descărcare model RNNoise (arhivă Ubuntu, aprox. 19 MB)...' ;;
@@ -549,6 +582,9 @@ msg_text() {
         inst.noWebkit) f='Το πακέτο WebKitGTK δεν εγκαταστάθηκε: η διεπαφή θα ανοίξει στο πρόγραμμα περιήγησης.' ;;
         inst.noPwCli) f='Το pw-cli δεν βρέθηκε. Είναι πράγματι το PipeWire το σύστημα ήχου σας;' ;;
         inst.systemPkg) f='Είναι επίσης εγκατεστημένο ένα πακέτο Aqulify (/usr/bin). Αυτή η εγκατάσταση (~/.local) έχει προτεραιότητα· για να χρησιμοποιήσετε την έκδοση πακέτου, εκτελέστε το ./uninstall.sh αργότερα.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Μεταγλώττιση...' ;;
         inst.rnnSystem) f='RNNoise (μείωση θορύβου φωνής): πακέτο συστήματος.' ;;
         inst.rnnDownload) f='Λήψη μοντέλου RNNoise (αρχείο Ubuntu, περίπου 19 MB)...' ;;
@@ -595,6 +631,9 @@ msg_text() {
         inst.noWebkit) f='WebKitGTK paketi yüklenmedi: arayüz tarayıcıda açılacak.' ;;
         inst.noPwCli) f='pw-cli bulunamadı. PipeWire gerçekten ses sisteminiz mi?' ;;
         inst.systemPkg) f='Paketlenmiş bir Aqulify da kurulu (/usr/bin). Bu kurulum (~/.local) artık önceliklidir; paketlenmiş sürümü kullanmak için daha sonra ./uninstall.sh çalıştırın.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Derleniyor...' ;;
         inst.rnnSystem) f='RNNoise (konuşma gürültüsü azaltma): sistem paketi.' ;;
         inst.rnnDownload) f='RNNoise modeli indiriliyor (Ubuntu arşivi, yaklaşık 19 MB)...' ;;
@@ -641,6 +680,9 @@ msg_text() {
         inst.noWebkit) f='WebKitGTK-pakettia ei asennettu: käyttöliittymä avataan selaimessa.' ;;
         inst.noPwCli) f='Komentoa pw-cli ei löytynyt. Onko PipeWire varmasti äänijärjestelmäsi?' ;;
         inst.systemPkg) f='Myös paketoitu Aqulify on asennettuna (/usr/bin). Tämä asennus (~/.local) on ensisijainen; käyttääksesi paketoitua versiota suorita myöhemmin ./uninstall.sh.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Käännetään...' ;;
         inst.rnnSystem) f='RNNoise (puheen kohinanvaimennus): järjestelmäpaketti.' ;;
         inst.rnnDownload) f='Ladataan RNNoise-malli (Ubuntu-arkisto, n. 19 Mt)...' ;;
@@ -687,6 +729,9 @@ msg_text() {
         inst.noWebkit) f='WebKitGTK-pakken blev ikke installeret: brugerfladen åbnes i browseren.' ;;
         inst.noPwCli) f='pw-cli blev ikke fundet. Er PipeWire virkelig dit lydsystem?' ;;
         inst.systemPkg) f='En pakket Aqulify er også installeret (/usr/bin). Denne installation (~/.local) har forrang; kør ./uninstall.sh senere for at bruge den pakkede version.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Kompilerer...' ;;
         inst.rnnSystem) f='RNNoise (stemmestøjreduktion): systempakke.' ;;
         inst.rnnDownload) f='Downloader RNNoise-model (Ubuntu-arkiv, ca. 19 MB)...' ;;
@@ -733,6 +778,9 @@ msg_text() {
         inst.noWebkit) f='WebKitGTK-pakken ble ikke installert: brukergrensesnittet åpnes i nettleseren.' ;;
         inst.noPwCli) f='pw-cli ble ikke funnet. Er PipeWire virkelig lydsystemet ditt?' ;;
         inst.systemPkg) f='En pakket Aqulify er også installert (/usr/bin). Denne installasjonen (~/.local) har nå forrang; kjør ./uninstall.sh senere for å bruke den pakkede versjonen.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Kompilerer...' ;;
         inst.rnnSystem) f='RNNoise (stemmestøyreduksjon): systempakke.' ;;
         inst.rnnDownload) f='Laster ned RNNoise-modell (Ubuntu-arkiv, ca. 19 MB)...' ;;
@@ -779,6 +827,9 @@ msg_text() {
         inst.noWebkit) f='WebKitGTK-paketet installerades inte: gränssnittet öppnas i webbläsaren.' ;;
         inst.noPwCli) f='pw-cli hittades inte. Är PipeWire verkligen ditt ljudsystem?' ;;
         inst.systemPkg) f='Ett paketerat Aqulify är också installerat (/usr/bin). Denna installation (~/.local) har företräde; kör ./uninstall.sh senare för att använda den paketerade versionen.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Kompilerar...' ;;
         inst.rnnSystem) f='RNNoise (röstbrusreducering): systempaket.' ;;
         inst.rnnDownload) f='Laddar ner RNNoise-modell (Ubuntu-arkiv, ca 19 MB)...' ;;
@@ -825,6 +876,9 @@ msg_text() {
         inst.noWebkit) f='חבילת WebKitGTK לא הותקנה: הממשק ייפתח בדפדפן.' ;;
         inst.noPwCli) f='pw-cli לא נמצא. האם PipeWire היא אכן מערכת השמע שלך?' ;;
         inst.systemPkg) f='מותקנת גם חבילת Aqulify מהפצה (/usr/bin). התקנה זו (~/.local) מקבלת עדיפות; כדי להשתמש בגרסת החבילה, הפעל את ./uninstall.sh מאוחר יותר.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] מהדר...' ;;
         inst.rnnSystem) f='RNNoise (הפחתת רעשי קול): חבילת מערכת.' ;;
         inst.rnnDownload) f='מוריד מודל RNNoise (ארכיון Ubuntu, כ-19 MB)...' ;;
@@ -871,6 +925,9 @@ msg_text() {
         inst.noWebkit) f='WebKitGTKパッケージがインストールされませんでした: UIはブラウザで開きます。' ;;
         inst.noPwCli) f='pw-cliが見つかりません。PipeWireは本当にオーディオシステムとして動作していますか？' ;;
         inst.systemPkg) f='パッケージ版のAqulifyもインストールされています (/usr/bin)。このインストール (~/.local) が優先されます。パッケージ版を使用するには、後で ./uninstall.sh を実行してください。' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] コンパイル中...' ;;
         inst.rnnSystem) f='RNNoise (音声ノイズ低減): システムパッケージ。' ;;
         inst.rnnDownload) f='RNNoiseモデルをダウンロードしています (Ubuntuアーカイブ、約19 MB)...' ;;
@@ -917,6 +974,9 @@ msg_text() {
         inst.noWebkit) f='WebKitGTK 패키지가 설치되지 않았습니다: 브라우저에서 UI가 열립니다.' ;;
         inst.noPwCli) f='pw-cli를 찾을 수 없습니다. 오디오 시스템으로 PipeWire를 사용하고 계십니까?' ;;
         inst.systemPkg) f='패키지된 Aqulify도 설치되어 있습니다 (/usr/bin). 이 설치본(~/.local)이 우선권을 가집니다. 패키지 버전을 사용하려면 나중에 ./uninstall.sh 를 실행하십시오.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] 컴파일 중...' ;;
         inst.rnnSystem) f='RNNoise (음성 노이즈 감소): 시스템 패키지.' ;;
         inst.rnnDownload) f='RNNoise 모델 다운로드 중 (Ubuntu 아카이브, 약 19 MB)...' ;;
@@ -963,6 +1023,9 @@ msg_text() {
         inst.noWebkit) f='Balíček WebKitGTK nebyl nainstalován: rozhraní se otevře v prohlížeči.' ;;
         inst.noPwCli) f='pw-cli nebyl nalezen. Používáte skutečně PipeWire jako zvukový systém?' ;;
         inst.systemPkg) f='V systému je nainstalována také balíčková verze Aqulify (/usr/bin). Tato instalace (~/.local) má nyní přednost; pro použití balíčkové verze spusťte později ./uninstall.sh.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Kompilace...' ;;
         inst.rnnSystem) f='RNNoise (redukce šumu řeči): systémový balíček.' ;;
         inst.rnnDownload) f='Stahování modelu RNNoise (archiv Ubuntu, cca 19 MB)...' ;;
@@ -1009,6 +1072,9 @@ msg_text() {
         inst.noWebkit) f='Пакет WebKitGTK не встановлено: інтерфейс відкриється у веб-переглядачі.' ;;
         inst.noPwCli) f='pw-cli не знайдено. Чи дійсно PipeWire є вашою звуковою системою?' ;;
         inst.systemPkg) f='Також знайдено пакетну версію Aqulify (/usr/bin). Ця інсталяція (~/.local) тепер має пріоритет; щоб використовувати версію з пакета, виконайте пізніше ./uninstall.sh.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Компіляція...' ;;
         inst.rnnSystem) f='RNNoise (зменшення шуму мовлення): системний пакет.' ;;
         inst.rnnDownload) f='Завантаження моделі RNNoise (архів Ubuntu, прибл. 19 МБ)...' ;;
@@ -1056,7 +1122,10 @@ msg_text() {
         inst.unknownDistro2) f='for the app window: gtk3 and webkit2gtk-4.1 (or 4.0) development packages.' ;;
         inst.noWebkit) f='The WebKitGTK package was not installed: the interface will open in a browser.' ;;
         inst.noPwCli) f='pw-cli was not found. Is your sound system really PipeWire?' ;;
-        inst.systemPkg) f='A packaged Aqulify is also installed (/usr/bin). This installation (~/.local) takes precedence from now on; to use the packaged one instead, run ./uninstall.sh afterwards.' ;;
+        inst.systemPkg) f='A packaged Aqulify is already installed (/usr/bin/aqulify-engine). Two installations can conflict; updating via your package manager is recommended.' ;;
+        inst.systemPkgAsk) f='Install alongside it under ~/.local anyway? [y/N] ' ;;
+        inst.systemPkgAbort) f='Installation cancelled (the packaged Aqulify was left untouched).' ;;
+        inst.systemPkgNonInt) f='Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force' ;;
         inst.step2) f='[2/6] Building...' ;;
         inst.rnnSystem) f='RNNoise (speech noise reduction): system package.' ;;
         inst.rnnDownload) f='Downloading the RNNoise model (Ubuntu archive, about 19 MB)...' ;;
@@ -1134,6 +1203,26 @@ echo -e "${BLUE}================================================================
 
 [ "$(id -u)" -eq 0 ] && [ -z "${AQULIFY_ALLOW_ROOT:-}" ] && die "$(msg inst.noRoot)"
 
+FORCE_INSTALL="${AQ_FORCE_INSTALL:-0}"
+for arg in "$@"; do
+    [ "$arg" = "--force" ] && FORCE_INSTALL=1
+done
+
+# Két telepítés megelőzése: ha a gépen már van csomagból telepített Aqulify (/usr/bin/aqulify-engine),
+# ne telepítsünk csendben mellé a ~/.local alá (kérdezzünk rá, nem-interaktívan álljunk meg).
+if [ -x /usr/bin/aqulify-engine ] && [ "$FORCE_INSTALL" != "1" ]; then
+    warn "$(msg inst.systemPkg)"
+    if [ -t 0 ]; then
+        read -r -p "$(msg inst.systemPkgAsk)" _dual_ans
+        case "$_dual_ans" in
+            i|I|y|Y) ;;
+            *) say "$(msg inst.systemPkgAbort)"; exit 0 ;;
+        esac
+    else
+        die "$(msg inst.systemPkgNonInt)"
+    fi
+fi
+
 # ------------------------------------------------------------------ 1. csomagok
 say "\n$(msg inst.step1)"
 . /etc/os-release 2>/dev/null || die "$(msg inst.noOsRelease)"
@@ -1168,8 +1257,6 @@ esac
 [ "$GUI_PKGS_OK" = 1 ] || warn "$(msg inst.noWebkit)"
 
 command -v pw-cli >/dev/null 2>&1 || warn "$(msg inst.noPwCli)"
-# Két telepítés egyszerre (T28): a ~/.config/systemd/user szolgáltatás felülírja a csomagét, így a ~/.local motor indul
-if [ -x /usr/bin/aqulify-engine ]; then warn "$(msg inst.systemPkg)"; fi
 
 # ------------------------------------------------------------------ 2. fordítás
 say "\n$(msg inst.step2)"

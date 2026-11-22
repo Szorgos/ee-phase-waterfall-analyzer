@@ -44,5 +44,8 @@
   "inst.sumLog": "Αρχείο καταγραφής: journalctl --user -u aqulify -f",
   "inst.sumUninstall": "Απεγκατάσταση:  ./uninstall.sh",
   "uninst.purged": "Το Aqulify και οι αποθηκευμένες ρυθμίσεις καταργήθηκαν.",
-  "uninst.removed": "Το Aqulify καταργήθηκε. (Οι ρυθμίσεις διατηρήθηκαν στο: ~/.config/aqulify – για διαγραφή: ./uninstall.sh --purge)"
+  "uninst.removed": "Το Aqulify καταργήθηκε. (Οι ρυθμίσεις διατηρήθηκαν στο: ~/.config/aqulify – για διαγραφή: ./uninstall.sh --purge)",
+  "inst.systemPkgAsk": "Install alongside it under ~/.local anyway? [y/N] ",
+  "inst.systemPkgAbort": "Installation cancelled (the packaged Aqulify was left untouched).",
+  "inst.systemPkgNonInt": "Refusing to install alongside a system package in non-interactive mode. To override: ./install.sh --force"
 }

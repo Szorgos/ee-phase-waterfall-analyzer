@@ -1072,5 +1072,14 @@
   "hl.adminLabel": "リモート管理者",
   "hl.removeBtn": "削除",
   "hl.resetHelpTitle": "アクセスを失った場合",
-  "hl.resetHelpText": "所有者端末を紛失・機種変更した場合は、SDカードをPCに挿し、ブートパーティションに空の aqulify-reset ファイルを作成してください。次回起動時にAqulifyが古いペアリングとファイルを削除し、初期設定モードに戻ります。"
+  "hl.resetHelpText": "所有者端末を紛失・機種変更した場合は、SDカードをPCに挿し、ブートパーティションに空の aqulify-reset ファイルを作成してください。次回起動時にAqulifyが古いペアリングとファイルを削除し、初期設定モードに戻ります。",
+  "dual.title": "Two Aqulify installations found on this computer",
+  "dual.desc": "Currently running: {running}, while {other} is also installed. To remove the old script installation, run in a terminal:",
+  "dual.kindScript": "script installation (~/.local)",
+  "dual.kindPkg": "system package (/usr/bin)",
+  "dual.copy": "Copy command",
+  "dual.copied": "Copied",
+  "dual.dismiss": "Dismiss",
+  "dual.otherTitle": "Another Aqulify engine is already running on this computer",
+  "dual.otherDesc": "An older Aqulify instance is already using port 47810 or the PipeWire audio device. To stop the duplicate instance and clean up, run in a terminal:"
 }

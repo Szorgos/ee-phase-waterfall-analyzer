@@ -1072,5 +1072,14 @@
   "hl.adminLabel": "Távoli admin",
   "hl.removeBtn": "Eltávolítás",
   "hl.resetHelpTitle": "Hozzáférés elvesztése",
-  "hl.resetHelpText": "Ha a tulajdonos-telefon elveszett vagy lecserélted, tedd az SD-kártyát a számítógépbe, és hozz létre a boot partíción egy üres aqulify-reset fájlt. A következő indításkor az Aqulify törli a régi párosításokat és a fájlt, majd újra beállítható."
+  "hl.resetHelpText": "Ha a tulajdonos-telefon elveszett vagy lecserélted, tedd az SD-kártyát a számítógépbe, és hozz létre a boot partíción egy üres aqulify-reset fájlt. A következő indításkor az Aqulify törli a régi párosításokat és a fájlt, majd újra beállítható.",
+  "dual.title": "Két Aqulify-telepítés van ezen a gépen",
+  "dual.desc": "Most a(z) {running} fut, de a(z) {other} is telepítve van. A régi scriptes telepítés eltávolításához futtasd terminálban:",
+  "dual.otherTitle": "Egy másik Aqulify-motor is fut ezen a gépen",
+  "dual.otherDesc": "Egy régebbi (zár nélküli) Aqulify-példány már foglalja a 47810-es portot vagy a PipeWire hangeszközt. A kettős futás megszüntetéséhez futtasd terminálban:",
+  "dual.kindScript": "scriptes telepítés (~/.local)",
+  "dual.kindPkg": "rendszercsomag (/usr/bin)",
+  "dual.copy": "Parancs másolása",
+  "dual.copied": "Másolva",
+  "dual.dismiss": "Elrejtés"
 }

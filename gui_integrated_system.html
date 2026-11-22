@@ -5248,6 +5248,17 @@ var qrcode = function() {
       <button type="button" class="mini-btn" id="btnErPrevNo" onclick="errRepDismissPrevious()" data-i18n="er.no">Nem</button>
     </div>
   </div>
+  <div id="dualInstallBanner" class="remote-banner" style="flex-wrap:wrap;" hidden>
+    <div style="display:flex; flex-direction:column; gap:4px; flex:1 1 320px;">
+      <span id="dualInstallTitle" style="font-weight:600;" data-i18n="dual.title">Két Aqulify-telepítés van ezen a gépen</span>
+      <span id="dualInstallDesc" class="ao-hint" style="margin:0;"></span>
+      <code id="dualInstallCmd" style="font-size:11px; user-select:all; background:var(--aq-input); padding:4px 8px; border-radius:4px; word-break:break-all;"></code>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <button type="button" class="mini-btn" id="btnDualCopy" onclick="dualInstallCopyCmd()" data-i18n="dual.copy">Parancs másolása</button>
+      <button type="button" class="mini-btn" id="btnDualDismiss" onclick="dualInstallDismiss()" data-i18n="dual.dismiss">Elrejtés</button>
+    </div>
+  </div>
   <div id="hiresDspNote" class="dsp-warn" hidden><span id="hiresDspNoteText"></span></div>
   <div id="loadAdvBanner" class="remote-banner" style="flex-wrap:wrap;" hidden>
     <div style="display:flex; flex-direction:column; gap:2px; flex:1 1 320px;">
@@ -10847,6 +10858,49 @@ function errRepDismissPrevious() {
   moSend({ type: "error_report_dismiss_previous" });
 }
 
+let dualInstallDismissed = false;
+let dualInstallLastCmd = "";
+function dualInstallOnStatus(di) {
+  const b = document.getElementById("dualInstallBanner");
+  if (!b) return;
+  if (!di || typeof di !== "object" || !di.removeCmd || dualInstallDismissed) {
+    b.hidden = true;
+    return;
+  }
+  const titleEl = document.getElementById("dualInstallTitle");
+  const desc = document.getElementById("dualInstallDesc");
+  if (di.reason === "other_running") {
+    if (titleEl) titleEl.textContent = t("dual.otherTitle");
+    if (desc) desc.textContent = t("dual.otherDesc");
+  } else {
+    if (titleEl) titleEl.textContent = t("dual.title");
+    const kindLabel = (k) => (k === "script" ? t("dual.kindScript") : t("dual.kindPkg"));
+    if (desc) {
+      desc.textContent = t("dual.desc")
+        .replace("{running}", kindLabel(di.running))
+        .replace("{other}", kindLabel(di.other));
+    }
+  }
+  const cmdEl = document.getElementById("dualInstallCmd");
+  dualInstallLastCmd = String(di.removeCmd || "");
+  if (cmdEl) cmdEl.textContent = dualInstallLastCmd;
+  b.hidden = false;
+}
+function dualInstallCopyCmd() {
+  if (!dualInstallLastCmd) return;
+  const btn = document.getElementById("btnDualCopy");
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(dualInstallLastCmd).then(() => {
+      if (btn) { btn.textContent = t("dual.copied"); setTimeout(() => { btn.textContent = t("dual.copy"); }, 1800); }
+    }).catch(() => {});
+  }
+}
+function dualInstallDismiss() {
+  dualInstallDismissed = true;
+  const b = document.getElementById("dualInstallBanner");
+  if (b) b.hidden = true;
+}
+
 function errRepSetFeedback(kind, text, copyId) {
   const fb = document.getElementById("errRepFeedback");
   if (!fb) return;
@@ -13966,6 +14020,7 @@ function initPipewireBridge() {
           engineStatus = data;
           updOnEngineStatus(data.update);
           if (data.error_report) errRepOnStatus(data.error_report);
+          dualInstallOnStatus(data.dualInstall);
           updateEngineBadge();
           if (aoCaps) { aoRenderPath(); laRender(); upsRenderStatus(); }
           if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);

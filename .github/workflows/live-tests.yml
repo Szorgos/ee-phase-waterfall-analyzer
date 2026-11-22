@@ -44,12 +44,13 @@ jobs:
         run: |
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_PIPEWIRE_PLUGIN=ON -DBUILD_LINUX_GUI=OFF \
             -DAQULIFY_RNNOISE_MODEL_DIR="$RUNNER_TEMP/rnnoise-model"
-          cmake --build build -j"$(nproc)" --target aqulify-engine test_alsa test_room test_mic_live test_measure_live test_pw_reconnect
+          cmake --build build -j"$(nproc)" --target aqulify-engine test_alsa test_room test_mic_live test_measure_live test_pw_reconnect test_linux_lock
 
-      - name: ALSA-kimenet és PipeWire újracsatlakozás egységtesztje
+      - name: ALSA-kimenet, PipeWire újracsatlakozás és Linux példányzár egységtesztje
         run: |
           ./build/test_alsa
           ./build/test_pw_reconnect
+          ./build/test_linux_lock
 
       - name: Szobamérés – mag, mikrofonfelvétel és teljes mérés élőben
         run: |

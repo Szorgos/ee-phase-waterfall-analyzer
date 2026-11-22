@@ -1072,5 +1072,14 @@
   "hl.adminLabel": "מנהל מרחוק",
   "hl.removeBtn": "הסרה",
   "hl.resetHelpTitle": "אובדן גישה",
-  "hl.resetHelpText": "אם טלפון הבעלים אבד או הוחלף, הכנס את כרטיס ה-SD למחשב וצור קובץ ריק בשם aqulify-reset במחיצת האתחול. בהפעלה הבאה Aqulify ימחק את השיוכים הישנים ואת הקובץ ויחזור למצב הגדרה."
+  "hl.resetHelpText": "אם טלפון הבעלים אבד או הוחלף, הכנס את כרטיס ה-SD למחשב וצור קובץ ריק בשם aqulify-reset במחיצת האתחול. בהפעלה הבאה Aqulify ימחק את השיוכים הישנים ואת הקובץ ויחזור למצב הגדרה.",
+  "dual.title": "Two Aqulify installations found on this computer",
+  "dual.desc": "Currently running: {running}, while {other} is also installed. To remove the old script installation, run in a terminal:",
+  "dual.kindScript": "script installation (~/.local)",
+  "dual.kindPkg": "system package (/usr/bin)",
+  "dual.copy": "Copy command",
+  "dual.copied": "Copied",
+  "dual.dismiss": "Dismiss",
+  "dual.otherTitle": "Another Aqulify engine is already running on this computer",
+  "dual.otherDesc": "An older Aqulify instance is already using port 47810 or the PipeWire audio device. To stop the duplicate instance and clean up, run in a terminal:"
 }

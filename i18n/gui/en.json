@@ -1072,5 +1072,14 @@
   "hl.adminLabel": "Remote admin",
   "hl.removeBtn": "Remove",
   "hl.resetHelpTitle": "Lost access",
-  "hl.resetHelpText": "If the owner phone is lost or replaced, insert the SD card into a computer and create an empty aqulify-reset file on the boot partition. On the next startup, Aqulify clears old pairings and the file, and returns to setup mode."
+  "hl.resetHelpText": "If the owner phone is lost or replaced, insert the SD card into a computer and create an empty aqulify-reset file on the boot partition. On the next startup, Aqulify clears old pairings and the file, and returns to setup mode.",
+  "dual.title": "Two Aqulify installations found on this computer",
+  "dual.desc": "Currently running: {running}, while {other} is also installed. To remove the old script installation, run in a terminal:",
+  "dual.otherTitle": "Another Aqulify engine is already running on this computer",
+  "dual.otherDesc": "An older Aqulify instance is already using port 47810 or the PipeWire audio device. To stop the duplicate instance and clean up, run in a terminal:",
+  "dual.kindScript": "script installation (~/.local)",
+  "dual.kindPkg": "system package (/usr/bin)",
+  "dual.copy": "Copy command",
+  "dual.copied": "Copied",
+  "dual.dismiss": "Dismiss"
 }

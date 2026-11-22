@@ -28,6 +28,7 @@
 #include "report_sender.hpp"
 #include "library_bridge.hpp"
 #include "linux_store.hpp"
+#include "linux_instance_lock.hpp"
 #include "live_upsample.hpp"
 #include "load_advisor.hpp"
 #include "media_mpris.hpp"
@@ -459,6 +460,27 @@ int main(int argc, char* argv[]) {
     aq::report::Service reportService;
     // Nyelv (a hangbeállításokban látszó kimenet neve): a felületen választott, különben a munkameneté
     aq_i18n::init();
+
+    // Egyetlen-példány zár (flock): még a PipeWire virtuális eszköz (aqulify_sink) létrehozása előtt!
+    // Kilépéskor és összeomláskor is automatikusan felszabadul; eltérő XDG_CONFIG_HOME esetén nem ütközik.
+    linux_inst::InstanceLock instLock;
+    {
+        linux_inst::ExistingInfo ex;
+        const std::string lockPath = linux_store::configDir(true) + "/engine.lock";
+        if (!instLock.acquire(lockPath, selfExePath(), AQULIFY_VERSION, &ex)) {
+            std::cerr << "[Info] Az Aqulify motor már fut (PID " << ex.pid
+                      << (ex.exe.empty() ? "" : ", " + ex.exe)
+                      << (ex.version.empty() ? "" : ", v" + ex.version)
+                      << "); ez a példány (" << selfExePath() << ") nem indul el másodszor.\n";
+            if (!ex.exe.empty() && ex.exe != selfExePath()) {
+                std::cerr << "[Figyelem] Két eltérő Aqulify-telepítés van a gépen. A régi scriptes telepítés eltávolításához:\n"
+                          << "  rm -f ~/.config/systemd/user/aqulify.service ~/.local/bin/aqulify-engine ~/.local/bin/aqulify-gui && "
+                          << "systemctl --user daemon-reload && systemctl --user restart aqulify.service\n";
+            }
+            return 0;
+        }
+    }
+
     std::vector<int> ports(std::begin(kEnginePorts), std::end(kEnginePorts));
     for (int i = 1; i + 1 < argc; ++i)
         if (std::strcmp(argv[i], "--port") == 0) ports = { std::atoi(argv[i + 1]) };
@@ -610,7 +632,20 @@ int main(int argc, char* argv[]) {
     // A telepítés módja (csomag, COPR, install.sh): a felület ebből tudja, milyen paranccsal frissíthető a program
     const char* installKind = update::linuxInstallName(update::detectLinuxInstall(selfExePath(), update::realFs()));
     std::cout << "[Frissítés] A telepítés módja: " << installKind << "\n";
-    const std::string installJson = std::string(",\"install\":\"") + installKind + "\"";
+    const char* homeEnv = std::getenv("HOME");
+    const char* xdgCfg = std::getenv("XDG_CONFIG_HOME");
+    const std::string homeStr = homeEnv ? homeEnv : "";
+    const std::string cfgBase = (xdgCfg && *xdgCfg) ? std::string(xdgCfg) : (homeStr.empty() ? std::string() : (homeStr + "/.config"));
+    const std::string selfExe = selfExePath();
+    const linux_inst::DualInstallInfo dualInstall = linux_inst::detectDualInstall(installKind, selfExe, homeStr, cfgBase);
+    if (dualInstall.detected) {
+        std::cout << "[Figyelem] Két Aqulify-telepítés van a gépen (fut: " << dualInstall.runningKind
+                  << " [" << dualInstall.runningPath << "], másik: " << dualInstall.otherKind
+                  << " [" << dualInstall.otherPath << "]). A régi scriptes telepítés eltávolítása:\n  "
+                  << dualInstall.removeCmd << "\n";
+    }
+    std::atomic<bool> defaultPortBusy{false};
+    const std::string installJsonBase = std::string(",\"install\":\"") + installKind + "\"";
     cb.statusFields = [&]() {
         auto now = std::chrono::steady_clock::now();
         if (now - lastSinkQuery > std::chrono::seconds(2)) {
@@ -648,7 +683,13 @@ int main(int argc, char* argv[]) {
         else
 #endif
             s += cachedVolumeJson;
-        s += installJson;
+        s += installJsonBase;
+        if (dualInstall.detected) {
+            s += dualInstall.statusJsonField();
+        } else if (defaultPortBusy.load(std::memory_order_relaxed) || node.hasDuplicateAqulifySink()) {
+            s += linux_inst::detectOtherRunningEngine(defaultPortBusy.load(std::memory_order_relaxed),
+                                                      node.hasDuplicateAqulifySink(), installKind, selfExe).statusJsonField();
+        }
 #if defined(AQ_HAVE_SYSTEMD)
         s += std::string(",\"tray\":") + (tray.registered() ? "true" : "false");
 #endif
@@ -1425,7 +1466,11 @@ int main(int argc, char* argv[]) {
     std::unique_ptr<WebSocketBridge> bridge;
     for (int p : ports) {
         auto b = std::make_unique<WebSocketBridge>(p);
-        if (b->start(cb)) { bridge = std::move(b); break; }
+        if (b->start(cb)) {
+            if (ports.size() > 1 && p != kEnginePorts[0]) defaultPortBusy.store(true, std::memory_order_relaxed);
+            bridge = std::move(b);
+            break;
+        }
         std::cout << "[Info] A " << p << " port foglalt, a következőt próbálom.\n";
     }
     if (!bridge) {

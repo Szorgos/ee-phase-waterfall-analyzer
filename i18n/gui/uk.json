@@ -1072,5 +1072,14 @@
   "hl.adminLabel": "Віддалений адмін",
   "hl.removeBtn": "Видалити",
   "hl.resetHelpTitle": "Втрата доступу",
-  "hl.resetHelpText": "Якщо телефон власника втрачено або замінено, вставте SD-карту в комп’ютер і створіть порожній файл aqulify-reset на завантажувальному розділі. Під час наступного запуску Aqulify видалить старі сполучення та файл і повернеться в режим налаштування."
+  "hl.resetHelpText": "Якщо телефон власника втрачено або замінено, вставте SD-карту в комп’ютер і створіть порожній файл aqulify-reset на завантажувальному розділі. Під час наступного запуску Aqulify видалить старі сполучення та файл і повернеться в режим налаштування.",
+  "dual.title": "Two Aqulify installations found on this computer",
+  "dual.desc": "Currently running: {running}, while {other} is also installed. To remove the old script installation, run in a terminal:",
+  "dual.kindScript": "script installation (~/.local)",
+  "dual.kindPkg": "system package (/usr/bin)",
+  "dual.copy": "Copy command",
+  "dual.copied": "Copied",
+  "dual.dismiss": "Dismiss",
+  "dual.otherTitle": "Another Aqulify engine is already running on this computer",
+  "dual.otherDesc": "An older Aqulify instance is already using port 47810 or the PipeWire audio device. To stop the duplicate instance and clean up, run in a terminal:"
 }

@@ -179,6 +179,8 @@ public:
     uint32_t overruns() const { return overruns_.load(std::memory_order_relaxed); }
     /** Fut-e az ébren tartó hangfolyam. */
     bool keepAwakeActive() const { return keepAliveStreaming_.load(); }
+    /** Van-e egynél több aqulify_sink csomópont a PipeWire-gráfban (pl. régi, zár nélküli motor is fut). */
+    bool hasDuplicateAqulifySink() const { return duplicateAqulifySink_.load(std::memory_order_relaxed); }
 
     /** A k-adik kimenet (1–3) saját lánca, pl. impulzusválasz egy zónának (submitIr szálbiztos). */
     AetherChain& zoneChain(int k) { return multi_.chain(k); }
@@ -363,6 +365,8 @@ private:
     std::unordered_map<uint32_t, std::string> knownSinksById_; // külső (nem aqulify*) Audio/Sink csomópontok
     std::mutex targetMu_;
     std::string preferredTarget_;                     // felhasználó által választott kimenet (ha van)
+    std::vector<uint32_t> aqulifySinkIds_;            // látott aqulify_sink csomópontok (dupla példány jelzéséhez)
+    std::atomic<bool> duplicateAqulifySink_{false};
     std::atomic<uint32_t> lastQuantum_{0};
     std::atomic<float> loadAvg_{0.0f}, loadPeak_{0.0f};
     std::atomic<uint32_t> overruns_{0};
@@ -693,7 +697,12 @@ private:
         const char* nodeName = spa_dict_lookup(props, PW_KEY_NODE_NAME);
         if (!cls) return;
         if (std::strcmp(cls, "Audio/Sink") == 0) {
-            if (nodeName && !pw_reconnect::isOwnAqulifyNode(nodeName, self->sinkName_)) {
+            // Második Aqulify virtuális eszköz észlelése (régi, flock nélküli 2.7.0–2.8.3 motor)
+            if (nodeName && self->sinkName_ == nodeName) {
+                if (std::find(self->aqulifySinkIds_.begin(), self->aqulifySinkIds_.end(), id) == self->aqulifySinkIds_.end())
+                    self->aqulifySinkIds_.push_back(id);
+                self->duplicateAqulifySink_.store(self->aqulifySinkIds_.size() > 1, std::memory_order_relaxed);
+            } else if (nodeName && !pw_reconnect::isOwnAqulifyNode(nodeName, self->sinkName_)) {
                 self->knownSinksById_[id] = nodeName;
                 const auto a = self->reconnect_.onNewExternalSink(nodeName, self->sinkName_);
                 if (a.schedule) self->scheduleReconnect(a.delayMs);
@@ -713,7 +722,13 @@ private:
     }
 
     static void onRegistryGlobalRemove(void* data, uint32_t id) {
-        static_cast<AetherSinkNode*>(data)->knownSinksById_.erase(id);
+        auto* self = static_cast<AetherSinkNode*>(data);
+        self->knownSinksById_.erase(id);
+        auto it = std::find(self->aqulifySinkIds_.begin(), self->aqulifySinkIds_.end(), id);
+        if (it != self->aqulifySinkIds_.end()) {
+            self->aqulifySinkIds_.erase(it);
+            self->duplicateAqulifySink_.store(self->aqulifySinkIds_.size() > 1, std::memory_order_relaxed);
+        }
     }
 
     /** Az ébren tartás visszakapcsolása a szünet végén (a fő hurok szálán). */

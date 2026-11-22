@@ -1072,5 +1072,14 @@
   "hl.adminLabel": "远程管理员",
   "hl.removeBtn": "移除",
   "hl.resetHelpTitle": "丢失访问权限",
-  "hl.resetHelpText": "如果所有者手机丢失或更换，请将 SD 卡插入电脑，并在启动分区创建一个空的 aqulify-reset 文件。下次启动时，Aqulify 会清除旧配对和该文件，并恢复到初始设置模式。"
+  "hl.resetHelpText": "如果所有者手机丢失或更换，请将 SD 卡插入电脑，并在启动分区创建一个空的 aqulify-reset 文件。下次启动时，Aqulify 会清除旧配对和该文件，并恢复到初始设置模式。",
+  "dual.title": "Two Aqulify installations found on this computer",
+  "dual.desc": "Currently running: {running}, while {other} is also installed. To remove the old script installation, run in a terminal:",
+  "dual.kindScript": "script installation (~/.local)",
+  "dual.kindPkg": "system package (/usr/bin)",
+  "dual.copy": "Copy command",
+  "dual.copied": "Copied",
+  "dual.dismiss": "Dismiss",
+  "dual.otherTitle": "Another Aqulify engine is already running on this computer",
+  "dual.otherDesc": "An older Aqulify instance is already using port 47810 or the PipeWire audio device. To stop the duplicate instance and clean up, run in a terminal:"
 }
