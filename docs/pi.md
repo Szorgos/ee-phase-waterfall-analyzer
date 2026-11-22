@@ -136,6 +136,25 @@ Hivatalos rendszerdokumentáció:
 
 ---
 
+## 6a. Hálózati vevő (lejátszás telefonról vagy számítógépről)
+
+Az Aqulify hálózati vevőként is megjelenhet: a telefon vagy a számítógép hálózati hangkimenet-választójában az Aqulify neve látszik, és az odaküldött hang az Aqulify DSP-láncán (EQ, konvolver stb.) át szól. **Alapból ki van kapcsolva.**
+
+- **Működés:** a vevő a rendszer `shairport-sync` programja (MIT licenc, külön csomag). A motor gyermekfolyamatként indítja, a hangját az „Aqulify” eszközre (`aqulify_sink`) irányítja, összeomláskor újraindítja, a motor leállásakor leállítja. A motor hangútja nem változik.
+- **Telepítés:**
+  ```bash
+  sudo apt install shairport-sync pipewire-pulse
+  sudo systemctl disable --now shairport-sync
+  ```
+  A második sor a csomag saját, rendszerszintű vevőjét kapcsolja ki (a Debian-csomag ezt magától elindítja; az a hangot az Aqulify megkerülésével, közvetlenül a hangkártyára küldené). Az Aqulify a saját példányát a felhasználó munkamenetében indítja. A `pipewire-pulse` a régebbi (4.3 előtti) `shairport-sync` miatt kell, amelynek még nincs közvetlen PipeWire-kimenete.
+- **Bekapcsolás:** a felületen a Kimenet menü → *Hangkimenet (haladó)* → *Hálózati vevő* jelölőnégyzet; ugyanitt állítható a kijelzett név (üresen: „Aqulify”). Ha a program nincs telepítve, a felület ezt jelzi és megmutatja a telepítő parancsot.
+- **Minőség (őszintén):** veszteségmentes, de kb. CD-minőségű (44,1 kHz / 16 bit). A küldő eszköz hangerője digitálisan hat, és a hangot a PipeWire a gráf mintavételére alakítja: ez az út **nem bitpontos és nem hi-res**. Bitpontos lejátszáshoz a beépített lejátszó való.
+- **Hálózat:** TCP 7110, UDP 6110–6119 és az mDNS (UDP 5353, `avahi-daemon`). Tűzfal (pl. `ufw`) esetén ezeket engedélyezni kell. A saját portok miatt egy esetleg futó rendszerszintű vevővel sem ütközik.
+- **Újabb protokoll-változat (több szobás szinkron):** ha a `shairport-sync` így készült, ehhez a külön `nqptp` rendszerszolgáltatás kell (UDP 319/320). Nélküle a program a klasszikus módban fut, ez egy eszközről szóló lejátszáshoz elég.
+- **Napló:** `journalctl --user -u aqulify | grep "Hálózati vevő"`.
+
+---
+
 ## 7. Eltávolítás
 
 ```bash
@@ -154,3 +173,4 @@ Az alábbi pontok valódi Raspberry Pi hiányában (eddig emulált környezetben
 - **Valós idejű CPU-mérés (`test_dsp`) valódi hardveren.**
 - **Grafikus felület (`aqulify-gui`) és 3D vízesés HDMI-n.**
 - **Kódos párosítás SSH-n (`aqulify-engine --pair`):** valódi Pi-n SSH-n keresztül, fizikai telefonnal.
+- **Hálózati vevő (6a):** valódi telefonról valódi Pi-re még nem próbáltuk; az automatikus teszt hamis programmal ellenőrzi az indítást, az újraindítást és a leállítást.

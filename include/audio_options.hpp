@@ -16,6 +16,7 @@
 #include <string>
 
 #include "mini_json.hpp"
+#include "net_receiver.hpp"
 
 namespace ee_analyzer::audioopt {
 
@@ -94,6 +95,10 @@ struct AudioOptions {
     // indításkori visszaállítástól függetlenül él.
     bool errorReports = false;
     bool errorReportsAsked = false;   // az első indításkori kérdésre már válaszolt-e a felhasználó
+    // Hálózati vevő (net_receiver.hpp): alapból KI. Hálózati szolgáltatás, ezért (a hibajelentéshez hasonlóan) az
+    // indításkori visszaállítástól függetlenül él. A név üresen az alapnév ("Aqulify").
+    bool netRecv = false;
+    std::string netRecvName;
 
     bool operator==(const AudioOptions& o) const {
         return bufferFrames == o.bufferFrames && keepAwake == o.keepAwake && rateMode == o.rateMode &&
@@ -109,7 +114,7 @@ struct AudioOptions {
                upsampleCustom == o.upsampleCustom && upsampleThreads == o.upsampleThreads &&
                upsampleMaxRate == o.upsampleMaxRate && dedicatedCore == o.dedicatedCore && loadAdvisor == o.loadAdvisor &&
                asio == o.asio && asioDriver == o.asioDriver && errorReports == o.errorReports &&
-               errorReportsAsked == o.errorReportsAsked;
+               errorReportsAsked == o.errorReportsAsked && netRecv == o.netRecv && netRecvName == o.netRecvName;
     }
     bool operator!=(const AudioOptions& o) const { return !(*this == o); }
 };
@@ -184,6 +189,7 @@ inline void sanitize(AudioOptions& o) {
     for (char c : o.asioDriver) {
         if (static_cast<unsigned char>(c) < 0x20) { o.asioDriver.clear(); break; }
     }
+    o.netRecvName = aq::netrecv::sanitizeName(o.netRecvName);
 }
 
 /** Szöveg JSON-karakterlánc tartalmaként (idézőjel és visszaper escape; a vezérlőkaraktert a sanitize kiszűri). */
@@ -240,7 +246,9 @@ inline std::string toJson(const AudioOptions& o) {
          ",\"asio\":" + (o.asio ? "true" : "false") +
          ",\"asioDriver\":\"" + jsonStringBody(o.asioDriver) + "\"" +
          ",\"errorReports\":" + (o.errorReports ? "true" : "false") +
-         ",\"errorReportsAsked\":" + (o.errorReportsAsked ? "true" : "false") + "}";
+         ",\"errorReportsAsked\":" + (o.errorReportsAsked ? "true" : "false") +
+         ",\"netRecv\":" + (o.netRecv ? "true" : "false") +
+         ",\"netRecvName\":\"" + jsonStringBody(o.netRecvName) + "\"}";
     return s;
 }
 
@@ -295,6 +303,8 @@ inline AudioOptions fromJson(const json::Value& v, AudioOptions base = {}) {
     if (const json::Value* x = v.get("asioDriver"); x && x->type == T::String) base.asioDriver = x->str;
     if (const json::Value* x = v.get("errorReports"); x && x->type == T::Bool) base.errorReports = x->b;
     if (const json::Value* x = v.get("errorReportsAsked"); x && x->type == T::Bool) base.errorReportsAsked = x->b;
+    if (const json::Value* x = v.get("netRecv"); x && x->type == T::Bool) base.netRecv = x->b;
+    if (const json::Value* x = v.get("netRecvName"); x && x->type == T::String) base.netRecvName = x->str.substr(0, 256);
 
     sanitize(base);
     return base;

@@ -26,6 +26,8 @@ BuildRequires:  libappstream-glib
 
 Requires:       pipewire
 Requires:       hicolor-icon-theme
+# Hálózati vevő (alapból ki): a rendszer shairport-sync programja, a motor gyermekfolyamatként indítja
+Recommends:     shairport-sync
 # three.js r128 (MIT) a 3D vízeséshez
 Provides:       bundled(js-three) = 0.128.0
 # Az EasyEffects-szel azonos DSP könyvtárak (third_party/)

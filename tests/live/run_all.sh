@@ -17,6 +17,9 @@ run "Motor: haladó hangkimenet" python3 -I "$HERE/audio_opts_live.py"
 run "Motor: felmintavételezés" python3 -I "$HERE/upsample_live.py"
 run "Motor: felmintavételezés az élő úton" python3 -I "$HERE/live_upsample_live.py"
 run "Motor: nagy felbontás (352,8–768 kHz)" python3 -I "$HERE/hires_live.py"
+NR_DIR=$(mktemp -d)
+PATH="$HERE/fake_netrecv:$PATH" AQ_FAKE_NETRECV_DIR="$NR_DIR" run "Motor: hálózati vevő (hamis program)" python3 -I "$HERE/netrecv_live.py"
+rm -rf "$NR_DIR"
 echo; echo "=================== Motor: PipeWire újracsatlakozás (AQ-19)"
 bash "$HERE/reconnect_live.sh" "$BUILD" || fail=1
 if command -v node >/dev/null 2>&1 && node -e "require('playwright')" 2>/dev/null; then
