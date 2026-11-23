@@ -35,6 +35,7 @@
 #include <cmath>
 #include <chrono>
 #include <cstdio>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -424,15 +425,43 @@ public:
     SourceManager(win::WasapiLoopback& lb, PlayerDsp& dsp, player::WinPlayerOutput& out)
         : loopback_(lb), player_(dsp), playerOut_(out), apoDevice_(loadApoDevice()) {}
 
+    /**
+     * A rendszerhang-híd (win_live_bridge.hpp) állapota. Amíg a híd fut, a programok hangja a virtuális kábelen át a
+     * motor DSP-láncába (PlayerDsp) jut, és onnan kizárólagos módban a valódi eszközre: a DSP a motorban fut. A kábelen
+     * is ott lehet az Equalizer APO a pluginnal; az ilyenkor átengedő beállítást kap, különben a lánc kétszer futna le.
+     */
+    void setBridgeActiveFn(std::function<bool()> fn) {
+        std::lock_guard<std::mutex> lk(mutex_);
+        bridgeActiveFn_ = std::move(fn);
+    }
+
+    /** A pluginnak szánt beállítás: a híd alatt minden modul ki (bitpontos átengedés), egyébként a felület lánca. */
+    static ParamData pluginParamsFor(const ParamData& p, bool bridgeActive) {
+        if (!bridgeActive) return p;
+        ParamData q = p;
+        q.flags &= kFlagInitialized;
+        return q;
+    }
+
     /** Rendszeresen hívandó (pl. 250 ms-onként) a fő szálból. */
     void poll(const ParamData& currentParams) {
         std::lock_guard<std::mutex> lk(mutex_);
+        lastParams_ = currentParams;   // a motor mostani lánca (a pushParams is frissíti)
+        // A rendszerhang-híd indulása / leállása: a forrás és a plugin beállítása ehhez igazodik
+        const bool bridge = bridgeActiveFn_ && bridgeActiveFn_() && !playerOut_.exclusiveActive();
+        if (bridge != bridgeActive_) {
+            bridgeActive_ = bridge;
+            std::cout << (bridge ? "[Forrás] Rendszerhang-híd: a DSP a motorban fut (a kábelen a plugin átenged).\n"
+                                 : "[Forrás] A rendszerhang-híd leállt: a DSP ismét az Equalizer APO pluginban fut.\n");
+            if (mapping_.state()) mapping_.state()->params.write(pluginParamsFor(lastParams_, bridgeActive_));
+        }
         if (!mapping_.state()) {
             if (mapping_.open()) {
                 std::cout << "[Plugin] Aqulify EQ APO plugin közös memória megtalálva ("
                           << (mapping_.isGlobal() ? "Global" : "Local") << ").\n";
                 // A GUI-ban beállított, mentett lánc átadása a pluginnak
-                mapping_.state()->params.write(currentParams);   // a régi, leállás előtti lánc nem maradhat élesen
+                // (a régi, leállás előtti lánc nem maradhat élesen; a híd alatt átengedés)
+                mapping_.state()->params.write(pluginParamsFor(lastParams_, bridgeActive_));
                 {
                     std::lock_guard<std::mutex> ik(irMutex_);
                     if (!ir_.empty()) win::writeIrBlock(mapping_.state()->ir, ir_);
@@ -469,7 +498,8 @@ public:
         // ne szemetelje tele a naplót (a tényleges jelforrás-váltás fent azonnal megtörténik).
         const int srcKind = alive ? kSrcApo : (rawPluginAlive ? kSrcLoopbackNoApo : kSrcLoopback);
         int loggedKind = 0;
-        if (sourceLog_.update(srcKind, GetTickCount64(), loggedKind)) {
+        // a híd alatt a forrás a motor (fent naplózva); a kábel plugin / loopback váltakozása nem érdekes
+        if (sourceLog_.update(srcKind, GetTickCount64(), loggedKind) && !bridgeActive_) {
             if (loggedKind == kSrcLoopbackNoApo)
                 std::cout << "[Forrás] A mostani eszközön nincs bekapcsolva az Equalizer APO: WASAPI loopback (csak "
                              "analízis); a plugin egy másik eszközön fut.\n";
@@ -545,6 +575,7 @@ public:
     double bassHarmonicsDb() {
         std::lock_guard<std::mutex> lk(mutex_);
         if (playerActive_) return playerOut_.dopActive() ? -100.0 : player_.bassHarmonicsDb();
+        if (bridgeActive_) return player_.bassHarmonicsDb();
         if (pluginActive_ && mapping_.state()) return mapping_.state()->bassHarmonicsDb.load();
         return -100.0;
     }
@@ -587,8 +618,9 @@ public:
 
     void pushParams(const ParamData& p) {
         std::lock_guard<std::mutex> lk(mutex_);
+        lastParams_ = p;
         player_.setParams(p);
-        if (mapping_.state()) mapping_.state()->params.write(p);
+        if (mapping_.state()) mapping_.state()->params.write(pluginParamsFor(p, bridgeActive_));
     }
 
     /** Rövid, emberi leírás a tálcaikonhoz. */
@@ -604,6 +636,11 @@ public:
             } else {
                 swprintf(buf, 96, L"WASAPI exclusive (%.1f kHz)", player_.sampleRate() / 1000.0);
             }
+            return buf;
+        }
+        if (bridgeActive_) {
+            wchar_t buf[96];
+            swprintf(buf, 96, L"Rendszerhang-híd (%.1f kHz)", player_.sampleRate() / 1000.0);
             return buf;
         }
         if (pluginActive_ && mapping_.state()) {
@@ -625,6 +662,12 @@ public:
             std::snprintf(buf, sizeof(buf), ",\"source\":\"%s\",\"dspActive\":%s,\"sr\":%u,\"gr\":%.2f",
                           asio ? (dop ? "ASIO (DSD)" : "ASIO") : dop ? "WASAPI exclusive (DoP)" : "WASAPI exclusive",
                           dop ? "false" : "true", sr, dop ? 0.0 : player_.gainReductionDb());
+            s += buf;
+            s += ",\"dspState\":\"active\"";
+        } else if (bridgeActive_) {
+            // Rendszerhang-híd: a lánc a motorban fut (a kábelen a plugin átenged), a mintavétel a valódi eszközé
+            std::snprintf(buf, sizeof(buf), ",\"source\":\"%s\",\"dspActive\":true,\"sr\":%u,\"gr\":%.2f",
+                          "System audio bridge", player_.sampleRate(), player_.gainReductionDb());
             s += buf;
             s += ",\"dspState\":\"active\"";
         } else if (pluginActive_ && mapping_.state()) {
@@ -674,6 +717,7 @@ public:
     std::string magicDiagJson() {
         std::lock_guard<std::mutex> lk(mutex_);
         if (playerActive_) return playerOut_.dopActive() ? std::string{} : player_.magicDiagJson();
+        if (bridgeActive_) return player_.magicDiagJson();
         if (!pluginActive_ || !mapping_.state()) return {};
         magic::MagicDiag d;
         if (!mapping_.state()->magicDiag.read(d)) return {};
@@ -748,6 +792,9 @@ private:
     bool playerActive_ = false;
     uint64_t playerReadPos_ = 0;
     uint64_t lastPlayerData_ = 0;
+    std::function<bool()> bridgeActiveFn_;
+    bool bridgeActive_ = false;      // a rendszerhang-híd fut: a DSP a motorban (PlayerDsp), a plugin átenged
+    ParamData lastParams_{};         // a felület lánca (a híd leállásakor ez megy vissza a pluginnak)
     bool pluginActive_ = false;
     uint64_t pluginReadPos_ = 0;
     uint64_t loopbackReadPos_ = 0;
@@ -956,6 +1003,8 @@ int main(int argc, char** argv) {
             return baseRate();
         };
     }
+    // A forrásválasztó tudja, mikor fut a híd: a DSP ilyenkor a motorban, a kábelen a plugin átenged (nincs kétszeres lánc)
+    sources.setBridgeActiveFn([&]() { return !filePlayer.hasTrack() && winLiveBridge.isActive(); });
     // Zenetár (2.x): a mentett zenei mappák (%APPDATA%\Aqulify\library.json), különben a Zene mappa
     library::MusicLibrary musicLibrary;
     // A lejátszási napló (3c2, %APPDATA%\Aqulify\stats.json): a sor előtt, mert a sor mérőszála a megszűnéséig hívhatja
