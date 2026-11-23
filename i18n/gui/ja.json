@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "システム音声アップサンプリング: 仮想オーディオケーブル（VB-Cable 等）が見つかりません。",
   "ups.liveNoOutput": "システム音声アップサンプリング: 別の物理 DAC / 出力デバイスが見つかりません（ループ防止）。",
   "ups.engineFftDD": "Aqulify FFT-DD（106ビット Double-Double）",
-  "ups.engineHintDD": "106ビット Double-Double（有効数字 約31桁）単段FFT + Kaiser-sincエンジン（HydrogenAudio SRC：99.85 %）。位相選択可能・ゼロ遅延フィルター。"
+  "ups.engineHintDD": "106ビット Double-Double（有効数字 約31桁）単段FFT + Kaiser-sincエンジン（HydrogenAudio SRC：99.85 %）。位相選択可能・ゼロ遅延フィルター。",
+  "dev.tabDevice": "デバイス",
+  "dev.tabOutput": "オーディオ出力",
+  "dev.tabPlayer": "プレーヤー",
+  "dev.tabRate": "サンプルレート",
+  "dev.tabGeneral": "一般",
+  "ups.downEngine": "ダウンサンプリング",
+  "ups.downSystem": "システム（従来どおり）",
+  "ups.downHint": "ファイルのサンプルレートが出力の対応範囲より高い場合（例：96 kHz の DAC で 192 kHz のファイル）、このエンジンでダウンサンプリングします。「システム」：従来どおりサウンドシステムのミキサーが変換します。"
 }

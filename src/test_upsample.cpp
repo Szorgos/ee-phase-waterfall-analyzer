@@ -62,7 +62,34 @@ concept HasUpsampleEngine = requires(T& u) {
 };
 
 // K2: Szabályok elméleti kiválasztó függvénye (független teszt-elvárás)
+// Lefelé alakítás elvárása: csak ha a kimenet a forrást nem tudja; „Kimenet maximuma”: a legnagyobb kisebb ráta,
+// a többi szabály: az egész arányú (azonos családú) ráta előbb, különben a legnagyobb kisebb (0: nincs)
+static uint32_t computeExpectedDownRate(int rule, uint32_t srcRate, const std::vector<uint32_t>& supported) {
+    uint32_t best = 0, family = 0;
+    for (uint32_t r : supported) {
+        if (r >= srcRate) continue;
+        best = std::max(best, r);
+        if (srcRate % r == 0) family = std::max(family, r);
+    }
+    if (rule == 3) return best;
+    return family > 0 ? family : best;
+}
+
+static uint32_t computeExpectedUpRate(int rule, uint32_t srcRate, const std::vector<uint32_t>& supported, const std::map<uint32_t, uint32_t>& customTable);
+
 static uint32_t computeExpectedTargetRate(int rule, uint32_t srcRate, const std::vector<uint32_t>& supported, const std::map<uint32_t, uint32_t>& customTable) {
+    const uint32_t up = rule == 0 ? 0 : computeExpectedUpRate(rule, srcRate, supported, customTable);
+    if (up > 0) return up;
+    if (std::find(supported.begin(), supported.end(), srcRate) != supported.end()) return 0;
+    if (rule == 4) {
+        auto it = customTable.find(srcRate);
+        if (it != customTable.end() && it->second < srcRate &&
+            std::find(supported.begin(), supported.end(), it->second) != supported.end()) return it->second;
+    }
+    return computeExpectedDownRate(rule, srcRate, supported);
+}
+
+static uint32_t computeExpectedUpRate(int rule, uint32_t srcRate, const std::vector<uint32_t>& supported, const std::map<uint32_t, uint32_t>& customTable) {
     auto isSupported = [&](uint32_t r) {
         return std::find(supported.begin(), supported.end(), r) != supported.end();
     };
@@ -140,12 +167,17 @@ static void testK2RulesMatrix() {
                 const uint32_t expectedOut = (target == 0) ? src : target;
                 // Független elvárás összevetése a termékkód UpsampleEngine::selectTargetRate függvényével
                 const uint32_t actualOut = ee_analyzer::UpsampleEngine::selectTargetRate(
+                    src, static_cast<ee_analyzer::audioopt::UpsampleRule>(rule), caps, customTable, false, false, nullptr, 0, /*allowDown=*/true);
+                // Lefelé alakítás nélkül (a rendszer keverője alakít): soha nem kisebb a cél
+                const uint32_t noDown = ee_analyzer::UpsampleEngine::selectTargetRate(
                     src, static_cast<ee_analyzer::audioopt::UpsampleRule>(rule), caps, customTable, false, false);
-                // Lefelé soha nem alakíthat, és csak a képességkészletben szereplő (vagy eredeti) rátára válthat!
-                if (actualOut < src || actualOut != expectedOut) {
+                if (noDown < src) allValid = false;
+                // Lefelé csak akkor alakíthat, ha a kimenet a forrást nem tudja; csak támogatott (vagy eredeti) rátára válthat!
+                const bool srcSupported = std::find(caps.begin(), caps.end(), src) != caps.end();
+                if ((actualOut < src && srcSupported) || actualOut != expectedOut) {
                     allValid = false;
                 }
-                if (actualOut > src && std::find(caps.begin(), caps.end(), actualOut) == caps.end()) {
+                if (actualOut != src && std::find(caps.begin(), caps.end(), actualOut) == caps.end()) {
                     allValid = false;
                 }
                 ++testsCount;
@@ -153,7 +185,7 @@ static void testK2RulesMatrix() {
         }
     }
 
-    CHECK(allValid && testsCount >= 240, "K2 szabolymátrix: %zu eset ellenőrizve, lefelé soha, csak támogatott cél", testsCount);
+    CHECK(allValid && testsCount >= 240, "K2 szabolymátrix: %zu eset ellenőrizve, lefelé csak nem támogatott forrásnál, csak támogatott cél", testsCount);
 }
 
 // K3: Átvitel és elnyomás mérése FFT-vel mind a 4 kötelező mintavételi párra

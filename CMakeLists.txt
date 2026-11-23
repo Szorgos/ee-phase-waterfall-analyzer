@@ -599,6 +599,10 @@ if(BUILD_PIPEWIRE_PLUGIN AND NOT WIN32 AND NOT APPLE)
     add_executable(test_pw_reconnect src/test_pw_reconnect.cpp)
     target_include_directories(test_pw_reconnect PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+    # Linux: az „Aqulify” mint alapértelmezett kimenet (döntés) egységtesztje
+    add_executable(test_linux_default_sink src/test_linux_default_sink.cpp)
+    target_include_directories(test_linux_default_sink PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
     # Linux egyetlen-példány zár (flock) és két telepítés felismerése egységtesztje
     add_executable(test_linux_lock src/test_linux_lock.cpp)
     target_include_directories(test_linux_lock PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)

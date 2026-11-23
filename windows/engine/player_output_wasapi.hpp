@@ -124,6 +124,20 @@ public:
                 }
             }
             if (!res.empty()) return res;
+        } else {
+            // Megosztott módban a Windows keverője a megosztott formátum (mix format) mintavételén fut, minden mást ő
+            // alakít át: a lejátszó ide alakít (fel- vagy lefelé) a választott motorral
+            win::ComPtr<IMMDevice> dev;
+            if (openTargetDevice(dev)) {
+                win::ComPtr<IAudioClient> cli;
+                WAVEFORMATEX* mix = nullptr;
+                if (SUCCEEDED(dev->Activate(win::kIID_IAudioClient, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(cli.put()))) &&
+                    SUCCEEDED(cli->GetMixFormat(&mix)) && mix) {
+                    const uint32_t r = mix->nSamplesPerSec;
+                    CoTaskMemFree(mix);
+                    if (r >= 8000) return { r };
+                }
+            }
         }
         return { 44100, 48000, 88200, 96000, 176400, 192000 };
     }

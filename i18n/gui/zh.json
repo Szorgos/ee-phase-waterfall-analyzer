@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "系统音频升频：未检测到已安装的虚拟音频线（如 VB-Cable）。",
   "ups.liveNoOutput": "系统音频升频：未找到独立的物理 DAC/输出设备（已阻止回环）。",
   "ups.engineFftDD": "Aqulify FFT-DD（106 位 Double-Double）",
-  "ups.engineHintDD": "106 位 Double-Double（约 31 位有效数字）单级 FFT + Kaiser-sinc 引擎（HydrogenAudio SRC：99.85 %），可选相位与零延迟滤波器。"
+  "ups.engineHintDD": "106 位 Double-Double（约 31 位有效数字）单级 FFT + Kaiser-sinc 引擎（HydrogenAudio SRC：99.85 %），可选相位与零延迟滤波器。",
+  "dev.tabDevice": "设备",
+  "dev.tabOutput": "音频输出",
+  "dev.tabPlayer": "播放器",
+  "dev.tabRate": "采样率",
+  "dev.tabGeneral": "常规",
+  "ups.downEngine": "降采样",
+  "ups.downSystem": "系统（原方式）",
+  "ups.downHint": "如果文件的采样率高于输出所支持的采样率（例如 96 kHz DAC 上的 192 kHz 文件），将使用此引擎降采样。“系统”：像以前一样由声音系统的混音器转换。"
 }

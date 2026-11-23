@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "Upsampling מערכת: לא נמצא כבל שמע וירטואלי מותקן (כגון VB-Cable).",
   "ups.liveNoOutput": "Upsampling מערכת: לא נמצא DAC/פלט פיזי נפרד (נמנעה לולאת משוב).",
   "ups.engineFftDD": "Aqulify FFT-DD (106 סיביות Double-Double)",
-  "ups.engineHintDD": "מנוע FFT + Kaiser-sinc חד-שלבי בדיוק 106 סיביות Double-Double (~31 ספרות משמעותיות, HydrogenAudio SRC: 99.85%), עם מופע לבחירה ומסנן ללא השהיה."
+  "ups.engineHintDD": "מנוע FFT + Kaiser-sinc חד-שלבי בדיוק 106 סיביות Double-Double (~31 ספרות משמעותיות, HydrogenAudio SRC: 99.85%), עם מופע לבחירה ומסנן ללא השהיה.",
+  "dev.tabDevice": "התקן",
+  "dev.tabOutput": "פלט שמע",
+  "dev.tabPlayer": "נגן",
+  "dev.tabRate": "קצב דגימה",
+  "dev.tabGeneral": "כללי",
+  "ups.downEngine": "הורדת קצב דגימה",
+  "ups.downSystem": "מערכת (כמו קודם)",
+  "ups.downHint": "אם קצב הדגימה של הקובץ גבוה ממה שהפלט תומך בו (למשל קובץ 192 kHz על DAC של 96 kHz), הוא יומר כלפי מטה במנוע זה. „מערכת”: המיקסר של מערכת השמע ממיר, כמו קודם."
 }

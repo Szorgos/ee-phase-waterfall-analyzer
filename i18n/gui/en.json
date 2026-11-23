@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "System audio upsampling: no virtual audio cable detected (e.g. VB-Cable).",
   "ups.liveNoOutput": "System audio upsampling: no separate physical DAC/output device found (feedback loop prevented).",
   "ups.engineFftDD": "Aqulify FFT-DD (106-bit Double-Double)",
-  "ups.engineHintDD": "106-bit Double-Double (~31 significant digits) single-stage FFT + Kaiser-sinc engine (HydrogenAudio SRC: 99.85%), with selectable phase and zero-delay filter."
+  "ups.engineHintDD": "106-bit Double-Double (~31 significant digits) single-stage FFT + Kaiser-sinc engine (HydrogenAudio SRC: 99.85%), with selectable phase and zero-delay filter.",
+  "dev.tabDevice": "Device",
+  "dev.tabOutput": "Audio output",
+  "dev.tabPlayer": "Player",
+  "dev.tabRate": "Sample rate",
+  "dev.tabGeneral": "General",
+  "ups.downEngine": "Downsampling",
+  "ups.downSystem": "System (as before)",
+  "ups.downHint": "If a file's sample rate is higher than the output supports (e.g. a 192 kHz file on a 96 kHz DAC), it is converted down with this engine. \"System\": the sound system's mixer converts it, as before."
 }

@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "Systemaudio-Upsampling: kein virtuelles Audiokabel gefunden (z. B. VB-Cable).",
   "ups.liveNoOutput": "Systemaudio-Upsampling: kein separater physischer DAC/Ausgang gefunden (Rückkopplung verhindert).",
   "ups.engineFftDD": "Aqulify FFT-DD (106-Bit Double-Double)",
-  "ups.engineHintDD": "Einstufige 106-Bit-Double-Double-FFT + Kaiser-Sinc-Engine (~31 signifikante Stellen, HydrogenAudio SRC: 99,85 %) mit wählbarer Phase und verzögerungsfreiem Filter."
+  "ups.engineHintDD": "Einstufige 106-Bit-Double-Double-FFT + Kaiser-Sinc-Engine (~31 signifikante Stellen, HydrogenAudio SRC: 99,85 %) mit wählbarer Phase und verzögerungsfreiem Filter.",
+  "dev.tabDevice": "Gerät",
+  "dev.tabOutput": "Audioausgabe",
+  "dev.tabPlayer": "Player",
+  "dev.tabRate": "Abtastrate",
+  "dev.tabGeneral": "Allgemein",
+  "ups.downEngine": "Abwärtswandlung",
+  "ups.downSystem": "System (wie bisher)",
+  "ups.downHint": "Ist die Abtastrate der Datei höher, als die Ausgabe unterstützt (z. B. eine 192-kHz-Datei an einem 96-kHz-DAC), wird sie mit dieser Engine heruntergerechnet. „System“: Der Mixer des Soundsystems wandelt sie um, wie bisher."
 }

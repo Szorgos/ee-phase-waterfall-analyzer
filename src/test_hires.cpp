@@ -173,11 +173,18 @@ static void testOptions() {
 // Független elvárás: a szabályok a felső korláttal (0 = nincs)
 static uint32_t expectTarget(int rule, uint32_t src, const std::vector<uint32_t>& caps, uint32_t maxRate) {
     auto ok = [&](uint32_t r) { return std::find(caps.begin(), caps.end(), r) != caps.end() && (maxRate == 0 || r <= maxRate); };
-    if (rule == 0 || src > 192000) return src;
-    if (rule == 1) return ok(src * 2) ? src * 2 : src;
-    if (rule == 2) { uint32_t b = src; for (uint32_t m = 2; m <= 16; m *= 2) if (ok(src * m)) b = src * m; return b; }
-    if (rule == 3) { uint32_t b = src; for (uint32_t r : caps) if (ok(r) && r > b) b = r; return b; }
-    return src;
+    uint32_t up = src;
+    if (rule != 0 && src <= 192000) {
+        if (rule == 1 && ok(src * 2)) up = src * 2;
+        if (rule == 2) for (uint32_t m = 2; m <= 16; m *= 2) if (ok(src * m)) up = src * m;
+        if (rule == 3) for (uint32_t r : caps) if (ok(r) && r > up) up = r;
+    }
+    if (up > src || ok(src)) return up;
+    // A forrás a korlát fölött: lefelé (Kimenet maximuma: a legnagyobb; különben az azonos családú előbb)
+    uint32_t best = 0, family = 0;
+    for (uint32_t r : caps) if (ok(r) && r < src) { best = std::max(best, r); if (src % r == 0) family = std::max(family, r); }
+    const uint32_t down = rule == 3 ? best : (family ? family : best);
+    return down ? down : src;
 }
 
 static void testTargets() {
@@ -188,11 +195,47 @@ static void testTargets() {
         for (uint32_t src : { 44100u, 48000u, 88200u, 96000u, 176400u, 192000u, 352800u, 384000u })
             for (uint32_t cap : { 0u, 384000u, 192000u }) {
                 const uint32_t got = UpsampleEngine::selectTargetRate(src, static_cast<audioopt::UpsampleRule>(rule), caps, {}, false, false,
-                                                                     nullptr, cap);
+                                                                     nullptr, cap, /*allowDown=*/true);
                 if (got != expectTarget(rule, src, caps, cap)) ++bad;
                 ++cases;
             }
     CHECK(bad == 0, "%zu eset, eltérés: %zu (pl. 44,1 kHz kettő hatványa → 705,6 kHz; korláttal 352,8 kHz)", cases, bad);
+}
+
+static void testDownsampleEngines() {
+    std::printf("[4b] Lefelé alakítás (192 kHz -> 96 kHz-es DAC) mindhárom motorral\n");
+    const std::vector<uint32_t> dac96 = { 96000 };
+    auto pick = [&](uint32_t src, audioopt::UpsampleRule rule, bool down) {
+        return UpsampleEngine::selectTargetRate(src, rule, dac96, {}, false, false, nullptr, 0, down);
+    };
+    CHECK(pick(192000, audioopt::UpsampleRule::MaxOutput, true) == 96000 && pick(176400, audioopt::UpsampleRule::MaxOutput, true) == 96000 &&
+          pick(44100, audioopt::UpsampleRule::MaxOutput, true) == 96000,
+          "csak 96 kHz-es kimenet: 192 / 176,4 kHz le-, 44,1 kHz felfelé 96 kHz-re");
+    CHECK(pick(192000, audioopt::UpsampleRule::Off, true) == 96000 && pick(44100, audioopt::UpsampleRule::Off, true) == 44100,
+          "kikapcsolt felfelé alakításnál is lefelé alakít, felfelé nem");
+    CHECK(pick(192000, audioopt::UpsampleRule::MaxOutput, false) == 192000,
+          "lefelé alakítás kikapcsolva (rendszer): a forrás változatlanul megy a keverőnek");
+    const uint32_t src = 192000, dst = 96000;
+    const size_t n = src;   // 1 s
+    std::vector<float> in(n * 2);
+    for (size_t i = 0; i < n; ++i)
+        in[2 * i] = in[2 * i + 1] = static_cast<float>(0.5 * std::sin(2 * kPi * 1000.0 * i / src) + 0.3 * std::sin(2 * kPi * 60000.0 * i / src));
+    for (int eng = 0; eng <= 2; ++eng) {
+        UpsampleEngine e;
+        e.init(src, dst, 2, 28, 25.0, 0.95, 1.00, 0.0f, eng);
+        std::vector<float> out(dst * 2 + (1u << 16)), left;
+        const size_t chunk = 4096;
+        for (size_t off = 0; off < n; off += chunk) {
+            size_t got = 0;
+            e.process(in.data() + off * 2, std::min(chunk, n - off), out.data(), out.size() / 2, got);
+            for (size_t i = 0; i < got; ++i) left.push_back(out[2 * i]);
+        }
+        const size_t m = 32768, from = left.size() > m + 8192 ? left.size() - m - 4096 : 0;
+        const double a1k = left.size() > m ? toneAmp(left, from, m, 1000.0, dst) : 0.0;
+        const double alias = left.size() > m ? toneAmp(left, from, m, 36000.0, dst) : 1.0;   // 60 kHz tükörképe 96 kHz-en
+        CHECK(std::fabs(a1k - 0.5) < 0.01 && alias < 1e-4, "%s: 1 kHz amplitúdó %.4f (0,5), 60 kHz tükörképe %.2e",
+              audioopt::upsampleEngineLabel(eng), a1k, alias);
+    }
 }
 
 // ---------------------------------------------------------------- [5]
@@ -600,6 +643,7 @@ int main() {
     testOutStageDelay();
     testOptions();
     testTargets();
+    testDownsampleEngines();
     testThreadsBitIdentical();
     testLoadMeter();
     testAdvisor();

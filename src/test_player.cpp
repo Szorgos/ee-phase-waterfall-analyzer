@@ -2350,6 +2350,17 @@ static void testUpsamplePlayerK1K6K7K8K16() {
             CHECK(p1.upsampleReason() == "source_rate", "K16: indoklás 'source_rate' (%s)", p1.upsampleReason().c_str());
             p1.stop();
 
+            // Választott lefelé alakító motorral (FFT64): a kimenet legfeljebb 192 kHz-et tud, így az azonos családú
+            // 176,4 kHz-re alakul, nem a rendszer keverője
+            auto* out1d = new FakeOutput;
+            FilePlayer p1d{ std::unique_ptr<PlayerOutput>(out1d) };
+            audioopt::AudioOptions downOpts = opts;
+            downOpts.downsampleEngine = 1;
+            p1d.setUpsampleOptions(downOpts);
+            p1d.setUpsample(true);
+            CHECK(p1d.open(highPath, &err) && out1d->rate == 176400, "K16: lefelé alakító motorral 352.8 -> 176.4 kHz (%u)", out1d->rate);
+            p1d.stop();
+
             // 2. DoP / DSD esetén
             auto* out2 = new FakeOutput;
             FilePlayer p2{ std::unique_ptr<PlayerOutput>(out2) };

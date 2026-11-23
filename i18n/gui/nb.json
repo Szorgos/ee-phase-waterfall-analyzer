@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "Systemlyd-oppsampling: ingen virtuell lydkabel funnet (f.eks. VB-Cable).",
   "ups.liveNoOutput": "Systemlyd-oppsampling: ingen separat fysisk DAC/utgang funnet (tilbakekobling forhindret).",
   "ups.engineFftDD": "Aqulify FFT-DD (106-bits Double-Double)",
-  "ups.engineHintDD": "Ett-trinns 106-bits Double-Double (~31 signifikante sifre) FFT + Kaiser-sinc-motor (HydrogenAudio SRC: 99,85 %) med valgbar fase og filter uten forsinkelse."
+  "ups.engineHintDD": "Ett-trinns 106-bits Double-Double (~31 signifikante sifre) FFT + Kaiser-sinc-motor (HydrogenAudio SRC: 99,85 %) med valgbar fase og filter uten forsinkelse.",
+  "dev.tabDevice": "Enhet",
+  "dev.tabOutput": "Lydutgang",
+  "dev.tabPlayer": "Avspiller",
+  "dev.tabRate": "Samplingsfrekvens",
+  "dev.tabGeneral": "Generelt",
+  "ups.downEngine": "Nedsampling",
+  "ups.downSystem": "System (som før)",
+  "ups.downHint": "Hvis filens samplingsfrekvens er høyere enn utgangen støtter (f.eks. en 192 kHz-fil på en 96 kHz-DAC), konverteres den ned med denne motoren. «System»: lydsystemets mikser konverterer, som før."
 }

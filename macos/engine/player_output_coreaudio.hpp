@@ -126,6 +126,29 @@ public:
         return true;
     }
 
+    /**
+     * Megosztott módban a Core Audio a hangeszköz névleges mintavételén szól, minden mást ő alakít át: a lejátszó
+     * ide alakít (fel- vagy lefelé) a választott motorral.
+     */
+    std::vector<uint32_t> supportedRates() const override {
+        AudioObjectID dev = targetDev_;
+        if (dev == kAudioObjectUnknown) {
+            AudioObjectPropertyAddress a{ kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal,
+                                          kAudioObjectPropertyElementMain };
+            UInt32 sz = sizeof(dev);
+            if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &a, 0, nullptr, &sz, &dev) != noErr) dev = kAudioObjectUnknown;
+        }
+        if (dev != kAudioObjectUnknown) {
+            AudioObjectPropertyAddress a{ kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal,
+                                          kAudioObjectPropertyElementMain };
+            Float64 r = 0.0;
+            UInt32 sz = sizeof(r);
+            if (AudioObjectGetPropertyData(dev, &a, 0, nullptr, &sz, &r) == noErr && r >= 8000.0)
+                return { static_cast<uint32_t>(r + 0.5) };
+        }
+        return PlayerOutput::supportedRates();
+    }
+
     void close() override {
         hbRunning_ = false;
         if (unit_) {

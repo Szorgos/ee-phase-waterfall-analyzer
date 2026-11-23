@@ -348,7 +348,7 @@ bool FilePlayer::startStreamLocked(std::unique_ptr<Segment> seg, std::string* er
     const bool isDsd = (seg->dsdRate > 0);
     const uint32_t targetRate = decideTargetRate(srcRate, seg->bypassUpsample, isDsd);
 
-    if (targetRate > srcRate) {
+    if (targetRate != srcRate) {   // felfelé, vagy lefelé, ha a kimenet a forrást nem tudja
         upsampleActive_ = true;
         upsampleSrcRate_ = srcRate;
         upsampleTargetRate_ = targetRate;
@@ -358,7 +358,10 @@ bool FilePlayer::startStreamLocked(std::unique_ptr<Segment> seg, std::string* er
                       : (targetRate >= 352800 && load::logicalCores() >= 4 ? 2 : 1);
         upsampler_.setThreads(thr);
         upsampleThreadsUsed_ = thr;
-        upsampler_.initWithOptions(srcRate, targetRate, 2, upsampleOpts_);
+        // Lefelé a külön választott motor számol (a szűrő többi beállítása közös)
+        audioopt::AudioOptions convOpts = upsampleOpts_;
+        if (targetRate < srcRate && upsampleOpts_.downsampleEngine >= 0) convOpts.upsampleEngine = upsampleOpts_.downsampleEngine;
+        upsampler_.initWithOptions(srcRate, targetRate, 2, convOpts);
         rate_ = targetRate;
         if (seg->total > 0) {
             seg->total = static_cast<uint64_t>(std::round(static_cast<double>(seg->dec->totalFrames()) * targetRate / srcRate));
@@ -929,7 +932,8 @@ uint32_t FilePlayer::decideTargetRate(uint32_t srcRate, bool bypassUpsample, boo
         ? out_->supportedRates()
         : std::vector<uint32_t>{ 44100, 48000, 88200, 96000, 176400, 192000 };
     return UpsampleEngine::selectTargetRate(srcRate, rule, supported, upsampleOpts_.upsampleCustom,
-                                            bypassUpsample, isDsd, &upsampleReason_, upsampleOpts_.upsampleMaxRate);
+                                            bypassUpsample, isDsd, &upsampleReason_, upsampleOpts_.upsampleMaxRate,
+                                            upsampleOpts_.downsampleEngine >= 0);
 }
 
 void FilePlayer::setUpsample(bool on) {

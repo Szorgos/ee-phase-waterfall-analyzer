@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "Rendszerhang-felmintavételezés: nincs telepített virtuális hangkábel (pl. VB-Cable).",
   "ups.liveNoOutput": "Rendszerhang-felmintavételezés: nincs külön valódi DAC / kimeneti eszköz (visszacsatolás megakadályozva).",
   "ups.engineFftDD": "Aqulify FFT-DD (106 bites Double-Double)",
-  "ups.engineHintDD": "106 bites Double-Double (~31 értékes jegy) egylépcsős FFT + Kaiser-sinc motor (HydrogenAudio SRC: 99,85 %), választható fázissal és 0 késleltetésű szűrővel."
+  "ups.engineHintDD": "106 bites Double-Double (~31 értékes jegy) egylépcsős FFT + Kaiser-sinc motor (HydrogenAudio SRC: 99,85 %), választható fázissal és 0 késleltetésű szűrővel.",
+  "dev.tabDevice": "Eszköz",
+  "dev.tabOutput": "Hangkimenet",
+  "dev.tabPlayer": "Lejátszó",
+  "dev.tabRate": "Mintavételezés",
+  "dev.tabGeneral": "Általános",
+  "ups.downEngine": "Lefelé alakítás",
+  "ups.downSystem": "Rendszer (eddigi)",
+  "ups.downHint": "Ha a hangfájl mintavétele nagyobb, mint amit a kimenet tud (pl. 192 kHz-es fájl 96 kHz-es DAC-on), ezzel a motorral alakul le. „Rendszer”: a hangrendszer keverője alakít, mint eddig."
 }

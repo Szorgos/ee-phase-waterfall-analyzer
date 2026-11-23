@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "Upsampling systemowy: nie wykryto wirtualnego kabla audio (np. VB-Cable).",
   "ups.liveNoOutput": "Upsampling systemowy: brak osobnego fizycznego DAC/wyjścia (zapobieżono pętli sprzężenia).",
   "ups.engineFftDD": "Aqulify FFT-DD (106-bitowy Double-Double)",
-  "ups.engineHintDD": "Jednostopniowy 106-bitowy (Double-Double, ~31 cyfr znaczących) silnik FFT + Kaiser-sinc (HydrogenAudio SRC: 99,85 %) z wyborem fazy i filtrem bez opóźnienia."
+  "ups.engineHintDD": "Jednostopniowy 106-bitowy (Double-Double, ~31 cyfr znaczących) silnik FFT + Kaiser-sinc (HydrogenAudio SRC: 99,85 %) z wyborem fazy i filtrem bez opóźnienia.",
+  "dev.tabDevice": "Urządzenie",
+  "dev.tabOutput": "Wyjście audio",
+  "dev.tabPlayer": "Odtwarzacz",
+  "dev.tabRate": "Częstotliwość próbkowania",
+  "dev.tabGeneral": "Ogólne",
+  "ups.downEngine": "Konwersja w dół",
+  "ups.downSystem": "System (jak dotąd)",
+  "ups.downHint": "Jeśli częstotliwość próbkowania pliku jest wyższa, niż obsługuje wyjście (np. plik 192 kHz na przetworniku 96 kHz), zostanie obniżona tym silnikiem. „System”: konwertuje mikser systemu dźwięku, jak dotąd."
 }

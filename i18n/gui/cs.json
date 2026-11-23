@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "Systémové převzorkování: nebyl nalezen virtuální audio kabel (např. VB-Cable).",
   "ups.liveNoOutput": "Systémové převzorkování: nenalezen samostatný fyzický DAC/výstup (smyčka zablokována).",
   "ups.engineFftDD": "Aqulify FFT-DD (106bitový Double-Double)",
-  "ups.engineHintDD": "Jednostupňový 106bitový Double-Double (~31 platných číslic) motor FFT + Kaiser-sinc (HydrogenAudio SRC: 99,85 %) s volitelnou fází a filtrem s nulovým zpožděním."
+  "ups.engineHintDD": "Jednostupňový 106bitový Double-Double (~31 platných číslic) motor FFT + Kaiser-sinc (HydrogenAudio SRC: 99,85 %) s volitelnou fází a filtrem s nulovým zpožděním.",
+  "dev.tabDevice": "Zařízení",
+  "dev.tabOutput": "Zvukový výstup",
+  "dev.tabPlayer": "Přehrávač",
+  "dev.tabRate": "Vzorkovací frekvence",
+  "dev.tabGeneral": "Obecné",
+  "ups.downEngine": "Podvzorkování",
+  "ups.downSystem": "Systém (jako dosud)",
+  "ups.downHint": "Pokud je vzorkovací frekvence souboru vyšší, než výstup podporuje (např. soubor 192 kHz na DAC 96 kHz), převede se dolů tímto jádrem. „Systém“: převádí mixér zvukového systému, jako dosud."
 }

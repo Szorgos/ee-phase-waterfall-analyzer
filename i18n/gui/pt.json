@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "Upsampling do sistema: nenhum cabo de áudio virtual encontrado (ex. VB-Cable).",
   "ups.liveNoOutput": "Upsampling do sistema: nenhum DAC/saída física separada encontrada (loop evitado).",
   "ups.engineFftDD": "Aqulify FFT-DD (Double-Double de 106 bits)",
-  "ups.engineHintDD": "Motor FFT + Kaiser-sinc de estágio único em precisão Double-Double de 106 bits (~31 dígitos significativos, HydrogenAudio SRC: 99,85 %), com fase selecionável e filtro sem atraso."
+  "ups.engineHintDD": "Motor FFT + Kaiser-sinc de estágio único em precisão Double-Double de 106 bits (~31 dígitos significativos, HydrogenAudio SRC: 99,85 %), com fase selecionável e filtro sem atraso.",
+  "dev.tabDevice": "Dispositivo",
+  "dev.tabOutput": "Saída de áudio",
+  "dev.tabPlayer": "Leitor",
+  "dev.tabRate": "Taxa de amostragem",
+  "dev.tabGeneral": "Geral",
+  "ups.downEngine": "Conversão descendente",
+  "ups.downSystem": "Sistema (como antes)",
+  "ups.downHint": "Se a taxa de amostragem do ficheiro for superior à suportada pela saída (p. ex., um ficheiro de 192 kHz num DAC de 96 kHz), é reduzida com este motor. «Sistema»: o misturador do sistema de som converte, como antes."
 }

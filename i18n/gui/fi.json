@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "Järjestelmä-äänen ylös-näytteistys: virtuaalista äänikaapelia ei löytynyt (esim. VB-Cable).",
   "ups.liveNoOutput": "Järjestelmä-äänen ylös-näytteistys: erillistä fyysistä DAC/lähtölaitetta ei löytynyt (kierto estetty).",
   "ups.engineFftDD": "Aqulify FFT-DD (106-bittinen Double-Double)",
-  "ups.engineHintDD": "Yksivaiheinen 106-bittinen Double-Double (~31 merkitsevää numeroa) FFT + Kaiser-sinc -moottori (HydrogenAudio SRC: 99,85 %), valittavalla vaiheella ja viiveettömällä suotimella."
+  "ups.engineHintDD": "Yksivaiheinen 106-bittinen Double-Double (~31 merkitsevää numeroa) FFT + Kaiser-sinc -moottori (HydrogenAudio SRC: 99,85 %), valittavalla vaiheella ja viiveettömällä suotimella.",
+  "dev.tabDevice": "Laite",
+  "dev.tabOutput": "Äänilähtö",
+  "dev.tabPlayer": "Soitin",
+  "dev.tabRate": "Näytteenottotaajuus",
+  "dev.tabGeneral": "Yleiset",
+  "ups.downEngine": "Alasnäytteistys",
+  "ups.downSystem": "Järjestelmä (kuten ennen)",
+  "ups.downHint": "Jos tiedoston näytteenottotaajuus on suurempi kuin lähtö tukee (esim. 192 kHz:n tiedosto 96 kHz:n DAC:ssa), se muunnetaan alas tällä moottorilla. ”Järjestelmä”: äänijärjestelmän mikseri muuntaa, kuten ennen."
 }

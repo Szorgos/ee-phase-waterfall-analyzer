@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "Suréchantillonnage système : aucun câble audio virtuel détecté (ex. VB-Cable).",
   "ups.liveNoOutput": "Suréchantillonnage système : aucun DAC/sortie physique distinct détecté (boucle évitée).",
   "ups.engineFftDD": "Aqulify FFT-DD (Double-Double 106 bits)",
-  "ups.engineHintDD": "Moteur FFT + Kaiser-sinc à étage unique en précision Double-Double 106 bits (~31 chiffres significatifs, HydrogenAudio SRC : 99,85 %), phase au choix et filtre sans retard."
+  "ups.engineHintDD": "Moteur FFT + Kaiser-sinc à étage unique en précision Double-Double 106 bits (~31 chiffres significatifs, HydrogenAudio SRC : 99,85 %), phase au choix et filtre sans retard.",
+  "dev.tabDevice": "Appareil",
+  "dev.tabOutput": "Sortie audio",
+  "dev.tabPlayer": "Lecteur",
+  "dev.tabRate": "Fréquence d'échantillonnage",
+  "dev.tabGeneral": "Général",
+  "ups.downEngine": "Sous-échantillonnage",
+  "ups.downSystem": "Système (comme avant)",
+  "ups.downHint": "Si la fréquence d'échantillonnage du fichier dépasse celle que la sortie prend en charge (p. ex. un fichier 192 kHz sur un DAC 96 kHz), elle est abaissée avec ce moteur. « Système » : le mélangeur du système audio la convertit, comme avant."
 }

@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "Sistem sesi yükseltme: kurulu sanal ses kablosu bulunamadı (ör. VB-Cable).",
   "ups.liveNoOutput": "Sistem sesi yükseltme: ayrı bir fiziksel DAC/çıkış bulunamadı (geri besleme engellendi).",
   "ups.engineFftDD": "Aqulify FFT-DD (106 bit Double-Double)",
-  "ups.engineHintDD": "106 bit Double-Double (~31 anlamlı basamak) tek aşamalı FFT + Kaiser-sinc motoru (HydrogenAudio SRC: %99,85), seçilebilir faz ve sıfır gecikmeli filtre ile."
+  "ups.engineHintDD": "106 bit Double-Double (~31 anlamlı basamak) tek aşamalı FFT + Kaiser-sinc motoru (HydrogenAudio SRC: %99,85), seçilebilir faz ve sıfır gecikmeli filtre ile.",
+  "dev.tabDevice": "Cihaz",
+  "dev.tabOutput": "Ses çıkışı",
+  "dev.tabPlayer": "Oynatıcı",
+  "dev.tabRate": "Örnekleme hızı",
+  "dev.tabGeneral": "Genel",
+  "ups.downEngine": "Örnekleme düşürme",
+  "ups.downSystem": "Sistem (önceki gibi)",
+  "ups.downHint": "Dosyanın örnekleme hızı çıkışın desteklediğinden yüksekse (ör. 96 kHz DAC'ta 192 kHz dosya), bu motorla düşürülür. \"Sistem\": dönüşümü önceki gibi ses sisteminin karıştırıcısı yapar."
 }

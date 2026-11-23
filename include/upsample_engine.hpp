@@ -41,7 +41,11 @@ public:
      * Motor inicializálása a megadott mintavételi frekvenciákkal és minőségi paraméterekkel.
      */
     /**
-     * Célmintavétel kiválasztása a 3.2 szabályok szerint (lefelé soha, csak támogatott rátára).
+     * Célmintavétel kiválasztása a 3.2 szabályok szerint, csak támogatott rátára.
+     * Felfelé a szabály dönt (192 kHz-es forrásig). allowDown (a lejátszóban: downsampleEngine ≥ 0): ha a kimenet a
+     * forrás mintavételét nem tudja (vagy a felső korlát fölött van), pl. 192 kHz-es fájl 96 kHz-es DAC-on, lefelé
+     * alakít a választott motorral – a felfelé szabálytól függetlenül; az egyéni táblázat lefelé is megadhat célt.
+     * allowDown nélkül lefelé soha (ilyenkor a rendszer keverője alakít).
      */
     static uint32_t selectTargetRate(uint32_t srcRate,
                                      audioopt::UpsampleRule rule,
@@ -50,54 +54,66 @@ public:
                                      bool bypassUpsample,
                                      bool isDsd,
                                      std::string* reasonOut = nullptr,
-                                     uint32_t maxRate = 0) {
+                                     uint32_t maxRate = 0,
+                                     bool allowDown = false) {
         auto setReason = [&](const char* r) { if (reasonOut) *reasonOut = r; };
         if (bypassUpsample) { setReason("bypass"); return srcRate; }
         if (isDsd) { setReason("dsd"); return srcRate; }
-        if (srcRate > 192000) { setReason("source_rate"); return srcRate; }
-        if (rule == audioopt::UpsampleRule::Off) { setReason("off"); return srcRate; }
+        if (rule == audioopt::UpsampleRule::Off && !allowDown) { setReason("off"); return srcRate; }
 
         // A felső korlát (a terhelés-tanácsadó állítja) a tudott mintavételek közül kizárja a nagyobbakat
         auto isSupported = [&](uint32_t r) {
             return std::find(supported.begin(), supported.end(), r) != supported.end() && (maxRate == 0 || r <= maxRate);
         };
 
-        if (rule == audioopt::UpsampleRule::Double) {
-            const uint32_t target = srcRate * 2;
-            if (isSupported(target)) { setReason(""); return target; }
-            setReason("dac_unsupported");
-            return srcRate;
-        }
-        if (rule == audioopt::UpsampleRule::PowerOfTwo) {
-            uint32_t best = srcRate;
-            for (uint32_t mult = 2; mult <= 16; mult *= 2) {
-                const uint32_t cand = srcRate * mult;
-                if (isSupported(cand) && cand > best) best = cand;
+        uint32_t up = srcRate;
+        if (srcRate <= 192000) {
+            if (rule == audioopt::UpsampleRule::Double) {
+                if (isSupported(srcRate * 2)) up = srcRate * 2;
+            } else if (rule == audioopt::UpsampleRule::PowerOfTwo) {
+                for (uint32_t mult = 2; mult <= 16; mult *= 2)
+                    if (isSupported(srcRate * mult)) up = srcRate * mult;
+            } else if (rule == audioopt::UpsampleRule::MaxOutput) {
+                for (uint32_t r : supported)
+                    if (isSupported(r) && r > up) up = r;
+            } else if (rule == audioopt::UpsampleRule::Custom) {
+                auto it = customMap.find(srcRate);
+                if (it != customMap.end() && it->second > srcRate && isSupported(it->second)) up = it->second;
             }
-            if (best > srcRate) { setReason(""); return best; }
-            setReason("dac_unsupported");
-            return srcRate;
         }
-        if (rule == audioopt::UpsampleRule::MaxOutput) {
-            uint32_t best = srcRate;
-            for (uint32_t r : supported) {
-                if (isSupported(r) && r > best) best = r;
+        if (up > srcRate) { setReason(""); return up; }
+
+        if (allowDown) {
+            // Egyéni táblázat: lefelé választott cél (pl. 192 → 96 kHz)
+            if (rule == audioopt::UpsampleRule::Custom) {
+                auto it = customMap.find(srcRate);
+                if (it != customMap.end() && it->second < srcRate && isSupported(it->second)) { setReason(""); return it->second; }
             }
-            if (best > srcRate) { setReason(""); return best; }
-            setReason("dac_unsupported");
-            return srcRate;
-        }
-        if (rule == audioopt::UpsampleRule::Custom) {
-            auto it = customMap.find(srcRate);
-            if (it != customMap.end()) {
-                const uint32_t target = it->second;
-                if (target > srcRate && isSupported(target)) { setReason(""); return target; }
+            if (!isSupported(srcRate)) {
+                const uint32_t down = selectDownRate(srcRate, rule, supported, isSupported);
+                if (down > 0) { setReason(""); return down; }
             }
-            setReason("dac_unsupported");
-            return srcRate;
         }
-        setReason("off");
+        setReason(rule == audioopt::UpsampleRule::Off ? "off" : srcRate > 192000 ? "source_rate" : "dac_unsupported");
         return srcRate;
+    }
+
+    /**
+     * Lefelé alakítás célja, ha a kimenet a forrást nem tudja (0: nincs kisebb támogatott ráta). „Kimenet maximuma”:
+     * a legnagyobb tudott ráta; a többi szabály (és a kikapcsolt felfelé alakítás) az egész arányú (azonos családú, pl. 176,4 → 88,2 kHz) rátát
+     * választja előbb, és csak ha ilyen nincs, a legnagyobb kisebbet.
+     */
+    template <class Pred>
+    static uint32_t selectDownRate(uint32_t srcRate, audioopt::UpsampleRule rule, const std::vector<uint32_t>& supported,
+                                   Pred isSupported) {
+        uint32_t best = 0, family = 0;
+        for (uint32_t r : supported) {
+            if (r >= srcRate || !isSupported(r)) continue;
+            best = std::max(best, r);
+            if (srcRate % r == 0) family = std::max(family, r);
+        }
+        if (rule == audioopt::UpsampleRule::MaxOutput) return best;
+        return family > 0 ? family : best;
     }
 
     bool init(uint32_t srcRate, uint32_t dstRate, uint32_t channels = 2,

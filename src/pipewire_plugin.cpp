@@ -29,6 +29,7 @@
 #include "library_bridge.hpp"
 #include "radio_bridge.hpp"
 #include "linux_headless.hpp"
+#include "linux_default_sink.hpp"
 #include "linux_store.hpp"
 #include "linux_instance_lock.hpp"
 #include "live_upsample.hpp"
@@ -236,8 +237,10 @@ std::string getOutputSinksJson(std::string* outCurrentSink = nullptr) {
 /**
  * A DSP kimenetét a megadott fizikai nyelőre irányítja. Csak létező nyelőnévre (vagy régi
  * "speaker"/"usb"/"hdmi" kulcsszóra) visz át; ismeretlen szövegből soha nem lesz parancs.
+ * pin: akkor is átviszi, ha már ott szól – így a stream célja rögzül (target.object), és nem követi az
+ * alapértelmezett kimenetet (amikor az Aqulify lesz az alapértelmezett, a WirePlumber máshová kötné).
  */
-bool applyOutputSink(const std::string& targetSink, bool remember) {
+bool applyOutputSink(const std::string& targetSink, bool remember, bool pin = false) {
     if (targetSink.empty()) return false;
     std::string sinkInputId, curSinkId;
     if (!findOwnSinkInput(sinkInputId, curSinkId)) return false;
@@ -254,6 +257,9 @@ bool applyOutputSink(const std::string& targetSink, bool remember) {
     }
     if (resolved.empty() || !isSafeSinkName(resolved)) return false;
     if (resolvedId == curSinkId) {                    // már ott szól
+        // pin: a move-sink-input ugyanarra a nyelőre nem rögzít célt, ezért a metaadatba írjuk (a sink-input
+        // száma a PipeWire-csomópont azonosítója; a név ellenőrzött)
+        if (pin) std::system(("pw-metadata " + sinkInputId + " target.object '" + resolved + "' >/dev/null 2>&1").c_str());
         if (g_node) g_node->setPreferredOutput(resolved);
         if (remember) linux_store::saveOutputSink(resolved);
         return true;
@@ -445,8 +451,8 @@ int main(int argc, char* argv[]) {
                      "  --listen lan     hálózati távvezérlés bekapcsolása (47820-as port és mDNS hirdető)\n"
                      "  --headless       fej nélküli (kijelző nélküli) párosítási mód kényszerítése\n"
                      "  --pair           párosító kód a telefonhoz a már futó motortól (kijelző nélkül, pl. SSH-n)\n"
-                     "A motor egy \"Aqulify\" nevű kimeneti hangeszközt hoz létre. Válaszd ki a hangbeállításokban\n"
-                     "(vagy: pactl set-default-sink aqulify_sink), és minden hang a DSP láncon át szól.\n";
+                     "A motor egy \"Aqulify\" nevű kimeneti hangeszközt hoz létre, és alapértelmezett kimenetnek állítja,\n"
+                     "így minden hang a DSP láncon át szól. A rendszer hangerő-paneljén választott hangkártya lesz a DSP kimenete.\n";
         return 0;
     }
     // Beépített hibajelentés: a diagnosztikai mappa és a napló tükre (a jelentés utolsó sorai ebből). A beállítás
@@ -543,6 +549,57 @@ int main(int argc, char* argv[]) {
             }
         }).detach();
     }
+
+    // Az „Aqulify” a rendszer alapértelmezett kimenete (linux_default_sink.hpp): induláskor átáll rá, és ha a
+    // felhasználó a rendszer hangerő-paneljén hangkártyát választ, az lesz a DSP kimenete, az alapértelmezett pedig
+    // visszaáll az Aqulify-ra – így a hang (és a vízesés, az EQ) nem kerüli meg a DSP-láncot.
+    std::mutex defMu;
+    std::condition_variable defCv;
+    bool defQuit = false;
+    std::thread defaultThread([&, hasStoredChoice = !initialSink.empty()] {
+        bool startup = true, warned = false;
+        for (;;) {
+            {
+                std::unique_lock<std::mutex> lk(defMu);
+                defCv.wait_for(lk, std::chrono::milliseconds(startup ? 300 : 1000), [&] { return defQuit; });
+                if (defQuit) return;
+            }
+            std::string cur = runCapture("pactl get-default-sink");
+            while (!cur.empty() && (cur.back() == '\n' || cur.back() == '\r' || cur.back() == ' ')) cur.pop_back();
+            if (cur == "aqulify_sink") { startup = false; warned = false; continue; }
+            if (runCapture("pactl list short sinks").find("\taqulify_sink\t") == std::string::npos) continue;   // még nem látszik
+            std::vector<std::string> others;
+            for (const auto& s : listPhysicalSinks()) others.push_back(s.name);
+            const defsink::Action a = defsink::decide(cur, others, startup, hasStoredChoice);
+            // A DSP kimenete rögzített célt kap (a választott vagy a megjegyzett hangkártya). Előbb az alapértelmezett
+            // áll át: a WirePlumber ekkor a „követő” streameket újrakötné, a saját kimenetünket máshová is
+            const std::string pinTarget = !a.dspTarget.empty() ? a.dspTarget : a.setDefault ? linux_store::loadOutputSink() : "";
+            if (!pinTarget.empty()) node.setPreferredOutput(pinTarget);
+            if (a.setDefault) {
+                if (std::system("LC_ALL=C pactl set-default-sink aqulify_sink >/dev/null 2>&1") == 0) {
+                    std::cout << "[PipeWire] Alapértelmezett kimenet: Aqulify (előtte: " << cur << ")\n";
+                    warned = false;
+                } else if (!warned) {
+                    std::cerr << "[PipeWire] Az Aqulify nem állítható be alapértelmezett kimenetnek (pactl set-default-sink).\n";
+                    warned = true;
+                }
+            }
+            if (!pinTarget.empty()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(150));   // a WirePlumber újrakötése után
+                for (int i = 0; i < 10 && !applyOutputSink(pinTarget, a.remember, true); ++i)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            }
+            startup = false;
+        }
+    });
+    struct DefaultStopper {
+        std::function<void()> f;
+        ~DefaultStopper() { if (f) f(); }
+    } defaultStopper{ [&] {
+        { std::lock_guard<std::mutex> lk(defMu); defQuit = true; }
+        defCv.notify_all();
+        if (defaultThread.joinable()) defaultThread.join();
+    } };
 
     uint64_t readPos = 0;
 #if defined(AQ_HAVE_ALSA)
@@ -1206,11 +1263,13 @@ int main(int argc, char* argv[]) {
     };
     player::pwAllowedRatesHook() = [&, parseAllowedRates]() -> std::vector<uint32_t> {
         audioopt::RateMode rm = audioopt::RateMode::System;
-        { std::lock_guard<std::mutex> lk(audioMutex); rm = audioOpts.rateMode; }
-        if (rm == audioopt::RateMode::Follow) {
-            auto parsed = parseAllowedRates(pwSetting("clock.allowed-rates"));
-            if (!parsed.empty()) return parsed;
-        }
+        uint32_t fixedRate = 0;
+        { std::lock_guard<std::mutex> lk(audioMutex); rm = audioOpts.rateMode; fixedRate = static_cast<uint32_t>(std::max(0, audioOpts.fixedRate)); }
+        // Rögzített mintavétel: a gráf csak ezen szól, a lejátszó ide alakít (fel- vagy lefelé) a választott motorral
+        if (rm == audioopt::RateMode::Fixed && fixedRate > 0) return { fixedRate };
+        // Rendszer és „forrást követi”: a gráf csak az engedélyezett mintavételekre vált, a többit a PipeWire alakítja
+        auto parsed = parseAllowedRates(pwSetting("clock.allowed-rates"));
+        if (!parsed.empty()) return parsed;
         return { 44100, 48000, 88200, 96000, 176400, 192000 };
     };
     player::pwActualRateHook() = [&]() -> uint32_t {

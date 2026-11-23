@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "시스템 업샘플링: 설치된 가상 오디오 케이블(예: VB-Cable)이 없습니다.",
   "ups.liveNoOutput": "시스템 업샘플링: 별도의 물리적 DAC/출력 장치가 없습니다(피드백 루프 방지).",
   "ups.engineFftDD": "Aqulify FFT-DD (106비트 Double-Double)",
-  "ups.engineHintDD": "106비트 Double-Double(유효숫자 약 31자리) 단일 단계 FFT + Kaiser-sinc 엔진(HydrogenAudio SRC: 99.85 %), 위상 선택 및 제로 지연 필터."
+  "ups.engineHintDD": "106비트 Double-Double(유효숫자 약 31자리) 단일 단계 FFT + Kaiser-sinc 엔진(HydrogenAudio SRC: 99.85 %), 위상 선택 및 제로 지연 필터.",
+  "dev.tabDevice": "장치",
+  "dev.tabOutput": "오디오 출력",
+  "dev.tabPlayer": "플레이어",
+  "dev.tabRate": "샘플레이트",
+  "dev.tabGeneral": "일반",
+  "ups.downEngine": "다운샘플링",
+  "ups.downSystem": "시스템 (기존 방식)",
+  "ups.downHint": "파일의 샘플레이트가 출력이 지원하는 것보다 높으면(예: 96 kHz DAC에서 192 kHz 파일) 이 엔진으로 다운샘플링합니다. '시스템': 기존처럼 사운드 시스템의 믹서가 변환합니다."
 }

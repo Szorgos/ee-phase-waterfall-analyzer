@@ -3683,6 +3683,70 @@ var qrcode = function() {
   .sink-popover[hidden] {
     display: none !important;
   }
+  /* Eszköz ablak: bal oldali fülsor + egy panel egyszerre (fix méret, nem ugrál a fülváltáskor). A sorok egységes
+     rácsba rendeződnek: bal oldalt a felirat, jobbra az azonos szélességű vezérlő. */
+  .sink-popover {
+    display: flex;
+    flex-direction: column;
+    column-width: auto;
+    column-count: 1;
+    width: min(880px, calc(100vw - 32px));
+    height: min(640px, calc(100vh - 48px));
+    overflow: hidden;
+    padding: 14px 0 0;
+  }
+  .sink-popover > * { margin-bottom: 0; }
+  .sink-popover .sink-modal-head { margin: 0 22px; flex: none; }
+  .dev-body { flex: 1; min-height: 0; display: flex; }
+  .dev-nav {
+    flex: none;
+    width: 176px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 10px;
+    border-right: 1px solid var(--aq-line);
+    overflow-y: auto;
+  }
+  .dev-tab {
+    text-align: left;
+    padding: 8px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--aq-text-2);
+    font: inherit;
+    font-size: 0.86rem;
+    cursor: pointer;
+  }
+  .dev-tab:hover { background: color-mix(in srgb, var(--aq-text) 6%, transparent); color: var(--aq-text); }
+  .dev-tab[aria-selected="true"] { background: color-mix(in srgb, var(--aq-accent) 16%, transparent); color: var(--aq-text); font-weight: 600; }
+  .dev-tab:focus-visible { outline: 2px solid var(--aq-accent); outline-offset: -2px; }
+  .dev-panes { flex: 1; min-width: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 22px 18px; }
+  .dev-pane { max-width: 560px; }
+  .dev-pane > * + * { margin-top: 14px; }
+  .dev-pane .sink-sec-title { margin: 14px 0 6px; }
+  .dev-pane > :first-child > .sink-sec-title:first-child, .dev-pane > .sink-sec-title:first-child { margin-top: 0; }
+  .sink-popover .ao-row:not(.ao-check):not(.ao-stack) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    align-items: center;
+    gap: 12px;
+  }
+  .sink-popover .ao-row:not(.ao-check):not(.ao-stack) > :last-child { min-width: 0; justify-self: stretch; }
+  .sink-popover .ao-row:not(.ao-check):not(.ao-stack) > select,
+  .sink-popover .ao-row:not(.ao-check):not(.ao-stack) > input.ee-input { width: 100% !important; max-width: none; box-sizing: border-box; }
+  .sink-popover .ao-row.ao-stack { flex-direction: column; align-items: stretch; gap: 6px; }
+  .sink-popover .ao-row.ao-stack > div { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .sink-popover .ao-hint-flush { margin-left: 0; }
+  .sink-popover #upsCustomWrap { padding: 4px 10px !important; }
+  @media (max-width: 700px) {
+    .dev-body { flex-direction: column; }
+    .dev-nav { width: auto; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--aq-line); padding: 8px 12px; }
+    .dev-tab { white-space: nowrap; }
+    .dev-panes { padding: 12px 16px 16px; }
+    .sink-popover .ao-row:not(.ao-check):not(.ao-stack) { grid-template-columns: minmax(0, 1fr) minmax(0, 55%); }
+  }
   .sink-sec-title {
     font-size: var(--aq-fs-micro);
     font-weight: 700;
@@ -5001,7 +5065,17 @@ var qrcode = function() {
             <span id="sinkModalTitle" data-i18n="dev.title">Kimeneti eszköz (DAC) és fejhallgató-profil</span>
             <button type="button" class="adw-btn" onclick="closeSinkMenu()" title="Bezárás" data-i18n-title="common.close" aria-label="Bezárás" data-i18n-aria-label="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
           </div>
-          <div class="sink-sec-title" data-i18n="sink.label">Kimeneti eszköz (DAC)</div>
+          <div class="dev-body">
+            <nav class="dev-nav" role="tablist" aria-label="Kimeneti eszköz (DAC) és fejhallgató-profil" data-i18n-aria-label="dev.title">
+              <button type="button" class="dev-tab" role="tab" id="devTab-device" data-pane="device" onclick="devShowPane('device')" data-i18n="dev.tabDevice">Eszköz</button>
+              <button type="button" class="dev-tab" role="tab" id="devTab-output" data-pane="output" onclick="devShowPane('output')" data-i18n="dev.tabOutput">Hangkimenet</button>
+              <button type="button" class="dev-tab" role="tab" id="devTab-player" data-pane="player" onclick="devShowPane('player')" data-i18n="dev.tabPlayer">Lejátszó</button>
+              <button type="button" class="dev-tab" role="tab" id="devTab-rate" data-pane="rate" onclick="devShowPane('rate')" data-i18n="dev.tabRate">Mintavételezés</button>
+              <button type="button" class="dev-tab" role="tab" id="devTab-general" data-pane="general" onclick="devShowPane('general')" data-i18n="dev.tabGeneral">Általános</button>
+            </nav>
+            <div class="dev-panes">
+              <section class="dev-pane" id="devPane-device" data-pane="device" role="tabpanel" aria-labelledby="devTab-device" hidden>
+<div class="sink-sec-title" data-i18n="sink.label">Kimeneti eszköz (DAC)</div>
           <div id="physicalSinkWrap" style="display:none; align-items:center; gap:8px;">
             <select id="selectPhysicalSink" class="mini-select" onchange="onPhysicalSinkChanged(this.value)" style="width:100%; max-width:none;" title="Válassz kimeneti hangeszközt" data-i18n-title="sink.title"></select>
           </div>
@@ -5031,7 +5105,9 @@ var qrcode = function() {
               <span data-i18n="dev.multiBtn">Kimenetek beállítása</span></button>
           </div>
           <button type="button" id="btnLibraryRoots" hidden onclick="openLibraryModal()"></button>
-          <div id="audioOptsWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:10px;">
+              </section>
+              <section class="dev-pane" id="devPane-output" data-pane="output" role="tabpanel" aria-labelledby="devTab-output" hidden>
+<div id="audioOptsWrap" hidden>
             <div class="sink-sec-title" data-i18n="ao.title">Hangkimenet (haladó)</div>
             <label class="ao-row" id="aoRowBuffer"><span data-i18n="ao.buffer">Pufferméret</span>
               <select id="aoBuffer" class="mini-select" onchange="aoSend()"></select></label>
@@ -5048,7 +5124,12 @@ var qrcode = function() {
               <div class="ao-hint" data-i18n="ao.netRecvHint">A telefon vagy a számítógép a hálózati hangkimenetek listájában ezen a néven látja az Aqulify-t, és a hang az EQ-n át szól. Kb. CD-minőség (44,1 kHz / 16 bit): nem bitpontos és nem hi-res.</div>
               <div class="ao-hint" id="aoNetRecvState" hidden></div>
             </div>
-            <div id="aoPlayerWrap" hidden>
+            
+            <div class="ao-path" id="aoPath"></div>
+          </div>
+              </section>
+              <section class="dev-pane" id="devPane-player" data-pane="player" role="tabpanel" aria-labelledby="devTab-player" hidden>
+<div id="aoPlayerWrap" hidden>
               <div class="sink-sec-title" style="margin-top:10px;" data-i18n="ao.playerTitle">Beépített lejátszó</div>
               <label class="ao-row"><span>ReplayGain</span>
                 <select id="aoRg" class="mini-select" onchange="aoSend()">
@@ -5088,7 +5169,11 @@ var qrcode = function() {
                   <div class="ao-hint" data-i18n="ao.dsdDopHint">A DSD-fájlok PCM-átalakítás nélkül, DoP 1.1 csomagolásban mennek a DAC-ra. Ilyenkor a DSP-lánc, a ReplayGain és a digitális hangerő kimarad (a hangerőt a DAC-on szabályozd).</div>
                 </div>
               </div>
-              <div id="aoUpsampleWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:8px;">
+              
+            </div>
+              </section>
+              <section class="dev-pane" id="devPane-rate" data-pane="rate" role="tabpanel" aria-labelledby="devTab-rate" hidden>
+<div id="aoUpsampleWrap" hidden>
                 <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:4px;">
                   <div class="sink-sec-title" style="margin:0;" data-i18n="ups.title">Felmintavételezés (beépített lejátszó)</div>
                   <button type="button" id="upsHelpBtn" class="mini-btn" style="padding:1px 8px; font-weight:600; font-size:11px;" onclick="upsToggleHelp(event)" title="Súgó a felmintavételezéshez" data-i18n="ups.infoBtn" data-i18n-title="ups.helpBtn" aria-expanded="false" aria-controls="upsHelpBox">Infó</button>
@@ -5102,6 +5187,15 @@ var qrcode = function() {
                     <option value="4" data-i18n="ups.ruleCustom">Egyéni táblázat</option>
                   </select>
                 </label>
+                <label class="ao-row"><span data-i18n="ups.downEngine">Lefelé alakítás</span>
+                  <select id="upsDownEngine" class="mini-select" onchange="upsFillCustomSelects(); aoSend()">
+                    <option value="-1" data-i18n="ups.downSystem">Rendszer (eddigi)</option>
+                    <option value="0">libsoxr</option>
+                    <option value="1">Aqulify FFT64</option>
+                    <option value="2">Aqulify FFT-DD</option>
+                  </select>
+                </label>
+                <div class="ao-hint ao-hint-flush" data-i18n="ups.downHint">Ha a hangfájl mintavétele nagyobb, mint amit a kimenet tud (pl. 192 kHz-es fájl 96 kHz-es DAC-on), ezzel a motorral alakul le. „Rendszer”: a hangrendszer keverője alakít, mint eddig.</div>
                 <div id="upsSettingsWrap" hidden>
                   <div id="upsCustomWrap" hidden style="margin:6px 0; padding:6px; border:1px solid var(--aq-line); border-radius:6px;">
                     <label class="ao-row"><span>44,1 kHz</span><select id="upsCust44100" class="mini-select" onchange="aoSend()"></select></label>
@@ -5129,7 +5223,7 @@ var qrcode = function() {
                       <div id="upsSysNoCableHint" class="ao-hint" hidden style="color:var(--aq-warn,#f59e0b);" data-i18n="ups.sysNoCable">Virtuális hangkábel (pl. VB-Cable) szükséges: állítsd azt Windows alapértelmezett kimenetnek, és az Aqulify a valódi DAC-odra továbbítja a felmintavételezett hangot.</div>
                     </div>
                   </div>
-                  <div id="upsPresetWrap" class="ao-row" style="flex-direction:column; align-items:stretch; gap:4px; margin-top:4px;">
+                  <div id="upsPresetWrap" class="ao-row ao-stack">
                     <span data-i18n="ups.preset">Szűrő előbeállítás</span>
                     <div style="display:flex; gap:4px; flex-wrap:wrap;">
                       <button type="button" id="upsPreset0" class="adw-btn" style="flex:1; font-size:11px; padding:4px 6px;" onclick="upsSelectPreset(0)" data-i18n="ups.presetLinear">Lineáris fázis</button>
@@ -5197,10 +5291,9 @@ var qrcode = function() {
                 </div>
                 <div id="upsStatus" class="ao-path" style="margin-top:6px;"></div>
               </div>
-            </div>
-            <div class="ao-path" id="aoPath"></div>
-          </div>
-          <div id="closePrefWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:10px;">
+              </section>
+              <section class="dev-pane" id="devPane-general" data-pane="general" role="tabpanel" aria-labelledby="devTab-general" hidden>
+<div id="closePrefWrap" hidden>
             <div class="sink-sec-title" data-i18n="close.setting">Ablak bezárásakor:</div>
             <select id="selectClosePref" class="mini-select" style="width:100%; max-width:none;" onchange="setClosePref(this.value)">
               <option value="ask" data-i18n="close.optAsk">Kérdezzen</option>
@@ -5208,7 +5301,7 @@ var qrcode = function() {
               <option value="quit" data-i18n="close.optQuit">Bezárás (leállás)</option>
             </select>
           </div>
-          <div id="restorePrefWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:10px;">
+<div id="restorePrefWrap" hidden>
             <div class="sink-sec-title" data-i18n="restore.setting">Indításkor:</div>
             <select id="selectRestoreMode" class="mini-select" style="width:100%; max-width:none;" onchange="restoreModeChanged()">
               <option value="ask" data-i18n="restore.optAsk">Kérdezzen</option>
@@ -5220,7 +5313,7 @@ var qrcode = function() {
             <label class="ao-row ao-check" id="rowRestoreMulti"><input type="checkbox" id="chkRestoreMulti" onchange="restoreModeChanged()"> <span data-i18n="restore.multi">Több kimenet (2–4. kimenet)</span></label>
             <label class="ao-row ao-check" id="rowRestoreAudio"><input type="checkbox" id="chkRestoreAudio" onchange="restoreModeChanged()"> <span data-i18n="restore.audio">Haladó hangkimenet (puffer, mintavétel, ébren tartás)</span></label>
           </div>
-          <div id="updWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:10px;">
+<div id="updWrap" hidden>
             <div class="sink-sec-title" data-i18n="upd.section">Frissítések</div>
             <label class="ao-row ao-check"><input type="checkbox" id="chkUpdAuto" onchange="updSetAuto(this.checked)"> <span data-i18n="upd.auto">Frissítések automatikus keresése</span></label>
             <div class="ao-hint" data-i18n="upd.autoHint">Naponta legfeljebb egyszer a GitHubtól kérdezi le a legújabb kiadást. Azonosítót nem küld.</div>
@@ -5231,7 +5324,7 @@ var qrcode = function() {
             <div id="upsAboutCredit" class="ao-hint" style="margin-top:6px;" data-i18n="ups.aboutCredit">Felmintavételezés: libsoxr, LGPL-2.1+</div>
             <div id="asioAboutCredit" class="ao-hint" style="margin-top:2px;" data-i18n="ao.asioCredit">ASIO-kimenet (Windows): Steinberg ASIO SDK 2.3.4, GPLv3. Az ASIO a Steinberg Media Technologies GmbH védjegye és szoftvere.</div>
           </div>
-          <div id="errRepWrap" hidden style="border-top:1px solid var(--aq-line); margin-top:10px; padding-top:10px;">
+<div id="errRepWrap" hidden>
             <div class="sink-sec-title" data-i18n="er.section">Hibajelentés</div>
             <label class="ao-row ao-check"><input type="checkbox" id="chkErrReports" onchange="errRepToggle(this.checked)"> <span data-i18n="er.setting">Névtelen hibajelentés</span></label>
             <div class="ao-hint" data-i18n="er.privacyShort">Bekapcsolva csak a program verzióját, rendszeradatait, a lejátszási utat, a hangkártyák gyári típusát és a motor utolsó naplósorait küldi a projekt szerverére (90 napig tárolva). Nevet, gépnevet, útvonalat, IP-, MAC- vagy e-mail-címet nem küld. Bármikor kikapcsolható.</div>
@@ -5239,6 +5332,9 @@ var qrcode = function() {
               <button type="button" class="adw-btn primary" id="btnErrReportOpen" onclick="closeSinkMenu(); openErrorReportModal('manual')" data-i18n="er.reportBtn">Hibát jelentek</button>
               <button type="button" class="adw-btn" id="btnErrReportWhat" onclick="closeSinkMenu(); openErrorReportPreviewOnly()" data-i18n="er.whatSends">Mit küld?</button>
               <button type="button" class="adw-btn" id="btnErrLog" onclick="closeSinkMenu(); openErrorLogModal()" data-i18n="er.logBtn">Napló</button>
+            </div>
+          </div>
+              </section>
             </div>
           </div>
         </div>
@@ -10628,11 +10724,15 @@ function upsFillCustomSelects() {
     opt0.value = String(s);
     opt0.textContent = t("ups.customKeep");
     sel.appendChild(opt0);
-    for (const d of UPS_TGTS) {
-      if (d <= s) continue;
+    // Felfelé (nagyobb célok), majd lefelé (kisebbek: csak ha a lefelé alakítás motorja be van állítva, az alakít)
+    const downEl = document.getElementById("upsDownEngine");
+    const downOn = !!downEl && parseInt(downEl.value, 10) >= 0;
+    const down = UPS_SRCS.filter(d => d < s).reverse();
+    for (const d of UPS_TGTS.filter(d => d > s).concat(down)) {
       const opt = document.createElement("option");
       opt.value = String(d);
-      opt.textContent = aoKhz(d);
+      opt.textContent = (d < s ? "↓ " : "↑ ") + aoKhz(d);
+      opt.disabled = d < s && !downOn;
       sel.appendChild(opt);
     }
     if (prev) sel.value = prev;
@@ -10696,6 +10796,8 @@ function upsApplyOptions(o, cp) {
   const eng = typeof o.upsampleEngine === "number" ? o.upsampleEngine : 0;
   const engEl = document.getElementById("upsEngine");
   if (engEl) engEl.value = String(eng);
+  const downEl = document.getElementById("upsDownEngine");
+  if (downEl) downEl.value = String(typeof o.downsampleEngine === "number" ? o.downsampleEngine : -1);
   upsUpdateEngineUi(eng);
   const sysWrap = document.getElementById("upsSysWrap");
   const sysChk = document.getElementById("upsSystemAudio");
@@ -11004,6 +11106,8 @@ function aoSend() {
       opts.upsampleRule = parseInt(ruleEl.value, 10) || 0;
       const engEl = document.getElementById("upsEngine");
       opts.upsampleEngine = engEl ? (parseInt(engEl.value, 10) || 0) : 0;
+      const downEl = document.getElementById("upsDownEngine");
+      if (downEl) opts.downsampleEngine = parseInt(downEl.value, 10);
       const sysChk = document.getElementById("upsSystemAudio");
       if (sysChk && aoCapsDetail && aoCapsDetail.systemUpsample) {
         opts.upsampleSystemAudio = sysChk.checked;
@@ -15952,14 +16056,57 @@ function setMainView(v, persist) {
   }, 250);
 }
 
+/** Az Eszköz ablak fülei: egyszerre egy panel; a csak rejtett elemeket tartalmazó panel füle nem látszik. */
+function devVisibleTabs() {
+  const vis = [];
+  document.querySelectorAll("#sinkPopover .dev-pane").forEach(p => {
+    const k = p.dataset.pane;
+    const has = k === "device" || Array.from(p.children).some(c => !c.hidden);
+    const tab = document.getElementById("devTab-" + k);
+    if (tab) tab.hidden = !has;
+    if (has) vis.push(k);
+  });
+  return vis;
+}
+function devShowPane(k) {
+  const vis = devVisibleTabs();
+  if (!vis.includes(k)) k = "device";
+  document.querySelectorAll("#sinkPopover .dev-pane").forEach(p => { p.hidden = p.dataset.pane !== k; });
+  document.querySelectorAll("#sinkPopover .dev-tab").forEach(b => {
+    const on = b.dataset.pane === k;
+    b.setAttribute("aria-selected", on ? "true" : "false");
+    b.tabIndex = on ? 0 : -1;
+  });
+  const panes = document.querySelector("#sinkPopover .dev-panes");
+  if (panes) panes.scrollTop = 0;
+  upsCloseHelp();
+  try { localStorage.setItem("aqDevPane", k); } catch (e) {}
+}
 function toggleSinkMenu(ev) {
   if (ev) ev.stopPropagation();
   const pop = document.getElementById("sinkPopover");
   if (pop) {
     pop.hidden = !pop.hidden;
     if (pop.hidden) upsCloseHelp();
+    else {
+      let k = "device";
+      try { k = localStorage.getItem("aqDevPane") || "device"; } catch (e) {}
+      devShowPane(k);
+    }
   }
 }
+// Fülsor billentyűzettel: fel/le (mobilon balra/jobbra) nyíl a látható fülek között
+document.addEventListener("keydown", (e) => {
+  const tab = e.target && e.target.closest ? e.target.closest("#sinkPopover .dev-tab") : null;
+  if (!tab || !["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
+  const vis = devVisibleTabs();
+  const i = vis.indexOf(tab.dataset.pane);
+  const k = vis[(i + (e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : vis.length - 1)) % vis.length];
+  devShowPane(k);
+  const nt = document.getElementById("devTab-" + k);
+  if (nt) nt.focus();
+  e.preventDefault();
+});
 function closeSinkMenu() {
   const pop = document.getElementById("sinkPopover");
   if (pop) pop.hidden = true;

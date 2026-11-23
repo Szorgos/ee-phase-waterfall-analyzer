@@ -92,6 +92,9 @@ struct AudioOptions {
     // Felmintavételezés a beépített lejátszóban és opcionálisan a rendszerhangon (libsoxr, 64 bites FFT64 vagy 106 bites FFT-DD)
     UpsampleRule upsampleRule = UpsampleRule::Off;
     int upsampleEngine = 0;                     // 0: libsoxr (alapértelmezett), 1: Aqulify FFT64 (64 bit), 2: Aqulify FFT-DD (106 bit)
+    // Lefelé alakítás a beépített lejátszóban, ha a kimenet a forrás mintavételét nem tudja (pl. 192 kHz-es fájl 96 kHz-es
+    // DAC-on): -1: a rendszer keverője (alapértelmezett, az eddigi viselkedés), 0–2: a választott motor (mint upsampleEngine)
+    int downsampleEngine = -1;
     bool upsampleSystemAudio = false;           // false: csak beépített lejátszó (alap); true: külső rendszerhang is
     std::string systemCaptureDevice;            // Windows virtuális kábel / választható forráseszköz (üres: automatikus)
     int upsamplePreset = 1;                     // 0: linear, 1: intermediate, 2: minimum, 3: custom, 4: reference
@@ -123,7 +126,7 @@ struct AudioOptions {
                fixedRate == o.fixedRate && resampleQuality == o.resampleQuality && replayGain == o.replayGain &&
                rgPreampDb == o.rgPreampDb && rgPreventClip == o.rgPreventClip && preload == o.preload &&
                exclusive == o.exclusive && exclHwVolume == o.exclHwVolume &&
-               upsampleRule == o.upsampleRule && upsampleEngine == o.upsampleEngine &&
+               upsampleRule == o.upsampleRule && upsampleEngine == o.upsampleEngine && downsampleEngine == o.downsampleEngine &&
                upsampleSystemAudio == o.upsampleSystemAudio && systemCaptureDevice == o.systemCaptureDevice &&
                upsamplePreset == o.upsamplePreset &&
                std::abs(upsamplePassbandEnd - o.upsamplePassbandEnd) < 1e-4 &&
@@ -189,6 +192,7 @@ inline void sanitize(AudioOptions& o) {
     const int ur = static_cast<int>(o.upsampleRule);
     if (ur < 0 || ur > 4) o.upsampleRule = UpsampleRule::Off;
     if (o.upsampleEngine < 0 || o.upsampleEngine > 2) o.upsampleEngine = 0;
+    if (o.downsampleEngine < -1 || o.downsampleEngine > 2) o.downsampleEngine = -1;
     if (o.systemCaptureDevice.size() > 255) o.systemCaptureDevice.clear();
     for (char c : o.systemCaptureDevice) {
         if (static_cast<unsigned char>(c) < 0x20) { o.systemCaptureDevice.clear(); break; }
@@ -252,6 +256,7 @@ inline std::string toJson(const AudioOptions& o) {
            ",\"exclHwVolume\":" + (o.exclHwVolume ? "true" : "false") +
            ",\"upsampleRule\":" + std::to_string(static_cast<int>(o.upsampleRule)) +
            ",\"upsampleEngine\":" + std::to_string(o.upsampleEngine) +
+           ",\"downsampleEngine\":" + std::to_string(o.downsampleEngine) +
            ",\"upsampleSystemAudio\":" + (o.upsampleSystemAudio ? "true" : "false") +
            ",\"systemCaptureDevice\":\"" + jsonStringBody(o.systemCaptureDevice) + "\"" +
            ",\"upsamplePreset\":" + std::to_string(o.upsamplePreset) +
@@ -301,6 +306,8 @@ inline AudioOptions fromJson(const json::Value& v, AudioOptions base = {}) {
         base.upsampleRule = static_cast<UpsampleRule>(static_cast<int>(x->num));
     if (const json::Value* x = v.get("upsampleEngine"); x && x->type == T::Number)
         base.upsampleEngine = static_cast<int>(x->num);
+    if (const json::Value* x = v.get("downsampleEngine"); x && x->type == T::Number)
+        base.downsampleEngine = static_cast<int>(x->num);
     if (const json::Value* x = v.get("upsampleSystemAudio"); x && x->type == T::Bool)
         base.upsampleSystemAudio = x->b;
     if (const json::Value* x = v.get("systemCaptureDevice"); x && x->type == T::String)

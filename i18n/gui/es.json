@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "Sobremuestreo del sistema: no se detectó ningún cable de audio virtual (p. ej. VB-Cable).",
   "ups.liveNoOutput": "Sobremuestreo del sistema: no hay un DAC/salida física independiente (bucle evitado).",
   "ups.engineFftDD": "Aqulify FFT-DD (Double-Double de 106 bits)",
-  "ups.engineHintDD": "Motor FFT + Kaiser-sinc de una etapa con precisión Double-Double de 106 bits (~31 dígitos significativos, HydrogenAudio SRC: 99,85 %), fase seleccionable y filtro sin retardo."
+  "ups.engineHintDD": "Motor FFT + Kaiser-sinc de una etapa con precisión Double-Double de 106 bits (~31 dígitos significativos, HydrogenAudio SRC: 99,85 %), fase seleccionable y filtro sin retardo.",
+  "dev.tabDevice": "Dispositivo",
+  "dev.tabOutput": "Salida de audio",
+  "dev.tabPlayer": "Reproductor",
+  "dev.tabRate": "Frecuencia de muestreo",
+  "dev.tabGeneral": "General",
+  "ups.downEngine": "Conversión descendente",
+  "ups.downSystem": "Sistema (como antes)",
+  "ups.downHint": "Si la frecuencia de muestreo del archivo es mayor que la que admite la salida (p. ej., un archivo de 192 kHz en un DAC de 96 kHz), se reduce con este motor. «Sistema»: lo convierte el mezclador del sistema de sonido, como antes."
 }

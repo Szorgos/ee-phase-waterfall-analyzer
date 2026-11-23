@@ -1118,5 +1118,13 @@
   "ups.liveNoVirtual": "Systeemaudio-upsampling: geen virtuele audiokabel gevonden (bijv. VB-Cable).",
   "ups.liveNoOutput": "Systeemaudio-upsampling: geen aparte fysieke DAC/uitvoer gevonden (terugkoppeling voorkomen).",
   "ups.engineFftDD": "Aqulify FFT-DD (106-bit Double-Double)",
-  "ups.engineHintDD": "Enkeltraps 106-bit Double-Double (~31 significante cijfers) FFT + Kaiser-sinc-engine (HydrogenAudio SRC: 99,85 %), met kiesbare fase en vertragingsvrij filter."
+  "ups.engineHintDD": "Enkeltraps 106-bit Double-Double (~31 significante cijfers) FFT + Kaiser-sinc-engine (HydrogenAudio SRC: 99,85 %), met kiesbare fase en vertragingsvrij filter.",
+  "dev.tabDevice": "Apparaat",
+  "dev.tabOutput": "Audio-uitvoer",
+  "dev.tabPlayer": "Speler",
+  "dev.tabRate": "Samplefrequentie",
+  "dev.tabGeneral": "Algemeen",
+  "ups.downEngine": "Downsampling",
+  "ups.downSystem": "Systeem (zoals voorheen)",
+  "ups.downHint": "Als de samplefrequentie van het bestand hoger is dan de uitvoer ondersteunt (bijv. een 192 kHz-bestand op een 96 kHz-DAC), wordt die met deze engine omlaag geconverteerd. ‘Systeem’: de mixer van het geluidssysteem converteert, zoals voorheen."
 }
