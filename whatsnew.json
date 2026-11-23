@@ -1,6 +1,127 @@
 {
   "versions": [
     {
+      "version": "2.9.4",
+      "date": "2026-11-23",
+      "notes": {
+        "hu": [
+          "Új (Linux): az „Aqulify” magától alapértelmezett kimenet lesz, így minden hang (és a vízesés, az EQ) a DSP-láncon át szól. Ha a rendszer hangerő-paneljén hangkártyát választasz, az lesz a DSP kimenete.",
+          "Új: választható lefelé alakítás minden platformon. Ha a fájl mintavétele nagyobb, mint amit a kimenet tud (pl. 192 kHz-es fájl 96 kHz-es DAC-on), a libsoxr, az FFT64 vagy az FFT-DD motor alakítja le; „Rendszer”: mint eddig.",
+          "Új: átszervezett Eszköz ablak fülekkel és egységes szélességű vezérlőkkel."
+        ],
+        "en": [
+          "New (Linux): “Aqulify” now makes itself the default output, so all audio (and the waterfall and EQ) goes through the DSP chain. If you pick a sound card in the system volume panel, it becomes the DSP output.",
+          "New: selectable downsampling on all platforms. If a file’s sample rate is higher than the output supports (e.g. a 192 kHz file on a 96 kHz DAC), the libsoxr, FFT64 or FFT-DD engine converts it down; “System”: as before.",
+          "New: redesigned Device window with tabs and evenly sized controls."
+        ],
+        "es": [
+          "Nuevo (Linux): «Aqulify» se convierte sola en la salida predeterminada, así todo el audio (y la cascada y el ecualizador) pasa por la cadena DSP. Si eliges una tarjeta de sonido en el panel de volumen del sistema, esa será la salida del DSP.",
+          "Nuevo: conversión descendente seleccionable en todas las plataformas. Si la frecuencia del archivo es mayor que la que admite la salida (p. ej., 192 kHz en un DAC de 96 kHz), la reduce el motor libsoxr, FFT64 o FFT-DD; «Sistema»: como antes.",
+          "Nuevo: ventana Dispositivo rediseñada con pestañas y controles del mismo ancho."
+        ],
+        "fr": [
+          "Nouveau (Linux) : « Aqulify » devient d’elle-même la sortie par défaut, tout le son (ainsi que la cascade et l’égaliseur) passe donc par la chaîne DSP. Si vous choisissez une carte son dans le panneau de volume du système, elle devient la sortie du DSP.",
+          "Nouveau : sous-échantillonnage au choix sur toutes les plateformes. Si la fréquence du fichier dépasse celle de la sortie (p. ex. 192 kHz sur un DAC 96 kHz), le moteur libsoxr, FFT64 ou FFT-DD l’abaisse ; « Système » : comme avant.",
+          "Nouveau : fenêtre Appareil repensée, avec des onglets et des commandes de même largeur."
+        ],
+        "zh": [
+          "新功能（Linux）：“Aqulify”会自动成为默认输出，所有声音（以及瀑布图和均衡器）都经过 DSP 链。如果在系统音量面板中选择声卡，它将成为 DSP 的输出。",
+          "新功能：所有平台均可选择降采样方式。当文件采样率高于输出所支持的采样率时（例如 96 kHz DAC 上的 192 kHz 文件），由 libsoxr、FFT64 或 FFT-DD 引擎降采样；“系统”：与以前相同。",
+          "新功能：重新设计的设备窗口，带选项卡，控件宽度统一。"
+        ],
+        "de": [
+          "Neu (Linux): „Aqulify“ wird automatisch zur Standardausgabe, sodass der gesamte Ton (samt Wasserfall und EQ) durch die DSP-Kette läuft. Wählen Sie im Lautstärkefeld des Systems eine Soundkarte, wird sie zur DSP-Ausgabe.",
+          "Neu: wählbare Abwärtswandlung auf allen Plattformen. Ist die Abtastrate der Datei höher, als die Ausgabe unterstützt (z. B. 192 kHz an einem 96-kHz-DAC), rechnet die Engine libsoxr, FFT64 oder FFT-DD sie herunter; „System“: wie bisher.",
+          "Neu: überarbeitetes Gerätefenster mit Registerkarten und gleich breiten Bedienelementen."
+        ],
+        "it": [
+          "Novità (Linux): «Aqulify» diventa da sola l’uscita predefinita, così tutto l’audio (e la cascata e l’EQ) passa per la catena DSP. Se scegli una scheda audio nel pannello del volume di sistema, diventa l’uscita del DSP.",
+          "Novità: sottocampionamento selezionabile su tutte le piattaforme. Se la frequenza del file supera quella supportata dall’uscita (ad es. 192 kHz su un DAC a 96 kHz), la riduce il motore libsoxr, FFT64 o FFT-DD; «Sistema»: come prima.",
+          "Novità: finestra Dispositivo riprogettata, con schede e controlli della stessa larghezza."
+        ],
+        "nl": [
+          "Nieuw (Linux): ‘Aqulify’ wordt vanzelf de standaarduitvoer, zodat al het geluid (en de waterval en de EQ) door de DSP-keten gaat. Kies je in het volumepaneel van het systeem een geluidskaart, dan wordt die de DSP-uitvoer.",
+          "Nieuw: instelbare downsampling op alle platforms. Is de samplefrequentie van het bestand hoger dan de uitvoer aankan (bijv. 192 kHz op een 96 kHz-DAC), dan converteert de libsoxr-, FFT64- of FFT-DD-engine omlaag; ‘Systeem’: zoals voorheen.",
+          "Nieuw: vernieuwd apparaatvenster met tabbladen en even brede bedieningselementen."
+        ],
+        "pl": [
+          "Nowość (Linux): „Aqulify” samo staje się domyślnym wyjściem, więc cały dźwięk (oraz wodospad i EQ) przechodzi przez łańcuch DSP. Jeśli wybierzesz kartę dźwiękową w systemowym panelu głośności, stanie się ona wyjściem DSP.",
+          "Nowość: konwersja w dół do wyboru na wszystkich platformach. Gdy częstotliwość pliku jest wyższa, niż obsługuje wyjście (np. 192 kHz na przetworniku 96 kHz), obniża ją silnik libsoxr, FFT64 lub FFT-DD; „System”: jak dotąd.",
+          "Nowość: przebudowane okno Urządzenie z kartami i kontrolkami o jednakowej szerokości."
+        ],
+        "ru": [
+          "Новое (Linux): «Aqulify» сама становится выходом по умолчанию, поэтому весь звук (а также водопад и эквалайзер) проходит через цепочку DSP. Если выбрать звуковую карту на системной панели громкости, она станет выходом DSP.",
+          "Новое: выбираемое понижение частоты на всех платформах. Если частота файла выше, чем поддерживает выход (например, 192 кГц на ЦАП 96 кГц), её понижает движок libsoxr, FFT64 или FFT-DD; «Система»: как раньше.",
+          "Новое: переработанное окно «Устройство» с вкладками и элементами одинаковой ширины."
+        ],
+        "pt": [
+          "Novo (Linux): o «Aqulify» passa a ser sozinho a saída predefinida, por isso todo o som (e a cascata e o EQ) passa pela cadeia DSP. Se escolher uma placa de som no painel de volume do sistema, ela passa a ser a saída do DSP.",
+          "Novo: conversão descendente à escolha em todas as plataformas. Se a taxa do ficheiro for superior à suportada pela saída (p. ex., 192 kHz num DAC de 96 kHz), o motor libsoxr, FFT64 ou FFT-DD reduz-a; «Sistema»: como antes.",
+          "Novo: janela Dispositivo redesenhada, com separadores e controlos da mesma largura."
+        ],
+        "ro": [
+          "Nou (Linux): „Aqulify” devine singură ieșirea implicită, astfel tot sunetul (și cascada, și EQ-ul) trece prin lanțul DSP. Dacă alegi o placă de sunet în panoul de volum al sistemului, aceasta devine ieșirea DSP.",
+          "Nou: subeșantionare la alegere pe toate platformele. Dacă rata fișierului depășește ce suportă ieșirea (de ex. 192 kHz pe un DAC de 96 kHz), motorul libsoxr, FFT64 sau FFT-DD o reduce; „Sistem”: ca până acum.",
+          "Nou: fereastra Dispozitiv reproiectată, cu file și comenzi de aceeași lățime."
+        ],
+        "el": [
+          "Νέο (Linux): το «Aqulify» γίνεται μόνο του η προεπιλεγμένη έξοδος, έτσι όλος ο ήχος (και ο καταρράκτης και το EQ) περνά από την αλυσίδα DSP. Αν επιλέξετε κάρτα ήχου στον πίνακα έντασης του συστήματος, αυτή γίνεται η έξοδος του DSP.",
+          "Νέο: επιλέξιμη υποδειγματοληψία σε όλες τις πλατφόρμες. Αν ο ρυθμός του αρχείου είναι υψηλότερος από όσο υποστηρίζει η έξοδος (π.χ. 192 kHz σε DAC 96 kHz), τον μειώνει η μηχανή libsoxr, FFT64 ή FFT-DD· «Σύστημα»: όπως πριν.",
+          "Νέο: ανανεωμένο παράθυρο Συσκευής με καρτέλες και στοιχεία ελέγχου ίδιου πλάτους."
+        ],
+        "tr": [
+          "Yeni (Linux): \"Aqulify\" artık kendiliğinden varsayılan çıkış olur; böylece tüm ses (şelale ve EQ dahil) DSP zincirinden geçer. Sistem ses panelinde bir ses kartı seçerseniz, o kart DSP çıkışı olur.",
+          "Yeni: tüm platformlarda seçilebilir örnekleme düşürme. Dosyanın örnekleme hızı çıkışın desteklediğinden yüksekse (ör. 96 kHz DAC'ta 192 kHz), libsoxr, FFT64 veya FFT-DD motoru düşürür; \"Sistem\": önceki gibi.",
+          "Yeni: sekmeli ve eşit genişlikte denetimlere sahip yeniden tasarlanmış Cihaz penceresi."
+        ],
+        "fi": [
+          "Uutta (Linux): ”Aqulify” asettuu itse oletuslähdöksi, joten kaikki ääni (sekä vesiputous ja EQ) kulkee DSP-ketjun läpi. Jos valitset äänikortin järjestelmän äänenvoimakkuuspaneelista, siitä tulee DSP:n lähtö.",
+          "Uutta: valittava alasnäytteistys kaikilla alustoilla. Jos tiedoston näytteenottotaajuus on suurempi kuin lähtö tukee (esim. 192 kHz 96 kHz:n DAC:ssa), libsoxr-, FFT64- tai FFT-DD-moottori muuntaa sen alas; ”Järjestelmä”: kuten ennen.",
+          "Uutta: uudistettu Laite-ikkuna välilehdillä ja tasalevyisillä säätimillä."
+        ],
+        "da": [
+          "Nyt (Linux): \"Aqulify\" bliver selv standardudgangen, så al lyd (også vandfaldet og EQ) går gennem DSP-kæden. Vælger du et lydkort i systemets lydstyrkepanel, bliver det DSP-udgangen.",
+          "Nyt: valgbar nedsampling på alle platforme. Hvis filens samplingsfrekvens er højere, end udgangen understøtter (f.eks. 192 kHz på en 96 kHz-DAC), konverterer libsoxr-, FFT64- eller FFT-DD-motoren den ned; \"System\": som hidtil.",
+          "Nyt: omdesignet Enhed-vindue med faner og lige brede kontroller."
+        ],
+        "nb": [
+          "Nytt (Linux): «Aqulify» blir selv standardutgangen, slik at all lyd (også fossen og EQ) går gjennom DSP-kjeden. Velger du et lydkort i systemets volumpanel, blir det DSP-utgangen.",
+          "Nytt: valgbar nedsampling på alle plattformer. Hvis filens samplingsfrekvens er høyere enn utgangen støtter (f.eks. 192 kHz på en 96 kHz-DAC), konverterer libsoxr-, FFT64- eller FFT-DD-motoren den ned; «System»: som før.",
+          "Nytt: redesignet Enhet-vindu med faner og like brede kontroller."
+        ],
+        "sv": [
+          "Nytt (Linux): ”Aqulify” blir själv standardutgången, så allt ljud (även vattenfallet och EQ) går genom DSP-kedjan. Väljer du ett ljudkort i systemets volympanel blir det DSP-utgången.",
+          "Nytt: valbar nedsampling på alla plattformar. Om filens samplingsfrekvens är högre än utgången stöder (t.ex. 192 kHz på en 96 kHz-DAC) konverterar motorn libsoxr, FFT64 eller FFT-DD ned den; ”System”: som tidigare.",
+          "Nytt: omgjort Enhet-fönster med flikar och lika breda kontroller."
+        ],
+        "he": [
+          "חדש (Linux): „Aqulify” הופכת מעצמה לפלט ברירת המחדל, כך שכל השמע (וגם המפל וה-EQ) עובר דרך שרשרת ה-DSP. אם תבחרו כרטיס קול בלוח עוצמת הקול של המערכת, הוא יהפוך לפלט ה-DSP.",
+          "חדש: הורדת קצב דגימה לבחירה בכל הפלטפורמות. אם קצב הדגימה של הקובץ גבוה ממה שהפלט תומך בו (למשל 192 kHz על DAC של 96 kHz), מנוע libsoxr‏, FFT64 או FFT-DD מוריד אותו; „מערכת”: כמו קודם.",
+          "חדש: חלון התקן מעוצב מחדש, עם לשוניות ופקדים ברוחב אחיד."
+        ],
+        "ja": [
+          "新機能（Linux）：「Aqulify」が自動で既定の出力になり、すべての音（ウォーターフォールと EQ も）が DSP チェーンを通ります。システムの音量パネルでサウンドカードを選ぶと、それが DSP の出力になります。",
+          "新機能：すべてのプラットフォームでダウンサンプリング方式を選択可能。ファイルのサンプルレートが出力の対応範囲より高い場合（例：96 kHz の DAC で 192 kHz）、libsoxr・FFT64・FFT-DD エンジンが変換します。「システム」：従来どおり。",
+          "新機能：タブと幅のそろったコントロールで「デバイス」ウィンドウを刷新。"
+        ],
+        "ko": [
+          "새 기능(Linux): 'Aqulify'가 자동으로 기본 출력이 되어 모든 소리(폭포 그래프와 EQ 포함)가 DSP 체인을 거칩니다. 시스템 볼륨 패널에서 사운드 카드를 선택하면 그 카드가 DSP 출력이 됩니다.",
+          "새 기능: 모든 플랫폼에서 다운샘플링 방식 선택 가능. 파일의 샘플레이트가 출력이 지원하는 것보다 높으면(예: 96 kHz DAC에서 192 kHz) libsoxr, FFT64 또는 FFT-DD 엔진이 낮춥니다. '시스템': 기존과 동일.",
+          "새 기능: 탭과 같은 너비의 컨트롤로 새로 디자인한 장치 창."
+        ],
+        "cs": [
+          "Nové (Linux): „Aqulify“ se samo nastaví jako výchozí výstup, takže veškerý zvuk (i vodopád a EQ) prochází řetězcem DSP. Když v systémovém panelu hlasitosti vyberete zvukovou kartu, stane se výstupem DSP.",
+          "Nové: volitelné podvzorkování na všech platformách. Je-li vzorkovací frekvence souboru vyšší, než výstup podporuje (např. 192 kHz na DAC 96 kHz), převede ji dolů jádro libsoxr, FFT64 nebo FFT-DD; „Systém“: jako dosud.",
+          "Nové: přepracované okno Zařízení s kartami a ovládacími prvky stejné šířky."
+        ],
+        "uk": [
+          "Нове (Linux): «Aqulify» сама стає виходом за замовчуванням, тож увесь звук (а також водоспад і еквалайзер) проходить через ланцюг DSP. Якщо вибрати звукову карту на системній панелі гучності, вона стане виходом DSP.",
+          "Нове: вибір способу зниження частоти на всіх платформах. Якщо частота файлу вища, ніж підтримує вихід (наприклад, 192 кГц на ЦАП 96 кГц), її знижує рушій libsoxr, FFT64 або FFT-DD; «Система»: як раніше.",
+          "Нове: перероблене вікно «Пристрій» із вкладками та елементами однакової ширини."
+        ]
+      }
+    },
+    {
       "version": "2.9.3",
       "date": "2026-11-23",
       "notes": {

@@ -1,3 +1,19 @@
+### Újdonságok (2.9.4)
+
+**Letöltés (2.9.4):**
+- Windows 11: [Aqulify-Setup-2.9.4.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.4/Aqulify-Setup-2.9.4.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.4/Aqulify-Setup-2.9.4.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.9.4-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.4/Aqulify-2.9.4-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.4/Aqulify-2.9.4-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.9.4.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.4/Aqulify-Linux-2.9.4.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.4/Aqulify-Linux-2.9.4.tar.gz.sha256))
+- Fedora: [aqulify-2.9.4-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.4/aqulify-2.9.4-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.9.4-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.4/aqulify_2.9.4-1_amd64.deb) · Arch: [aqulify-2.9.4-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.4/aqulify-2.9.4-1-x86_64.pkg.tar.zst)
+- Raspberry Pi 4 / 5 (Raspberry Pi OS, 64 bit): [aqulify_2.9.4-1.pi1_arm64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.4/aqulify_2.9.4-1.pi1_arm64.deb) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.4/aqulify_2.9.4-1.pi1_arm64.deb.sha256)) · útmutató: `docs/pi.md`
+- Android-távirányító (Android 8+, változatlan): [Aqulify-Remote-1.5.1.apk](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.2/Aqulify-Remote-1.5.1.apk) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.2/Aqulify-Remote-1.5.1.apk.sha256))
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Új (Linux): az „Aqulify” magától a rendszer alapértelmezett kimenete lesz.** Így minden alkalmazás hangja (és a vízesés, az EQ) a DSP-láncon át szól. Ha a rendszer hangerő-paneljén hangkártyát választasz (pl. a laptop hangszóróját), az lesz a DSP kimenete, az alapértelmezett pedig visszaáll az Aqulify-ra – a választás többé nem kerüli meg a programot.
+- **Új: választható lefelé alakítás (minden platformon).** Ha a hangfájl mintavétele nagyobb, mint amit a kimenet tud (pl. 192 kHz-es fájl 96 kHz-es DAC-on), a Mintavételezés fül „Lefelé alakítás” beállításával a libsoxr, az Aqulify FFT64 vagy az Aqulify FFT-DD motor alakítja le; „Rendszer” (alapértelmezett): a hangrendszer keverője, mint eddig. Az egyéni táblázatban lefelé irányú cél is választható.
+- **Változás: megosztott módban a lejátszó a rendszer keverőjének mintavételére alakít.** Windowson a megosztott formátum, macOS-en a hangeszköz névleges, Linuxon az engedélyezett (rögzítettnél a beállított) mintavétel a cél, így a felmintavételezett hangot nem alakítja át még egyszer a rendszer.
+- **Új: átszervezett Eszköz ablak.** Fülek (Eszköz, Hangkimenet, Lejátszó, Mintavételezés, Általános), egyszerre egy panel, egységes szélességű vezérlők.
+
 ### Újdonságok (2.9.3)
 
 **Letöltés (2.9.3):**
