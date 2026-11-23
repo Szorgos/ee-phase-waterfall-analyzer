@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <mutex>
@@ -32,8 +33,16 @@ static int g_fail = 0;
 
 static const std::string kData = std::getenv("AQ_TEST_DATA_DIR") ? std::getenv("AQ_TEST_DATA_DIR") : AQ_TEST_DATA_DIR;
 
+/** UTF-8 útvonal (Windowson a keskeny ifstream az ANSI kódlapot használná, az ékezetes név nem nyílna meg). */
+static std::filesystem::path u8p(const std::string& s) {
+#if defined(__cpp_char8_t)
+    return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t*>(s.data()), s.size()));
+#else
+    return std::filesystem::u8path(s);
+#endif
+}
 static std::string readFile(const std::string& p) {
-    std::ifstream f(p, std::ios::binary);
+    std::ifstream f(u8p(p), std::ios::binary);
     return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 }
 static bool contains(const std::string& s, const std::string& t) { return s.find(t) != std::string::npos; }
@@ -541,7 +550,10 @@ static void testDownload(const Iface& ifc) {
     }
     const std::string path = t->path();
     t.reset();
-    CHECK(!std::ifstream(path).good(), "a megszűnéskor a fájl törlődik");
+    {
+        std::error_code ec;
+        CHECK(!path.empty() && !std::filesystem::exists(u8p(path), ec), "a megszűnéskor a fájl törlődik");
+    }
 
     // tiltott cím a letöltőben is (a hívó szabálya szerint)
     HttpTrack::Config bad = c;
