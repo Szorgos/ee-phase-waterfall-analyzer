@@ -1,6 +1,81 @@
 {
   "versions": [
     {
+      "version": "2.9.7",
+      "date": "2026-11-23",
+      "notes": {
+        "hu": [
+          "Windows, rendszerhang felmintavételezése: a DSP-lánc (EQ, limiter és a többi modul) eddig kétszer futott le, most csak egyszer; a felület a helyes forrást mutatja."
+        ],
+        "en": [
+          "Windows, system audio upsampling: the DSP chain (EQ, limiter and the other modules) used to run twice, now it runs once; the interface shows the correct source."
+        ],
+        "es": [
+          "Windows, sobremuestreo del audio del sistema: la cadena DSP (EQ, limitador y los demás módulos) se aplicaba dos veces; ahora solo una, y la interfaz muestra la fuente correcta."
+        ],
+        "fr": [
+          "Windows, suréchantillonnage du son système : la chaîne DSP (EQ, limiteur et les autres modules) s’appliquait deux fois ; désormais une seule, et l’interface affiche la bonne source."
+        ],
+        "zh": [
+          "Windows 系统声音升频：DSP 链（均衡器、限幅器及其他模块）此前会运行两次，现在只运行一次；界面显示正确的音源。"
+        ],
+        "de": [
+          "Windows, Upsampling des Systemklangs: Die DSP-Kette (EQ, Limiter und die übrigen Module) lief bisher doppelt, jetzt nur noch einmal; die Oberfläche zeigt die richtige Quelle."
+        ],
+        "it": [
+          "Windows, sovracampionamento dell’audio di sistema: la catena DSP (EQ, limiter e gli altri moduli) veniva applicata due volte, ora una sola; l’interfaccia mostra la sorgente corretta."
+        ],
+        "nl": [
+          "Windows, upsampling van het systeemgeluid: de DSP-keten (EQ, limiter en de andere modules) liep tot nu toe twee keer, nu nog maar één keer; de interface toont de juiste bron."
+        ],
+        "pl": [
+          "Windows, nadpróbkowanie dźwięku systemowego: łańcuch DSP (EQ, limiter i pozostałe moduły) działał dotąd dwukrotnie, teraz tylko raz; interfejs pokazuje właściwe źródło."
+        ],
+        "ru": [
+          "Windows, повышение частоты дискретизации системного звука: цепочка DSP (эквалайзер, лимитер и другие модули) раньше применялась дважды, теперь один раз; интерфейс показывает правильный источник."
+        ],
+        "pt": [
+          "Windows, sobreamostragem do áudio do sistema: a cadeia DSP (EQ, limitador e os outros módulos) era aplicada duas vezes; agora só uma, e a interface mostra a fonte correta."
+        ],
+        "ro": [
+          "Windows, supraeșantionarea sunetului de sistem: lanțul DSP (EQ, limitator și celelalte module) rula de două ori, acum o singură dată; interfața arată sursa corectă."
+        ],
+        "el": [
+          "Windows, υπερδειγματοληψία του ήχου συστήματος: η αλυσίδα DSP (EQ, limiter και οι υπόλοιπες μονάδες) εφαρμοζόταν δύο φορές, τώρα μόνο μία· η διεπαφή δείχνει τη σωστή πηγή."
+        ],
+        "tr": [
+          "Windows, sistem sesinin üst örneklenmesi: DSP zinciri (EQ, limiter ve diğer modüller) şimdiye kadar iki kez çalışıyordu, artık bir kez çalışıyor; arayüz doğru kaynağı gösteriyor."
+        ],
+        "fi": [
+          "Windows, järjestelmääänen ylösnäytteistys: DSP-ketju (EQ, limitteri ja muut moduulit) ajettiin aiemmin kahdesti, nyt vain kerran; käyttöliittymä näyttää oikean lähteen."
+        ],
+        "da": [
+          "Windows, upsampling af systemlyden: DSP-kæden (EQ, limiter og de øvrige moduler) kørte hidtil to gange, nu kun én gang; brugerfladen viser den rigtige kilde."
+        ],
+        "nb": [
+          "Windows, oppsampling av systemlyden: DSP-kjeden (EQ, limiter og de andre modulene) kjørte hittil to ganger, nå bare én gang; grensesnittet viser riktig kilde."
+        ],
+        "sv": [
+          "Windows, uppsampling av systemljudet: DSP-kedjan (EQ, limiter och de övriga modulerna) kördes hittills två gånger, nu bara en gång; gränssnittet visar rätt källa."
+        ],
+        "he": [
+          "Windows, דגימת־יתר של צליל המערכת: שרשרת ה־DSP (EQ, לימיטר ושאר המודולים) רצה עד כה פעמיים, ועכשיו רק פעם אחת; הממשק מציג את המקור הנכון."
+        ],
+        "ja": [
+          "Windows のシステム音声アップサンプリング：DSP チェーン（EQ、リミッターなどのモジュール）が二重に適用されていた問題を修正し、一度だけ適用されるようになりました。画面には正しい音源が表示されます。"
+        ],
+        "ko": [
+          "Windows 시스템 사운드 업샘플링: DSP 체인(EQ, 리미터 및 기타 모듈)이 두 번 적용되던 문제를 고쳐 이제 한 번만 적용되며, 화면에 올바른 소스가 표시됩니다."
+        ],
+        "cs": [
+          "Windows, převzorkování systémového zvuku: řetězec DSP (EQ, limiter a ostatní moduly) dosud běžel dvakrát, nyní jen jednou; rozhraní ukazuje správný zdroj."
+        ],
+        "uk": [
+          "Windows, підвищення частоти дискретизації системного звуку: ланцюжок DSP (еквалайзер, лімітер та інші модулі) раніше застосовувався двічі, тепер один раз; інтерфейс показує правильне джерело."
+        ]
+      }
+    },
+    {
       "version": "2.9.6",
       "date": "2026-11-23",
       "notes": {
