@@ -1,3 +1,19 @@
+### Újdonságok (2.9.3)
+
+**Letöltés (2.9.3):**
+- Windows 11: [Aqulify-Setup-2.9.3.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.3/Aqulify-Setup-2.9.3.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.3/Aqulify-Setup-2.9.3.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.9.3-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.3/Aqulify-2.9.3-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.3/Aqulify-2.9.3-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.9.3.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.3/Aqulify-Linux-2.9.3.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.3/Aqulify-Linux-2.9.3.tar.gz.sha256))
+- Fedora: [aqulify-2.9.3-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.3/aqulify-2.9.3-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.9.3-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.3/aqulify_2.9.3-1_amd64.deb) · Arch: [aqulify-2.9.3-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.3/aqulify-2.9.3-1-x86_64.pkg.tar.zst)
+- Raspberry Pi 4 / 5 (Raspberry Pi OS, 64 bit): [aqulify_2.9.3-1.pi1_arm64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.3/aqulify_2.9.3-1.pi1_arm64.deb) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.3/aqulify_2.9.3-1.pi1_arm64.deb.sha256)) · útmutató: `docs/pi.md`
+- Android-távirányító (Android 8+, változatlan): [Aqulify-Remote-1.5.1.apk](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.2/Aqulify-Remote-1.5.1.apk) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.2/Aqulify-Remote-1.5.1.apk.sha256))
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Javítva (Windows): a „Minden hang (rendszerhang is)” kikapcsolása után nem némul el a gép.** Eddig a Windows hangkimenete a virtuális kábelen maradt, ha a felmintavételezést kikapcsolták vagy kiléptek a programból, így semmi nem szólt. Most a program a híd indulásakor maga állítja a kimenetet a kábelre (és megjegyzi a valódi eszközt), kikapcsoláskor, hibánál és kilépéskor pedig visszaállítja. Ha a program összeomlik, a következő indulás állítja vissza. Ha a DAC nem tud nagyobb mintavételt a kábelnél, a rendszerhang változatlanul (1:1) szól tovább; ha a kábel mintavételét sem tudja, normál üzem marad, kábel nélkül.
+- **Javítva (Linux): a közvetlen ALSA-kimenet megnyitása nem akad el, ha a hangkártyát más program foglalja.** A megnyitás legfeljebb kb. 3 másodpercig próbálkozik, utána „foglalt” hibát ad, a lejátszó nem fagy le.
+- **Új: az A/B összehasonlítás kétállású kapcsoló** („Hallod: Feldolgozott | Eredeti”), így mindig látszik, melyik szól.
+- A beépített hibajelentő a 3 tagú gépazonosítót (gyártó, termékkód, terméknév) is kiszűri a jelentésből.
+
 ### Újdonságok (2.9.2)
 
 **Letöltés (2.9.2):**

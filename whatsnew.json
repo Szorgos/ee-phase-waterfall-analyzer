@@ -1,6 +1,150 @@
 {
   "versions": [
     {
+      "version": "2.9.3",
+      "date": "2026-11-23",
+      "notes": {
+        "hu": [
+          "Javítva (Windows): ha a „Minden hang (rendszerhang is)” felmintavételezést kikapcsolod vagy kilépsz a programból, a Windows hangkimenete magától visszaáll a valódi hangeszközre. Eddig a virtuális kábelen maradt, és nem szólt semmi. Bekapcsoláskor a program maga állítja a kimenetet a kábelre.",
+          "Javítva (Windows): ha a DAC nem tud nagyobb mintavételt a virtuális kábelnél, a rendszerhang nem némul el, hanem változatlanul (1:1) szól tovább.",
+          "Javítva (Linux): a közvetlen ALSA-kimenet megnyitása nem akad el, ha a hangkártyát éppen más program foglalja.",
+          "Új: az A/B összehasonlítás kétállású kapcsoló lett („Hallod: Feldolgozott | Eredeti”), így mindig látszik, melyik szól."
+        ],
+        "en": [
+          "Fixed (Windows): when you turn off “All audio (system audio too)” upsampling or quit the app, the Windows sound output now switches back to your real audio device. Before, it stayed on the virtual cable and nothing played. When you turn it on, the app sets the output to the cable itself.",
+          "Fixed (Windows): if the DAC cannot go higher than the virtual cable’s sample rate, system audio no longer goes silent; it keeps playing unchanged (1:1).",
+          "Fixed (Linux): opening the direct ALSA output no longer hangs when another program is using the sound card.",
+          "New: A/B comparison is now a two-position switch (“You hear: Processed | Original”), so you can always see which one is playing."
+        ],
+        "es": [
+          "Corregido (Windows): al desactivar el sobremuestreo «Todo el audio (también del sistema)» o cerrar la aplicación, la salida de sonido de Windows vuelve sola a tu dispositivo de audio real. Antes se quedaba en el cable virtual y no sonaba nada. Al activarlo, la aplicación pone la salida en el cable.",
+          "Corregido (Windows): si el DAC no admite una frecuencia mayor que la del cable virtual, el audio del sistema ya no se silencia; sigue sonando sin cambios (1:1).",
+          "Corregido (Linux): abrir la salida ALSA directa ya no se bloquea cuando otro programa está usando la tarjeta de sonido.",
+          "Nuevo: la comparación A/B es ahora un interruptor de dos posiciones («Escuchas: Procesado | Original»), así siempre se ve cuál suena."
+        ],
+        "fr": [
+          "Corrigé (Windows) : quand vous désactivez le suréchantillonnage « Tout l’audio (audio système inclus) » ou quittez l’application, la sortie audio de Windows revient d’elle-même sur votre vrai périphérique. Auparavant, elle restait sur le câble virtuel et plus rien ne sonnait. À l’activation, l’application règle elle-même la sortie sur le câble.",
+          "Corrigé (Windows) : si le DAC ne peut pas dépasser la fréquence du câble virtuel, le son du système ne se coupe plus ; il continue sans modification (1:1).",
+          "Corrigé (Linux) : l’ouverture de la sortie ALSA directe ne bloque plus quand un autre programme utilise la carte son.",
+          "Nouveau : la comparaison A/B est désormais un interrupteur à deux positions (« Vous entendez : Traité | Original »), on voit toujours lequel joue."
+        ],
+        "zh": [
+          "已修复（Windows）：关闭“全部音频（含系统音频）”升频或退出程序后，Windows 声音输出会自动切回真实音频设备。此前会停留在虚拟音频线上，导致完全无声。开启时，程序会自动把输出设为虚拟音频线。",
+          "已修复（Windows）：如果 DAC 支持的采样率不高于虚拟音频线，系统声音不再静音，而是原样（1:1）继续播放。",
+          "已修复（Linux）：当声卡被其他程序占用时，打开直接 ALSA 输出不再卡住。",
+          "新增：A/B 比较改为两档开关（“当前试听：已处理 | 原始”），随时可见当前播放的是哪一个。"
+        ],
+        "de": [
+          "Behoben (Windows): Wenn Sie das Upsampling „Gesamter Ton (auch Systemaudio)“ ausschalten oder das Programm beenden, schaltet die Windows-Tonausgabe von selbst auf Ihr echtes Audiogerät zurück. Bisher blieb sie auf dem virtuellen Kabel und es war nichts zu hören. Beim Einschalten stellt das Programm die Ausgabe selbst auf das Kabel.",
+          "Behoben (Windows): Kann der DAC nicht mehr als die Abtastrate des virtuellen Kabels, verstummt der Systemklang nicht mehr, sondern spielt unverändert (1:1) weiter.",
+          "Behoben (Linux): Das Öffnen der direkten ALSA-Ausgabe hängt nicht mehr, wenn ein anderes Programm die Soundkarte belegt.",
+          "Neu: Der A/B-Vergleich ist jetzt ein Schalter mit zwei Stellungen („Du hörst: Verarbeitet | Original“), so ist immer zu sehen, was gerade spielt."
+        ],
+        "it": [
+          "Corretto (Windows): disattivando il sovracampionamento «Tutto l’audio (anche di sistema)» o chiudendo il programma, l’uscita audio di Windows torna da sola al dispositivo reale. Prima restava sul cavo virtuale e non si sentiva nulla. All’attivazione, il programma imposta da sé l’uscita sul cavo.",
+          "Corretto (Windows): se il DAC non supera la frequenza del cavo virtuale, l’audio di sistema non si ammutolisce più, ma continua invariato (1:1).",
+          "Corretto (Linux): l’apertura dell’uscita ALSA diretta non si blocca più se un altro programma sta usando la scheda audio.",
+          "Nuovo: il confronto A/B è ora un interruttore a due posizioni («Ascolti: Elaborato | Originale»), così si vede sempre quale suona."
+        ],
+        "nl": [
+          "Opgelost (Windows): als je de upsampling „Alle audio (ook systeemaudio)” uitzet of het programma afsluit, schakelt de Windows-geluidsuitvoer vanzelf terug naar je echte audioapparaat. Voorheen bleef die op de virtuele kabel staan en was er niets te horen. Bij inschakelen zet het programma de uitvoer zelf op de kabel.",
+          "Opgelost (Windows): als de DAC niet hoger kan dan de samplefrequentie van de virtuele kabel, valt het systeemgeluid niet meer weg maar speelt het ongewijzigd (1:1) door.",
+          "Opgelost (Linux): het openen van de directe ALSA-uitvoer blijft niet meer hangen als een ander programma de geluidskaart gebruikt.",
+          "Nieuw: de A/B-vergelijking is nu een schakelaar met twee standen („Je hoort: Verwerkt | Origineel”), zodat altijd zichtbaar is wat er speelt."
+        ],
+        "pl": [
+          "Poprawiono (Windows): po wyłączeniu upsamplingu „Cały dźwięk (również systemowy)” lub zamknięciu programu wyjście dźwięku Windows samo wraca na prawdziwe urządzenie audio. Wcześniej zostawało na wirtualnym kablu i nic nie grało. Przy włączaniu program sam ustawia wyjście na kabel.",
+          "Poprawiono (Windows): jeśli DAC nie obsługuje wyższej częstotliwości niż wirtualny kabel, dźwięk systemowy już nie milknie, tylko gra dalej bez zmian (1:1).",
+          "Poprawiono (Linux): otwieranie bezpośredniego wyjścia ALSA nie zawiesza się, gdy kartę dźwiękową zajmuje inny program.",
+          "Nowość: porównanie A/B to teraz przełącznik dwupozycyjny („Słyszysz: Przetworzony | Oryginał”), więc zawsze widać, co gra."
+        ],
+        "ru": [
+          "Исправлено (Windows): при отключении апсемплинга «Весь звук (включая системный)» или выходе из программы звуковой выход Windows сам возвращается на реальное аудиоустройство. Раньше он оставался на виртуальном кабеле, и ничего не звучало. При включении программа сама переключает выход на кабель.",
+          "Исправлено (Windows): если ЦАП не поддерживает частоту выше, чем у виртуального кабеля, системный звук больше не пропадает, а играет без изменений (1:1).",
+          "Исправлено (Linux): открытие прямого вывода ALSA больше не зависает, когда звуковую карту занимает другая программа.",
+          "Новое: сравнение A/B теперь двухпозиционный переключатель («Слышно: Обработанный | Оригинал»), всегда видно, что звучит."
+        ],
+        "pt": [
+          "Corrigido (Windows): ao desligar o upsampling «Todo o áudio (também do sistema)» ou sair do programa, a saída de som do Windows volta sozinha ao seu dispositivo de áudio real. Antes ficava no cabo virtual e nada tocava. Ao ligar, o programa coloca a saída no cabo.",
+          "Corrigido (Windows): se o DAC não suportar uma taxa maior que a do cabo virtual, o som do sistema já não fica mudo; continua a tocar sem alterações (1:1).",
+          "Corrigido (Linux): abrir a saída ALSA direta já não bloqueia quando outro programa está a usar a placa de som.",
+          "Novo: a comparação A/B é agora um interruptor de duas posições («Você ouve: Processado | Original»), para ver sempre qual está a tocar."
+        ],
+        "ro": [
+          "Corectat (Windows): când dezactivați supraeșantionarea „Tot sunetul (și audio de sistem)” sau închideți programul, ieșirea audio Windows revine singură la dispozitivul audio real. Înainte rămânea pe cablul virtual și nu se auzea nimic. La activare, programul setează singur ieșirea pe cablu.",
+          "Corectat (Windows): dacă DAC-ul nu suportă o frecvență mai mare decât cablul virtual, sunetul sistemului nu mai amuțește, ci continuă neschimbat (1:1).",
+          "Corectat (Linux): deschiderea ieșirii ALSA directe nu se mai blochează când placa de sunet este folosită de alt program.",
+          "Nou: comparația A/B este acum un comutator cu două poziții („Auzi: Procesat | Original”), așa că se vede mereu ce se aude."
+        ],
+        "el": [
+          "Διορθώθηκε (Windows): όταν απενεργοποιείτε το upsampling «Όλος ο ήχος (και του συστήματος)» ή κλείνετε το πρόγραμμα, η έξοδος ήχου των Windows επιστρέφει μόνη της στην πραγματική συσκευή ήχου. Πριν έμενε στο εικονικό καλώδιο και δεν ακουγόταν τίποτα. Κατά την ενεργοποίηση, το πρόγραμμα ορίζει μόνο του την έξοδο στο καλώδιο.",
+          "Διορθώθηκε (Windows): αν ο DAC δεν υποστηρίζει υψηλότερη συχνότητα από το εικονικό καλώδιο, ο ήχος του συστήματος δεν σβήνει πια, αλλά συνεχίζει αμετάβλητος (1:1).",
+          "Διορθώθηκε (Linux): το άνοιγμα της άμεσης εξόδου ALSA δεν κολλάει πια όταν άλλο πρόγραμμα χρησιμοποιεί την κάρτα ήχου.",
+          "Νέο: η σύγκριση A/B είναι πλέον διακόπτης δύο θέσεων («Ακούτε: Επεξεργασμένο | Αρχικό»), ώστε να φαίνεται πάντα τι παίζει."
+        ],
+        "tr": [
+          "Düzeltildi (Windows): “Tüm sesler (sistem sesi dahil)” yükseltmeyi kapattığınızda veya programdan çıktığınızda Windows ses çıkışı kendiliğinden gerçek ses aygıtınıza döner. Önceden sanal kabloda kalıyor ve hiç ses gelmiyordu. Açtığınızda program çıkışı kendisi kabloya ayarlar.",
+          "Düzeltildi (Windows): DAC sanal kablonun örnekleme hızından yükseğini desteklemiyorsa sistem sesi artık kesilmez, değişmeden (1:1) çalmaya devam eder.",
+          "Düzeltildi (Linux): ses kartını başka bir program kullanırken doğrudan ALSA çıkışını açmak artık takılmıyor.",
+          "Yeni: A/B karşılaştırması artık iki konumlu bir anahtar (“Duyduğunuz: İşlenmiş | Orijinal”), böylece hangisinin çaldığı hep görünür."
+        ],
+        "fi": [
+          "Korjattu (Windows): kun poistat ”Kaikki ääni (myös järjestelmä-ääni)” -ylösnäytteistyksen käytöstä tai suljet ohjelman, Windowsin äänilähtö palaa itsestään oikeaan äänilaitteeseen. Aiemmin se jäi virtuaalikaapeliin eikä mitään kuulunut. Käyttöön otettaessa ohjelma asettaa lähdön itse kaapeliin.",
+          "Korjattu (Windows): jos DAC ei tue virtuaalikaapelia suurempaa näytteenottotaajuutta, järjestelmä-ääni ei enää vaikene vaan jatkuu muuttumattomana (1:1).",
+          "Korjattu (Linux): suoran ALSA-lähdön avaaminen ei enää jumitu, kun toinen ohjelma käyttää äänikorttia.",
+          "Uutta: A/B-vertailu on nyt kaksiasentoinen kytkin (”Kuulet: Käsitelty | Alkuperäinen”), joten näet aina, kumpi soi."
+        ],
+        "da": [
+          "Rettet (Windows): når du slår opsampling af „Al lyd (også systemlyd)“ fra eller lukker programmet, skifter Windows’ lydudgang selv tilbage til din rigtige lydenhed. Før blev den stående på det virtuelle kabel, og der kom ingen lyd. Når du slår det til, sætter programmet selv udgangen til kablet.",
+          "Rettet (Windows): hvis DAC’en ikke kan mere end det virtuelle kabels samplerate, bliver systemlyden ikke længere tavs, men spiller uændret (1:1) videre.",
+          "Rettet (Linux): åbning af den direkte ALSA-udgang hænger ikke længere, når et andet program bruger lydkortet.",
+          "Nyt: A/B-sammenligningen er nu en kontakt med to stillinger („Du hører: Behandlet | Original“), så du altid kan se, hvad der spiller."
+        ],
+        "nb": [
+          "Rettet (Windows): når du slår av oppsampling av «All lyd (også systemlyd)» eller avslutter programmet, går Windows’ lydutgang av seg selv tilbake til den ekte lydenheten. Før ble den stående på den virtuelle kabelen, og ingenting spilte. Når du slår det på, setter programmet selv utgangen til kabelen.",
+          "Rettet (Windows): hvis DAC-en ikke kan mer enn den virtuelle kabelens samplingsfrekvens, blir systemlyden ikke lenger stille, men spiller uendret (1:1) videre.",
+          "Rettet (Linux): åpning av den direkte ALSA-utgangen henger ikke lenger når et annet program bruker lydkortet.",
+          "Nytt: A/B-sammenligningen er nå en bryter med to stillinger («Du hører: Behandlet | Original»), så du alltid ser hva som spiller."
+        ],
+        "sv": [
+          "Åtgärdat (Windows): när du stänger av uppsamplingen ”Allt ljud (även systemljud)” eller avslutar programmet växlar Windows ljudutgång själv tillbaka till din riktiga ljudenhet. Tidigare blev den kvar på den virtuella kabeln och inget hördes. När du slår på det ställer programmet själv utgången på kabeln.",
+          "Åtgärdat (Windows): om DAC:n inte klarar mer än den virtuella kabelns samplingsfrekvens tystnar systemljudet inte längre, utan spelar oförändrat (1:1) vidare.",
+          "Åtgärdat (Linux): att öppna den direkta ALSA-utgången hänger sig inte längre när ett annat program använder ljudkortet.",
+          "Nytt: A/B-jämförelsen är nu en tvålägesbrytare (”Du hör: Behandlad | Original”), så det syns alltid vilken som spelar."
+        ],
+        "he": [
+          "תוקן (Windows): כשמכבים את ה־upsampling „כל השמע (כולל שמע מערכת)” או יוצאים מהתוכנה, פלט הצליל של Windows חוזר מעצמו להתקן השמע האמיתי. קודם הוא נשאר על הכבל הווירטואלי ולא נשמע דבר. בהפעלה התוכנה מגדירה בעצמה את הפלט לכבל.",
+          "תוקן (Windows): אם ה־DAC אינו תומך בקצב גבוה מזה של הכבל הווירטואלי, צליל המערכת כבר לא משתתק אלא ממשיך ללא שינוי (1:1).",
+          "תוקן (Linux): פתיחת פלט ALSA הישיר כבר לא נתקעת כשתוכנה אחרת משתמשת בכרטיס הקול.",
+          "חדש: השוואת A/B היא עכשיו מתג דו־מצבי („שומעים: מעובד | מקורי”), כך שתמיד רואים מה מתנגן."
+        ],
+        "ja": [
+          "修正（Windows）：「すべての音声（システム音声も含む）」のアップサンプリングをオフにするか、アプリを終了すると、Windows の音声出力が自動的に実際のオーディオ機器に戻るようになりました。以前は仮想ケーブルのままで、何も鳴りませんでした。オンにするとアプリが出力をケーブルに切り替えます。",
+          "修正（Windows）：DAC が仮想ケーブルより高いサンプルレートに対応していない場合でも、システム音が無音にならず、そのまま（1:1）再生を続けます。",
+          "修正（Linux）：他のプログラムがサウンドカードを使用中でも、ALSA 直接出力のオープンで止まらなくなりました。",
+          "新機能：A/B 比較が 2 ポジションのスイッチになりました（「再生中：処理後 | オリジナル」）。どちらが鳴っているか常にわかります。"
+        ],
+        "ko": [
+          "수정(Windows): '모든 오디오(시스템 오디오 포함)' 업샘플링을 끄거나 프로그램을 종료하면 Windows 소리 출력이 자동으로 실제 오디오 장치로 돌아갑니다. 이전에는 가상 케이블에 남아 아무 소리도 나지 않았습니다. 켤 때는 프로그램이 출력을 케이블로 직접 설정합니다.",
+          "수정(Windows): DAC가 가상 케이블보다 높은 샘플레이트를 지원하지 않아도 시스템 소리가 끊기지 않고 그대로(1:1) 재생됩니다.",
+          "수정(Linux): 다른 프로그램이 사운드 카드를 사용 중일 때 직접 ALSA 출력을 여는 동작이 더 이상 멈추지 않습니다.",
+          "신규: A/B 비교가 2단 스위치가 되었습니다('듣는 소리: 처리됨 | 원본'). 어느 쪽이 재생 중인지 항상 보입니다."
+        ],
+        "cs": [
+          "Opraveno (Windows): když vypnete převzorkování „Veškerý zvuk (včetně systémového)“ nebo ukončíte program, zvukový výstup Windows se sám vrátí na skutečné zvukové zařízení. Dříve zůstal na virtuálním kabelu a nic nehrálo. Při zapnutí program sám nastaví výstup na kabel.",
+          "Opraveno (Windows): pokud DAC nezvládne vyšší vzorkovací frekvenci než virtuální kabel, systémový zvuk už neztichne, ale hraje dál beze změny (1:1).",
+          "Opraveno (Linux): otevření přímého výstupu ALSA se už nezasekne, když zvukovou kartu používá jiný program.",
+          "Nové: porovnání A/B je nyní dvoupolohový přepínač („Slyšíte: Zpracovaný | Původní“), takže je vždy vidět, co hraje."
+        ],
+        "uk": [
+          "Виправлено (Windows): коли ви вимикаєте апсемплінг «Увесь звук (разом із системним)» або виходите з програми, звуковий вихід Windows сам повертається на справжній аудіопристрій. Раніше він лишався на віртуальному кабелі, і нічого не звучало. Під час увімкнення програма сама перемикає вихід на кабель.",
+          "Виправлено (Windows): якщо ЦАП не підтримує частоту, вищу за віртуальний кабель, системний звук більше не зникає, а грає без змін (1:1).",
+          "Виправлено (Linux): відкриття прямого виходу ALSA більше не зависає, коли звукову карту використовує інша програма.",
+          "Нове: порівняння A/B тепер двопозиційний перемикач («Чути: Оброблений | Оригінал»), тож завжди видно, що звучить."
+        ]
+      }
+    },
+    {
       "version": "2.9.2",
       "date": "2026-11-22",
       "notes": {
