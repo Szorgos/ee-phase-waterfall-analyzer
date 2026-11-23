@@ -677,6 +677,14 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   .aq-switch:not(.on) .aq-lbl-off, .aq-switch.on .aq-lbl-on { color: var(--aq-text); }
   .aq-switch.nudge { animation: aqNudge 0.6s ease-in-out 3; }
 
+  /* A/B összehasonlító kapcsoló: „Hallod: [Feldolgozott | Eredeti]”; az éppen hallható oldal világít (.selected) */
+  .ab-seg { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .ab-seg-cap { color: var(--aq-text-2); font-size: var(--aq-fs-body); margin-right: 2px; white-space: nowrap; }
+  .ab-seg .adw-btn { white-space: nowrap; }
+  .ab-seg[aria-disabled="true"] .ab-seg-cap { opacity: 0.55; }
+  .ab-seg .adw-btn.selected { --hf-mix: var(--hf-mix-accent); }   /* a hallható oldal a téma kiemelőszínére eloxált, a másik sima fém */
+  .ab-seg .adw-btn:disabled { pointer-events: none; }   /* a súgó (title) a csoportról jelenik meg akkor is, ha a gomb tiltott */
+
   /* ======================================================= */
   /* EGYEDI AUDIOFIL CHECKBOX (ISO 9241-303 & Fitts törvénye)*/
   /* ======================================================= */
@@ -5451,7 +5459,7 @@ var qrcode = function() {
         <button class="adw-btn primary" id="btnImportAutoEq" title="AutoEq kereső és fájl / szöveges profil importáló" data-i18n-title="eq.importTitle"><svg class="aq-icon" aria-hidden="true"><use href="#i-headphones"/></svg><span data-i18n="eq.importBtn">AutoEq Kereső & Import</span></button>
         <span class="preset-eq-only" id="presetEqOnly">
           <button class="adw-btn" id="btnEqBypassTab">EQ: KI (Bypass)</button>
-          <button class="adw-btn" id="btnEqAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
+          <div class="ab-seg" id="btnEqAbTab" data-ab-mod="eq" role="radiogroup" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle" data-i18n-aria-label="mt.abTitle"><span class="ab-seg-cap" data-i18n="ab.hear">Hallod:</span><button type="button" class="adw-btn" role="radio" data-ab-side="0" data-i18n="ab.processed">Feldolgozott</button><button type="button" class="adw-btn" role="radio" data-ab-side="1" data-i18n="ab.original">Eredeti</button></div>
           <span class="preset-sep" aria-hidden="true"></span>
           <div class="stat-group">
             <span class="lbl" data-i18n="strip.eqMode">EQ Mód:</span>
@@ -5654,7 +5662,7 @@ var qrcode = function() {
             <span class="status-badge off" id="badgeStatus-convolver" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
-            <button class="adw-btn" id="btnConvAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
+            <div class="ab-seg" id="btnConvAbTab" data-ab-mod="convolver" role="radiogroup" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle" data-i18n-aria-label="mt.abTitle"><span class="ab-seg-cap" data-i18n="ab.hear">Hallod:</span><button type="button" class="adw-btn" role="radio" data-ab-side="0" data-i18n="ab.processed">Feldolgozott</button><button type="button" class="adw-btn" role="radio" data-ab-side="1" data-i18n="ab.original">Eredeti</button></div>
             <button type="button" class="aq-switch" id="btnToggle-convolver" onclick="toggleModule('convolver')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
             <label class="adw-btn" style="cursor:pointer; font-size:0.78rem;">
               <svg class="aq-icon" aria-hidden="true"><use href="#i-folder"/></svg><span data-i18n="cv.browse">WAV / IRS Tallózása...</span>
@@ -5746,7 +5754,7 @@ var qrcode = function() {
             <span class="status-badge off" id="badgeStatus-loudness" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
           </div>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="adw-btn" id="btnLoudAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
+            <div class="ab-seg" id="btnLoudAbTab" data-ab-mod="loudness" role="radiogroup" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle" data-i18n-aria-label="mt.abTitle"><span class="ab-seg-cap" data-i18n="ab.hear">Hallod:</span><button type="button" class="adw-btn" role="radio" data-ab-side="0" data-i18n="ab.processed">Feldolgozott</button><button type="button" class="adw-btn" role="radio" data-ab-side="1" data-i18n="ab.original">Eredeti</button></div>
             <button type="button" class="aq-switch" id="btnToggle-loudness" onclick="toggleModule('loudness')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
           </div>
         </div>
@@ -5769,7 +5777,7 @@ var qrcode = function() {
             <span style="font-size:0.75rem; color:var(--aq-text-2);">
               <span data-i18n="bass.principle">Elv:</span> <strong style="color:var(--aq-accent-2);">Missing Fundamental</strong>
             </span>
-            <button class="adw-btn" id="btnBassAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
+            <div class="ab-seg" id="btnBassAbTab" data-ab-mod="bass" role="radiogroup" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle" data-i18n-aria-label="mt.abTitle"><span class="ab-seg-cap" data-i18n="ab.hear">Hallod:</span><button type="button" class="adw-btn" role="radio" data-ab-side="0" data-i18n="ab.processed">Feldolgozott</button><button type="button" class="adw-btn" role="radio" data-ab-side="1" data-i18n="ab.original">Eredeti</button></div>
             <button type="button" class="aq-switch" id="btnToggle-bass" onclick="toggleModule('bass')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
           </div>
         </div>
@@ -5801,7 +5809,7 @@ var qrcode = function() {
             <span class="status-badge off" id="badgeStatus-stereo" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
           </div>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="adw-btn" id="btnStereoAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
+            <div class="ab-seg" id="btnStereoAbTab" data-ab-mod="stereo" role="radiogroup" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle" data-i18n-aria-label="mt.abTitle"><span class="ab-seg-cap" data-i18n="ab.hear">Hallod:</span><button type="button" class="adw-btn" role="radio" data-ab-side="0" data-i18n="ab.processed">Feldolgozott</button><button type="button" class="adw-btn" role="radio" data-ab-side="1" data-i18n="ab.original">Eredeti</button></div>
             <button type="button" class="aq-switch" id="btnToggle-stereo" onclick="toggleModule('stereo')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
           </div>
         </div>
@@ -5821,7 +5829,7 @@ var qrcode = function() {
             <span class="status-badge off" id="badgeStatus-mono" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
           </div>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="adw-btn" id="btnMonoAbTab" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
+            <div class="ab-seg" id="btnMonoAbTab" data-ab-mod="mono" role="radiogroup" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle" data-i18n-aria-label="mt.abTitle"><span class="ab-seg-cap" data-i18n="ab.hear">Hallod:</span><button type="button" class="adw-btn" role="radio" data-ab-side="0" data-i18n="ab.processed">Feldolgozott</button><button type="button" class="adw-btn" role="radio" data-ab-side="1" data-i18n="ab.original">Eredeti</button></div>
             <button type="button" class="aq-switch" id="btnToggle-mono" onclick="toggleModule('mono')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
           </div>
         </div>
@@ -5893,7 +5901,7 @@ var qrcode = function() {
             <span class="status-badge off" id="badgeStatus-magic" data-i18n="mod.off">Kikapcsolva (Bypass)</span>
           </div>
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="adw-btn" id="btnMagicCompare" onclick="toggleMagicCompare()" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle">A/B: feldolgozott</button>
+            <div class="ab-seg" id="btnMagicCompare" data-ab-mod="magic" role="radiogroup" style="display:none;" title="Előtte / utána összehasonlítás, hangerőre kiegyenlítve" data-i18n-title="mt.abTitle" data-i18n-aria-label="mt.abTitle"><span class="ab-seg-cap" data-i18n="ab.hear">Hallod:</span><button type="button" class="adw-btn" role="radio" data-ab-side="0" data-i18n="ab.processed">Feldolgozott</button><button type="button" class="adw-btn" role="radio" data-ab-side="1" data-i18n="ab.original">Eredeti</button></div>
             <button type="button" class="aq-switch" id="btnToggle-magic" onclick="toggleModule('magic')" role="switch" aria-checked="false"><span class="aq-switch-lbl aq-lbl-off" data-i18n="mod.btnOff">KI</span><span class="aq-switch-lbl aq-lbl-on" data-i18n="mod.btnOn">BE</span><span class="aq-switch-knob" aria-hidden="true"></span></button>
           </div>
         </div>
@@ -7016,27 +7024,49 @@ function abIsOn(mod) { return mod === 'eq' ? eqAbOn : mod === 'convolver' ? conv
 function setAb(mod, on) {
   if (mod === 'eq') eqAbOn = on; else if (mod === 'convolver') convAbOn = on; else if (mod === 'bass') bassAbOn = on; else if (mod === 'mono') monoAbOn = on; else if (mod === 'loudness') loudAbOn = on; else stereoAbOn = on;
 }
+/**
+ * Az A/B kapcsoló kétállású: „Hallod: [Feldolgozott | Eredeti]”. Mindkét lehetőség mindig látszik, és az éppen
+ * hallható világít (LED + kiemelés), így nem kell kitalálni, mit jelent az aktuális felirat (egy gomb, ami az
+ * állapotot vagy a kattintás hatását írja ki, félreérthető volt).
+ * `group`: a .ab-seg elem; `original`: az eredeti (hangerőre kiegyenlített) jel szól-e; `enabled`: a modul be van-e kapcsolva.
+ */
+function paintAbSeg(group, original, enabled) {
+  group.style.display = '';
+  group.title = t(enabled ? 'mt.abTitle' : 'ab.needModule');
+  group.setAttribute('aria-disabled', String(!enabled));
+  group.querySelectorAll('button[data-ab-side]').forEach((b) => {
+    const isOriginal = b.dataset.abSide === '1';
+    const sel = isOriginal === original;
+    b.disabled = !enabled;
+    b.classList.toggle('selected', sel);
+    b.setAttribute('aria-checked', String(sel));
+  });
+}
 function renderAbButtons() {
   if (!AB_MODS) return;   // a betöltés legelején (a deklaráció sora előtt) még nincs mit kirajzolni
   Object.keys(AB_MODS).forEach((mod) => {
-    const b = document.getElementById(AB_MODS[mod][0]);
-    if (!b) return;
-    // A gomb mindig látszik (különben kikapcsolt modulnál úgy tűnik, nincs A/B); kikapcsolt modulnál nem nyomható,
+    const g = document.getElementById(AB_MODS[mod][0]);
+    if (!g) return;
+    // Mindig látszik (különben kikapcsolt modulnál úgy tűnik, nincs A/B); kikapcsolt modulnál nem nyomható,
     // és a súgó megmondja, miért
-    const on = abIsOn(mod), active = moduleIsActive(mod);
-    b.style.display = '';
-    b.disabled = !active;
-    b.title = t(active ? 'mt.abTitle' : 'ab.needModule');
-    b.className = on ? 'adw-btn primary active' : 'adw-btn';
-    b.innerText = t(on ? 'ab.original' : 'ab.processed');
+    paintAbSeg(g, abIsOn(mod), moduleIsActive(mod));
   });
-  if (typeof fitEqActionRow === "function") fitEqActionRow();   // az A/B gomb megjelenése a gombsor szélességét is változtatja
+  if (typeof fitEqActionRow === "function") fitEqActionRow();   // az A/B kapcsoló megjelenése a gombsor szélességét is változtatja
 }
-function toggleAb(mod) {
-  setAb(mod, !abIsOn(mod));
-  sendEngine({ type: AB_MODS[mod][1], compare: abIsOn(mod) ? 1 : 0 });
+/** Az A/B kapcsoló egyik oldalát választották: original = true az eredeti, false a feldolgozott jel. */
+function chooseAb(mod, original) {
+  if (abIsOn(mod) === original) return;   // már ez szól
+  setAb(mod, original);
+  sendEngine({ type: AB_MODS[mod][1], compare: original ? 1 : 0 });
   renderAbButtons();
 }
+// Egy közös figyelő kezeli az összes modul A/B kapcsolóját (a Magic Touché is)
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest && ev.target.closest('.ab-seg button[data-ab-side]');
+  if (!b || b.disabled) return;
+  const mod = b.closest('.ab-seg').dataset.abMod, original = b.dataset.abSide === '1';
+  if (mod === 'magic') setMagicCompare(original); else chooseAb(mod, original);
+});
 
 /** Kikapcsolt modul beállításakor a be/ki gomb röviden felvillan: a változás csak bekapcsolva hallható. */
 function nudgeIfOff(mod) {
@@ -7616,18 +7646,6 @@ const btnConvBypass = document.getElementById("btnConvBypass");
 if (btnConvBypass) btnConvBypass.onclick = () => setModuleActive('convolver', !isConvolverEnabled);
 const btnConvBypassTab = document.getElementById("btnConvBypassTab");
 if (btnConvBypassTab) btnConvBypassTab.onclick = () => setModuleActive('convolver', !isConvolverEnabled);
-const btnEqAbTab = document.getElementById("btnEqAbTab");
-if (btnEqAbTab) btnEqAbTab.onclick = () => toggleAb('eq');
-const btnConvAbTab = document.getElementById("btnConvAbTab");
-if (btnConvAbTab) btnConvAbTab.onclick = () => toggleAb('convolver');
-const btnBassAbTab = document.getElementById("btnBassAbTab");
-if (btnBassAbTab) btnBassAbTab.onclick = () => toggleAb('bass');
-const btnMonoAbTab = document.getElementById("btnMonoAbTab");
-if (btnMonoAbTab) btnMonoAbTab.onclick = () => toggleAb('mono');
-const btnLoudAbTab = document.getElementById("btnLoudAbTab");
-if (btnLoudAbTab) btnLoudAbTab.onclick = () => toggleAb('loudness');
-const btnStereoAbTab = document.getElementById("btnStereoAbTab");
-if (btnStereoAbTab) btnStereoAbTab.onclick = () => toggleAb('stereo');
 
 const btnCameraAngle = document.getElementById("btnCameraAngle");
 if (btnCameraAngle) {
@@ -13066,17 +13084,17 @@ function sendMagic() {
   sendEngine({ type: "set_magic", amount: getCtl("magicAmount"), compare: magicCompare ? 1 : 0,
                character: getCtl("magicCharacter"), content: getCtl("magicContent") });
 }
-function toggleMagicCompare() {
-  magicCompare = !magicCompare;
+function setMagicCompare(original) {
+  if (magicCompare === original) return;
+  magicCompare = original;
   renderMagicCompare();
   sendMagic();
 }
 function renderMagicCompare() {
-  const b = document.getElementById("btnMagicCompare");
-  if (!b) return;
-  b.style.display = isMagicEnabled ? "" : "none";
-  b.className = magicCompare ? "adw-btn" : "adw-btn primary active";
-  b.innerText = magicCompare ? t("mt.abOriginal") : t("mt.abProcessed");
+  const g = document.getElementById("btnMagicCompare");
+  if (!g) return;
+  paintAbSeg(g, magicCompare, isMagicEnabled);
+  g.style.display = isMagicEnabled ? "" : "none";   // a Magic Touch A/B kapcsolója csak bekapcsolt modulnál látszik
 }
 
 /** A motor által küldött Magic Touch mérések (állapotüzenet, 0,5 s-onként); null: nincs adat. */
