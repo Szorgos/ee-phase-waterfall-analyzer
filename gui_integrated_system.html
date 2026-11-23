@@ -10831,7 +10831,8 @@ function upsRenderStatus() {
   const lu = engineStatus && engineStatus.liveUpsample;
   if (lu && lu.active) {
     if (lu.ownEngine) {
-      const engLabel = lu.converter === "fftdd" ? "Aqulify FFT-DD" : lu.converter === "fft64" ? "Aqulify FFT64" : "libsoxr";
+      // "none": átengedés (a DAC nem tud többet a kábel mintavételénél), a hang átalakítás nélkül megy át
+      const engLabel = lu.converter === "none" ? "1:1" : lu.converter === "fftdd" ? "Aqulify FFT-DD" : lu.converter === "fft64" ? "Aqulify FFT64" : "libsoxr";
       parts.push(`<span class="ok">● ${t("ups.liveOwnActive", { src: aoKhz(lu.srcRate), dst: aoKhz(lu.actualDacRate || lu.targetRate), engine: engLabel, ms: Math.round(lu.latencyMs || 0) })}</span>`);
     } else {
       parts.push(`<span class="ok">● ${t("ups.liveActive", { src: aoKhz(lu.srcRate), dst: aoKhz(lu.actualDacRate || lu.targetRate) })}</span>`);

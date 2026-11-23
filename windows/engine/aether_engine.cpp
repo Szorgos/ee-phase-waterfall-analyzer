@@ -1205,6 +1205,8 @@ int main(int argc, char** argv) {
         filePlayer.setPreload(audioOpts.preload);
         filePlayer.setUpsampleOptions(audioOpts);
         winLiveBridge.setOptions(audioOpts);
+        // Ha az előző futás a virtuális kábelen hagyta a Windows hangkimenetét, innen tudja, mire állítsa vissza
+        winLiveBridge.setStateFile(userFilePath(L"system_audio_device.txt", true));
         winLiveBridge.start(&playerDsp, [&]() { return filePlayer.hasTrack(); });
         playerOut.setExclusive(audioOpts.exclusive);
         playerOut.setAsio(audioOpts.asio, audioOpts.asioDriver);

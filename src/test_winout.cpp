@@ -618,6 +618,59 @@ int main() {
         const auto pAsio = win::chooseWinBridgeDevices(onlyVirt, "", true);
         CHECK(pAsio.ok && pAsio.captureId == L"dev-vb" && pAsio.outputName == "ASIO",
               "ASIO módban csak a virtuális kábel is elegendő a rögzítéshez");
+
+        // A kábel már az alapértelmezett: a megjegyzett DAC legyen a kimenet, ne az első valódi eszköz
+        const std::vector<WasapiEndpointInfo> cableDefault = {
+            { L"dev-hdmi", "dev-hdmi", "Monitor (HDMI)", false, false },
+            { L"dev-vb", "dev-vb", "CABLE Input (VB-Audio Virtual Cable)", true, true },
+            { L"dev-dac", "dev-dac", "Speakers (USB HiFi DAC)", false, false }
+        };
+        const auto pPref = win::chooseWinBridgeDevices(cableDefault, "", false, L"dev-dac");
+        CHECK(pPref.ok && pPref.outputId == L"dev-dac", "a megjegyzett DAC a kimenet, nem a HDMI");
+        const auto pGone = win::chooseWinBridgeDevices(cableDefault, "", false, L"dev-kihuzva");
+        CHECK(pGone.ok && pGone.outputId == L"dev-hdmi", "kihúzott megjegyzett eszköz: az első valódi eszköz");
+    }
+
+    std::printf("\n[14] Rendszerhang-híd: a Windows alapértelmezett kimenetének átállítása és visszaállítása\n");
+    {
+        win::DefaultDeviceState st;
+        // Bekapcsolás: a DAC az alapértelmezett -> megjegyezzük, a rendszer a kábelre áll
+        auto a = win::planEngage(st, L"dac", false, L"vb", L"dac");
+        CHECK(a.setDefault && a.target == L"vb" && st.engaged && st.restoreId == L"dac" && a.stateChanged,
+              "bekapcsolás: a DAC megjegyezve, a kimenet a kábelre áll");
+        a = win::planEngage(st, L"vb", true, L"vb", L"dac");
+        CHECK(!a.setDefault && !a.stateChanged, "már a kábelen: nincs teendő");
+        // A felhasználó a fejhallgatóra váltott: az lesz a cél, a rendszer vissza a kábelre
+        a = win::planEngage(st, L"phones", false, L"vb", L"dac");
+        CHECK(a.setDefault && a.target == L"vb" && st.restoreId == L"phones", "kézi váltás: új visszaállítási cél");
+        // Kikapcsolás: vissza a megjegyzett eszközre
+        a = win::planRelease(st, L"vb", true);
+        CHECK(a.setDefault && a.target == L"phones" && !st.engaged && a.stateChanged,
+              "kikapcsolás: a Windows kimenete vissza a valódi eszközre");
+        a = win::planRelease(st, L"vb", true);
+        CHECK(!a.setDefault && !a.stateChanged, "nem kapcsolt be: nem nyúlunk a kimenethez");
+
+        // Kézzel a kábelre állított rendszer: a híd kimenete lesz a visszaállítási cél
+        win::DefaultDeviceState st2;
+        a = win::planEngage(st2, L"vb", true, L"vb", L"dac");
+        CHECK(!a.setDefault && st2.engaged && st2.restoreId == L"dac", "kézi kábel: a DAC a visszaállítási cél");
+        // Közben a felhasználó maga váltott valódi eszközre: azt nem írjuk felül
+        a = win::planRelease(st2, L"hdmi", false);
+        CHECK(!a.setDefault && !st2.engaged, "valódi eszközön áll: nem írjuk felül");
+
+        // Megőrzés fájlban (összeomlás utáni visszaállításhoz)
+        wchar_t tmp[MAX_PATH];
+        GetTempPathW(MAX_PATH, tmp);
+        const std::wstring path = std::wstring(tmp) + L"aq_test_sysaudio_dev.txt";
+        win::DefaultDeviceState s3;
+        s3.engaged = true;
+        s3.restoreId = L"{0.0.0.00000000}.{dac}";
+        s3.cableId = L"{0.0.0.00000000}.{vb}";
+        CHECK(win::saveDefaultDeviceState(path, s3), "állapot mentve");
+        const auto l3 = win::loadDefaultDeviceState(path);
+        CHECK(l3.engaged && l3.restoreId == s3.restoreId && l3.cableId == s3.cableId, "állapot visszaolvasva");
+        CHECK(win::saveDefaultDeviceState(path, win::DefaultDeviceState{}) && !win::loadDefaultDeviceState(path).engaged,
+              "kikapcsolt állapot: a fájl törölve");
     }
 
     std::printf("\n%s (%d hiba, %d rendben)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail, g_ok);

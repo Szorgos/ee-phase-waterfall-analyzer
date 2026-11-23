@@ -34,6 +34,7 @@
 #include "player_output_win.hpp"
 #include "upsample_engine.hpp"
 #include "wasapi_loopback.hpp"
+#include "win_default_device.hpp"
 
 namespace ee_analyzer::win {
 
@@ -55,7 +56,8 @@ struct WinBridgeDevicePlan {
  */
 inline WinBridgeDevicePlan chooseWinBridgeDevices(const std::vector<WasapiEndpointInfo>& devices,
                                                   const std::string& preferredCaptureUtf8,
-                                                  bool useAsio) {
+                                                  bool useAsio,
+                                                  const std::wstring& preferredOutputId = {}) {
     WinBridgeDevicePlan plan;
 
     // 1. Virtuális hangkábel kiválasztása
@@ -92,8 +94,19 @@ inline WinBridgeDevicePlan chooseWinBridgeDevices(const std::vector<WasapiEndpoi
     }
 
     // 2. Fizikai WASAPI kimeneti eszköz kiválasztása (visszacsatolás-védelemmel)
+    // Elsőként a megjegyzett valódi eszköz (amelyről a rendszer kimenetét a kábelre állítottuk), mert utána
+    // már a kábel az alapértelmezett
     const WasapiEndpointInfo* out = nullptr;
+    if (!preferredOutputId.empty()) {
+        for (const auto& d : devices) {
+            if (d.id == preferredOutputId && d.id != cap->id && !d.isVirtual) {
+                out = &d;
+                break;
+            }
+        }
+    }
     for (const auto& d : devices) {
+        if (out) break;
         if (d.id != cap->id && !d.isVirtual && d.isDefault) {
             out = &d;
             break;
@@ -134,6 +147,17 @@ public:
     WinLiveBridge(const WinLiveBridge&) = delete;
     WinLiveBridge& operator=(const WinLiveBridge&) = delete;
 
+    /**
+     * A megőrzött alapértelmezett-eszköz állapot fájlja (start() előtt). Ha az előző futás a kábelen hagyta a
+     * rendszer kimenetét (összeomlás, kilőtt folyamat), a figyelőszál első köre visszaállítja, ha a híd most ki van kapcsolva.
+     */
+    void setStateFile(const std::wstring& path) {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (started_) return;
+        stateFile_ = path;
+        defState_ = loadDefaultDeviceState(path);
+    }
+
     void start(player::ExclusiveDsp* dsp, std::function<bool()> isPlayerActive) {
         std::lock_guard<std::mutex> lk(mu_);
         if (started_) return;
@@ -154,6 +178,8 @@ public:
         cv_.notify_all();
         if (watchThread_.joinable()) watchThread_.join();
         teardownPipeline();
+        // Kilépés: a rendszer kimenete visszaáll a valódi eszközre (különben a hang a kábelben elveszne)
+        if (defState_.engaged) releaseDefault(WasapiLoopback::listRenderEndpoints());
         std::lock_guard<std::mutex> lk(mu_);
         started_ = false;
     }
@@ -163,6 +189,7 @@ public:
             std::lock_guard<std::mutex> lk(mu_);
             opts_ = o;
             wake_ = true;
+            optsGen_++;
         }
         cv_.notify_all();
     }
@@ -216,7 +243,8 @@ public:
             src = lastSrcRate_;
             tgt = lastTargetRate_;
         }
-        const char* conv = act
+        // Átengedés (a DAC nem tud többet, mint a kábel): a hang átalakítás nélkül, a DSP-láncon át megy a DAC-ra
+        const char* conv = (act && st.srcRate != st.dstRate)
             ? audioopt::upsampleConverterCode(st.engineType)
             : "none";
         char buf[512];
@@ -258,6 +286,72 @@ private:
         teardownPipelineLocked();
     }
 
+    /** Csak a DAC-kimenet és a konverter leállítása (a kábel lehallgatása marad, hogy a mintavétele látsszon). */
+    void closeOutputLocked() {
+        if (!pipeRunning_) return;
+        active_.store(false, std::memory_order_release);
+        output_.setActive(false);
+        output_.close();
+        bridge_.stop();
+        pipeRunning_ = false;
+        appliedSrcRate_ = 0;
+        appliedDstRate_.store(0, std::memory_order_relaxed);
+        appliedOutId_.clear();
+    }
+
+    static const WasapiEndpointInfo* findDefault(const std::vector<WasapiEndpointInfo>& devices) {
+        for (const auto& d : devices)
+            if (d.isDefault) return &d;
+        return nullptr;
+    }
+
+    void persistDefaultState() {
+        if (!saveDefaultDeviceState(stateFile_, defState_))
+            std::cerr << "[Felmintavételezés/Win] Az eszközállapot nem menthető.\n";
+    }
+
+    /** A rendszer kimenete a kábelre (a programok oda szólnak, a híd viszi a DAC-ra). */
+    void engageDefault(const std::vector<WasapiEndpointInfo>& devices, const WinBridgeDevicePlan& plan) {
+        const WasapiEndpointInfo* def = findDefault(devices);
+        std::wstring fallback = plan.outputId;
+        if (fallback.empty()) {   // ASIO: a visszaállítási cél az első valódi eszköz
+            for (const auto& d : devices)
+                if (!d.isVirtual && d.id != plan.captureId) { fallback = d.id; break; }
+        }
+        const auto a = planEngage(defState_, def ? def->id : std::wstring{}, def ? def->isVirtual : false,
+                                  plan.captureId, fallback);
+        if (a.stateChanged) persistDefaultState();
+        if (!a.setDefault) return;
+        if (setDefaultRenderDeviceId(a.target)) {
+            std::cout << "[Felmintavételezés/Win] A Windows hangkimenete: " << plan.captureName << " (rendszerhang a hídon át).\n";
+            setDefaultFailLogged_ = false;
+        } else if (!setDefaultFailLogged_) {
+            setDefaultFailLogged_ = true;
+            std::cerr << "[Felmintavételezés/Win] A Windows alapértelmezett hangkimenete nem állítható át a kábelre.\n";
+        }
+    }
+
+    /** A rendszer kimenete vissza a megjegyzett valódi eszközre (normál üzem, virtuális kábel nélkül). */
+    void releaseDefault(const std::vector<WasapiEndpointInfo>& devices) {
+        if (!defState_.engaged) return;
+        const WasapiEndpointInfo* def = findDefault(devices);
+        std::wstring target = defState_.restoreId;
+        bool targetPresent = false;
+        for (const auto& d : devices)
+            if (d.id == target && !d.isVirtual) targetPresent = true;
+        const auto a = planRelease(defState_, def ? def->id : std::wstring{}, def ? def->isVirtual : false);
+        if (a.stateChanged) persistDefaultState();
+        if (!a.setDefault || !targetPresent) return;
+        if (setDefaultRenderDeviceId(a.target)) {
+            std::string name;
+            for (const auto& d : devices)
+                if (d.id == a.target) name = d.name;
+            std::cout << "[Felmintavételezés/Win] A Windows hangkimenete visszaállt: " << name << ".\n";
+        } else {
+            std::cerr << "[Felmintavételezés/Win] A Windows alapértelmezett hangkimenete nem állítható vissza.\n";
+        }
+    }
+
     void teardownPipelineLocked() {
         if (!pipeRunning_ && !loopbackRunning_) return;
         active_.store(false, std::memory_order_release);
@@ -297,21 +391,33 @@ private:
                 if (quit_) return;
                 wake_ = false;
                 o = opts_;
+                if (optsGen_ != failGen_) failKey_.clear();   // új beállítás: a korábbi nyitási hiba újrapróbálható
             }
 
-            const bool playerBusy = suspendedForPlayer_.load(std::memory_order_acquire) ||
-                                    (isPlayerActive_ && isPlayerActive_());
-            if (playerBusy || !o.upsampleSystemAudio || o.upsampleRule == audioopt::UpsampleRule::Off) {
+            // Kikapcsolt híd: normál üzem, a rendszer kimenete vissza a valódi eszközre
+            if (!o.upsampleSystemAudio || o.upsampleRule == audioopt::UpsampleRule::Off) {
                 teardownPipeline();
-                setStatus(playerBusy ? "player_active" : "off", "", "", 0, 0);
+                if (defState_.engaged) releaseDefault(WasapiLoopback::listRenderEndpoints());
+                setStatus("off", "", "", 0, 0);
                 continue;
             }
 
             const auto devices = WasapiLoopback::listRenderEndpoints();
-            const WinBridgeDevicePlan plan = chooseWinBridgeDevices(devices, o.systemCaptureDevice, o.asio);
+            const WinBridgeDevicePlan plan =
+                chooseWinBridgeDevices(devices, o.systemCaptureDevice, o.asio, defState_.restoreId);
             if (!plan.ok) {
                 teardownPipeline();
+                releaseDefault(devices);
                 setStatus(plan.reason, plan.captureName, plan.outputName, 0, 0);
+                continue;
+            }
+
+            // A beépített lejátszó elsőbbsége: a DAC-ot elengedjük, a rendszer kimenete marad, ahol van
+            const bool playerBusy = suspendedForPlayer_.load(std::memory_order_acquire) ||
+                                    (isPlayerActive_ && isPlayerActive_());
+            if (playerBusy) {
+                teardownPipeline();
+                setStatus("player_active", "", "", 0, 0);
                 continue;
             }
 
@@ -349,19 +455,30 @@ private:
             if (!o.asio) output_.wasapi().setTargetDeviceId(plan.outputId);
             const auto supported = output_.supportedRates();
             std::string reason;
-            const uint32_t dstRate = UpsampleEngine::selectTargetRate(
+            uint32_t dstRate = UpsampleEngine::selectTargetRate(
                 srcRate, o.upsampleRule, supported, o.upsampleCustom,
                 /*bypassUpsample=*/false, /*isDsd=*/false, &reason, o.upsampleMaxRate);
 
+            // Nincs mire felmintavételezni (a DAC nem tud többet, mint a kábel): átengedés változatlan mintavétellel,
+            // hogy a rendszerhang ne álljon meg. Ha a DAC a kábel mintavételét sem tudja, normál üzem (kábel nélkül).
             if (dstRate <= srcRate) {
-                if (pipeRunning_) {
-                    active_.store(false, std::memory_order_release);
-                    output_.setActive(false);
-                    output_.close();
-                    bridge_.stop();
-                    pipeRunning_ = false;
+                const bool dacTakesSrc =
+                    supported.empty() || std::find(supported.begin(), supported.end(), srcRate) != supported.end();
+                if (!dacTakesSrc) {
+                    closeOutputLocked();
+                    releaseDefault(devices);
+                    setStatus(reason.empty() ? "dac_unsupported" : reason, plan.captureName, plan.outputName, srcRate, 0);
+                    continue;
                 }
-                setStatus(reason.empty() ? "same_rate" : reason, plan.captureName, plan.outputName, srcRate, dstRate);
+                dstRate = srcRate;
+            }
+
+            // Ugyanez a nyitás nemrég nem sikerült: normál üzem, 30 s múlva (vagy új beállításnál) újrapróba
+            const std::string key = std::to_string(srcRate) + "|" + std::to_string(dstRate) + "|" +
+                                    WasapiLoopback::wideToUtf8(plan.outputId.c_str());
+            if (!failKey_.empty() && failKey_ == key &&
+                std::chrono::steady_clock::now() - failTime_ < std::chrono::seconds(30)) {
+                releaseDefault(devices);
                 continue;
             }
 
@@ -370,6 +487,9 @@ private:
                                     appliedOutId_ != plan.outputId ||
                                     !sameBridgeOpts(appliedOpts_, o);
             if (!needReopen) {
+                // A rendszer kimenete maradjon a kábelen (ha a felhasználó közben másik valódi eszközt választott,
+                // az lesz a híd kimenete, a rendszer pedig visszakerül a kábelre)
+                engageDefault(devices, plan);
                 setStatus("", plan.captureName, plan.outputName, srcRate, dstRate);
                 continue;
             }
@@ -380,9 +500,19 @@ private:
             output_.close();
             bridge_.stop();
 
+            auto markFailed = [&] {
+                failKey_ = key;
+                failTime_ = std::chrono::steady_clock::now();
+                {
+                    std::lock_guard<std::mutex> lk(mu_);
+                    failGen_ = optsGen_;
+                }
+                releaseDefault(devices);   // a hang ne vesszen el a kábelben
+            };
             if (!bridge_.configure(srcRate, dstRate, o) || !bridge_.start()) {
                 pipeRunning_ = false;
                 setStatus("bridge_failed", plan.captureName, plan.outputName, srcRate, dstRate);
+                markFailed();
                 continue;
             }
             std::string err;
@@ -392,8 +522,12 @@ private:
                 setStatus(err.empty() ? "open_failed" : err, plan.captureName, plan.outputName, srcRate, dstRate);
                 std::cerr << "[Felmintavételezés/Win] A kimenet nem nyitható meg (" << plan.outputName
                           << ", " << dstRate << " Hz): " << err << "\n";
+                markFailed();
                 continue;
             }
+            failKey_.clear();
+            // Csak a sikeres nyitás után: a programok hangja innentől a kábelen és a hídon át jut a DAC-ra
+            engageDefault(devices, plan);
 
             appliedSrcRate_ = srcRate;
             appliedDstRate_.store(dstRate, std::memory_order_relaxed);
@@ -405,7 +539,7 @@ private:
             setStatus("", plan.captureName, plan.outputName, srcRate, dstRate);
             std::cout << "[Felmintavételezés/Win] Rendszerhang aktív: " << plan.captureName << " (" << srcRate
                       << " Hz) -> " << plan.outputName << " (" << dstRate << " Hz, "
-                      << audioopt::upsampleEngineLabel(o.upsampleEngine)
+                      << (dstRate == srcRate ? std::string("átengedés") : audioopt::upsampleEngineLabel(o.upsampleEngine))
                       << ").\n";
         }
     }
@@ -434,6 +568,14 @@ private:
     uint32_t appliedSrcRate_ = 0;
     std::wstring appliedCapId_, appliedOutId_;
     audioopt::AudioOptions appliedOpts_;
+
+    // Alapértelmezett lejátszóeszköz (csak a figyelőszál és a leállítás használja)
+    std::wstring stateFile_;
+    DefaultDeviceState defState_;
+    bool setDefaultFailLogged_ = false;
+    uint64_t optsGen_ = 0, failGen_ = 0;   // mu_ védi
+    std::string failKey_;
+    std::chrono::steady_clock::time_point failTime_{};
 
     mutable std::mutex statusMu_;
     std::string lastReason_ = "off";
