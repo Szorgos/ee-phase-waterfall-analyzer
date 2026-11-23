@@ -151,6 +151,73 @@ static void testAlsaSupportedRatesK11() {
     }
 }
 
+/**
+ * Foglalt eszköz szimulálása: a megnyitás cseréjével (a valódi eszköz foglaltságát a kernel dönti el, azt itt nem
+ * lehet előállítani). Azt bizonyítja, hogy az open() / openDop() időkorláton belül hibával visszatér, és nem akad el.
+ */
+static void testBusyDevice() {
+    std::printf("\n[6] Foglalt hangkártya: az open() időkorláton belül hibával tér vissza (szimulált megnyitás)\n");
+    using clk = std::chrono::steady_clock;
+    const auto ms = [](clk::time_point a) { return std::chrono::duration_cast<std::chrono::milliseconds>(clk::now() - a).count(); };
+    const AlsaPlayerOutput::RenderFn silence = [](float* b, size_t n) { std::fill(b, b + n * 2, 0.0f); };
+    const AlsaPlayerOutput::RenderDopFn dopSilence = [](int32_t* b, size_t n) { std::fill(b, b + n * 2, 0); };
+
+    {   // a) mindig foglalt: az újrapróbálás után hibával tér vissza
+        AlsaPlayerOutput a("null");
+        std::atomic<int> calls{0};
+        a.setOpenHooksForTest([&](snd_pcm_t**, const char*) { ++calls; return -EBUSY; }, 300, 5000);
+        std::string err;
+        auto t0 = clk::now();
+        const bool ok = a.open(44100, silence, &err);
+        const auto took = ms(t0);
+        CHECK(!ok && took >= 250 && took < 2000, "open(): foglalt eszköz -> hiba %lld ms alatt (%d próba, ok: \"%s\")",
+              static_cast<long long>(took), calls.load(), err.c_str());
+        CHECK(calls > 3 && !a.isOpen(), "közben többször újrapróbálta (%d), és a kimenet nincs nyitva", calls.load());
+        std::string derr;
+        t0 = clk::now();
+        const bool okDop = a.openDop(705600, dopSilence, &derr);
+        CHECK(!okDop && derr == "busy" && ms(t0) < 2000, "openDop(): foglalt eszköz -> \"busy\" (%s)", derr.c_str());
+    }
+    {   // b) röviddel később felszabadul: az újrapróbálás megnyitja, és szól
+        AlsaPlayerOutput a("null");
+        std::atomic<int> calls{0};
+        a.setOpenHooksForTest(
+            [&](snd_pcm_t** p, const char* dev) {
+                if (++calls <= 3) return -EBUSY;
+                return snd_pcm_open(p, dev, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
+            },
+            2000, 5000);
+        std::string err;
+        const bool ok = a.open(44100, silence, &err);
+        CHECK(ok && a.isOpen() && calls == 4, "felszabaduló eszköz: a %d. próbára megnyílt (%s)", calls.load(), ok ? "" : err.c_str());
+        a.setActive(true);
+        CHECK(waitUntil([&] { return a.consumedFrames() > 0; }), "az újrapróbálással megnyitott kimenet halad (blokkoló írás)");
+        a.close();
+        CHECK(!a.isOpen(), "bezáráskor a kimenet bezárul");
+    }
+    {   // c) a megnyitás elakad (mintha a kernelben aludna): a hívó az időkorlátnál visszatér, a szál később maga takarít
+        AlsaPlayerOutput a("null");
+        a.setOpenHooksForTest(
+            [&](snd_pcm_t** p, const char* dev) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(800));
+                return snd_pcm_open(p, dev, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
+            },
+            3000, 250);
+        std::string err;
+        auto t0 = clk::now();
+        const bool ok = a.open(44100, silence, &err);
+        const auto took = ms(t0);
+        CHECK(!ok && took >= 200 && took < 700, "elakadt megnyitás: az open() %lld ms után visszatér (ok: \"%s\")",
+              static_cast<long long>(took), err.c_str());
+        CHECK(!a.isOpen(), "a késve megnyílt eszközt a szál elengedi, nem marad nyitva");
+        t0 = clk::now();
+        a.close();   // join: a szál a megnyitás végén kilép
+        CHECK(ms(t0) < 2000 && !a.isOpen(), "a close() a szál kilépése után visszatér (%lld ms)", static_cast<long long>(ms(t0)));
+        a.setOpenHooksForTest({}, 3000, 10000);
+        CHECK(a.open(44100, silence, &err) && a.isOpen(), "utána a valódi megnyitás (null eszköz) rendben működik");
+    }
+}
+
 int main() {
     std::printf("[1] Eszköznév -> kártyaszám\n");
     CHECK(alsaCardIndex("hw:1,0") == 1 && alsaCardIndex("plughw:2,0") == 2 && alsaCardIndex("hw:3") == 3,
@@ -337,6 +404,7 @@ int main() {
     }
     fs::remove(dsfPath);
     testAlsaSupportedRatesK11();
+    testBusyDevice();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

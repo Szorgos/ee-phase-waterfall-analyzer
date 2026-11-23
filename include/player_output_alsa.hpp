@@ -114,6 +114,7 @@ public:
         release();
         if (card < 0) return true;
         if (sd_bus_open_user(&bus_) < 0) { bus_ = nullptr; return true; }   // nincs session-busz: nincs kit kérni
+        sd_bus_set_method_call_timeout(bus_, 5000000);   // a másik fél nem válaszol: 5 s, ne az alapértelmezett 25 s
         name_ = "org.freedesktop.ReserveDevice1.Audio" + std::to_string(card);
         path_ = "/org/freedesktop/ReserveDevice1/Audio" + std::to_string(card);
         static const sd_bus_vtable vtable[] = {
@@ -313,7 +314,7 @@ public:
         rtPriority_ = 0;
         thread_ = std::thread([this] { run(); });
         std::unique_lock<std::mutex> lk(initMutex_);
-        initCv_.wait(lk, [this] { return initState_ != 0; });
+        if (!waitInit(lk)) { lk.unlock(); return giveUpInit(error, false); }
         if (initState_ < 0) {
             lk.unlock();
             const std::string why = lastError();
@@ -366,7 +367,7 @@ public:
         rtPriority_ = 0;
         thread_ = std::thread([this] { run(); });
         std::unique_lock<std::mutex> lk(initMutex_);
-        initCv_.wait(lk, [this] { return initState_ != 0; });
+        if (!waitInit(lk)) { lk.unlock(); return giveUpInit(error, true); }
         if (initState_ < 0) {
             lk.unlock();
             const std::string why = dopError_.empty() ? "format" : dopError_;
@@ -441,11 +442,40 @@ public:
     std::string nativeDsdFormat() const { std::lock_guard<std::mutex> lk(infoMutex_); return nativeName_; }
     /** A natív DSD kipróbálása DoP előtt (alapból igen; a teszt és a hibakeresés kikapcsolhatja). */
     void setPreferNativeDsd(bool on) { preferNative_ = on; }
+    /** Csak a tesztnek: a megnyitás cseréje (nem blokkoló hívás, mint az snd_pcm_open NONBLOCK-kal) és az időkorlátok (ms). */
+    void setOpenHooksForTest(std::function<int(snd_pcm_t**, const char*)> openFn, int retryMs, int initWaitMs) {
+        pcmOpenFn_ = std::move(openFn);
+        openRetryMs_ = retryMs;
+        initWaitMs_ = initWaitMs;
+    }
     void setDopTap(std::function<void(const int32_t*, size_t)> fn) { dopTap_ = std::move(fn); }
     void setRawTap(std::function<void(const uint8_t*, size_t, const AlsaFormat&)> fn) { rawTap_ = std::move(fn); }
 
 private:
     void setError(const std::string& e) { std::lock_guard<std::mutex> lk(infoMutex_); error_ = e; }
+
+    /**
+     * A szál megnyitásának bevárása időkorláttal: a hívó (dekóder / híd) szál így soha nem akad el végtelenül.
+     * false: az időkorlát lejárt.
+     */
+    bool waitInit(std::unique_lock<std::mutex>& lk) {
+        return initCv_.wait_for(lk, std::chrono::milliseconds(initWaitMs_), [this] { return initState_ != 0; });
+    }
+
+    /**
+     * Az időkorlát lejárt, a szál még nem jelzett vissza. NEM join-olunk: ha a szál valamelyik hívásban (a kernelben)
+     * ragadt, a join ugyanúgy végtelenül várna, csak máshol. Jelezzük a szálnak a kilépést (quit_), ő a megnyitás
+     * végén magától bezár és elenged mindent; a következő close() / open() / destruktor join-ol rá (addigra lejár,
+     * mert a megnyitás minden lépése időkorlátos).
+     */
+    bool giveUpInit(std::string* error, bool dop) {
+        quit_ = true;
+        wakeCv_.notify_all();
+        const std::string why = "a hangkártya megnyitása nem fejeződött be időben (más program tarthatja az eszközt)";
+        setError(why);
+        if (error) *error = dop ? "busy" : why;
+        return false;
+    }
 
     /**
      * 24 bites DoP szó (az int32_t alsó 24 bitjén: [23:16]=marker, [15:8]=b0, [7:0]=b1) bitpontos átadása az ALSA
@@ -485,10 +515,26 @@ private:
             if (dopMode_) dopError_ = "busy";
             return false;
         }
-        int r = snd_pcm_open(&pcm, dev.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
+        // NEM blokkoló megnyitás: a Linux kernel (snd_pcm_open, pcm_native.c) foglalt eszköznél blokkoló módban a
+        // végtelenségig várakoztat, amíg a másik használó (pl. a PipeWire) be nem zárja. Itt rövid ideig újrapróbáljuk
+        // (a foglalás kéréseit közben kiszolgálva), utána "foglalt" hibával visszatérünk.
+        const auto t0 = std::chrono::steady_clock::now();
+        int r = 0;
+        for (;;) {
+            pcm = nullptr;
+            r = pcmOpenFn_ ? pcmOpenFn_(&pcm, dev.c_str())
+                           : snd_pcm_open(&pcm, dev.c_str(), SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
+            if (r != -EBUSY && r != -EAGAIN) break;
+            if (quit_ || std::chrono::steady_clock::now() - t0 >= std::chrono::milliseconds(openRetryMs_)) break;
+            reservation_.process();
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        if (r >= 0) snd_pcm_nonblock(pcm, 0);   // a lejátszó ciklus blokkoló írásra épül
         if (r < 0) {
-            setError(std::string("a hangkártya nem nyitható meg (") + dev + "): " + snd_strerror(r));
-            if (dopMode_) dopError_ = (r == -EBUSY) ? "busy" : "format";
+            const bool busy = (r == -EBUSY || r == -EAGAIN);
+            setError(busy ? std::string("a hangkártyát más program tartja (") + dev + ")"
+                          : std::string("a hangkártya nem nyitható meg (") + dev + "): " + snd_strerror(r));
+            if (dopMode_) dopError_ = busy ? "busy" : "format";
             reservation_.release();
             pcm = nullptr;
             return false;
@@ -637,6 +683,12 @@ private:
         snd_pcm_uframes_t period = 0;
         bool canPause = false;
         const bool ok = openDevice(pcm, f, period, canPause);
+        if (ok && quit_) {
+            // az open() közben feladta a várakozást (időkorlát): nincs kinek dolgozni, mindent elengedünk
+            snd_pcm_close(pcm);
+            reservation_.release();
+            return;
+        }
         if (ok && dsp_ && !dopMode_) dsp_->prepare(rate_, static_cast<uint32_t>(period), f.ditherBits);
         open_ = ok;
         {
@@ -798,6 +850,9 @@ private:
     std::mutex initMutex_, wakeMutex_;
     std::condition_variable initCv_, wakeCv_;
     int initState_ = 0;
+    std::function<int(snd_pcm_t**, const char*)> pcmOpenFn_;   // üres: a valódi snd_pcm_open (csak a teszt cseréli)
+    int openRetryMs_ = 3000;    // ennyi ideig próbálkozunk foglalt eszköznél
+    int initWaitMs_ = 10000;    // ennyit vár az open() / openDop() a szál megnyitására
     mutable std::mutex infoMutex_;
     mutable std::vector<uint32_t> cachedRates_;
     std::string info_, error_, openedDevice_, dopError_;

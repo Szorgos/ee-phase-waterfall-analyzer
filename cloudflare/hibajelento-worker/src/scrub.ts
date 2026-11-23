@@ -291,6 +291,9 @@ export function scrubBridgeDeviceNames(s: string): string {
 /**
  * Többtagú, nagybetűs DMI/sorozatszám-szerű gépazonosítók (pl. ALSA SOF kártyák longname mezője:
  * ACMECOMPUTERLIMITED-NOTEBOOK1234-99887766554-ABCD1E2) cseréje <dmi>-re.
+ * A 3 tagú alak is <dmi> (SOF longname: GYARTO-TERMEKKOD-TermekNevVerzio, pl. ACME-12B34567XY-ExampleBookPro9Gen2i):
+ * csupa nagybetűs első tag (>=3), a 2. tagban >=6 számjegy, a 3. tag >=8 hosszú és kis- és nagybetűt is tartalmaz,
+ * összhossz >= 20. A mintának a kliens (include/error_report.hpp) megfelelőjével azonosnak kell maradnia.
  */
 export function scrubDmiStrings(s: string): string {
   let out = "";
@@ -309,6 +312,10 @@ export function scrubDmiStrings(s: string): string {
       let firstLen = 0;
       let hasLongSerial = false;
       let valid = true;
+      let secondDigits = 0; // a 2. tag számjegyeinek száma (3 tagú alak)
+      let lastLen = 0; // az utolsó tag hossza, és hogy van-e benne kis- / nagybetű
+      let lastLower = false;
+      let lastUpper = false;
       const finishPart = (a: number, b: number, partIdx: number) => {
         const len = b - a;
         if (len === 0) {
@@ -317,19 +324,28 @@ export function scrubDmiStrings(s: string): string {
         }
         let digits = 0;
         let upperOnly = true;
+        let hasLower = false;
+        let hasUpper = false;
         for (let k = a; k < b; ++k) {
           const ch = code(s, k);
           if (isDigit(ch)) {
             ++digits;
             upperOnly = false;
-          } else if (!(ch >= 65 && ch <= 90)) {
+          } else if (ch >= 65 && ch <= 90) {
+            hasUpper = true;
+          } else {
             upperOnly = false;
+            if (ch >= 97 && ch <= 122) hasLower = true;
           }
         }
         if (partIdx === 1) {
           firstUpperOnly = upperOnly;
           firstLen = len;
         }
+        if (partIdx === 2) secondDigits = digits;
+        lastLen = len;
+        lastLower = hasLower;
+        lastUpper = hasUpper;
         if (digits >= 6) hasLongSerial = true;
       };
       while (j < s.length) {
@@ -347,7 +363,9 @@ export function scrubDmiStrings(s: string): string {
       }
       finishPart(curStart, j, parts);
       const endOk = j >= s.length || !(isWordish(code(s, j)) || s[j] === "." || s[j] === ":");
-      if (valid && endOk && parts >= 4 && j - i >= 20 && firstUpperOnly && firstLen >= 3 && hasLongSerial) {
+      const fourPlus = parts >= 4 && hasLongSerial;
+      const three = parts === 3 && secondDigits >= 6 && lastLen >= 8 && lastLower && lastUpper;
+      if (valid && endOk && (fourPlus || three) && j - i >= 20 && firstUpperOnly && firstLen >= 3) {
         out += "<dmi>";
         i = j;
         continue;

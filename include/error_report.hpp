@@ -395,6 +395,9 @@ inline void scrubBridgeDeviceNames(std::string& s, bool jsonMode) {
  * ACMECOMPUTERLIMITED-NOTEBOOK1234-99887766554-ABCD1E2) cseréje <dmi>-re.
  * Feltétel: legalább 4 kötőjellel elválasztott [A-Za-z0-9_] tag, összhossz >= 20, az első tag csupa nagybetű (>=3),
  * és van legalább egy >=6 számjegyet tartalmazó tag (valódi DAC-neveket, USB-útvonalakat és kernelverziókat nem érint).
+ * A 3 tagú alak is <dmi> (SOF longname: GYARTO-TERMEKKOD-TermekNevVerzio, pl. ACME-12B34567XY-ExampleBookPro9Gen2i):
+ * csupa nagybetűs első tag (>=3), a 2. tagban >=6 számjegy, a 3. tag >=8 hosszú és kis- és nagybetűt is tartalmaz,
+ * összhossz >= 20. A mintának a Worker scrub.ts-ben lévő megfelelőjével azonosnak kell maradnia.
  */
 inline void scrubDmiStrings(std::string& s) {
     std::string out;
@@ -411,17 +414,23 @@ inline void scrubDmiStrings(std::string& s) {
             size_t firstLen = 0;
             bool hasLongSerial = false;
             bool valid = true;
+            int secondDigits = 0;                 // a 2. tag számjegyeinek száma (3 tagú alak)
+            size_t lastLen = 0;                   // az utolsó tag hossza, és hogy van-e benne kis- / nagybetű
+            bool lastLower = false, lastUpper = false;
             auto finishPart = [&](size_t a, size_t b, int partIdx) {
                 const size_t len = b - a;
                 if (len == 0) { valid = false; return; }
                 int digits = 0;
-                bool upperOnly = true;
+                bool upperOnly = true, hasLower = false, hasUpper = false;
                 for (size_t k = a; k < b; ++k) {
                     const unsigned char ch = static_cast<unsigned char>(s[k]);
                     if (isDigit(ch)) { ++digits; upperOnly = false; }
-                    else if (!(ch >= 'A' && ch <= 'Z')) upperOnly = false;
+                    else if (ch >= 'A' && ch <= 'Z') hasUpper = true;
+                    else { upperOnly = false; if (ch >= 'a' && ch <= 'z') hasLower = true; }
                 }
                 if (partIdx == 1) { firstUpperOnly = upperOnly; firstLen = len; }
+                if (partIdx == 2) secondDigits = digits;
+                lastLen = len; lastLower = hasLower; lastUpper = hasUpper;
                 if (digits >= 6) hasLongSerial = true;
             };
             while (j < s.size()) {
@@ -439,7 +448,9 @@ inline void scrubDmiStrings(std::string& s) {
             }
             finishPart(curStart, j, parts);
             const bool endOk = j >= s.size() || !(isWordish(static_cast<unsigned char>(s[j])) || s[j] == '.' || s[j] == ':');
-            if (valid && endOk && parts >= 4 && (j - i) >= 20 && firstUpperOnly && firstLen >= 3 && hasLongSerial) {
+            const bool fourPlus = parts >= 4 && hasLongSerial;
+            const bool three = parts == 3 && secondDigits >= 6 && lastLen >= 8 && lastLower && lastUpper;
+            if (valid && endOk && (fourPlus || three) && (j - i) >= 20 && firstUpperOnly && firstLen >= 3) {
                 out += "<dmi>";
                 i = j;
                 continue;

@@ -184,6 +184,38 @@ describe("[9] adatvédelmi javítások: WS Bridge eszköznevek, DMI-lánc, USB-�
     expect(out).not.toContain("usb-0000:00:14.0-<ip>");
   });
 
+  it("a 3 tagú SOF longname (GYARTO-TERMEKKOD-TermekNevVerzio) <dmi>-re cserélődik, a kártyanevek nem", () => {
+    const text =
+      " 2 [sofhdadsp      ]: sof-hda-dsp - sof-hda-dsp\n" +
+      "                      ACME-12B34567XY-ExampleBookPro9Gen2i\n" +
+      " 3 [BTR7           ]: USB-Audio - FiiO BTR7\n" +
+      "                      FAKEVENDOR-99A12345BC-DemoStationUltra3rdGenX\n";
+    const out = scrubText(text);
+    expect(out).not.toContain("ACME-");
+    expect(out).not.toContain("12B34567XY");
+    expect(out).not.toContain("ExampleBookPro9Gen2i");
+    expect(out).not.toContain("FAKEVENDOR");
+    expect(out).not.toContain("DemoStation");
+    expect(out).toContain("                      <dmi>\n");
+    expect(out).toContain("sof-hda-dsp - sof-hda-dsp");
+    expect(out).toContain("USB-Audio - FiiO BTR7");
+  });
+
+  it("negatív esetek a 3 tagú szabály közelében: kártyanevek és rövid / számjegyszegény alakok változatlanok", () => {
+    const keepList = [
+      "USB-Audio",
+      "USB-Audio - FiiO FiiO BTR7",
+      "sof-hda-dsp",
+      "HDA-Intel",
+      "AUDIO-DEVICE-GenericPlayback",
+      "ACME-12345-ExampleBookPro9Gen2i",
+      "ACME-12B34567XY-short",
+      "ACME-12B34567XY-lowercasesuffix",
+      "AB-12B34567XY-ExampleBookPro9Gen2i",
+    ];
+    for (const s of keepList) expect(scrubText(s)).toBe(s);
+  });
+
   it("negatív esetek: gyári hangeszközök, kernelverzió és USB-útvonal változatlan, valódi IPv4 <ip>", () => {
     const keepList = [
       "TOPPING USB DAC",
