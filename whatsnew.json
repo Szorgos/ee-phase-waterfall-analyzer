@@ -1,6 +1,104 @@
 {
   "versions": [
     {
+      "version": "2.9.5",
+      "date": "2026-11-23",
+      "notes": {
+        "hu": [
+          "Új: UPnP / DLNA lejátszó minden platformon. A telefonos és számítógépes UPnP / DLNA vezérlők a hálózati zeneszerver számait az Aqulify beépített lejátszóján, a teljes láncon át játsszák le: hi-res, bitpontos is lehet, DSD is; szünetmentes váltással és pontos tekeréssel.",
+          "Alapból ki van kapcsolva; bekapcsolás: Hangkimenet → Hálózati vevő → UPnP / DLNA lejátszó. Csak a helyi hálózaton érhető el; jelszava nincs, de megadhatod, mely címekről vezérelhető."
+        ],
+        "en": [
+          "New: UPnP / DLNA player on all platforms. Phone and computer UPnP / DLNA controllers play tracks from your network music server through Aqulify’s built-in player and the full chain: hi-res, it can be bit-perfect, DSD too; with gapless transitions and precise seeking.",
+          "Off by default; turn it on under Audio output → Network receiver → UPnP / DLNA player. Reachable only on the local network; it has no password, but you can limit which addresses may control it."
+        ],
+        "es": [
+          "Nuevo: reproductor UPnP / DLNA en todas las plataformas. Los controladores UPnP / DLNA del teléfono y del ordenador reproducen las pistas de tu servidor de música de red a través del reproductor integrado de Aqulify y de toda la cadena: hi-res, puede ser bit-perfect, también DSD; con transiciones sin pausas y búsqueda precisa.",
+          "Desactivado por defecto; actívalo en Salida de audio → Receptor de red → Reproductor UPnP / DLNA. Solo accesible en la red local; no tiene contraseña, pero puedes limitar desde qué direcciones se controla."
+        ],
+        "fr": [
+          "Nouveau : lecteur UPnP / DLNA sur toutes les plateformes. Les contrôleurs UPnP / DLNA du téléphone et de l’ordinateur lisent les morceaux de votre serveur musical réseau via le lecteur intégré d’Aqulify et toute la chaîne : hi-res, bit-perfect possible, DSD aussi ; avec enchaînement sans blanc et positionnement précis.",
+          "Désactivé par défaut ; activez-le dans Sortie audio → Récepteur réseau → Lecteur UPnP / DLNA. Accessible uniquement sur le réseau local ; pas de mot de passe, mais vous pouvez limiter les adresses autorisées à le contrôler."
+        ],
+        "zh": [
+          "新功能：所有平台均支持 UPnP / DLNA 播放器。手机和电脑上的 UPnP / DLNA 控制端可通过 Aqulify 内置播放器和完整处理链播放网络音乐服务器中的曲目：高解析度，可比特完美，也支持 DSD；支持无缝衔接和精确定位。",
+          "默认关闭；在“音频输出 → 网络接收器 → UPnP / DLNA 播放器”中开启。仅可在本地网络中访问；没有密码，但可以限制允许控制的地址。"
+        ],
+        "de": [
+          "Neu: UPnP-/DLNA-Player auf allen Plattformen. UPnP-/DLNA-Steuer-Apps auf Telefon und Computer spielen Titel vom Musikserver im Netz über den eingebauten Player von Aqulify und die komplette Kette ab: Hi-Res, auch bitgenau, auch DSD; mit lückenlosen Übergängen und genauem Spulen.",
+          "Standardmäßig aus; einschalten unter Audioausgabe → Netzwerkempfänger → UPnP-/DLNA-Player. Nur im lokalen Netz erreichbar; kein Passwort, aber die steuernden Adressen lassen sich einschränken."
+        ],
+        "it": [
+          "Novità: lettore UPnP / DLNA su tutte le piattaforme. I controller UPnP / DLNA su telefono e computer riproducono i brani del server musicale di rete tramite il lettore integrato di Aqulify e l’intera catena: hi-res, anche bit-perfect, anche DSD; con passaggi senza pause e posizionamento preciso.",
+          "Disattivato per impostazione predefinita; attivalo in Uscita audio → Ricevitore di rete → Lettore UPnP / DLNA. Raggiungibile solo dalla rete locale; non ha password, ma puoi limitare gli indirizzi che possono controllarlo."
+        ],
+        "nl": [
+          "Nieuw: UPnP / DLNA-speler op alle platforms. UPnP / DLNA-bedieningsapps op telefoon en computer spelen nummers van je muziekserver in het netwerk af via de ingebouwde speler van Aqulify en de volledige keten: hi-res, ook bit-perfect, ook DSD; met naadloze overgangen en nauwkeurig spoelen.",
+          "Standaard uit; inschakelen via Audio-uitvoer → Netwerkontvanger → UPnP / DLNA-speler. Alleen bereikbaar in het lokale netwerk; geen wachtwoord, maar je kunt beperken vanaf welke adressen hij bediend wordt."
+        ],
+        "pl": [
+          "Nowość: odtwarzacz UPnP / DLNA na wszystkich platformach. Kontrolery UPnP / DLNA na telefonie i komputerze odtwarzają utwory z sieciowego serwera muzyki przez wbudowany odtwarzacz Aqulify i cały tor: hi-res, także bit-perfect, także DSD; z płynnymi przejściami i dokładnym przewijaniem.",
+          "Domyślnie wyłączony; włączysz go w Wyjście audio → Odbiornik sieciowy → Odtwarzacz UPnP / DLNA. Dostępny tylko w sieci lokalnej; nie ma hasła, ale możesz ograniczyć adresy, z których można nim sterować."
+        ],
+        "ru": [
+          "Новое: плеер UPnP / DLNA на всех платформах. Пульты UPnP / DLNA на телефоне и компьютере воспроизводят треки с сетевого музыкального сервера через встроенный плеер Aqulify и всю цепочку обработки: hi-res, возможно bit-perfect, также DSD; с бесшовными переходами и точной перемоткой.",
+          "По умолчанию выключен; включается в «Аудиовыход → Сетевой приёмник → Плеер UPnP / DLNA». Доступен только в локальной сети; пароля нет, но можно ограничить адреса, с которых разрешено управление."
+        ],
+        "pt": [
+          "Novo: reprodutor UPnP / DLNA em todas as plataformas. Os controladores UPnP / DLNA do telemóvel e do computador reproduzem as faixas do servidor de música da rede através do leitor integrado do Aqulify e de toda a cadeia: hi-res, também bit-perfect, também DSD; com transições sem pausas e posicionamento preciso.",
+          "Desativado por predefinição; ative-o em Saída de áudio → Recetor de rede → Reprodutor UPnP / DLNA. Acessível apenas na rede local; não tem palavra-passe, mas pode limitar os endereços que o controlam."
+        ],
+        "ro": [
+          "Nou: player UPnP / DLNA pe toate platformele. Controlerele UPnP / DLNA de pe telefon și calculator redau piesele de pe serverul de muzică din rețea prin playerul integrat Aqulify și întregul lanț: hi-res, chiar bit-perfect, și DSD; cu tranziții fără pauză și derulare precisă.",
+          "Dezactivat implicit; îl pornești din Ieșire audio → Receptor de rețea → Player UPnP / DLNA. Accesibil doar în rețeaua locală; nu are parolă, dar poți limita adresele care îl pot controla."
+        ],
+        "el": [
+          "Νέο: αναπαραγωγέας UPnP / DLNA σε όλες τις πλατφόρμες. Οι ελεγκτές UPnP / DLNA σε τηλέφωνο και υπολογιστή παίζουν κομμάτια από τον μουσικό διακομιστή του δικτύου μέσω του ενσωματωμένου αναπαραγωγέα του Aqulify και ολόκληρης της αλυσίδας: hi-res, και bit-perfect, και DSD· με αδιάκοπες μεταβάσεις και ακριβή μετακίνηση.",
+          "Απενεργοποιημένο από προεπιλογή· ενεργοποιείται στο Έξοδος ήχου → Δέκτης δικτύου → Αναπαραγωγέας UPnP / DLNA. Προσβάσιμο μόνο στο τοπικό δίκτυο· δεν έχει κωδικό, αλλά μπορείτε να περιορίσετε από ποιες διευθύνσεις ελέγχεται."
+        ],
+        "tr": [
+          "Yeni: tüm platformlarda UPnP / DLNA oynatıcı. Telefon ve bilgisayardaki UPnP / DLNA kontrol uygulamaları, ağdaki müzik sunucusunun parçalarını Aqulify’ın yerleşik oynatıcısı ve tüm zincir üzerinden çalar: hi-res, bit-perfect de olabilir, DSD de; kesintisiz geçişler ve hassas ileri/geri sarma ile.",
+          "Varsayılan olarak kapalı; Ses çıkışı → Ağ alıcısı → UPnP / DLNA oynatıcı altından açılır. Yalnızca yerel ağdan erişilebilir; parolası yoktur, ancak hangi adreslerin kontrol edebileceğini sınırlayabilirsiniz."
+        ],
+        "fi": [
+          "Uutta: UPnP / DLNA -soitin kaikilla alustoilla. Puhelimen ja tietokoneen UPnP / DLNA -ohjaimet soittavat verkon musiikkipalvelimen kappaleita Aqulifyn sisäänrakennetun soittimen ja koko ketjun kautta: hi-res, myös bit-perfect, myös DSD; saumattomin siirtymin ja tarkalla kelauksella.",
+          "Oletuksena pois päältä; käyttöön kohdasta Äänilähtö → Verkkovastaanotin → UPnP / DLNA -soitin. Tavoitettavissa vain lähiverkossa; salasanaa ei ole, mutta voit rajata, mistä osoitteista sitä saa ohjata."
+        ],
+        "da": [
+          "Nyt: UPnP / DLNA-afspiller på alle platforme. UPnP / DLNA-fjernbetjeninger på telefon og computer afspiller numre fra din musikserver på netværket gennem Aqulifys indbyggede afspiller og hele kæden: hi-res, også bit-perfect, også DSD; med overgange uden pause og præcis spoling.",
+          "Slået fra som standard; slå til under Lydudgang → Netværksmodtager → UPnP / DLNA-afspiller. Kun tilgængelig på det lokale netværk; ingen adgangskode, men du kan begrænse, hvilke adresser der må styre den."
+        ],
+        "nb": [
+          "Nytt: UPnP / DLNA-spiller på alle plattformer. UPnP / DLNA-kontrollere på telefon og datamaskin spiller spor fra musikkserveren i nettverket gjennom Aqulifys innebygde spiller og hele kjeden: hi-res, også bit-perfect, også DSD; med sømløse overganger og nøyaktig spoling.",
+          "Av som standard; slå på under Lydutgang → Nettverksmottaker → UPnP / DLNA-spiller. Bare tilgjengelig på det lokale nettverket; ingen passord, men du kan begrense hvilke adresser som kan styre den."
+        ],
+        "sv": [
+          "Nytt: UPnP / DLNA-spelare på alla plattformar. UPnP / DLNA-kontrollappar i telefon och dator spelar spår från musikservern i nätverket via Aqulifys inbyggda spelare och hela kedjan: hi-res, även bit-perfect, även DSD; med sömlösa övergångar och exakt spolning.",
+          "Avstängd som standard; slå på under Ljudutgång → Nätverksmottagare → UPnP / DLNA-spelare. Nås bara i det lokala nätverket; inget lösenord, men du kan begränsa vilka adresser som får styra den."
+        ],
+        "he": [
+          "חדש: נגן UPnP / DLNA בכל הפלטפורמות. בקרי UPnP / DLNA בטלפון ובמחשב מנגנים רצועות משרת המוזיקה ברשת דרך הנגן המובנה של Aqulify וכל שרשרת העיבוד: hi-res, אפשר גם bit-perfect, וגם DSD; עם מעברים ללא הפסקה וקפיצה מדויקת.",
+          "כבוי כברירת מחדל; מפעילים ב־פלט שמע ← מקלט רשת ← נגן UPnP / DLNA. נגיש רק ברשת המקומית; אין סיסמה, אך אפשר להגביל מאילו כתובות ניתן לשלוט בו."
+        ],
+        "ja": [
+          "新機能：すべてのプラットフォームで UPnP / DLNA プレーヤーに対応。スマートフォンやパソコンの UPnP / DLNA コントローラーから、ネットワーク上の音楽サーバーの曲を Aqulify の内蔵プレーヤーと処理チェーン全体を通して再生できます。ハイレゾ、ビットパーフェクトも可能、DSD にも対応。ギャップレス再生と正確なシークに対応。",
+          "初期設定ではオフです。オーディオ出力 → ネットワーク受信 → UPnP / DLNA プレーヤーでオンにします。ローカルネットワークからのみ利用でき、パスワードはありませんが、操作を許可するアドレスを制限できます。"
+        ],
+        "ko": [
+          "새 기능: 모든 플랫폼에서 UPnP / DLNA 플레이어 지원. 휴대폰과 컴퓨터의 UPnP / DLNA 컨트롤러로 네트워크 음악 서버의 곡을 Aqulify 내장 플레이어와 전체 처리 체인을 거쳐 재생합니다. 하이레조, 비트 퍼펙트도 가능하며 DSD도 지원합니다. 끊김 없는 전환과 정확한 탐색을 지원합니다.",
+          "기본값은 꺼짐이며, 오디오 출력 → 네트워크 수신기 → UPnP / DLNA 플레이어에서 켭니다. 로컬 네트워크에서만 접근할 수 있고 비밀번호는 없지만, 제어를 허용할 주소를 제한할 수 있습니다."
+        ],
+        "cs": [
+          "Novinka: přehrávač UPnP / DLNA na všech platformách. Ovladače UPnP / DLNA v telefonu a počítači přehrávají skladby ze síťového hudebního serveru přes vestavěný přehrávač Aqulify a celý řetězec: hi-res, i bit-perfect, i DSD; s plynulými přechody a přesným posouváním.",
+          "Ve výchozím stavu vypnuto; zapnete v Zvukový výstup → Síťový přijímač → Přehrávač UPnP / DLNA. Dostupné jen v místní síti; nemá heslo, ale můžete omezit adresy, ze kterých ho lze ovládat."
+        ],
+        "uk": [
+          "Нове: плеєр UPnP / DLNA на всіх платформах. Пульти UPnP / DLNA на телефоні та комп’ютері відтворюють треки з мережевого музичного сервера через вбудований плеєр Aqulify і весь ланцюг обробки: hi-res, можливо bit-perfect, також DSD; з безшовними переходами і точним перемотуванням.",
+          "Типово вимкнено; вмикається в «Аудіовихід → Мережевий приймач → Плеєр UPnP / DLNA». Доступний лише в локальній мережі; пароля немає, але можна обмежити адреси, з яких дозволено керування."
+        ]
+      }
+    },
+    {
       "version": "2.9.4",
       "date": "2026-11-23",
       "notes": {
