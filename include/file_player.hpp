@@ -111,8 +111,10 @@ public:
     /**
      * Már megnyitott, élő folyam lejátszása (internetrádió, radio_stream.hpp): ugyanazon a láncon szól, mint egy fájl,
      * de nincs hossza, nem tekerhető és nincs ReplayGain. title: az állomás neve (amíg nincs „most szól” adat).
+     * token: a folyam jele (0: nincs; a UPnP-renderer a sajátját adja, hogy felismerje, mikor szól).
      */
-    bool openStream(std::unique_ptr<AudioDecoder> dec, const std::string& title, std::string* error = nullptr);
+    bool openStream(std::unique_ptr<AudioDecoder> dec, const std::string& title, std::string* error = nullptr,
+                    uint64_t token = 0);
     void setNextProvider(NextProvider next);
     /**
      * A sor megváltozott: az előre betöltött következő szám(ok) kiesnek, és a lejátszó a mostani szám végén újra

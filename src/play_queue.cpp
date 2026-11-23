@@ -48,9 +48,13 @@ PlayQueue::PlayQueue(FilePlayer& player, Resolve resolve, Save save)
     player_.setNextProvider([this](uint64_t after, std::string& path, uint64_t& token) {
         std::string id;
         {
-            std::lock_guard<std::mutex> lk(m_);
+            std::unique_lock<std::mutex> lk(m_);
             const int i = indexOfLocked(after);
-            if (i < 0) return false;
+            if (i < 0) {
+                lk.unlock();
+                std::lock_guard<std::mutex> fl(foreignM_);
+                return foreign_ ? foreign_(after, path, token) : false;   // nem a sor száma (pl. UPnP)
+            }
             const size_t n = items_.size();
             size_t j;
             if (repeat_ == Repeat::One) j = static_cast<size_t>(i);
@@ -75,6 +79,11 @@ PlayQueue::~PlayQueue() {
     tickCv_.notify_all();
     if (tick_.joinable()) tick_.join();
     player_.setNextProvider(nullptr);
+}
+
+void PlayQueue::setForeignNext(FilePlayer::NextProvider next) {
+    std::lock_guard<std::mutex> lk(foreignM_);
+    foreign_ = std::move(next);
 }
 
 void PlayQueue::setPlayedCallback(std::function<void(const std::string& id)> played) {

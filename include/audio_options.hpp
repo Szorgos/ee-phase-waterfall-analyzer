@@ -120,6 +120,13 @@ struct AudioOptions {
     // indításkori visszaállítástól függetlenül él. A név üresen az alapnév ("Aqulify").
     bool netRecv = false;
     std::string netRecvName;
+    // UPnP / DLNA lejátszó (upnp_bridge.hpp): alapból KI; szolgáltatás, mindig visszaáll (mint a hálózati vevő).
+    // A név üresen „Aqulify (gépnév)”. Fix hangerő: a vezérlő hangereje nem hat (bitpontos). upnpAllow: ha nem üres,
+    // csak ezekről az IPv4-címekről fogad vezérlést (vesszővel elválasztva).
+    bool upnp = false;
+    std::string upnpName;
+    bool upnpFixedVolume = false;
+    std::string upnpAllow;
 
     bool operator==(const AudioOptions& o) const {
         return bufferFrames == o.bufferFrames && keepAwake == o.keepAwake && rateMode == o.rateMode &&
@@ -137,7 +144,8 @@ struct AudioOptions {
                upsampleCustom == o.upsampleCustom && upsampleThreads == o.upsampleThreads &&
                upsampleMaxRate == o.upsampleMaxRate && dedicatedCore == o.dedicatedCore && loadAdvisor == o.loadAdvisor &&
                asio == o.asio && asioDriver == o.asioDriver && errorReports == o.errorReports &&
-               errorReportsAsked == o.errorReportsAsked && netRecv == o.netRecv && netRecvName == o.netRecvName;
+               errorReportsAsked == o.errorReportsAsked && netRecv == o.netRecv && netRecvName == o.netRecvName &&
+               upnp == o.upnp && upnpName == o.upnpName && upnpFixedVolume == o.upnpFixedVolume && upnpAllow == o.upnpAllow;
     }
     bool operator!=(const AudioOptions& o) const { return !(*this == o); }
 };
@@ -219,6 +227,23 @@ inline void sanitize(AudioOptions& o) {
         if (static_cast<unsigned char>(c) < 0x20) { o.asioDriver.clear(); break; }
     }
     o.netRecvName = aq::netrecv::sanitizeName(o.netRecvName);
+    // UPnP: a név vezérlőkarakter nélkül, legfeljebb 64 bájt (UTF-8 határon); a címlista csak számjegy, pont, elválasztó
+    {
+        std::string n;
+        for (unsigned char c : o.upnpName)
+            if (c >= 0x20 && c != 0x7F) n += static_cast<char>(c);
+        if (n.size() > 64) {
+            size_t cut = 64;
+            while (cut > 0 && (static_cast<unsigned char>(n[cut]) & 0xC0) == 0x80) --cut;
+            n.resize(cut);
+        }
+        const size_t b = n.find_first_not_of(' ');
+        o.upnpName = b == std::string::npos ? std::string() : n.substr(b, n.find_last_not_of(' ') - b + 1);
+        std::string a;
+        for (char c : o.upnpAllow)
+            if ((c >= '0' && c <= '9') || c == '.' || c == ',' || c == ' ') a += c;
+        o.upnpAllow = a.substr(0, 512);
+    }
 }
 
 /** Szöveg JSON-karakterlánc tartalmaként (idézőjel és visszaper escape; a vezérlőkaraktert a sanitize kiszűri). */
@@ -281,7 +306,11 @@ inline std::string toJson(const AudioOptions& o) {
          ",\"errorReports\":" + (o.errorReports ? "true" : "false") +
          ",\"errorReportsAsked\":" + (o.errorReportsAsked ? "true" : "false") +
          ",\"netRecv\":" + (o.netRecv ? "true" : "false") +
-         ",\"netRecvName\":\"" + jsonStringBody(o.netRecvName) + "\"}";
+         ",\"netRecvName\":\"" + jsonStringBody(o.netRecvName) + "\"" +
+         ",\"upnp\":" + (o.upnp ? "true" : "false") +
+         ",\"upnpName\":\"" + jsonStringBody(o.upnpName) + "\"" +
+         ",\"upnpFixedVolume\":" + (o.upnpFixedVolume ? "true" : "false") +
+         ",\"upnpAllow\":\"" + jsonStringBody(o.upnpAllow) + "\"}";
     return s;
 }
 
@@ -346,6 +375,10 @@ inline AudioOptions fromJson(const json::Value& v, AudioOptions base = {}) {
     if (const json::Value* x = v.get("errorReportsAsked"); x && x->type == T::Bool) base.errorReportsAsked = x->b;
     if (const json::Value* x = v.get("netRecv"); x && x->type == T::Bool) base.netRecv = x->b;
     if (const json::Value* x = v.get("netRecvName"); x && x->type == T::String) base.netRecvName = x->str.substr(0, 256);
+    if (const json::Value* x = v.get("upnp"); x && x->type == T::Bool) base.upnp = x->b;
+    if (const json::Value* x = v.get("upnpName"); x && x->type == T::String) base.upnpName = x->str.substr(0, 256);
+    if (const json::Value* x = v.get("upnpFixedVolume"); x && x->type == T::Bool) base.upnpFixedVolume = x->b;
+    if (const json::Value* x = v.get("upnpAllow"); x && x->type == T::String) base.upnpAllow = x->str.substr(0, 1024);
 
     sanitize(base);
     return base;

@@ -233,7 +233,7 @@ bool FilePlayer::open(const std::string& path, std::string* error, uint64_t toke
     return openSegment(std::move(seg), error);
 }
 
-bool FilePlayer::openStream(std::unique_ptr<AudioDecoder> dec, const std::string& title, std::string* error) {
+bool FilePlayer::openStream(std::unique_ptr<AudioDecoder> dec, const std::string& title, std::string* error, uint64_t token) {
     if (!dec || dec->channels() == 0 || dec->sampleRate() == 0) {
         if (error) *error = "format";
         return false;
@@ -242,6 +242,7 @@ bool FilePlayer::openStream(std::unique_ptr<AudioDecoder> dec, const std::string
     s->channels = dec->channels();
     s->total = 0;           // ismeretlen hossz: nem tekerhető
     s->title = title;
+    s->token = token;
     s->dec = std::move(dec);
     return openSegment(std::move(s), error);
 }

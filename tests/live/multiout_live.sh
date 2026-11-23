@@ -2,8 +2,10 @@
 # Több kimenet élő tesztje elszigetelt PipeWire-környezetben (Linux; pipewire, wireplumber, pipewire-pulse,
 # pactl, dbus-daemon kell). Használat: tests/live/multiout_live.sh <build-mappa> [parancs…]
 # Parancs nélkül a motor élő tesztje (multiout_live.py) fut; különben a megadott parancs, AQ_PORT és AQ_WORK
-# környezeti változóval (pl. a felület böngészős tesztje).
+# környezeti változóval (pl. a felület böngészős tesztje). AQ_ENGINE_PORT: a motor portja (alapból 47810; más, ha a
+# gépen már fut egy Aqulify).
 set -u
+EPORT=${AQ_ENGINE_PORT:-47810}
 BUILD=${1:-build}
 shift || true
 ENGINE="$(cd "$BUILD" && pwd)/aqulify-engine"
@@ -35,13 +37,13 @@ sleep 1.5
 wireplumber > "$W/wireplumber.log" 2>&1 &
 pipewire-pulse > "$W/pulse.log" 2>&1 &
 sleep 2.5
-"$ENGINE" --port 47810 > "$W/engine.log" 2>&1 &
+"$ENGINE" --port "$EPORT" > "$W/engine.log" 2>&1 &
 ENGINE_PID=$!
 sleep 3
 if [ $# -gt 0 ]; then
-    AQ_PORT=47810 AQ_WORK="$W" "$@"
+    AQ_PORT=$EPORT AQ_WORK="$W" "$@"
 else
-    python3 -I "$HERE/multiout_live.py" 47810 "$W"
+    python3 -I "$HERE/multiout_live.py" "$EPORT" "$W"
 fi
 rc=$?
 # Ha a motor a teszt alatt kilépett: összeomlás (jelzés, 128 fölötti kód) nem lehet

@@ -66,6 +66,7 @@
 #include "file_player.hpp"
 #include "library_bridge.hpp"
 #include "radio_bridge.hpp"
+#include "upnp_bridge.hpp"
 #include "player_output_wasapi.hpp"
 #include "player_output_win.hpp"
 #include "win_live_bridge.hpp"
@@ -1141,6 +1142,15 @@ int main(int argc, char** argv) {
     radioStations.load(readSmallFile(userFilePath(L"radio.json", false), 1u << 20));
     radio::RadioController radioCtl(filePlayer, radioStations);
     radio::attachRadio(cb, radioCtl, radioStations);
+    // UPnP / DLNA lejátszó (upnp_bridge.hpp): a telefonos vezérlők (BubbleUPnP, mconnect, foobar2000, …) a beépített
+    // lejátszón át, a teljes láncon (kizárólagos WASAPI / ASIO, DoP / natív DSD). Alapból ki (audio.json).
+    upnp::UpnpService upnpService(filePlayer, playQueue, cb.setVolume, cb.getVolume);
+    cb.mediaJson = [&]() {
+        if (!filePlayer.hasTrack()) return mediaSession.json();
+        media::Info m = playQueue.mediaInfo();
+        upnpService.patchInfo(m);
+        return media::toJson(m);
+    };
     cb.loadRemote = [] { return readSmallFile(userFilePath(L"remote.json", false), 256 * 1024); };
     cb.saveRemote = [](const std::string& doc) { return writeFileAtomic(userFilePath(L"remote.json", true), doc); };
     cb.loadTargets = [] { return readSmallFile(userFilePath(L"remote-targets.json", false), 256 * 1024); };
@@ -1205,6 +1215,7 @@ int main(int argc, char** argv) {
         filePlayer.setPreload(audioOpts.preload);
         filePlayer.setUpsampleOptions(audioOpts);
         winLiveBridge.setOptions(audioOpts);
+        upnpService.apply(audioOpts.upnp, audioOpts.upnpName, audioOpts.upnpFixedVolume, audioOpts.upnpAllow);
         // Ha az előző futás a virtuális kábelen hagyta a Windows hangkimenetét, innen tudja, mire állítsa vissza
         winLiveBridge.setStateFile(userFilePath(L"system_audio_device.txt", true));
         winLiveBridge.start(&playerDsp, [&]() { return filePlayer.hasTrack(); });
@@ -1230,7 +1241,8 @@ int main(int argc, char** argv) {
         return "{\"opts\":" + optsToJsonWithDop(audioOpts, dsdDop) +
                ",\"caps\":{\"buffer\":false,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true,\"upsample\":true,"
                "\"systemUpsample\":true,\"virtualCables\":" + win::WinLiveBridge::virtualCablesJson() +
-               ",\"exclusive\":true,\"dop\":true,\"asio\":true,\"asioDrivers\":" + drivers + "}}";
+               ",\"exclusive\":true,\"dop\":true,\"asio\":true,\"asioDrivers\":" + drivers + ",\"upnp\":true}" +
+               ",\"upnpState\":" + upnpService.statusJson() + "}";
     };
     cb.setAudioOptions = [&](const json::Value& v) {
         std::lock_guard<std::mutex> lk(audioMutex);
@@ -1246,6 +1258,7 @@ int main(int argc, char** argv) {
         filePlayer.setPreload(o.preload);
         filePlayer.setUpsampleOptions(o);
         winLiveBridge.setOptions(o);
+        upnpService.apply(o.upnp, o.upnpName, o.upnpFixedVolume, o.upnpAllow);
         playerDsp.setHardwarePref(o.exclHwVolume && !o.asio);
         if (o.exclusive != playerOut.wantExclusive()) {
             playerOut.setExclusive(o.exclusive);

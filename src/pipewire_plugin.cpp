@@ -28,6 +28,7 @@
 #include "report_sender.hpp"
 #include "library_bridge.hpp"
 #include "radio_bridge.hpp"
+#include "upnp_bridge.hpp"
 #include "linux_headless.hpp"
 #include "linux_default_sink.hpp"
 #include "linux_store.hpp"
@@ -1094,6 +1095,19 @@ int main(int argc, char* argv[]) {
     netRecvCfg.configPath = linux_store::configDir(true) + "/netrecv.conf";
     aq::netrecv::Receiver netReceiver(netRecvCfg);
     netReceiver.setLineHandler([](const std::string& line) { std::cout << "[Hálózati vevő] " << line << std::endl; });
+    // UPnP / DLNA lejátszó (upnp_bridge.hpp): a telefonos vezérlők (BubbleUPnP, mconnect, …) a beépített lejátszón
+    // át, a teljes láncon (bitpontos / hi-res, DSD). Alapból ki; a beállítás az audio.json része, mindig visszaáll.
+    audioOpts.upnp = savedAudio.upnp;
+    audioOpts.upnpName = savedAudio.upnpName;
+    audioOpts.upnpFixedVolume = savedAudio.upnpFixedVolume;
+    audioOpts.upnpAllow = savedAudio.upnpAllow;
+    upnp::UpnpService upnpService(filePlayer, playQueue, cb.setVolume, cb.getVolume);
+    cb.mediaJson = [&]() {
+        if (!filePlayer.hasTrack()) return mediaSession.json();
+        media::Info m = playQueue.mediaInfo();
+        upnpService.patchInfo(m);
+        return media::toJson(m);
+    };
     auto optsToJsonWithDop = [](const audioopt::AudioOptions& o, bool dop) {
         std::string j = audioopt::toJson(o);
         if (!j.empty() && j.back() == '}') {
@@ -1126,6 +1140,7 @@ int main(int argc, char* argv[]) {
     auto applyAudio = [&](const audioopt::AudioOptions& o) {
         audioopt::resampleQuality().store(o.resampleQuality);
         netReceiver.requestApply(o.netRecv, o.netRecvName);
+        upnpService.apply(o.upnp, o.upnpName, o.upnpFixedVolume, o.upnpAllow);
         filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         filePlayer.setPreload(o.preload);
         filePlayer.setUpsampleOptions(o);
@@ -1420,7 +1435,8 @@ int main(int argc, char* argv[]) {
             netReceiver.requestApply(true, audioOpts.netRecvName);
         return "{\"opts\":" + optsToJsonWithDop(audioOpts, dsdDop) +
                ",\"caps\":{\"buffer\":true,\"keepAwake\":true,\"rate\":true,\"resample\":true,\"player\":true,\"upsample\":true,\"systemUpsample\":true" +
-               exclCap + ",\"netRecv\":true},\"netRecvState\":" + netReceiver.statusJson() + "}";
+               exclCap + ",\"netRecv\":true,\"upnp\":true},\"netRecvState\":" + netReceiver.statusJson() +
+               ",\"upnpState\":" + upnpService.statusJson() + "}";
     };
     cb.setAudioOptions = [&](const json::Value& v) {
         std::lock_guard<std::mutex> lk(audioMutex);
@@ -1705,6 +1721,7 @@ int main(int argc, char* argv[]) {
         audioopt::AudioOptions off = audioOpts;
         off.rateMode = audioopt::RateMode::System;
         off.netRecv = false;
+        off.upnp = false;
         applyAudio(off);
     }
 #if defined(AQ_HAVE_SYSTEMD)

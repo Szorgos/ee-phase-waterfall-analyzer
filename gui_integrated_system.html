@@ -5118,11 +5118,23 @@ var qrcode = function() {
             <label class="ao-row ao-check" id="aoRowKeep"><input type="checkbox" id="aoKeepAwake" onchange="aoSend()"> <span data-i18n="ao.keepAwake">Hangkártya ébren tartása</span></label>
             <div class="ao-hint" id="aoKeepHint" data-i18n="ao.keepAwakeHint">Csendben sem alszik el: nincs pattanás, és a számok eleje sem vész el.</div>
             <div id="aoNetRecvWrap" hidden>
+              <div id="aoNetRecvAirWrap" hidden>
               <label class="ao-row ao-check"><input type="checkbox" id="aoNetRecv" onchange="aoSend()"> <span data-i18n="ao.netRecv">Hálózati vevő</span></label>
               <label class="ao-row"><span data-i18n="ao.netRecvName">Kijelzett név</span>
                 <input type="text" id="aoNetRecvName" class="ee-input" style="width:150px;" maxlength="50" placeholder="Aqulify" onchange="aoSend()"></label>
               <div class="ao-hint" data-i18n="ao.netRecvHint">A telefon vagy a számítógép a hálózati hangkimenetek listájában ezen a néven látja az Aqulify-t, és a hang az EQ-n át szól. Kb. CD-minőség (44,1 kHz / 16 bit): nem bitpontos és nem hi-res.</div>
               <div class="ao-hint" id="aoNetRecvState" hidden></div>
+              </div>
+              <div id="aoUpnpWrap" hidden>
+                <label class="ao-row ao-check"><input type="checkbox" id="aoUpnp" onchange="aoSend()"> <span data-i18n="ao.upnp">UPnP / DLNA lejátszó</span></label>
+                <label class="ao-row"><span data-i18n="ao.upnpName">Név a vezérlőkben</span>
+                  <input type="text" id="aoUpnpName" class="ee-input" style="width:150px;" maxlength="64" placeholder="Aqulify" onchange="aoSend()"></label>
+                <label class="ao-row ao-check"><input type="checkbox" id="aoUpnpFixed" onchange="aoSend()"> <span data-i18n="ao.upnpFixed">Fix hangerő (bitpontos)</span></label>
+                <label class="ao-row"><span data-i18n="ao.upnpAllow">Csak ezekről a címekről</span>
+                  <input type="text" id="aoUpnpAllow" class="ee-input" style="width:150px;" maxlength="512" data-i18n-placeholder="ao.upnpAllowPh" placeholder="üres: bárki" onchange="aoSend()"></label>
+                <div class="ao-hint" data-i18n="ao.upnpHint">A telefonos és számítógépes UPnP / DLNA vezérlők ezen a néven látják az Aqulify-t; a zene a beépített lejátszón, a teljes láncon át szól (hi-res és bitpontos is lehet). Fix hangerőnél a vezérlő hangereje nem hat. A UPnP-nek nincs jelszava: a helyi hálózaton bárki vezérelheti.</div>
+                <div class="ao-hint" id="aoUpnpState" hidden></div>
+              </div>
             </div>
             
             <div class="ao-path" id="aoPath"></div>
@@ -10634,8 +10646,11 @@ function aoOnMessage(m) {
   document.getElementById("aoRowKeep").hidden = cp.keepAwake === false;
   document.getElementById("aoKeepHint").hidden = cp.keepAwake === false;
   document.getElementById("aoPlayerWrap").hidden = cp.player !== true;
-  document.getElementById("aoNetRecvWrap").hidden = cp.netRecv !== true;
+  document.getElementById("aoNetRecvWrap").hidden = cp.netRecv !== true && cp.upnp !== true;
+  document.getElementById("aoNetRecvAirWrap").hidden = cp.netRecv !== true;
+  document.getElementById("aoUpnpWrap").hidden = cp.upnp !== true;
   if (cp.netRecv === true) aoNetRecvRender(aoOpts, m.netRecvState);
+  if (cp.upnp === true) aoUpnpRender(aoOpts, m.upnpState);
   aoFillSelects();
   const o = aoOpts;
   document.getElementById("aoBuffer").value = String(o.buffer || 0);
@@ -11085,6 +11100,37 @@ function aoNetRecvRender(o, st) {
   if (o.netRecv && (s === "starting" || s === "restarting") && !aoNetRecvTimer)
     aoNetRecvTimer = setTimeout(() => { aoNetRecvTimer = null; moSend({ type: "get_audio_opts" }); }, 2500);
 }
+// UPnP / DLNA lejátszó: be / ki, név, fix hangerő, engedélyezett vezérlők, állapot (cím, utolsó vezérlő, hiba).
+// Bekapcsolva 5 s-onként frissít, amíg a beállítás nyitva van.
+let aoUpnpTimer = null;
+function aoUpnpRender(o, st) {
+  document.getElementById("aoUpnp").checked = !!o.upnp;
+  document.getElementById("aoUpnpFixed").checked = !!o.upnpFixedVolume;
+  const nm = document.getElementById("aoUpnpName");
+  if (document.activeElement !== nm) nm.value = o.upnpName || "";
+  const al = document.getElementById("aoUpnpAllow");
+  if (document.activeElement !== al) al.value = o.upnpAllow || "";
+  const el = document.getElementById("aoUpnpState");
+  st = st || {};
+  const lines = [];
+  if (o.upnp && st.state === "running") {
+    const addrs = st.addresses || [];
+    lines.push(addrs.length ? t("ao.upnpRunning", { name: st.name || "Aqulify", addr: addrs.join(", ") + ":" + st.port })
+                            : t("ao.upnpNoAddr"));
+  } else if (o.upnp && st.state === "failed") {
+    lines.push(t("ao.upnpFailed", { detail: st.error || "-" }));
+  }
+  const r = st.renderer || {};
+  if (o.upnp && r.peer) lines.push(t("ao.upnpLast", { peer: r.peer, action: r.action || "-" }));
+  if (o.upnp && r.error) lines.push(t("ao.upnpError", { detail: r.error }));
+  el.hidden = lines.length === 0;
+  el.textContent = lines.join(" · ");
+  if (o.upnp && !aoUpnpTimer)
+    aoUpnpTimer = setTimeout(() => {
+      aoUpnpTimer = null;
+      if (!document.getElementById("aoUpnpWrap").hidden && document.getElementById("aoUpnpWrap").offsetParent) moSend({ type: "get_audio_opts" });
+    }, 5000);
+}
 function aoSend() {
   const rv = document.getElementById("aoRate").value;
   const opts = { buffer: parseInt(document.getElementById("aoBuffer").value, 10) || 0,
@@ -11093,6 +11139,12 @@ function aoSend() {
   if (aoCapsDetail && aoCapsDetail.netRecv) {
     opts.netRecv = document.getElementById("aoNetRecv").checked;
     opts.netRecvName = document.getElementById("aoNetRecvName").value.trim();
+  }
+  if (aoCapsDetail && aoCapsDetail.upnp) {
+    opts.upnp = document.getElementById("aoUpnp").checked;
+    opts.upnpName = document.getElementById("aoUpnpName").value.trim();
+    opts.upnpFixedVolume = document.getElementById("aoUpnpFixed").checked;
+    opts.upnpAllow = document.getElementById("aoUpnpAllow").value.trim();
   }
   if (rv.startsWith("fixed:")) opts.fixedRate = parseInt(rv.slice(6), 10);
   if (aoCapsDetail && aoCapsDetail.player) {

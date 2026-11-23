@@ -67,22 +67,26 @@ bool isIpLiteral(const RadioUrl& u) {
     return true;
 }
 
-/** Egy socket-cím megengedett-e (nyilvános, vagy a teszteknél a loopback). */
-bool sockaddrAllowed(const sockaddr* sa, bool allowLoopback, std::string* text = nullptr) {
+/**
+ * Egy socket-cím megengedett-e: a saját címszabály (policy, ha meg van adva), különben nyilvános, vagy a teszteknél
+ * a loopback.
+ */
+bool sockaddrAllowed(const sockaddr* sa, bool allowLoopback, std::string* text = nullptr,
+                     const std::function<bool(int, const uint8_t*)>* policy = nullptr) {
     char buf[INET6_ADDRSTRLEN] = { 0 };
     bool pub = false, loop = false;
     if (sa->sa_family == AF_INET) {
         const auto* s = reinterpret_cast<const sockaddr_in*>(sa);
         uint8_t b[4];
         std::memcpy(b, &s->sin_addr, 4);
-        pub = isPublicV4(b);
+        pub = policy && *policy ? (*policy)(4, b) : isPublicV4(b);
         loop = isLoopbackV4(b);
         inet_ntop(AF_INET, const_cast<in_addr*>(&s->sin_addr), buf, sizeof(buf));
     } else if (sa->sa_family == AF_INET6) {
         const auto* s = reinterpret_cast<const sockaddr_in6*>(sa);
         uint8_t b[16];
         std::memcpy(b, &s->sin6_addr, 16);
-        pub = isPublicV6(b);
+        pub = policy && *policy ? (*policy)(6, b) : isPublicV6(b);
         loop = isLoopbackV6(b);
         inet_ntop(AF_INET6, const_cast<in6_addr*>(&s->sin6_addr), buf, sizeof(buf));
     } else {
@@ -95,6 +99,13 @@ bool sockaddrAllowed(const sockaddr* sa, bool allowLoopback, std::string* text =
 } // namespace
 
 bool resolvePublic(const RadioUrl& u, bool allowLoopback, std::string& ipOut, std::string& err) {
+    NetOptions o;
+    o.allowLoopback = allowLoopback;
+    return resolveAllowed(u, o, ipOut, err);
+}
+
+bool resolveAllowed(const RadioUrl& u, const NetOptions& o, std::string& ipOut, std::string& err) {
+    const bool allowLoopback = o.allowLoopback;
     addrinfo hints{};
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -110,7 +121,7 @@ bool resolvePublic(const RadioUrl& u, bool allowLoopback, std::string& ipOut, st
         if (!p->ai_addr || (p->ai_family != AF_INET && p->ai_family != AF_INET6)) continue;
         std::string text;
         any = true;
-        if (!sockaddrAllowed(p->ai_addr, allowLoopback, &text)) ok = false;
+        if (!sockaddrAllowed(p->ai_addr, allowLoopback, &text, &o.allowAddr)) ok = false;
         if (first.empty()) first = text;
     }
     freeaddrinfo(res);
@@ -200,7 +211,7 @@ void HttpStream::abort() {
 
 bool HttpStream::open(const RadioUrl& u, const NetOptions& o, HttpHead& head, std::string& err) {
     std::string ip;
-    if (!resolvePublic(u, o.allowLoopback, ip, err)) return false;
+    if (!resolveAllowed(u, o, ip, err)) return false;
     Impl& I = *impl_;
     HINTERNET req = nullptr;
     {
@@ -226,8 +237,11 @@ bool HttpStream::open(const RadioUrl& u, const NetOptions& o, HttpHead& head, st
         std::wstring wip = wide(ip);
         WinHttpSetOption(req, kOptResolutionHostname, wip.data(), static_cast<DWORD>(wip.size()));
     }
-    const wchar_t* hdrs = L"Icy-MetaData: 1\r\n";
-    if (!WinHttpSendRequest(req, hdrs, static_cast<DWORD>(-1L), WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+    std::string hdrText = o.icyMetaData ? "Icy-MetaData: 1\r\n" : "";
+    for (const auto& h : o.extraHeaders) hdrText += h + "\r\n";
+    const std::wstring hdrs = wide(hdrText);
+    if (!WinHttpSendRequest(req, hdrs.empty() ? WINHTTP_NO_ADDITIONAL_HEADERS : hdrs.c_str(),
+                            hdrs.empty() ? 0 : static_cast<DWORD>(-1L), WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
         !WinHttpReceiveResponse(req, nullptr)) {
         const DWORD e = GetLastError();
         std::lock_guard<std::mutex> lk(I.m);
@@ -241,7 +255,7 @@ bool HttpStream::open(const RadioUrl& u, const NetOptions& o, HttpHead& head, st
         ci.cbSize = sizeof(ci);
         DWORD len = sizeof(ci);
         if (!WinHttpQueryOption(req, WINHTTP_OPTION_CONNECTION_INFO, &ci, &len) ||
-            !sockaddrAllowed(reinterpret_cast<const sockaddr*>(&ci.RemoteAddress), o.allowLoopback)) {
+            !sockaddrAllowed(reinterpret_cast<const sockaddr*>(&ci.RemoteAddress), o.allowLoopback, nullptr, &o.allowAddr)) {
             err = "blocked";
             return false;
         }
@@ -345,14 +359,16 @@ bool HttpStream::open(const RadioUrl& u, const NetOptions& o, HttpHead& head, st
     Impl& I = *impl_;
     I.stallMs = std::max(1, o.stallTimeoutS) * 1000;
     std::string ip;
-    if (!resolvePublic(u, o.allowLoopback, ip, err)) return false;
+    if (!resolveAllowed(u, o, ip, err)) return false;
     // Argumentumtömb, héj nélkül; -q: a felhasználó .curlrc-je nem számít; proxy nincs (különben a proxy oldaná fel a
     // nevet, és a címellenőrzés hatástalan lenne); átirányítást nem követ (a hívó ellenőrzi és követi). --http0.9: a
     // régi „ICY 200 OK” válaszsort a curl HTTP/0.9-nek veszi; így a sor a kimenetbe kerül, és a fejlécet mi bontjuk
     std::vector<std::string> args = { "curl", "-q", "-sS", "-i", "-N", "--http0.9", "--proto", "=http,https", "--noproxy", "*",
                                       "--max-redirs", "0", "--connect-timeout", std::to_string(o.connectTimeoutS),
                                       "-y", std::to_string(std::max(1, o.stallTimeoutS)), "-Y", "1",
-                                      "-A", o.userAgent, "-H", "Icy-MetaData: 1" };
+                                      "-A", o.userAgent };
+    if (o.icyMetaData) { args.push_back("-H"); args.push_back("Icy-MetaData: 1"); }
+    for (const auto& h : o.extraHeaders) { args.push_back("-H"); args.push_back(h); }
     if (!isIpLiteral(u)) {
         // a már ellenőrzött címre kapcsolódik: a név nem oldható fel újra (DNS-újrakötés ellen)
         const std::string ipPart = ip.find(':') != std::string::npos ? "[" + ip + "]" : ip;

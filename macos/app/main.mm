@@ -43,6 +43,7 @@
 #include "music_library.hpp"
 #include "library_bridge.hpp"
 #include "radio_bridge.hpp"
+#include "upnp_bridge.hpp"
 #include "play_queue.hpp"
 #include "playlists.hpp"
 #include "play_stats.hpp"
@@ -280,6 +281,9 @@ struct Core {
         if (!linux_store::saveRadio(doc)) std::cerr << "[Rádió] Figyelem: a radio.json nem írható.\n";
     }};
     radio::RadioController radioCtl{filePlayer, radioStations};
+    // UPnP / DLNA lejátszó (upnp_bridge.hpp): a híd beállításakor jön létre (a hangerő a híd hívásait használja); a
+    // híd után, a lejátszó előtt szűnik meg
+    std::unique_ptr<upnp::UpnpService> upnpService;
 
     /** A felület kimenetválasztója: első a rendszer alapértelmezettje, utána az eszközök. */
     void refreshSinks() {
@@ -515,6 +519,10 @@ struct Core {
         if (c->hasAudio) c->savedAudio = audioopt::fromJson(v);
         c->audioOpts.errorReports = c->savedAudio.errorReports;           // hozzájárulás: a visszaállítás módjától függetlenül él
         c->audioOpts.errorReportsAsked = c->savedAudio.errorReportsAsked; // első indításkori kérdés állapota
+        c->audioOpts.upnp = c->savedAudio.upnp;                           // UPnP: szolgáltatás, mindig visszaáll
+        c->audioOpts.upnpName = c->savedAudio.upnpName;
+        c->audioOpts.upnpFixedVolume = c->savedAudio.upnpFixedVolume;
+        c->audioOpts.upnpAllow = c->savedAudio.upnpAllow;
     }
     c->engine.params.write(c->current);
     c->presetDoc = linux_store::loadPresets();
@@ -680,7 +688,10 @@ struct Core {
     c->musicLibrary.setRoots(roots);
 
     cb.mediaJson = [c]() {
-        return c->filePlayer.hasTrack() ? media::toJson(c->playQueue.mediaInfo()) : c->media.json();
+        if (!c->filePlayer.hasTrack()) return c->media.json();
+        media::Info m = c->playQueue.mediaInfo();
+        if (c->upnpService) c->upnpService->patchInfo(m);
+        return media::toJson(m);
     };
     cb.mediaCommand = [c](const std::string& action, double value) {
         if (c->filePlayer.hasTrack()) c->playQueue.command(action, value);
@@ -739,11 +750,17 @@ struct Core {
         if (c->playerExclusive()) { c->playerDsp.setVolume(level, mute); return; }
         c->engine.setOutputVolume(static_cast<float>(level), mute);
     };
+    c->upnpService = std::make_unique<upnp::UpnpService>(c->filePlayer, c->playQueue, cb.setVolume, cb.getVolume);
+    {
+        std::lock_guard<std::mutex> lk(c->audioMutex);
+        c->upnpService->apply(c->audioOpts.upnp, c->audioOpts.upnpName, c->audioOpts.upnpFixedVolume, c->audioOpts.upnpAllow);
+    }
     cb.audioOptionsJson = [c]() -> std::string {
         std::lock_guard<std::mutex> lk(c->audioMutex);
         return "{\"opts\":" + audioopt::toJson(c->audioOpts) +
                ",\"caps\":{\"buffer\":true,\"keepAwake\":false,\"rate\":false,\"resample\":false,\"player\":true,\"upsample\":true,"
-               "\"systemUpsample\":true,\"exclusive\":true,\"exclusiveKind\":\"hog\"}}";
+               "\"systemUpsample\":true,\"exclusive\":true,\"exclusiveKind\":\"hog\",\"upnp\":true}" +
+               ",\"upnpState\":" + (c->upnpService ? c->upnpService->statusJson() : std::string("{\"state\":\"off\"}")) + "}";
     };
     cb.setAudioOptions = [c](const json::Value& v) {
         std::lock_guard<std::mutex> lk(c->audioMutex);
@@ -760,6 +777,7 @@ struct Core {
         c->filePlayer.setReplayGain(o.replayGain, o.rgPreampDb, o.rgPreventClip);
         c->filePlayer.setPreload(o.preload);
         c->filePlayer.setUpsampleOptions(o);
+        if (c->upnpService) c->upnpService->apply(o.upnp, o.upnpName, o.upnpFixedVolume, o.upnpAllow);
         if (c->playerSel && c->playerSel->wantExclusive() != o.exclusive) {
             c->playerSel->setExclusive(o.exclusive);   // a következő számtól
             std::cout << "[Lejátszó] Core Audio kizárólagos kimenet (hog mode): " << (o.exclusive ? "be" : "ki")
@@ -930,6 +948,7 @@ struct Core {
     core_->updater.stop();
     core_->media.stop();
     core_->engine.stop();
+    if (core_->upnpService) core_->upnpService->apply(false, "", false, "");
     core_->filePlayer.stop();
     {
         std::lock_guard<std::mutex> lk(core_->paramMutex);

@@ -41,6 +41,13 @@ struct NetOptions {
     int headTimeoutS = 15;
     int stallTimeoutS = 20;       // ennyi ideig nem jön adat: a kapcsolat bontása (újracsatlakozás)
     std::string userAgent = "Aqulify";
+    /**
+     * Saját címszabály a nyilvános-szabály helyett (a UPnP-renderer: magáncím csak a kérés alhálózatából,
+     * upnp_soap.hpp). family: 4 vagy 6, addr: 4 vagy 16 bájt hálózati sorrendben. Üres: a nyilvános-szabály.
+     */
+    std::function<bool(int family, const uint8_t* addr)> allowAddr;
+    std::vector<std::string> extraHeaders;   // további kérésfejlécek, pl. "Range: bytes=1000-"
+    bool icyMetaData = true;                 // "Icy-MetaData: 1" (a rádióé; véges fájlnál ki)
 };
 
 /**
@@ -48,6 +55,8 @@ struct NetOptions {
  * elfogadott). ipOut: az első cím szövegként. err: "dns" vagy "blocked".
  */
 bool resolvePublic(const RadioUrl& u, bool allowLoopback, std::string& ipOut, std::string& err);
+/** Ugyanez a beállítások címszabályával (allowAddr, ha meg van adva; különben a nyilvános-szabály). */
+bool resolveAllowed(const RadioUrl& u, const NetOptions& o, std::string& ipOut, std::string& err);
 
 /** Egy GET-kérés, átirányítás követése nélkül. */
 class HttpStream {

@@ -105,6 +105,12 @@ public:
      */
     void setPlayedCallback(std::function<void(const std::string& id)> played);
 
+    /**
+     * Más forrás következő száma (a UPnP-renderer szünetmentes váltásához): ha a lejátszó olyan jel után kérdez, amely
+     * nem a sor tétele, ez a függvény válaszol. A lejátszó zárja alatt hívódik (nem hívhatja vissza a lejátszót).
+     */
+    void setForeignNext(FilePlayer::NextProvider next);
+
 private:
     struct Entry {
         QueueItem item;
@@ -141,6 +147,8 @@ private:
     // a hallott idő mérése (0,25 s-onként): a lejátszási naplóhoz
     void trackLoop();
     std::function<void(const std::string& id)> played_;
+    std::mutex foreignM_;
+    FilePlayer::NextProvider foreign_;
     ListenTracker tracker_;
     std::mutex tickM_;
     std::condition_variable tickCv_;
