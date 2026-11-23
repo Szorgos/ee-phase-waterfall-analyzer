@@ -651,6 +651,7 @@
   "upd.title": "有新版本可用",
   "upd.versions": "当前：{cur} · 新版：{ver}",
   "upd.noNotes": "更改内容见发布页面。",
+  "upd.more": "……另有 {n} 项更改（详见发布页面）。",
   "upd.update": "更新",
   "upd.later": "稍后",
   "upd.skip": "跳过此版本",

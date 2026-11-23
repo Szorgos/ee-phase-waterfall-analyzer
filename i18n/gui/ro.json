@@ -651,6 +651,7 @@
   "upd.title": "Versiune nouă disponibilă",
   "upd.versions": "Curentă: {cur} · Nouă: {ver}",
   "upd.noNotes": "Modificările sunt descrise pe pagina versiunii.",
+  "upd.more": "…și încă {n} modificări (vezi pagina versiunii).",
   "upd.update": "Actualizează",
   "upd.later": "Mai târziu",
   "upd.skip": "Ignoră această versiune",

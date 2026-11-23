@@ -651,6 +651,7 @@
   "upd.title": "Yeni sürüm mevcut",
   "upd.versions": "Mevcut: {cur} · Yeni: {ver}",
   "upd.noNotes": "Değişiklikler sürüm sayfasında listelenmiştir.",
+  "upd.more": "…ve {n} değişiklik daha (sürüm sayfasına bakın).",
   "upd.update": "Güncelle",
   "upd.later": "Daha sonra",
   "upd.skip": "Bu sürümü yoksay",

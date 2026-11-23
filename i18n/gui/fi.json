@@ -651,6 +651,7 @@
   "upd.title": "Uusi versio saatavilla",
   "upd.versions": "Nykyinen: {cur} · Uusi: {ver}",
   "upd.noNotes": "Muutokset on kuvattu julkaisusivulla.",
+  "upd.more": "…ja {n} muuta muutosta (katso julkaisusivu).",
   "upd.update": "Päivitä",
   "upd.later": "Myöhemmin",
   "upd.skip": "Ohita tämä versio",

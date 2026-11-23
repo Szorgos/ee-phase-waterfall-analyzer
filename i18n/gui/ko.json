@@ -436,6 +436,7 @@
   "upd.available": "새 버전 사용 가능: {ver}",
   "upd.versions": "현재: {cur} · 새 버전: {ver}",
   "upd.noNotes": "변경 사항은 릴리스 페이지에 나와 있습니다.",
+  "upd.more": "…외 {n}개의 변경 사항(릴리스 페이지 참조).",
   "upd.update": "업데이트",
   "upd.later": "나중에",
   "upd.skip": "이 버전 건너뛰기",

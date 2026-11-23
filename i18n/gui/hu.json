@@ -651,6 +651,7 @@
   "upd.title": "Új verzió érhető el",
   "upd.versions": "Jelenlegi: {cur} · Új: {ver}",
   "upd.noNotes": "A változások a kiadás oldalán olvashatók.",
+  "upd.more": "…és még {n} további változás (a kiadás oldalán olvasható).",
   "upd.update": "Frissítés",
   "upd.later": "Később",
   "upd.skip": "Kihagyom ezt a verziót",

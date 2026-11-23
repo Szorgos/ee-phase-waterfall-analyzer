@@ -436,6 +436,7 @@
   "upd.available": "גרסה חדשה זמינה: {ver}",
   "upd.versions": "נוכחית: {cur} · חדשה: {ver}",
   "upd.noNotes": "השינויים מפורטים בדף הגרסה.",
+  "upd.more": "…ועוד {n} שינויים (ראו בדף הגרסה).",
   "upd.update": "עדכן",
   "upd.later": "אחר כך",
   "upd.skip": "דלג על גרסה זו",

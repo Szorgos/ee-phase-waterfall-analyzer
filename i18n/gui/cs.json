@@ -436,6 +436,7 @@
   "upd.title": "K dispozici je nová verze",
   "upd.versions": "Aktuální: {cur} · Nová: {ver}",
   "upd.noNotes": "Změny jsou uvedeny na stránce vydání.",
+  "upd.more": "…a dalších {n} změn (viz stránka vydání).",
   "upd.update": "Aktualizovat",
   "upd.later": "Později",
   "upd.skip": "Přeskočit tuto verzi",

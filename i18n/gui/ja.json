@@ -436,6 +436,7 @@
   "upd.available": "新しいバージョンが利用可能: {ver}",
   "upd.versions": "現在: {cur} · 最新: {ver}",
   "upd.noNotes": "変更内容はリリースノートで確認できます。",
+  "upd.more": "…ほか {n} 件の変更（リリースページを参照）。",
   "upd.update": "アップデート",
   "upd.later": "後で",
   "upd.skip": "このバージョンをスキップ",

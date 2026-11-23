@@ -6375,7 +6375,7 @@ var qrcode = function() {
       <button class="icon-btn" onclick="updClose('later')" title="Bezárás" data-i18n-title="common.close" data-i18n-aria-label="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
     </div>
     <p id="updVersions" class="module-desc" style="margin:0;"></p>
-    <ul id="updNotes" style="margin:0; padding-left:20px; display:flex; flex-direction:column; gap:6px; font-size:0.9rem; color:var(--aq-text); line-height:1.4;"></ul>
+    <ul id="updNotes" style="margin:0; padding-left:20px; max-height:55vh; overflow-y:auto; display:flex; flex-direction:column; gap:6px; font-size:0.9rem; color:var(--aq-text); line-height:1.4;"></ul>
     <p id="updNoNotes" class="module-desc" style="margin:0;" hidden data-i18n="upd.noNotes">A változások a kiadás oldalán olvashatók.</p>
     <p id="updProgress" class="module-desc" style="margin:0; font-weight:600;" hidden aria-live="polite"></p>
     <div id="updLinux" style="display:none; flex-direction:column; gap:6px;">
@@ -14901,6 +14901,27 @@ function updNotes(list, ver) {
   const n = e && e.notes ? (e.notes[aqLang] || e.notes.en || e.notes.hu) : null;
   return Array.isArray(n) ? n.filter(s => typeof s === "string" && s.trim()) : [];
 }
+// Ennél több pontnál verziónként csak az első (a legfontosabb) pont látszik, a többi a kiadás oldalán olvasható
+const UPD_MAX_NOTES = 10;
+/**
+ * A felhasználó saját verziója ("from", kizárva) és a cél ("to") közötti összes verzió pontjai, a legújabb elöl:
+ * [{ version, notes, hidden }]. Így nem csak az utolsó lépcsőfok látszik. Ismeretlen saját verziónál csak a cél.
+ */
+function updNotesRange(list, from, to) {
+  if (!Array.isArray(list)) return [];
+  const known = /^\d+\.\d+\.\d+$/.test(String(from || ""));
+  const groups = list
+    .filter(e => e && typeof e.version === "string" && updCompare(e.version, to) <= 0 &&
+                 (known ? updCompare(e.version, from) > 0 : e.version === to))
+    .sort((a, b) => updCompare(b.version, a.version))
+    .map(e => ({ version: e.version, notes: updNotes(list, e.version), hidden: 0 }))
+    .filter(g => g.notes.length);
+  const total = groups.reduce((s, g) => s + g.notes.length, 0);
+  if (total > UPD_MAX_NOTES && groups.length > 1) {
+    groups.forEach(g => { g.hidden = g.notes.length - 1; g.notes = g.notes.slice(0, 1); });
+  }
+  return groups;
+}
 function updAuto() { return updStore(UPD_KEYS.auto) !== "0"; }
 function updSetAuto(on) {
   updStore(UPD_KEYS.auto, on ? "1" : "0");
@@ -14937,7 +14958,7 @@ async function updCheck(manual) {
     const url = typeof rel.html_url === "string" && rel.html_url.startsWith(`https://github.com/${UPD_REPO}/releases/`)
       ? rel.html_url : UPD_PAGE;
     if (!updInfo || updInfo.ver !== ver) { updFallbackPage = false; updProgressState = null; }
-    updInfo = { ver, cur, url, list };
+    updInfo = { ver, cur, from: cur, url, list };
     const m = document.getElementById("modalUpdate");
     if (!manual && m && m.style.display === "flex") return;   // nyitott ablak (pl. Újdonságok) fölé nem ugrik fel
     updShow("update");
@@ -14963,12 +14984,30 @@ function updRender() {
   document.getElementById("updTitle").textContent = wn ? t("wn.title", { ver: updInfo.ver }) : t("upd.title");
   document.getElementById("updVersions").textContent = t("upd.versions", { cur: updInfo.cur, ver: updInfo.ver });
   updShowEl("updVersions", !wn);
-  const notes = wn ? updNotes(window.AQ_WHATSNEW, updInfo.ver) : updNotes(updInfo.list, updInfo.ver);
+  // a saját verzió óta érkezett összes újdonság (frissítés után: a legutóbb látott verzió óta)
+  const groups = updNotesRange(wn ? window.AQ_WHATSNEW : updInfo.list, updInfo.from, updInfo.ver);
   const ul = document.getElementById("updNotes");
   ul.textContent = "";
-  notes.forEach(s => { const li = document.createElement("li"); li.textContent = s; ul.appendChild(li); });
-  updShowEl("updNotes", notes.length > 0, "flex");
-  updShowEl("updNoNotes", !wn && !notes.length);
+  const multi = groups.length > 1;
+  let hidden = 0;
+  groups.forEach(g => {
+    if (multi) {
+      const h = document.createElement("li");
+      h.textContent = g.version;
+      h.style.cssText = "list-style:none; margin:6px 0 0 -20px; font-weight:600; font-size:0.85rem; color:var(--aq-text-2);";
+      ul.appendChild(h);
+    }
+    g.notes.forEach(s => { const li = document.createElement("li"); li.textContent = s; ul.appendChild(li); });
+    hidden += g.hidden;
+  });
+  if (hidden) {
+    const li = document.createElement("li");
+    li.textContent = t("upd.more", { n: hidden });
+    li.style.cssText = "list-style:none; margin-left:-20px; color:var(--aq-text-2);";
+    ul.appendChild(li);
+  }
+  updShowEl("updNotes", groups.length > 0, "flex");
+  updShowEl("updNoNotes", !wn && !groups.length);
   // frissítés közben a „Frissítés” és a „Kihagyom” nem látszik; a „Később” bezárja az ablakot (a letöltés folytatódik).
   // Ha a frissítés a felhasználóra vár (macOS: a lemezkép megnyílt, az alkalmazást ő húzza át), csak a „Rendben” marad.
   const ps = !wn && updProgressState;
@@ -15058,8 +15097,8 @@ function updWhatsNew() {
   const seen = updStore(UPD_KEYS.seen);
   if (cur) updStore(UPD_KEYS.seen, cur);
   if (!seen || !cur || updCompare(cur, seen) <= 0) return;
-  if (!updNotes(window.AQ_WHATSNEW, cur).length) return;
-  updInfo = { ver: cur, cur, url: "", list: null };
+  if (!updNotesRange(window.AQ_WHATSNEW, seen, cur).length) return;
+  updInfo = { ver: cur, cur, from: seen, url: "", list: null };
   updShow("whatsnew");
 }
 function updInit() {

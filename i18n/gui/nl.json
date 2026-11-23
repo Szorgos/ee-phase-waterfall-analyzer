@@ -651,6 +651,7 @@
   "upd.title": "Nieuwe versie beschikbaar",
   "upd.versions": "Huidig: {cur} · Nieuw: {ver}",
   "upd.noNotes": "De wijzigingen staan vermeld op de releasepagina.",
+  "upd.more": "…en nog {n} wijzigingen (zie de releasepagina).",
   "upd.update": "Bijwerken",
   "upd.later": "Later",
   "upd.skip": "Deze versie overslaan",

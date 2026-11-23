@@ -436,6 +436,7 @@
   "upd.available": "Ny version tilgængelig: {ver}",
   "upd.versions": "Nuværende: {cur} · Ny: {ver}",
   "upd.noNotes": "Ændringerne findes på udgivelsessiden.",
+  "upd.more": "…og {n} ændringer mere (se udgivelsessiden).",
   "upd.update": "Opdater",
   "upd.later": "Senere",
   "upd.skip": "Spring denne version over",

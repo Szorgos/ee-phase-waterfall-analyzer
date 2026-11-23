@@ -651,6 +651,7 @@
   "upd.title": "Nova versão disponível",
   "upd.versions": "Atual: {cur} · Nova: {ver}",
   "upd.noNotes": "As alterações estão descritas na página de lançamento.",
+  "upd.more": "…e mais {n} alterações (ver a página da versão).",
   "upd.update": "Atualizar",
   "upd.later": "Mais tarde",
   "upd.skip": "Ignorar esta versão",
