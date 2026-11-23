@@ -11183,7 +11183,8 @@ function aoSend() {
         const sel = document.getElementById("upsCust" + s);
         if (sel) {
           const tv = parseInt(sel.value, 10) || s;
-          if (tv > s) cust[String(s)] = tv;
+          // felfelé és lefelé is (a lefelé célt a motor csak a lefelé alakítás motorjával használja)
+          if (tv !== s) cust[String(s)] = tv;
         }
       }
       opts.upsampleCustom = cust;
