@@ -764,6 +764,20 @@ static void testPrivacyBridgeDmiUsb() {
     CHECK(contains(cardsOut, "usb-0000:00:14.0-4.1.2.3") && !contains(cardsOut, "usb-0000:00:14.0-<ip>"),
           "a 4-részes USB-útvonal (usb-0000:00:14.0-4.1.2.3) nem válik <ip>-vé");
 
+    // 8b/2. 3 tagú SOF longname (GYARTO-TERMEKKOD-TermekNevVerzio; kitalált példák)
+    const std::string cards3 =
+        " 2 [sofhdadsp      ]: sof-hda-dsp - sof-hda-dsp\n"
+        "                      ACME-12B34567XY-ExampleBookPro9Gen2i\n"
+        " 3 [BTR7           ]: USB-Audio - FiiO BTR7\n"
+        "                      FAKEVENDOR-99A12345BC-DemoStationUltra3rdGenX\n";
+    const std::string cards3Out = aq::report::scrub(cards3, ctx, false);
+    CHECK(!contains(cards3Out, "ACME-") && !contains(cards3Out, "12B34567XY") && !contains(cards3Out, "ExampleBookPro9Gen2i") &&
+          !contains(cards3Out, "FAKEVENDOR") && !contains(cards3Out, "DemoStation"),
+          "3 tagú SOF/DMI gépazonosító eltűnik");
+    CHECK(contains(cards3Out, "                      <dmi>\n") && contains(cards3Out, "sof-hda-dsp - sof-hda-dsp") &&
+          contains(cards3Out, "USB-Audio - FiiO BTR7"),
+          "a 3 tagú azonosító helyén <dmi>, a kártyanevek épek");
+
     // 8c. Negatív esetek (nem szabad átírni) + valódi IPv4
     const char* keepList[] = {
         "TOPPING USB DAC",
@@ -774,6 +788,16 @@ static void testPrivacyBridgeDmiUsb() {
         "HDA Intel HDMI at 0xf7d10000 irq 36",
         "Generic USB Audio at usb-0000:00:14.0-4.4",
         "6.6.87.2-microsoft-standard-WSL2",
+        // a 3 tagú DMI-szabály közelében lévő, de nem gépazonosító szövegek
+        "USB-Audio",
+        "USB-Audio - FiiO FiiO BTR7",
+        "sof-hda-dsp",
+        "HDA-Intel",
+        "AUDIO-DEVICE-GenericPlayback",     // nincs 6 számjegyes tag
+        "ACME-12345-ExampleBookPro9Gen2i",  // csak 5 számjegy a 2. tagban
+        "ACME-12B34567XY-short",            // a 3. tag rövid
+        "ACME-12B34567XY-lowercasesuffix",  // a 3. tagban nincs nagybetű
+        "AB-12B34567XY-ExampleBookPro9Gen2i",   // az első tag túl rövid
     };
     for (const char* s : keepList) {
         const std::string got = aq::report::scrub(s, ctx, false);
