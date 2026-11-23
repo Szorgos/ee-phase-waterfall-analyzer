@@ -151,6 +151,7 @@ function makeSineWav(filePath, sr = 44100, freq = 1000, seconds = 6) {
 
   // Visszaállítás alapállapotra
   await page.selectOption("#upsRule", "0");
+  await page.click("#devTab-output");
   await page.selectOption("#aoRate", "system");
   await page.waitForFunction(() => aoOpts && aoOpts.upsampleRule === 0 && aoOpts.rateMode === "system", null, { timeout: 5000 });
 
