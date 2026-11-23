@@ -277,7 +277,9 @@ public:
     }
 
     bool isActive() const { return active_; }
-    bool isFft64() const { return useFft64_; }
+    bool isFft64() const { return useFft64_; }   // a saját FFT-ág (64 vagy 106 bites)
+    /** A ténylegesen futó motor: 0 = libsoxr, 1 = Aqulify FFT64, 2 = Aqulify FFT-DD (audioopt::UpsampleEngineType). */
+    int engineType() const { return useFft64_ ? (fftStream_.isDD() ? 2 : 1) : 0; }
     uint32_t srcRate() const { return srcRate_; }
     uint32_t dstRate() const { return dstRate_; }
     uint32_t channels() const { return channels_; }

@@ -1020,6 +1020,7 @@ int main() {
             const bool initDD = engDD.init(44100, 88200, 1, 32, 50.0, 0.9966, 1.00, 0.0f,
                                            static_cast<int>(audioopt::UpsampleEngineType::FftDD));
             CHECK(initDD && engDD.isActive() && engDD.isFft64(), "UpsampleEngine 106 bites FFT-DD init");
+            CHECK(engDD.engineType() == 2, "UpsampleEngine::engineType() FFT-DD-nél 2 (az állapotsor ne FFT64-et írjon)");
             std::vector<float> inDD(44100);
             for (size_t i = 0; i < inDD.size(); ++i)
                 inDD[i] = 0.5f * std::sin(2.0f * static_cast<float>(kPi) * 10000.0f * i / 44100.0f);
@@ -1050,6 +1051,7 @@ int main() {
             const bool initOk = eng.init(44100, 96000, 1, 32, ph, 0.95, 1.00, 0.0f,
                                          static_cast<int>(audioopt::UpsampleEngineType::Fft64));
             CHECK(initOk && eng.isActive() && eng.isFft64(), "UpsampleEngine FFT64 init és isFft64()");
+            CHECK(eng.engineType() == 1, "UpsampleEngine::engineType() FFT64-nél 1");
 
             // 1 másodperces 10 kHz szinusz + impulzus ellenőrzés
             std::vector<float> in(44100);

@@ -214,7 +214,7 @@ struct BridgeStatus {
     bool prefilled = false;
     uint32_t srcRate = 0;
     uint32_t dstRate = 0;
-    int engineType = 0;       // 0 = libsoxr, 1 = Aqulify FFT64
+    int engineType = 0;       // 0 = libsoxr, 1 = Aqulify FFT64, 2 = Aqulify FFT-DD
     double latencyMs = 0.0;
     double driftPpm = 0.0;
     uint64_t underruns = 0;
@@ -458,7 +458,7 @@ public:
         st.prefilled = prefilled_.load(std::memory_order_acquire);
         st.srcRate = srcRate_;
         st.dstRate = dstRate_;
-        st.engineType = upsampler_.isFft64() ? 1 : 0;
+        st.engineType = upsampler_.engineType();   // a 106 bites FFT-DD is külön (eddig FFT64-nek látszott)
         if (srcRate_ > 0 && dstRate_ > 0) {
             const double inMs = 1000.0 * static_cast<double>(inRing_.available()) / static_cast<double>(srcRate_);
             const double outMs = 1000.0 * static_cast<double>(outRing_.available()) / static_cast<double>(dstRate_);
