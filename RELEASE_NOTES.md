@@ -1,3 +1,16 @@
+### Újdonságok (2.9.6)
+
+**Letöltés (2.9.6):**
+- Windows 11: [Aqulify-Setup-2.9.6.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.6/Aqulify-Setup-2.9.6.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.6/Aqulify-Setup-2.9.6.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.9.6-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.6/Aqulify-2.9.6-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.6/Aqulify-2.9.6-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.9.6.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.6/Aqulify-Linux-2.9.6.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.6/Aqulify-Linux-2.9.6.tar.gz.sha256))
+- Fedora: [aqulify-2.9.6-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.6/aqulify-2.9.6-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.9.6-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.6/aqulify_2.9.6-1_amd64.deb) · Arch: [aqulify-2.9.6-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.6/aqulify-2.9.6-1-x86_64.pkg.tar.zst)
+- Raspberry Pi 4 / 5 (Raspberry Pi OS, 64 bit): [aqulify_2.9.6-1.pi1_arm64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.6/aqulify_2.9.6-1.pi1_arm64.deb) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.6/aqulify_2.9.6-1.pi1_arm64.deb.sha256)) · útmutató: `docs/pi.md`
+- Android-távirányító (Android 8+, változatlan): [Aqulify-Remote-1.5.1.apk](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.2/Aqulify-Remote-1.5.1.apk) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.2/Aqulify-Remote-1.5.1.apk.sha256))
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- Kezelőfelület javítása.
+
 ### Újdonságok (2.9.5)
 
 **Letöltés (2.9.5):**

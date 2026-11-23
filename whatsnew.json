@@ -1,6 +1,81 @@
 {
   "versions": [
     {
+      "version": "2.9.6",
+      "date": "2026-11-23",
+      "notes": {
+        "hu": [
+          "Kezelőfelület javítása."
+        ],
+        "en": [
+          "User interface fix."
+        ],
+        "es": [
+          "Corrección de la interfaz."
+        ],
+        "fr": [
+          "Correctif de l’interface."
+        ],
+        "zh": [
+          "界面修复。"
+        ],
+        "de": [
+          "Korrektur der Benutzeroberfläche."
+        ],
+        "it": [
+          "Correzione dell’interfaccia."
+        ],
+        "nl": [
+          "Verbetering van de interface."
+        ],
+        "pl": [
+          "Poprawka interfejsu."
+        ],
+        "ru": [
+          "Исправление интерфейса."
+        ],
+        "pt": [
+          "Correção da interface."
+        ],
+        "ro": [
+          "Remediere a interfeței."
+        ],
+        "el": [
+          "Διόρθωση της διεπαφής."
+        ],
+        "tr": [
+          "Arayüz düzeltmesi."
+        ],
+        "fi": [
+          "Käyttöliittymän korjaus."
+        ],
+        "da": [
+          "Rettelse af brugerfladen."
+        ],
+        "nb": [
+          "Retting av brukergrensesnittet."
+        ],
+        "sv": [
+          "Rättning av gränssnittet."
+        ],
+        "he": [
+          "תיקון בממשק."
+        ],
+        "ja": [
+          "インターフェースの修正。"
+        ],
+        "ko": [
+          "인터페이스 수정."
+        ],
+        "cs": [
+          "Oprava rozhraní."
+        ],
+        "uk": [
+          "Виправлення інтерфейсу."
+        ]
+      }
+    },
+    {
       "version": "2.9.5",
       "date": "2026-11-23",
       "notes": {
