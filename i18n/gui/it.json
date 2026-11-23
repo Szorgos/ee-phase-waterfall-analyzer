@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "Audio di sistema: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Sovracampionamento di sistema: nessun cavo audio virtuale rilevato (es. VB-Cable).",
   "ups.liveNoOutput": "Sovracampionamento di sistema: nessun DAC/uscita fisica separata trovata (loop impedito).",
+  "ups.liveBusy": "Sovracampionamento di sistema: un altro programma usa l’uscita in modo esclusivo; nel frattempo l’audio suona senza sovracampionamento e Aqulify riprova ogni 10 secondi.",
   "ups.engineFftDD": "Aqulify FFT-DD (Double-Double a 106 bit)",
   "ups.engineHintDD": "Motore FFT + Kaiser-sinc a singolo stadio in precisione Double-Double a 106 bit (~31 cifre significative, HydrogenAudio SRC: 99,85 %), con fase selezionabile e filtro a ritardo zero.",
   "dev.tabDevice": "Dispositivo",

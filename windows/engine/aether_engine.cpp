@@ -1004,7 +1004,7 @@ int main(int argc, char** argv) {
         };
     }
     // A forrásválasztó tudja, mikor fut a híd: a DSP ilyenkor a motorban, a kábelen a plugin átenged (nincs kétszeres lánc)
-    sources.setBridgeActiveFn([&]() { return !filePlayer.hasTrack() && winLiveBridge.isActive(); });
+    sources.setBridgeActiveFn([&]() { return !filePlayer.hasTrack() && winLiveBridge.dspInEngine(); });
     // Zenetár (2.x): a mentett zenei mappák (%APPDATA%\Aqulify\library.json), különben a Zene mappa
     library::MusicLibrary musicLibrary;
     // A lejátszási napló (3c2, %APPDATA%\Aqulify\stats.json): a sor előtt, mert a sor mérőszála a megszűnéséig hívhatja

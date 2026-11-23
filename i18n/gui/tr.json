@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "Sistem sesi: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Sistem sesi yükseltme: kurulu sanal ses kablosu bulunamadı (ör. VB-Cable).",
   "ups.liveNoOutput": "Sistem sesi yükseltme: ayrı bir fiziksel DAC/çıkış bulunamadı (geri besleme engellendi).",
+  "ups.liveBusy": "Sistem sesi yükseltme: çıkış aygıtını başka bir program özel modda kullanıyor; serbest kalana kadar ses yükseltmesiz çalar ve Aqulify her 10 saniyede yeniden dener.",
   "ups.engineFftDD": "Aqulify FFT-DD (106 bit Double-Double)",
   "ups.engineHintDD": "106 bit Double-Double (~31 anlamlı basamak) tek aşamalı FFT + Kaiser-sinc motoru (HydrogenAudio SRC: %99,85), seçilebilir faz ve sıfır gecikmeli filtre ile.",
   "dev.tabDevice": "Cihaz",

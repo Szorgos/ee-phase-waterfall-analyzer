@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "Áudio do sistema: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Upsampling do sistema: nenhum cabo de áudio virtual encontrado (ex. VB-Cable).",
   "ups.liveNoOutput": "Upsampling do sistema: nenhum DAC/saída física separada encontrada (loop evitado).",
+  "ups.liveBusy": "Upsampling do sistema: outro programa está a usar a saída em modo exclusivo; até ser libertada, o som toca sem upsampling e o Aqulify tenta de novo a cada 10 segundos.",
   "ups.engineFftDD": "Aqulify FFT-DD (Double-Double de 106 bits)",
   "ups.engineHintDD": "Motor FFT + Kaiser-sinc de estágio único em precisão Double-Double de 106 bits (~31 dígitos significativos, HydrogenAudio SRC: 99,85 %), com fase selecionável e filtro sem atraso.",
   "dev.tabDevice": "Dispositivo",

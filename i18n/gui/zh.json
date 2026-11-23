@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "系统音频：{src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "系统音频升频：未检测到已安装的虚拟音频线（如 VB-Cable）。",
   "ups.liveNoOutput": "系统音频升频：未找到独立的物理 DAC/输出设备（已阻止回环）。",
+  "ups.liveBusy": "系统音频升频：输出设备正被其他程序独占使用；在释放之前声音不经升频播放，Aqulify 每 10 秒重试一次。",
   "ups.engineFftDD": "Aqulify FFT-DD（106 位 Double-Double）",
   "ups.engineHintDD": "106 位 Double-Double（约 31 位有效数字）单级 FFT + Kaiser-sinc 引擎（HydrogenAudio SRC：99.85 %），可选相位与零延迟滤波器。",
   "dev.tabDevice": "设备",

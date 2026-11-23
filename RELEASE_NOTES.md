@@ -11,6 +11,8 @@
 
 - **Windows, rendszerhang felmintavételezése:** a DSP-lánc (EQ, limiter és a többi modul) eddig kétszer futott le: egyszer a virtuális kábelen (Equalizer APO plugin), egyszer a felmintavételező hídban. Mostantól a híd alatt csak a motorban fut, a kábelen a plugin változatlanul átengedi a hangot.
 - A felület a híd alatt a helyes forrást mutatja („System audio bridge”, élő DSP) a „Készenlét” / „csak analízis” helyett.
+- **Foglalt kimeneti eszköz:** ha egy másik program kizárólagosan használja a DAC-ot / hangkártyát, a rendszerhang addig felmintavételezés nélkül, normál módon szól (eddig a híd megosztott módba esett vissza, ahol a DSP kétszer futott, vagy a hang a kábelben maradt), a Mintavételezés lap ezt ki is írja, és a felszabadulás után a híd 10 másodpercen belül magától elindul.
+- **Beállítások szinkronja:** ha a hangkimenet / felmintavételezés beállítását a telefonról vagy egy másik ablakból módosítod, a gépen nyitott felület is azonnal az új értéket mutatja. Eddig a régit mutatta, és a következő ottani módosítás visszaírhatta.
 
 ### Újdonságok (2.9.6)
 

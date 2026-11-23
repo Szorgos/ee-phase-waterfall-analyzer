@@ -212,6 +212,8 @@ public:
     }
 
     bool isActive() const { return active_.load(std::memory_order_acquire); }
+    /** A híd fut, és a kimenete kizárólagos (WASAPI exclusive vagy ASIO): a DSP-lánc ilyenkor a hídban fut. */
+    bool dspInEngine() const { return active_.load(std::memory_order_acquire) && output_.exclusiveActive(); }
     uint32_t actualRate() const { return active_.load(std::memory_order_acquire) ? appliedDstRate_.load(std::memory_order_relaxed) : 0; }
 
     /** A telepített virtuális kábelek listája JSON-tömbként (caps.virtualCables). */
@@ -352,6 +354,37 @@ private:
         }
     }
 
+    /**
+     * A DAC kimenete csak megosztott módban nyílt meg (más program foglalja: "busy"), vagy menet közben került oda.
+     * Megosztott módban a hídban nem fut a DSP-lánc, a valódi eszköz Equalizer APO-ja pedig a kábelé mellett másodszor
+     * dolgozna: a híd ezért leáll, a rendszer kimenete visszakerül a valódi eszközre (normál üzem, a plugin egyszer
+     * dolgozik), és 10 s múlva (vagy új beállításnál) újrapróbálja. A kábel lehallgatása marad.
+     */
+    void busyFallbackLocked(const WinBridgeDevicePlan& plan, const std::string& key, uint32_t srcRate, uint32_t dstRate) {
+        active_.store(false, std::memory_order_release);
+        output_.setActive(false);
+        output_.close();
+        bridge_.stop();
+        pipeRunning_ = false;
+        appliedSrcRate_ = 0;
+        appliedDstRate_.store(0, std::memory_order_relaxed);
+        appliedOutId_.clear();
+        releaseDefault(WasapiLoopback::listRenderEndpoints());
+        failKey_ = key;
+        failTime_ = std::chrono::steady_clock::now();
+        failRetry_ = std::chrono::seconds(10);
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            failGen_ = optsGen_;
+        }
+        setStatus("device_busy", plan.captureName, plan.outputName, srcRate, dstRate);
+        if (!busyLogged_) {
+            busyLogged_ = true;
+            std::cout << "[Felmintavételezés/Win] A kimenet (" << plan.outputName
+                      << ") nem nyitható meg kizárólagosan (foglalt): normál üzem, 10 s-onként újrapróba.\n";
+        }
+    }
+
     void teardownPipelineLocked() {
         if (!pipeRunning_ && !loopbackRunning_) return;
         active_.store(false, std::memory_order_release);
@@ -397,6 +430,7 @@ private:
             // Kikapcsolt híd: normál üzem, a rendszer kimenete vissza a valódi eszközre
             if (!o.upsampleSystemAudio || o.upsampleRule == audioopt::UpsampleRule::Off) {
                 teardownPipeline();
+                busyLogged_ = false;
                 if (defState_.engaged) releaseDefault(WasapiLoopback::listRenderEndpoints());
                 setStatus("off", "", "", 0, 0);
                 continue;
@@ -477,9 +511,22 @@ private:
             const std::string key = std::to_string(srcRate) + "|" + std::to_string(dstRate) + "|" +
                                     WasapiLoopback::wideToUtf8(plan.outputId.c_str());
             if (!failKey_.empty() && failKey_ == key &&
-                std::chrono::steady_clock::now() - failTime_ < std::chrono::seconds(30)) {
+                std::chrono::steady_clock::now() - failTime_ < failRetry_) {
                 releaseDefault(devices);
                 continue;
+            }
+
+            // A futó híd kimenete menet közben megosztott módba került (pl. az eszköz újranyílt, és közben más program
+            // foglalta le): a DSP-lánc ilyenkor nem fut a hídban, ezért vissza a normál üzemre, és később újrapróba
+            // (3 egymást követő kör, kb. 3 s: az eszköz rövid újranyitása közben a mód átmenetileg nem kizárólagos)
+            if (pipeRunning_ && !o.asio && !output_.exclusiveActive()) {
+                if (++sharedRounds_ >= 3) {
+                    sharedRounds_ = 0;
+                    busyFallbackLocked(plan, key, srcRate, dstRate);
+                    continue;
+                }
+            } else {
+                sharedRounds_ = 0;
             }
 
             const bool needReopen = !pipeRunning_ || appliedSrcRate_ != srcRate ||
@@ -503,6 +550,7 @@ private:
             auto markFailed = [&] {
                 failKey_ = key;
                 failTime_ = std::chrono::steady_clock::now();
+                failRetry_ = std::chrono::seconds(30);
                 {
                     std::lock_guard<std::mutex> lk(mu_);
                     failGen_ = optsGen_;
@@ -517,6 +565,11 @@ private:
             }
             std::string err;
             if (!output_.open(dstRate, [this](float* dst, size_t n) { bridge_.pullOutput(dst, n); }, &err)) {
+                // Más program foglalja kizárólagosan, és a megosztott visszalépés sem sikerült: ugyanaz, mint a foglalt eset
+                if (!o.asio && output_.wasapi().lastExclusiveFailure() == "busy") {
+                    busyFallbackLocked(plan, key, srcRate, dstRate);
+                    continue;
+                }
                 bridge_.stop();
                 pipeRunning_ = false;
                 setStatus(err.empty() ? "open_failed" : err, plan.captureName, plan.outputName, srcRate, dstRate);
@@ -525,7 +578,18 @@ private:
                 markFailed();
                 continue;
             }
+            // A kimenet megnyílt, de nem kizárólagosan (az eszközt más program foglalja: "busy"): megosztott módban a
+            // DSP-lánc nem fut a hídban, a valódi eszköz Equalizer APO-ja pedig a kábelével együtt kétszer dolgozna.
+            // Ezért a híd nem indul: normál üzem (a rendszer kimenete a valódi eszközön), 5 s múlva újrapróba.
+            if (!o.asio && !output_.exclusiveActive()) {
+                busyFallbackLocked(plan, key, srcRate, dstRate);
+                continue;
+            }
             failKey_.clear();
+            if (busyLogged_) {
+                std::cout << "[Felmintavételezés/Win] A kimenet felszabadult, a rendszerhang-híd elindul.\n";
+                busyLogged_ = false;
+            }
             // Csak a sikeres nyitás után: a programok hangja innentől a kábelen és a hídon át jut a DAC-ra
             engageDefault(devices, plan);
 
@@ -576,6 +640,9 @@ private:
     uint64_t optsGen_ = 0, failGen_ = 0;   // mu_ védi
     std::string failKey_;
     std::chrono::steady_clock::time_point failTime_{};
+    std::chrono::seconds failRetry_{30};   // a sikertelen nyitás utáni várakozás (foglalt eszköznél rövidebb)
+    int sharedRounds_ = 0;                 // hány egymást követő körben nem kizárólagos a futó híd kimenete
+    bool busyLogged_ = false;              // a „foglalt” naplósor csak egyszer (a felszabadulásig)
 
     mutable std::mutex statusMu_;
     std::string lastReason_ = "off";

@@ -2523,7 +2523,11 @@ private:
                 if (const json::Value* o = msg.get("opts"); o && o->type == json::Value::Type::Object) cb_.setAudioOptions(*o);
             }
             }
-            sendText("{\"type\":\"audio_opts\"," + cb_.audioOptionsJson().substr(1));
+            const std::string reply = "{\"type\":\"audio_opts\"," + cb_.audioOptionsJson().substr(1);
+            sendText(reply);
+            // A többi nyitott felület (gép, telefon) is az új beállítást lássa: különben a régit mutatja, és a következő
+            // ottani módosítás a teljes, elavult állapotot küldené vissza (felülírva ezt a változtatást)
+            if (type == "set_audio_opts") broadcast(reply, cur_);
             return;
         }
         if (type == "error_report_preview" || type == "error_report_send" || type == "error_report_save" ||

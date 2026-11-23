@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "Systeemaudio: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Systeemaudio-upsampling: geen virtuele audiokabel gevonden (bijv. VB-Cable).",
   "ups.liveNoOutput": "Systeemaudio-upsampling: geen aparte fysieke DAC/uitvoer gevonden (terugkoppeling voorkomen).",
+  "ups.liveBusy": "Systeemaudio-upsampling: een ander programma gebruikt het uitvoerapparaat exclusief; tot het vrijkomt klinkt het geluid zonder upsampling, en Aqulify probeert het elke 10 seconden opnieuw.",
   "ups.engineFftDD": "Aqulify FFT-DD (106-bit Double-Double)",
   "ups.engineHintDD": "Enkeltraps 106-bit Double-Double (~31 significante cijfers) FFT + Kaiser-sinc-engine (HydrogenAudio SRC: 99,85 %), met kiesbare fase en vertragingsvrij filter.",
   "dev.tabDevice": "Apparaat",

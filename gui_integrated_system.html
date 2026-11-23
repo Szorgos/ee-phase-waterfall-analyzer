@@ -10978,6 +10978,8 @@ function upsRenderStatus() {
     parts.push(`<span class="warn">● ${t("ups.liveNoOutput")}</span>`);
   } else if (lu && lu.reason === "dac_unsupported") {
     parts.push(`<span class="warn">● ${t("ups.liveUnsupported", { src: aoKhz(lu.srcRate) })}</span>`);
+  } else if (lu && lu.reason === "device_busy") {
+    parts.push(`<span class="warn">● ${t("ups.liveBusy")}</span>`);
   } else if (lu && lu.reason === "rate_mode") {
     parts.push(`<span>${t("ups.liveFixedRate")}</span>`);
   }

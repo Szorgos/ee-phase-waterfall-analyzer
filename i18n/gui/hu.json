@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "Rendszerhang: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Rendszerhang-felmintavételezés: nincs telepített virtuális hangkábel (pl. VB-Cable).",
   "ups.liveNoOutput": "Rendszerhang-felmintavételezés: nincs külön valódi DAC / kimeneti eszköz (visszacsatolás megakadályozva).",
+  "ups.liveBusy": "Rendszerhang-felmintavételezés: a kimeneti eszközt most egy másik program használja kizárólagosan; addig a hang felmintavételezés nélkül szól, és az Aqulify 10 másodpercenként újrapróbálja.",
   "ups.engineFftDD": "Aqulify FFT-DD (106 bites Double-Double)",
   "ups.engineHintDD": "106 bites Double-Double (~31 értékes jegy) egylépcsős FFT + Kaiser-sinc motor (HydrogenAudio SRC: 99,85 %), választható fázissal és 0 késleltetésű szűrővel.",
   "dev.tabDevice": "Eszköz",

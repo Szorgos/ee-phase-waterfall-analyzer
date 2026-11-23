@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "Systémový zvuk: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Systémové převzorkování: nebyl nalezen virtuální audio kabel (např. VB-Cable).",
   "ups.liveNoOutput": "Systémové převzorkování: nenalezen samostatný fyzický DAC/výstup (smyčka zablokována).",
+  "ups.liveBusy": "Systémové převzorkování: výstupní zařízení výhradně používá jiný program; do jeho uvolnění hraje zvuk bez převzorkování a Aqulify to zkouší znovu každých 10 sekund.",
   "ups.engineFftDD": "Aqulify FFT-DD (106bitový Double-Double)",
   "ups.engineHintDD": "Jednostupňový 106bitový Double-Double (~31 platných číslic) motor FFT + Kaiser-sinc (HydrogenAudio SRC: 99,85 %) s volitelnou fází a filtrem s nulovým zpožděním.",
   "dev.tabDevice": "Zařízení",

@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "Systemaudio: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Systemaudio-Upsampling: kein virtuelles Audiokabel gefunden (z. B. VB-Cable).",
   "ups.liveNoOutput": "Systemaudio-Upsampling: kein separater physischer DAC/Ausgang gefunden (Rückkopplung verhindert).",
+  "ups.liveBusy": "Systemaudio-Upsampling: Ein anderes Programm nutzt das Ausgabegerät exklusiv; bis es frei ist, läuft der Klang ohne Upsampling, und Aqulify versucht es alle 10 Sekunden erneut.",
   "ups.engineFftDD": "Aqulify FFT-DD (106-Bit Double-Double)",
   "ups.engineHintDD": "Einstufige 106-Bit-Double-Double-FFT + Kaiser-Sinc-Engine (~31 signifikante Stellen, HydrogenAudio SRC: 99,85 %) mit wählbarer Phase und verzögerungsfreiem Filter.",
   "dev.tabDevice": "Gerät",

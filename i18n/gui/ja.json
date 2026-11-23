@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "システム音声: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "システム音声アップサンプリング: 仮想オーディオケーブル（VB-Cable 等）が見つかりません。",
   "ups.liveNoOutput": "システム音声アップサンプリング: 別の物理 DAC / 出力デバイスが見つかりません（ループ防止）。",
+  "ups.liveBusy": "システム音声アップサンプリング: 出力デバイスを別のプログラムが排他的に使用しています。解放されるまではアップサンプリングなしで再生し、Aqulify は 10 秒ごとに再試行します。",
   "ups.engineFftDD": "Aqulify FFT-DD（106ビット Double-Double）",
   "ups.engineHintDD": "106ビット Double-Double（有効数字 約31桁）単段FFT + Kaiser-sincエンジン（HydrogenAudio SRC：99.85 %）。位相選択可能・ゼロ遅延フィルター。",
   "dev.tabDevice": "デバイス",

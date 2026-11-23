@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "Ήχος συστήματος: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Upsampling συστήματος: δεν βρέθηκε εικονικό καλώδιο ήχου (π.χ. VB-Cable).",
   "ups.liveNoOutput": "Upsampling συστήματος: δεν βρέθηκε ξεχωριστό φυσικό DAC/έξοδος (αποτράπηκε βρόχος).",
+  "ups.liveBusy": "Upsampling συστήματος: άλλο πρόγραμμα χρησιμοποιεί αποκλειστικά τη συσκευή εξόδου· μέχρι να ελευθερωθεί, ο ήχος παίζει χωρίς upsampling και το Aqulify ξαναδοκιμάζει κάθε 10 δευτερόλεπτα.",
   "ups.engineFftDD": "Aqulify FFT-DD (106-bit Double-Double)",
   "ups.engineHintDD": "Μονοβάθμια μηχανή 106-bit Double-Double (~31 σημαντικά ψηφία) FFT + Kaiser-sinc (HydrogenAudio SRC: 99,85 %), με επιλέξιμη φάση και φίλτρο μηδενικής καθυστέρησης.",
   "dev.tabDevice": "Συσκευή",

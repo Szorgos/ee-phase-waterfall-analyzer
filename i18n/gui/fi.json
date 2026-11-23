@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "Järjestelmä-ääni: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Järjestelmä-äänen ylös-näytteistys: virtuaalista äänikaapelia ei löytynyt (esim. VB-Cable).",
   "ups.liveNoOutput": "Järjestelmä-äänen ylös-näytteistys: erillistä fyysistä DAC/lähtölaitetta ei löytynyt (kierto estetty).",
+  "ups.liveBusy": "Järjestelmä-äänen ylösnäytteistys: toinen ohjelma käyttää lähtölaitetta yksinoikeudella; siihen asti ääni soi ilman ylösnäytteistystä, ja Aqulify yrittää uudelleen 10 sekunnin välein.",
   "ups.engineFftDD": "Aqulify FFT-DD (106-bittinen Double-Double)",
   "ups.engineHintDD": "Yksivaiheinen 106-bittinen Double-Double (~31 merkitsevää numeroa) FFT + Kaiser-sinc -moottori (HydrogenAudio SRC: 99,85 %), valittavalla vaiheella ja viiveettömällä suotimella.",
   "dev.tabDevice": "Laite",

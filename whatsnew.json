@@ -5,73 +5,119 @@
       "date": "2026-11-23",
       "notes": {
         "hu": [
-          "Windows, rendszerhang felmintavételezése: a DSP-lánc (EQ, limiter és a többi modul) eddig kétszer futott le, most csak egyszer; a felület a helyes forrást mutatja."
+          "Windows, rendszerhang felmintavételezése: a DSP-lánc (EQ, limiter és a többi modul) eddig kétszer futott le, most csak egyszer; a felület a helyes forrást mutatja.",
+          "Ha a kimeneti eszközt egy másik program kizárólagosan foglalja, a rendszerhang addig felmintavételezés nélkül szól (eddig a hang a kábelben elveszhetett, vagy a DSP kétszer futott), és a felszabadulás után a felmintavételezés magától elindul.",
+          "Ha a beállítást a telefonról vagy egy másik ablakból módosítod, a gépen nyitott felület is azonnal az új értéket mutatja (eddig a régit mutatta, és a következő ottani módosítás visszaírhatta)."
         ],
         "en": [
-          "Windows, system audio upsampling: the DSP chain (EQ, limiter and the other modules) used to run twice, now it runs once; the interface shows the correct source."
+          "Windows, system audio upsampling: the DSP chain (EQ, limiter and the other modules) used to run twice, now it runs once; the interface shows the correct source.",
+          "If another program holds the output device exclusively, system audio plays without upsampling until it is released (previously the sound could get lost in the cable or the DSP ran twice), then upsampling starts by itself.",
+          "When a setting is changed from the phone or another window, the interface open on the computer shows the new value at once (previously it kept the old one, and the next change there could write it back)."
         ],
         "es": [
-          "Windows, sobremuestreo del audio del sistema: la cadena DSP (EQ, limitador y los demás módulos) se aplicaba dos veces; ahora solo una, y la interfaz muestra la fuente correcta."
+          "Windows, sobremuestreo del audio del sistema: la cadena DSP (EQ, limitador y los demás módulos) se aplicaba dos veces; ahora solo una, y la interfaz muestra la fuente correcta.",
+          "Si otro programa ocupa la salida en modo exclusivo, el audio del sistema suena sin sobremuestreo hasta que se libera (antes el sonido podía perderse en el cable o el DSP se aplicaba dos veces) y después el sobremuestreo se inicia solo.",
+          "Si cambias un ajuste desde el teléfono u otra ventana, la interfaz abierta en el ordenador muestra al instante el nuevo valor (antes mostraba el anterior y el siguiente cambio allí podía revertirlo)."
         ],
         "fr": [
-          "Windows, suréchantillonnage du son système : la chaîne DSP (EQ, limiteur et les autres modules) s’appliquait deux fois ; désormais une seule, et l’interface affiche la bonne source."
+          "Windows, suréchantillonnage du son système : la chaîne DSP (EQ, limiteur et les autres modules) s’appliquait deux fois ; désormais une seule, et l’interface affiche la bonne source.",
+          "Si un autre programme occupe la sortie en mode exclusif, le son système est lu sans suréchantillonnage jusqu’à sa libération (auparavant le son pouvait se perdre dans le câble ou le DSP s’appliquait deux fois), puis le suréchantillonnage reprend tout seul.",
+          "Quand un réglage est modifié depuis le téléphone ou une autre fenêtre, l’interface ouverte sur l’ordinateur affiche aussitôt la nouvelle valeur (auparavant elle gardait l’ancienne, et la modification suivante pouvait la rétablir)."
         ],
         "zh": [
-          "Windows 系统声音升频：DSP 链（均衡器、限幅器及其他模块）此前会运行两次，现在只运行一次；界面显示正确的音源。"
+          "Windows 系统声音升频：DSP 链（均衡器、限幅器及其他模块）此前会运行两次，现在只运行一次；界面显示正确的音源。",
+          "如果其他程序独占了输出设备，系统声音在释放前不经升频播放（此前声音可能在虚拟线缆中丢失或 DSP 运行两次），释放后升频会自动启动。",
+          "从手机或其他窗口更改设置后，电脑上打开的界面会立即显示新值（此前仍显示旧值，之后在那里的修改可能把它改回去）。"
         ],
         "de": [
-          "Windows, Upsampling des Systemklangs: Die DSP-Kette (EQ, Limiter und die übrigen Module) lief bisher doppelt, jetzt nur noch einmal; die Oberfläche zeigt die richtige Quelle."
+          "Windows, Upsampling des Systemklangs: Die DSP-Kette (EQ, Limiter und die übrigen Module) lief bisher doppelt, jetzt nur noch einmal; die Oberfläche zeigt die richtige Quelle.",
+          "Belegt ein anderes Programm das Ausgabegerät exklusiv, läuft der Systemklang bis zur Freigabe ohne Upsampling (bisher konnte der Ton im Kabel verloren gehen oder die DSP doppelt laufen); danach startet das Upsampling von selbst.",
+          "Wird eine Einstellung am Telefon oder in einem anderen Fenster geändert, zeigt die am Computer geöffnete Oberfläche sofort den neuen Wert (bisher blieb der alte stehen, und die nächste Änderung dort konnte ihn zurückschreiben)."
         ],
         "it": [
-          "Windows, sovracampionamento dell’audio di sistema: la catena DSP (EQ, limiter e gli altri moduli) veniva applicata due volte, ora una sola; l’interfaccia mostra la sorgente corretta."
+          "Windows, sovracampionamento dell’audio di sistema: la catena DSP (EQ, limiter e gli altri moduli) veniva applicata due volte, ora una sola; l’interfaccia mostra la sorgente corretta.",
+          "Se un altro programma occupa l’uscita in modo esclusivo, l’audio di sistema suona senza sovracampionamento finché non viene liberata (prima il suono poteva perdersi nel cavo o il DSP veniva applicato due volte), poi il sovracampionamento riparte da solo.",
+          "Se cambi un’impostazione dal telefono o da un’altra finestra, l’interfaccia aperta sul computer mostra subito il nuovo valore (prima restava quello vecchio e la modifica successiva lì poteva ripristinarlo)."
         ],
         "nl": [
-          "Windows, upsampling van het systeemgeluid: de DSP-keten (EQ, limiter en de andere modules) liep tot nu toe twee keer, nu nog maar één keer; de interface toont de juiste bron."
+          "Windows, upsampling van het systeemgeluid: de DSP-keten (EQ, limiter en de andere modules) liep tot nu toe twee keer, nu nog maar één keer; de interface toont de juiste bron.",
+          "Als een ander programma het uitvoerapparaat exclusief bezet, klinkt het systeemgeluid zonder upsampling tot het vrijkomt (voorheen kon het geluid in de kabel verloren gaan of liep de DSP dubbel); daarna start de upsampling vanzelf.",
+          "Als een instelling via de telefoon of een ander venster wordt gewijzigd, toont de interface op de computer meteen de nieuwe waarde (voorheen bleef de oude staan en kon de volgende wijziging daar die terugzetten)."
         ],
         "pl": [
-          "Windows, nadpróbkowanie dźwięku systemowego: łańcuch DSP (EQ, limiter i pozostałe moduły) działał dotąd dwukrotnie, teraz tylko raz; interfejs pokazuje właściwe źródło."
+          "Windows, nadpróbkowanie dźwięku systemowego: łańcuch DSP (EQ, limiter i pozostałe moduły) działał dotąd dwukrotnie, teraz tylko raz; interfejs pokazuje właściwe źródło.",
+          "Jeśli inny program zajmuje wyjście na wyłączność, dźwięk systemowy gra bez upsamplingu do czasu zwolnienia (wcześniej dźwięk mógł zginąć w kablu albo DSP działał podwójnie), a potem upsampling startuje sam.",
+          "Gdy ustawienie zmienisz z telefonu lub innego okna, interfejs otwarty na komputerze od razu pokazuje nową wartość (wcześniej pokazywał starą, a kolejna zmiana tam mogła ją przywrócić)."
         ],
         "ru": [
-          "Windows, повышение частоты дискретизации системного звука: цепочка DSP (эквалайзер, лимитер и другие модули) раньше применялась дважды, теперь один раз; интерфейс показывает правильный источник."
+          "Windows, повышение частоты дискретизации системного звука: цепочка DSP (эквалайзер, лимитер и другие модули) раньше применялась дважды, теперь один раз; интерфейс показывает правильный источник.",
+          "Если устройство вывода монопольно занято другой программой, системный звук до его освобождения идёт без апсемплинга (раньше звук мог теряться в кабеле или DSP работал дважды), после чего апсемплинг запускается сам.",
+          "Если настройку изменить с телефона или из другого окна, интерфейс на компьютере сразу показывает новое значение (раньше оставалось старое, и следующее изменение там могло вернуть его)."
         ],
         "pt": [
-          "Windows, sobreamostragem do áudio do sistema: a cadeia DSP (EQ, limitador e os outros módulos) era aplicada duas vezes; agora só uma, e a interface mostra a fonte correta."
+          "Windows, sobreamostragem do áudio do sistema: a cadeia DSP (EQ, limitador e os outros módulos) era aplicada duas vezes; agora só uma, e a interface mostra a fonte correta.",
+          "Se outro programa ocupar a saída em modo exclusivo, o áudio do sistema toca sem upsampling até ser libertada (antes o som podia perder-se no cabo ou o DSP era aplicado duas vezes) e depois o upsampling arranca sozinho.",
+          "Se mudares uma definição no telemóvel ou noutra janela, a interface aberta no computador mostra logo o novo valor (antes ficava o antigo e a alteração seguinte ali podia repô-lo)."
         ],
         "ro": [
-          "Windows, supraeșantionarea sunetului de sistem: lanțul DSP (EQ, limitator și celelalte module) rula de două ori, acum o singură dată; interfața arată sursa corectă."
+          "Windows, supraeșantionarea sunetului de sistem: lanțul DSP (EQ, limitator și celelalte module) rula de două ori, acum o singură dată; interfața arată sursa corectă.",
+          "Dacă un alt program ocupă ieșirea în mod exclusiv, sunetul de sistem se aude fără supraeșantionare până la eliberare (înainte sunetul se putea pierde în cablu sau DSP-ul rula de două ori), apoi supraeșantionarea pornește singură.",
+          "Dacă schimbi o setare de pe telefon sau din altă fereastră, interfața deschisă pe computer arată imediat noua valoare (înainte rămânea cea veche, iar următoarea modificare de acolo o putea rescrie)."
         ],
         "el": [
-          "Windows, υπερδειγματοληψία του ήχου συστήματος: η αλυσίδα DSP (EQ, limiter και οι υπόλοιπες μονάδες) εφαρμοζόταν δύο φορές, τώρα μόνο μία· η διεπαφή δείχνει τη σωστή πηγή."
+          "Windows, υπερδειγματοληψία του ήχου συστήματος: η αλυσίδα DSP (EQ, limiter και οι υπόλοιπες μονάδες) εφαρμοζόταν δύο φορές, τώρα μόνο μία· η διεπαφή δείχνει τη σωστή πηγή.",
+          "Αν άλλο πρόγραμμα κρατά αποκλειστικά τη συσκευή εξόδου, ο ήχος συστήματος παίζει χωρίς upsampling μέχρι να ελευθερωθεί (πριν ο ήχος μπορούσε να χαθεί στο καλώδιο ή το DSP έτρεχε δύο φορές) και μετά το upsampling ξεκινά μόνο του.",
+          "Όταν μια ρύθμιση αλλάζει από το τηλέφωνο ή άλλο παράθυρο, η διεπαφή στον υπολογιστή δείχνει αμέσως τη νέα τιμή (πριν έμενε η παλιά και η επόμενη αλλαγή εκεί μπορούσε να την επαναφέρει)."
         ],
         "tr": [
-          "Windows, sistem sesinin üst örneklenmesi: DSP zinciri (EQ, limiter ve diğer modüller) şimdiye kadar iki kez çalışıyordu, artık bir kez çalışıyor; arayüz doğru kaynağı gösteriyor."
+          "Windows, sistem sesinin üst örneklenmesi: DSP zinciri (EQ, limiter ve diğer modüller) şimdiye kadar iki kez çalışıyordu, artık bir kez çalışıyor; arayüz doğru kaynağı gösteriyor.",
+          "Çıkış aygıtını başka bir program özel modda tutuyorsa, sistem sesi serbest kalana kadar yükseltmesiz çalar (önceden ses kabloda kaybolabiliyor veya DSP iki kez çalışıyordu), ardından yükseltme kendiliğinden başlar.",
+          "Bir ayar telefondan veya başka bir pencereden değiştirildiğinde, bilgisayarda açık arayüz yeni değeri hemen gösterir (önceden eskisi kalıyordu ve oradaki bir sonraki değişiklik onu geri yazabiliyordu)."
         ],
         "fi": [
-          "Windows, järjestelmääänen ylösnäytteistys: DSP-ketju (EQ, limitteri ja muut moduulit) ajettiin aiemmin kahdesti, nyt vain kerran; käyttöliittymä näyttää oikean lähteen."
+          "Windows, järjestelmääänen ylösnäytteistys: DSP-ketju (EQ, limitteri ja muut moduulit) ajettiin aiemmin kahdesti, nyt vain kerran; käyttöliittymä näyttää oikean lähteen.",
+          "Jos toinen ohjelma varaa lähtölaitteen yksinoikeudella, järjestelmäääni soi ilman ylösnäytteistystä, kunnes laite vapautuu (aiemmin ääni saattoi kadota kaapeliin tai DSP ajettiin kahdesti), ja sen jälkeen ylösnäytteistys käynnistyy itsestään.",
+          "Kun asetusta muutetaan puhelimesta tai toisesta ikkunasta, tietokoneella avoinna oleva käyttöliittymä näyttää heti uuden arvon (aiemmin vanha jäi näkyviin, ja seuraava muutos siellä saattoi palauttaa sen)."
         ],
         "da": [
-          "Windows, upsampling af systemlyden: DSP-kæden (EQ, limiter og de øvrige moduler) kørte hidtil to gange, nu kun én gang; brugerfladen viser den rigtige kilde."
+          "Windows, upsampling af systemlyden: DSP-kæden (EQ, limiter og de øvrige moduler) kørte hidtil to gange, nu kun én gang; brugerfladen viser den rigtige kilde.",
+          "Hvis et andet program bruger udgangsenheden eksklusivt, spiller systemlyden uden opsampling, indtil den frigives (før kunne lyden gå tabt i kablet, eller DSP’en kørte to gange); derefter starter opsamplingen af sig selv.",
+          "Når en indstilling ændres fra telefonen eller et andet vindue, viser brugerfladen på computeren straks den nye værdi (før stod den gamle, og den næste ændring dér kunne skrive den tilbage)."
         ],
         "nb": [
-          "Windows, oppsampling av systemlyden: DSP-kjeden (EQ, limiter og de andre modulene) kjørte hittil to ganger, nå bare én gang; grensesnittet viser riktig kilde."
+          "Windows, oppsampling av systemlyden: DSP-kjeden (EQ, limiter og de andre modulene) kjørte hittil to ganger, nå bare én gang; grensesnittet viser riktig kilde.",
+          "Hvis et annet program bruker utgangsenheten eksklusivt, spilles systemlyden uten oppsampling til den blir ledig (før kunne lyden forsvinne i kabelen eller DSP-en kjøre to ganger); deretter starter oppsamplingen av seg selv.",
+          "Når en innstilling endres fra telefonen eller et annet vindu, viser grensesnittet på datamaskinen straks den nye verdien (før sto den gamle, og neste endring der kunne skrive den tilbake)."
         ],
         "sv": [
-          "Windows, uppsampling av systemljudet: DSP-kedjan (EQ, limiter och de övriga modulerna) kördes hittills två gånger, nu bara en gång; gränssnittet visar rätt källa."
+          "Windows, uppsampling av systemljudet: DSP-kedjan (EQ, limiter och de övriga modulerna) kördes hittills två gånger, nu bara en gång; gränssnittet visar rätt källa.",
+          "Om ett annat program använder utgångsenheten exklusivt spelas systemljudet utan uppsampling tills den frigörs (tidigare kunde ljudet försvinna i kabeln eller DSP:n köras två gånger); sedan startar uppsamplingen av sig själv.",
+          "När en inställning ändras från telefonen eller ett annat fönster visar gränssnittet på datorn genast det nya värdet (tidigare stod det gamla kvar, och nästa ändring där kunde skriva tillbaka det)."
         ],
         "he": [
-          "Windows, דגימת־יתר של צליל המערכת: שרשרת ה־DSP (EQ, לימיטר ושאר המודולים) רצה עד כה פעמיים, ועכשיו רק פעם אחת; הממשק מציג את המקור הנכון."
+          "Windows, דגימת־יתר של צליל המערכת: שרשרת ה־DSP (EQ, לימיטר ושאר המודולים) רצה עד כה פעמיים, ועכשיו רק פעם אחת; הממשק מציג את המקור הנכון.",
+          "אם תוכנה אחרת תופסת את התקן הפלט באופן בלעדי, צליל המערכת מתנגן ללא upsampling עד שישתחרר (קודם הצליל יכול היה ללכת לאיבוד בכבל או שה־DSP רץ פעמיים), ואז ה־upsampling מתחיל מעצמו.",
+          "כששינוי הגדרה נעשה מהטלפון או מחלון אחר, הממשק הפתוח במחשב מציג מיד את הערך החדש (קודם נשאר הערך הישן, והשינוי הבא שם יכול היה להחזיר אותו)."
         ],
         "ja": [
-          "Windows のシステム音声アップサンプリング：DSP チェーン（EQ、リミッターなどのモジュール）が二重に適用されていた問題を修正し、一度だけ適用されるようになりました。画面には正しい音源が表示されます。"
+          "Windows のシステム音声アップサンプリング：DSP チェーン（EQ、リミッターなどのモジュール）が二重に適用されていた問題を修正し、一度だけ適用されるようになりました。画面には正しい音源が表示されます。",
+          "出力デバイスを別のプログラムが排他的に使用している間は、システム音声をアップサンプリングなしで再生し（以前は音声が仮想ケーブル内で失われたり DSP が二重に適用されたりすることがありました）、解放後に自動でアップサンプリングを開始します。",
+          "スマートフォンや別のウィンドウから設定を変更すると、パソコンで開いている画面にもすぐ新しい値が表示されます（以前は古い値のままで、そこで次に変更すると元に戻ることがありました）。"
         ],
         "ko": [
-          "Windows 시스템 사운드 업샘플링: DSP 체인(EQ, 리미터 및 기타 모듈)이 두 번 적용되던 문제를 고쳐 이제 한 번만 적용되며, 화면에 올바른 소스가 표시됩니다."
+          "Windows 시스템 사운드 업샘플링: DSP 체인(EQ, 리미터 및 기타 모듈)이 두 번 적용되던 문제를 고쳐 이제 한 번만 적용되며, 화면에 올바른 소스가 표시됩니다.",
+          "다른 프로그램이 출력 장치를 독점하고 있으면 해제될 때까지 시스템 사운드를 업샘플링 없이 재생하고(이전에는 소리가 가상 케이블에서 사라지거나 DSP가 두 번 적용될 수 있었음), 해제되면 업샘플링이 자동으로 시작됩니다.",
+          "휴대폰이나 다른 창에서 설정을 바꾸면 컴퓨터에 열린 화면에도 새 값이 바로 표시됩니다(이전에는 예전 값이 남아 있어 그곳에서 다음에 바꿀 때 되돌아갈 수 있었음)."
         ],
         "cs": [
-          "Windows, převzorkování systémového zvuku: řetězec DSP (EQ, limiter a ostatní moduly) dosud běžel dvakrát, nyní jen jednou; rozhraní ukazuje správný zdroj."
+          "Windows, převzorkování systémového zvuku: řetězec DSP (EQ, limiter a ostatní moduly) dosud běžel dvakrát, nyní jen jednou; rozhraní ukazuje správný zdroj.",
+          "Pokud výstupní zařízení výhradně drží jiný program, systémový zvuk hraje do jeho uvolnění bez převzorkování (dříve se zvuk mohl ztratit v kabelu nebo DSP běželo dvakrát) a poté se převzorkování spustí samo.",
+          "Když nastavení změníte z telefonu nebo jiného okna, rozhraní otevřené v počítači hned ukáže novou hodnotu (dříve zůstala stará a další změna tam ji mohla vrátit)."
         ],
         "uk": [
-          "Windows, підвищення частоти дискретизації системного звуку: ланцюжок DSP (еквалайзер, лімітер та інші модулі) раніше застосовувався двічі, тепер один раз; інтерфейс показує правильне джерело."
+          "Windows, підвищення частоти дискретизації системного звуку: ланцюжок DSP (еквалайзер, лімітер та інші модулі) раніше застосовувався двічі, тепер один раз; інтерфейс показує правильне джерело.",
+          "Якщо пристрій виводу монопольно зайнятий іншою програмою, системний звук до його звільнення грає без апсемплінгу (раніше звук міг губитися в кабелі або DSP працював двічі), після чого апсемплінг запускається сам.",
+          "Якщо налаштування змінити з телефона чи іншого вікна, інтерфейс на комп’ютері одразу показує нове значення (раніше лишалося старе, і наступна зміна там могла його повернути)."
         ]
       }
     },

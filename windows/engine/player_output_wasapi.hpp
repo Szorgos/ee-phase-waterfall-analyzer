@@ -86,6 +86,14 @@ public:
     bool wantExclusive() const { return wantExclusive_.load(); }
     /** Most kizárólagos módban szól-e (nyitott hangfolyam). */
     bool exclusiveActive() const { return exclusiveOn_.load(); }
+    /**
+     * A legutóbbi nyitásnál miért nem indult a kizárólagos mód ("busy", "format", "notAllowed", "error"; üres: sikerült
+     * vagy nem kérték). Sikertelen nyitás után is olvasható (a megosztott visszalépés is meghiúsulhatott).
+     */
+    std::string lastExclusiveFailure() const {
+        std::lock_guard<std::mutex> lk(infoMutex_);
+        return lastExclFail_;
+    }
     /** Natív DSD (DoP 1.1) kérése (a jelút-állapot számára). */
     void setWantDop(bool on) { wantDop_.store(on); }
     bool wantDop() const { return wantDop_.load(); }
@@ -582,6 +590,10 @@ private:
         }
         std::string fallback;
         HRESULT why = S_OK;
+        {
+            std::lock_guard<std::mutex> lk(infoMutex_);
+            lastExclFail_.clear();
+        }
         if (wantExclusive_ && dsp_) {
             if (openExclusive(s, dev.p, why)) {
                 dsp_->prepare(rate_, s.bufferFrames, s.fmt.ditherBits);
@@ -593,6 +605,10 @@ private:
                 std::snprintf(hx, sizeof(hx), "0x%08lX", static_cast<unsigned long>(why));
                 std::cout << "[Lejátszó] A kizárólagos mód nem indult el (" << fallback << ", " << hx
                           << ", eszköz: " << s.devName << "); megosztott módban szól.\n";
+                {
+                    std::lock_guard<std::mutex> lk(infoMutex_);
+                    lastExclFail_ = fallback;   // akkor is megmarad, ha a megosztott nyitás sem sikerül
+                }
                 s.render.reset();
                 s.client.reset();
             }
@@ -794,6 +810,7 @@ private:
     // a felületnek
     mutable std::mutex infoMutex_;
     std::string infoFallback_, infoFormat_, infoDopFallback_;
+    std::string lastExclFail_;   // a legutóbbi nyitásnál a kizárólagos mód sikertelenségének oka (üres: sikerült / nem kérték)
     HRESULT infoHr_ = S_OK, infoDopHr_ = S_OK;
     UINT32 infoBuffer_ = 0;
     mutable std::atomic<float> loadAvg_{0.0f}, loadPeak_{0.0f};

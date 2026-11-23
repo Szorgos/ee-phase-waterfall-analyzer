@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "시스템 오디오: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "시스템 업샘플링: 설치된 가상 오디오 케이블(예: VB-Cable)이 없습니다.",
   "ups.liveNoOutput": "시스템 업샘플링: 별도의 물리적 DAC/출력 장치가 없습니다(피드백 루프 방지).",
+  "ups.liveBusy": "시스템 업샘플링: 다른 프로그램이 출력 장치를 독점 사용 중입니다. 해제될 때까지 업샘플링 없이 재생되며, Aqulify가 10초마다 다시 시도합니다.",
   "ups.engineFftDD": "Aqulify FFT-DD (106비트 Double-Double)",
   "ups.engineHintDD": "106비트 Double-Double(유효숫자 약 31자리) 단일 단계 FFT + Kaiser-sinc 엔진(HydrogenAudio SRC: 99.85 %), 위상 선택 및 제로 지연 필터.",
   "dev.tabDevice": "장치",

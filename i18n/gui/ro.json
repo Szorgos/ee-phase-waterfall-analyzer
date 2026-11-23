@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "Audio de sistem: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "Supraeșantionare sistem: nu s-a detectat un cablu audio virtual (ex. VB-Cable).",
   "ups.liveNoOutput": "Supraeșantionare sistem: nu există un DAC/ieșire fizică separată (buclă prevenită).",
+  "ups.liveBusy": "Supraeșantionare sistem: un alt program folosește ieșirea în mod exclusiv; până la eliberare sunetul se aude fără supraeșantionare, iar Aqulify reîncearcă la fiecare 10 secunde.",
   "ups.engineFftDD": "Aqulify FFT-DD (Double-Double pe 106 biți)",
   "ups.engineHintDD": "Motor FFT + Kaiser-sinc într-o singură treaptă pe 106 biți Double-Double (~31 cifre semnificative, HydrogenAudio SRC: 99,85 %), cu fază selectabilă și filtru fără întârziere.",
   "dev.tabDevice": "Dispozitiv",

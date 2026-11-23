@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "System audio: {src} → {dst} · {engine} ({ms} ms)",
   "ups.liveNoVirtual": "System audio upsampling: no virtual audio cable detected (e.g. VB-Cable).",
   "ups.liveNoOutput": "System audio upsampling: no separate physical DAC/output device found (feedback loop prevented).",
+  "ups.liveBusy": "System audio upsampling: another program is using the output device exclusively; until it is released the sound plays without upsampling, and Aqulify retries every 10 seconds.",
   "ups.engineFftDD": "Aqulify FFT-DD (106-bit Double-Double)",
   "ups.engineHintDD": "106-bit Double-Double (~31 significant digits) single-stage FFT + Kaiser-sinc engine (HydrogenAudio SRC: 99.85%), with selectable phase and zero-delay filter.",
   "dev.tabDevice": "Device",

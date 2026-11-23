@@ -1128,6 +1128,7 @@
   "ups.liveOwnActive": "שמע מערכת: {src} → {dst} · {engine} ({ms} מ״ש)",
   "ups.liveNoVirtual": "Upsampling מערכת: לא נמצא כבל שמע וירטואלי מותקן (כגון VB-Cable).",
   "ups.liveNoOutput": "Upsampling מערכת: לא נמצא DAC/פלט פיזי נפרד (נמנעה לולאת משוב).",
+  "ups.liveBusy": "Upsampling מערכת: תוכנה אחרת משתמשת בהתקן הפלט באופן בלעדי; עד שישתחרר הצליל מתנגן ללא upsampling, ו־Aqulify מנסה שוב כל 10 שניות.",
   "ups.engineFftDD": "Aqulify FFT-DD (106 סיביות Double-Double)",
   "ups.engineHintDD": "מנוע FFT + Kaiser-sinc חד-שלבי בדיוק 106 סיביות Double-Double (~31 ספרות משמעותיות, HydrogenAudio SRC: 99.85%), עם מופע לבחירה ומסנן ללא השהיה.",
   "dev.tabDevice": "התקן",
