@@ -56,7 +56,10 @@ function makeSineWav(filePath, sr = 44100, freq = 1000, seconds = 6) {
 
   // Kimenet menü és felmintavételezés blokk
   await page.click("#btnSinkMenu");
-  check(await page.isVisible("#aoUpsampleWrap"), "K13: a Felmintavételezés blokk látható a Kimenet menüben");
+  await page.click("#devTab-rate");   // az Eszköz ablak „Mintavételezés” füle
+  check(await page.isVisible("#aoUpsampleWrap"), "K13: a Felmintavételezés blokk látható az Eszköz ablak Mintavételezés fülén");
+  check(await page.isVisible("#upsDownEngine") && (await page.inputValue("#upsDownEngine")) === "-1",
+        "K13: a Lefelé alakítás választó látszik, alapból „Rendszer”");
 
   // 1. Szabály beállítása: ×2
   await page.selectOption("#upsRule", "1");
@@ -86,8 +89,10 @@ function makeSineWav(filePath, sr = 44100, freq = 1000, seconds = 6) {
   check(helpText.includes("libsoxr, LGPL-2.1+"), "K13: a súgó tartalmazza a libsoxr, LGPL-2.1+ megjelölést");
 
   // 5. K12(a) élő állapotsor a felületen: „forrást követi” -> 44,1 -> 88,2 kHz, DAC 88,2 kHz
+  await page.click("#devTab-output");
   await page.selectOption("#aoRate", "follow");
   await page.waitForFunction(() => aoOpts && aoOpts.rateMode === "follow", null, { timeout: 5000 });
+  await page.click("#devTab-rate");
   await page.evaluate(p => moSend({ type: "player_open", path: p }), wavPath);
   await page.waitForFunction(() => {
     const u = engineStatus && engineStatus.upsample;
@@ -99,17 +104,20 @@ function makeSineWav(filePath, sr = 44100, freq = 1000, seconds = 6) {
   await page.evaluate(() => moSend({ type: "player_stop" }));
   await page.waitForTimeout(800);
 
-  // 6. K12(b) élő állapotsor a felületen: „rendszer” mód (48 kHz) -> visszaalakítás figyelmeztetés
+  // 6. K12(b) élő állapotsor a felületen: „rendszer” mód (a PipeWire csak 48 kHz-et enged) -> a ×2 nem lehetséges,
+  // a lejátszó nem alakít feleslegesen (régen 88,2 kHz-re alakított, amit a PipeWire visszaalakított: figyelmeztetés)
+  await page.click("#devTab-output");
   await page.selectOption("#aoRate", "system");
   await page.waitForFunction(() => aoOpts && aoOpts.rateMode === "system", null, { timeout: 5000 });
+  await page.click("#devTab-rate");
   await page.evaluate(p => moSend({ type: "player_open", path: p }), wavPath);
   await page.waitForFunction(() => {
     const u = engineStatus && engineStatus.upsample;
-    return u && u.active === true && u.actualDacRate === 48000 && u.resampleWarning === true;
+    return u && u.active === false && u.reason === "dac_unsupported" && !u.resampleWarning;
   }, null, { timeout: 10000 });
   const stWarn = await page.innerText("#upsStatus");
-  check(/48 kHz/.test(stWarn) && /Figyelem/.test(stWarn),
-        "K13: rendszer módban az állapotsor a visszaalakítás figyelmeztetését mutatja: " + stWarn);
+  check(!/Figyelem/.test(stWarn),
+        "K13: rendszer módban nincs kettős átalakítás és nincs figyelmeztetés: " + stWarn);
   await page.evaluate(() => moSend({ type: "player_stop" }));
   await page.waitForTimeout(500);
 
@@ -117,6 +125,7 @@ function makeSineWav(filePath, sr = 44100, freq = 1000, seconds = 6) {
   await page.reload();
   await page.waitForFunction(() => typeof aoCaps !== "undefined" && aoCaps === true && aoOpts !== null, null, { timeout: 15000 });
   await page.click("#btnSinkMenu");
+  check((await page.getAttribute("#devTab-rate", "aria-selected")) === "true", "K13: az Eszköz ablak az utoljára nyitott fülön nyílik");
   const ruleAfterReload = await page.inputValue("#upsRule");
   check(ruleAfterReload === "1" && (await page.evaluate(() => aoOpts.upsampleRule === 1)),
         `K13: újratöltés után a beállítás megmaradt (upsRule=${ruleAfterReload})`);

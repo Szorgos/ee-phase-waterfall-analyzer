@@ -19,6 +19,7 @@ const engineState = () => JSON.parse(execFileSync("python3", ["-I", path.join(he
 
   console.log("Haladó hangkimenet a Kimenet menüben");
   await page.click("#btnSinkMenu");
+  await page.click("#devTab-output");   // az Eszköz ablak „Hangkimenet” füle
   check(await page.isVisible("#audioOptsWrap"), "a „Hangkimenet (haladó)” rész látszik (a motor jelzi a képességet)");
   await page.waitForFunction(() => aoOpts !== null, null, { timeout: 5000 });
   await page.selectOption("#aoBuffer", "256");

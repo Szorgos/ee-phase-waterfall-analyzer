@@ -227,7 +227,7 @@ def main():
     time.sleep(1.0)
 
     # --- K12(b): „rendszer” mód (48 kHz-es gráf) + ×2 szabály -> visszaalakítás figyelmeztetés
-    print("[K12b] Rendszer mód (48 kHz gráf) + ×2 szabály -> visszaalakítás figyelmeztetés")
+    print("[K12b] Rendszer mód (48 kHz gráf) + ×2 szabály -> nem alakít (a gráf csak 48 kHz-et enged, nincs kettős átalakítás)")
     set_opts(rateMode="system", keepAwake=False, upsampleRule=1)
     time.sleep(1.0)
 
@@ -242,17 +242,57 @@ def main():
     st_b = get_status()
     u_b = st_b.get("upsample", {})
     check(pw_sr_b == 48000, f"K12b: a PipeWire gráf 48000 Hz-en maradt (pw-dump: {pw_sr_b} Hz)")
-    check(u_b.get("active") is True and u_b.get("targetRate") == 88200 and
-          u_b.get("actualDacRate") == 48000 and u_b.get("resampleWarning") is True,
-          f"K12b: visszaalakítás figyelmeztetés aktív (actualDacRate={u_b.get('actualDacRate')}, warn={u_b.get('resampleWarning')})")
+    check(u_b.get("active") is False and u_b.get("reason") == "dac_unsupported" and not u_b.get("resampleWarning"),
+          f"K12b: a ×2 a 48 kHz-es gráfon nem lehetséges, nem alakít (active={u_b.get('active')}, ok={u_b.get('reason')}, warn={u_b.get('resampleWarning')})")
     print(f'K_METRIC: {{"test":"K12b_system_warn","pwRate":{pw_sr_b},"actualDacRate":{u_b.get("actualDacRate",0)},"resampleWarning":{str(bool(u_b.get("resampleWarning"))).lower()}}}')
 
     ws2.send({"type": "player_stop"})
     ws2.wait_type("player_result", limit=300)
     ws2.s.close()
 
+    # --- K12(c): „rendszer” mód + „Kimenet maximuma” -> a gráf rátájára (48 kHz) alakít, nincs figyelmeztetés
+    print("[K12c] Rendszer mód + Kimenet maximuma (44,1 -> 48 kHz, a gráf rátája)")
+    set_opts(rateMode="system", keepAwake=False, upsampleRule=3)
+    time.sleep(1.0)
+    ws3 = WS(PORT)
+    ws3.send({"type": "hello", "client": "upsample_live"})
+    ws3.send({"type": "player_open", "path": wav_path})
+    res3 = ws3.wait_type("player_result", limit=500)
+    time.sleep(2.0)
+    u_c = get_status().get("upsample", {})
+    check(res3 is not None and res3.get("ok") is True and u_c.get("active") is True and u_c.get("targetRate") == 48000 and
+          not u_c.get("resampleWarning"),
+          f"K12c: 44,1 -> 48 kHz, a PipeWire nem alakít újra (target={u_c.get('targetRate')}, warn={u_c.get('resampleWarning')})")
+    ws3.send({"type": "player_stop"})
+    ws3.wait_type("player_result", limit=300)
+    ws3.s.close()
+    time.sleep(1.0)
+
+    # --- K12(d): lefelé alakítás: 96 kHz-es fájl a 48 kHz-es gráfon. „Rendszer” (alap): nem alakít (a PipeWire igen);
+    # választott motorral (FFT64) a lejátszó alakít 48 kHz-re
+    print("[K12d] Lefelé alakítás: 96 kHz-es fájl, 48 kHz-es gráf (rendszer, majd FFT64)")
+    wav96 = os.path.join(WORK, "ups_96k_1k.wav")
+    make_sine_wav(wav96, sr=96000, freq=1000.0, seconds=6.0, amp=0.5)
+    for down, want_active, label in ((-1, False, "Rendszer"), (1, True, "FFT64")):
+        set_opts(rateMode="system", keepAwake=False, upsampleRule=0, downsampleEngine=down)
+        time.sleep(1.0)
+        ws4 = WS(PORT)
+        ws4.send({"type": "hello", "client": "upsample_live"})
+        ws4.send({"type": "player_open", "path": wav96})
+        res4 = ws4.wait_type("player_result", limit=500)
+        time.sleep(2.0)
+        u_d = get_status().get("upsample", {})
+        ok = res4 is not None and res4.get("ok") is True and u_d.get("active") is want_active
+        if want_active:
+            ok = ok and u_d.get("srcRate") == 96000 and u_d.get("targetRate") == 48000
+        check(ok, f"K12d ({label}): active={u_d.get('active')}, {u_d.get('srcRate')} -> {u_d.get('targetRate')} Hz, ok={u_d.get('reason')}")
+        ws4.send({"type": "player_stop"})
+        ws4.wait_type("player_result", limit=300)
+        ws4.s.close()
+        time.sleep(1.0)
+
     # Visszaállítás
-    set_opts(rateMode="system", upsampleRule=0)
+    set_opts(rateMode="system", upsampleRule=0, downsampleEngine=-1)
     print(f"\n{('SIKERTELEN' if fails else 'MINDEN TESZT SIKERES')} ({fails} hiba)")
     return 1 if fails else 0
 
