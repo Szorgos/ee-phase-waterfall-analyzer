@@ -15,8 +15,10 @@
 #include <spa/pod/builder.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <functional>
+#include <iostream>
 #include <string>
 
 #include "audio_options.hpp"
@@ -93,10 +95,12 @@ public:
             pw_stream_events e{};
             e.version = PW_VERSION_STREAM_EVENTS;
             e.process = onProcess;
+            e.state_changed = onStateChanged;
             return e;
         }();
         spa_zero(listener_);   // az előző (megszüntetett) hangfolyam figyelője nem él tovább
         pw_stream_add_listener(stream_, &listener_, &events, this);
+        streamState_.store(PW_STREAM_STATE_CONNECTING, std::memory_order_relaxed);
         uint8_t buf[1024];
         struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buf, sizeof(buf));
         struct spa_audio_info_raw info{};
@@ -129,9 +133,23 @@ public:
         pw_stream_destroy(stream_);
         stream_ = nullptr;
         render_ = nullptr;
+        streamState_.store(PW_STREAM_STATE_UNCONNECTED, std::memory_order_relaxed);
         pw_thread_loop_unlock(loop_);
         if (pwAfterCloseHook()) pwAfterCloseHook()();
     }
+
+    /** A lejátszó PipeWire-hangfolyamának állapota (diagnosztikához). */
+    const char* streamStateName() const {
+        switch (streamState_.load(std::memory_order_relaxed)) {
+            case PW_STREAM_STATE_ERROR: return "error";
+            case PW_STREAM_STATE_UNCONNECTED: return "unconnected";
+            case PW_STREAM_STATE_CONNECTING: return "connecting";
+            case PW_STREAM_STATE_PAUSED: return "paused";
+            case PW_STREAM_STATE_STREAMING: return "streaming";
+            default: return "unknown";
+        }
+    }
+    bool hasError() const { return streamState_.load(std::memory_order_relaxed) == PW_STREAM_STATE_ERROR; }
 
     void setActive(bool active) override {
         if (!loop_ || !stream_) return;
@@ -176,6 +194,14 @@ private:
         return core_ != nullptr;
     }
 
+    static void onStateChanged(void* data, enum pw_stream_state, enum pw_stream_state state, const char* error) {
+        auto* self = static_cast<PwPlayerOutput*>(data);
+        self->streamState_.store(static_cast<int>(state), std::memory_order_relaxed);
+        if (state == PW_STREAM_STATE_ERROR) {
+            std::cerr << "[Lejátszó/PipeWire] hangfolyam hiba: " << (error ? error : "") << "\n";
+        }
+    }
+
     static void onProcess(void* data) {
         auto* self = static_cast<PwPlayerOutput*>(data);
         struct pw_buffer* b = pw_stream_dequeue_buffer(self->stream_);
@@ -203,6 +229,7 @@ private:
     struct spa_hook listener_{};
     RenderFn render_;
     uint32_t streamRate_ = 0;
+    std::atomic<int> streamState_{PW_STREAM_STATE_UNCONNECTED};
 };
 
 } // namespace ee_analyzer::player

@@ -405,6 +405,51 @@ int main() {
     fs::remove(dsfPath);
     testAlsaSupportedRatesK11();
     testBusyDevice();
+
+    std::printf("\n[7] SelectablePlayerOutput: kizárólagos állapot-értesítés és ALSA -> megosztott átmeneti hook\n");
+    {
+        auto* alsa7 = new AlsaPlayerOutput("null");
+        auto* shared7 = new NullShared;
+        auto* sel7 = new SelectablePlayerOutput(std::unique_ptr<PlayerOutput>(shared7), std::unique_ptr<PlayerOutput>(alsa7));
+        std::vector<bool> exclEvents;
+        int fallbackHookCalls = 0;
+        int sharedOpensAtHook = -1;
+        sel7->setExclusiveChangedCallback([&](bool active) { exclEvents.push_back(active); });
+        sel7->setBeforeFallbackToSharedHook([&]() {
+            ++fallbackHookCalls;
+            sharedOpensAtHook = shared7->opens.load();
+        });
+        const PlayerOutput::RenderFn silence = [](float* b, size_t n) { std::fill(b, b + n * 2, 0.0f); };
+
+        // 1. Megosztott mód eleve: nincs exclusive esemény és nincs fallback hook
+        CHECK(sel7->open(44100, silence, nullptr) && !sel7->exclusiveActive(), "megosztott megnyitás rendben");
+        CHECK(exclEvents.empty() && fallbackHookCalls == 0, "tisztán megosztott módban nincs ALSA->megosztott hook");
+
+        // 2. Kizárólagos megnyitás: exclusiveChanged(true)
+        sel7->setExclusive(true);
+        CHECK(sel7->open(44100, silence, nullptr) && sel7->exclusiveActive(), "kizárólagos (null) megnyitás rendben");
+        CHECK(exclEvents.size() == 1 && exclEvents[0] == true, "kizárólagos megnyitáskor exclusiveChanged(true)");
+
+        // 3. Váltás megosztottra (exclusive: false): előbb exclusiveChanged(false), majd fallback hook a shared->open előtt
+        const int opensBefore = shared7->opens.load();
+        sel7->setExclusive(false);
+        CHECK(sel7->open(96000, silence, nullptr) && !sel7->exclusiveActive(), "váltás megosztottra (96 kHz) rendben");
+        CHECK(exclEvents.size() == 2 && exclEvents[1] == false, "kizárólagos zárásakor exclusiveChanged(false)");
+        CHECK(fallbackHookCalls == 1 && sharedOpensAtHook == opensBefore && shared7->opens.load() == opensBefore + 1,
+              "ALSA -> megosztott váltáskor a hook pontosan a shared->open() előtt futott");
+
+        // 4. Kizárólagos sikertelen megnyitás (nem létező eszköz) -> fallback hook szintén lefut
+        delete sel7;
+        auto* alsaFail7 = new AlsaPlayerOutput("hw:99,0");
+        auto* sharedFail7 = new NullShared;
+        SelectablePlayerOutput selFail7{ std::unique_ptr<PlayerOutput>(sharedFail7), std::unique_ptr<PlayerOutput>(alsaFail7) };
+        int failHookCalls = 0;
+        selFail7.setBeforeFallbackToSharedHook([&]() { ++failHookCalls; });
+        selFail7.setExclusive(true);
+        CHECK(selFail7.open(96000, silence, nullptr) && !selFail7.exclusiveActive() && failHookCalls == 1,
+              "sikertelen kizárólagos megnyitásnál (fallback) is lefut az átmeneti hook");
+    }
+
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

@@ -66,6 +66,41 @@ int main() {
     check(c2e2.schedule && !c2e2.logError && c2e2.delayMs == 2000, "2. kiesés 2. hibája: nem naplóz újra");
     check(st.onStreaming(), "2. kiesés utáni STREAMING: ismét naplózza az újracsatlakozást");
 
+    std::printf("[3] Dummy/null nyelő kiszűrése és fizikai tartalék-választás (resolveTargetOrFallback)\n");
+    check(isDummyOrNullSink("auto_null"), "auto_null dummy nyelőként felismerve");
+    check(isDummyOrNullSink("alsa_output.dummy"), "dummy nyelő felismerve");
+    check(!isDummyOrNullSink("alsa_output.usb-BurrBrown_USB_AUDIO_DAC-00.analog-stereo"), "USB DAC nem dummy");
+    check(!isDummyOrNullSink("test_dac"), "virtuális teszt DAC nem dummy");
+
+    const std::unordered_set<std::string> mixed = {
+        "auto_null",
+        "aqulify_sink",
+        "alsa_output.pci-0000_00_1f.3.analog-stereo",
+        "alsa_output.usb-BurrBrown_USB_AUDIO_DAC-00.analog-stereo"
+    };
+    check(resolveTargetOrFallback("", mixed) == "alsa_output.usb-BurrBrown_USB_AUDIO_DAC-00.analog-stereo",
+          "üres választásnál a valódi USB DAC-ot választja (nem auto_null-t és nem aqulify_sink-et)");
+    check(resolveTargetOrFallback("", { "auto_null", "alsa_output.pci-0000_00_1f.3.analog-stereo" }) ==
+              "alsa_output.pci-0000_00_1f.3.analog-stereo",
+          "USB nélkül a valódi PCI kártyát választja (nem auto_null-t)");
+    check(resolveTargetOrFallback("", { "auto_null", "aqulify_sink" }).empty(),
+          "csak saját és dummy nyelő esetén üres cél");
+    check(resolveTargetOrFallback("alsa_output.usb-HIANYZO.analog-stereo", { "auto_null", "alsa_output.pci-0.analog-stereo" }) ==
+              "alsa_output.pci-0.analog-stereo",
+          "hiányzó választott DAC esetén fizikai tartalékra esik vissza");
+    check(resolveTargetOrFallback("aqulify_sink", { "aqulify_sink", "test_dac" }) == "test_dac",
+          "saját aqulify_sink megadásakor is valódi külső nyelőt választ");
+
+    State st3;
+    st3.onError();
+    check(!st3.onNewExternalSink("auto_null").schedule, "auto_null megjelenése nem indít újracsatlakozást");
+    check(st3.onNewExternalSink("alsa_output.usb-BurrBrown-00.analog-stereo").schedule,
+          "valódi USB DAC megjelenése azonnal újracsatlakozást indít");
+    State st4;
+    const auto imm = st4.requestImmediate();
+    check(imm.schedule && imm.delayMs == kNewSinkDelayMs && st4.pending(),
+          "requestImmediate() beállítja a pending állapotot és gyors időzítőt kér");
+
     std::printf("\n%s (%d hiba)\n", fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", fail);
     return fail ? 1 : 0;
 }

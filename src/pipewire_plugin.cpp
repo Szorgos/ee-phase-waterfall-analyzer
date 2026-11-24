@@ -134,7 +134,8 @@ std::vector<SinkInfo> listPhysicalSinks() {
         size_t t2 = line.find('\t', t1 + 1);
         if (t2 == std::string::npos) t2 = line.size();
         SinkInfo s{ line.substr(0, t1), line.substr(t1 + 1, t2 - t1 - 1) };
-        if (s.name == "aqulify_sink" || !isSafeSinkName(s.name)) continue; // a saját virtuális nyelőnk nem cél
+        if (pw_reconnect::isOwnAqulifyNode(s.name) || pw_reconnect::isDummyOrNullSink(s.name) || !isSafeSinkName(s.name))
+            continue; // a saját virtuális nyelőnk és a dummy/auto_null nem valódi fizikai cél
         v.push_back(std::move(s));
     }
     return v;
@@ -243,8 +244,6 @@ std::string getOutputSinksJson(std::string* outCurrentSink = nullptr) {
  */
 bool applyOutputSink(const std::string& targetSink, bool remember, bool pin = false) {
     if (targetSink.empty()) return false;
-    std::string sinkInputId, curSinkId;
-    if (!findOwnSinkInput(sinkInputId, curSinkId)) return false;
 
     std::string lowerTarget = targetSink;
     std::transform(lowerTarget.begin(), lowerTarget.end(), lowerTarget.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -257,18 +256,36 @@ bool applyOutputSink(const std::string& targetSink, bool remember, bool pin = fa
         if (kw && resolved.empty()) { resolved = s.name; resolvedId = s.id; }
     }
     if (resolved.empty() || !isSafeSinkName(resolved)) return false;
+
+    std::string sinkInputId, curSinkId;
+    if (!findOwnSinkInput(sinkInputId, curSinkId)) {
+        // A lejátszó stream épp hiba / újracsatlakozás alatt állhat: a célt akkor is beállítjuk és elindítjuk az újrakötést
+        if (g_node) g_node->setPreferredOutput(resolved);
+        if (remember) linux_store::saveOutputSink(resolved);
+        return true;
+    }
+
     if (resolvedId == curSinkId) {                    // már ott szól
         // pin: a move-sink-input ugyanarra a nyelőre nem rögzít célt, ezért a metaadatba írjuk (a sink-input
         // száma a PipeWire-csomópont azonosítója; a név ellenőrzött)
-        if (pin) std::system(("pw-metadata " + sinkInputId + " target.object '" + resolved + "' >/dev/null 2>&1").c_str());
-        if (g_node) g_node->setPreferredOutput(resolved);
+        if (pin) {
+            const int rc = std::system(("pw-metadata " + sinkInputId + " target.object '" + resolved + "' >/dev/null 2>&1").c_str());
+            (void)rc;
+        }
+        if (g_node) {
+            g_node->noteCurrentOutputTarget(resolved);
+            g_node->setPreferredOutput(resolved);
+        }
         if (remember) linux_store::saveOutputSink(resolved);
         return true;
     }
     const std::string cmd = "LC_ALL=C pactl move-sink-input " + sinkInputId + " '" + resolved + "' >/dev/null 2>&1";
     if (std::system(cmd.c_str()) != 0) return false;
     std::cout << "[PipeWire] Kimeneti eszköz: " << resolved << " (sink-input #" << sinkInputId << ")\n";
-    if (g_node) g_node->setPreferredOutput(resolved);
+    if (g_node) {
+        g_node->noteCurrentOutputTarget(resolved);
+        g_node->setPreferredOutput(resolved);
+    }
     if (remember) linux_store::saveOutputSink(resolved);
     return true;
 }
@@ -551,6 +568,10 @@ int main(int argc, char* argv[]) {
         }).detach();
     }
 
+    // Diagnosztikai hangerő-gyorsítótár (szálbiztos atomikus mezők: a s_healthTick nem indít popen-t)
+    std::atomic<int> cachedVolPct{-1};
+    std::atomic<int> cachedVolMuted{-1};   // -1: ismeretlen, 0: nincs némítva, 1: némítva
+
     // Az „Aqulify” a rendszer alapértelmezett kimenete (linux_default_sink.hpp): induláskor átáll rá, és ha a
     // felhasználó a rendszer hangerő-paneljén hangkártyát választ, az lesz a DSP kimenete, az alapértelmezett pedig
     // visszaáll az Aqulify-ra – így a hang (és a vízesés, az EQ) nem kerüli meg a DSP-láncot.
@@ -559,6 +580,7 @@ int main(int argc, char* argv[]) {
     bool defQuit = false;
     std::thread defaultThread([&, hasStoredChoice = !initialSink.empty()] {
         bool startup = true, warned = false;
+        int volTick = 0;
         for (;;) {
             {
                 std::unique_lock<std::mutex> lk(defMu);
@@ -567,7 +589,39 @@ int main(int argc, char* argv[]) {
             }
             std::string cur = runCapture("pactl get-default-sink");
             while (!cur.empty() && (cur.back() == '\n' || cur.back() == '\r' || cur.back() == ' ')) cur.pop_back();
-            if (cur == "aqulify_sink") { startup = false; warned = false; continue; }
+            if (cur == "aqulify_sink") {
+                startup = false;
+                warned = false;
+                // Ha az aqulify_sink maradt az alapértelmezett (pl. crash után), ellenőrizzük, hogy a kimeneti
+                // stream valódi fizikai hangkártyára van-e kötve (ne ragadjon error-ban vagy auto_null-on)
+                if (!node.externalExclusiveActive_.load(std::memory_order_acquire)) {
+                    const int st = node.playbackState.load(std::memory_order_relaxed);
+                    const std::string curTarget = node.outputTarget();
+                    const bool needTarget = (st == PW_STREAM_STATE_ERROR || st == PW_STREAM_STATE_UNCONNECTED ||
+                                             curTarget.empty() || pw_reconnect::isDummyOrNullSink(curTarget));
+                    if (needTarget) {
+                        std::unordered_set<std::string> physSet;
+                        for (const auto& s : listPhysicalSinks()) physSet.insert(s.name);
+                        const std::string best = pw_reconnect::resolveTargetOrFallback(linux_store::loadOutputSink(), physSet);
+                        if (!best.empty()) {
+                            node.setPreferredOutput(best);
+                            if (node.playbackStreaming.load(std::memory_order_acquire)) {
+                                applyOutputSink(best, false, true);
+                            } else {
+                                node.requestReconnectIfNeeded();
+                            }
+                        }
+                    } else if (cachedVolPct.load(std::memory_order_relaxed) < 0 || (++volTick % 10 == 0)) {
+                        double lv = 0.0;
+                        bool mu = false;
+                        if (sinkVolume(curTarget, lv, mu)) {
+                            cachedVolPct.store(static_cast<int>(std::lround(lv * 100.0)), std::memory_order_relaxed);
+                            cachedVolMuted.store(mu ? 1 : 0, std::memory_order_relaxed);
+                        }
+                    }
+                }
+                continue;
+            }
             if (runCapture("pactl list short sinks").find("\taqulify_sink\t") == std::string::npos) continue;   // még nem látszik
             std::vector<std::string> others;
             for (const auto& s : listPhysicalSinks()) others.push_back(s.name);
@@ -679,9 +733,15 @@ int main(int argc, char* argv[]) {
         cachedSinksJson = getOutputSinksJson(&cachedCurrentSink);
         double lv = 0.0;
         bool mu = false;
-        cachedVolumeJson = sinkVolume(cachedCurrentSink, lv, mu)
-                               ? ",\"volume\":{\"level\":" + std::to_string(lv) + ",\"muted\":" + (mu ? "true" : "false") + "}"
-                               : std::string();
+        if (sinkVolume(cachedCurrentSink, lv, mu)) {
+            cachedVolPct.store(static_cast<int>(std::lround(lv * 100.0)), std::memory_order_relaxed);
+            cachedVolMuted.store(mu ? 1 : 0, std::memory_order_relaxed);
+            cachedVolumeJson = ",\"volume\":{\"level\":" + std::to_string(lv) + ",\"muted\":" + (mu ? "true" : "false") + "}";
+        } else {
+            cachedVolPct.store(-1, std::memory_order_relaxed);
+            cachedVolMuted.store(-1, std::memory_order_relaxed);
+            cachedVolumeJson.clear();
+        }
         lastSinkQuery = std::chrono::steady_clock::now();
     };
 
@@ -805,6 +865,7 @@ int main(int argc, char* argv[]) {
     mediaSession.start();
     // A beépített lejátszó (2.x): az „Aqulify” eszközre játszik, így a hang a DSP-láncon át szól. Amíg van betöltött
     // szám, a „most szól” és a vezérlés ezt mutatja; utána ismét a gépen futó lejátszót (MPRIS).
+    player::PwPlayerOutput* pwPlayerRaw = nullptr;
 #if defined(AQ_HAVE_ALSA)
     // Kizárólagos módban (beállítás: exclusive) közvetlenül az ALSA-eszközre, a lejátszó saját DSP-láncán át
     {
@@ -814,13 +875,28 @@ int main(int argc, char* argv[]) {
     auto alsaOut = std::make_unique<player::AlsaPlayerOutput>();
     alsaOut->setExclusiveDsp(playerDsp.get());
     alsaRaw = alsaOut.get();   // a jelút állapotához (natív DSD és formátuma)
-    auto selOut = std::make_unique<player::SelectablePlayerOutput>(std::make_unique<player::PwPlayerOutput>("aqulify_sink"),
-                                                                   std::move(alsaOut));
+    auto pwOut = std::make_unique<player::PwPlayerOutput>("aqulify_sink");
+    pwPlayerRaw = pwOut.get();
+    auto selOut = std::make_unique<player::SelectablePlayerOutput>(std::move(pwOut), std::move(alsaOut));
+    selOut->setExclusiveChangedCallback([&node](bool active) {
+        node.setExternalExclusiveActive(active);
+    });
+    selOut->setBeforeFallbackToSharedHook([&node]() {
+        // Közvetlen ALSA lezárása / sikertelen nyitása után a WirePlumbernek idő kell a DAC visszavételéhez:
+        // kérjük az újracsatlakozást, és legfeljebb ~1,2 s-ig megvárjuk, amíg a fizikai kimenet újra kész.
+        node.requestReconnectIfNeeded();
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(1200);
+        while (std::chrono::steady_clock::now() < deadline && !node.hasReadyPhysicalOutput()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(60));
+        }
+    });
     playerSel = selOut.get();
     player::FilePlayer filePlayer(std::move(selOut));
     playerFilePlayer = &filePlayer;
 #else
-    player::FilePlayer filePlayer(std::make_unique<player::PwPlayerOutput>("aqulify_sink"));
+    auto pwOut = std::make_unique<player::PwPlayerOutput>("aqulify_sink");
+    pwPlayerRaw = pwOut.get();
+    player::FilePlayer filePlayer(std::move(pwOut));
 #endif
     // Zenetár (2.x): a mentett zenei mappák, különben a Zene mappa; a bejárás a háttérben indul
     library::MusicLibrary musicLibrary;
@@ -1118,6 +1194,11 @@ int main(int argc, char* argv[]) {
     };
     const std::string origAllowedRates = pwSetting("clock.allowed-rates");
     const std::string origForceRate = pwSetting("clock.force-rate");
+    int cachedAutoQuantum = [] {
+        const int q = std::atoi(pwSetting("clock.quantum").c_str());
+        return q > 0 ? q : 1024;
+    }();
+    int lastAppliedBufFrames = -1;
     bool ratesTouched = false;
     std::atomic<bool> playerStreamOpenFlag{false};
     auto playerStreamOpen = [&]() { return playerStreamOpenFlag.load(); };
@@ -1154,9 +1235,16 @@ int main(int argc, char* argv[]) {
 #else
         filePlayer.setDsdDop(false);
 #endif
-        const int autoQ = std::atoi(pwSetting("clock.quantum").c_str());
+        // Csak pufferméret-váltáskor kérdezzük le frissen a clock.quantum-ot (csúszkahúzáskor ne indítson popen-t!)
+        if (o.bufferFrames != lastAppliedBufFrames) {
+            if (o.bufferFrames == 0 && lastAppliedBufFrames > 0) {
+                const int q = std::atoi(pwSetting("clock.quantum").c_str());
+                if (q > 0) cachedAutoQuantum = q;
+            }
+            lastAppliedBufFrames = o.bufferFrames;
+        }
         const bool pauseForPlayer = o.rateMode == audioopt::RateMode::Follow && playerStreamOpen();
-        node.setAudioOptions(o.bufferFrames, o.keepAwake && !pauseForPlayer, autoQ > 0 ? autoQ : 1024);
+        node.setAudioOptions(o.bufferFrames, o.keepAwake && !pauseForPlayer, cachedAutoQuantum);
         node.setRateFollow(o.rateMode == audioopt::RateMode::Follow);
         {
             // Az alábbi ágak a force-rate-et felülírják (forrás-követés, fix, vagy visszaállítás): az élő út kényszere
@@ -1276,15 +1364,41 @@ int main(int argc, char* argv[]) {
         if (inNum && cur >= 8000 && cur <= 768000) out.push_back(cur);
         return out;
     };
-    player::pwAllowedRatesHook() = [&, parseAllowedRates]() -> std::vector<uint32_t> {
+    auto detectCurrentDacRates = [&]() -> std::vector<uint32_t> {
+        std::string siId, outSinkId;
+        findOwnSinkInput(siId, outSinkId);
+        if (outSinkId.empty()) {
+            const std::string t = node.outputTarget();
+            if (!t.empty()) outSinkId = liveups::sinkIdByName(runCapture("pactl list short sinks"), t);
+        }
+        if (outSinkId.empty()) return {};
+        const int card = liveups::alsaCardOfSink(runCapture("pactl list sinks"), outSinkId);
+        if (card < 0) return {};
+        std::ifstream f("/proc/asound/card" + std::to_string(card) + "/stream0");
+        if (!f) return {};
+        const std::string txt((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        return liveups::parseStream0PlaybackRates(txt);
+    };
+    player::pwAllowedRatesHook() = [&, parseAllowedRates, detectCurrentDacRates]() -> std::vector<uint32_t> {
         audioopt::RateMode rm = audioopt::RateMode::System;
         uint32_t fixedRate = 0;
         { std::lock_guard<std::mutex> lk(audioMutex); rm = audioOpts.rateMode; fixedRate = static_cast<uint32_t>(std::max(0, audioOpts.fixedRate)); }
         // Rögzített mintavétel: a gráf csak ezen szól, a lejátszó ide alakít (fel- vagy lefelé) a választott motorral
         if (rm == audioopt::RateMode::Fixed && fixedRate > 0) return { fixedRate };
-        // Rendszer és „forrást követi”: a gráf csak az engedélyezett mintavételekre vált, a többit a PipeWire alakítja
-        auto parsed = parseAllowedRates(pwSetting("clock.allowed-rates"));
-        if (!parsed.empty()) return parsed;
+        // Rendszer és „forrást követi”: ha az USB DAC valós hardveres rátái kiolvashatók (/proc/asound/cardN/stream0),
+        // azokat vesszük alapul (és metsszük a PipeWire allowed-rates listájával), így pl. 48 kHz-es DAC-ra nem kér 96 kHz-et
+        const auto pwRates = parseAllowedRates(pwSetting("clock.allowed-rates"));
+        const auto dacRates = detectCurrentDacRates();
+        if (!dacRates.empty()) {
+            if (!pwRates.empty()) {
+                std::vector<uint32_t> common;
+                for (uint32_t r : dacRates)
+                    if (std::find(pwRates.begin(), pwRates.end(), r) != pwRates.end()) common.push_back(r);
+                if (!common.empty()) return common;
+            }
+            return dacRates;
+        }
+        if (!pwRates.empty()) return pwRates;
         return { 44100, 48000, 88200, 96000, 176400, 192000 };
     };
     player::pwActualRateHook() = [&]() -> uint32_t {
@@ -1308,8 +1422,7 @@ int main(int argc, char* argv[]) {
         {
             std::lock_guard<std::mutex> lk(audioMutex);
             if (audioOpts.rateMode == audioopt::RateMode::Follow && audioOpts.keepAwake) {
-                const int autoQ = std::max(32, std::atoi(pwSetting("clock.quantum").c_str()));
-                node.setAudioOptions(audioOpts.bufferFrames, false, autoQ);
+                node.setAudioOptions(audioOpts.bufferFrames, false, cachedAutoQuantum);
                 paused = true;
             }
         }
@@ -1323,8 +1436,7 @@ int main(int argc, char* argv[]) {
             s_playerOpen = false;
             std::lock_guard<std::mutex> lk(audioMutex);
             if (!audioOpts.keepAwake) return;
-            const int autoQ = std::max(32, std::atoi(pwSetting("clock.quantum").c_str()));
-            node.setAudioOptions(audioOpts.bufferFrames, true, autoQ);
+            node.setAudioOptions(audioOpts.bufferFrames, true, cachedAutoQuantum);
         }).detach();
     };
     // Az élő út figyelője: másodpercenként megnézi, milyen mintavételű külső hangfolyam szól az Aqulify eszközre, és
@@ -1697,11 +1809,16 @@ int main(int argc, char* argv[]) {
                       static_cast<unsigned long long>(filePlayer.underruns()), filePlayer.isUpsampleActive() ? "true" : "false",
                       dop ? "true" : "false");
         // „Nincs hang” diagnosztika: hová megy a kimenet (üres: a PipeWire alapértelmezettje), a kimeneti stream
-        // állapota, és mikor jött utoljára nem néma rendszerhang az Aqulify eszközre (-1: az indulás óta nem)
+        // állapota, mikor jött utoljára nem néma rendszerhang (-1: az indulás óta nem), és a kimenet hangereje/némítása
         const std::string target = node.outputTarget();
+        const int volPct = cachedVolPct.load(std::memory_order_relaxed);
+        const int volMut = cachedVolMuted.load(std::memory_order_relaxed);
         const std::string diag = "\"output_target\":\"" + jsonEscape(target.empty() ? std::string("(default)") : target) +
                                  "\",\"output_state\":\"" + node.playbackStateName() +
-                                 "\",\"input_signal_age_ms\":" + std::to_string(node.inputSignalAgeMs()) + ",";
+                                 "\",\"input_signal_age_ms\":" + std::to_string(node.inputSignalAgeMs()) +
+                                 ",\"output_volume_pct\":" + std::to_string(volPct) +
+                                 ",\"output_muted\":" + (volMut < 0 ? "null" : (volMut ? "true" : "false")) +
+                                 (pwPlayerRaw ? (std::string(",\"player_pw_state\":\"") + pwPlayerRaw->streamStateName() + "\"") : std::string()) + ",";
         std::string head(buf);
         head.insert(1, diag);   // a nyitó { után
         health.setSection("engine", head + audioopt::toJson(o) + "}");

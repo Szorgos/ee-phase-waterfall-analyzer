@@ -428,6 +428,10 @@ static int runChild(const std::string& mode, const std::string& dir, const std::
     c.crashHandlers = (mode == "abort");
     aq::health::Monitor mon;
     if (!mon.start(c)) return 3;
+    // Egy soha nem jelző (lastNs == 0) és egy aktív szál a crash.txt age_ms=-1 ellenőrzéséhez
+    std::atomic<bool> idleExpected{ false };
+    aq::wd::Heartbeat hbNever("never-beat", &idleExpected);
+    hbNever.setLabel("never-beat: init");
     mon.setSection("engine", "{\"path\":\"PCM 44100\"}");
     appendLine(log, "[Gyermek] utolsó sor a leállás előtt (" + mode + ")");
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
@@ -500,6 +504,8 @@ static void testAbnormalEnd(const std::string& self) {
     startNext(dir, log, true, abnormal, rep);
     CHECK(abnormal, "a következő indítás rendellenes előző futást lát (abort)");
     CHECK(contains(rep, "AQ_CRASH") && contains(rep, "SIGABRT"), "a jelentésben az összeomlás jele (SIGABRT, a kezelő írta)");
+    CHECK(contains(rep, "thread=never-beat label=never-beat: init age_ms=-1"),
+          "soha nem jelző szál (lastNs==0) age_ms=-1 értékkel jelenik meg a crash.txt-ben (nem age_ms=0)");
     CHECK(contains(rep, "utolsó sor a leállás előtt (abort)"), "és a napló utolsó sora");
     // Bekapcsolt beállítás: a jelentés megmarad (a küldés a 3. szakasz)
     startNext(dir, log, true, abnormal, rep);

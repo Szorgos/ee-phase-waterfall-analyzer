@@ -311,6 +311,67 @@ int main() {
               "rátaváltás után 96 kHz DSP aktív és stop() szálbiztosan leállt");
     }
 
+    std::printf("[L6] Párhuzamos stresszteszt: configure() + status() + pushInput() + pullOutput() egyidejűleg\n");
+    {
+        LiveUpsampleBridge br;
+        audioopt::AudioOptions initOpt;
+        initOpt.upsampleEngine = 0;
+        initOpt.upsamplePhase = 25.0;
+        CHECK(br.configure(44100, 96000, initOpt, nullptr, true) && br.start(), "stresszteszt: híd indul");
+
+        std::atomic<bool> stopFlag{false};
+        std::atomic<uint64_t> statusReads{0};
+        std::atomic<uint64_t> badStatus{0};
+
+        std::thread tCap([&] {
+            std::vector<float> blk(512 * 2, 0.2f);
+            while (!stopFlag.load(std::memory_order_relaxed)) {
+                br.pushInput(blk.data(), 512);
+                std::this_thread::sleep_for(std::chrono::microseconds(300));
+            }
+        });
+        std::thread tPlay([&] {
+            std::vector<float> blk(512 * 2, 0.0f);
+            while (!stopFlag.load(std::memory_order_relaxed)) {
+                br.pullOutput(blk.data(), 512);
+                std::this_thread::sleep_for(std::chrono::microseconds(300));
+            }
+        });
+        std::thread tStatus([&] {
+            while (!stopFlag.load(std::memory_order_relaxed)) {
+                const BridgeStatus st = br.status();
+                statusReads.fetch_add(1, std::memory_order_relaxed);
+                if (std::isnan(st.latencyMs) || std::isnan(st.driftPpm)) {
+                    badStatus.fetch_add(1, std::memory_order_relaxed);
+                }
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
+            }
+        });
+
+        // Fő szál: gyors paraméter- és motorváltások (csúszkahúzás szimulációja, beleértve a #40-es stopband=1.15174 értéket)
+        int cfgOk = 0;
+        for (int i = 0; i < 16; ++i) {
+            audioopt::AudioOptions o;
+            o.upsampleEngine = (i % 2 == 0) ? 0 : 1;
+            o.upsamplePhase = (i % 3 == 0) ? 50.0 : 25.0;
+            o.upsamplePassbandEnd = 0.95;
+            o.upsampleStopbandBegin = (i == 5) ? 1.15174 : (1.00 + 0.03 * (i % 5));
+            if (br.configure((i % 2 == 0) ? 44100 : 48000, 96000, o, nullptr, true) && br.start()) ++cfgOk;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+
+        stopFlag.store(true, std::memory_order_release);
+        tCap.join();
+        tPlay.join();
+        tStatus.join();
+        br.stop();
+        std::printf("         újrakonfigurálások: %d/16, párhuzamos status() hívások: %llu, hibás: %llu\n",
+                    cfgOk, static_cast<unsigned long long>(statusReads.load()),
+                    static_cast<unsigned long long>(badStatus.load()));
+        CHECK(cfgOk == 16 && statusReads.load() > 100 && badStatus.load() == 0 && !br.isRunning(),
+              "párhuzamos configure/status/push/pull: összeomlás és NaN nélkül lefutott");
+    }
+
     if (g_fail == 0) std::printf("\nMINDEN LIVE BRIDGE TESZT SIKERES (0 hiba)\n");
     else std::printf("\n%d HIBA: SIKERTELEN\n", g_fail);
     return g_fail == 0 ? 0 : 1;

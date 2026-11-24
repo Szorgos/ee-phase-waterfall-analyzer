@@ -12,12 +12,20 @@
 #include <cctype>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 namespace ee_analyzer::pw_reconnect {
 
 inline constexpr int kInitialBackoffMs = 1000;
 inline constexpr int kMaxBackoffMs = 5000;
 inline constexpr int kNewSinkDelayMs = 150;
+
+inline std::string toLowerAscii(const std::string& s) {
+    std::string low;
+    low.reserve(s.size());
+    for (unsigned char c : s) low.push_back(static_cast<char>(std::tolower(c)));
+    return low;
+}
 
 /** Saját Aqulify csomópont-e (visszacsatolási hurok elkerülése: soha nem lehet kimeneti cél). */
 inline bool isOwnAqulifyNode(const std::string& name, const std::string& sinkName = "aqulify_sink") {
@@ -38,17 +46,71 @@ inline bool isOwnAqulifyNode(const std::string& name, const std::string& sinkNam
 }
 
 /**
+ * PipeWire/PulseAudio néma/dummy nyelő-e (pl. auto_null, dummy output).
+ * Ezek nem valódi hangkártyák: ha a fizikai DAC átmenetileg eltűnik (pl. ALSA foglalás miatt),
+ * nem szabad véglegesen ezekre rögzülni vagy újracsatlakozási okként kezelni őket.
+ */
+inline bool isDummyOrNullSink(const std::string& name) {
+    if (name.empty()) return false;
+    const std::string low = toLowerAscii(name);
+    return low == "auto_null" || low == "null" ||
+           low.find("auto_null") != std::string::npos ||
+           low.find("dummy") != std::string::npos ||
+           low.find("null_sink") != std::string::npos;
+}
+
+/**
+ * Determinisztikus tartalék-választás valódi külső nyelők közül (nem saját aqulify*, nem auto_null/dummy).
+ * USB hangkártyák előnyben részesülnek, egyébként alfabetikus sorrendben az első valódi nyelő.
+ */
+inline std::string selectFallbackSink(const std::unordered_set<std::string>& knownExternalSinks,
+                                      const std::string& sinkName = "aqulify_sink") {
+    std::vector<std::string> usbSinks;
+    std::vector<std::string> otherSinks;
+    for (const auto& s : knownExternalSinks) {
+        if (s.empty() || isOwnAqulifyNode(s, sinkName) || isDummyOrNullSink(s)) continue;
+        const std::string low = toLowerAscii(s);
+        if (low.find("usb") != std::string::npos) usbSinks.push_back(s);
+        else otherSinks.push_back(s);
+    }
+    if (!usbSinks.empty()) {
+        std::sort(usbSinks.begin(), usbSinks.end());
+        return usbSinks.front();
+    }
+    if (!otherSinks.empty()) {
+        std::sort(otherSinks.begin(), otherSinks.end());
+        return otherSinks.front();
+    }
+    return {};
+}
+
+/**
  * A lejátszó stream céleszközének kiválasztása:
- * - ha a felhasználó választott eszközt, az nem saját aqulify* csomópont, és jelenleg elérhető a gráfban,
+ * - ha a felhasználó választott eszközt, az nem saját aqulify* és nem dummy csomópont, és elérhető a gráfban,
  *   akkor azt célozzuk (PW_KEY_TARGET_OBJECT);
- * - különben üres szöveget adunk vissza (a WirePlumber az alapértelmezett, nem saját kimenetre köt).
+ * - különben üres szöveget adunk vissza (a meglévő kompatibilitási hívások számára).
  */
 inline std::string resolveTarget(const std::string& preferredTarget,
                                  const std::unordered_set<std::string>& knownExternalSinks,
                                  const std::string& sinkName = "aqulify_sink") {
-    if (preferredTarget.empty() || isOwnAqulifyNode(preferredTarget, sinkName)) return {};
+    if (preferredTarget.empty() || isOwnAqulifyNode(preferredTarget, sinkName) || isDummyOrNullSink(preferredTarget))
+        return {};
     if (knownExternalSinks.find(preferredTarget) != knownExternalSinks.end()) return preferredTarget;
     return {};
+}
+
+/**
+ * Céleszköz-választás automatikus fizikai tartalékkal:
+ * ha az aqulify_sink a rendszer alapértelmezett kimenete, az üres target.object WirePlumber-hibához
+ * („no target node available”) vagy auto_null-ra kötéshez vezethet. Ezért ha a választott eszköz nincs meg
+ * vagy üres, a gráfban látott valódi (nem saját, nem dummy) külső nyelők közül választunk egyet.
+ */
+inline std::string resolveTargetOrFallback(const std::string& preferredTarget,
+                                           const std::unordered_set<std::string>& knownExternalSinks,
+                                           const std::string& sinkName = "aqulify_sink") {
+    const std::string exact = resolveTarget(preferredTarget, knownExternalSinks, sinkName);
+    if (!exact.empty()) return exact;
+    return selectFallbackSink(knownExternalSinks, sinkName);
 }
 
 /** Állapotgép a lejátszó stream hiba utáni újracsatlakozásához és napló-zajcsökkentéséhez. */
@@ -83,13 +145,23 @@ public:
         return a;
     }
 
-    /** Új külső (nem saját aqulify*) Audio/Sink csomópont jelent meg a regiszterben. */
+    /** Új valódi külső (nem saját aqulify*, nem dummy/auto_null) Audio/Sink csomópont jelent meg a regiszterben. */
     Action onNewExternalSink(const std::string& nodeName, const std::string& sinkName = "aqulify_sink") {
         Action a;
-        if (!pending_ || isOwnAqulifyNode(nodeName, sinkName)) return a;
+        if (!pending_ || isOwnAqulifyNode(nodeName, sinkName) || isDummyOrNullSink(nodeName)) return a;
         backoffMs_ = kInitialBackoffMs;
         a.schedule = true;
         a.delayMs = kNewSinkDelayMs;
+        return a;
+    }
+
+    /** Azonnali újracsatlakozás kérése (pl. rögzítetlen/dummy cél cseréje valódi DAC megjelenésekor vagy ALSA után). */
+    Action requestImmediate(int delayMs = kNewSinkDelayMs) {
+        Action a;
+        pending_ = true;
+        backoffMs_ = kInitialBackoffMs;
+        a.schedule = true;
+        a.delayMs = std::max(1, delayMs);
         return a;
     }
 

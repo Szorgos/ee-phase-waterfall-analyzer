@@ -7,6 +7,7 @@
  *        megosztottra lép vissza, és az okot megőrzi (fallback()).
  */
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -29,19 +30,44 @@ public:
     /** A legutóbbi visszalépés oka (üres: nem volt). */
     std::string fallback() const { std::lock_guard<std::mutex> lk(m_); return fallback_; }
     PlayerOutput* exclusiveOutput() { return exclusive_.get(); }
+    PlayerOutput* sharedOutput() { return shared_.get(); }
+
+    /** Értesítés a kizárólagos kimenet tényleges aktiválódásáról / bezárásáról (pl. őrszem elnyomása ALSA alatt). */
+    void setExclusiveChangedCallback(std::function<void(bool active)> fn) {
+        std::lock_guard<std::mutex> lk(cbMu_);
+        onExclusiveChanged_ = std::move(fn);
+    }
+
+    /**
+     * Közvetlen (kizárólagos) kimenet lezárása vagy sikertelen megnyitása után, a megosztott kimenet megnyitása
+     * előtt hívódik: a motor itt várhat rövid ideig, amíg a hangrendszer (WirePlumber) visszaveszi a DAC-ot.
+     */
+    void setBeforeFallbackToSharedHook(std::function<void()> fn) {
+        std::lock_guard<std::mutex> lk(cbMu_);
+        beforeFallbackToShared_ = std::move(fn);
+    }
 
     bool open(uint32_t sampleRate, RenderFn render, std::string* error) override {
+        const bool wasExclusive = exclusiveActive();
         close();
+        bool triedExclusive = false;
         if (want_.load() && exclusive_) {
+            triedExclusive = true;
             std::string why;
             if (exclusive_->open(sampleRate, render, &why)) {
                 setFallback("");
                 cur_ = exclusive_.get();
+                notifyExclusive(true);
                 return true;
             }
             setFallback(why.empty() ? "a kizárólagos kimenet nem nyitható meg" : why);
         } else {
             setFallback("");
+        }
+        if (wasExclusive || triedExclusive) {
+            std::function<void()> hook;
+            { std::lock_guard<std::mutex> lk(cbMu_); hook = beforeFallbackToShared_; }
+            if (hook) hook();
         }
         if (!shared_->open(sampleRate, std::move(render), error)) return false;
         cur_ = shared_.get();
@@ -55,6 +81,7 @@ public:
             if (exclusive_->openDop(dopSampleRate, std::move(render), &why)) {
                 setFallback("");
                 cur_ = exclusive_.get();
+                notifyExclusive(true);
                 return true;
             }
             // DoP esetén nincs visszalépés a megosztott kimenetre (az nem támogatja a DoP-ot)
@@ -68,7 +95,11 @@ public:
         return false;
     }
     void close() override {
-        if (PlayerOutput* c = cur_.exchange(nullptr)) c->close();
+        if (PlayerOutput* c = cur_.exchange(nullptr)) {
+            const bool wasExcl = (c == exclusive_.get());
+            c->close();
+            if (wasExcl) notifyExclusive(false);
+        }
     }
     void setActive(bool active) override { if (PlayerOutput* c = cur_.load()) c->setActive(active); }
     void lock() override { if (PlayerOutput* c = cur_.load()) c->lock(); else idle_.lock(); }
@@ -88,6 +119,11 @@ public:
 
 private:
     void setFallback(const std::string& s) { std::lock_guard<std::mutex> lk(m_); fallback_ = s; }
+    void notifyExclusive(bool active) {
+        std::function<void(bool)> fn;
+        { std::lock_guard<std::mutex> lk(cbMu_); fn = onExclusiveChanged_; }
+        if (fn) fn(active);
+    }
 
     std::unique_ptr<PlayerOutput> shared_, exclusive_;
     std::atomic<PlayerOutput*> cur_{nullptr};
@@ -95,6 +131,9 @@ private:
     std::mutex idle_;
     mutable std::mutex m_;
     std::string fallback_;
+    mutable std::mutex cbMu_;
+    std::function<void(bool)> onExclusiveChanged_;
+    std::function<void()> beforeFallbackToShared_;
 };
 
 } // namespace ee_analyzer::player

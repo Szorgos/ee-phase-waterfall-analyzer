@@ -41,6 +41,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <unistd.h>
 #include <unordered_map>
 #include <unordered_set>
@@ -110,8 +111,37 @@ public:
         return t > 0 ? (monoNs() - t) / 1000000 : -1;
     }
     // Őrszem (beépített hibajelentés): a kimeneti visszahívás csak időbélyeget ír (valós idejű szál); jelzést csak
-    // szóló hangfolyamnál várunk. A regisztráció és a címke itt, a létrehozó szálon.
-    aq::wd::Heartbeat outputHeartbeat{ "pw-output", &playbackStreaming };
+    // szóló hangfolyamnál várunk, és kizárólagos ALSA mód alatt (amikor a DAC a PipeWire alól elvész) nem.
+    std::atomic<bool> externalExclusiveActive_{false};
+    std::atomic<bool> outputHeartbeatExpected_{false};
+    aq::wd::Heartbeat outputHeartbeat{ "pw-output", &outputHeartbeatExpected_ };
+
+    void updateOutputHeartbeatExpected() {
+        outputHeartbeatExpected_.store(
+            playbackStreaming.load(std::memory_order_acquire) && !externalExclusiveActive_.load(std::memory_order_acquire),
+            std::memory_order_release);
+    }
+
+    /** Kizárólagos ALSA mód jelzése: amíg aktív, a pw-output őrszem nem riaszt; elengedéskor újracsatlakozunk, ha kell. */
+    void setExternalExclusiveActive(bool active) {
+        const bool prev = externalExclusiveActive_.exchange(active, std::memory_order_acq_rel);
+        updateOutputHeartbeatExpected();
+        if (prev && !active && loop && targetEvent_) {
+            pw_loop_signal_event(pw_main_loop_get_loop(loop), targetEvent_);
+        }
+    }
+
+    /** Van-e legalább egy valódi (nem saját, nem dummy/auto_null) külső Audio/Sink a regiszterben. */
+    bool hasPhysicalSink() const { return physicalSinkCount_.load(std::memory_order_acquire) > 0; }
+
+    /** A fő kimenet valódi fizikai hangkártyára van-e kötve (streaming vagy passzív paused; nem hibás, nem dummy). */
+    bool hasReadyPhysicalOutput() const {
+        if (physicalSinkCount_.load(std::memory_order_acquire) <= 0) return false;
+        const int st = playbackState.load(std::memory_order_acquire);
+        if (st != PW_STREAM_STATE_STREAMING && st != PW_STREAM_STATE_PAUSED) return false;
+        const std::string t = outputTarget();
+        return !t.empty() && !pw_reconnect::isDummyOrNullSink(t);
+    }
 
     static constexpr int kExtraZones = multiout::kMaxOutputs - 1;
     static constexpr uint32_t kZoneRing = 32768;      // kb. 0,7 s 48 kHz-en
@@ -213,10 +243,37 @@ public:
     /** A saját motoros élő felmintavételező híd telemetriája (szálbiztos). */
     livebridge::BridgeStatus liveUpsampleStatus() const { return liveBridge_.status(); }
 
-    /** A felhasználó által választott kimeneti eszköz (bármely szálról). Saját aqulify* csomópont elutasítva. */
+    /** A felhasználó által választott kimeneti eszköz (bármely szálról). Saját aqulify* vagy dummy csomópont elutasítva. */
     void setPreferredOutput(const std::string& target) {
-        std::lock_guard<std::mutex> lk(targetMu_);
-        if (target.empty() || !pw_reconnect::isOwnAqulifyNode(target, sinkName_)) preferredTarget_ = target;
+        bool valid = false;
+        {
+            std::lock_guard<std::mutex> lk(targetMu_);
+            if (target.empty() || (!pw_reconnect::isOwnAqulifyNode(target, sinkName_) && !pw_reconnect::isDummyOrNullSink(target))) {
+                preferredTarget_ = target;
+                valid = !target.empty();
+            }
+        }
+        // Ha a kimeneti stream hibás vagy még nincs fizikai célra rögzítve, ébresszük a fő hurkot az újracsatlakozáshoz
+        if (valid && loop && targetEvent_) {
+            const int st = playbackState.load(std::memory_order_relaxed);
+            const std::string cur = outputTarget();
+            if (st == PW_STREAM_STATE_ERROR || st == PW_STREAM_STATE_UNCONNECTED ||
+                cur.empty() || pw_reconnect::isDummyOrNullSink(cur)) {
+                pw_loop_signal_event(pw_main_loop_get_loop(loop), targetEvent_);
+            }
+        }
+    }
+
+    /** Külső áthelyezés (pactl move-sink-input) után az aktuális céleszköz frissítése a diagnosztikához. */
+    void noteCurrentOutputTarget(const std::string& target) {
+        if (target.empty() || pw_reconnect::isOwnAqulifyNode(target, sinkName_) || pw_reconnect::isDummyOrNullSink(target)) return;
+        std::lock_guard<std::mutex> lk(diagMu_);
+        outputTarget_ = target;
+    }
+
+    /** Kérés a fő huroknak: ellenőrizze a kimeneti streamet, és ha hibás / rögzítetlen, csatlakozzon újra. */
+    void requestReconnectIfNeeded() {
+        if (loop && targetEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), targetEvent_);
     }
 
     /** A legutóbbi feldolgozott blokk hossza (a gráf tényleges quantuma) mintában. */
@@ -306,6 +363,7 @@ public:
         zoneEvent_ = pw_loop_add_event(pw_main_loop_get_loop(loop), onZoneEvent, this);
         optsEvent_ = pw_loop_add_event(pw_main_loop_get_loop(loop), onOptsEvent, this);
         liveUpsEvent_ = pw_loop_add_event(pw_main_loop_get_loop(loop), onLiveUpsEvent, this);
+        targetEvent_ = pw_loop_add_event(pw_main_loop_get_loop(loop), onTargetEvent, this);
         appliedLatency_ = latencyReq_.load();
 
         // Formátum: 32 bites lebegőpontos, sztereó, nem-interleaved; a mintavételt a gráf adja (rate = 0)
@@ -326,13 +384,9 @@ public:
                               static_cast<pw_stream_flags>(captureFlags), cparams, 1) < 0)
             return fail("a virtuális eszköz nem csatlakoztatható");
 
-        // 2. Lejátszó stream a valódi hangeszköz felé (hiba után a fő hurok időzítője újracsatlakoztatja)
+        // Regiszter létrehozása még a lejátszó stream előtt: külső Stream/Output/Audio (forrás-követés)
+        // és külső Audio/Sink (célválasztás, DAC visszatérés) figyelése
         struct pw_loop* l = pw_main_loop_get_loop(loop);
-        reconnectTimer_ = pw_loop_add_timer(l, onReconnectTimer, this);
-        if (!createAndConnectPlayback()) return fail("a lejátszó stream nem csatlakoztatható");
-        if (keepAwakeWanted_.load()) createKeepAlive();
-
-        // Regiszter: külső Stream/Output/Audio (forrás-követés) és külső Audio/Sink (DAC visszatérés) figyelése
         registry_ = pw_core_get_registry(core, PW_VERSION_REGISTRY, 0);
         if (registry_) {
             static const struct pw_registry_events regEvents = [] {
@@ -344,6 +398,12 @@ public:
             }();
             pw_registry_add_listener(registry_, &registryListener_, &regEvents, this);
         }
+
+        // 2. Lejátszó stream a valódi hangeszköz felé (hiba után a fő hurok időzítője újracsatlakoztatja)
+        reconnectTimer_ = pw_loop_add_timer(l, onReconnectTimer, this);
+        if (!createAndConnectPlayback()) return fail("a lejátszó stream nem csatlakoztatható");
+        if (keepAwakeWanted_.load()) createKeepAlive();
+
         // Az ébren tartás visszakapcsolása a szünet után (negyedmásodpercenként ellenőrzi)
         resumeTimer_ = pw_loop_add_timer(l, onResumeTimer, this);
         struct timespec iv{ 0, 250 * 1000000L };
@@ -375,16 +435,20 @@ public:
             if (reconnectTimer_) { pw_loop_destroy_source(l, reconnectTimer_); reconnectTimer_ = nullptr; }
             if (resumeTimer_) { pw_loop_destroy_source(l, resumeTimer_); resumeTimer_ = nullptr; }
             if (liveUpsEvent_) { pw_loop_destroy_source(l, liveUpsEvent_); liveUpsEvent_ = nullptr; }
+            if (targetEvent_) { pw_loop_destroy_source(l, targetEvent_); targetEvent_ = nullptr; }
         }
         for (auto& z : zones_) if (z && z->stream) { pw_stream_destroy(z->stream); z->stream = nullptr; }
         destroyKeepAlive();
         chain.stopWorker();
         multi_.stopWorkers();
+        // Előbb a playback streamet bontjuk szálbiztosan (capture RT in-flight megvárásával), utána a capture-t
+        destroyPlaybackSafe();
         if (capture) { pw_stream_destroy(capture); capture = nullptr; }
-        if (playback) { pw_stream_destroy(playback); playback = nullptr; }
+        waitRtIdle(captureInFlight_);
         liveBridge_.stop();
         if (registry_) { pw_proxy_destroy(reinterpret_cast<struct pw_proxy*>(registry_)); registry_ = nullptr; }
         knownSinksById_.clear();
+        physicalSinkCount_.store(0, std::memory_order_release);
         if (core) { pw_core_disconnect(core); core = nullptr; }
         if (context) { pw_context_destroy(context); context = nullptr; }
         // a pw_deinit()-et a hívó végzi a legvégén (PwDeinitGuard): a lejátszó saját PipeWire-hurka ezután áll le
@@ -415,12 +479,52 @@ private:
     struct spa_hook registryListener_{};
     struct spa_source* resumeTimer_ = nullptr;        // csak a fő hurok szála
     struct spa_source* reconnectTimer_ = nullptr;     // csak a fő hurok szála (lejátszó stream újracsatlakozás)
+    struct spa_source* targetEvent_ = nullptr;        // csak a fő hurok szála (célváltozás / ALSA elengedés ébresztése)
     pw_reconnect::State reconnect_;                   // csak a fő hurok szála
-    std::unordered_map<uint32_t, std::string> knownSinksById_; // külső (nem aqulify*) Audio/Sink csomópontok
+    std::unordered_map<uint32_t, std::string> knownSinksById_; // külső (nem aqulify*, nem dummy) Audio/Sink csomópontok
+    std::atomic<int> physicalSinkCount_{0};
     std::mutex targetMu_;
     std::string preferredTarget_;                     // felhasználó által választott kimenet (ha van)
     mutable std::mutex diagMu_;
     std::string outputTarget_;                        // a fő kimenet ténylegesen kért céleszköze (jelentéshez)
+
+    // Szálbiztos RT életciklus: a playback stream törlése és a liveBridge_ újrakonfigurálása csak akkor fut,
+    // miután az RT data-loop callbackjei (onCaptureProcess / onPlaybackProcess) kiléptek (0 lock az RT szálon).
+    std::atomic<struct pw_stream*> playbackPtr_{nullptr};
+    std::atomic<bool> playbackTriggerReady_{false};
+    std::atomic<int> captureInFlight_{0};
+    std::atomic<int> playbackInFlight_{0};
+
+    struct RtInFlightGuard {
+        std::atomic<int>& counter;
+        explicit RtInFlightGuard(std::atomic<int>& c) noexcept : counter(c) {
+            counter.fetch_add(1, std::memory_order_acq_rel);
+        }
+        ~RtInFlightGuard() noexcept {
+            counter.fetch_sub(1, std::memory_order_release);
+        }
+    };
+
+    static void waitRtIdle(std::atomic<int>& counter) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
+        while (counter.load(std::memory_order_acquire) > 0 && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::yield();
+        }
+    }
+
+    /** A playback stream szálbiztos megszüntetése a fő hurok szálán: előbb elrejti az RT capture elől, majd megvárja. */
+    void destroyPlaybackSafe() {
+        playbackTriggerReady_.store(false, std::memory_order_release);
+        playbackStreaming.store(false, std::memory_order_release);
+        updateOutputHeartbeatExpected();
+        struct pw_stream* old = playbackPtr_.exchange(nullptr, std::memory_order_acq_rel);
+        playback = nullptr;
+        waitRtIdle(captureInFlight_);
+        if (old) {
+            pw_stream_destroy(old);
+        }
+        waitRtIdle(playbackInFlight_);
+    }
     static int64_t monoNs() {
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -480,9 +584,12 @@ private:
         }
         if (sameLiveUpsConfig(want, self->liveUpsApplied_)) return;
 
-        // Ha mindkét állapot aktív és a kimeneti mintavétel (dstRate) nem változott, a playback stream maradhat
+        // Ha mindkét állapot aktív és a kimeneti mintavétel (dstRate) nem változott, a playback stream maradhat,
+        // de a liveBridge_ újrakonfigurálása előtt megvárjuk a futó RT capture/playback hívásokat!
         if (want.enable && self->liveUpsApplied_.enable && want.dstRate == self->liveUpsApplied_.dstRate) {
             self->liveUpsActive_.store(false, std::memory_order_release);
+            self->waitRtIdle(self->captureInFlight_);
+            self->waitRtIdle(self->playbackInFlight_);
             if (self->liveBridge_.configure(want.srcRate, want.dstRate, want.opts) && self->liveBridge_.start()) {
                 self->liveUpsApplied_ = want;
                 self->liveUpsActive_.store(true, std::memory_order_release);
@@ -494,13 +601,9 @@ private:
             }
         }
 
-        // Üzemmód- vagy célmintavétel-váltás: a playback streamet szinkronban leállítjuk, majd az új módban nyitjuk újra
+        // Üzemmód- vagy célmintavétel-váltás: a playback streamet szálbiztosan leállítjuk, majd az új módban nyitjuk újra
         self->liveUpsActive_.store(false, std::memory_order_release);
-        if (self->playback) {
-            self->playbackStreaming = false;
-            pw_stream_destroy(self->playback);
-            self->playback = nullptr;
-        }
+        self->destroyPlaybackSafe();
         if (want.enable) {
             self->liveUpsApplied_ = want;
             const bool bridgeOk = self->liveBridge_.configure(want.srcRate, want.dstRate, want.opts) &&
@@ -514,6 +617,7 @@ private:
             self->liveUpsActive_.store(true, std::memory_order_release);
             if (!self->createAndConnectPlayback()) {
                 self->liveUpsActive_.store(false, std::memory_order_release);
+                self->waitRtIdle(self->captureInFlight_);
                 self->liveBridge_.stop();
                 self->liveUpsApplied_ = LiveUpsRequest{};
                 self->createAndConnectPlayback();
@@ -763,7 +867,7 @@ private:
         std::unordered_set<std::string> known;
         known.reserve(knownSinksById_.size());
         for (const auto& [id, name] : knownSinksById_) known.insert(name);
-        const std::string target = pw_reconnect::resolveTarget(pref, known, sinkName_);
+        const std::string target = pw_reconnect::resolveTargetOrFallback(pref, known, sinkName_);
 
         const bool decoupled = liveUpsApplied_.enable && liveUpsApplied_.dstRate > 0;
         struct pw_properties* pprops = pw_properties_new(
@@ -785,8 +889,9 @@ private:
         if (!target.empty()) pw_properties_set(pprops, PW_KEY_TARGET_OBJECT, target.c_str());
         { std::lock_guard<std::mutex> lk(diagMu_); outputTarget_ = target; }
         applyLatencyProp(pprops);
-        playback = pw_stream_new(core, (sinkName_ + "_output").c_str(), pprops);
-        if (!playback) return false;
+        // Lokális mutatóval hozzuk létre és csatlakoztatjuk; trigger engedélyezés csak sikeres connect után!
+        struct pw_stream* s = pw_stream_new(core, (sinkName_ + "_output").c_str(), pprops);
+        if (!s) return false;
 
         static const struct pw_stream_events playbackEvents = [] {
             pw_stream_events e{};
@@ -797,7 +902,7 @@ private:
             return e;
         }();
         spa_zero(playbackListener);
-        pw_stream_add_listener(playback, &playbackListener, &playbackEvents, this);
+        pw_stream_add_listener(s, &playbackListener, &playbackEvents, this);
 
         uint8_t buf[1024];
         struct spa_audio_info_raw info{};
@@ -810,13 +915,19 @@ private:
         const struct spa_pod* pparams[1] = { spa_format_audio_raw_build(&b2, SPA_PARAM_EnumFormat, &info) };
         int pflags = PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS;
         if (!decoupled) pflags |= PW_STREAM_FLAG_TRIGGER;
-        if (pw_stream_connect(playback, PW_DIRECTION_OUTPUT, PW_ID_ANY,
+        playbackTriggerReady_.store(false, std::memory_order_release);
+        playback = s;
+        playbackPtr_.store(s, std::memory_order_release);
+        if (pw_stream_connect(s, PW_DIRECTION_OUTPUT, PW_ID_ANY,
                               static_cast<pw_stream_flags>(pflags),
                               pparams, 1) < 0) {
-            pw_stream_destroy(playback);
+            playbackPtr_.store(nullptr, std::memory_order_release);
             playback = nullptr;
+            waitRtIdle(playbackInFlight_);
+            pw_stream_destroy(s);
             return false;
         }
+        playbackTriggerReady_.store(!decoupled, std::memory_order_release);
         return true;
     }
 
@@ -840,13 +951,24 @@ private:
     static void onReconnectTimer(void* data, uint64_t) {
         auto* self = static_cast<AetherSinkNode*>(data);
         if (!self->reconnect_.pending() || !self->core) return;
-        if (self->playback) {
-            self->playbackStreaming = false;
-            pw_stream_destroy(self->playback);
-            self->playback = nullptr;
-        }
+        self->destroyPlaybackSafe();
         if (!self->createAndConnectPlayback()) {
             const auto a = self->reconnect_.onAttemptFailed();
+            if (a.schedule) self->scheduleReconnect(a.delayMs);
+        }
+    }
+
+    /** Fő hurkos esemény: új céleszköz beállításakor vagy ALSA elengedésekor hibás/rögzítetlen stream újracsatlakoztatása. */
+    static void onTargetEvent(void* data, uint64_t) {
+        auto* self = static_cast<AetherSinkNode*>(data);
+        if (!self->core || self->externalExclusiveActive_.load(std::memory_order_acquire)) return;
+        const int st = self->playbackState.load(std::memory_order_relaxed);
+        const std::string cur = self->outputTarget();
+        const bool broken = self->reconnect_.pending() || st == PW_STREAM_STATE_ERROR || st == PW_STREAM_STATE_UNCONNECTED;
+        const bool unpinnedWithPhysical = !self->knownSinksById_.empty() &&
+                                          (cur.empty() || pw_reconnect::isDummyOrNullSink(cur));
+        if (broken || unpinnedWithPhysical) {
+            const auto a = self->reconnect_.requestImmediate(pw_reconnect::kNewSinkDelayMs);
             if (a.schedule) self->scheduleReconnect(a.delayMs);
         }
     }
@@ -854,7 +976,7 @@ private:
     /**
      * Új csomópont a gráfban (a fő hurok szálán):
      * - külső Audio/Sink: nyilvántartjuk (célválasztáshoz), és ha a lejátszó stream újracsatlakozásra vár,
-     *   azonnal ütemezzük az újranyitást;
+     *   vagy még nem rögzült valódi fizikai kimenetre (pl. indulás / auto_null), azonnal ütemezzük az újranyitást;
      * - külső Stream/Output/Audio: forrás-követésnél az ébren tartás rövid szüneteltetése (némán;
      *   csak a tényleges mintavétel-váltás naplózódik az onPlaybackParamChanged-ben).
      */
@@ -870,10 +992,26 @@ private:
                 if (std::find(self->aqulifySinkIds_.begin(), self->aqulifySinkIds_.end(), id) == self->aqulifySinkIds_.end())
                     self->aqulifySinkIds_.push_back(id);
                 self->duplicateAqulifySink_.store(self->aqulifySinkIds_.size() > 1, std::memory_order_relaxed);
-            } else if (nodeName && !pw_reconnect::isOwnAqulifyNode(nodeName, self->sinkName_)) {
+            } else if (nodeName && !pw_reconnect::isOwnAqulifyNode(nodeName, self->sinkName_) &&
+                       !pw_reconnect::isDummyOrNullSink(nodeName)) {
                 self->knownSinksById_[id] = nodeName;
-                const auto a = self->reconnect_.onNewExternalSink(nodeName, self->sinkName_);
-                if (a.schedule) self->scheduleReconnect(a.delayMs);
+                self->physicalSinkCount_.store(static_cast<int>(self->knownSinksById_.size()), std::memory_order_release);
+                if (!self->externalExclusiveActive_.load(std::memory_order_acquire)) {
+                    const auto a = self->reconnect_.onNewExternalSink(nodeName, self->sinkName_);
+                    if (a.schedule) {
+                        self->scheduleReconnect(a.delayMs);
+                    } else {
+                        std::string pref;
+                        { std::lock_guard<std::mutex> lk(self->targetMu_); pref = self->preferredTarget_; }
+                        const std::string curTarget = self->outputTarget();
+                        const bool unpinned = curTarget.empty() || pw_reconnect::isDummyOrNullSink(curTarget);
+                        const bool prefReturned = !pref.empty() && pref == nodeName && curTarget != pref;
+                        if (unpinned || prefReturned) {
+                            const auto req = self->reconnect_.requestImmediate(pw_reconnect::kNewSinkDelayMs);
+                            if (req.schedule) self->scheduleReconnect(req.delayMs);
+                        }
+                    }
+                }
             }
             return;
         }
@@ -890,7 +1028,9 @@ private:
 
     static void onRegistryGlobalRemove(void* data, uint32_t id) {
         auto* self = static_cast<AetherSinkNode*>(data);
-        self->knownSinksById_.erase(id);
+        if (self->knownSinksById_.erase(id) > 0) {
+            self->physicalSinkCount_.store(static_cast<int>(self->knownSinksById_.size()), std::memory_order_release);
+        }
         auto it = std::find(self->aqulifySinkIds_.begin(), self->aqulifySinkIds_.end(), id);
         if (it != self->aqulifySinkIds_.end()) {
             self->aqulifySinkIds_.erase(it);
@@ -987,14 +1127,22 @@ private:
     static void onPlaybackState(void* data, enum pw_stream_state old, enum pw_stream_state state, const char* error) {
         auto* self = static_cast<AetherSinkNode*>(data);
         (void)old;
-        self->playbackStreaming = (state == PW_STREAM_STATE_STREAMING);
+        const bool streaming = (state == PW_STREAM_STATE_STREAMING);
+        self->playbackStreaming.store(streaming, std::memory_order_release);
+        self->updateOutputHeartbeatExpected();
         self->playbackState.store(static_cast<int>(state), std::memory_order_relaxed);
+        if (state == PW_STREAM_STATE_ERROR || state == PW_STREAM_STATE_UNCONNECTED) {
+            self->playbackTriggerReady_.store(false, std::memory_order_release);
+        }
         if (state == PW_STREAM_STATE_ERROR) {
             // A streamet itt nem szabad törölni/újranyitni: csak jelezzük, és a fő hurok időzítője végzi el.
             const auto a = self->reconnect_.onError();
             if (a.logError) std::cerr << "[PipeWire] lejátszó stream hiba: " << (error ? error : "") << "\n";
             if (a.schedule) self->scheduleReconnect(a.delayMs);
-        } else if (state == PW_STREAM_STATE_STREAMING) {
+        } else if (streaming) {
+            if (!self->liveUpsActive_.load(std::memory_order_acquire)) {
+                self->playbackTriggerReady_.store(true, std::memory_order_release);
+            }
             self->cancelReconnectTimer();
             if (self->reconnect_.onStreaming()) {
                 std::cout << "[PipeWire] Lejátszó stream újracsatlakoztatva.\n" << std::flush;
@@ -1004,8 +1152,13 @@ private:
 
     static void onCaptureProcess(void* data) {
         auto* self = static_cast<AetherSinkNode*>(data);
+        RtInFlightGuard rtGuard(self->captureInFlight_);
         if (!self->liveUpsActive_.load(std::memory_order_acquire)) {
-            if (self->playback) pw_stream_trigger_process(self->playback);
+            if (self->playbackTriggerReady_.load(std::memory_order_acquire)) {
+                if (struct pw_stream* pb = self->playbackPtr_.load(std::memory_order_acquire)) {
+                    pw_stream_trigger_process(pb);
+                }
+            }
             return;
         }
         // Szétválasztott mód (saját motoros rendszerhang-felmintavételezés): capture -> SPSC gyűrű (0 allokáció, 0 zár)
@@ -1041,6 +1194,9 @@ private:
 
     static void onPlaybackProcess(void* data) {
         auto* self = static_cast<AetherSinkNode*>(data);
+        RtInFlightGuard rtGuard(self->playbackInFlight_);
+        struct pw_stream* pb = self->playbackPtr_.load(std::memory_order_acquire);
+        if (!pb) return;
         self->outputHeartbeat.beat();
         struct timespec t0;
         clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -1056,7 +1212,7 @@ private:
                 in = t;
             }
         }
-        struct pw_buffer* out = pw_stream_dequeue_buffer(self->playback);
+        struct pw_buffer* out = pw_stream_dequeue_buffer(pb);
         if (!out) {
             if (in) pw_stream_queue_buffer(self->capture, in);
             return;
@@ -1064,7 +1220,7 @@ private:
 
         struct spa_buffer* ob = out->buffer;
         if (ob->n_datas < 2 || !ob->datas[0].data || !ob->datas[1].data) {
-            pw_stream_queue_buffer(self->playback, out);
+            pw_stream_queue_buffer(pb, out);
             if (in) pw_stream_queue_buffer(self->capture, in);
             return;
         }
@@ -1111,7 +1267,7 @@ private:
 
         // A gráf valódi órajele a playback stream pw_time szerkezetéből (K12 / U15)
         struct pw_time pwt{};
-        if (pw_stream_get_time_n(self->playback, &pwt, sizeof(pwt)) == 0 && pwt.rate.denom > 0) {
+        if (pw_stream_get_time_n(pb, &pwt, sizeof(pwt)) == 0 && pwt.rate.denom > 0) {
             self->graphRate.store(pwt.rate.denom, std::memory_order_relaxed);
         }
         // Mintavétel-váltás (allowed-rates): ritka esemény, a lánc újrahangolása itt történik
@@ -1165,7 +1321,7 @@ private:
             ob->datas[i].chunk->size = n * sizeof(float);
             ob->datas[i].chunk->stride = sizeof(float);
         }
-        pw_stream_queue_buffer(self->playback, out);
+        pw_stream_queue_buffer(pb, out);
         if (in) pw_stream_queue_buffer(self->capture, in);
         self->noteLoad(t0, n);
     }

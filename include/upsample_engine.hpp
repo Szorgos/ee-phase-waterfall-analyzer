@@ -148,7 +148,10 @@ public:
         q_spec.precision = static_cast<double>(precision);
         q_spec.phase_response = std::clamp(phase, 0.0, 50.0);
         q_spec.passband_end = passbandEnd;
-        q_spec.stopband_begin = stopbandBegin;
+        // Felmintavételezésnél (io_ratio < 1) a libsoxr megköveteli: stopband_begin - 1 <= 1 - passband_end
+        // ("imaging greater than rolloff"), különben soxr_create() hibával visszatér.
+        const double maxSoxrStopband = (dstRate > srcRate) ? std::max(1.0, 2.0 - passbandEnd) : 1.50;
+        q_spec.stopband_begin = std::clamp(stopbandBegin, passbandEnd + 0.003, maxSoxrStopband);
 
         soxr_io_spec_t io_spec = soxr_io_spec(SOXR_FLOAT32_I, SOXR_FLOAT32_I);
         soxr_runtime_spec_t rt_spec = soxr_runtime_spec(1);

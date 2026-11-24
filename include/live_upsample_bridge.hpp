@@ -249,8 +249,17 @@ public:
      */
     bool configure(uint32_t srcRate, uint32_t dstRate, const audioopt::AudioOptions& optsIn,
                    DspCallback dspCb = nullptr, bool enableDriftControl = true) {
-        stop();
-        if (srcRate < 8000 || srcRate > 768000 || dstRate < 8000 || dstRate > 768000) return false;
+        std::lock_guard<std::mutex> lk(cfgMu_);
+        configured_.store(false, std::memory_order_release);
+        stopLocked();
+        if (srcRate < 8000 || srcRate > 768000 || dstRate < 8000 || dstRate > 768000) {
+            statusSrcRate_.store(0, std::memory_order_relaxed);
+            statusDstRate_.store(0, std::memory_order_relaxed);
+            statusEngineType_.store(0, std::memory_order_relaxed);
+            statusDelayFrames_.store(0.0, std::memory_order_relaxed);
+            statusClipped_.store(0, std::memory_order_relaxed);
+            return false;
+        }
 
         audioopt::AudioOptions opts = optsIn;
         audioopt::sanitize(opts);
@@ -278,7 +287,12 @@ public:
         upsampler_.setThreads(thr);
         if (srcRate != dstRate) {
             if (!upsampler_.initWithOptions(srcRate, dstRate, 2, opts)) {
-                configured_ = false;
+                configured_.store(false, std::memory_order_release);
+                statusSrcRate_.store(0, std::memory_order_relaxed);
+                statusDstRate_.store(0, std::memory_order_relaxed);
+                statusEngineType_.store(0, std::memory_order_relaxed);
+                statusDelayFrames_.store(0.0, std::memory_order_relaxed);
+                statusClipped_.store(0, std::memory_order_relaxed);
                 return false;
             }
         }
@@ -304,13 +318,21 @@ public:
         upStage_.assign(std::max<size_t>(kWorkChunk * ratioCeil + 4096, isFft ? 65536u : 16384u) * 2, 0.0f);
         driftStage_.reserve(upStage_.size());
 
-        configured_ = true;
+        // Állapot-pillanatkép atomikus gyorsítótára: a status() így soha nem olvas közvetlenül az upsampler_-ből
+        statusSrcRate_.store(srcRate_, std::memory_order_relaxed);
+        statusDstRate_.store(dstRate_, std::memory_order_relaxed);
+        statusEngineType_.store(upsampler_.engineType(), std::memory_order_relaxed);
+        statusDelayFrames_.store((srcRate_ != dstRate_) ? upsampler_.delayFrames() : 0.0, std::memory_order_relaxed);
+        statusClipped_.store(upsampler_.clippedSamples(), std::memory_order_relaxed);
+
+        configured_.store(true, std::memory_order_release);
         return true;
     }
 
     /** Háttér munkaszál indítása. */
     bool start() {
-        if (!configured_) return false;
+        std::lock_guard<std::mutex> lk(cfgMu_);
+        if (!configured_.load(std::memory_order_acquire)) return false;
         if (running_.exchange(true)) return true;
         worker_ = std::thread(&LiveUpsampleBridge::workerLoop, this);
         return true;
@@ -318,19 +340,14 @@ public:
 
     /** Háttér munkaszál tiszta leállítása. */
     void stop() {
-        if (!running_.exchange(false)) return;
-        {
-            std::lock_guard<std::mutex> lk(wakeMu_);
-            wakeFlag_ = true;
-        }
-        wakeCv_.notify_all();
-        if (worker_.joinable()) worker_.join();
+        std::lock_guard<std::mutex> lk(cfgMu_);
+        stopLocked();
     }
 
-    bool isConfigured() const { return configured_; }
+    bool isConfigured() const { return configured_.load(std::memory_order_acquire); }
     bool isRunning() const { return running_.load(std::memory_order_acquire); }
-    uint32_t srcRate() const { return srcRate_; }
-    uint32_t dstRate() const { return dstRate_; }
+    uint32_t srcRate() const { return statusSrcRate_.load(std::memory_order_relaxed); }
+    uint32_t dstRate() const { return statusDstRate_.load(std::memory_order_relaxed); }
     size_t targetFillFrames() const { return targetFillFrames_; }
     size_t outAvailableFrames() const { return outRing_.available(); }
     size_t inAvailableFrames() const { return inRing_.available(); }
@@ -340,7 +357,7 @@ public:
      * Ha a gyűrűpuffer megtelt, a többletet eldobja és növeli az overrun számlálót.
      */
     size_t pushInput(const float* stereo, size_t frames) {
-        if (!configured_ || !stereo || frames == 0) return 0;
+        if (!configured_.load(std::memory_order_acquire) || !stereo || frames == 0) return 0;
         const size_t pushed = inRing_.push(stereo, frames);
         if (pushed < frames) {
             overruns_.fetch_add(frames - pushed, std::memory_order_relaxed);
@@ -361,7 +378,7 @@ public:
      */
     size_t pullOutput(float* stereo, size_t frames) {
         if (!stereo || frames == 0) return 0;
-        if (!configured_) {
+        if (!configured_.load(std::memory_order_acquire)) {
             std::memset(stereo, 0, frames * 2 * sizeof(float));
             return 0;
         }
@@ -386,7 +403,7 @@ public:
      * Visszaadja, hogy dolgozott-e fel bemeneti kereteket.
      */
     bool stepOnce() {
-        if (!configured_) return false;
+        if (!configured_.load(std::memory_order_acquire)) return false;
         const size_t availIn = inRing_.available();
         if (availIn == 0) return false;
         const size_t minOutFree = upsampler_.isFft64() ? 65536u : 8192u;
@@ -404,6 +421,8 @@ public:
             if (!upsampler_.process(inStage_.data(), got, upStage_.data(), upStage_.size() / 2, outFrames)) {
                 return true;
             }
+            statusDelayFrames_.store(upsampler_.delayFrames(), std::memory_order_relaxed);
+            statusClipped_.store(upsampler_.clippedSamples(), std::memory_order_relaxed);
             prodPtr = upStage_.data();
             prodFrames = outFrames;
         }
@@ -451,31 +470,45 @@ public:
         return true;
     }
 
-    /** Aktuális állapot-pillanatkép lekérése (bármely szálról biztonságos). */
+    /** Aktuális állapot-pillanatkép lekérése (bármely szálról biztonságos, zármentes). */
     BridgeStatus status() const {
         BridgeStatus st;
-        st.active = configured_ && (running_.load(std::memory_order_acquire) || prefilled_.load(std::memory_order_acquire));
-        st.prefilled = prefilled_.load(std::memory_order_acquire);
-        st.srcRate = srcRate_;
-        st.dstRate = dstRate_;
-        st.engineType = upsampler_.engineType();   // a 106 bites FFT-DD is külön (eddig FFT64-nek látszott)
-        if (srcRate_ > 0 && dstRate_ > 0) {
-            const double inMs = 1000.0 * static_cast<double>(inRing_.available()) / static_cast<double>(srcRate_);
-            const double outMs = 1000.0 * static_cast<double>(outRing_.available()) / static_cast<double>(dstRate_);
-            const double filtMs = (srcRate_ != dstRate_)
-                                      ? (1000.0 * upsampler_.delayFrames() / static_cast<double>(dstRate_))
+        const bool cfg = configured_.load(std::memory_order_acquire);
+        const bool pref = prefilled_.load(std::memory_order_acquire);
+        const uint32_t sr = statusSrcRate_.load(std::memory_order_relaxed);
+        const uint32_t dr = statusDstRate_.load(std::memory_order_relaxed);
+        st.active = cfg && (running_.load(std::memory_order_acquire) || pref);
+        st.prefilled = pref;
+        st.srcRate = sr;
+        st.dstRate = dr;
+        st.engineType = statusEngineType_.load(std::memory_order_relaxed);   // a 106 bites FFT-DD is külön (eddig FFT64-nek látszott)
+        if (sr > 0 && dr > 0) {
+            const double inMs = 1000.0 * static_cast<double>(inRing_.available()) / static_cast<double>(sr);
+            const double outMs = 1000.0 * static_cast<double>(outRing_.available()) / static_cast<double>(dr);
+            const double filtMs = (sr != dr)
+                                      ? (1000.0 * statusDelayFrames_.load(std::memory_order_relaxed) / static_cast<double>(dr))
                                       : 0.0;
             st.latencyMs = inMs + outMs + filtMs;
         }
         st.driftPpm = driftRatio_.load(std::memory_order_relaxed) * 1e6;
         st.underruns = underruns_.load(std::memory_order_relaxed);
         st.overruns = overruns_.load(std::memory_order_relaxed);
-        st.clipped = upsampler_.clippedSamples();
+        st.clipped = statusClipped_.load(std::memory_order_relaxed);
         return st;
     }
 
 private:
     static constexpr size_t kWorkChunk = 1024;
+
+    void stopLocked() {
+        if (!running_.exchange(false)) return;
+        {
+            std::lock_guard<std::mutex> lk(wakeMu_);
+            wakeFlag_ = true;
+        }
+        wakeCv_.notify_all();
+        if (worker_.joinable()) worker_.join();
+    }
 
     void workerLoop() {
         while (running_.load(std::memory_order_acquire)) {
@@ -499,13 +532,21 @@ private:
     MicroDriftCompensator drift_;
     DspCallback dspCb_;
 
-    bool configured_ = false;
+    std::mutex cfgMu_;                                // configure() / start() / stop() egymástól való védelme (nem RT!)
+    std::atomic<bool> configured_{false};
     bool driftEnabled_ = true;
     uint32_t srcRate_ = 0;
     uint32_t dstRate_ = 0;
     audioopt::AudioOptions opts_;
     size_t targetFillFrames_ = 4096;
     size_t prefillFrames_ = 4096;
+
+    // Atomikus telemetria-gyorsítótár a status() számára (így nem olvas közvetlenül upsampler_-ből / soxr_-ből)
+    std::atomic<uint32_t> statusSrcRate_{0};
+    std::atomic<uint32_t> statusDstRate_{0};
+    std::atomic<int> statusEngineType_{0};
+    std::atomic<double> statusDelayFrames_{0.0};
+    std::atomic<uint64_t> statusClipped_{0};
 
     double errFiltered_ = 0.0;
     double errIntegral_ = 0.0;

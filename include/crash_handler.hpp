@@ -130,7 +130,8 @@ inline void dumpThreads() noexcept {
         putStr(" label=");
         putStr(label ? label : "");
         putStr(" age_ms=");
-        putNum(last > 0 && now > last ? static_cast<unsigned long long>((now - last) / 1000000) : 0ULL);
+        if (last <= 0) putStr("-1");
+        else putNum(now > last ? static_cast<unsigned long long>((now - last) / 1000000) : 0ULL);
         putStr("\n");
     }
 }
