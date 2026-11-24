@@ -6949,9 +6949,11 @@ function setLanguage(code, persist) {
   }
   applyI18nDom();
   if (typeof refreshDynamicTexts === "function") refreshDynamicTexts();
-  if (typeof renderRwCalStatus === "function") renderRwCalStatus();
-  if (typeof updateRwPointCountUi === "function") updateRwPointCountUi();
-  if (typeof renderRwResults === "function") renderRwResults();
+  if (typeof rwPoints !== "undefined" && Array.isArray(rwPoints)) {
+    if (typeof renderRwCalStatus === "function") renderRwCalStatus();
+    if (typeof updateRwPointCountUi === "function") updateRwPointCountUi();
+    if (typeof renderRwResults === "function") renderRwResults();
+  }
   const rwNotice = document.getElementById("rwApplyResultNotice");
   if (rwNotice) rwNotice.textContent = "";
   if (aqNowPlaying) aqNowPlaying.setLang(code);
@@ -16324,21 +16326,21 @@ setTimeout(() => {
    SZOBAKORREKCIÓ VARÁZSLÓ, SÁVCSÖKKENTŐ, APO EXPORT ÉS AUTO PROFIL (Task E, F, H)
    ========================================================================== */
 
-let rwStep = 1;
-let rwLastBackupL = null;
-let rwLastBackupR = null;
-let rwLastBackupSplit = false;
-let rwLastBackupPreamp = 0.0;
-let rwLastBackupAutoPreamp = false;
-let rwLastBackupEqOn = true;
-let rwMeasuredData = null;
-let rwPoints = [];          // több hallgatási pont adatai (offline / betöltéshez is)
-let rwServerPoints = [];    // a motor által tárolt pontok listája: [{id, snr_db, peak_db}]
-let rwAppendNextPoint = false;
-let rwRecomputeTimer = null;
-let rwAbOriginal = null;
-let rwAbActive = false;
-let rwActiveMicCal = null;  // { fileName, parsed }
+var rwStep = 1;
+var rwLastBackupL = null;
+var rwLastBackupR = null;
+var rwLastBackupSplit = false;
+var rwLastBackupPreamp = 0.0;
+var rwLastBackupAutoPreamp = false;
+var rwLastBackupEqOn = true;
+var rwMeasuredData = null;
+var rwPoints = [];          // több hallgatási pont adatai (offline / betöltéshez is)
+var rwServerPoints = [];    // a motor által tárolt pontok listája: [{id, snr_db, peak_db}]
+var rwAppendNextPoint = false;
+var rwRecomputeTimer = null;
+var rwAbOriginal = null;
+var rwAbActive = false;
+var rwActiveMicCal = null;  // { fileName, parsed }
 
 function toggleRwHelp(forceState) {
   const box = document.getElementById('rwHelpBox');
