@@ -1,3 +1,23 @@
+### Újdonságok (3.0.0)
+
+**Letöltés (3.0.0):**
+- Windows 11: [Aqulify-Setup-3.0.0.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/Aqulify-Setup-3.0.0.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/Aqulify-Setup-3.0.0.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-3.0.0-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/Aqulify-3.0.0-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/Aqulify-3.0.0-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-3.0.0.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/Aqulify-Linux-3.0.0.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/Aqulify-Linux-3.0.0.tar.gz.sha256))
+- Fedora: [aqulify-3.0.0-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/aqulify-3.0.0-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_3.0.0-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/aqulify_3.0.0-1_amd64.deb) · Arch: [aqulify-3.0.0-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/aqulify-3.0.0-1-x86_64.pkg.tar.zst)
+- Raspberry Pi 4 / 5 (Raspberry Pi OS, 64 bit): [aqulify_3.0.0-1.pi1_arm64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/aqulify_3.0.0-1.pi1_arm64.deb) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/aqulify_3.0.0-1.pi1_arm64.deb.sha256)) · útmutató: `docs/pi.md`
+- Android-távirányító (Android 8+): [Aqulify-Remote-1.5.4.apk](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/Aqulify-Remote-1.5.4.apk) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/Aqulify-Remote-1.5.4.apk.sha256))
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+Az Aqulify 3.0 a 2.x sorozat érett, stabil lezárása: a funkciókészlet nem bővült, a kiadás a 2.x alatt elkészült lejátszó, felmintavételező, távvezérlő és mérőrész csiszolását és javítását hozza.
+
+- **Szobakorrekció (kísérleti) – mérés csiszolása:** a mérés eleji kattanást és a mikrofon DC-eltolását a kiértékelés kiszűri (eddig téves hibát adhatott); a több mérési pontot a motor teljesítményben átlagolja, a rossz pont törölhető; a célcsúszkák és a simítás a motorban számolják újra a korrekciót; alkalmazáskor a korrekció beállítja az előerősítést (az összegzett EQ-csúcs és a tartalék alapján), az A/B és a Visszavonás ezt is visszaállítja.
+- **Korrekciós határok:** teljes erejű korrekció 500 Hz alatt, fölötte csak széles (Q ≤ 1) és kis (±2,5 dB) sáv; a hangszóró alsó határa (−6 dB pont) alatt nincs emelés; mély, keskeny kioltást nem tölt fel (jelzi); az összegzett emelés legfeljebb +3 dB; változó simítás (1/24 oktáv mélyen, 1/3 oktáv magasan). A „Csatornaillesztés” cél kikerült.
+- **Csatornánkénti korrekció:** két csatornás mérésnél a bal és a jobb hangfal külön sávkészletet kap (alapból „Csatornánként”, választható „Közös”); mindkét csatorna a saját 300 Hz–3 kHz-es átlagához igazodik, a szintkülönbséget a felület csak kiírja; az előerősítés közös. Egycsatornás alkalmazásnál a felület és a motor állapota egyezik, a másik csatorna megtartja a korábbi sávokat.
+- **Mérőmikrofon:** a kalibrációs fájl olvasása robusztusabb (`Sens Factor`, UTF-8 BOM, számokat tartalmazó fejléc, harmadik fázisoszlop, rendezetlen / ismétlődő sorok), a 0° / 90° fájl felismerése pontos; a szintpróba jelzi az automatikus erősítést (AGC); Windowson a felvevő 48 kHz-et kér automatikus átalakítással.
+- **Felmintavételezés (beépített lejátszó), szűrő a DAC rátáján:** ha a DAC a forrásnál nagyobb mintavételt nem tud, a lejátszó a választott szűrővel 2×-re, majd átlátszó lépéssel vissza alakít (állapot: „szűrő a DAC rátáján”); kikapcsolt felmintavételezéssel a lejátszás bit-perfect marad. Ha a DAC a célrátát nem tudja, a felirat jelzi, hogy az EQ belső túlmintavételezése (Decramp) ettől függetlenül működik.
+- **Telefonos távirányító 1.5.4:** a felmintavételezés kijelzése az új „szűrő a DAC rátáján” állapotot is mutatja.
+
 ### Újdonságok (2.9.9)
 
 **Letöltés (2.9.9):**

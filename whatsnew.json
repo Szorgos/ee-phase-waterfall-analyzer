@@ -1,6 +1,150 @@
 {
   "versions": [
     {
+      "version": "3.0.0",
+      "date": "2026-11-24",
+      "notes": {
+        "hu": [
+          "Aqulify 3.0: a 2.x sorozat érett, stabil lezárása – sok javítás és csiszolás után ez az eddigi legmegbízhatóbb változat.",
+          "Szobakorrekció (kísérleti): több mérési pont átlaga, a bal és a jobb hangfal külön korrekciója, és automatikus előerősítés-csökkentés, hogy ne torzuljon a hang.",
+          "Mérőmikrofon: több kalibrációsfájl-formátumot olvas, és figyelmeztet, ha a rendszer automatikus erősítése elrontaná a mérést.",
+          "Felmintavételezés (beépített lejátszó): ha a DAC nem tud a forrásnál nagyobb mintavételt, a választott szűrő most is érvényesül. Bit-perfect lejátszáshoz kapcsold ki a felmintavételezést. A telefonos távirányító 1.5.4 is kijelzi."
+        ],
+        "en": [
+          "Aqulify 3.0: the mature, stable close of the 2.x series – after many fixes and refinements, the most reliable version yet.",
+          "Room Correction (experimental): averages several measurement points, corrects the left and right speakers separately, and lowers the preamp automatically so the sound doesn't distort.",
+          "Measurement microphone: reads more calibration file formats and warns you if the system's automatic gain would spoil the measurement.",
+          "Upsampling (built-in player): if your DAC can't go above the source rate, your chosen filter is now still applied. Turn upsampling off for bit-perfect playback. Phone remote 1.5.4 shows this too."
+        ],
+        "es": [
+          "Aqulify 3.0: el cierre maduro y estable de la serie 2.x; tras muchas correcciones y mejoras, la versión más fiable hasta ahora.",
+          "Corrección de sala (experimental): promedia varios puntos de medición, corrige por separado el altavoz izquierdo y el derecho, y baja el preamplificador automáticamente para que el sonido no distorsione.",
+          "Micrófono de medición: lee más formatos de archivo de calibración y avisa si la ganancia automática del sistema estropearía la medición.",
+          "Sobremuestreo (reproductor integrado): si tu DAC no admite una frecuencia mayor que la de la fuente, ahora se aplica igualmente el filtro elegido. Desactiva el sobremuestreo para una reproducción bit-perfect. El mando del teléfono 1.5.4 también lo muestra."
+        ],
+        "fr": [
+          "Aqulify 3.0 : l’aboutissement mûr et stable de la série 2.x ; après de nombreux correctifs et améliorations, la version la plus fiable à ce jour.",
+          "Correction de pièce (expérimentale) : moyenne de plusieurs points de mesure, correction séparée des enceintes gauche et droite, et baisse automatique du préampli pour éviter la distorsion.",
+          "Micro de mesure : lit davantage de formats de fichiers de calibration et vous avertit si le gain automatique du système fausserait la mesure.",
+          "Suréchantillonnage (lecteur intégré) : si votre DAC ne dépasse pas la fréquence de la source, le filtre choisi est désormais tout de même appliqué. Désactivez le suréchantillonnage pour une lecture bit-perfect. La télécommande 1.5.4 l’affiche aussi."
+        ],
+        "zh": [
+          "Aqulify 3.0：2.x 系列成熟稳定的收官版本——经过大量修复和打磨，是迄今最可靠的版本。",
+          "房间校准（实验性）：对多个测量点取平均，左右音箱分别校准，并自动降低前级增益，避免声音失真。",
+          "测量麦克风：支持更多校准文件格式，并在系统自动增益可能影响测量时发出提醒。",
+          "升频采样（内置播放器）：如果 DAC 不支持高于音源的采样率，现在也会应用你选择的滤波器。需要 bit-perfect 播放时请关闭升频采样。手机遥控 1.5.4 也会显示此状态。"
+        ],
+        "de": [
+          "Aqulify 3.0: der ausgereifte, stabile Abschluss der 2.x-Reihe – nach vielen Korrekturen und Verfeinerungen die bisher zuverlässigste Version.",
+          "Raumkorrektur (experimentell): mittelt mehrere Messpunkte, korrigiert linken und rechten Lautsprecher getrennt und senkt den Vorverstärker automatisch, damit nichts verzerrt.",
+          "Messmikrofon: liest mehr Kalibrierdatei-Formate und warnt, wenn die automatische Verstärkung des Systems die Messung verfälschen würde.",
+          "Upsampling (integrierter Player): Wenn dein DAC nicht über die Quellrate hinaus kann, wird dein gewählter Filter jetzt trotzdem angewendet. Für Bit-perfect-Wiedergabe Upsampling ausschalten. Die Telefon-Fernbedienung 1.5.4 zeigt das ebenfalls an."
+        ],
+        "it": [
+          "Aqulify 3.0: la conclusione matura e stabile della serie 2.x; dopo tante correzioni e rifiniture, la versione più affidabile finora.",
+          "Correzione stanza (sperimentale): fa la media di più punti di misura, corregge separatamente il diffusore sinistro e destro e abbassa automaticamente il preamplificatore per evitare distorsioni.",
+          "Microfono di misura: legge più formati di file di calibrazione e avvisa se il guadagno automatico del sistema rovinerebbe la misura.",
+          "Sovracampionamento (lettore integrato): se il DAC non supera la frequenza della sorgente, ora il filtro scelto viene comunque applicato. Per una riproduzione bit-perfect disattiva il sovracampionamento. Anche il telecomando 1.5.4 lo mostra."
+        ],
+        "nl": [
+          "Aqulify 3.0: de volwassen, stabiele afsluiting van de 2.x-reeks – na veel reparaties en verfijningen de betrouwbaarste versie tot nu toe.",
+          "Ruimtecorrectie (experimenteel): middelt meerdere meetpunten, corrigeert de linker- en rechterluidspreker afzonderlijk en verlaagt de voorversterking automatisch, zodat het geluid niet vervormt.",
+          "Meetmicrofoon: leest meer formaten kalibratiebestanden en waarschuwt als de automatische versterking van het systeem de meting zou verpesten.",
+          "Upsampling (ingebouwde speler): als je DAC niet hoger kan dan de bronfrequentie, wordt je gekozen filter nu toch toegepast. Zet upsampling uit voor bit-perfect afspelen. De telefoonafstandsbediening 1.5.4 toont dit ook."
+        ],
+        "pl": [
+          "Aqulify 3.0: dojrzałe, stabilne zwieńczenie serii 2.x – po wielu poprawkach i dopracowaniach to najbardziej niezawodna wersja.",
+          "Korekcja pomieszczenia (eksperymentalna): uśrednia kilka punktów pomiarowych, koryguje osobno lewy i prawy głośnik i automatycznie obniża przedwzmacniacz, aby dźwięk się nie zniekształcał.",
+          "Mikrofon pomiarowy: odczytuje więcej formatów plików kalibracyjnych i ostrzega, gdy automatyczne wzmocnienie systemu zepsułoby pomiar.",
+          "Nadpróbkowanie (wbudowany odtwarzacz): jeśli DAC nie obsługuje częstotliwości wyższej niż źródło, wybrany filtr i tak jest teraz stosowany. Do odtwarzania bit-perfect wyłącz nadpróbkowanie. Pilot w telefonie 1.5.4 też to pokazuje."
+        ],
+        "ru": [
+          "Aqulify 3.0: зрелое и стабильное завершение серии 2.x — после множества исправлений и доработок это самая надёжная версия.",
+          "Коррекция помещения (экспериментально): усредняет несколько точек измерения, корректирует левую и правую колонки отдельно и автоматически снижает предусиление, чтобы звук не искажался.",
+          "Измерительный микрофон: читает больше форматов файлов калибровки и предупреждает, если автоматическое усиление системы испортит измерение.",
+          "Апсемплинг (встроенный плеер): если ЦАП не поддерживает частоту выше исходной, выбранный фильтр теперь всё равно применяется. Для bit-perfect воспроизведения выключите апсемплинг. Пульт на телефоне 1.5.4 тоже это показывает."
+        ],
+        "pt": [
+          "Aqulify 3.0: o fecho maduro e estável da série 2.x – depois de muitas correções e afinações, a versão mais fiável até agora.",
+          "Correção de sala (experimental): faz a média de vários pontos de medição, corrige separadamente a coluna esquerda e a direita e baixa o pré-amplificador automaticamente para o som não distorcer.",
+          "Microfone de medição: lê mais formatos de ficheiros de calibração e avisa se o ganho automático do sistema estragaria a medição.",
+          "Sobreamostragem (reprodutor integrado): se o DAC não suportar uma frequência acima da fonte, o filtro escolhido passa a ser aplicado na mesma. Para reprodução bit-perfect, desligue a sobreamostragem. O comando no telemóvel 1.5.4 também o mostra."
+        ],
+        "ro": [
+          "Aqulify 3.0: încheierea matură și stabilă a seriei 2.x – după multe remedieri și rafinări, cea mai fiabilă versiune de până acum.",
+          "Corecția camerei (experimental): face media mai multor puncte de măsurare, corectează separat boxa stângă și cea dreaptă și coboară automat preamplificarea, ca sunetul să nu se distorsioneze.",
+          "Microfon de măsurare: citește mai multe formate de fișiere de calibrare și te avertizează dacă amplificarea automată a sistemului ar strica măsurătoarea.",
+          "Supraeșantionare (player integrat): dacă DAC-ul nu suportă o rată mai mare decât sursa, filtrul ales se aplică acum oricum. Pentru redare bit-perfect, oprește supraeșantionarea. Telecomanda din telefon 1.5.4 afișează și ea acest lucru."
+        ],
+        "el": [
+          "Aqulify 3.0: η ώριμη, σταθερή ολοκλήρωση της σειράς 2.x – μετά από πολλές διορθώσεις και βελτιώσεις, η πιο αξιόπιστη έκδοση μέχρι σήμερα.",
+          "Διόρθωση χώρου (πειραματική): υπολογίζει τον μέσο όρο πολλών σημείων μέτρησης, διορθώνει χωριστά το αριστερό και το δεξί ηχείο και χαμηλώνει αυτόματα τον προενισχυτή ώστε να μην παραμορφώνεται ο ήχος.",
+          "Μικρόφωνο μέτρησης: διαβάζει περισσότερες μορφές αρχείων βαθμονόμησης και προειδοποιεί αν η αυτόματη ενίσχυση του συστήματος θα χαλούσε τη μέτρηση.",
+          "Υπερδειγματοληψία (ενσωματωμένος αναπαραγωγέας): αν ο DAC δεν υποστηρίζει ρυθμό υψηλότερο από την πηγή, το φίλτρο που επιλέξατε εφαρμόζεται πλέον κανονικά. Για αναπαραγωγή bit-perfect απενεργοποιήστε την υπερδειγματοληψία. Το τηλεχειριστήριο κινητού 1.5.4 το εμφανίζει επίσης."
+        ],
+        "tr": [
+          "Aqulify 3.0: 2.x serisinin olgun ve kararlı finali – birçok düzeltme ve iyileştirmeden sonra şimdiye kadarki en güvenilir sürüm.",
+          "Oda düzeltmesi (deneysel): birden fazla ölçüm noktasının ortalamasını alır, sol ve sağ hoparlörü ayrı ayrı düzeltir ve ses bozulmasın diye ön yükseltmeyi otomatik olarak düşürür.",
+          "Ölçüm mikrofonu: daha fazla kalibrasyon dosyası biçimini okur ve sistemin otomatik kazancı ölçümü bozacaksa uyarır.",
+          "Yukarı örnekleme (dahili oynatıcı): DAC'ınız kaynaktan yüksek bir hızı desteklemiyorsa seçtiğiniz filtre artık yine de uygulanır. Bit-perfect çalma için yukarı örneklemeyi kapatın. Telefon kumandası 1.5.4 de bunu gösterir."
+        ],
+        "fi": [
+          "Aqulify 3.0: 2.x-sarjan kypsä ja vakaa päätös – monien korjausten ja hiomisten jälkeen tähänastisista versioista luotettavin.",
+          "Huonekorjaus (kokeellinen): laskee usean mittauspisteen keskiarvon, korjaa vasemman ja oikean kaiuttimen erikseen ja laskee esivahvistusta automaattisesti, jottei ääni säröydy.",
+          "Mittamikrofoni: lukee useampia kalibrointitiedostomuotoja ja varoittaa, jos järjestelmän automaattinen vahvistus pilaisi mittauksen.",
+          "Ylinäytteistys (sisäinen soitin): jos DAC ei tue lähdettä suurempaa näytetaajuutta, valitsemaasi suodinta käytetään nyt silti. Bittitarkkaa toistoa varten kytke ylinäytteistys pois. Puhelinkaukosäädin 1.5.4 näyttää tämän myös."
+        ],
+        "da": [
+          "Aqulify 3.0: den modne, stabile afslutning på 2.x-serien – efter mange rettelser og forbedringer den mest pålidelige version hidtil.",
+          "Rumkorrektion (eksperimentel): tager gennemsnittet af flere målepunkter, korrigerer venstre og højre højttaler hver for sig og sænker forforstærkningen automatisk, så lyden ikke forvrænges.",
+          "Målemikrofon: læser flere formater af kalibreringsfiler og advarer, hvis systemets automatiske forstærkning ville ødelægge målingen.",
+          "Opsampling (indbygget afspiller): hvis din DAC ikke kan gå over kildens samplerate, bruges dit valgte filter nu alligevel. Slå opsampling fra for bit-perfect afspilning. Telefonfjernbetjeningen 1.5.4 viser det også."
+        ],
+        "nb": [
+          "Aqulify 3.0: den modne, stabile avslutningen på 2.x-serien – etter mange rettelser og forbedringer den mest pålitelige versjonen hittil.",
+          "Romkorreksjon (eksperimentell): tar gjennomsnittet av flere målepunkter, korrigerer venstre og høyre høyttaler hver for seg og senker forforsterkningen automatisk, så lyden ikke forvrenges.",
+          "Målemikrofon: leser flere formater for kalibreringsfiler og varsler hvis systemets automatiske forsterkning ville ødelegge målingen.",
+          "Oppsampling (innebygd spiller): hvis DAC-en ikke kan gå over kildens samplingsfrekvens, brukes det valgte filteret nå likevel. Slå av oppsampling for bit-perfect avspilling. Telefonfjernkontrollen 1.5.4 viser dette også."
+        ],
+        "sv": [
+          "Aqulify 3.0: den mogna, stabila avslutningen på 2.x-serien – efter många rättningar och förbättringar den hittills mest pålitliga versionen.",
+          "Rumskorrigering (experimentell): tar medelvärdet av flera mätpunkter, korrigerar vänster och höger högtalare var för sig och sänker förförstärkningen automatiskt så att ljudet inte förvrängs.",
+          "Mätmikrofon: läser fler format av kalibreringsfiler och varnar om systemets automatiska förstärkning skulle förstöra mätningen.",
+          "Uppsampling (inbyggd spelare): om din DAC inte klarar högre än källans samplingsfrekvens används ditt valda filter nu ändå. Stäng av uppsampling för bit-perfect uppspelning. Telefonfjärrkontrollen 1.5.4 visar detta också."
+        ],
+        "he": [
+          "Aqulify 3.0: הסיום הבשל והיציב של סדרת 2.x – אחרי תיקונים ושיפורים רבים, הגרסה האמינה ביותר עד כה.",
+          "כיול חלל אקוסטי (ניסיוני): ממצע כמה נקודות מדידה, מתקן בנפרד את הרמקול השמאלי והימני ומוריד אוטומטית את ההגברה המקדימה כדי שהצליל לא יתעוות.",
+          "מיקרופון מדידה: קורא יותר פורמטים של קובצי כיול ומזהיר אם ההגברה האוטומטית של המערכת תקלקל את המדידה.",
+          "העלאת קצב דגימה (נגן מובנה): אם ה-DAC לא תומך בקצב גבוה מזה של המקור, המסנן שבחרת מוחל כעת בכל זאת. להשמעה bit-perfect כבה את העלאת קצב הדגימה. גם השלט בטלפון 1.5.4 מציג זאת."
+        ],
+        "ja": [
+          "Aqulify 3.0：2.x シリーズを締めくくる、成熟した安定版です。多くの修正と改良を経た、これまでで最も信頼できるバージョンです。",
+          "ルーム補正（試験的）：複数の測定点を平均し、左右のスピーカーを個別に補正し、音が歪まないようプリアンプを自動で下げます。",
+          "測定用マイク：より多くの校正ファイル形式を読み込み、システムの自動ゲインが測定を損なう場合は警告します。",
+          "アップサンプリング（内蔵プレーヤー）：DAC が音源より高いレートに対応していなくても、選んだフィルターが適用されるようになりました。ビットパーフェクト再生にはアップサンプリングをオフにしてください。スマホリモコン 1.5.4 でも表示されます。"
+        ],
+        "ko": [
+          "Aqulify 3.0: 2.x 시리즈의 성숙하고 안정적인 마무리 – 많은 수정과 개선을 거친, 지금까지 가장 믿을 수 있는 버전입니다.",
+          "룸 코렉션(실험적): 여러 측정 지점을 평균하고, 왼쪽과 오른쪽 스피커를 따로 보정하며, 소리가 왜곡되지 않도록 프리앰프를 자동으로 낮춥니다.",
+          "측정용 마이크: 더 많은 보정 파일 형식을 읽고, 시스템 자동 게인이 측정을 망칠 경우 경고합니다.",
+          "업샘플링(내장 플레이어): DAC가 원본보다 높은 샘플레이트를 지원하지 않아도 이제 선택한 필터가 적용됩니다. 비트퍼펙트 재생을 원하면 업샘플링을 끄세요. 휴대폰 리모컨 1.5.4에서도 표시됩니다."
+        ],
+        "cs": [
+          "Aqulify 3.0: zralé a stabilní završení řady 2.x – po mnoha opravách a vylepšeních dosud nejspolehlivější verze.",
+          "Korekce místnosti (experimentální): průměruje více měřicích bodů, koriguje levý a pravý reproduktor zvlášť a automaticky snižuje předzesílení, aby se zvuk nezkresloval.",
+          "Měřicí mikrofon: načte více formátů kalibračních souborů a upozorní, pokud by automatické zesílení systému měření pokazilo.",
+          "Převzorkování nahoru (vestavěný přehrávač): pokud DAC nezvládne vyšší vzorkovací frekvenci než zdroj, zvolený filtr se nyní přesto použije. Pro bit-perfect přehrávání převzorkování vypněte. Dálkové ovládání v telefonu 1.5.4 to také zobrazuje."
+        ],
+        "uk": [
+          "Aqulify 3.0: зріле й стабільне завершення серії 2.x — після багатьох виправлень і доопрацювань це найнадійніша версія.",
+          "Корекція приміщення (експериментально): усереднює кілька точок вимірювання, коригує ліву й праву колонки окремо та автоматично знижує попереднє підсилення, щоб звук не спотворювався.",
+          "Вимірювальний мікрофон: читає більше форматів файлів калібрування й попереджає, якщо автоматичне підсилення системи зіпсує вимірювання.",
+          "Апсемплінг (вбудований плеєр): якщо ЦАП не підтримує частоту, вищу за частоту джерела, вибраний фільтр тепер усе одно застосовується. Для bit-perfect відтворення вимкніть апсемплінг. Пульт на телефоні 1.5.4 теж це показує."
+        ]
+      }
+    },
+    {
       "version": "2.9.9",
       "date": "2026-11-24",
       "notes": {
