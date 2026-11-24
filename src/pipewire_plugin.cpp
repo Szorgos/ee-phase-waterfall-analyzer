@@ -1693,7 +1693,15 @@ int main(int argc, char* argv[]) {
                       node.playbackStreaming.load() ? "true" : "false", 100.0 * node.dspLoad(), node.overruns(),
                       static_cast<unsigned long long>(filePlayer.underruns()), filePlayer.isUpsampleActive() ? "true" : "false",
                       dop ? "true" : "false");
-        health.setSection("engine", std::string(buf) + audioopt::toJson(o) + "}");
+        // „Nincs hang” diagnosztika: hová megy a kimenet (üres: a PipeWire alapértelmezettje), a kimeneti stream
+        // állapota, és mikor jött utoljára nem néma rendszerhang az Aqulify eszközre (-1: az indulás óta nem)
+        const std::string target = node.outputTarget();
+        const std::string diag = "\"output_target\":\"" + jsonEscape(target.empty() ? std::string("(default)") : target) +
+                                 "\",\"output_state\":\"" + node.playbackStateName() +
+                                 "\",\"input_signal_age_ms\":" + std::to_string(node.inputSignalAgeMs()) + ",";
+        std::string head(buf);
+        head.insert(1, diag);   // a nyitó { után
+        health.setSection("engine", head + audioopt::toJson(o) + "}");
     };
     s_healthTick();
     node.addTimer([](void*, uint64_t) { if (s_healthTick) s_healthTick(); }, nullptr, 2000);

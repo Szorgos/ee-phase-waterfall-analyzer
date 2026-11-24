@@ -30,8 +30,10 @@
 #include <spa/utils/result.h>
 
 #include <array>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -84,6 +86,29 @@ public:
     uint32_t actualGraphRate() const { const uint32_t g = graphRate.load(std::memory_order_relaxed); return g > 0 ? g : sampleRate.load(std::memory_order_relaxed); }
     std::atomic<bool> playbackStreaming{false};
     std::atomic<bool> coreError{false};
+
+    // Hibajelentés-diagnosztika („nincs hang”): hová megy a kimenet, milyen állapotú a kimeneti stream, és mikor jött
+    // utoljára nem néma hang az Aqulify eszközre. A valós idejű szálak csak atomikus értéket írnak.
+    std::atomic<int> playbackState{PW_STREAM_STATE_UNCONNECTED};
+    std::atomic<int64_t> lastInputSignalNs{0};   // CLOCK_MONOTONIC; 0: még nem jött hang
+    /** A fő kimenet céleszközének node.name-je; üres: a PipeWire alapértelmezett kimenete. */
+    std::string outputTarget() const { std::lock_guard<std::mutex> lk(diagMu_); return outputTarget_; }
+    /** A kimeneti stream állapota szövegesen (a jelentéshez). */
+    const char* playbackStateName() const {
+        switch (playbackState.load(std::memory_order_relaxed)) {
+            case PW_STREAM_STATE_ERROR: return "error";
+            case PW_STREAM_STATE_UNCONNECTED: return "unconnected";
+            case PW_STREAM_STATE_CONNECTING: return "connecting";
+            case PW_STREAM_STATE_PAUSED: return "paused";
+            case PW_STREAM_STATE_STREAMING: return "streaming";
+            default: return "unknown";
+        }
+    }
+    /** Hány ms-a jött utoljára nem néma hang az Aqulify eszközre (-1: az indulás óta még nem). */
+    int64_t inputSignalAgeMs() const {
+        const int64_t t = lastInputSignalNs.load(std::memory_order_relaxed);
+        return t > 0 ? (monoNs() - t) / 1000000 : -1;
+    }
     // Őrszem (beépített hibajelentés): a kimeneti visszahívás csak időbélyeget ír (valós idejű szál); jelzést csak
     // szóló hangfolyamnál várunk. A regisztráció és a címke itt, a létrehozó szálon.
     aq::wd::Heartbeat outputHeartbeat{ "pw-output", &playbackStreaming };
@@ -394,6 +419,19 @@ private:
     std::unordered_map<uint32_t, std::string> knownSinksById_; // külső (nem aqulify*) Audio/Sink csomópontok
     std::mutex targetMu_;
     std::string preferredTarget_;                     // felhasználó által választott kimenet (ha van)
+    mutable std::mutex diagMu_;
+    std::string outputTarget_;                        // a fő kimenet ténylegesen kért céleszköze (jelentéshez)
+    static int64_t monoNs() {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        return static_cast<int64_t>(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
+    }
+    /** Nem néma bemenet jelzése (valós idejű szál: csak egy atomikus írás, ha a csúcs ~−100 dBFS fölött van). */
+    void noteInput(const float* a, const float* b, uint32_t n) {
+        float pk = 0.0f;
+        for (uint32_t i = 0; i < n; ++i) pk = std::max(pk, std::max(std::fabs(a[i]), std::fabs(b[i])));
+        if (pk > 1e-5f) lastInputSignalNs.store(monoNs(), std::memory_order_relaxed);
+    }
     std::vector<uint32_t> aqulifySinkIds_;            // látott aqulify_sink csomópontok (dupla példány jelzéséhez)
     std::atomic<bool> duplicateAqulifySink_{false};
     std::atomic<uint32_t> lastQuantum_{0};
@@ -745,6 +783,7 @@ private:
             pw_properties_setf(pprops, PW_KEY_NODE_FORCE_RATE, "%u", liveUpsApplied_.dstRate);
         }
         if (!target.empty()) pw_properties_set(pprops, PW_KEY_TARGET_OBJECT, target.c_str());
+        { std::lock_guard<std::mutex> lk(diagMu_); outputTarget_ = target; }
         applyLatencyProp(pprops);
         playback = pw_stream_new(core, (sinkName_ + "_output").c_str(), pprops);
         if (!playback) return false;
@@ -949,6 +988,7 @@ private:
         auto* self = static_cast<AetherSinkNode*>(data);
         (void)old;
         self->playbackStreaming = (state == PW_STREAM_STATE_STREAMING);
+        self->playbackState.store(static_cast<int>(state), std::memory_order_relaxed);
         if (state == PW_STREAM_STATE_ERROR) {
             // A streamet itt nem szabad törölni/újranyitni: csak jelezzük, és a fő hurok időzítője végzi el.
             const auto a = self->reconnect_.onError();
@@ -981,6 +1021,7 @@ private:
                 if (d0->data && d1->data && total > 0) {
                     const float* sL = SPA_PTROFF(d0->data, off0, float);
                     const float* sR = SPA_PTROFF(d1->data, off1, float);
+                    self->noteInput(sL, sR, total);
                     uint32_t done = 0;
                     while (done < total) {
                         const uint32_t chunk = std::min<uint32_t>(total - done, kScratch);
@@ -1054,6 +1095,7 @@ private:
                 if (d0->data && d1->data && n > 0) {
                     std::memcpy(outL, SPA_PTROFF(d0->data, off0, float), n * sizeof(float));
                     std::memcpy(outR, SPA_PTROFF(d1->data, off1, float), n * sizeof(float));
+                    self->noteInput(outL, outR, n);
                 } else {
                     n = 0;
                 }
