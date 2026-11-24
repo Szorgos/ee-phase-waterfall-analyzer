@@ -15,9 +15,11 @@
 #include <fstream>
 #include <string>
 
-#include <pwd.h>
 #include <sys/stat.h>
+#if !defined(_WIN32)
+#include <pwd.h>
 #include <unistd.h>
+#endif
 
 namespace aq::linux_headless {
 
@@ -152,8 +154,10 @@ inline std::string lingerWarning(const Decision& d, const std::string& user,
 
 /** A futó folyamat felhasználójának neve (a lingering-fájl nevéhez); ismeretlennél üres. */
 inline std::string currentUserName() {
+#if !defined(_WIN32)
     if (const struct passwd* pw = ::getpwuid(::getuid()); pw && pw->pw_name) return pw->pw_name;
-    return {};
+#endif
+    return {};   // Windowson nincs lingering (a teszt ott is fordul)
 }
 
 } // namespace aq::linux_headless

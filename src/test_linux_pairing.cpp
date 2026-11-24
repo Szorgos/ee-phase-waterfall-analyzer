@@ -201,7 +201,9 @@ void testLingerWarning() {
     check(lingerWarning(headless, "probauser", dir.string()).empty(), "bekapcsolt lingeringnél nincs figyelmeztetés");
     // ismeretlen felhasználó: nem figyelmeztet tévesen
     check(lingerWarning(headless, "", dir.string()).empty(), "ismeretlen felhasználónál nincs figyelmeztetés");
+#if !defined(_WIN32)
     check(!currentUserName().empty(), "a futó folyamat felhasználóneve kiolvasható");
+#endif
     fs::remove_all(dir);
 }
 
