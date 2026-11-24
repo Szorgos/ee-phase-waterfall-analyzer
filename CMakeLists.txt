@@ -213,10 +213,14 @@ target_include_directories(test_src_ref PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/incl
 add_executable(test_live_upsample_bridge src/test_live_upsample_bridge.cpp)
 target_link_libraries(test_live_upsample_bridge PRIVATE aq_player soxr Threads::Threads)
 target_include_directories(test_live_upsample_bridge PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+add_executable(test_hid_paritas src/test_hid_paritas.cpp)
+target_link_libraries(test_hid_paritas PRIVATE aq_player ee_dsp_core soxr Threads::Threads)
+target_include_directories(test_hid_paritas PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 if(WIN32)
     target_link_libraries(aqulify-src PRIVATE ws2_32 iphlpapi)
     target_link_libraries(test_src_ref PRIVATE ws2_32 iphlpapi)
     target_link_libraries(test_live_upsample_bridge PRIVATE ws2_32 iphlpapi)
+    target_link_libraries(test_hid_paritas PRIVATE ws2_32 iphlpapi)
 endif()
 
 

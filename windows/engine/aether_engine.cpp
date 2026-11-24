@@ -88,7 +88,7 @@ namespace {
 const IID kIID_IAudioEndpointVolume = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
 
 template <class F>
-bool withEndpointVolume(F&& fn) {
+bool withEndpointVolume(F&& fn, const std::wstring& deviceId = {}) {
     const HRESULT ci = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     bool ok = false;
     {
@@ -96,22 +96,26 @@ bool withEndpointVolume(F&& fn) {
         win::ComPtr<IMMDevice> dev;
         win::ComPtr<IAudioEndpointVolume> vol;
         if (SUCCEEDED(CoCreateInstance(win::kCLSID_MMDeviceEnumerator, nullptr, CLSCTX_ALL, win::kIID_IMMDeviceEnumerator,
-                                       reinterpret_cast<void**>(en.put()))) &&
-            SUCCEEDED(en->GetDefaultAudioEndpoint(eRender, eConsole, dev.put())) &&
-            SUCCEEDED(dev->Activate(kIID_IAudioEndpointVolume, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(vol.put())))) {
-            ok = fn(vol.p);
+                                       reinterpret_cast<void**>(en.put())))) {
+            const HRESULT ghr = deviceId.empty()
+                ? en->GetDefaultAudioEndpoint(eRender, eConsole, dev.put())
+                : en->GetDevice(deviceId.c_str(), dev.put());
+            if (SUCCEEDED(ghr) &&
+                SUCCEEDED(dev->Activate(kIID_IAudioEndpointVolume, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(vol.put())))) {
+                ok = fn(vol.p);
+            }
         }
     }
     if (SUCCEEDED(ci)) CoUninitialize();
     return ok;
 }
 
-std::string endpointVolumeJson() {
+std::string endpointVolumeJson(const std::wstring& deviceId = {}) {
     float level = 0.0f;
     BOOL muted = FALSE;
     if (!withEndpointVolume([&](IAudioEndpointVolume* v) {
             return SUCCEEDED(v->GetMasterVolumeLevelScalar(&level)) && SUCCEEDED(v->GetMute(&muted));
-        }))
+        }, deviceId))
         return {};
     return ",\"volume\":{\"level\":" + std::to_string(level) + ",\"muted\":" + (muted ? "true" : "false") + "}";
 }
@@ -120,18 +124,19 @@ std::string endpointVolumeJson() {
  * Van-e az eszköznek hardveres hangereje. Ha nem olvasható, nincs (false): a csúszka ilyenkor a digitális úton
  * szabályoz, és nem hat csendben egy olyan hangerőre, amelyet nem lehet állítani.
  */
-bool endpointHardwareVolume() {
+bool endpointHardwareVolume(const std::wstring& deviceId = {}) {
     DWORD mask = 0;
-    if (!withEndpointVolume([&](IAudioEndpointVolume* v) { return SUCCEEDED(v->QueryHardwareSupport(&mask)); })) return false;
+    if (!withEndpointVolume([&](IAudioEndpointVolume* v) { return SUCCEEDED(v->QueryHardwareSupport(&mask)); }, deviceId))
+        return false;
     return (mask & ENDPOINT_HARDWARE_SUPPORT_VOLUME) != 0;
 }
 
-void setEndpointVolume(double level, int mute) {
+void setEndpointVolume(double level, int mute, const std::wstring& deviceId = {}) {
     withEndpointVolume([&](IAudioEndpointVolume* v) {
         if (level >= 0.0) v->SetMasterVolumeLevelScalar(static_cast<float>(std::min(1.0, level)), nullptr);
         if (mute >= 0) v->SetMute(mute ? TRUE : FALSE, nullptr);
         return true;
-    });
+    }, deviceId);
 }
 } // namespace
 
@@ -307,9 +312,10 @@ bool hasArg(int argc, char** argv, const char* a) {
  */
 class PlayerDsp : public player::ExclusiveDsp {
 public:
-    PlayerDsp() : tap_(std::make_unique<SharedTapRing>()) {
+    explicit PlayerDsp(const ParamData& initial = transparentParams()) : tap_(std::make_unique<SharedTapRing>()) {
         chain_.setSampleRate(48000);
         chain_.startWorker();
+        params_.write(initial);
     }
     ~PlayerDsp() override { chain_.stopWorker(); }
 
@@ -317,6 +323,11 @@ public:
     void submitIr(IrData ir) { chain_.submitIr(std::move(ir)); }
     /** A felhasználó választása: a DAC hardveres hangereje (true) vagy a digitális (false). A következő számtól hat. */
     void setHardwarePref(bool on) { hwPref_ = on; }
+    /** Az éppen használt valódi kimeneti végpont azonosítója (üres = rendszer alapértelmezettje; a hídnál a valódi DAC). */
+    void setActiveDeviceFn(std::function<std::wstring()> fn) {
+        std::lock_guard<std::mutex> lk(devFnMu_);
+        activeDeviceFn_ = std::move(fn);
+    }
 
     /**
      * Digitális hangerő (a felület csúszkája, 0..1) és némítás. Csak hardveres hangerő nélküli eszközön hat; ott a lánc
@@ -337,8 +348,13 @@ public:
 
     // ---- player::ExclusiveDsp (a kimenet szálán)
     void prepare(uint32_t rate, uint32_t blockFrames, int ditherBits) override {
-        // a hardveres út csak akkor, ha a felhasználó azt választotta és az eszköz tényleg tud hangerőt
-        hwVolume_ = hwPref_.load() && endpointHardwareVolume();
+        // a hardveres út csak akkor, ha a felhasználó azt választotta és a valódi céleszköz tényleg tud hangerőt
+        std::wstring devId;
+        {
+            std::lock_guard<std::mutex> lk(devFnMu_);
+            if (activeDeviceFn_) devId = activeDeviceFn_();
+        }
+        hwVolume_ = hwPref_.load() && endpointHardwareVolume(devId);
         applyVolume();
         std::cout << "[Lejátszó] Hangerő kizárólagos módban: "
                   << (hwVolume_ ? "az eszköz hardveres hangereje" : "digitális (a DSP-lánc végén)")
@@ -417,6 +433,8 @@ private:
     std::atomic<float> level_{1.0f};
     std::atomic<bool> muted_{false};
     std::atomic<bool> hwVolume_{false}, hwPref_{false};
+    std::mutex devFnMu_;
+    std::function<std::wstring()> activeDeviceFn_;
 };
 
 /** Az EQ APO plugin közös memóriájának figyelése és a jelforrás kiválasztása. */
@@ -876,8 +894,9 @@ int main(int argc, char** argv) {
     auto loopback = std::make_unique<win::WasapiLoopback>();
     loopback->start();
 
-    // A beépített lejátszó kimenete és a kizárólagos módú saját lánca (a lánc a lejátszónál tovább él)
-    PlayerDsp playerDsp;
+    // A beépített lejátszó kimenete és a kizárólagos módú saját lánca (a lánc a lejátszónál tovább él);
+    // a visszaállított láncot azonnal megkapja, hogy az első GUI-módosítás előtt is egyezzen a pluginnal
+    PlayerDsp playerDsp(current);
     auto playerOutOwned = std::make_unique<player::WinPlayerOutput>();
     player::WinPlayerOutput& playerOut = *playerOutOwned;
     playerOut.setExclusiveDsp(&playerDsp);
@@ -949,12 +968,7 @@ int main(int argc, char** argv) {
                 std::cout << "[Beállítások] Figyelem: a restore.json nem írható.\n";
         }
     };
-    // (a statusFields a lejátszó után, lent)
-    cb.setVolume = [&](double level, int mute) {
-        // kizárólagos módban, hardveres hangerő nélküli eszközön a csúszka a lánc digitális hangereje
-        if (playerOut.exclusiveActive() && !playerDsp.hardwareVolume()) playerDsp.setVolume(level, mute);
-        else setEndpointVolume(level, mute);
-    };
+    // (a statusFields és a setVolume a lejátszó és a rendszerhang-híd után, lent)
     cb.setIr = [&](IrData&& ir) { sources.setIr(std::move(ir)); };
     cb.getIr = [&]() { return sources.irCopy(); };
     cb.loadLibraryIr = loadLibraryIr;
@@ -1005,6 +1019,14 @@ int main(int argc, char** argv) {
     }
     // A forrásválasztó tudja, mikor fut a híd: a DSP ilyenkor a motorban, a kábelen a plugin átenged (nincs kétszeres lánc)
     sources.setBridgeActiveFn([&]() { return !filePlayer.hasTrack() && winLiveBridge.dspInEngine(); });
+    // A híd kizárólagos kimeneténél a Windows alapértelmezettje a virtuális kábel: a hangerő a valódi céleszközre menjen
+    playerDsp.setActiveDeviceFn([&]() { return !filePlayer.hasTrack() ? winLiveBridge.currentOutputId() : std::wstring{}; });
+    cb.setVolume = [&](double level, int mute) {
+        const bool bridgeExcl = !filePlayer.hasTrack() && winLiveBridge.dspInEngine();
+        const bool excl = playerOut.exclusiveActive() || bridgeExcl;
+        if (excl && !playerDsp.hardwareVolume()) playerDsp.setVolume(level, mute);
+        else setEndpointVolume(level, mute, bridgeExcl ? winLiveBridge.currentOutputId() : std::wstring{});
+    };
     // Zenetár (2.x): a mentett zenei mappák (%APPDATA%\Aqulify\library.json), különben a Zene mappa
     library::MusicLibrary musicLibrary;
     // A lejátszási napló (3c2, %APPDATA%\Aqulify\stats.json): a sor előtt, mert a sor mérőszála a megszűnéséig hívhatja
@@ -1124,10 +1146,12 @@ int main(int argc, char** argv) {
     };
     cb.statusFields = [&]() {
         std::string s = sources.statusFields() + updater.statusJson();
+        const bool bridgeExcl = !filePlayer.hasTrack() && winLiveBridge.dspInEngine();
         const bool excl = playerOut.exclusiveActive();
         const bool dop = playerOut.dopActive() || filePlayer.isDopActive();
-        const bool digitalVolume = excl && !dop && !playerDsp.hardwareVolume();
-        s += digitalVolume ? playerDsp.volumeJson() : endpointVolumeJson();
+        const bool digitalVolume = (excl || bridgeExcl) && !dop && !playerDsp.hardwareVolume();
+        s += digitalVolume ? playerDsp.volumeJson()
+                           : endpointVolumeJson(bridgeExcl ? winLiveBridge.currentOutputId() : std::wstring{});
         {
             const bool uActive = filePlayer.isUpsampleActive();
             const uint32_t uSrc = filePlayer.upsampleSrcRate();

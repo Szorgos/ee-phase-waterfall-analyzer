@@ -513,15 +513,24 @@ int main() {
         CHECK(win::isEqApoClassName(L"EqualizerAPO Pre-Mix Class") && win::isEqApoClassName(L"EqualizerAPO Post-Mix Class") &&
                   !win::isEqApoClassName(L"Realtek Audio Effects") && !win::isEqApoClassName(L""),
               "az Equalizer APO osztálynév felismerése (más gyártó effektje nem az)");
+        CHECK(win::isVendorApoClassName(L"MaxxAudioAPO Class") && win::isVendorApoClassName(L"RtkAPOMFX2 Class") &&
+                  !win::isVendorApoClassName(L"EqualizerAPO Pre-Mix Class") &&
+                  !win::isVendorApoClassName(L"Microsoft Audio Engine") &&
+                  !win::isVendorApoClassName(L"WM LFX APO") && !win::isVendorApoClassName(L"WM GFX APO") &&
+                  !win::isVendorApoClassName(L"CplPage Class") && !win::isVendorApoClassName(L""),
+              "gyártói APO osztálynevek felismerése (Equalizer APO és Windows alap APO-k kizárva)");
         CHECK(win::apoOnRenderDevice(L"nem-azonosito") == ApoOnDevice::Unknown, "értelmezhetetlen azonosító: ismeretlen");
+        CHECK(win::vendorAposOnRenderDevice(L"nem-azonosito").empty(), "értelmezhetetlen azonosító: nincs gyártói APO");
         // A gép valódi eszközei: a lista és az egyenkénti lekérdezés ugyanazt mondja
         const auto devs = win::listRenderDevices();
         bool consistent = true;
         for (const auto& d : devs) {
-            const ApoOnDevice one = win::apoOnRenderDevice(L"{0.0.0.00000000}." + d.key);
+            const std::wstring devId = L"{0.0.0.00000000}." + d.key;
+            const ApoOnDevice one = win::apoOnRenderDevice(devId);
             if (one != d.apo) consistent = false;
-            std::printf("         %s %-60s APO: %s\n", d.active ? "[aktív]" : "[ -   ]", d.name.c_str(),
-                        d.apo == ApoOnDevice::Yes ? "igen" : d.apo == ApoOnDevice::No ? "nem" : "?");
+            const auto vend = win::vendorAposOnRenderDevice(devId);
+            std::printf("         %s %-60s APO: %s (gyártói: %zu)\n", d.active ? "[aktív]" : "[ -   ]", d.name.c_str(),
+                        d.apo == ApoOnDevice::Yes ? "igen" : d.apo == ApoOnDevice::No ? "nem" : "?", vend.size());
         }
         CHECK(consistent, "a lista és az egyenkénti lekérdezés egyezik (%zu eszköz)", devs.size());
     }

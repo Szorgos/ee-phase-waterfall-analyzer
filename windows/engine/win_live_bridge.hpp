@@ -27,6 +27,7 @@
 #include <thread>
 #include <vector>
 
+#include "apo_detect.hpp"
 #include "audio_options.hpp"
 #include "exclusive_dsp.hpp"
 #include "live_upsample_bridge.hpp"
@@ -215,6 +216,11 @@ public:
     /** A híd fut, és a kimenete kizárólagos (WASAPI exclusive vagy ASIO): a DSP-lánc ilyenkor a hídban fut. */
     bool dspInEngine() const { return active_.load(std::memory_order_acquire) && output_.exclusiveActive(); }
     uint32_t actualRate() const { return active_.load(std::memory_order_acquire) ? appliedDstRate_.load(std::memory_order_relaxed) : 0; }
+    /** A híd valódi kimeneti WASAPI-eszközének azonosítója (üres, ha a híd nem nyitott WASAPI-t vagy ASIO fut). */
+    std::wstring currentOutputId() const {
+        std::lock_guard<std::mutex> lk(statusMu_);
+        return currentOutId_;
+    }
 
     /** A telepített virtuális kábelek listája JSON-tömbként (caps.virtualCables). */
     static std::string virtualCablesJson() {
@@ -288,6 +294,11 @@ private:
         teardownPipelineLocked();
     }
 
+    void setCurrentOutId(const std::wstring& id) {
+        std::lock_guard<std::mutex> lk(statusMu_);
+        currentOutId_ = id;
+    }
+
     /** Csak a DAC-kimenet és a konverter leállítása (a kábel lehallgatása marad, hogy a mintavétele látsszon). */
     void closeOutputLocked() {
         if (!pipeRunning_) return;
@@ -299,6 +310,7 @@ private:
         appliedSrcRate_ = 0;
         appliedDstRate_.store(0, std::memory_order_relaxed);
         appliedOutId_.clear();
+        setCurrentOutId({});
     }
 
     static const WasapiEndpointInfo* findDefault(const std::vector<WasapiEndpointInfo>& devices) {
@@ -369,6 +381,7 @@ private:
         appliedSrcRate_ = 0;
         appliedDstRate_.store(0, std::memory_order_relaxed);
         appliedOutId_.clear();
+        setCurrentOutId({});
         releaseDefault(WasapiLoopback::listRenderEndpoints());
         failKey_ = key;
         failTime_ = std::chrono::steady_clock::now();
@@ -399,6 +412,7 @@ private:
         appliedDstRate_.store(0, std::memory_order_relaxed);
         appliedCapId_.clear();
         appliedOutId_.clear();
+        setCurrentOutId({});
     }
 
     static bool sameBridgeOpts(const audioopt::AudioOptions& a, const audioopt::AudioOptions& b) {
@@ -517,10 +531,11 @@ private:
             }
 
             // A futó híd kimenete menet közben megosztott módba került (pl. az eszköz újranyílt, és közben más program
-            // foglalta le): a DSP-lánc ilyenkor nem fut a hídban, ezért vissza a normál üzemre, és később újrapróba
-            // (3 egymást követő kör, kb. 3 s: az eszköz rövid újranyitása közben a mód átmenetileg nem kizárólagos)
+            // foglalta le): a DSP-lánc ilyenkor nem fut a hídban, ezért vissza a normál üzemre, és később újrapróba.
+            // Ha a visszalépés oka már ismert (lastExclusiveFailure), azonnal leállunk (nincs 3 s-os dupla-DSP ablak).
             if (pipeRunning_ && !o.asio && !output_.exclusiveActive()) {
-                if (++sharedRounds_ >= 3) {
+                const bool fellBack = !output_.wasapi().lastExclusiveFailure().empty();
+                if (fellBack || ++sharedRounds_ >= 3) {
                     sharedRounds_ = 0;
                     busyFallbackLocked(plan, key, srcRate, dstRate);
                     continue;
@@ -555,6 +570,7 @@ private:
                     std::lock_guard<std::mutex> lk(mu_);
                     failGen_ = optsGen_;
                 }
+                setCurrentOutId({});
                 releaseDefault(devices);   // a hang ne vesszen el a kábelben
             };
             if (!bridge_.configure(srcRate, dstRate, o) || !bridge_.start()) {
@@ -563,6 +579,8 @@ private:
                 markFailed();
                 continue;
             }
+            // A nyitás előtt rögzítjük a valódi céleszközt, hogy a PlayerDsp::prepare() ezen ellenőrizze a hardveres hangerőt
+            setCurrentOutId(o.asio ? std::wstring{} : plan.outputId);
             std::string err;
             if (!output_.open(dstRate, [this](float* dst, size_t n) { bridge_.pullOutput(dst, n); }, &err)) {
                 // Más program foglalja kizárólagosan, és a megosztott visszalépés sem sikerült: ugyanaz, mint a foglalt eset
@@ -605,6 +623,22 @@ private:
                       << " Hz) -> " << plan.outputName << " (" << dstRate << " Hz, "
                       << (dstRate == srcRate ? std::string("átengedés") : audioopt::upsampleEngineLabel(o.upsampleEngine))
                       << ").\n";
+            // Diagnosztikai tájékoztató (eszközönként egyszer): ha a céleszközön gyártói hangfeldolgozás (APO) aktív,
+            // a kizárólagos mód azt megkerüli, ezért a hangszín eltérhet a Windows megosztott módjától
+            if (!o.asio && !plan.outputId.empty() && plan.outputId != vendorApoLoggedId_) {
+                vendorApoLoggedId_ = plan.outputId;
+                const auto vendorApos = vendorAposOnRenderDevice(plan.outputId);
+                if (!vendorApos.empty()) {
+                    std::string list;
+                    for (size_t i = 0; i < vendorApos.size(); ++i) {
+                        if (i) list += ", ";
+                        list += vendorApos[i];
+                    }
+                    std::cout << "[Felmintavételezés/Win] Megjegyzés: a(z) „" << plan.outputName
+                              << "” eszközön gyártói hangfeldolgozás aktív (" << list
+                              << "); kizárólagos módban ez kimarad, ezért a hangszín eltérhet a normál módtól.\n";
+                }
+            }
         }
     }
 
@@ -643,10 +677,12 @@ private:
     std::chrono::seconds failRetry_{30};   // a sikertelen nyitás utáni várakozás (foglalt eszköznél rövidebb)
     int sharedRounds_ = 0;                 // hány egymást követő körben nem kizárólagos a futó híd kimenete
     bool busyLogged_ = false;              // a „foglalt” naplósor csak egyszer (a felszabadulásig)
+    std::wstring vendorApoLoggedId_;       // melyik kimeneti eszközre írtuk már ki a gyártói APO tájékoztatót
 
     mutable std::mutex statusMu_;
     std::string lastReason_ = "off";
     std::string captureName_, outputName_;
+    std::wstring currentOutId_;
     uint32_t lastSrcRate_ = 0, lastTargetRate_ = 0;
 };
 
