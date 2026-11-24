@@ -10946,6 +10946,9 @@ function upsRenderStatus() {
   const parts = [];
   if (u.resampleWarning) {
     parts.push(`<span class="warn">● ${t("ups.statusWarnResample", { actual: aoKhz(u.actualDacRate || 48000) })}</span>`);
+  } else if (u.active && u.reason === "filter_only") {
+    // Szűrő a DAC rátáján: a választott szűrővel 2× fel, majd átlátszó lépéssel vissza a DAC rátájára
+    parts.push(`<span class="ok">● ${t("ups.statusFilterOnly", { src: aoKhz(u.srcRate), mid: aoKhz(u.srcRate * 2) })}</span>`);
   } else if (u.active) {
     parts.push(`<span class="ok">● ${t("ups.statusActive", { src: aoKhz(u.srcRate), dst: aoKhz(u.targetRate), actual: aoKhz(u.actualDacRate || u.targetRate) })}</span>`);
   } else if (u.reason === "dac_unsupported") {

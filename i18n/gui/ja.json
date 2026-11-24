@@ -942,6 +942,7 @@
   "ups.statusActive": "現在: {src} → {dst} · DAC は {actual} で動作中",
   "ups.statusWarnResample": "注意: システムが {actual} に再変換しています。排他モードまたは「ソースに追従」を有効にしてください",
   "ups.statusUnsupported": "変換なし: DAC が目標レート非対応 ({src}) · EQ の内部オーバーサンプリング (Decramp) は、DAC 自身のレートでそのまま動作します。",
+  "ups.statusFilterOnly": "DAC レートでフィルター: {src} → {mid} → {src}（DAC はこれより高いレートに非対応）",
   "ups.statusDsd": "変換なし: DSD ソース",
   "ups.statusHighRate": "変換なし: 192 kHz 超のソース",
   "ups.statusBypass": "変換なし: バイパス（測定中）",

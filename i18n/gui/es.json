@@ -942,6 +942,7 @@
   "ups.statusActive": "Ahora: {src} → {dst} · DAC funcionando a {actual}",
   "ups.statusWarnResample": "Aviso: el sistema reconvierte a {actual} – activa el modo exclusivo o la frecuencia «Seguir fuente»",
   "ups.statusUnsupported": "Sin conversión: el DAC no admite la frecuencia destino ({src}) · El sobremuestreo interno del EQ (Decramp) funciona igualmente, a la frecuencia propia del DAC.",
+  "ups.statusFilterOnly": "Filtro a la frecuencia del DAC: {src} → {mid} → {src} (el DAC no admite una frecuencia mayor)",
   "ups.statusDsd": "Sin conversión: fuente DSD",
   "ups.statusHighRate": "Sin conversión: fuente superior a 192 kHz",
   "ups.statusBypass": "Sin conversión: paso directo (medición)",

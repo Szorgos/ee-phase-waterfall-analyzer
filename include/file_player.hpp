@@ -206,7 +206,17 @@ public:
     static constexpr uint32_t kDsdSwitchSilenceMs = 60;
     /** Az új hangfolyam elején még hátralévő csend kerete (tesztekhez). */
     uint64_t leadInFrames() const { return leadIn_.load(); }
-    uint32_t decideTargetRate(uint32_t srcRate, bool bypassUpsample, bool isDsd) const;
+    /**
+     * filterOnly (ha nem nullptr): „szűrő a DAC rátáján” kell-e – a felmintavételezés be van kapcsolva, a forrás PCM
+     * (nem DSD / DoP), nincs megkerülés, a DAC a forrás mintavételét tudja, de nagyobbat nem (ok: "dac_unsupported"),
+     * és a terhelés-tanácsadó felső korlátja a 2·srcRate köztes mintavételt megengedi. Ilyenkor a cél = srcRate, de a
+     * lejátszó a felhasználó szűrőjével 2·srcRate-re, majd átlátszó lépéssel vissza alakít.
+     */
+    uint32_t decideTargetRate(uint32_t srcRate, bool bypassUpsample, bool isDsd, bool* filterOnly = nullptr) const;
+    /** A mostani hangfolyam „szűrő a DAC rátáján” módban szól (két lépés, a kimenet = a forrás mintavétele). */
+    bool isUpsampleFilterOnly() const {
+        return !dopActive_.load() && upsampleActive_.load() && upsampleFilterOnly_.load();
+    }
 
 private:
     /** A hallott szám újranyitása a mostani helyről (dsdOnly: csak DSD-fájlnál; a DoP-váltáshoz). */
@@ -311,6 +321,7 @@ private:
     std::atomic<bool> upsampleActive_{false};
     std::atomic<uint32_t> upsampleSrcRate_{0};
     std::atomic<uint32_t> upsampleTargetRate_{0};
+    std::atomic<bool> upsampleFilterOnly_{false};   // szűrő a DAC rátáján (lásd decideTargetRate)
     mutable std::string upsampleReason_{ "off" };
     UpsampleEngine upsampler_;
     std::vector<float> upsampleOutBuf_;

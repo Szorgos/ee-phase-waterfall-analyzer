@@ -942,6 +942,7 @@
   "ups.statusActive": "Nyní: {src} → {dst} · DAC běží na {actual}",
   "ups.statusWarnResample": "Pozor: systém převádí zpět na {actual} – zapněte výhradní režim nebo «Podle zdroje»",
   "ups.statusUnsupported": "Bez převodu: DAC nepodporuje cílovou frekvenci ({src}) · Vnitřní převzorkování EQ (Decramp) funguje i tak, na vlastní frekvenci DAC.",
+  "ups.statusFilterOnly": "Filtr na frekvenci DAC: {src} → {mid} → {src} (DAC nepodporuje vyšší frekvenci)",
   "ups.statusDsd": "Bez převodu: zdroj DSD",
   "ups.statusHighRate": "Bez převodu: zdroj nad 192 kHz",
   "ups.statusBypass": "Bez převodu: přímá cesta (měření)",

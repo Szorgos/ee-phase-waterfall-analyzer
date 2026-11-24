@@ -942,6 +942,7 @@
   "ups.statusActive": "Nu: {src} → {dst} · DAC draait op {actual}",
   "ups.statusWarnResample": "Let op: het systeem converteert terug naar {actual} – schakel exclusieve modus of 'Bron volgen' in",
   "ups.statusUnsupported": "Geen omzetting: DAC ondersteunt doelfrequentie niet ({src}) · De interne oversampling van de EQ (Decramp) werkt gewoon, op de eigen frequentie van de DAC.",
+  "ups.statusFilterOnly": "Filter op DAC-frequentie: {src} → {mid} → {src} (de DAC ondersteunt geen hogere frequentie)",
   "ups.statusDsd": "Geen omzetting: DSD-bron",
   "ups.statusHighRate": "Geen omzetting: bron boven 192 kHz",
   "ups.statusBypass": "Geen omzetting: bypass (meting)",

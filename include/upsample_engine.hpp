@@ -181,6 +181,44 @@ public:
                     opts.upsampleEngine);
     }
 
+    /**
+     * „Szűrő a DAC rátáján”: a DAC a forrásnál nagyobb mintavételt nem tud, de a felhasználó a választott szűrő
+     * karakterét kéri. Két lépés: (1) srcRate → 2·srcRate a felhasználó saját beállításaival (motor, fázis, áteresztő
+     * sáv, pontosság, fejtér) – pontosan, amit az initWithOptions egy rendes duplázásnál csinálna; (2) 2·srcRate →
+     * srcRate egy rögzített, átlátszó lépéssel (lásd kFilterOnlyDown*). A kimenet mintavétele srcRate marad.
+     */
+    bool initFilterOnly(uint32_t srcRate, uint32_t channels, const audioopt::AudioOptions& opts) {
+        if (srcRate == 0 || !initWithOptions(srcRate, srcRate * 2, channels, opts) || !active_) {
+            reset();
+            return false;
+        }
+        // A második lépés: libsoxr, lineáris fázis, 28 bites pontosság (a 32 bites lebegőpontos minták 24 bites
+        // mantisszájánál nagyobb), az áteresztő sáv vége a DAC Nyquist-frekvenciájának 99 %-a (44,1 kHz-nél
+        // 21,83 kHz), a zárósáv kezdete pontosan a Nyquist-frekvencia (1,0: a Nyquist fölötti rész nem tükröződik
+        // vissza), fejtér nélkül. Indok: a hangkaraktert az első (a felhasználó) szűrője adja; ez a lépés csak azt vágja
+        // le, ami a DAC Nyquist-frekvenciája fölött van; a 99 % a felhasználói szűrők szokásos áteresztő sávja (95 %)
+        // fölött van. Szűkebb átmenetnél / nagyobb pontosságnál a libsoxr sokkal hosszabb blokkokkal dolgozik; mérve
+        // (88,2 -> 44,1 kHz, 4096-os adagok, átlagos soxr_delay): 28 bit / 99 %: kb. 93 ms; 32 bit / 99 %: kb. 185 ms;
+        // 32 bit / 99,5 %: kb. 390 ms. A lejátszó a késleltetést kiegyenlíti, de a hosszabb blokk fölösleges terhelés.
+        soxr_quality_spec_t q = soxr_quality_spec(SOXR_VHQ, 0);   // az első lépés libsoxr-ágával azonos alap
+        q.precision = kFilterOnlyDownPrecision;
+        q.phase_response = 50.0;
+        q.passband_end = kFilterOnlyDownPassband;
+        q.stopband_begin = 1.0;
+        soxr_io_spec_t io = soxr_io_spec(SOXR_FLOAT32_I, SOXR_FLOAT32_I);
+        soxr_runtime_spec_t rt = soxr_runtime_spec(1);
+        soxr_error_t err = nullptr;
+        down_ = soxr_create(static_cast<double>(srcRate) * 2.0, static_cast<double>(srcRate), channels, &err, &io, &q, &rt);
+        if (err != nullptr || down_ == nullptr) {
+            reset();
+            return false;
+        }
+        downDrained_ = false;
+        return true;
+    }
+    static constexpr double kFilterOnlyDownPrecision = 28.0;   // bit
+    static constexpr double kFilterOnlyDownPassband = 0.99;    // a kimeneti Nyquist-frekvencia arányában
+
     void reset() {
         if (soxr_) {
             soxr_delete(soxr_);
@@ -190,6 +228,11 @@ public:
             soxr_delete(soxrR_);
             soxrR_ = nullptr;
         }
+        if (down_) {
+            soxr_delete(down_);
+            down_ = nullptr;
+        }
+        downDrained_ = false;
         fftStream_.reset();
         useFft64_ = false;
         split_ = false;
@@ -202,6 +245,8 @@ public:
         if (useFft64_) fftStream_.clear();
         if (soxr_) soxr_clear(soxr_);
         if (soxrR_) soxr_clear(soxrR_);
+        if (down_) soxr_clear(down_);
+        downDrained_ = false;
     }
 
     /**
@@ -213,6 +258,101 @@ public:
      * outFrames: ténylegesen előállított kimeneti keretek
      */
     bool process(const float* in, size_t inFrames, float* out, size_t outCapacityFrames, size_t& outFrames) {
+        if (!down_) return processMain(in, inFrames, out, outCapacityFrames, outFrames, true);
+        // Szűrő a DAC rátáján: az első lépés (felhasználói szűrő) a köztes pufferbe, onnan a második lépés a kimenetre
+        if (in && inFrames > 0) downDrained_ = false;
+        const size_t midCap = inFrames * 2 + 4096;
+        if (mid_.size() < midCap * channels_) mid_.resize(midCap * channels_);
+        size_t midFrames = 0;
+        bool ok = processMain(in, inFrames, mid_.data(), midCap, midFrames, false);
+        ok = runDown(mid_.data(), midFrames, out, outCapacityFrames, outFrames) && ok;
+        return ok;
+    }
+
+    /**
+     * Belső szűrő kiürítése (a forrásfolyam végén).
+     */
+    bool flush(float* out, size_t outCapacityFrames, size_t& outFrames) {
+        if (!down_) return flushMain(out, outCapacityFrames, outFrames, true);
+        outFrames = 0;
+        if (!active_) return true;
+        bool ok = true;
+        // Előbb az első lépés maradékát visszük át a második lépésen; amíg az ad mintát, a hívó újra kér
+        while (!downDrained_) {
+            const size_t midCap = outCapacityFrames * 2 + 4096;
+            if (mid_.size() < midCap * channels_) mid_.resize(midCap * channels_);
+            size_t midFrames = 0;
+            ok = flushMain(mid_.data(), midCap, midFrames, false) && ok;
+            if (midFrames == 0) { downDrained_ = true; break; }
+            ok = runDown(mid_.data(), midFrames, out, outCapacityFrames, outFrames) && ok;
+            if (outFrames > 0) return ok;
+        }
+        // Utána a második lépés saját maradéka
+        size_t odone = 0;
+        const soxr_error_t err = soxr_process(down_, nullptr, 0, nullptr, out, outCapacityFrames, &odone);
+        outFrames = odone;
+        finishOutput(out, odone);
+        return ok && err == nullptr;
+    }
+
+    /**
+     * Késleltetés kimeneti keretekben (a belső szűrő állapota szerint). Szűrő a DAC rátáján: a két lépésé együtt
+     * (az első lépésé a köztes mintavételről a kimenetire átszámolva).
+     */
+    double delayFrames() const {
+        double d = mainDelayFrames();
+        if (down_) d = d * static_cast<double>(srcRate_) / static_cast<double>(dstRate_) + soxr_delay(down_);
+        return d;
+    }
+
+    bool isActive() const { return active_; }
+    bool isFft64() const { return useFft64_; }   // a saját FFT-ág (64 vagy 106 bites)
+    /** Szűrő a DAC rátáján (két lépés, a kimenet mintavétele = srcRate). */
+    bool isFilterOnly() const { return down_ != nullptr; }
+    /** A ténylegesen futó motor: 0 = libsoxr, 1 = Aqulify FFT64, 2 = Aqulify FFT-DD (audioopt::UpsampleEngineType). */
+    int engineType() const { return useFft64_ ? (fftStream_.isDD() ? 2 : 1) : 0; }
+    uint32_t srcRate() const { return srcRate_; }
+    /** A felhasználói szűrő kimeneti mintavétele (szűrő a DAC rátáján: a köztes 2·srcRate). */
+    uint32_t dstRate() const { return dstRate_; }
+    uint32_t channels() const { return channels_; }
+    float headroomDb() const { return headroomDb_; }
+    float headroomGain() const { return headroomGain_; }
+    /** Túlvezérelt kimeneti minták (szűrő a DAC rátáján: a második lépés után, a DAC-ra menő jelben). */
+    uint64_t clippedSamples() const { return clippedSamples_; }
+    /** A kimenetre adott keretek (szűrő a DAC rátáján: a második lépés után). */
+    uint64_t processedFrames() const { return processedFrames_; }
+    void resetClippedSamples() { clippedSamples_ = 0; }
+
+private:
+    /** A második lépés (2·srcRate → srcRate): a bemenetet mindig teljesen átveszi (idone nélkül a libsoxr nem
+     *  korlátozza a kimeneti hely szerint); ami a kimenetre nem fér, a libsoxr-ben marad a következő hívásig. */
+    bool runDown(const float* mid, size_t midFrames, float* out, size_t outCap, size_t& outFrames) {
+        size_t odone = 0;
+        // A bemenet mutatója üres adagnál sem nullptr: az a libsoxr-ben kiürítést (a folyam végét) jelentené
+        const soxr_error_t err = soxr_process(down_, mid, midFrames, nullptr, out, outCap, &odone);
+        outFrames = odone;
+        finishOutput(out, odone);
+        return err == nullptr;
+    }
+
+    /** A kimenetre kerülő minták számlálása (szűrő a DAC rátáján: a fejteret az első lépés már alkalmazta). */
+    void finishOutput(const float* out, size_t frames) {
+        processedFrames_ += frames;
+        const size_t samples = frames * channels_;
+        for (size_t i = 0; i < samples; ++i)
+            if (out[i] > 1.0f || out[i] < -1.0f) ++clippedSamples_;
+    }
+
+    double mainDelayFrames() const {
+        if (active_ && useFft64_) return fftStream_.delayFrames();
+        if (active_ && soxr_) {
+            return soxr_delay(soxr_);
+        }
+        return 0.0;
+    }
+
+    /** final: ez a kimenet a DAC-ra megy (keretszám és túlvezérlés számlálása); különben a köztes jel. */
+    bool processMain(const float* in, size_t inFrames, float* out, size_t outCapacityFrames, size_t& outFrames, bool final) {
         if (!active_ || (!useFft64_ && soxr_ == nullptr)) {
             size_t toCopy = std::min(inFrames, outCapacityFrames);
             if (in && out && toCopy > 0) {
@@ -226,8 +366,8 @@ public:
             size_t odone = 0;
             const bool ok = fftStream_.process(in, inFrames, out, outCapacityFrames, odone);
             outFrames = odone;
-            processedFrames_ += odone;
-            applyHeadroom(out, odone * channels_);
+            if (final) processedFrames_ += odone;
+            applyHeadroom(out, odone * channels_, final);
             return ok;
         }
 
@@ -235,15 +375,12 @@ public:
         soxr_error_t err = split_ ? processSplit(in, inFrames, out, outCapacityFrames, odone)
                                   : runOne(soxr_, in, inFrames, out, outCapacityFrames, odone);
         outFrames = odone;
-        processedFrames_ += odone;
-        applyHeadroom(out, odone * channels_);
+        if (final) processedFrames_ += odone;
+        applyHeadroom(out, odone * channels_, final);
         return (err == nullptr);
     }
 
-    /**
-     * Belső szűrő kiürítése (a forrásfolyam végén).
-     */
-    bool flush(float* out, size_t outCapacityFrames, size_t& outFrames) {
+    bool flushMain(float* out, size_t outCapacityFrames, size_t& outFrames, bool final) {
         if (!active_ || (!useFft64_ && soxr_ == nullptr)) {
             outFrames = 0;
             return true;
@@ -252,54 +389,30 @@ public:
             size_t odone = 0;
             const bool ok = fftStream_.flush(out, outCapacityFrames, odone);
             outFrames = odone;
-            processedFrames_ += odone;
-            applyHeadroom(out, odone * channels_);
+            if (final) processedFrames_ += odone;
+            applyHeadroom(out, odone * channels_, final);
             return ok;
         }
         size_t odone = 0;
         soxr_error_t err = split_ ? processSplit(nullptr, 0, out, outCapacityFrames, odone)
                                   : runOne(soxr_, nullptr, 0, out, outCapacityFrames, odone);
         outFrames = odone;
-        processedFrames_ += odone;
-        applyHeadroom(out, odone * channels_);
+        if (final) processedFrames_ += odone;
+        applyHeadroom(out, odone * channels_, final);
         return (err == nullptr);
     }
 
-    /**
-     * Késleltetés kimeneti keretekben (a belső szűrő állapota szerint).
-     */
-    double delayFrames() const {
-        if (active_ && useFft64_) return fftStream_.delayFrames();
-        if (active_ && soxr_) {
-            return soxr_delay(soxr_);
-        }
-        return 0.0;
-    }
-
-    bool isActive() const { return active_; }
-    bool isFft64() const { return useFft64_; }   // a saját FFT-ág (64 vagy 106 bites)
-    /** A ténylegesen futó motor: 0 = libsoxr, 1 = Aqulify FFT64, 2 = Aqulify FFT-DD (audioopt::UpsampleEngineType). */
-    int engineType() const { return useFft64_ ? (fftStream_.isDD() ? 2 : 1) : 0; }
-    uint32_t srcRate() const { return srcRate_; }
-    uint32_t dstRate() const { return dstRate_; }
-    uint32_t channels() const { return channels_; }
-    float headroomDb() const { return headroomDb_; }
-    float headroomGain() const { return headroomGain_; }
-    uint64_t clippedSamples() const { return clippedSamples_; }
-    uint64_t processedFrames() const { return processedFrames_; }
-    void resetClippedSamples() { clippedSamples_ = 0; }
-
-private:
     static soxr_error_t runOne(soxr_t s, const float* in, size_t inFrames, float* out, size_t outCap, size_t& odone) {
         size_t idone = 0;
         odone = 0;
         return soxr_process(s, in, inFrames, &idone, out, outCap, &odone);
     }
 
-    void applyHeadroom(float* out, size_t samples) {
+    /** countClips: a túlvezérelt minták számlálása (csak a DAC-ra menő jelben). */
+    void applyHeadroom(float* out, size_t samples, bool countClips) {
         for (size_t i = 0; i < samples; ++i) {
             const float v = out[i] * headroomGain_;
-            if (v > 1.0f || v < -1.0f) ++clippedSamples_;
+            if (countClips && (v > 1.0f || v < -1.0f)) ++clippedSamples_;
             out[i] = v;
         }
     }
@@ -378,6 +491,9 @@ private:
     soxr_error_t jobErr_ = nullptr;
 
     soxr_t soxr_ = nullptr;
+    soxr_t down_ = nullptr;          // szűrő a DAC rátáján: a második (2·srcRate → srcRate) lépés
+    bool downDrained_ = false;       // kiürítéskor az első lépés már mindent átadott a másodiknak
+    std::vector<float> mid_;         // a két lépés közötti (2·srcRate) minták
     srcconv::fft64::StreamResampler fftStream_;
     bool useFft64_ = false;
     bool active_ = false;

@@ -942,6 +942,7 @@
   "ups.statusActive": "Nyt: {src} → {dst} · DAC toimii taajuudella {actual}",
   "ups.statusWarnResample": "Huomio: järjestelmä muuntaa takaisin taajuudelle {actual} – ota käyttöön yksinoikeustila tai «Seuraa lähdettä»",
   "ups.statusUnsupported": "Ei muunnosta: DAC ei tue tavoitetaajuutta ({src}) · EQ:n sisäinen ylinäytteistys (Decramp) toimii silti DAC:n omalla taajuudella.",
+  "ups.statusFilterOnly": "Suodin DAC:n taajuudella: {src} → {mid} → {src} (DAC ei tue suurempaa taajuutta)",
   "ups.statusDsd": "Ei muunnosta: DSD-lähde",
   "ups.statusHighRate": "Ei muunnosta: yli 192 kHz lähde",
   "ups.statusBypass": "Ei muunnosta: ohitus (mittaus)",

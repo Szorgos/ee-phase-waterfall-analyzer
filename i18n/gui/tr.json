@@ -942,6 +942,7 @@
   "ups.statusActive": "Şimdi: {src} → {dst} · DAC {actual} hızında çalışıyor",
   "ups.statusWarnResample": "Uyarı: sistem {actual} hızına geri dönüştürüyor – özel modu veya «Kaynağı izle» ayarını açın",
   "ups.statusUnsupported": "Dönüşüm yok: DAC hedef hızı desteklemiyor ({src}) · EQ'nun dahili üst örneklemesi (Decramp) yine de çalışır, DAC'ın kendi hızında.",
+  "ups.statusFilterOnly": "DAC hızında filtre: {src} → {mid} → {src} (DAC daha yüksek hızı desteklemiyor)",
   "ups.statusDsd": "Dönüşüm yok: DSD kaynağı",
   "ups.statusHighRate": "Dönüşüm yok: 192 kHz üzeri kaynak",
   "ups.statusBypass": "Dönüşüm yok: atlama (ölçüm)",

@@ -942,6 +942,7 @@
   "ups.statusActive": "כעת: {src} → {dst} · ה-DAC פועל ב-{actual}",
   "ups.statusWarnResample": "אזהרה: המערכת ממירה חזרה ל-{actual} – הפעל מצב בלעדי או «עקוב אחר המקור»",
   "ups.statusUnsupported": "ללא המרה: ה-DAC אינו תומך בקצב היעד ({src}) · הדגימת-יתר הפנימית של ה-EQ (Decramp) פועלת בכל זאת, בקצב של ה-DAC עצמו.",
+  "ups.statusFilterOnly": "מסנן בקצב ה-DAC: {src} → {mid} → {src} (ה-DAC אינו תומך בקצב גבוה יותר)",
   "ups.statusDsd": "ללא המרה: מקור DSD",
   "ups.statusHighRate": "ללא המרה: מקור מעל 192 kHz",
   "ups.statusBypass": "ללא המרה: עקיפה (מדידה)",

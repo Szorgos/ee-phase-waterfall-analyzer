@@ -942,6 +942,7 @@
   "ups.statusActive": "Aktiv: {src} → {dst} · DAC läuft mit {actual}",
   "ups.statusWarnResample": "Achtung: Das System wandelt zurück auf {actual} – aktiviere den exklusiven Modus oder „Quelle folgen“",
   "ups.statusUnsupported": "Keine Wandlung: Der DAC unterstützt die Zielfrequenz nicht ({src}) · Das interne Oversampling des EQ (Decramp) funktioniert trotzdem, mit der eigenen Rate des DAC.",
+  "ups.statusFilterOnly": "Filter mit DAC-Rate: {src} → {mid} → {src} (der DAC kann keine höhere Rate)",
   "ups.statusDsd": "Keine Wandlung: DSD-Quelle",
   "ups.statusHighRate": "Keine Wandlung: Quelle über 192 kHz",
   "ups.statusBypass": "Keine Wandlung: Bypass (Messung)",

@@ -942,6 +942,7 @@
   "ups.statusActive": "Acum: {src} → {dst} · DAC rulează la {actual}",
   "ups.statusWarnResample": "Atenție: sistemul reconvertește la {actual} – activează modul exclusiv sau „Urmează sursa”",
   "ups.statusUnsupported": "Fără conversie: DAC-ul nu suportă rata țintă ({src}) · Supraeșantionarea internă a EQ-ului (Decramp) funcționează oricum, la rata proprie a DAC-ului.",
+  "ups.statusFilterOnly": "Filtru la rata DAC-ului: {src} → {mid} → {src} (DAC-ul nu suportă o rată mai mare)",
   "ups.statusDsd": "Fără conversie: sursă DSD",
   "ups.statusHighRate": "Fără conversie: sursă peste 192 kHz",
   "ups.statusBypass": "Fără conversie: bypass (măsurare)",

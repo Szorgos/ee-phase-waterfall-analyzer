@@ -942,6 +942,7 @@
   "ups.statusActive": "Agora: {src} → {dst} · DAC a funcionar em {actual}",
   "ups.statusWarnResample": "Aviso: o sistema reamostra de volta para {actual} – ative o modo exclusivo ou «Seguir fonte»",
   "ups.statusUnsupported": "Sem conversão: o DAC não suporta a taxa alvo ({src}) · A sobreamostragem interna do EQ (Decramp) funciona na mesma, à taxa própria do DAC.",
+  "ups.statusFilterOnly": "Filtro à taxa do DAC: {src} → {mid} → {src} (o DAC não suporta uma taxa mais alta)",
   "ups.statusDsd": "Sem conversão: fonte DSD",
   "ups.statusHighRate": "Sem conversão: fonte acima de 192 kHz",
   "ups.statusBypass": "Sem conversão: bypass (medição)",

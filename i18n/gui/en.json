@@ -946,6 +946,7 @@
   "ups.statusActive": "Now: {src} → {dst} · DAC running at {actual}",
   "ups.statusWarnResample": "Warning: the system resamples back to {actual} – enable exclusive mode or 'Follow source' sample rate",
   "ups.statusUnsupported": "No conversion: DAC does not support the target rate ({src}) · The EQ's internal oversampling (Decramp) still works, at the DAC's own rate.",
+  "ups.statusFilterOnly": "Filter at DAC rate: {src} → {mid} → {src} (the DAC can't take a higher rate)",
   "ups.statusDsd": "No conversion: DSD source",
   "ups.statusHighRate": "No conversion: source above 192 kHz",
   "ups.statusBypass": "No conversion: bypass (measurement)",

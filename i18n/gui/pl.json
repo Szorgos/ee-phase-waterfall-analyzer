@@ -942,6 +942,7 @@
   "ups.statusActive": "Teraz: {src} → {dst} · DAC pracuje na {actual}",
   "ups.statusWarnResample": "Uwaga: system przelicza z powrotem na {actual} – włącz tryb wyłączny lub „Zgodnie ze źródłem”",
   "ups.statusUnsupported": "Brak konwersji: DAC nie obsługuje docelowej częstotliwości ({src}) · Wewnętrzny oversampling korektora EQ (Decramp) działa mimo to, z własną częstotliwością DAC.",
+  "ups.statusFilterOnly": "Filtr przy częstotliwości DAC: {src} → {mid} → {src} (DAC nie obsługuje wyższej częstotliwości)",
   "ups.statusDsd": "Brak konwersji: źródło DSD",
   "ups.statusHighRate": "Brak konwersji: źródło powyżej 192 kHz",
   "ups.statusBypass": "Brak konwersji: obejście (pomiar)",

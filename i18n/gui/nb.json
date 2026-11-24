@@ -942,6 +942,7 @@
   "ups.statusActive": "Nå: {src} → {dst} · DAC kjører på {actual}",
   "ups.statusWarnResample": "Advarsel: systemet resampler tilbake til {actual} – slå på eksklusiv modus eller «Følg kilde»",
   "ups.statusUnsupported": "Ingen konvertering: DAC støtter ikke målfrekvensen ({src}) · EQ-ens interne oversampling (Decramp) virker likevel, på DAC-ens egen frekvens.",
+  "ups.statusFilterOnly": "Filter på DAC-ens frekvens: {src} → {mid} → {src} (DAC-en støtter ikke høyere frekvens)",
   "ups.statusDsd": "Ingen konvertering: DSD-kilde",
   "ups.statusHighRate": "Ingen konvertering: kilde over 192 kHz",
   "ups.statusBypass": "Ingen konvertering: bypass (måling)",

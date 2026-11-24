@@ -105,7 +105,8 @@ function makeSineWav(filePath, sr = 44100, freq = 1000, seconds = 6) {
   await page.waitForTimeout(800);
 
   // 6. K12(b) élő állapotsor a felületen: „rendszer” mód (a PipeWire csak 48 kHz-et enged) -> a ×2 nem lehetséges,
-  // a lejátszó nem alakít feleslegesen (régen 88,2 kHz-re alakított, amit a PipeWire visszaalakított: figyelmeztetés)
+  // a lejátszó nem alakít feleslegesen (régen 88,2 kHz-re alakított, amit a PipeWire visszaalakított: figyelmeztetés).
+  // A „szűrő a DAC rátáján” (reason "filter_only") itt sem indul: a gráf a 44,1 kHz-es forrást sem tudja.
   await page.click("#devTab-output");
   await page.selectOption("#aoRate", "system");
   await page.waitForFunction(() => aoOpts && aoOpts.rateMode === "system", null, { timeout: 5000 });

@@ -942,6 +942,7 @@
   "ups.statusActive": "현재: {src} → {dst} · DAC가 {actual}로 동작 중",
   "ups.statusWarnResample": "주의: 시스템이 {actual}로 다시 변환 중입니다 – 단독 모드 또는 '소스 따르기'를 켜세요",
   "ups.statusUnsupported": "변환 없음: DAC가 목표 샘플레이트를 지원하지 않음 ({src}) · EQ의 내부 오버샘플링(Decramp)은 DAC 자체 속도에서 그대로 작동합니다.",
+  "ups.statusFilterOnly": "DAC 속도에서 필터: {src} → {mid} → {src} (DAC가 더 높은 샘플레이트를 지원하지 않음)",
   "ups.statusDsd": "변환 없음: DSD 소스",
   "ups.statusHighRate": "변환 없음: 192 kHz 초과 소스",
   "ups.statusBypass": "변환 없음: 바이패스 (측정 중)",

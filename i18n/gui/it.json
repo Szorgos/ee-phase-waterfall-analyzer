@@ -942,6 +942,7 @@
   "ups.statusActive": "Attivo: {src} → {dst} · DAC a {actual}",
   "ups.statusWarnResample": "Attenzione: il sistema ricampiona a {actual} – attiva la modalità esclusiva o «Segui sorgente»",
   "ups.statusUnsupported": "Nessuna conversione: il DAC non supporta la frequenza scelta ({src}) · Il sovracampionamento interno dell'EQ (Decramp) funziona comunque, alla frequenza propria del DAC.",
+  "ups.statusFilterOnly": "Filtro alla frequenza del DAC: {src} → {mid} → {src} (il DAC non supporta frequenze più alte)",
   "ups.statusDsd": "Nessuna conversione: sorgente DSD",
   "ups.statusHighRate": "Nessuna conversione: sorgente oltre 192 kHz",
   "ups.statusBypass": "Nessuna conversione: bypass (misurazione)",
