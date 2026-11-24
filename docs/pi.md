@@ -46,6 +46,7 @@ sudo apt install ./aqulify_2.9.8-1~pi1_arm64.deb
 - `/usr/bin/aqulify-gui` – asztali grafikus felület (GTK3 + WebKitGTK 4.1)
 - `/usr/bin/aqulify-play` – parancssori lejátszó
 - `/usr/bin/aqulify-tune` – választható, visszavonható rendszerhangoló szkript (`tools/pi/aqulify-tune.sh`)
+- `/usr/lib/aqulify/aqulify-linger` – bejelentkezés nélküli futás be- és kikapcsolása a csomag szkriptjeiből (`tools/pi/linger.sh`, 2.9.9-től)
 - `/usr/lib/systemd/user/aqulify.service` – felhasználói systemd-szolgáltatás (`linux/aqulify.service.in`)
 - `/usr/lib/systemd/user-preset/80-aqulify.preset` – systemd előbeállítás (`enable aqulify.service`)
 - `/usr/share/applications/io.github.szorgos.Aqulify.desktop` – asztali menübejegyzés
@@ -60,6 +61,7 @@ sudo apt install ./aqulify_2.9.8-1~pi1_arm64.deb
   systemctl --user restart aqulify
   systemctl --user status aqulify
   ```
+- **Bejelentkezés nélküli futás (lingering, a 2.9.9-től automatikus):** képernyő nélküli Pi-n nincs bejelentkezett munkamenet, ezért a systemd az utolsó SSH-munkamenet bezárásakor leállítaná a felhasználói szolgáltatásokat (a PipeWire-t és az Aqulify-t is), és a Pi a következő bejelentkezésig elérhetetlen lenne. A Pi-csomag telepítéskor ezért bekapcsolja a lingeringet annak a felhasználónak, aki `sudo apt`-tal telepít (ha ez nem ismert, az 1000-es azonosítójú, a Pi OS első felhasználójának) – csak ha még ki volt kapcsolva, és a csomag eltávolításakor csak ezt vonja vissza (`/usr/lib/aqulify/aqulify-linger`, forrás: `tools/pi/linger.sh`). Ha mégis ki van kapcsolva, a motor fej nélküli módban figyelmeztet a naplóban. Kézzel: `sudo loginctl enable-linger $USER`, ellenőrzés: `loginctl show-user $USER -p Linger`.
 - **Grafikus felület (HDMI-monitoron):** az alkalmazásmenüből vagy terminálból az `aqulify-gui` paranccsal indítható.
 
 ---
@@ -83,9 +85,9 @@ sudo apt install ./aqulify_2.9.8-1~pi1_arm64.deb
 
 ## 5. Választható, visszavonható rendszerhangolás (`aqulify-tune`) / Optional, reversible system tuning (`aqulify-tune`)
 
-**Magyar:** A csomag telepíti a `/usr/bin/aqulify-tune` szkriptet, de a telepítés **nem** kapcsolja be magától. A `sudo aqulify-tune enable` parancs elmenti az eredeti rendszerértékeket (`/var/lib/aqulify-tune/state`), a CPU-governort `performance` üzemmódra állítja (ha elérhető), a hang osztályú (`bInterfaceClass = 01`) USB-eszközökön (`/sys/bus/usb/devices`) kikapcsolja az energiatakarékosságot (`power/control = on`), létrehozza a `/etc/security/limits.d/95-aqulify-audio.conf` fájlt (`@audio - rtprio 95`, `@audio - memlock unlimited`), és beállítja az `aqulify-tune.service` (`oneshot`) szolgáltatást az újraindítás utáni megőrzéshez. A jelenlegi állapot az `aqulify-tune status` paranccsal kérdezhető le. A hangolás bármikor maradéktalanul visszavonható a `sudo aqulify-tune disable` paranccsal (vagy a csomag eltávolításakor a `DEBIAN/prerm` automatikusan visszaállítja az eredeti állapotot).
+**Magyar:** A csomag telepíti a `/usr/bin/aqulify-tune` szkriptet, de a telepítés **nem** kapcsolja be magától. A `sudo aqulify-tune enable` parancs elmenti az eredeti rendszerértékeket (`/var/lib/aqulify-tune/state`), a CPU-governort `performance` üzemmódra állítja (ha elérhető), a hang osztályú (`bInterfaceClass = 01`) USB-eszközökön (`/sys/bus/usb/devices`) kikapcsolja az energiatakarékosságot (`power/control = on`), létrehozza a `/etc/security/limits.d/95-aqulify-audio.conf` fájlt (`@audio - rtprio 95`, `@audio - memlock unlimited`), a Wi-Fi-csatolókon kikapcsolja az energiatakarékosságot (`iw dev <csatoló> set power_save off`, tartósan a NetworkManagerben is: `/etc/NetworkManager/conf.d/95-aqulify-wifi-powersave.conf`, `wifi.powersave = 2`), mert bekapcsolva a Pi Wi-Fi-je elnyelheti a hálózati felderítés (UPnP / DLNA, mDNS) csomagjait, és beállítja az `aqulify-tune.service` (`oneshot`) szolgáltatást az újraindítás utáni megőrzéshez. A jelenlegi állapot az `aqulify-tune status` paranccsal kérdezhető le. A hangolás bármikor maradéktalanul visszavonható a `sudo aqulify-tune disable` paranccsal (vagy a csomag eltávolításakor a `DEBIAN/prerm` automatikusan visszaállítja az eredeti állapotot).
 
-**English:** The package installs `/usr/bin/aqulify-tune`, which remains **off by default**. Running `sudo aqulify-tune enable` saves the original system settings (`/var/lib/aqulify-tune/state`), sets the CPU scaling governor to `performance` (where supported), disables USB autosuspend (`power/control = on`) for USB Audio Class (`bInterfaceClass = 01`) devices under `/sys/bus/usb/devices`, creates `/etc/security/limits.d/95-aqulify-audio.conf` (`@audio - rtprio 95`, `@audio - memlock unlimited`), and installs `aqulify-tune.service` (`oneshot`) so the settings persist across reboots. Use `aqulify-tune status` to inspect current values. All changes are completely reversible at any time via `sudo aqulify-tune disable` (and are automatically reverted by `DEBIAN/prerm` if the package is removed).
+**English:** The package installs `/usr/bin/aqulify-tune`, which remains **off by default**. Running `sudo aqulify-tune enable` saves the original system settings (`/var/lib/aqulify-tune/state`), sets the CPU scaling governor to `performance` (where supported), disables USB autosuspend (`power/control = on`) for USB Audio Class (`bInterfaceClass = 01`) devices under `/sys/bus/usb/devices`, creates `/etc/security/limits.d/95-aqulify-audio.conf` (`@audio - rtprio 95`, `@audio - memlock unlimited`), turns off Wi-Fi power saving (`iw dev <iface> set power_save off`, persistently in NetworkManager too: `/etc/NetworkManager/conf.d/95-aqulify-wifi-powersave.conf`, `wifi.powersave = 2`) because a power-saving Pi Wi-Fi can drop network discovery packets (UPnP / DLNA, mDNS), and installs `aqulify-tune.service` (`oneshot`) so the settings persist across reboots. Use `aqulify-tune status` to inspect current values. All changes are completely reversible at any time via `sudo aqulify-tune disable` (and are automatically reverted by `DEBIAN/prerm` if the package is removed).
 
 ---
 
@@ -174,7 +176,7 @@ sudo apt remove aqulify
 Az alábbi pontok valódi Raspberry Pi hiányában (eddig emulált környezetben vagy virtuális eszközökkel vizsgálva) **még nincsenek teljes körűen ellenőrizve**:
 
 - **Valódi Raspberry Pi 4 / 5 hardver:** a csomag települése és hosszú távú futása valódi Pi-n.
-- **Bejelentkezés nélküli indulás (`loginctl enable-linger`) és Raspberry Pi OS Lite:** hogy a PipeWire és az `aqulify.service` felhasználói szolgáltatás bejelentkezés nélkül elindul-e és folyamatosan működik-e.
+- **Bejelentkezés nélküli futás valódi Pi-n a csomag beállításával:** egy felhasználó valódi Pi 4-en (Pi OS trixie, képernyő nélkül) jelezte, hogy lingering nélkül az SSH bezárása után az Aqulify elérhetetlenné válik (2026-11-24); hogy a `loginctl enable-linger` után folyamatosan fut-e, arról még nincs visszajelzés. Hogy a 2.9.9-es csomag telepítéskor ezt magától helyesen bekapcsolja-e (a `SUDO_USER` alapján), azt csak hamis `loginctl`-lel teszteltük, valódi Pi-n még nem.
 - **PipeWire és közvetlen ALSA hangút valódi Pi-n:** USB DAC-on keresztüli folyamatos nagy felbontású és DSD (DoP) lejátszás.
 - **Valós idejű CPU-mérés (`test_dsp`) valódi hardveren.**
 - **Grafikus felület (`aqulify-gui`) és 3D vízesés HDMI-n.**

@@ -4,6 +4,12 @@
 #   2. USB-energiatakarékosság kikapcsolása az USB Audio Class (bInterfaceClass = 01) eszközökön: power/control -> on
 #   3. Valós idejű prioritás és memóriazárolás az @audio csoportnak: /etc/security/limits.d/95-aqulify-audio.conf
 #   4. Systemd oneshot szolgáltatás újraindítás utáni alkalmazáshoz: /etc/systemd/system/aqulify-tune.service
+#   5. Wi-Fi energiatakarékosság kikapcsolása (iw … set power_save off, tartósan a NetworkManagerben is:
+#      /etc/NetworkManager/conf.d/95-aqulify-wifi-powersave.conf, wifi.powersave = 2), hogy a hálózati felderítés
+#      (UPnP / DLNA, mDNS) ne akadjon el
+#
+# - NetworkManager wifi.powersave (0 alapértelmezett, 1 kihagy, 2 kikapcsol, 3 bekapcsol):
+#   https://networkmanager.dev/docs/api/latest/settings-802-11-wireless.html
 #
 # Dokumentációs források (ellenőrizve: 2026-11-15):
 # - Linux kernel CPU Performance Scaling (cpufreq sysfs: scaling_governor, scaling_available_governors):
@@ -31,6 +37,8 @@ STATE_DIR="$SYSROOT/var/lib/aqulify-tune"
 STATE_FILE="$STATE_DIR/state"
 LIMITS_FILE="$SYSROOT/etc/security/limits.d/95-aqulify-audio.conf"
 SERVICE_FILE="$SYSROOT/etc/systemd/system/aqulify-tune.service"
+NM_FILE="$SYSROOT/etc/NetworkManager/conf.d/95-aqulify-wifi-powersave.conf"
+IW="${AQ_IW:-iw}"   # teszteléshez hamis iw adható meg
 
 usage() {
     cat <<'EOF'
@@ -134,6 +142,33 @@ EOF
     echo "Valós idejű prioritás: $LIMITS_FILE létrehozva (@audio rtprio 95, memlock unlimited)."
     echo "Megjegyzés: a valós idejű prioritáshoz a felhasználónak az 'audio' csoportban kell lennie (ellenőrzés: groups)."
 
+    # 5. Wi-Fi energiatakarékosság kikapcsolása: bekapcsolva a Pi Wi-Fi-je szunyókál, és elnyeli a hálózati felderítés
+    #    (UPnP / DLNA, mDNS) csomagjait, így a telefon nem találja a gépet. Az eredeti érték mentődik.
+    local wifi_count=0 wdir iface orig_ps
+    if command -v "$IW" >/dev/null 2>&1; then
+        for wdir in "$SYSROOT"/sys/class/net/*/wireless; do
+            [ -d "$wdir" ] || continue
+            iface="$(basename "$(dirname "$wdir")")"
+            orig_ps="$("$IW" dev "$iface" get power_save 2>/dev/null | awk '{print $NF}' || true)"   # „Power save: on”
+            case "$orig_ps" in on|off) ;; *) continue ;; esac
+            save_state_once "wifi:${iface}" "$orig_ps"
+            "$IW" dev "$iface" set power_save off >/dev/null 2>&1 || continue
+            wifi_count=$((wifi_count + 1))
+        done
+        echo "Wi-Fi: $wifi_count csatolón az energiatakarékosság kikapcsolva."
+    else
+        echo "Wi-Fi: az 'iw' parancs nem érhető el, kihagyva."
+    fi
+    # A NetworkManager újracsatlakozáskor visszakapcsolná: tartós beállítás (wifi.powersave = 2: kikapcsolva)
+    if [ -d "$(dirname "$NM_FILE")" ]; then
+        cat > "$NM_FILE" <<'EOF'
+# Aqulify – Wi-Fi energiatakarékosság kikapcsolva (a hálózati felderítés megbízhatóságáért); aqulify-tune disable törli
+[connection]
+wifi.powersave = 2
+EOF
+        echo "NetworkManager: $NM_FILE létrehozva."
+    fi
+
     # 4. Systemd szolgáltatás újraindítás utánra
     mkdir -p "$(dirname "$SERVICE_FILE")"
     cat > "$SERVICE_FILE" <<'EOF'
@@ -174,6 +209,9 @@ cmd_disable() {
                         printf '%s\n' "$val" > "$target_file"
                     fi
                     ;;
+                wifi:*)
+                    "$IW" dev "${key#wifi:}" set power_save "$val" >/dev/null 2>&1 || true
+                    ;;
             esac
         done < "$STATE_FILE"
         rm -f "$STATE_FILE"
@@ -190,6 +228,10 @@ cmd_disable() {
     if [ -f "$SERVICE_FILE" ]; then
         rm -f "$SERVICE_FILE"
         echo "Törölve: $SERVICE_FILE"
+    fi
+    if [ -f "$NM_FILE" ]; then
+        rm -f "$NM_FILE"
+        echo "Törölve: $NM_FILE"
     fi
 
     if [ -n "$SYSROOT" ]; then
@@ -240,6 +282,16 @@ cmd_status() {
         echo "systemd egység: megvan ($SERVICE_FILE)"
     else
         echo "systemd egység: nincs"
+    fi
+
+    local wdir iface
+    for wdir in "$SYSROOT"/sys/class/net/*/wireless; do
+        [ -d "$wdir" ] || continue
+        iface="$(basename "$(dirname "$wdir")")"
+        echo "Wi-Fi ($iface) energiatakarékosság: $("$IW" dev "$iface" get power_save 2>/dev/null | awk '{print $NF}' || true)"
+    done
+    if [ -f "$NM_FILE" ]; then
+        echo "NetworkManager Wi-Fi beállítás: megvan ($NM_FILE)"
     fi
 }
 

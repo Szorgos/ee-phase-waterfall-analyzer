@@ -71,10 +71,29 @@ case "$1" in
         fi
         ;;
 esac
+# A bejelentkezés nélküli futást csak teljes eltávolításkor vonjuk vissza (frissítéskor marad), és csak ha mi kapcsoltuk be
+if [ "$1" = "remove" ] && [ -x /usr/lib/aqulify/aqulify-linger ]; then
+    /usr/lib/aqulify/aqulify-linger disable || true
+fi
 exit 0
 EOF
-chmod 755 debian/aqulify-tune.sh debian/prerm
-sed -i 's|\(\tinstall -m 755 debian/postrm \$(D)/DEBIAN/postrm\)|\1\n\tinstall -m 755 debian/aqulify-tune.sh $(D)/usr/bin/aqulify-tune\n\tinstall -m 755 debian/prerm $(D)/DEBIAN/prerm|' debian/rules
+# Bejelentkezés nélküli futás (lingering, tools/pi/linger.sh): képernyő nélküli Pi-n enélkül az SSH bezárásakor a
+# systemd leállítja az aqulify.service felhasználói szolgáltatást. A postinst bekapcsolja, a prerm visszavonja.
+cp "$SCRIPT_DIR/linger.sh" debian/aqulify-linger.sh
+[ "$(tail -n 1 debian/postinst)" = "exit 0" ] || { echo "HIBA: a debian/postinst nem 'exit 0'-val végződik"; exit 1; }
+{ sed '$d' debian/postinst; cat <<'EOF'
+# Raspberry Pi: az Aqulify bejelentkezés nélkül is fusson (loginctl enable-linger a telepítő felhasználónak)
+if [ "$1" = "configure" ] && [ -x /usr/lib/aqulify/aqulify-linger ]; then
+    /usr/lib/aqulify/aqulify-linger enable || true
+fi
+exit 0
+EOF
+} > debian/postinst.new
+mv debian/postinst.new debian/postinst
+chmod 755 debian/aqulify-tune.sh debian/prerm debian/aqulify-linger.sh debian/postinst
+sed -i 's|\(\tinstall -m 755 debian/postrm \$(D)/DEBIAN/postrm\)|\1\n\tinstall -m 755 debian/aqulify-tune.sh $(D)/usr/bin/aqulify-tune\n\tinstall -m 755 debian/prerm $(D)/DEBIAN/prerm\n\tinstall -D -m 755 debian/aqulify-linger.sh $(D)/usr/lib/aqulify/aqulify-linger|' debian/rules
+grep -Fq $'\tinstall -D -m 755 debian/aqulify-linger.sh $(D)/usr/lib/aqulify/aqulify-linger' debian/rules || { echo "HIBA: az aqulify-linger telepítése nem került be a debian/rules fájlba"; exit 1; }
+grep -Fq 'aqulify-linger enable' debian/postinst || { echo "HIBA: a lingering nem került be a debian/postinst fájlba"; exit 1; }
 grep -Fq $'\tinstall -m 755 debian/aqulify-tune.sh $(D)/usr/bin/aqulify-tune' debian/rules || { echo "HIBA: az aqulify-tune telepítése nem került be a debian/rules fájlba"; exit 1; }
 grep -Fq $'\tinstall -m 755 debian/prerm $(D)/DEBIAN/prerm' debian/rules || { echo "HIBA: a debian/prerm telepítése nem került be a debian/rules fájlba"; exit 1; }
 start=$(date +%s)

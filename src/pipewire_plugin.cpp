@@ -1605,6 +1605,9 @@ int main(int argc, char* argv[]) {
 
     const auto headlessDec = aq::linux_headless::detect(forceHeadless);
     std::cout << aq::linux_headless::formatLogLine(headlessDec) << "\n";
+    if (const std::string w = aq::linux_headless::lingerWarning(headlessDec, aq::linux_headless::currentUserName());
+        !w.empty())
+        std::cout << w << "\n";
 
     std::unique_ptr<WebSocketBridge> bridge;
     for (int p : ports) {

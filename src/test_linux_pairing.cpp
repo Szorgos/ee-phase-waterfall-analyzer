@@ -174,12 +174,44 @@ void testBluetoothSupportedFlag() {
 #endif
 }
 
+void testLingerWarning() {
+    std::cout << "[4] Bejelentkezés nélküli futás (lingering) figyelmeztetés...\n";
+    using namespace aq::linux_headless;
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / "aq_linger_test";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+
+    Env headlessEnv;
+    const auto headless = evaluate(headlessEnv);
+    Env deskEnv;
+    deskEnv.display = ":0";
+    const auto desktop = evaluate(deskEnv);
+
+    // nincs linger-fájl: fej nélküli módban figyelmeztet, a felhasználónév NINCS a sorban (PII)
+    const std::string w = lingerWarning(headless, "probauser", dir.string());
+    check(!w.empty(), "fej nélküli mód lingering nélkül: figyelmeztetés");
+    check(w.find("loginctl enable-linger $USER") != std::string::npos, "a figyelmeztetés megadja a parancsot");
+    check(w.find("probauser") == std::string::npos, "a felhasználónév nem kerül a naplóba");
+    // asztali gépen nincs figyelmeztetés (bejelentkezett munkamenet tartja életben)
+    check(lingerWarning(desktop, "probauser", dir.string()).empty(), "normál módban nincs figyelmeztetés");
+    // a linger-fájl megvan: nincs figyelmeztetés
+    std::ofstream(dir / "probauser").put('\n');
+    check(lingerEnabled("probauser", dir.string()), "a linger-fájl alapján bekapcsolt");
+    check(lingerWarning(headless, "probauser", dir.string()).empty(), "bekapcsolt lingeringnél nincs figyelmeztetés");
+    // ismeretlen felhasználó: nem figyelmeztet tévesen
+    check(lingerWarning(headless, "", dir.string()).empty(), "ismeretlen felhasználónál nincs figyelmeztetés");
+    check(!currentUserName().empty(), "a futó folyamat felhasználóneve kiolvasható");
+    fs::remove_all(dir);
+}
+
 } // namespace
 
 int main() {
     testHeadlessEvaluation();
     testRankLocalAddresses();
     testBluetoothSupportedFlag();
+    testLingerWarning();
     std::cout << "\nEredmény: " << g_pass << " OK, " << g_fail << " HIBA.\n";
     return g_fail == 0 ? 0 : 1;
 }

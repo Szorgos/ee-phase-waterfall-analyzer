@@ -15,6 +15,10 @@
 #include <fstream>
 #include <string>
 
+#include <pwd.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 namespace aq::linux_headless {
 
 struct Env {
@@ -124,6 +128,32 @@ inline std::string formatLogLine(const Decision& d) {
     return std::string("[Párosítás] Párosítás: ") +
            (d.headless ? "fej nélküli mód" : "normál mód") +
            ", ok: " + d.reason;
+}
+
+/**
+ * Bejelentkezés nélküli futás (systemd „lingering”): a felhasználói szolgáltatás (aqulify.service) csak akkor él
+ * bejelentkezés nélkül is, ha a felhasználónak van /var/lib/systemd/linger/<név> fájlja (loginctl enable-linger).
+ * Nélküle képernyő nélküli gépen az utolsó SSH-munkamenet bezárásakor a systemd leállítja az Aqulify-t.
+ */
+inline bool lingerEnabled(const std::string& user, const std::string& lingerDir = "/var/lib/systemd/linger") {
+    if (user.empty()) return true;   // ismeretlen felhasználó: nem figyelmeztetünk tévesen
+    struct stat st{};
+    return ::stat((lingerDir + "/" + user).c_str(), &st) == 0;
+}
+
+/** Figyelmeztető naplósor fej nélküli módban, ha a lingering ki van kapcsolva; egyébként üres. */
+inline std::string lingerWarning(const Decision& d, const std::string& user,
+                                 const std::string& lingerDir = "/var/lib/systemd/linger") {
+    if (!d.headless || lingerEnabled(user, lingerDir)) return {};
+    return "[Headless] Figyelem: a bejelentkezés nélküli futás (lingering) ki van kapcsolva, ezért az SSH-munkamenet "
+           "bezárása után a rendszer leállítja az Aqulify-t. Bekapcsolás: sudo loginctl enable-linger $USER";
+    // a felhasználónév szándékosan nincs a sorban: a napló a hibajelentésbe is bekerülhet (PII-mentes)
+}
+
+/** A futó folyamat felhasználójának neve (a lingering-fájl nevéhez); ismeretlennél üres. */
+inline std::string currentUserName() {
+    if (const struct passwd* pw = ::getpwuid(::getuid()); pw && pw->pw_name) return pw->pw_name;
+    return {};
 }
 
 } // namespace aq::linux_headless

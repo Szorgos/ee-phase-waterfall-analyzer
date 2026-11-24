@@ -153,6 +153,90 @@ exit 1
 FAILWRAP
 chmod 755 "$TMP/bin/aqulify-tune"
 check "prerm remove hibás aqulify-tune mellett is 0-val tér vissza" env AQ_SYSROOT="$TMP" PATH="$TMP/bin:$PATH" sh "$PRERM" remove
+rm -f "$TMP/var/lib/aqulify-tune/state"
+
+echo "=== [8] Wi-Fi energiatakarékosság (hamis iw, NetworkManager-mappa) ==="
+WIFI="$(mktemp -d /tmp/aq-tune-wifi.XXXXXX)"
+trap 'rm -rf "$TMP" "$TMP_NOCPU" "$WIFI"' EXIT
+mkdir -p "$WIFI/sys/class/net/wlan0/wireless" "$WIFI/sys/class/net/eth0" "$WIFI/etc/NetworkManager/conf.d" "$WIFI/bin"
+echo "on" > "$WIFI/iw_wlan0"
+cat > "$WIFI/bin/iw" <<FAKEIW
+#!/bin/sh
+# hamis iw: dev <csatoló> get power_save | dev <csatoló> set power_save on|off
+f="$WIFI/iw_\$2"
+case "\$3" in
+    get) [ -f "\$f" ] || exit 1; echo "Power save: \$(cat "\$f")" ;;
+    set) echo "\$5" > "\$f" ;;
+esac
+FAKEIW
+chmod 755 "$WIFI/bin/iw"
+OUT_WIFI="$(AQ_SYSROOT="$WIFI" AQ_IW="$WIFI/bin/iw" bash "$TUNE" enable)"
+check_eq "wlan0 energiatakarékosság -> off" "off" "$(cat "$WIFI/iw_wlan0")"
+check "kábeles csatolóhoz (eth0) nem nyúlt" test ! -e "$WIFI/iw_eth0"
+check "állapotfájlban a wlan0 eredeti értéke (on)" grep -Fxq "wifi:wlan0=on" "$WIFI/var/lib/aqulify-tune/state"
+check "NetworkManager tartós beállítás létrejött" grep -Fq "wifi.powersave = 2" "$WIFI/etc/NetworkManager/conf.d/95-aqulify-wifi-powersave.conf"
+check "kimenet jelzi a Wi-Fi-t" grep -Fq "Wi-Fi: 1 csatolón" <<<"$OUT_WIFI"
+AQ_SYSROOT="$WIFI" AQ_IW="$WIFI/bin/iw" bash "$TUNE" enable --boot >/dev/null
+check "kétszeri enable után is az eredeti (on) marad mentve" grep -Fxq "wifi:wlan0=on" "$WIFI/var/lib/aqulify-tune/state"
+check "status kiírja a Wi-Fi állapotát" grep -Fq "Wi-Fi (wlan0) energiatakarékosság: off" <<<"$(AQ_SYSROOT="$WIFI" AQ_IW="$WIFI/bin/iw" bash "$TUNE" status)"
+AQ_SYSROOT="$WIFI" AQ_IW="$WIFI/bin/iw" bash "$TUNE" disable >/dev/null
+check_eq "disable után a wlan0 visszaállt: on" "on" "$(cat "$WIFI/iw_wlan0")"
+check "disable törölte a NetworkManager-beállítást" test ! -e "$WIFI/etc/NetworkManager/conf.d/95-aqulify-wifi-powersave.conf"
+# iw nélküli rendszeren sem áll le hibával
+check "enable iw nélkül is sikeres" env AQ_SYSROOT="$WIFI" AQ_IW="$WIFI/bin/nincs-ilyen-iw" bash "$TUNE" enable >/dev/null
+AQ_SYSROOT="$WIFI" AQ_IW="$WIFI/bin/nincs-ilyen-iw" bash "$TUNE" disable >/dev/null
+
+echo "=== [9] Bejelentkezés nélküli futás (linger.sh) ==="
+LINGER="$SCRIPT_DIR/linger.sh"
+LG="$(mktemp -d /tmp/aq-linger.XXXXXX)"
+trap 'rm -rf "$TMP" "$TMP_NOCPU" "$WIFI" "$LG"' EXIT
+mkdir -p "$LG/bin"
+cat > "$LG/bin/loginctl" <<FAKELC
+#!/bin/sh
+# hamis loginctl: enable-linger / disable-linger <név> a hamis /var/lib/systemd/linger alatt
+echo "\$*" >> "$LG/loginctl.log"
+case "\$1" in
+    enable-linger) mkdir -p "$LG/var/lib/systemd/linger"; : > "$LG/var/lib/systemd/linger/\$2" ;;
+    disable-linger) rm -f "$LG/var/lib/systemd/linger/\$2" ;;
+esac
+FAKELC
+chmod 755 "$LG/bin/loginctl"
+lg() { env AQ_SYSROOT="$LG" AQ_LOGINCTL="$LG/bin/loginctl" "$@"; }
+# 9a: sudo apt-tal telepít a „bala” felhasználó: bekapcsolja és megjegyzi
+lg SUDO_USER=bala AQ_UID1000=pi sh "$LINGER" enable >/dev/null
+check "SUDO_USER lingeringje bekapcsolva" test -e "$LG/var/lib/systemd/linger/bala"
+check "nem a uid 1000-es felhasználóé" test ! -e "$LG/var/lib/systemd/linger/pi"
+check_eq "megjegyezte, kinek kapcsolta be" "bala" "$(cat "$LG/var/lib/aqulify/linger-user")"
+# 9b: eltávolításkor visszavonja
+lg sh "$LINGER" disable
+check "disable visszavonta" test ! -e "$LG/var/lib/systemd/linger/bala"
+check "a megjegyzés törölve" test ! -e "$LG/var/lib/aqulify/linger-user"
+# 9c: a felhasználó már maga bekapcsolta: nem jegyzi meg, és eltávolításkor sem vonja vissza
+mkdir -p "$LG/var/lib/systemd/linger"; : > "$LG/var/lib/systemd/linger/bala"
+rm -f "$LG/loginctl.log"
+lg SUDO_USER=bala sh "$LINGER" enable >/dev/null
+check "már bekapcsolt lingeringhez nem nyúlt" test ! -e "$LG/loginctl.log"
+lg sh "$LINGER" disable
+check "a felhasználó saját beállítása megmaradt" test -e "$LG/var/lib/systemd/linger/bala"
+rm -f "$LG/var/lib/systemd/linger/bala"
+# 9d: sudo nélkül (root): a uid 1000-es felhasználó; root sosem
+lg SUDO_USER=root AQ_UID1000=pi sh "$LINGER" enable >/dev/null
+check "root telepítésnél a uid 1000-es felhasználó kapja" test -e "$LG/var/lib/systemd/linger/pi"
+check "rootnak nem kapcsolja be" test ! -e "$LG/var/lib/systemd/linger/root"
+lg sh "$LINGER" disable
+# 9e: nincs felhasználó: nem hiba, nem ír semmit
+check "felhasználó nélkül is 0-val tér vissza" lg SUDO_USER= AQ_UID1000= sh "$LINGER" enable
+check "felhasználó nélkül nincs megjegyzés" test ! -e "$LG/var/lib/aqulify/linger-user"
+# 9f: a loginctl nem működik (pl. systemd nélküli chroot): a linger-fájlt maga hozza létre
+lg AQ_LOGINCTL=false SUDO_USER=bala sh "$LINGER" enable >/dev/null
+check "loginctl nélkül a linger-fájl létrejött" test -e "$LG/var/lib/systemd/linger/bala"
+lg AQ_LOGINCTL=false sh "$LINGER" disable
+check "loginctl nélkül a disable is törölte" test ! -e "$LG/var/lib/systemd/linger/bala"
+
+echo "=== [10] A Pi-csomag postinst és prerm hívja a lingeringet ==="
+check "pi_deb_build: a postinst kiegészítés tartalmazza: aqulify-linger enable" grep -Fq "/usr/lib/aqulify/aqulify-linger enable" "$SCRIPT_DIR/pi_deb_build.sh"
+check "a prerm (remove) tartalmazza: aqulify-linger disable" grep -Fq "aqulify-linger disable" "$PRERM"
+check "a linger.sh telepítése a debian/rules-ba kerül" grep -Fq "debian/aqulify-linger.sh \$(D)/usr/lib/aqulify/aqulify-linger" "$SCRIPT_DIR/pi_deb_build.sh"
 
 echo ""
 if [ "$fail" -eq 0 ]; then
