@@ -1,6 +1,150 @@
 {
   "versions": [
     {
+      "version": "2.9.9",
+      "date": "2026-11-24",
+      "notes": {
+        "hu": [
+          "Raspberry Pi képernyő nélkül: az Aqulify bejelentkezés nélkül is folyamatosan fut, így a telefon mindig eléri (eddig az SSH bezárása után elérhetetlenné válhatott).",
+          "Telefonos távirányító 1.5.3: a UPnP / DLNA lejátszó a telefonról is bekapcsolható, képernyő nélküli Raspberry Pi-n is.",
+          "Windowson a „Minden hang” bekapcsolásakor már az indulástól a beállított hangzás szól, és a hangerő a valódi hangkártyát állítja.",
+          "Raspberry Pi Wi-Fi-n: az aqulify-tune a Wi-Fi energiatakarékos módját is kikapcsolja, így a telefon megbízhatóbban megtalálja a Pi-t."
+        ],
+        "en": [
+          "Raspberry Pi without a screen: Aqulify keeps running even when nobody is logged in, so your phone can always reach it (it could become unreachable after closing SSH).",
+          "Phone remote 1.5.3: you can switch on the UPnP / DLNA player from your phone, on a screenless Raspberry Pi too.",
+          "On Windows with “All audio” on, your sound settings apply right from start-up, and the volume controls your real sound card.",
+          "Raspberry Pi on Wi-Fi: aqulify-tune also turns off Wi-Fi power saving, so your phone finds the Pi more reliably."
+        ],
+        "es": [
+          "Raspberry Pi sin pantalla: Aqulify sigue funcionando aunque nadie haya iniciado sesión, así que el teléfono siempre lo alcanza (antes podía quedar inaccesible al cerrar SSH).",
+          "Mando del teléfono 1.5.3: puedes activar el reproductor UPnP / DLNA desde el teléfono, también en una Raspberry Pi sin pantalla.",
+          "En Windows con «Todo el audio» activado, tus ajustes de sonido se aplican desde el inicio y el volumen controla tu tarjeta de sonido real.",
+          "Raspberry Pi por Wi-Fi: aqulify-tune también desactiva el ahorro de energía del Wi-Fi, para que el teléfono encuentre la Pi de forma más fiable."
+        ],
+        "fr": [
+          "Raspberry Pi sans écran : Aqulify continue de tourner même sans session ouverte, votre téléphone peut donc toujours le joindre (il pouvait devenir injoignable après la fermeture de SSH).",
+          "Télécommande 1.5.3 : vous pouvez activer le lecteur UPnP / DLNA depuis votre téléphone, y compris sur un Raspberry Pi sans écran.",
+          "Sous Windows avec « Tout l’audio » activé, vos réglages sonores s’appliquent dès le démarrage et le volume pilote votre vraie carte son.",
+          "Raspberry Pi en Wi-Fi : aqulify-tune désactive aussi l’économie d’énergie du Wi-Fi, pour que votre téléphone trouve le Pi plus sûrement."
+        ],
+        "zh": [
+          "无屏幕的树莓派：即使无人登录，Aqulify 也会持续运行，手机随时都能连接（以前关闭 SSH 后可能无法访问）。",
+          "手机遥控 1.5.3：可以在手机上开启 UPnP / DLNA 播放器，无屏幕的树莓派也可以。",
+          "在 Windows 上开启“全部音频”时，你的声音设置从启动起就生效，音量控制的是真正的声卡。",
+          "使用 Wi-Fi 的树莓派：aqulify-tune 还会关闭 Wi-Fi 省电模式，让手机更可靠地找到树莓派。"
+        ],
+        "de": [
+          "Raspberry Pi ohne Bildschirm: Aqulify läuft auch ohne angemeldeten Benutzer weiter, sodass dein Telefon es immer erreicht (bisher konnte es nach dem Schließen von SSH unerreichbar werden).",
+          "Telefon-Fernbedienung 1.5.3: Du kannst den UPnP-/DLNA-Player vom Telefon aus einschalten, auch auf einem Raspberry Pi ohne Bildschirm.",
+          "Unter Windows mit „Gesamter Ton“ gelten deine Klangeinstellungen ab dem Start, und die Lautstärke steuert deine echte Soundkarte.",
+          "Raspberry Pi im WLAN: aqulify-tune schaltet auch den WLAN-Stromsparmodus aus, damit dein Telefon den Pi zuverlässiger findet."
+        ],
+        "it": [
+          "Raspberry Pi senza schermo: Aqulify continua a funzionare anche senza nessun utente collegato, così il telefono lo raggiunge sempre (prima poteva diventare irraggiungibile chiudendo SSH).",
+          "Telecomando 1.5.3: puoi attivare il lettore UPnP / DLNA dal telefono, anche su un Raspberry Pi senza schermo.",
+          "Su Windows con «Tutto l’audio» attivo, le tue impostazioni audio valgono fin dall’avvio e il volume controlla la tua vera scheda audio.",
+          "Raspberry Pi in Wi-Fi: aqulify-tune disattiva anche il risparmio energetico del Wi-Fi, così il telefono trova il Pi in modo più affidabile."
+        ],
+        "nl": [
+          "Raspberry Pi zonder scherm: Aqulify blijft draaien, ook als niemand is ingelogd, zodat je telefoon hem altijd bereikt (voorheen kon hij na het sluiten van SSH onbereikbaar worden).",
+          "Telefoonafstandsbediening 1.5.3: je kunt de UPnP-/DLNA-speler vanaf je telefoon inschakelen, ook op een Raspberry Pi zonder scherm.",
+          "Op Windows met ‘Alle audio’ aan gelden je geluidsinstellingen vanaf het opstarten, en het volume regelt je echte geluidskaart.",
+          "Raspberry Pi via wifi: aqulify-tune schakelt ook de energiebesparing van wifi uit, zodat je telefoon de Pi betrouwbaarder vindt."
+        ],
+        "pl": [
+          "Raspberry Pi bez ekranu: Aqulify działa dalej, nawet gdy nikt nie jest zalogowany, więc telefon zawsze się z nim połączy (wcześniej po zamknięciu SSH mógł stać się nieosiągalny).",
+          "Pilot w telefonie 1.5.3: odtwarzacz UPnP / DLNA możesz włączyć z telefonu, także na Raspberry Pi bez ekranu.",
+          "W Windows przy włączonym „Cały dźwięk” Twoje ustawienia dźwięku działają od startu, a głośność steruje prawdziwą kartą dźwiękową.",
+          "Raspberry Pi przez Wi-Fi: aqulify-tune wyłącza też oszczędzanie energii Wi-Fi, dzięki czemu telefon pewniej znajduje Pi."
+        ],
+        "ru": [
+          "Raspberry Pi без экрана: Aqulify продолжает работать, даже если никто не вошёл в систему, поэтому телефон всегда до него достучится (раньше после закрытия SSH он мог стать недоступен).",
+          "Пульт на телефоне 1.5.3: проигрыватель UPnP / DLNA можно включить с телефона, в том числе на Raspberry Pi без экрана.",
+          "В Windows при включённом «Весь звук» ваши настройки звука действуют с самого запуска, а громкость управляет настоящей звуковой картой.",
+          "Raspberry Pi по Wi-Fi: aqulify-tune также отключает энергосбережение Wi-Fi, чтобы телефон надёжнее находил Pi."
+        ],
+        "pt": [
+          "Raspberry Pi sem ecrã: o Aqulify continua a funcionar mesmo sem ninguém com sessão iniciada, por isso o telemóvel chega sempre até ele (antes podia ficar inacessível ao fechar o SSH).",
+          "Comando no telemóvel 1.5.3: pode ligar o leitor UPnP / DLNA a partir do telemóvel, também num Raspberry Pi sem ecrã.",
+          "No Windows com «Todo o áudio» ligado, as suas definições de som aplicam-se desde o arranque e o volume controla a placa de som real.",
+          "Raspberry Pi por Wi-Fi: o aqulify-tune também desliga a poupança de energia do Wi-Fi, para o telemóvel encontrar o Pi de forma mais fiável."
+        ],
+        "ro": [
+          "Raspberry Pi fără ecran: Aqulify rulează în continuare chiar dacă nu e nimeni autentificat, așa că telefonul îl găsește mereu (înainte putea deveni inaccesibil după închiderea SSH).",
+          "Telecomanda din telefon 1.5.3: poți porni playerul UPnP / DLNA din telefon, și pe un Raspberry Pi fără ecran.",
+          "Pe Windows, cu „Tot sunetul” activ, setările tale de sunet se aplică de la pornire, iar volumul controlează placa de sunet reală.",
+          "Raspberry Pi pe Wi-Fi: aqulify-tune oprește și economisirea de energie a Wi-Fi-ului, ca telefonul să găsească Pi-ul mai sigur."
+        ],
+        "el": [
+          "Raspberry Pi χωρίς οθόνη: το Aqulify συνεχίζει να λειτουργεί ακόμη κι αν δεν έχει συνδεθεί κανείς, οπότε το κινητό το βρίσκει πάντα (πριν μπορούσε να γίνει απρόσιτο μετά το κλείσιμο του SSH).",
+          "Τηλεχειριστήριο κινητού 1.5.3: μπορείτε να ενεργοποιήσετε το πρόγραμμα αναπαραγωγής UPnP / DLNA από το κινητό, και σε Raspberry Pi χωρίς οθόνη.",
+          "Στα Windows με ενεργό το «Όλος ο ήχος», οι ρυθμίσεις ήχου ισχύουν από την εκκίνηση και η ένταση ελέγχει την πραγματική κάρτα ήχου.",
+          "Raspberry Pi μέσω Wi-Fi: το aqulify-tune απενεργοποιεί και την εξοικονόμηση ενέργειας του Wi-Fi, ώστε το κινητό να βρίσκει το Pi πιο αξιόπιστα."
+        ],
+        "tr": [
+          "Ekransız Raspberry Pi: Aqulify kimse oturum açmamışken de çalışmaya devam eder, böylece telefonunuz ona her zaman ulaşır (önceden SSH kapatılınca erişilemez hale gelebiliyordu).",
+          "Telefon kumandası 1.5.3: UPnP / DLNA oynatıcıyı telefondan açabilirsiniz, ekransız Raspberry Pi'de de.",
+          "Windows'ta “Tüm sesler” açıkken ses ayarlarınız başlangıçtan itibaren geçerli olur ve ses düzeyi gerçek ses kartınızı kontrol eder.",
+          "Wi-Fi'deki Raspberry Pi: aqulify-tune Wi-Fi güç tasarrufunu da kapatır, böylece telefon Pi'yi daha güvenilir şekilde bulur."
+        ],
+        "fi": [
+          "Raspberry Pi ilman näyttöä: Aqulify pysyy käynnissä, vaikka kukaan ei ole kirjautuneena, joten puhelin tavoittaa sen aina (aiemmin se saattoi kadota SSH:n sulkemisen jälkeen).",
+          "Puhelinkaukosäädin 1.5.3: UPnP / DLNA -soittimen voi kytkeä päälle puhelimesta, myös näytöttömässä Raspberry Pissä.",
+          "Windowsissa, kun ”Kaikki ääni” on päällä, ääniasetuksesi ovat voimassa heti käynnistyksestä ja äänenvoimakkuus säätää oikeaa äänikorttia.",
+          "Raspberry Pi Wi-Fissä: aqulify-tune kytkee myös Wi-Fin virransäästön pois, joten puhelin löytää Pin luotettavammin."
+        ],
+        "da": [
+          "Raspberry Pi uden skærm: Aqulify kører videre, selv når ingen er logget ind, så din telefon altid kan nå den (før kunne den blive utilgængelig, når SSH blev lukket).",
+          "Telefonfjernbetjening 1.5.3: Du kan slå UPnP/DLNA-afspilleren til fra telefonen, også på en Raspberry Pi uden skærm.",
+          "På Windows med “Al lyd” slået til gælder dine lydindstillinger fra opstart, og lydstyrken styrer dit rigtige lydkort.",
+          "Raspberry Pi på Wi-Fi: aqulify-tune slår også Wi-Fi-strømbesparelse fra, så telefonen finder Pi'en mere pålideligt."
+        ],
+        "nb": [
+          "Raspberry Pi uten skjerm: Aqulify fortsetter å kjøre selv når ingen er logget inn, så telefonen alltid når den (før kunne den bli utilgjengelig etter at SSH ble lukket).",
+          "Telefonfjernkontroll 1.5.3: Du kan slå på UPnP/DLNA-spilleren fra telefonen, også på en Raspberry Pi uten skjerm.",
+          "På Windows med «All lyd» på gjelder lydinnstillingene dine fra oppstart, og volumet styrer det ekte lydkortet ditt.",
+          "Raspberry Pi på Wi-Fi: aqulify-tune slår også av strømsparing for Wi-Fi, så telefonen finner Pi-en mer pålitelig."
+        ],
+        "sv": [
+          "Raspberry Pi utan skärm: Aqulify fortsätter att köras även när ingen är inloggad, så att telefonen alltid når den (tidigare kunde den bli oåtkomlig när SSH stängdes).",
+          "Telefonfjärrkontroll 1.5.3: Du kan slå på UPnP/DLNA-spelaren från telefonen, även på en Raspberry Pi utan skärm.",
+          "På Windows med ”Allt ljud” påslaget gäller dina ljudinställningar från start, och volymen styr ditt riktiga ljudkort.",
+          "Raspberry Pi på wifi: aqulify-tune stänger också av wifi-energisparläget, så att telefonen hittar Pi:n mer pålitligt."
+        ],
+        "he": [
+          "Raspberry Pi ללא מסך: Aqulify ממשיך לפעול גם כשאף אחד לא מחובר, כך שהטלפון תמיד מגיע אליו (קודם הוא עלול היה להפוך ללא נגיש אחרי סגירת SSH).",
+          "שלט בטלפון 1.5.3: אפשר להפעיל את נגן ה-UPnP / DLNA מהטלפון, גם ב-Raspberry Pi ללא מסך.",
+          "ב-Windows כש„כל השמע” פועל, הגדרות הצליל שלך חלות כבר מההפעלה, ועוצמת השמע שולטת בכרטיס הקול האמיתי.",
+          "Raspberry Pi ב-Wi-Fi: ‏aqulify-tune מכבה גם את חיסכון החשמל של ה-Wi-Fi, כך שהטלפון מוצא את ה-Pi בצורה אמינה יותר."
+        ],
+        "ja": [
+          "画面のない Raspberry Pi：誰もログインしていなくても Aqulify が動き続けるので、スマートフォンからいつでも接続できます（以前は SSH を閉じると接続できなくなることがありました）。",
+          "スマホリモコン 1.5.3：UPnP / DLNA プレーヤーをスマートフォンからオンにできます。画面のない Raspberry Pi でも使えます。",
+          "Windows で「すべての音声」をオンにすると、起動直後から設定どおりの音になり、音量は実際のサウンドカードを調整します。",
+          "Wi-Fi 接続の Raspberry Pi：aqulify-tune が Wi-Fi の省電力もオフにするので、スマートフォンが Pi をより確実に見つけられます。"
+        ],
+        "ko": [
+          "화면 없는 Raspberry Pi: 아무도 로그인하지 않아도 Aqulify가 계속 실행되어 휴대폰에서 언제나 연결할 수 있습니다(이전에는 SSH를 닫으면 연결되지 않을 수 있었습니다).",
+          "휴대폰 리모컨 1.5.3: 휴대폰에서 UPnP / DLNA 플레이어를 켤 수 있으며, 화면 없는 Raspberry Pi에서도 됩니다.",
+          "Windows에서 ‘모든 오디오’를 켜면 시작할 때부터 설정한 소리가 나고, 볼륨은 실제 사운드 카드를 조절합니다.",
+          "Wi-Fi로 연결된 Raspberry Pi: aqulify-tune이 Wi-Fi 절전 모드도 꺼서 휴대폰이 Pi를 더 안정적으로 찾습니다."
+        ],
+        "cs": [
+          "Raspberry Pi bez obrazovky: Aqulify běží dál, i když není nikdo přihlášen, takže se k němu telefon vždy připojí (dříve mohl být po zavření SSH nedostupný).",
+          "Dálkové ovládání v telefonu 1.5.3: přehrávač UPnP / DLNA můžete zapnout z telefonu, i na Raspberry Pi bez obrazovky.",
+          "Ve Windows se zapnutým „Veškerý zvuk“ platí vaše nastavení zvuku hned od spuštění a hlasitost ovládá skutečnou zvukovou kartu.",
+          "Raspberry Pi na Wi-Fi: aqulify-tune vypne i úsporný režim Wi-Fi, takže telefon najde Pi spolehlivěji."
+        ],
+        "uk": [
+          "Raspberry Pi без екрана: Aqulify працює далі, навіть коли ніхто не ввійшов у систему, тож телефон завжди до нього дістанеться (раніше після закриття SSH він міг стати недоступним).",
+          "Пульт на телефоні 1.5.3: програвач UPnP / DLNA можна ввімкнути з телефона, зокрема на Raspberry Pi без екрана.",
+          "У Windows з увімкненим «Увесь звук» ваші налаштування звуку діють від самого запуску, а гучність керує справжньою звуковою картою.",
+          "Raspberry Pi через Wi-Fi: aqulify-tune також вимикає енергозбереження Wi-Fi, щоб телефон надійніше знаходив Pi."
+        ]
+      }
+    },
+    {
       "version": "2.9.8",
       "date": "2026-11-24",
       "notes": {
