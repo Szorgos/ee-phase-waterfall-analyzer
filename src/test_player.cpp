@@ -2377,6 +2377,178 @@ static void testUpsamplePlayerK1K6K7K8K16() {
     }
 }
 
+// =========================================================================
+// Szűrő a DAC rátáján: a DAC csak 44,1 / 48 kHz-et tud, a felmintavételezés be van kapcsolva
+// =========================================================================
+
+/** Csak 44,1 és 48 kHz-et tudó „DAC” (pl. 16 bites, 2× rátát nem fogadó eszköz). */
+class LowRateOutput : public FakeOutput {
+public:
+    std::vector<uint32_t> supportedRates() const override { return { 44100, 48000 }; }
+};
+
+/** Az összes előállított keret kivétele (a fájl végéig, a szűrő kiürítésével együtt; csend nélkül). */
+static std::vector<float> pullAllProduced(FilePlayer& p, FakeOutput& o) {
+    std::vector<float> out;
+    std::vector<float> blk(512 * 2);
+    for (int guard = 0; guard < 100000; ++guard) {
+        waitBuffered(p, 512);
+        const size_t k = std::min<size_t>(512, p.bufferedFrames());
+        if (k == 0) {
+            if (p.decodeAtEnd()) break;
+            continue;
+        }
+        if (!o.pull(blk.data(), k)) break;
+        out.insert(out.end(), blk.begin(), blk.begin() + k * 2);
+    }
+    return out;
+}
+
+static double toneAmpStereo(const std::vector<float>& x, int ch, size_t start, size_t n, double f, double sr) {
+    double s = 0.0, c = 0.0;
+    for (size_t i = 0; i < n; ++i) {
+        const double v = x[2 * (start + i) + ch];
+        const double ph = 2.0 * kPi * f * static_cast<double>(start + i) / sr;
+        s += v * std::sin(ph);
+        c += v * std::cos(ph);
+    }
+    return 2.0 * std::sqrt(s * s + c * c) / static_cast<double>(n);
+}
+
+static void testFilterOnlyPlayer() {
+    std::printf("\n========================================================\n");
+    std::printf(" Szűrő a DAC rátáján (lejátszó): DAC = {44,1; 48} kHz, ×2 szabály\n");
+    std::printf("========================================================\n");
+    const uint32_t sr = 44100;
+    const size_t n = 2 * sr;
+    std::vector<float> src(n * 2);
+    for (size_t i = 0; i < n; ++i) {
+        src[2 * i] = static_cast<float>(0.5 * std::sin(2.0 * kPi * 1000.0 * i / sr));
+        src[2 * i + 1] = static_cast<float>(0.5 * std::sin(2.0 * kPi * 21000.0 * i / sr));
+    }
+    const std::string path = tmpPath("aq_szuro_dac.wav");
+    writeWavFloat(path, sr, 2, src);
+    audioopt::AudioOptions opts;
+    opts.upsampleRule = audioopt::UpsampleRule::Double;
+    opts.upsamplePassbandEnd = 0.90;
+    std::string err;
+
+    // 1. Bekapcsolt felmintavételezés: két lépés, a kimenet 44,1 kHz, állapot „filter_only”
+    {
+        auto* out = new LowRateOutput;
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        p.setUpsampleOptions(opts);
+        CHECK(p.open(path, &err) && out->rate == sr && out->active, "SZ: megnyitás, a DAC rátája marad 44100 Hz (%u)", out->rate);
+        CHECK(p.isUpsampleActive() && p.isUpsampleFilterOnly() && p.upsampleReason() == "filter_only" &&
+              p.upsampleSrcRate() == sr && p.upsampleTargetRate() == sr,
+              "SZ: állapot: aktív, ok '%s', %u -> %u", p.upsampleReason().c_str(), p.upsampleSrcRate(), p.upsampleTargetRate());
+        CHECK(p.upsampleDelayMs() > 0.0, "SZ: a késleltetés (a két lépésé) %.2f ms", p.upsampleDelayMs());
+        CHECK(std::abs(p.duration() - 2.0) < 1e-6, "SZ: a szám hossza változatlan (%.4f s)", p.duration());
+        const std::vector<float> y = pullAllProduced(p, *out);
+        const size_t got = y.size() / 2;
+        CHECK(got + 2 >= n && got <= n + 2, "SZ: kimeneti keretszám = bemeneti (%zu ~ %zu)", got, n);
+        CHECK(p.upsampleProcessedFrames() == got, "SZ: processedFrames = a DAC-ra adott keretek (%llu)",
+              (unsigned long long)p.upsampleProcessedFrames());
+        const double g = std::pow(10.0, opts.upsampleHeadroomDb / 20.0);
+        const double d1k = 20.0 * std::log10(toneAmpStereo(y, 0, sr / 2, sr, 1000.0, sr) / (0.5 * g));
+        const double d21k = 20.0 * std::log10(toneAmpStereo(y, 1, sr / 2, sr, 21000.0, sr) / (0.5 * g));
+        CHECK(std::abs(d1k) <= 0.1, "SZ: 1 kHz egységnyi a fejtérrel: eltérés %.4f dB", d1k);
+        CHECK(d21k < -3.0, "SZ: 21 kHz a felhasználói szűrő (áteresztő sáv 90 %%) szerint csillapítva: %.2f dB", d21k);
+        CHECK(p.upsampleClippedSamples() == 0, "SZ: nincs túlvezérelt minta");
+        p.stop();
+    }
+
+    // 2. Tekerés: pozíció ±1 ms
+    {
+        auto* out = new LowRateOutput;
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        p.setUpsampleOptions(opts);
+        p.open(path, &err);
+        pullFrames(p, *out, 4410);
+        p.seek(1.0);
+        CHECK(std::abs(p.position() - 1.0) <= 0.001, "SZ: tekerés 1,0 s-ra: %.4f s", p.position());
+        pullFrames(p, *out, 4410);
+        CHECK(std::abs(p.position() - 1.1) <= 0.001, "SZ: tekerés után 0,1 s: %.4f s", p.position());
+        p.stop();
+    }
+
+    // 3. Szünetmentes váltás azonos mintavételnél: egy hangfolyam, a számhatár a két lépés késleltetésével
+    {
+        QueueFiles qf;
+        const size_t nA = sr / 2;
+        std::vector<float> xA(src.begin(), src.begin() + nA * 2), xB(src.begin() + nA * 2, src.begin() + nA * 4);
+        const std::string pathA = tmpPath("aq_szuro_a.wav"), pathB = tmpPath("aq_szuro_b.wav");
+        writeWavFloat(pathA, sr, 2, xA);
+        writeWavFloat(pathB, sr, 2, xB);
+        qf.path["sza"] = pathA;
+        qf.path["szb"] = pathB;
+        auto* out = new LowRateOutput;
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        p.setUpsampleOptions(opts);
+        PlayQueue q(p, qf.resolve());
+        CHECK(q.play(qf.items({ "sza", "szb" }), 0) && out->rate == sr, "SZ: sor lejátszása 44100 Hz-en");
+        pullFrames(p, *out, nA + 4410);
+        CHECK(std::abs(p.position() - 0.1) <= 0.001, "SZ: a B számban 0,1 s (%.4f s; a számhatár a két lépés késleltetésével)", p.position());
+        CHECK(out->opens == 1, "SZ: szünetmentes váltás, egy hangfolyam (%d)", out->opens.load());
+        p.stop();
+        std::error_code ec;
+        fs::remove(pathA, ec);
+        fs::remove(pathB, ec);
+    }
+
+    // 4. Kikapcsolt felmintavételezés és megkerülés: nincs átalakítás, bitpontos
+    auto bitExact = [&](const std::vector<float>& y) {
+        if (y.size() != src.size()) return false;
+        return std::memcmp(y.data(), src.data(), y.size() * sizeof(float)) == 0;
+    };
+    {
+        auto* out = new LowRateOutput;
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        audioopt::AudioOptions off = opts;
+        off.upsampleRule = audioopt::UpsampleRule::Off;
+        p.setUpsampleOptions(off);
+        p.open(path, &err);
+        CHECK(!p.isUpsampleActive() && !p.isUpsampleFilterOnly() && p.upsampleReason() == "off", "SZ: kikapcsolva nincs átalakítás (ok '%s')", p.upsampleReason().c_str());
+        CHECK(bitExact(pullAllProduced(p, *out)), "SZ: kikapcsolva a kimenet bitre azonos a forrással");
+        p.stop();
+    }
+    {
+        auto* out = new LowRateOutput;
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        p.setUpsampleOptions(opts);
+        p.open(path, &err, 0, /*bypassUpsample=*/true);
+        CHECK(!p.isUpsampleActive() && p.upsampleReason() == "bypass", "SZ: megkerülésnél nincs átalakítás (ok '%s')", p.upsampleReason().c_str());
+        CHECK(bitExact(pullAllProduced(p, *out)), "SZ: megkerülésnél a kimenet bitre azonos a forrással");
+        p.stop();
+    }
+
+    // 5. Döntés: DSD, a forrást sem tudó DAC, a terhelés-tanácsadó korlátja, rendes ×2 – nincs „szűrő a DAC rátáján”
+    {
+        auto* out = new LowRateOutput;
+        FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+        p.setUpsampleOptions(opts);
+        bool fo = true;
+        CHECK(p.decideTargetRate(44100, false, true, &fo) == 44100 && !fo && p.upsampleReason() == "dsd", "SZ: DSD: nincs");
+        fo = true;
+        CHECK(p.decideTargetRate(96000, false, false, &fo) == 96000 && !fo, "SZ: a DAC a forrást sem tudja (96 kHz): nincs (a keverő alakít)");
+        fo = false;
+        CHECK(p.decideTargetRate(48000, false, false, &fo) == 48000 && fo, "SZ: 48 kHz-es forrás: van");
+        audioopt::AudioOptions capped = opts;
+        capped.upsampleMaxRate = 48000;
+        p.setUpsampleOptions(capped);
+        fo = true;
+        CHECK(p.decideTargetRate(44100, false, false, &fo) == 44100 && !fo, "SZ: a felső korlát (48 kHz) a köztes 88,2 kHz-et nem engedi: nincs");
+
+        auto* out2 = new FakeOutput;   // 192 kHz-ig tudó DAC: rendes ×2, nem két lépés
+        FilePlayer p2{ std::unique_ptr<PlayerOutput>(out2) };
+        p2.setUpsampleOptions(opts);
+        fo = true;
+        CHECK(p2.decideTargetRate(44100, false, false, &fo) == 88200 && !fo, "SZ: ha a DAC tudja a 88,2 kHz-et, rendes ×2");
+    }
+    std::error_code ec;
+    fs::remove(path, ec);
+}
+
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);   // hiba esetén se vesszen el a kimenet (pl. CI, átirányítás)
     std::printf("========================================================\n");
@@ -2399,6 +2571,7 @@ int main() {
     testErrors();
     testDsdDop();
     testUpsamplePlayerK1K6K7K8K16();
+    testFilterOnlyPlayer();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

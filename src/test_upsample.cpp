@@ -721,6 +721,158 @@ static void testK13LiveUpsample() {
     CHECK(d.forceRate == 0 && d.reason == "source_rate", "K13: 192 kHz fölötti forrásnál nincs átalakítás");
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Szűrő a DAC rátáján (két lépés: a felhasználó szűrőjével 2× fel, átlátszó lépéssel vissza)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** A teljes jel átalakítása (process 4096-os adagokban, ahogy a lejátszó hívja, majd a kiürítés lépésenként). */
+static std::vector<float> runEngineAll(ee_analyzer::UpsampleEngine& e, const std::vector<float>& in, double ratio,
+                                       double* delayMidStream = nullptr) {
+    std::vector<float> out;
+    const size_t frames = in.size() / 2;
+    std::vector<float> buf;
+    for (size_t pos = 0; pos < frames; pos += 4096) {
+        const size_t n = std::min<size_t>(4096, frames - pos);
+        const size_t cap = static_cast<size_t>(std::ceil(n * ratio)) + 256;
+        buf.resize(cap * 2);
+        size_t got = 0;
+        e.process(in.data() + pos * 2, n, buf.data(), cap, got);
+        out.insert(out.end(), buf.begin(), buf.begin() + got * 2);
+        if (delayMidStream && pos >= frames / 2 && *delayMidStream == 0.0) *delayMidStream = e.delayFrames();
+    }
+    buf.resize(16384 * 2);
+    for (int i = 0; i < 1000; ++i) {
+        size_t got = 0;
+        e.flush(buf.data(), 16384, got);
+        if (got == 0) break;
+        out.insert(out.end(), buf.begin(), buf.begin() + got * 2);
+    }
+    return out;
+}
+
+/** Egy csatorna amplitúdója az f frekvencián (egész periódusú ablakon vetítve). */
+static double toneAmp(const std::vector<float>& x, int ch, size_t start, size_t n, double f, double sr) {
+    double s = 0.0, c = 0.0;
+    for (size_t i = 0; i < n; ++i) {
+        const double v = x[2 * (start + i) + ch];
+        const double ph = 2.0 * kPi * f * static_cast<double>(start + i) / sr;
+        s += v * std::sin(ph);
+        c += v * std::cos(ph);
+    }
+    return 2.0 * std::sqrt(s * s + c * c) / static_cast<double>(n);
+}
+
+static void testFilterOnlyEngine() {
+    using namespace ee_analyzer;
+    std::printf("\n[SZ] Szűrő a DAC rátáján: UpsampleEngine::initFilterOnly (44,1 -> 88,2 -> 44,1 kHz)\n");
+    const uint32_t sr = 44100;
+    const size_t n = sr * 3;
+    const double fHi = 21000.0;   // a felhasználói szűrő átmeneti sávjában (áteresztő sáv vége itt 0,90 = 19,85 kHz)
+    std::vector<float> x(n * 2);
+    for (size_t i = 0; i < n; ++i) {
+        x[2 * i] = static_cast<float>(0.5 * std::sin(2.0 * kPi * 1000.0 * i / sr));
+        x[2 * i + 1] = static_cast<float>(0.5 * std::sin(2.0 * kPi * fHi * i / sr));
+    }
+    audioopt::AudioOptions o;
+    o.upsampleRule = audioopt::UpsampleRule::Double;
+    o.upsamplePassbandEnd = 0.90;
+    o.upsampleStopbandBegin = 1.0;
+    o.upsamplePhase = 50.0;
+    o.upsampleHeadroomDb = -1.0f;
+
+    UpsampleEngine e;
+    CHECK(e.initFilterOnly(sr, 2, o) && e.isActive() && e.isFilterOnly() && e.dstRate() == 2 * sr,
+          "SZ: initFilterOnly 44,1 kHz: aktív, két lépés, köztes 88,2 kHz");
+    double delay = 0.0;
+    const std::vector<float> y = runEngineAll(e, x, 1.0, &delay);
+    const size_t outFrames = y.size() / 2;
+    CHECK(outFrames + 2 >= n && outFrames <= n + 2, "SZ: kimeneti keretszám = bemeneti (%zu ~ %zu)", outFrames, n);
+    CHECK(e.processedFrames() == outFrames, "SZ: processedFrames = a kimenetre adott keretek (%llu)",
+          (unsigned long long)e.processedFrames());
+    CHECK(delay > 0.0 && delay < sr, "SZ: késleltetés folyam közben %.1f keret (> 0, a két lépésé együtt)", delay);
+    const double g = std::pow(10.0, -1.0 / 20.0);
+    const double a1k = toneAmp(y, 0, sr, sr, 1000.0, sr);
+    const double dev1k = 20.0 * std::log10(a1k / (0.5 * g));
+    CHECK(std::abs(dev1k) <= 0.1, "SZ: 1 kHz egységnyi átvitel a -1 dB fejtérrel: eltérés %.4f dB (<= 0,1 dB)", dev1k);
+
+    // Referencia: ugyanez a felhasználói szűrő egy lépésben (44,1 -> 88,2 kHz) – a 21 kHz-es csillapítása
+    UpsampleEngine ref;
+    ref.initWithOptions(sr, 2 * sr, 2, o);
+    const std::vector<float> yr = runEngineAll(ref, x, 2.0);
+    const double aHiRef = toneAmp(yr, 1, 2 * sr, 2 * sr, fHi, 2.0 * sr);
+    const double aHi = toneAmp(y, 1, sr, sr, fHi, sr);
+    const double refDb = 20.0 * std::log10(aHiRef / (0.5 * g));
+    const double gotDb = 20.0 * std::log10(aHi / (0.5 * g));
+    CHECK(refDb < -3.0 && std::abs(gotDb - refDb) <= 0.5,
+          "SZ: 21 kHz a felhasználói szűrő szerint csillapítva: %.2f dB (egy lépésben 88,2 kHz-re: %.2f dB)", gotDb, refDb);
+
+    // A második lépés egyedül (a felhasználói szűrő nélkül) a 21 kHz-et átengedné: a csillapítás a felhasználóé
+    {
+        audioopt::AudioOptions wide = o;
+        wide.upsamplePassbandEnd = 0.997;
+        UpsampleEngine w;
+        w.initFilterOnly(sr, 2, wide);
+        const std::vector<float> yw = runEngineAll(w, x, 1.0);
+        const double wDb = 20.0 * std::log10(toneAmp(yw, 1, sr, sr, fHi, sr) / (0.5 * g));
+        CHECK(std::abs(wDb) <= 0.1, "SZ: széles (99,7 %%) felhasználói szűrővel a 21 kHz átmegy: %.3f dB", wDb);
+    }
+
+    // Minimum- és lineáris fázis: az impulzus előtti energia (előcsengés) csak a lineárisnál van
+    {
+        std::vector<float> imp(sr * 2, 0.0f);
+        const size_t at = sr / 2;
+        imp[2 * at] = imp[2 * at + 1] = 0.5f;
+        audioopt::AudioOptions lin = o, mp = o;
+        lin.upsamplePhase = 50.0;
+        mp.upsamplePhase = 0.0;
+        UpsampleEngine el, em;
+        el.initFilterOnly(sr, 2, lin);
+        em.initFilterOnly(sr, 2, mp);
+        const std::vector<float> yl = runEngineAll(el, imp, 1.0);
+        const std::vector<float> ym = runEngineAll(em, imp, 1.0);
+        double maxDiff = 0.0;
+        for (size_t i = 0; i < std::min(yl.size(), ym.size()) / 2; ++i)
+            maxDiff = std::max(maxDiff, static_cast<double>(std::abs(yl[2 * i] - ym[2 * i])));
+        // A válasz csúcsa előtti és utáni energia aránya: lineáris fázisnál szimmetrikus (~1), minimumfázisnál a
+        // csúcs előtt alig van (nincs előcsengés)
+        auto preToPost = [](const std::vector<float>& y) {
+            size_t pk = 0;
+            for (size_t i = 0; i < y.size() / 2; ++i) if (std::abs(y[2 * i]) > std::abs(y[2 * pk])) pk = i;
+            double pre = 0.0, post = 0.0;
+            for (size_t k = 1; k <= 2000 && k <= pk && pk + k < y.size() / 2; ++k) {
+                pre += static_cast<double>(y[2 * (pk - k)]) * y[2 * (pk - k)];
+                post += static_cast<double>(y[2 * (pk + k)]) * y[2 * (pk + k)];
+            }
+            return pre / std::max(post, 1e-30);
+        };
+        const double rL = preToPost(yl), rM = preToPost(ym);
+        CHECK(maxDiff > 1e-3, "SZ: minimum- és lineáris fázisú felhasználói szűrő eltérő kimenetet ad (max. eltérés %.4f)", maxDiff);
+        CHECK(rL > 0.5 && rL < 2.0 && rM < 0.2, "SZ: csúcs előtti / utáni energia: lineáris %.3f (~1), minimumfázisú %.3f (< 0,2)", rL, rM);
+    }
+
+    // Aqulify FFT64 motorral is (a felhasználó motorja az első lépésben)
+    {
+        audioopt::AudioOptions f = o;
+        f.upsampleEngine = 1;
+        f.upsamplePassbandEnd = 0.95;
+        UpsampleEngine ef;
+        CHECK(ef.initFilterOnly(sr, 2, f) && ef.isFilterOnly() && ef.engineType() == 1, "SZ: FFT64 motorral is két lépés");
+        const std::vector<float> yf = runEngineAll(ef, x, 1.0);
+        const double dF = 20.0 * std::log10(toneAmp(yf, 0, sr, sr, 1000.0, sr) / (0.5 * g));
+        CHECK(yf.size() / 2 + 2 >= n && yf.size() / 2 <= n + 2 && std::abs(dF) <= 0.1,
+              "SZ: FFT64: %zu keret, 1 kHz eltérés %.4f dB", yf.size() / 2, dF);
+    }
+
+    // Seek után (clear) újra tiszta állapot; a rendes (egylépéses) motor nem lesz kétlépéses
+    {
+        UpsampleEngine plain;
+        plain.initWithOptions(sr, 2 * sr, 2, o);
+        CHECK(!plain.isFilterOnly(), "SZ: a rendes felmintavételezés egy lépésben marad");
+        e.clear();
+        CHECK(e.delayFrames() >= 0.0, "SZ: clear() után a késleltetés érvényes (%.1f)", e.delayFrames());
+    }
+}
+
 template <class EngT = ee_analyzer::UpsampleEngine>
 static void testUpsampleDspSuite() {
     testK2RulesMatrix();
@@ -750,6 +902,7 @@ int main() {
 
     testUpsampleDspSuite<ee_analyzer::UpsampleEngine>();
     testK13LiveUpsample();
+    testFilterOnlyEngine();
 
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;

@@ -242,6 +242,8 @@ def main():
     st_b = get_status()
     u_b = st_b.get("upsample", {})
     check(pw_sr_b == 48000, f"K12b: a PipeWire gráf 48000 Hz-en maradt (pw-dump: {pw_sr_b} Hz)")
+    # A „szűrő a DAC rátáján” (reason "filter_only") itt nem indul: a gráf a 44,1 kHz-es forrást sem tudja (a PipeWire
+    # alakít), csak akkor, ha a DAC a forrást tudja, de nagyobbat nem (lásd test_player: testFilterOnlyPlayer)
     check(u_b.get("active") is False and u_b.get("reason") == "dac_unsupported" and not u_b.get("resampleWarning"),
           f"K12b: a ×2 a 48 kHz-es gráfon nem lehetséges, nem alakít (active={u_b.get('active')}, ok={u_b.get('reason')}, warn={u_b.get('resampleWarning')})")
     print(f'K_METRIC: {{"test":"K12b_system_warn","pwRate":{pw_sr_b},"actualDacRate":{u_b.get("actualDacRate",0)},"resampleWarning":{str(bool(u_b.get("resampleWarning"))).lower()}}}')

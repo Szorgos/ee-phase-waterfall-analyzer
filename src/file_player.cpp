@@ -253,11 +253,13 @@ bool FilePlayer::openSegment(std::unique_ptr<Segment> seg, std::string* error) {
     const bool curDop = dopActive_.load();
     const bool nextDop = seg->dopRaw != nullptr;
     const uint32_t nextSrcRate = nextDop ? seg->dopRate : seg->dec->sampleRate();
-    const uint32_t nextTargetRate = decideTargetRate(nextSrcRate, seg->bypassUpsample, nextDop || (seg->dsdRate > 0));
+    bool nextFilterOnly = false;
+    const uint32_t nextTargetRate = decideTargetRate(nextSrcRate, seg->bypassUpsample, nextDop || (seg->dsdRate > 0), &nextFilterOnly);
     // reopenOutput(): a kimenetet mindenképp újra kell nyitni (pl. WASAPI ↔ ASIO), a szám cseréje nem elég
     const bool forceNew = forceNewStream_.exchange(false);
+    // A szűrő a DAC rátáján mód váltása (be / ki) azonos mintavételnél is új átalakítót kér
     if (!forceNew && st != State::Idle && !segs_.empty() && curDop == nextDop && nextTargetRate == rate_ && out_->settlesOnRateChange() &&
-        (!upsampleActive_.load() || nextSrcRate == upsampleSrcRate_.load())) {
+        (!upsampleActive_.load() || nextSrcRate == upsampleSrcRate_.load()) && nextFilterOnly == isUpsampleFilterOnly()) {
         replaceTrackLocked(std::move(seg), st != State::Playing);
         return true;
     }
@@ -347,28 +349,37 @@ bool FilePlayer::startStreamLocked(std::unique_ptr<Segment> seg, std::string* er
     dopFallback_ = seg->dopFallback;
     const uint32_t srcRate = seg->dec->sampleRate();
     const bool isDsd = (seg->dsdRate > 0);
-    const uint32_t targetRate = decideTargetRate(srcRate, seg->bypassUpsample, isDsd);
+    bool filterOnly = false;
+    const uint32_t targetRate = decideTargetRate(srcRate, seg->bypassUpsample, isDsd, &filterOnly);
 
-    if (targetRate != srcRate) {   // felfelé, vagy lefelé, ha a kimenet a forrást nem tudja
+    if (targetRate != srcRate || filterOnly) {   // felfelé, lefelé (a kimenet a forrást nem tudja), vagy szűrő a DAC rátáján
         upsampleActive_ = true;
+        upsampleFilterOnly_ = filterOnly;
         upsampleSrcRate_ = srcRate;
         upsampleTargetRate_ = targetRate;
-        // Szálak: 2 = kért; automatikus = 2 szál a nagy célmintavételeknél (≥ 352,8 kHz), ha van legalább 4 mag
+        // Szálak: 2 = kért; automatikus = 2 szál a nagy célmintavételeknél (≥ 352,8 kHz), ha van legalább 4 mag.
+        // Szűrő a DAC rátáján: a felhasználói szűrő a köztes 2·srcRate-en számol, a döntés ehhez igazodik.
+        const uint32_t workRate = filterOnly ? srcRate * 2 : targetRate;
         const int thr = upsampleOpts_.upsampleThreads == 2 ? 2
                       : upsampleOpts_.upsampleThreads == 1 ? 1
-                      : (targetRate >= 352800 && load::logicalCores() >= 4 ? 2 : 1);
+                      : (workRate >= 352800 && load::logicalCores() >= 4 ? 2 : 1);
         upsampler_.setThreads(thr);
         upsampleThreadsUsed_ = thr;
-        // Lefelé a külön választott motor számol (a szűrő többi beállítása közös)
-        audioopt::AudioOptions convOpts = upsampleOpts_;
-        if (targetRate < srcRate && upsampleOpts_.downsampleEngine >= 0) convOpts.upsampleEngine = upsampleOpts_.downsampleEngine;
-        upsampler_.initWithOptions(srcRate, targetRate, 2, convOpts);
+        if (filterOnly) {
+            upsampler_.initFilterOnly(srcRate, 2, upsampleOpts_);
+        } else {
+            // Lefelé a külön választott motor számol (a szűrő többi beállítása közös)
+            audioopt::AudioOptions convOpts = upsampleOpts_;
+            if (targetRate < srcRate && upsampleOpts_.downsampleEngine >= 0) convOpts.upsampleEngine = upsampleOpts_.downsampleEngine;
+            upsampler_.initWithOptions(srcRate, targetRate, 2, convOpts);
+        }
         rate_ = targetRate;
         if (seg->total > 0) {
             seg->total = static_cast<uint64_t>(std::round(static_cast<double>(seg->dec->totalFrames()) * targetRate / srcRate));
         }
     } else {
         upsampleActive_ = false;
+        upsampleFilterOnly_ = false;
         upsampleSrcRate_ = srcRate;
         upsampleTargetRate_ = srcRate;
         upsampler_.reset();
@@ -647,8 +658,10 @@ bool FilePlayer::appendNextLocked() {
         if (!seg) { after = token; continue; }
         const bool nextDop = seg->dopRaw != nullptr;
         const uint32_t nextSrcRate = nextDop ? seg->dopRate : seg->dec->sampleRate();
-        const uint32_t nextTargetRate = decideTargetRate(nextSrcRate, seg->bypassUpsample, nextDop || (seg->dsdRate > 0));
-        if (nextDop != curDop || nextTargetRate != rate_ || (upsampleActive_.load() && nextSrcRate != upsampleSrcRate_.load())) {
+        bool nextFilterOnly = false;
+        const uint32_t nextTargetRate = decideTargetRate(nextSrcRate, seg->bypassUpsample, nextDop || (seg->dsdRate > 0), &nextFilterOnly);
+        if (nextDop != curDop || nextTargetRate != rate_ || (upsampleActive_.load() && nextSrcRate != upsampleSrcRate_.load()) ||
+            nextFilterOnly != isUpsampleFilterOnly()) {
             pending_ = std::move(seg);           // eltérő mód vagy mintavétel: új hangfolyamon
             return false;
         }
@@ -924,7 +937,7 @@ void FilePlayer::decodeLoop() {
     }
 }
 
-uint32_t FilePlayer::decideTargetRate(uint32_t srcRate, bool bypassUpsample, bool isDsd) const {
+uint32_t FilePlayer::decideTargetRate(uint32_t srcRate, bool bypassUpsample, bool isDsd, bool* filterOnly) const {
     audioopt::UpsampleRule rule = upsampleOpts_.upsampleRule;
     if (rule == audioopt::UpsampleRule::Off && upsampleEnabled_) {
         rule = audioopt::UpsampleRule::Double;
@@ -932,9 +945,20 @@ uint32_t FilePlayer::decideTargetRate(uint32_t srcRate, bool bypassUpsample, boo
     const std::vector<uint32_t> supported = out_
         ? out_->supportedRates()
         : std::vector<uint32_t>{ 44100, 48000, 88200, 96000, 176400, 192000 };
-    return UpsampleEngine::selectTargetRate(srcRate, rule, supported, upsampleOpts_.upsampleCustom,
-                                            bypassUpsample, isDsd, &upsampleReason_, upsampleOpts_.upsampleMaxRate,
-                                            upsampleOpts_.downsampleEngine >= 0);
+    const uint32_t target = UpsampleEngine::selectTargetRate(srcRate, rule, supported, upsampleOpts_.upsampleCustom,
+                                                             bypassUpsample, isDsd, &upsampleReason_,
+                                                             upsampleOpts_.upsampleMaxRate,
+                                                             upsampleOpts_.downsampleEngine >= 0);
+    if (filterOnly) {
+        // Szűrő a DAC rátáján: a DAC a forrást tudja, nagyobbat nem. Ha a forrást sem tudja, a rendszer keverője
+        // alakít (vagy a lefelé alakítás), ott a két átalakítás egymás után értelmetlen; a terhelés-tanácsadó felső
+        // korlátja (upsampleMaxRate) a köztes 2·srcRate-re is érvényes.
+        const uint32_t maxRate = upsampleOpts_.upsampleMaxRate;
+        *filterOnly = target == srcRate && upsampleReason_ == "dac_unsupported" && srcRate > 0 && srcRate <= 192000 &&
+                      std::find(supported.begin(), supported.end(), srcRate) != supported.end() &&
+                      (maxRate == 0 || static_cast<uint64_t>(srcRate) * 2 <= maxRate);
+    }
+    return target;
 }
 
 void FilePlayer::setUpsample(bool on) {
@@ -967,6 +991,8 @@ double FilePlayer::upsampleDelayMs() const {
 
 std::string FilePlayer::upsampleReason() const {
     std::lock_guard<std::mutex> lk(m_);
+    // Szűrő a DAC rátáján: aktív átalakítás saját jelzéssel (a cél = a forrás mintavétele, a felületen külön sor)
+    if (isUpsampleFilterOnly()) return "filter_only";
     return upsampleReason_;
 }
 
