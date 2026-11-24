@@ -1,3 +1,20 @@
+### Újdonságok (2.9.8)
+
+**Letöltés (2.9.8):**
+- Windows 11: [Aqulify-Setup-2.9.8.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.8/Aqulify-Setup-2.9.8.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.8/Aqulify-Setup-2.9.8.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-2.9.8-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.8/Aqulify-2.9.8-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.8/Aqulify-2.9.8-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-2.9.8.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.8/Aqulify-Linux-2.9.8.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.8/Aqulify-Linux-2.9.8.tar.gz.sha256))
+- Fedora: [aqulify-2.9.8-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.8/aqulify-2.9.8-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_2.9.8-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.8/aqulify_2.9.8-1_amd64.deb) · Arch: [aqulify-2.9.8-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.8/aqulify-2.9.8-1-x86_64.pkg.tar.zst)
+- Raspberry Pi 4 / 5 (Raspberry Pi OS, 64 bit): [aqulify_2.9.8-1.pi1_arm64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.8/aqulify_2.9.8-1.pi1_arm64.deb) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.8/aqulify_2.9.8-1.pi1_arm64.deb.sha256)) · útmutató: `docs/pi.md`
+- Android-távirányító (Android 8+): [Aqulify-Remote-1.5.2.apk](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.8/Aqulify-Remote-1.5.2.apk) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v2.9.8/Aqulify-Remote-1.5.2.apk.sha256))
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Frissítési ablak:** a saját verzió (frissítés után: a legutóbb látott verzió) óta megjelent összes kiadás pontjait mutatja, verziónként csoportosítva, a legújabb elöl; 10 pont fölött verziónként az első pontot és a többi számát. Eddig csak a legutolsó kiadás pontjai látszottak.
+- **FFT-DD kijelzése:** a rendszerhang-felmintavételezés állapota (Windows, Linux, macOS) a 106 bites FFT-DD motornál „Aqulify FFT-DD”-t ír. Eddig „Aqulify FFT64”-et írt, bár a motor FFT-DD-vel futott (a napló helyesen írta).
+- **Hibajelentés (Linux, Raspberry Pi):** a motor-szakaszban a fő kimenet céleszköze (`output_target`), a kimeneti stream állapota (`output_state`) és a legutóbbi nem néma bejövő rendszerhang kora (`input_signal_age_ms`), hogy a „nincs hang” jelentésekből látsszon, hol akad el a hang.
+- **Telefonos távirányító 1.5.2:** a lejátszó a rendszerhang felmintavételezését is helyesen mutatja (eddig „nincs felmintavételezés” villogott), a Kimenetek fül gombjai egyforma rácsban, a felület a téma színeit használja (lila maradványok nélkül).
+- A 2.9.7 változásnaplója közérthetőbb, előnyközpontú megfogalmazást kapott 23 nyelven.
+
 ### Újdonságok (2.9.7)
 
 **Letöltés (2.9.7):**

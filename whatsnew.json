@@ -1,6 +1,150 @@
 {
   "versions": [
     {
+      "version": "2.9.8",
+      "date": "2026-11-24",
+      "notes": {
+        "hu": [
+          "Frissítéskor minden újdonságot látsz: a program a saját verziód óta megjelent összes fő újítást felsorolja, nem csak a legutolsó lépést.",
+          "Pontos kijelzés: ha a 106 bites FFT-DD motort választod, az állapotsor is ezt mutatja (eddig tévesen FFT64-et írt, a hang már eddig is FFT-DD-vel ment).",
+          "Telefonos távirányító 1.5.2: helyesen mutatja a rendszerhang felmintavételezését, rendezettebb Kimenetek fül, egységes színek.",
+          "Linuxon és Raspberry Pi-n a „nincs hang” hibajelentésből már látszik, hol akad el a hang, így gyorsabban javítható."
+        ],
+        "en": [
+          "See everything new when you update: the app lists all the main improvements since your own version, not just the last step.",
+          "Accurate display: when you choose the 106-bit FFT-DD engine, the status line shows it too (it used to say FFT64 by mistake; the sound already went through FFT-DD).",
+          "Phone remote 1.5.2: shows system audio upsampling correctly, a tidier Outputs tab and consistent colours.",
+          "On Linux and Raspberry Pi, a “no sound” error report now shows where the sound stops, so it can be fixed faster."
+        ],
+        "es": [
+          "Al actualizar ves todas las novedades: el programa enumera todas las mejoras principales desde tu versión, no solo el último paso.",
+          "Indicación precisa: si eliges el motor FFT-DD de 106 bits, la barra de estado también lo muestra (antes decía FFT64 por error; el sonido ya pasaba por FFT-DD).",
+          "Mando del teléfono 1.5.2: muestra correctamente el sobremuestreo del audio del sistema, pestaña Salidas más ordenada y colores coherentes.",
+          "En Linux y Raspberry Pi, el informe de error «sin sonido» ya muestra dónde se detiene el sonido, así se corrige más rápido."
+        ],
+        "fr": [
+          "Toutes les nouveautés à la mise à jour : le programme liste toutes les améliorations principales depuis votre version, pas seulement la dernière étape.",
+          "Affichage exact : si vous choisissez le moteur FFT-DD 106 bits, la barre d’état l’affiche aussi (elle indiquait FFT64 par erreur ; le son passait déjà par FFT-DD).",
+          "Télécommande 1.5.2 : affiche correctement le suréchantillonnage du son système, onglet Sorties plus soigné et couleurs cohérentes.",
+          "Sous Linux et Raspberry Pi, le rapport d’erreur « pas de son » montre désormais où le son s’arrête, pour une correction plus rapide."
+        ],
+        "zh": [
+          "更新时可看到全部新内容：程序会列出自你当前版本以来的所有主要改进，而不只是最后一步。",
+          "显示更准确：选择 106 位 FFT-DD 引擎时，状态栏也会显示它（此前误显示为 FFT64；声音其实早已经过 FFT-DD）。",
+          "手机遥控 1.5.2：正确显示系统声音升频，“输出”页更整齐，颜色统一。",
+          "在 Linux 和树莓派上，“无声音”错误报告现在会显示声音在哪里中断，便于更快修复。"
+        ],
+        "de": [
+          "Beim Update alles Neue sehen: Das Programm listet alle wichtigen Neuerungen seit Ihrer Version auf, nicht nur den letzten Schritt.",
+          "Genaue Anzeige: Bei der 106-Bit-FFT-DD-Engine zeigt auch die Statuszeile diese an (bisher stand dort fälschlich FFT64; der Ton lief bereits über FFT-DD).",
+          "Telefon-Fernbedienung 1.5.2: zeigt das Upsampling des Systemklangs richtig an, aufgeräumter Reiter „Ausgänge“ und einheitliche Farben.",
+          "Unter Linux und auf dem Raspberry Pi zeigt ein Fehlerbericht „kein Ton“ jetzt, wo der Ton hängen bleibt – so lässt er sich schneller beheben."
+        ],
+        "it": [
+          "Con l’aggiornamento vedi tutte le novità: il programma elenca tutti i miglioramenti principali dalla tua versione, non solo l’ultimo passo.",
+          "Indicazione precisa: se scegli il motore FFT-DD a 106 bit, anche la barra di stato lo mostra (prima indicava FFT64 per errore; l’audio passava già per FFT-DD).",
+          "Telecomando 1.5.2: mostra correttamente il sovracampionamento dell’audio di sistema, scheda Uscite più ordinata e colori coerenti.",
+          "Su Linux e Raspberry Pi la segnalazione «nessun suono» ora mostra dove si interrompe l’audio, così si risolve più in fretta."
+        ],
+        "nl": [
+          "Bij het bijwerken zie je alles wat nieuw is: het programma toont alle belangrijke verbeteringen sinds jouw versie, niet alleen de laatste stap.",
+          "Juiste weergave: kies je de 106-bits FFT-DD-engine, dan toont de statusregel die ook (eerder stond er per abuis FFT64; het geluid liep al via FFT-DD).",
+          "Telefoonafstandsbediening 1.5.2: toont de upsampling van het systeemgeluid correct, een nettere tab Uitgangen en consistente kleuren.",
+          "Op Linux en Raspberry Pi laat een foutrapport ‘geen geluid’ nu zien waar het geluid stopt, zodat het sneller te verhelpen is."
+        ],
+        "pl": [
+          "Po aktualizacji widzisz wszystkie nowości: program wymienia wszystkie główne ulepszenia od twojej wersji, a nie tylko ostatni krok.",
+          "Dokładne wskazanie: gdy wybierzesz 106-bitowy silnik FFT-DD, pasek stanu też go pokazuje (wcześniej błędnie pisał FFT64; dźwięk i tak szedł przez FFT-DD).",
+          "Pilot w telefonie 1.5.2: poprawnie pokazuje upsampling dźwięku systemowego, uporządkowana karta Wyjścia i spójne kolory.",
+          "W Linuksie i na Raspberry Pi raport błędu „brak dźwięku” pokazuje teraz, gdzie dźwięk się zatrzymuje, więc łatwiej go szybko naprawić."
+        ],
+        "ru": [
+          "При обновлении видно всё новое: программа перечисляет все основные улучшения с вашей версии, а не только последний шаг.",
+          "Точная индикация: если выбран 106-битный движок FFT-DD, строка состояния тоже показывает его (раньше ошибочно писала FFT64; звук и так шёл через FFT-DD).",
+          "Пульт на телефоне 1.5.2: правильно показывает апсемплинг системного звука, аккуратнее вкладка «Выходы», единые цвета.",
+          "В Linux и на Raspberry Pi отчёт об ошибке «нет звука» теперь показывает, где пропадает звук, поэтому исправить его можно быстрее."
+        ],
+        "pt": [
+          "Ao atualizar vês todas as novidades: o programa lista todas as melhorias principais desde a tua versão, não só o último passo.",
+          "Indicação exata: se escolheres o motor FFT-DD de 106 bits, a barra de estado também o mostra (antes dizia FFT64 por engano; o som já passava pelo FFT-DD).",
+          "Comando no telemóvel 1.5.2: mostra corretamente o upsampling do áudio do sistema, separador Saídas mais arrumado e cores coerentes.",
+          "No Linux e no Raspberry Pi, o relatório de erro «sem som» mostra agora onde o som para, para ser corrigido mais depressa."
+        ],
+        "ro": [
+          "La actualizare vezi toate noutățile: programul enumeră toate îmbunătățirile principale de la versiunea ta, nu doar ultimul pas.",
+          "Afișare corectă: dacă alegi motorul FFT-DD pe 106 biți, bara de stare îl arată și ea (înainte scria greșit FFT64; sunetul trecea deja prin FFT-DD).",
+          "Telecomanda din telefon 1.5.2: arată corect supraeșantionarea sunetului de sistem, fila Ieșiri mai ordonată și culori unitare.",
+          "Pe Linux și Raspberry Pi, raportul de eroare „fără sunet” arată acum unde se oprește sunetul, ca să poată fi reparat mai repede."
+        ],
+        "el": [
+          "Στην ενημέρωση βλέπετε όλα τα νέα: το πρόγραμμα παραθέτει όλες τις κύριες βελτιώσεις από την έκδοσή σας, όχι μόνο το τελευταίο βήμα.",
+          "Ακριβής ένδειξη: αν επιλέξετε τη μηχανή FFT-DD 106 bit, τη δείχνει και η γραμμή κατάστασης (πριν έγραφε κατά λάθος FFT64· ο ήχος περνούσε ήδη από FFT-DD).",
+          "Τηλεχειριστήριο κινητού 1.5.2: δείχνει σωστά την υπερδειγματοληψία του ήχου συστήματος, πιο τακτοποιημένη καρτέλα Έξοδοι και ενιαία χρώματα.",
+          "Σε Linux και Raspberry Pi, η αναφορά σφάλματος «χωρίς ήχο» δείχνει πλέον πού σταματά ο ήχος, ώστε να διορθώνεται γρηγορότερα."
+        ],
+        "tr": [
+          "Güncellemede tüm yenilikleri görürsünüz: program yalnızca son adımı değil, sürümünüzden bu yana gelen tüm önemli iyileştirmeleri listeler.",
+          "Doğru gösterim: 106 bit FFT-DD motorunu seçtiğinizde durum satırı da bunu gösterir (önceden yanlışlıkla FFT64 yazıyordu; ses zaten FFT-DD'den geçiyordu).",
+          "Telefon kumandası 1.5.2: sistem sesi yukarı örneklemesini doğru gösterir, daha düzenli Çıkışlar sekmesi ve tutarlı renkler.",
+          "Linux ve Raspberry Pi'de \"ses yok\" hata raporu artık sesin nerede kesildiğini gösteriyor, böylece daha hızlı düzeltilebiliyor."
+        ],
+        "fi": [
+          "Päivittäessä näet kaiken uuden: ohjelma luettelee kaikki tärkeimmät parannukset omasta versiostasi lähtien, ei vain viimeistä askelta.",
+          "Tarkka näyttö: kun valitset 106-bittisen FFT-DD-moottorin, tilarivi näyttää sen (aiemmin siinä luki virheellisesti FFT64; ääni kulki jo FFT-DD:n kautta).",
+          "Puhelinkaukosäädin 1.5.2: näyttää järjestelmä-äänen ylösnäytteistyksen oikein, siistimpi Lähdöt-välilehti ja yhtenäiset värit.",
+          "Linuxissa ja Raspberry Pi:ssä ”ei ääntä” -virheraportti näyttää nyt, missä ääni katkeaa, joten vika korjataan nopeammin."
+        ],
+        "da": [
+          "Ved opdatering ser du alt nyt: programmet viser alle de vigtigste forbedringer siden din version, ikke kun det sidste trin.",
+          "Præcis visning: vælger du 106-bit FFT-DD-motoren, viser statuslinjen den også (før stod der ved en fejl FFT64; lyden gik allerede gennem FFT-DD).",
+          "Telefonfjernbetjening 1.5.2: viser upsampling af systemlyden korrekt, en mere ryddelig fane Udgange og ensartede farver.",
+          "På Linux og Raspberry Pi viser en fejlrapport om \"ingen lyd\" nu, hvor lyden stopper, så den kan rettes hurtigere."
+        ],
+        "nb": [
+          "Ved oppdatering ser du alt nytt: programmet viser alle de viktigste forbedringene siden din versjon, ikke bare det siste steget.",
+          "Nøyaktig visning: velger du 106-biters FFT-DD-motoren, viser statuslinjen den også (før sto det ved en feil FFT64; lyden gikk allerede gjennom FFT-DD).",
+          "Telefonfjernkontroll 1.5.2: viser oppsampling av systemlyden riktig, en ryddigere Utganger-fane og ensartede farger.",
+          "På Linux og Raspberry Pi viser en feilrapport om «ingen lyd» nå hvor lyden stopper, så den kan rettes raskere."
+        ],
+        "sv": [
+          "Vid uppdatering ser du allt nytt: programmet listar alla viktiga förbättringar sedan din version, inte bara det sista steget.",
+          "Exakt visning: väljer du 106-bitars FFT-DD-motorn visar statusraden den också (tidigare stod det felaktigt FFT64; ljudet gick redan genom FFT-DD).",
+          "Telefonfjärrkontroll 1.5.2: visar uppsamplingen av systemljudet korrekt, en prydligare flik Utgångar och enhetliga färger.",
+          "På Linux och Raspberry Pi visar en felrapport om ”inget ljud” nu var ljudet stannar, så att det kan åtgärdas snabbare."
+        ],
+        "he": [
+          "בעדכון רואים את כל החידושים: התוכנה מציגה את כל השיפורים העיקריים מאז הגרסה שלך, ולא רק את הצעד האחרון.",
+          "תצוגה מדויקת: כשבוחרים במנוע FFT-DD של 106 ביט, גם שורת המצב מציגה אותו (קודם נכתב בטעות FFT64; הצליל כבר עבר דרך FFT-DD).",
+          "שלט הטלפון 1.5.2: מציג נכון את דגימת-היתר של צליל המערכת, לשונית יציאות מסודרת יותר וצבעים אחידים.",
+          "ב-Linux וב-Raspberry Pi, דוח השגיאה „אין צליל” מראה עכשיו היכן הצליל נעצר, כך שאפשר לתקן מהר יותר."
+        ],
+        "ja": [
+          "更新時にすべての新機能が見られます：最後の一段階だけでなく、お使いのバージョン以降の主な改良をすべて表示します。",
+          "正確な表示：106 ビット FFT-DD エンジンを選ぶと、ステータス行にもそう表示されます（以前は誤って FFT64 と表示。音はすでに FFT-DD を通っていました）。",
+          "スマホリモコン 1.5.2：システム音のアップサンプリングを正しく表示し、「出力」タブを整理、色も統一しました。",
+          "Linux と Raspberry Pi では、「音が出ない」エラーレポートで音が止まる場所が分かるようになり、より早く修正できます。"
+        ],
+        "ko": [
+          "업데이트할 때 모든 새 기능을 볼 수 있습니다: 마지막 단계만이 아니라 사용 중인 버전 이후의 주요 개선 사항을 모두 보여 줍니다.",
+          "정확한 표시: 106비트 FFT-DD 엔진을 선택하면 상태 표시줄에도 그대로 표시됩니다(이전에는 실수로 FFT64로 표시됨. 소리는 이미 FFT-DD를 거쳤습니다).",
+          "휴대폰 리모컨 1.5.2: 시스템 소리 업샘플링을 올바르게 표시하고, 출력 탭을 정리했으며 색상을 통일했습니다.",
+          "Linux와 Raspberry Pi에서 '소리 없음' 오류 보고서가 이제 소리가 끊기는 위치를 보여 주어 더 빨리 고칠 수 있습니다."
+        ],
+        "cs": [
+          "Při aktualizaci uvidíte všechny novinky: program vypíše všechna hlavní vylepšení od vaší verze, ne jen poslední krok.",
+          "Přesné zobrazení: když zvolíte 106bitový engine FFT-DD, ukáže ho i stavový řádek (dříve mylně psal FFT64; zvuk už šel přes FFT-DD).",
+          "Dálkové ovládání v telefonu 1.5.2: správně ukazuje převzorkování systémového zvuku, úhlednější karta Výstupy a jednotné barvy.",
+          "Na Linuxu a Raspberry Pi hlášení chyby „žádný zvuk“ nyní ukáže, kde se zvuk zastaví, takže jde opravit rychleji."
+        ],
+        "uk": [
+          "Під час оновлення видно все нове: програма перелічує всі основні покращення з вашої версії, а не лише останній крок.",
+          "Точна індикація: якщо вибрати 106-бітний рушій FFT-DD, рядок стану теж показує його (раніше помилково писав FFT64; звук і так ішов через FFT-DD).",
+          "Пульт на телефоні 1.5.2: правильно показує апсемплінг системного звуку, охайніша вкладка «Виходи» та єдині кольори.",
+          "У Linux і на Raspberry Pi звіт про помилку «немає звуку» тепер показує, де зникає звук, тож його можна швидше виправити."
+        ]
+      }
+    },
+    {
       "version": "2.9.7",
       "date": "2026-11-23",
       "notes": {
