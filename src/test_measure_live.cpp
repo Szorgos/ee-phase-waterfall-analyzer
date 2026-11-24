@@ -116,6 +116,10 @@ int main() {
             std::printf("     bal–jobb különbség: %.3f ms\n", lr);
             CHECK(std::fabs(lr) < 0.05, "both: a bal–jobb különbség ~0 (%.3f ms)", lr);
             CHECK(res.find("\"lr_polarity_differs\":false") != std::string::npos, "both: azonos polaritás");
+            CHECK(res.find("\"bands_left\":[") != std::string::npos && res.find("\"bands_right\":[") != std::string::npos,
+                  "both: bands_left és bands_right megérkezik");
+            CHECK(!std::isnan(jsonNum(res, "lr_level_diff_db")) && std::fabs(jsonNum(res, "lr_level_diff_db")) < 0.5,
+                  "both: lr_level_diff_db ~ 0 dB a digitális hurokban (%.2f)", jsonNum(res, "lr_level_diff_db"));
         }
         CHECK(g_bypassOn.load() == g_bypassOff.load(), "%s: a lánc visszaállt (%d/%d)", ch, g_bypassOn.load(), g_bypassOff.load());
     }

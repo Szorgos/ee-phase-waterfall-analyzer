@@ -394,8 +394,15 @@ private:
             const double arrL = rl.measuredDelayMs;
             const double arrR = rr.measuredDelayMs + (static_cast<double>(split) - static_cast<double>(secondStart - lead)) * 1000.0 / kRate;
             pt.lr = LrCompare{ true, arrR - arrL, rl.invertedPolarity != rr.invertedPolarity };
+            // A bal–jobb relatív szintkülönbséget megőrizzük a tárolt pontban, hogy többpontos átlag után
+            // pontosan kiszámítható legyen a lr_level_diff_db, és az egyes csatornák külön normalizálhatók legyenek.
+            const float commonMid = 0.5f * (rl.midbandLevelDb + rr.midbandLevelDb);
+            const float offL = rl.midbandLevelDb - commonMid;
+            const float offR = rr.midbandLevelDb - commonMid;
             pt.rawLeft = std::move(rl.rawResponse);
             pt.rawRight = std::move(rr.rawResponse);
+            for (auto& p : pt.rawLeft) p.magDb += offL;
+            for (auto& p : pt.rawRight) p.magDb += offR;
             // Bal + jobb egyesítése teljesítményátlaggal (energiában)
             pt.rawResponse = powerAveragePositions({ pt.rawLeft, pt.rawRight });
             pt.snrDb = std::min(rl.snrDb, rr.snrDb);
@@ -452,22 +459,26 @@ private:
         avg.peakLevelDbfs = maxPeak;
 
         // A 300 Hz – 3 kHz középtartomány 0 dB-re igazítása (többpontos átlag után is pontos)
-        double refSum = 0.0;
-        int refCnt = 0;
-        for (const auto& p : avg.smoothedResponse) {
-            if (p.freq >= 300.0f && p.freq <= 3000.0f) { refSum += p.magDb; ++refCnt; }
-        }
-        const float refDb = refCnt > 0 ? static_cast<float>(refSum / refCnt) : 0.0f;
+        const float refDb = midbandMeanDb(avg.smoothedResponse);
         for (auto& p : avg.smoothedResponse) p.magDb -= refDb;
 
         MeasureResult avgL, avgR;
         const MeasureResult* pL = nullptr;
         const MeasureResult* pR = nullptr;
+        float lrLevelDiffDb = 0.0f;
         if (smoothedL.size() == pts.size() && smoothedR.size() == pts.size()) {
             avgL.smoothedResponse = powerAveragePositions(smoothedL);
             avgR.smoothedResponse = powerAveragePositions(smoothedR);
-            for (auto& p : avgL.smoothedResponse) p.magDb -= refDb;
-            for (auto& p : avgR.smoothedResponse) p.magDb -= refDb;
+            avgL.snrDb = minSnr;
+            avgL.peakLevelDbfs = maxPeak;
+            avgR.snrDb = minSnr;
+            avgR.peakLevelDbfs = maxPeak;
+            // Csatornánkénti normalizálás a saját 300 Hz – 3 kHz átlaghoz, hogy az EQ ne egyenlítse ki a szinteltérést
+            const float refL = midbandMeanDb(avgL.smoothedResponse);
+            const float refR = midbandMeanDb(avgR.smoothedResponse);
+            lrLevelDiffDb = refR - refL;
+            for (auto& p : avgL.smoothedResponse) p.magDb -= refL;
+            for (auto& p : avgR.smoothedResponse) p.magDb -= refR;
             pL = &avgL;
             pR = &avgR;
         }
@@ -485,7 +496,13 @@ private:
         MeasureConfig effCfg = cfg;
         if (effCfg.channel.empty()) effCfg.channel = pts.back().channel;
         mgr.finalize(effCfg, avg, progress);
-        post(resultJson(effCfg, avg, pLr, pL, pR, pts, isRecompute));
+        if (pL && pR) {
+            mgr.finalize(effCfg, avgL, nullptr);
+            mgr.finalize(effCfg, avgR, nullptr);
+            // Közös előerősítés a két csatornára: a kettő közül a negatívabb, hogy az L/R egyensúly ne tolódjon el
+            avg.recommendedPreampDb = std::min(avgL.recommendedPreampDb, avgR.recommendedPreampDb);
+        }
+        post(resultJson(effCfg, avg, pLr, pL, pR, lrLevelDiffDb, pts, isRecompute));
         return true;
     }
 
@@ -584,12 +601,29 @@ private:
         o << ']';
     }
 
+    static void appendBands(std::ostringstream& o, const char* key, const std::vector<AutoEqBand>& bs) {
+        o << ",\"" << key << "\":[";
+        for (size_t i = 0; i < bs.size(); ++i) {
+            const auto& b = bs[i];
+            o << (i ? "," : "") << "{\"type\":" << b.type << ",\"freq\":" << b.freq
+              << ",\"gainDb\":" << b.gainDb << ",\"q\":" << b.q << '}';
+        }
+        o << ']';
+    }
+
+    static void appendFloats(std::ostringstream& o, const char* key, const std::vector<float>& vs) {
+        o << ",\"" << key << "\":[";
+        for (size_t i = 0; i < vs.size(); ++i) o << (i ? "," : "") << vs[i];
+        o << ']';
+    }
+
     /**
      * Az eredmény JSON-ja a felület formátumában (freqs, measured_dbs, target_dbs, bands, ...). "both" mérésnél a
-     * két csatorna görbéje is (measured_left_dbs / measured_right_dbs) és a bal–jobb összevetés (lr_*).
+     * két csatorna görbéje és csatornánkénti sávjai is (measured_left_dbs / measured_right_dbs, bands_left / bands_right,
+     * lr_level_diff_db) és a bal–jobb összevetés (lr_*).
      */
     std::string resultJson(const MeasureConfig& cfg, const MeasureResult& r, const LrCompare* lr,
-                           const MeasureResult* rl, const MeasureResult* rr,
+                           const MeasureResult* rl, const MeasureResult* rr, float lrLevelDiffDb,
                            const std::vector<StoredPoint>& pts, bool isRecompute) {
         std::ostringstream o;
         o.setf(std::ios::fixed);
@@ -605,11 +639,9 @@ private:
             o << (i ? "," : "") << "{\"id\":" << pts[i].id << ",\"snr_db\":" << pts[i].snrDb
               << ",\"peak_db\":" << pts[i].peakLevelDbfs << '}';
         }
-        o << "],\"skipped_dips\":[";
-        for (size_t i = 0; i < r.skippedDips.size(); ++i) {
-            o << (i ? "," : "") << r.skippedDips[i];
-        }
-        o << "],\"freqs\":[";
+        o << ']';
+        appendFloats(o, "skipped_dips", r.skippedDips);
+        o << ",\"freqs\":[";
         for (size_t i = 0; i < r.smoothedResponse.size(); ++i) o << (i ? "," : "") << r.smoothedResponse[i].freq;
         o << ']';
         appendCurve(o, "measured_dbs", r.smoothedResponse);
@@ -617,13 +649,15 @@ private:
         if (rl && rr) {
             appendCurve(o, "measured_left_dbs", rl->smoothedResponse);
             appendCurve(o, "measured_right_dbs", rr->smoothedResponse);
+            appendBands(o, "bands_left", rl->correctionBands);
+            appendBands(o, "bands_right", rr->correctionBands);
+            appendFloats(o, "skipped_dips_left", rl->skippedDips);
+            appendFloats(o, "skipped_dips_right", rr->skippedDips);
+            o << ",\"speaker_low_cutoff_left_hz\":" << rl->speakerLowCutoffHz
+              << ",\"speaker_low_cutoff_right_hz\":" << rr->speakerLowCutoffHz
+              << ",\"lr_level_diff_db\":" << lrLevelDiffDb;
         }
-        o << ",\"bands\":[";
-        for (size_t i = 0; i < r.correctionBands.size(); ++i) {
-            const auto& b = r.correctionBands[i];
-            o << (i ? "," : "") << "{\"type\":1,\"freq\":" << b.freq << ",\"gainDb\":" << b.gainDb << ",\"q\":" << b.q << '}';
-        }
-        o << ']';
+        appendBands(o, "bands", r.correctionBands);
         // Egy csatorna mérésének késleltetése / polaritása nem korrekció (a rendszer késése és a mikrofon polaritása
         // ismeretlen): a felület 0-t kap. A bal–jobb különbség ("both") külön mezőben, tájékoztatásul.
         o << ",\"delay_ms\":0,\"inverted\":false";

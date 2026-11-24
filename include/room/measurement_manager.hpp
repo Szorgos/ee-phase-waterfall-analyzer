@@ -75,6 +75,7 @@ struct MeasureResult {
     bool invertedPolarity = false;
     float snrDb = 0.0f;
     float peakLevelDbfs = -100.0f;
+    float midbandLevelDb = 0.0f;    // a 300 Hz – 3 kHz átlagszint 0 dB-re igazítás előtt (csatornák összevetéséhez)
     float recommendedPreampDb = 0.0f;
     float speakerLowCutoffHz = 20.0f;
     std::vector<float> skippedDips;
@@ -130,6 +131,16 @@ inline std::vector<FreqPoint> buildTargetCurve(const std::vector<FreqPoint>& ref
         pt.magDb = static_cast<float>(tg);
     }
     return out;
+}
+
+/** A 300 Hz – 3 kHz középtartomány átlagos szintje (dB) a görbe 0 dB-re igazításához. */
+inline float midbandMeanDb(const std::vector<FreqPoint>& curve) {
+    double sum = 0.0;
+    int cnt = 0;
+    for (const auto& p : curve) {
+        if (p.freq >= 300.0f && p.freq <= 3000.0f) { sum += p.magDb; ++cnt; }
+    }
+    return cnt > 0 ? static_cast<float>(sum / cnt) : 0.0f;
 }
 
 class MeasurementManager {
@@ -329,11 +340,8 @@ public:
 
         // A szint önkényes (mikrofonerősítés, hangerő): a görbét a 300 Hz – 3 kHz átlagához igazítjuk (0 dB)
         {
-            double sum = 0.0;
-            int cnt = 0;
-            for (const auto& p : res.smoothedResponse)
-                if (p.freq >= 300.0f && p.freq <= 3000.0f) { sum += p.magDb; ++cnt; }
-            const float ref = cnt > 0 ? static_cast<float>(sum / cnt) : 0.0f;
+            const float ref = midbandMeanDb(res.smoothedResponse);
+            res.midbandLevelDb = ref;
             for (auto& p : res.smoothedResponse) p.magDb -= ref;
             for (auto& p : res.rawResponse) p.magDb -= ref;
         }

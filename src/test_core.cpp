@@ -2953,6 +2953,102 @@ static void testUpsampleOptionsK17() {
     }
 }
 
+static void testBridgeApplyMeasurementSplit() {
+    std::printf("[24] Híd: apply_measurement csatornánkénti split, régi kompatibilitás és egycsatornás másolás (T5–T6)\n");
+    std::mutex mu;
+    ParamData cur = transparentParams();
+    BridgeCallbacks cb;
+    cb.pullAudio = [](float*, size_t) -> size_t { return 0; };
+    cb.sampleRate = [] { return 48000.0; };
+    cb.getParams = [&] { std::lock_guard<std::mutex> lk(mu); return cur; };
+    cb.setParams = [&](const ParamData& p) { std::lock_guard<std::mutex> lk(mu); cur = p; };
+
+    WebSocketBridge bridge(47901);
+    const bool started = bridge.start(cb);
+    CHECK(started, "T5-T6: a híd elindul a 47901-es porton");
+    if (!started) return;
+
+    std::string first;
+    net::socket_t s = wsConnectLive(47901, "/", &first);
+    CHECK(s != net::kInvalidSocket, "T5-T6: helyi kliens csatlakozik a hídhoz");
+    if (s == net::kInvalidSocket) { bridge.stop(); return; }
+    (void)wsWaitFor(s, "\"modules\"", 2000);
+
+    auto getCur = [&] { std::lock_guard<std::mutex> lk(mu); return cur; };
+    auto setCur = [&](const ParamData& p) { std::lock_guard<std::mutex> lk(mu); cur = p; };
+
+    // T5a: régi formátumú kérés (bands_r nélkül) -> közös EQ, eqSplit = false
+    {
+        ParamData init = transparentParams();
+        init.eqSplit = 1;
+        init.numBandsR = 1;
+        init.bandsR[0].freq = 888.0f;
+        setCur(init);
+        wsSendText(s, R"({"type":"apply_measurement","channel":"both","preamp_db":-3.5,"bands":[{"type":1,"freq":60,"gainDb":-6.0,"q":3.0}]})");
+        std::string ack = wsWaitFor(s, "\"measurement_applied\"", 2000);
+        CHECK(!ack.empty(), "T5a: measurement_applied megérkezett");
+        ParamData p = getCur();
+        CHECK(p.eqSplit == 0, "T5a: bands_r nélküli both kérés -> eqSplit == 0 (kapott: %d)", p.eqSplit);
+        CHECK(p.numBands == 1 && std::fabs(p.bands[0].freq - 60.0f) < 0.1f, "T5a: közös sáv beállítva");
+        CHECK(std::fabs(p.preampDb - (-3.5f)) < 0.05f, "T5a: preamp_db érvényesült");
+    }
+
+    // T5b: új csatornánkénti kérés (bands_r + split:true) -> eqSplit = 1, bands=L, bandsR=R
+    {
+        wsSendText(s, R"({"type":"apply_measurement","channel":"both","split":true,"preamp_db":-4.5,"bands":[{"type":1,"freq":60,"gainDb":-7.0,"q":3.5}],"bands_r":[{"type":1,"freq":90,"gainDb":-6.5,"q":4.0}]})");
+        std::string ack = wsWaitFor(s, "\"measurement_applied\"", 2000);
+        CHECK(!ack.empty(), "T5b: measurement_applied megérkezett");
+        ParamData p = getCur();
+        CHECK(p.eqSplit == 1, "T5b: bands_r + split:true -> eqSplit == 1 (kapott: %d)", p.eqSplit);
+        CHECK(p.numBands == 1 && std::fabs(p.bands[0].freq - 60.0f) < 0.1f && std::fabs(p.bands[0].gainDb - (-7.0f)) < 0.1f,
+              "T5b: bal csatorna sávjai helyesek");
+        CHECK(p.numBandsR == 1 && std::fabs(p.bandsR[0].freq - 90.0f) < 0.1f && std::fabs(p.bandsR[0].gainDb - (-6.5f)) < 0.1f,
+              "T5b: jobb csatorna sávjai helyesek (n=%u, f=%.1f)", p.numBandsR, p.bandsR[0].freq);
+        CHECK(std::fabs(p.preampDb - (-4.5f)) < 0.05f, "T5b: közös preamp érvényesült");
+    }
+
+    // T6a: split nélküli állapotból "left" alkalmazás -> bandsR = korábbi közös sávok (nem elavult), bands = új bal
+    {
+        ParamData init = transparentParams();
+        init.eqSplit = 0;
+        init.numBands = 1;
+        init.bands[0].type = 1; init.bands[0].freq = 120.0f; init.bands[0].gainDb = -4.0f; init.bands[0].q = 2.0f;
+        // Elavult adat a bandsR-ben egy korábbi splitből
+        init.numBandsR = 1;
+        init.bandsR[0].type = 1; init.bandsR[0].freq = 999.0f; init.bandsR[0].gainDb = -9.0f; init.bandsR[0].q = 5.0f;
+        setCur(init);
+
+        wsSendText(s, R"({"type":"apply_measurement","channel":"left","preamp_db":-2.0,"bands":[{"type":1,"freq":55,"gainDb":-5.0,"q":2.5}]})");
+        std::string ack = wsWaitFor(s, "\"measurement_applied\"", 2000);
+        CHECK(!ack.empty(), "T6a: measurement_applied megérkezett");
+        ParamData p = getCur();
+        CHECK(p.eqSplit == 1, "T6a: egycsatornás left alkalmazás -> eqSplit == 1");
+        CHECK(p.numBands == 1 && std::fabs(p.bands[0].freq - 55.0f) < 0.1f, "T6a: bal sáv az új mérés (55 Hz)");
+        CHECK(p.numBandsR == 1 && std::fabs(p.bandsR[0].freq - 120.0f) < 0.1f && std::fabs(p.bandsR[0].gainDb - (-4.0f)) < 0.1f,
+              "T6a: jobb csatorna a korábbi közös sávot kapta (120 Hz, nem az elavult 999 Hz; kapott: %.1f Hz)", p.bandsR[0].freq);
+    }
+
+    // T6b: split nélküli állapotból "right" alkalmazás -> bands = korábbi közös sávok, bandsR = új jobb
+    {
+        ParamData init = transparentParams();
+        init.eqSplit = 0;
+        init.numBands = 1;
+        init.bands[0].type = 1; init.bands[0].freq = 150.0f; init.bands[0].gainDb = -3.0f; init.bands[0].q = 2.0f;
+        setCur(init);
+
+        wsSendText(s, R"({"type":"apply_measurement","channel":"right","preamp_db":-2.5,"bands":[{"type":1,"freq":85,"gainDb":-5.5,"q":3.0}]})");
+        std::string ack = wsWaitFor(s, "\"measurement_applied\"", 2000);
+        CHECK(!ack.empty(), "T6b: measurement_applied megérkezett");
+        ParamData p = getCur();
+        CHECK(p.eqSplit == 1, "T6b: egycsatornás right alkalmazás -> eqSplit == 1");
+        CHECK(p.numBands == 1 && std::fabs(p.bands[0].freq - 150.0f) < 0.1f, "T6b: bal csatorna megőrizte a korábbi közös sávot (150 Hz)");
+        CHECK(p.numBandsR == 1 && std::fabs(p.bandsR[0].freq - 85.0f) < 0.1f, "T6b: jobb csatorna az új mérést kapta (85 Hz)");
+    }
+
+    net::closeSocket(s);
+    bridge.stop();
+}
+
 int main() {
     std::printf("========================================================\n");
     std::printf(" Aqulify magteszt (Windows/Linux közös kód)\n");
@@ -2987,6 +3083,7 @@ int main() {
     testVisualSourceDsd();
     testBridgeEndlessAudio();
     testDefaultDeviceFollow();
+    testBridgeApplyMeasurementSplit();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

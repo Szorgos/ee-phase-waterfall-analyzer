@@ -1191,5 +1191,19 @@
   "rw.helpLimitsP": "Az EQ főleg a mély tartomány (500 Hz alatti) kiemeléseit vágja le. Mély, keskeny akusztikai kioltásokat és a hangszóró alsó határa alatti esést nem szabad erővel feltölteni – ott a hangszóró vagy a hallgatási hely mozgatása segít.",
   "eq.reduceMin": "A sávok száma már most is minimális (≤ 5).",
   "eq.reducePrompt": "Hány sávra szeretnéd csökkenteni az EQ-t? (pl. 5, 7 vagy 10)",
-  "eq.reduceDone": "A sávok számát {n}-re csökkentettük. Legnagyobb elhagyott eltérés: {diff} dB."
+  "eq.reduceDone": "A sávok számát {n}-re csökkentettük. Legnagyobb elhagyott eltérés: {diff} dB.",
+  "rw.modeLabel": "Korrekció módja:",
+  "rw.modeSplit": "Csatornánként (ajánlott)",
+  "rw.modeCommon": "Közös korrekció",
+  "rw.modeHelpBtn": "Mikor melyiket válasszam?",
+  "rw.modeHelpText": "A csatornánkénti korrekció általában jobb, mert a bal és a jobb hangfal más helyen áll a szobában (például az egyik közelebb a falhoz vagy sarokhoz), ezért eltérő mély rezonanciákat keltenek. A közös korrekció akkor hasznos, ha a szoba és a hangfalak elrendezése szimmetrikus, vagy ha a csatornánkénti beállítás furcsán szól.",
+  "rw.lrDiffRight": "A jobb hangfal {db} dB-lel hangosabb; ezt a hangerő-egyensúllyal állíthatod, a korrekció nem változtat rajta.",
+  "rw.lrDiffLeft": "A bal hangfal {db} dB-lel hangosabb; ezt a hangerő-egyensúllyal állíthatod, a korrekció nem változtat rajta.",
+  "rw.legendMeasuredL": "● Mért (Bal)",
+  "rw.legendMeasuredR": "● Mért (Jobb)",
+  "rw.legendCorrectedL": "● Korrigált (Bal)",
+  "rw.legendCorrectedR": "● Korrigált (Jobb)",
+  "rw.filterListLeft": "Bal csatorna (L):",
+  "rw.filterListRight": "Jobb csatorna (R):",
+  "rw.filterListNone": "(nincs sáv)"
 }

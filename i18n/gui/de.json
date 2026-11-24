@@ -1191,5 +1191,19 @@
   "rw.helpLimitsP": "Der EQ dämpft vor allem Bassüberhöhungen unter 500 Hz. Tiefe schmale Auslöschungen und der Abfall unterhalb der Lautsprechergrenze werden nicht stark angehoben – dort hilft das Verschieben von Lautsprechern oder Hörplatz.",
   "eq.reduceMin": "Die Bandanzahl ist bereits minimal (≤ 5).",
   "eq.reducePrompt": "Auf wie viele EQ-Bänder reduzieren? (z. B. 5, 7 oder 10)",
-  "eq.reduceDone": "Auf {n} Bänder reduziert. Größte ausgelassene Abweichung: {diff} dB."
+  "eq.reduceDone": "Auf {n} Bänder reduziert. Größte ausgelassene Abweichung: {diff} dB.",
+  "rw.modeLabel": "Korrekturmodus:",
+  "rw.modeSplit": "Pro Kanal (empfohlen)",
+  "rw.modeCommon": "Gemeinsame Korrektur",
+  "rw.modeHelpBtn": "Welchen Modus wählen?",
+  "rw.modeHelpText": "Die kanalspezifische Korrektur ist meist besser, da linker und rechter Lautsprecher unterschiedlich im Raum stehen (z. B. einer näher an einer Wand oder Ecke) und unterschiedliche Raummoden anregen. Die gemeinsame Korrektur ist sinnvoll bei symmetrischer Aufstellung oder wenn die kanalspezifische Korrektur ungewohnt klingt.",
+  "rw.lrDiffRight": "Der rechte Lautsprecher ist {db} dB lauter; passe dies über die Balance an, die Korrektur ändert dies nicht.",
+  "rw.lrDiffLeft": "Der linke Lautsprecher ist {db} dB lauter; passe dies über die Balance an, die Korrektur ändert dies nicht.",
+  "rw.legendMeasuredL": "● Gemessen (L)",
+  "rw.legendMeasuredR": "● Gemessen (R)",
+  "rw.legendCorrectedL": "● Korrigiert (L)",
+  "rw.legendCorrectedR": "● Korrigiert (R)",
+  "rw.filterListLeft": "Linker Kanal (L):",
+  "rw.filterListRight": "Rechter Kanal (R):",
+  "rw.filterListNone": "(keine Bänder)"
 }

@@ -281,6 +281,7 @@ struct FakeWorld {
     double playAtFrames = -1.0;
     std::vector<float> playedL, playedR;
     SyntheticRoom roomL, roomR;
+    float gainL = 1.0f, gainR = 1.0f;            // csatornánkénti szélessávú szintskálázás (pl. +2 dB eltérés)
     int bypassOn = 0, bypassOff = 0;
     bool lastBypass = false;
     std::vector<std::string> posts;
@@ -331,7 +332,7 @@ public:
             auto yr = w_.roomR.simulateResponse(w_.playedR, 48000);
             const size_t lat = static_cast<size_t>(std::round(w_.usbLatencyMs * 48.0));
             const size_t off = static_cast<size_t>(w_.playAtFrames) + lat;
-            for (size_t i = 0; i + off < n && i < yl.size(); ++i) out[i + off] += yl[i] + (i < yr.size() ? yr[i] : 0.0f);
+            for (size_t i = 0; i + off < n && i < yl.size(); ++i) out[i + off] += w_.gainL * yl[i] + (i < yr.size() ? w_.gainR * yr[i] : 0.0f);
         }
         // Ismert mikrofon-frekvenciamenet (ha meg van adva)
         if (!w_.micResponse.empty()) {
@@ -928,6 +929,196 @@ static void testLevelCheckAgcDetection() {
     CHECK(warnOn, "10b AGC mellett figyelmeztetés érkezik");
 }
 
+static std::vector<AutoEqBand> jsonBandArr(const std::string& j, const std::string& key) {
+    std::vector<AutoEqBand> out;
+    auto p = j.find("\"" + key + "\":[");
+    if (p == std::string::npos) return out;
+    p += key.size() + 4;
+    while (p < j.size() && j[p] != ']') {
+        const auto objStart = j.find('{', p);
+        if (objStart == std::string::npos) break;
+        const auto arrEnd = j.find(']', p);
+        if (arrEnd != std::string::npos && objStart > arrEnd) break;
+        const auto objEnd = j.find('}', objStart);
+        if (objEnd == std::string::npos) break;
+        const std::string sub = j.substr(objStart, objEnd - objStart + 1);
+        AutoEqBand b{};
+        const double t = jsonNum(sub, "type");
+        const double f = jsonNum(sub, "freq");
+        const double g = jsonNum(sub, "gainDb");
+        const double q = jsonNum(sub, "q");
+        b.type = std::isnan(t) ? 1 : static_cast<int>(t);
+        b.freq = std::isnan(f) ? 1000.0f : static_cast<float>(f);
+        b.gainDb = std::isnan(g) ? 0.0f : static_cast<float>(g);
+        b.q = std::isnan(q) ? 1.0f : static_cast<float>(q);
+        out.push_back(b);
+        p = objEnd + 1;
+    }
+    return out;
+}
+
+static float evalBandsAt(const std::vector<AutoEqBand>& bands, float f) {
+    float sum = 0.0f;
+    for (const auto& b : bands) sum += evalFilterDb(b, f);
+    return sum;
+}
+
+static void testPerChannelAutoEq() {
+    std::printf("[11] Csatornánkénti auto-EQ (T1–T4): eltérő L/R módusok, normalizálás, közös preamp, recompute\n");
+
+    auto runBoth = [](FakeWorld& w, MeasurementSession& s, const MeasureConfig& cfg) -> std::string {
+        { std::lock_guard<std::mutex> lk(w.mu); w.posts.clear(); }
+        std::string err;
+        CHECK(s.startMeasurement(cfg, "mic1", err), "both mérés elindul (%s)", err.c_str());
+        std::string res = waitFor(w, s, "measurement_result", 20.0);
+        CHECK(!res.empty(), "both mérési eredmény érkezett");
+        return res;
+    };
+
+    // T1: bal +8 dB @ 60 Hz, jobb +8 dB @ 90 Hz -> bands_left vág ~60 Hz és nem ~90 Hz, bands_right fordítva
+    {
+        FakeWorld w;
+        w.roomL.noiseLevel = w.roomR.noiseLevel = 0.0f;
+        w.roomL.acousticFilters = { { 1, 60.0f, +8.0f, 4.0f } };
+        w.roomR.acousticFilters = { { 1, 90.0f, +8.0f, 4.0f } };
+        MeasurementSession s(fakeDeps(w));
+
+        MeasureConfig cfg;
+        cfg.channel = "both";
+        cfg.durationSec = 1.0f;
+        cfg.targetType = "flat";
+        cfg.smoothingFraction = 12;
+
+        const std::string res = runBoth(w, s, cfg);
+        CHECK(res.find("\"bands_left\":[") != std::string::npos, "T1: bands_left mező jelen van");
+        CHECK(res.find("\"bands_right\":[") != std::string::npos, "T1: bands_right mező jelen van");
+        CHECK(res.find("\"skipped_dips_left\":[") != std::string::npos, "T1: skipped_dips_left mező jelen van");
+        CHECK(res.find("\"skipped_dips_right\":[") != std::string::npos, "T1: skipped_dips_right mező jelen van");
+        CHECK(!std::isnan(jsonNum(res, "speaker_low_cutoff_left_hz")), "T1: speaker_low_cutoff_left_hz jelen van");
+        CHECK(!std::isnan(jsonNum(res, "speaker_low_cutoff_right_hz")), "T1: speaker_low_cutoff_right_hz jelen van");
+        CHECK(!std::isnan(jsonNum(res, "lr_level_diff_db")), "T1: lr_level_diff_db jelen van");
+
+        const auto bL = jsonBandArr(res, "bands_left");
+        const auto bR = jsonBandArr(res, "bands_right");
+        const auto bC = jsonBandArr(res, "bands");
+        CHECK(!bL.empty() && !bR.empty() && !bC.empty(), "T1: bands_left (%zu), bands_right (%zu) és bands (%zu) nem üres",
+              bL.size(), bR.size(), bC.size());
+
+        bool lCut60 = false, lCut90 = false, rCut90 = false, rCut60 = false;
+        for (const auto& b : bL) {
+            if (std::fabs(b.freq - 60.0f) < 10.0f && b.gainDb < -3.0f) lCut60 = true;
+            if (std::fabs(b.freq - 90.0f) < 12.0f && b.gainDb < -2.0f) lCut90 = true;
+        }
+        for (const auto& b : bR) {
+            if (std::fabs(b.freq - 90.0f) < 10.0f && b.gainDb < -3.0f) rCut90 = true;
+            if (std::fabs(b.freq - 60.0f) < 12.0f && b.gainDb < -2.0f) rCut60 = true;
+        }
+        std::printf("   -> T1: L(60=%d, 90=%d), R(90=%d, 60=%d)\n", lCut60, lCut90, rCut90, rCut60);
+        CHECK(lCut60 && !lCut90, "T1: bands_left vág ~60 Hz-en és nem vág ~90 Hz-en");
+        CHECK(rCut90 && !rCut60, "T1: bands_right vág ~90 Hz-en és nem vág ~60 Hz-en");
+
+        // T4: measurement_recompute után a csatornánkénti sávok is a csúszkákhoz igazodnak
+        const float eqL35Before = evalBandsAt(bL, 35.0f);
+        const float eqR35Before = evalBandsAt(bR, 35.0f);
+        { std::lock_guard<std::mutex> lk(w.mu); w.posts.clear(); }
+        MeasureConfig cfg2 = cfg;
+        cfg2.targetType = "room_balanced";
+        cfg2.customTargetParams = true;
+        cfg2.targetBassDb = 6.0f;
+        cfg2.targetTrebleDb = -3.0f;
+        cfg2.targetKneeHz = 180.0f;
+        std::string rerr;
+        CHECK(s.recompute(cfg2, rerr), "T4: recompute sikeres (%s)", rerr.c_str());
+        const std::string resRec = waitFor(w, s, "measurement_result", 3.0);
+        CHECK(!resRec.empty() && resRec.find("\"recomputed\":true") != std::string::npos, "T4: recompute eredmény érkezett");
+        const auto bL2 = jsonBandArr(resRec, "bands_left");
+        const auto bR2 = jsonBandArr(resRec, "bands_right");
+        const float eqL35After = evalBandsAt(bL2, 35.0f);
+        const float eqR35After = evalBandsAt(bR2, 35.0f);
+        const float eqL60After = evalBandsAt(bL2, 60.0f);
+        const float eqR60After = evalBandsAt(bR2, 60.0f);
+        std::printf("   -> T4: 35 Hz L %+.2f->%+.2f dB, R %+.2f->%+.2f dB; 60 Hz L %+.2f vs R %+.2f dB\n",
+                    eqL35Before, eqL35After, eqR35Before, eqR35After, eqL60After, eqR60After);
+        CHECK(eqL35After > eqL35Before + 1.5f, "T4: recompute frissíti bands_left sávokat a mély csúszkához");
+        CHECK(eqR35After > eqR35Before + 1.5f, "T4: recompute frissíti bands_right sávokat a mély csúszkához");
+        CHECK(eqL60After < eqR60After - 3.0f, "T4: recompute megőrzi a bal/jobb csatornák eltérését");
+    }
+
+    // T2: a jobb csatorna széles sávban +2 dB-lel hangosabb, egyébként azonos
+    {
+        FakeWorld w;
+        w.roomL.noiseLevel = w.roomR.noiseLevel = 0.0f;
+        w.roomL.acousticFilters = { { 1, 70.0f, +6.0f, 3.5f } };
+        w.roomR.acousticFilters = { { 1, 70.0f, +6.0f, 3.5f } };
+        w.gainL = 1.0f;
+        w.gainR = std::pow(10.0f, 2.0f / 20.0f); // +2.0 dB széles sávban a jobb oldalon
+        MeasurementSession s(fakeDeps(w));
+
+        MeasureConfig cfg;
+        cfg.channel = "both";
+        cfg.durationSec = 1.0f;
+        cfg.targetType = "flat";
+        cfg.smoothingFraction = 12;
+
+        const std::string res = runBoth(w, s, cfg);
+        const double diffDb = jsonNum(res, "lr_level_diff_db");
+        const auto freqs = jsonArr(res, "freqs");
+        const auto bL = jsonBandArr(res, "bands_left");
+        const auto bR = jsonBandArr(res, "bands_right");
+
+        double maxLrEqDiff = 0.0;
+        double sumMidL = 0.0, sumMidR = 0.0;
+        int cntMid = 0;
+        for (double f : freqs) {
+            const float eL = evalBandsAt(bL, static_cast<float>(f));
+            const float eR = evalBandsAt(bR, static_cast<float>(f));
+            if (f >= 30.0 && f <= 16000.0) maxLrEqDiff = std::max(maxLrEqDiff, static_cast<double>(std::fabs(eL - eR)));
+            if (f >= 300.0 && f <= 3000.0) { sumMidL += eL; sumMidR += eR; ++cntMid; }
+        }
+        const double meanMidL = cntMid > 0 ? sumMidL / cntMid : 0.0;
+        const double meanMidR = cntMid > 0 ? sumMidR / cntMid : 0.0;
+        std::printf("   -> T2: lr_level_diff_db=%+.2f dB, max|eqL-eqR|=%.2f dB, középátlag L=%+.2f / R=%+.2f dB\n",
+                    diffDb, maxLrEqDiff, meanMidL, meanMidR);
+        CHECK(!std::isnan(diffDb) && std::fabs(diffDb - 2.0) < 0.35,
+              "T2: lr_level_diff_db ≈ +2.0 dB (mért: %.2f)", diffDb);
+        CHECK(maxLrEqDiff < 0.8, "T2: a két sávkészlet (közel) azonos (max eltérés: %.2f dB)", maxLrEqDiff);
+        CHECK(std::fabs(meanMidL) < 0.35 && std::fabs(meanMidR) < 0.35,
+              "T2: nincs szélessávú szintkiegyenlítő sáv (L=%.2f, R=%.2f dB)", meanMidL, meanMidR);
+    }
+
+    // T3: közös preamp = a két csatorna összegzett pozitív csúcsa közül a nagyobb, negatív előjellel
+    {
+        FakeWorld w;
+        w.roomL.noiseLevel = w.roomR.noiseLevel = 0.0f;
+        w.roomL.acousticFilters = { { 1, 100.0f, -6.0f, 0.9f } }; // széles mélyedés -> ~+3 dB emelés L-en
+        w.roomR.acousticFilters = { { 1, 80.0f, +6.0f, 4.0f } };  // csak kiemelés -> 0 dB emelés R-en
+        MeasurementSession s(fakeDeps(w));
+
+        MeasureConfig cfg;
+        cfg.channel = "both";
+        cfg.durationSec = 1.0f;
+        cfg.targetType = "flat";
+        cfg.smoothingFraction = 12;
+
+        const std::string res = runBoth(w, s, cfg);
+        const auto freqs = jsonArr(res, "freqs");
+        const auto bL = jsonBandArr(res, "bands_left");
+        const auto bR = jsonBandArr(res, "bands_right");
+        float maxPosL = 0.0f, maxPosR = 0.0f;
+        for (double f : freqs) {
+            maxPosL = std::max(maxPosL, evalBandsAt(bL, static_cast<float>(f)));
+            maxPosR = std::max(maxPosR, evalBandsAt(bR, static_cast<float>(f)));
+        }
+        const double recPreamp = jsonNum(res, "recommended_preamp_db");
+        const double expected = -static_cast<double>(std::max(maxPosL, maxPosR));
+        std::printf("   -> T3: maxPosL=%+.2f dB, maxPosR=%+.2f dB, recommended_preamp_db=%+.2f dB (várt %+.2f)\n",
+                    maxPosL, maxPosR, recPreamp, expected);
+        CHECK(maxPosL > 2.0f && maxPosR < 0.3f, "T3: bal csatornán érdemi emelés, jobbon ~0 (L=%.2f, R=%.2f)", maxPosL, maxPosR);
+        CHECK(!std::isnan(recPreamp) && std::fabs(recPreamp - expected) < 0.15,
+              "T3: közös preamp = -max(peakL, peakR) (kapott: %.2f, várt: %.2f)", recPreamp, expected);
+    }
+}
+
 int main() {
     std::printf("==========================================\n");
     std::printf("Aqulify Szobamérő Mag Tesztek (include/room/)\n");
@@ -943,6 +1134,7 @@ int main() {
     testTargetCurveAndAutoEqLimitsAndVarSmooth();
     testMultiPointPowerAvgAndRecompute();
     testLevelCheckAgcDetection();
+    testPerChannelAutoEq();
 
     std::printf("\n==========================================\n");
     std::printf("SIKER: Minden szobamérő mag teszt sikeres!\n");

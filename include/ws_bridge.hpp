@@ -3975,9 +3975,9 @@ private:
         float delayMs = static_cast<float>(num(msg, "delay_ms", 0.0));
         bool invert = msg.get("invert") && msg.get("invert")->b;
 
-        std::vector<EqBandPod> newBands;
-        if (const json::Value* bArr = msg.get("bands"); bArr && bArr->type == json::Value::Type::Array) {
-            for (const auto& item : bArr->arr) {
+        auto parseMeasBands = [&](const json::Value* arr, std::vector<EqBandPod>& out) {
+            if (!arr || arr->type != json::Value::Type::Array) return;
+            for (const auto& item : arr->arr) {
                 if (item.type == json::Value::Type::Object) {
                     EqBandPod bd{};
                     bd.type = static_cast<int32_t>(num(item, "type", 1.0));
@@ -3985,10 +3985,20 @@ private:
                     bd.freq = static_cast<float>(num(item, "freq", 1000.0));
                     bd.gainDb = static_cast<float>(num(item, "gainDb", 0.0));
                     bd.q = static_cast<float>(num(item, "q", 1.0));
-                    newBands.push_back(bd);
+                    out.push_back(bd);
                 }
             }
-        }
+        };
+
+        std::vector<EqBandPod> newBands;
+        parseMeasBands(msg.get("bands"), newBands);
+        const json::Value* bRArr = msg.get("bands_r");
+        const bool hasBandsR = (bRArr && bRArr->type == json::Value::Type::Array);
+        const json::Value* spV = msg.get("split");
+        const bool wantSplit = !spV || spV->b || spV->numberOr(0.0) != 0.0;
+        const bool applyBothSplit = hasBandsR && wantSplit;
+        std::vector<EqBandPod> newBandsR;
+        if (applyBothSplit) parseMeasBands(bRArr, newBandsR);
 
         if (xoverBand >= 0) {
             if (!cb_.getMultiOut || !cb_.setWayEq || !cb_.multiOutStatus) {
@@ -4017,41 +4027,62 @@ private:
             broadcast("{\"type\":\"multiout\",\"status\":" + cb_.multiOutStatus() + "}");
         } else {
             ParamData p = cb_.getParams();
+            p.set(kFlagInitialized, true);
             p.set(kFlagEq, true);
             if (const json::Value* preV = msg.get("preamp_db")) {
                 p.preampDb = std::clamp(static_cast<float>(preV->numberOr(0.0)), -36.0f, 12.0f);
             } else {
                 // Ha a kliens nem küldött külön preamp_db-t, legalább az összegzett pozitív emelést kompenzáljuk
-                float maxPos = 0.0f;
-                for (int i = 0; i <= 200; ++i) {
-                    const float f = static_cast<float>(20.0 * std::pow(1000.0, static_cast<double>(i) / 200.0));
-                    float sum = 0.0f;
-                    for (const auto& bd : newBands) {
-                        aqulify::room::AutoEqBand ab{ bd.type, bd.freq, bd.gainDb, bd.q };
-                        sum += aqulify::room::evalFilterDb(ab, f);
+                // (csatornánkénti módban a két csatorna csúcsa közül a nagyobbal).
+                auto peakOf = [](const std::vector<EqBandPod>& bs) {
+                    float pk = 0.0f;
+                    for (int i = 0; i <= 200; ++i) {
+                        const float f = static_cast<float>(20.0 * std::pow(1000.0, static_cast<double>(i) / 200.0));
+                        float sum = 0.0f;
+                        for (const auto& bd : bs) {
+                            aqulify::room::AutoEqBand ab{ bd.type, bd.freq, bd.gainDb, bd.q };
+                            sum += aqulify::room::evalFilterDb(ab, f);
+                        }
+                        if (sum > pk) pk = sum;
                     }
-                    if (sum > maxPos) maxPos = sum;
-                }
+                    return pk;
+                };
+                float maxPos = peakOf(newBands);
+                if (applyBothSplit) maxPos = std::max(maxPos, peakOf(newBandsR));
                 if (maxPos > 0.05f && p.preampDb > -maxPos) {
                     p.preampDb = std::clamp(-maxPos, -36.0f, 0.0f);
                 }
             }
             if (ch == "left") {
-                p.eqSplit = true;
-                p.numBands = static_cast<int32_t>(std::min<size_t>(newBands.size(), kMaxEqBands));
-                for (int32_t i = 0; i < p.numBands; ++i) p.bands[i] = newBands[i];
+                if (!p.eqSplit) {
+                    // Előtte nem volt split: a korábbi közös sávok átmásolása a jobb csatornára (ne maradjon elavult)
+                    p.numBandsR = std::min(p.numBands, kMaxEqBands);
+                    for (uint32_t i = 0; i < p.numBandsR; ++i) p.bandsR[i] = p.bands[i];
+                }
+                p.eqSplit = 1;
+                p.numBands = static_cast<uint32_t>(std::min<size_t>(newBands.size(), kMaxEqBands));
+                for (uint32_t i = 0; i < p.numBands; ++i) p.bands[i] = newBands[i];
                 p.chDelayMs[0] = std::clamp(delayMs, 0.0f, 50.0f);
                 p.chInvert[0] = invert ? 1 : 0;
             } else if (ch == "right") {
-                p.eqSplit = true;
-                p.numBandsR = static_cast<int32_t>(std::min<size_t>(newBands.size(), kMaxEqBands));
-                for (int32_t i = 0; i < p.numBandsR; ++i) p.bandsR[i] = newBands[i];
+                // Ha előtte nem volt split, a korábbi közös sávok már p.bands-ban (bal) vannak
+                p.eqSplit = 1;
+                p.numBandsR = static_cast<uint32_t>(std::min<size_t>(newBands.size(), kMaxEqBands));
+                for (uint32_t i = 0; i < p.numBandsR; ++i) p.bandsR[i] = newBands[i];
                 p.chDelayMs[1] = std::clamp(delayMs, 0.0f, 50.0f);
                 p.chInvert[1] = invert ? 1 : 0;
             } else {
-                p.eqSplit = false;
-                p.numBands = static_cast<int32_t>(std::min<size_t>(newBands.size(), kMaxEqBands));
-                for (int32_t i = 0; i < p.numBands; ++i) p.bands[i] = newBands[i];
+                if (applyBothSplit) {
+                    p.eqSplit = 1;
+                    p.numBands = static_cast<uint32_t>(std::min<size_t>(newBands.size(), kMaxEqBands));
+                    for (uint32_t i = 0; i < p.numBands; ++i) p.bands[i] = newBands[i];
+                    p.numBandsR = static_cast<uint32_t>(std::min<size_t>(newBandsR.size(), kMaxEqBands));
+                    for (uint32_t i = 0; i < p.numBandsR; ++i) p.bandsR[i] = newBandsR[i];
+                } else {
+                    p.eqSplit = 0;
+                    p.numBands = static_cast<uint32_t>(std::min<size_t>(newBands.size(), kMaxEqBands));
+                    for (uint32_t i = 0; i < p.numBands; ++i) p.bands[i] = newBands[i];
+                }
                 p.chDelayMs[0] = std::clamp(delayMs, 0.0f, 50.0f);
                 p.chDelayMs[1] = p.chDelayMs[0];
                 p.chInvert[0] = invert ? 1 : 0;

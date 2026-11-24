@@ -6614,12 +6614,37 @@ var qrcode = function() {
             <div id="rwPointListStep4" style="display:flex; gap:6px; flex-wrap:wrap; width:100%;"></div>
           </div>
 
+          <!-- Csatornánkénti / Közös korrekció választó („both” mérésnél) -->
+          <div id="rwEqModeRow" style="display:none; flex-direction:column; gap:6px; background:var(--aq-bg); padding:8px 12px; border-radius:6px;">
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span style="font-size:0.82rem; font-weight:600;" data-i18n="rw.modeLabel">Korrekció módja:</span>
+              <div role="group" style="display:inline-flex; gap:6px; flex-wrap:wrap;">
+                <button type="button" id="btnRwModeSplit" class="adw-btn primary active-opt" style="font-size:0.8rem; padding:4px 10px;" aria-pressed="true" onclick="setRwEqMode('split')" data-i18n="rw.modeSplit">Csatornánként (ajánlott)</button>
+                <button type="button" id="btnRwModeCommon" class="adw-btn" style="font-size:0.8rem; padding:4px 10px;" aria-pressed="false" onclick="setRwEqMode('common')" data-i18n="rw.modeCommon">Közös korrekció</button>
+              </div>
+              <button type="button" id="rwModeHelpBtn" class="mini-btn" style="padding:2px 8px; font-weight:700; font-size:0.78rem;" onclick="toggleRwModeHelp()" title="Mikor melyiket válasszam?" data-i18n-title="rw.modeHelpBtn" aria-expanded="false" aria-controls="rwModeHelpBox">i</button>
+            </div>
+            <div id="rwModeHelpBox" style="display:none; font-size:0.8rem; line-height:1.4; color:var(--aq-text-2); padding-top:4px; border-top:1px solid var(--aq-border);" data-i18n="rw.modeHelpText">
+              A csatornánkénti korrekció általában jobb, mert a bal és a jobb hangfal más helyen áll a szobában (például az egyik közelebb a falhoz vagy sarokhoz), ezért eltérő mély rezonanciákat keltenek. A közös korrekció akkor hasznos, ha a szoba és a hangfalak elrendezése szimmetrikus, vagy ha a csatornánkénti beállítás furcsán szól.
+            </div>
+          </div>
+
+          <!-- Bal–jobb szintkülönbség tájékoztató (> 1 dB eltérésnél) -->
+          <div id="rwLrLevelDiffNotice" style="display:none; background:rgba(53,132,228,0.12); border-left:3px solid var(--aq-blue, #3584e4); padding:7px 12px; border-radius:4px; font-size:0.82rem; line-height:1.35;"></div>
+
           <!-- Egyszerű grafikon előnézet -->
           <canvas id="rwCurveCanvas" width="660" height="180" style="width:100%; height:180px; background:#18181c; border-radius:6px;"></canvas>
-          <div style="display:flex; gap:16px; justify-content:center; font-size:0.75rem;">
+          <div id="rwLegendCommon" style="display:flex; gap:16px; justify-content:center; flex-wrap:wrap; font-size:0.75rem;">
             <span style="color:#888;" data-i18n="rw.legendMeasured">● Eredeti (mért) válasz</span>
             <span style="color:#00aaff;" data-i18n="rw.legendTarget">● Célgörbe</span>
             <span style="color:#00ff88;" data-i18n="rw.legendCorrected">● Korrigált válasz</span>
+          </div>
+          <div id="rwLegendSplit" style="display:none; gap:12px; justify-content:center; flex-wrap:wrap; font-size:0.75rem;">
+            <span style="color:#7aa7d9;" data-i18n="rw.legendMeasuredL">● Mért (Bal)</span>
+            <span style="color:#f0a368;" data-i18n="rw.legendMeasuredR">● Mért (Jobb)</span>
+            <span style="color:#00aaff;" data-i18n="rw.legendTarget">● Célgörbe</span>
+            <span style="color:#00ff88;" data-i18n="rw.legendCorrectedL">● Korrigált (Bal)</span>
+            <span style="color:#ffbe3b;" data-i18n="rw.legendCorrectedR">● Korrigált (Jobb)</span>
           </div>
 
           <!-- Egyszerű mód: Két közérthető csúszka + Hangerő-tartalék -->
@@ -6670,7 +6695,7 @@ var qrcode = function() {
                 </select>
                 <button type="button" class="mini-btn" onclick="saveRwSessionToFile()" data-i18n="rw.saveSession">Mérés mentése</button>
               </div>
-              <div id="rwFilterListText" style="max-height:80px; overflow-y:auto; font-family:monospace;"></div>
+              <div id="rwFilterListText" style="max-height:140px; overflow-y:auto; font-family:monospace; white-space:pre-line;"></div>
             </div>
           </div>
         </div>
@@ -13527,9 +13552,11 @@ function applyEngineState(st, fromSync) {
   suppressEngineSync = true;
   try {
     if (st.initialized) {
-      if (Array.isArray(st.bands) && st.bands.length > 0) {
+      const hasAnyBands = (Array.isArray(st.bands) && st.bands.length > 0) ||
+                          (!!st.eqSplit && Array.isArray(st.bandsR) && st.bandsR.length > 0);
+      if (hasAnyBands) {
         const prevSel = nodes.some(n => n.id === selectedNodeId) ? nodes.findIndex(n => n.id === selectedNodeId) : 0;
-        const bL = st.bands.map((b, i) => normBand(b, i));
+        const bL = Array.isArray(st.bands) ? st.bands.map((b, i) => normBand(b, i)) : [];
         const hasSplit = !!st.eqSplit && Array.isArray(st.bandsR);
         const bR = hasSplit ? st.bandsR.map((b, i) => normBand(b, i)) : [];
         setEqChannels(bL, bR, hasSplit);
@@ -16327,6 +16354,7 @@ setTimeout(() => {
    ========================================================================== */
 
 var rwStep = 1;
+var rwEqMode = 'split';     // 'split' (csatornánkénti, alapértelmezett) vagy 'common' (közös)
 var rwLastBackupL = null;
 var rwLastBackupR = null;
 var rwLastBackupSplit = false;
@@ -16744,6 +16772,29 @@ function updateRwPointCountUi() {
   renderRwPointChips(document.getElementById('rwPointListStep4'));
 }
 
+function hasRwPerChannelData(d) {
+  return !!(d && d.channel !== 'left' && d.channel !== 'right' &&
+            Array.isArray(d.bands_left) && Array.isArray(d.bands_right));
+}
+
+function isRwSplitModeActive() {
+  return hasRwPerChannelData(rwMeasuredData) && rwEqMode === 'split';
+}
+
+function setRwEqMode(mode) {
+  rwEqMode = (mode === 'common') ? 'common' : 'split';
+  renderRwResults();
+}
+
+function toggleRwModeHelp(forceState) {
+  const box = document.getElementById('rwModeHelpBox');
+  const btn = document.getElementById('rwModeHelpBtn');
+  if (!box) return;
+  const show = (typeof forceState === 'boolean') ? forceState : (box.style.display === 'none');
+  box.style.display = show ? 'block' : 'none';
+  if (btn) btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+}
+
 function handleRwMeasurementResult(res) {
   if (!res) return;
   const btnStart = document.getElementById('btnRwStartSweep');
@@ -16756,7 +16807,10 @@ function handleRwMeasurementResult(res) {
     if (!rwAppendNextPoint) rwPoints = [];
     rwPoints.push(res);
   }
-  if (!res.recomputed) rwAppendNextPoint = false;
+  if (!res.recomputed) {
+    rwAppendNextPoint = false;
+    if (hasRwPerChannelData(res)) rwEqMode = 'split';
+  }
   rwMeasuredData = res;
   updateRwPointCountUi();
   renderRwResults();
@@ -16772,15 +16826,66 @@ function renderRwResults() {
       rwMeasuredData.human_summary_en || rwMeasuredData.human_summary_hu || '';
   }
 
+  // Csatornánkénti / közös választó (csak „both” mérésnél, ha megvannak az L/R sávok)
+  const hasPerCh = hasRwPerChannelData(rwMeasuredData);
+  const splitActive = hasPerCh && rwEqMode === 'split';
+  const modeRow = document.getElementById('rwEqModeRow');
+  if (modeRow) modeRow.style.display = hasPerCh ? 'flex' : 'none';
+  const btnSplit = document.getElementById('btnRwModeSplit');
+  const btnCommon = document.getElementById('btnRwModeCommon');
+  if (btnSplit) {
+    btnSplit.classList.toggle('active-opt', splitActive);
+    btnSplit.classList.toggle('primary', splitActive);
+    btnSplit.setAttribute('aria-pressed', splitActive ? 'true' : 'false');
+  }
+  if (btnCommon) {
+    btnCommon.classList.toggle('active-opt', !splitActive);
+    btnCommon.classList.toggle('primary', !splitActive);
+    btnCommon.setAttribute('aria-pressed', !splitActive ? 'true' : 'false');
+  }
+
+  // Bal–jobb szintkülönbség tájékoztató sor (ha |lr_level_diff_db| > 1 dB)
+  const diffEl = document.getElementById('rwLrLevelDiffNotice');
+  if (diffEl) {
+    const diff = rwMeasuredData.lr_level_diff_db;
+    if (typeof diff === 'number' && Number.isFinite(diff) && Math.abs(diff) > 1.0) {
+      const key = diff > 0 ? 'rw.lrDiffRight' : 'rw.lrDiffLeft';
+      diffEl.textContent = t(key, { db: fmtNum(Math.abs(diff), 1) });
+      diffEl.style.display = 'block';
+    } else {
+      diffEl.textContent = '';
+      diffEl.style.display = 'none';
+    }
+  }
+
+  // Jelmagyarázat váltása
+  const hasLrCurves = Array.isArray(rwMeasuredData.measured_left_dbs) && Array.isArray(rwMeasuredData.measured_right_dbs);
+  const showSplitChart = splitActive && hasLrCurves;
+  const legCommon = document.getElementById('rwLegendCommon');
+  const legSplit = document.getElementById('rwLegendSplit');
+  if (legCommon) legCommon.style.display = showSplitChart ? 'none' : 'flex';
+  if (legSplit) legSplit.style.display = showSplitChart ? 'flex' : 'none';
+
   // Szűrők listázása a haladó dobozban
   const filterList = document.getElementById('rwFilterListText');
-  if (filterList && rwMeasuredData.bands) {
-    let lines = '';
-    rwMeasuredData.bands.forEach((b, idx) => {
-      const g = typeof b.gainDb === 'number' ? b.gainDb : (b.gain || 0);
-      lines += `#${idx+1}: ${Math.round(b.freq)} Hz | ${g > 0 ? '+' : ''}${g.toFixed(1)} dB | Q: ${b.q.toFixed(2)}\n`;
-    });
-    filterList.textContent = lines;
+  if (filterList) {
+    const fmtBandList = (arr) => {
+      if (!Array.isArray(arr) || arr.length === 0) return '  ' + t('rw.filterListNone') + '\n';
+      let out = '';
+      arr.forEach((b, idx) => {
+        const g = typeof b.gainDb === 'number' ? b.gainDb : (b.gain || 0);
+        out += `#${idx+1}: ${Math.round(b.freq)} Hz | ${g > 0 ? '+' : ''}${g.toFixed(1)} dB | Q: ${b.q.toFixed(2)}\n`;
+      });
+      return out;
+    };
+    if (splitActive) {
+      filterList.textContent = t('rw.filterListLeft') + '\n' + fmtBandList(rwMeasuredData.bands_left) +
+                               '\n' + t('rw.filterListRight') + '\n' + fmtBandList(rwMeasuredData.bands_right);
+    } else if (rwMeasuredData.bands) {
+      filterList.textContent = fmtBandList(rwMeasuredData.bands);
+    } else {
+      filterList.textContent = '';
+    }
   }
 
   // Görbe kirajzolása Canvas-re
@@ -16815,42 +16920,28 @@ function drawRwCurves() {
   function dbToY(val) {
     return midY - (val / 24.0) * (h / 2 - 10);
   }
-
-  // 1. Mért görbe (szürke)
-  ctx.strokeStyle = '#888899';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  for (let i = 0; i < freqs.length; ++i) {
-    const x = freqToX(freqs[i]);
-    const y = dbToY(measured[i]);
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-
-  // 2. Célgörbe (kék)
-  if (target.length === freqs.length) {
-    ctx.strokeStyle = '#00aaff';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 4]);
+  function strokeCurve(vals, color, lineWidth, dash) {
+    if (!Array.isArray(vals) || vals.length !== freqs.length) return;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.setLineDash(dash || []);
     ctx.beginPath();
     for (let i = 0; i < freqs.length; ++i) {
       const x = freqToX(freqs[i]);
-      const y = dbToY(target[i]);
+      const y = dbToY(vals[i]);
       if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
     ctx.stroke();
     ctx.setLineDash([]);
   }
-
-  // 3. Valós korrigált eredménygörbe a kiszámolt szűrők átviteléből (zöld)
-  if (bands.length > 0 && typeof evalBiquad === 'function') {
-    ctx.strokeStyle = '#00ff88';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
+  function computeCorrected(baseMeasured, bandList) {
+    if (!Array.isArray(baseMeasured) || baseMeasured.length !== freqs.length) return null;
+    if (typeof evalBiquad !== 'function') return null;
+    const out = new Array(freqs.length);
     for (let i = 0; i < freqs.length; ++i) {
       const f = freqs[i];
       let tot_re = 1, tot_im = 0;
-      for (const b of bands) {
+      for (const b of (bandList || [])) {
         const flt = { type: b.type || 1, freq: b.freq, gain: typeof b.gainDb === 'number' ? b.gainDb : (b.gain || 0), q: b.q || 1.0, mode: 0, slope: 0 };
         const hb = evalBiquad(flt, f);
         const nr = tot_re * hb.re - tot_im * hb.im;
@@ -16858,11 +16949,36 @@ function drawRwCurves() {
         tot_re = nr; tot_im = ni;
       }
       const eqDb = 20 * Math.log10(Math.max(1e-4, Math.hypot(tot_re, tot_im)));
-      const x = freqToX(f);
-      const corrY = dbToY(measured[i] + eqDb);
-      if (i === 0) ctx.moveTo(x, corrY); else ctx.lineTo(x, corrY);
+      out[i] = baseMeasured[i] + eqDb;
     }
-    ctx.stroke();
+    return out;
+  }
+
+  const splitActive = isRwSplitModeActive() &&
+                      Array.isArray(rwMeasuredData.measured_left_dbs) &&
+                      Array.isArray(rwMeasuredData.measured_right_dbs);
+
+  if (splitActive) {
+    // 1. Mért görbék csatornánként (L: kékes, R: narancsos, vékonyabb)
+    strokeCurve(rwMeasuredData.measured_left_dbs, '#7aa7d9', 1.5, [2, 2]);
+    strokeCurve(rwMeasuredData.measured_right_dbs, '#f0a368', 1.5, [2, 2]);
+    // 2. Célgörbe (kék szaggatott)
+    strokeCurve(target, '#00aaff', 2, [4, 4]);
+    // 3. Valós korrigált görbék csatornánként (L: zöld, R: arany)
+    const corrL = computeCorrected(rwMeasuredData.measured_left_dbs, rwMeasuredData.bands_left);
+    const corrR = computeCorrected(rwMeasuredData.measured_right_dbs, rwMeasuredData.bands_right);
+    if (corrL) strokeCurve(corrL, '#00ff88', 2.2);
+    if (corrR) strokeCurve(corrR, '#ffbe3b', 2.2);
+  } else {
+    // 1. Mért görbe (szürke)
+    strokeCurve(measured, '#888899', 2);
+    // 2. Célgörbe (kék)
+    strokeCurve(target, '#00aaff', 2, [4, 4]);
+    // 3. Valós korrigált eredménygörbe a kiszámolt szűrők átviteléből (zöld)
+    if (bands.length > 0) {
+      const corr = computeCorrected(measured, bands);
+      if (corr) strokeCurve(corr, '#00ff88', 2.5);
+    }
   }
 }
 
@@ -16935,7 +17051,10 @@ function saveRwSessionToFile() {
     alert(t('rw.noDataToSave') || 'Nincs menthető mérési adat.');
     return;
   }
-  const blob = new Blob([JSON.stringify(rwMeasuredData, null, 2)], { type: 'application/json' });
+  const toSave = hasRwPerChannelData(rwMeasuredData)
+    ? Object.assign({}, rwMeasuredData, { eq_mode: rwEqMode })
+    : rwMeasuredData;
+  const blob = new Blob([JSON.stringify(toSave, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'aqulify_room_measurement.json';
@@ -16949,9 +17068,13 @@ function loadRwSessionFromFile(input) {
   reader.onload = (e) => {
     try {
       const data = JSON.parse(e.target.result);
-      if (data && (data.bands || data.measured_dbs)) {
+      if (data && (data.bands || data.bands_left || data.measured_dbs)) {
         rwMeasuredData = data;
+        rwServerPoints = [];
         rwPoints = [data];
+        if (hasRwPerChannelData(data)) {
+          rwEqMode = (data.eq_mode === 'common') ? 'common' : 'split';
+        }
         updateRwPointCountUi();
         setRoomWizardStep(4);
         renderRwResults();
@@ -16967,12 +17090,15 @@ function loadRwSessionFromFile(input) {
 }
 
 // 5. Alkalmazás, A/B és visszavonás
-/** Összegzett EQ-görbe csúcsa és a tartalék csúszka alapján számolt biztonságos előerősítés (dB). */
-function computeRwPreampDb(bands) {
-  const maxPosEq = (typeof curvePeakDbFor === 'function' && bands && bands.length > 0)
-    ? Math.max(0, curvePeakDbFor(bands))
-    : ((rwMeasuredData && typeof rwMeasuredData.recommended_preamp_db === 'number')
-        ? Math.max(0, -rwMeasuredData.recommended_preamp_db) : 0);
+/** Összegzett EQ-görbe csúcsa (csatornánkénti módban a két csatorna maximuma) és a tartalék csúszka alapján számolt előerősítés (dB). */
+function computeRwPreampDb(bandsL, bandsR) {
+  const peakOf = (list) => (typeof curvePeakDbFor === 'function' && Array.isArray(list) && list.length > 0)
+    ? Math.max(0, curvePeakDbFor(list)) : 0;
+  let maxPosEq = Math.max(peakOf(bandsL), peakOf(bandsR));
+  if ((!bandsL || bandsL.length === 0) && (!bandsR || bandsR.length === 0)) {
+    maxPosEq = (rwMeasuredData && typeof rwMeasuredData.recommended_preamp_db === 'number')
+      ? Math.max(0, -rwMeasuredData.recommended_preamp_db) : 0;
+  }
   const hEl = document.getElementById('rwHeadroomSlider');
   const hVal = hEl ? parseFloat(hEl.value) : -4.0;
   const margin = Number.isFinite(hVal) ? Math.abs(Math.min(0, hVal)) : 4.0;
@@ -16989,7 +17115,7 @@ function applyRwPreampUi(val) {
 }
 
 function applyRwCorrection() {
-  if (!rwMeasuredData || !rwMeasuredData.bands) return;
+  if (!rwMeasuredData || (!rwMeasuredData.bands && !rwMeasuredData.bands_left)) return;
 
   // Mentés visszavonáshoz
   syncActiveChannelStore();
@@ -17001,7 +17127,7 @@ function applyRwCorrection() {
   rwLastBackupEqOn = isEqEnabled;
   rwAbActive = false;
 
-  const newBands = rwMeasuredData.bands.map((b, i) => normBand({
+  const toNormBands = (arr) => (arr || []).map((b, i) => normBand({
     freq: b.freq,
     gain: typeof b.gainDb === 'number' ? b.gainDb : (b.gain || 0),
     q: b.q,
@@ -17010,32 +17136,83 @@ function applyRwCorrection() {
     slope: 0
   }, i));
 
-  // Előerősítés = -(összegzett EQ-görbe legnagyobb pozitív értéke) - a tartalék csúszka értéke
-  const targetPreamp = computeRwPreampDb(newBands);
-  autoPreampMode = false;
-  applyRwPreampUi(targetPreamp);
+  const ch = rwMeasuredData.channel || 'both';
+  const useSplitBoth = isRwSplitModeActive();
+  let targetPreamp = 0.0;
+  let wsPayload = null;
 
-  setEqChannels(newBands, [], false);
-  setModuleActive('eq', newBands.length > 0);
-  if (targetPreamp < 0 && typeof isLimiterEnabled !== 'undefined' && !isLimiterEnabled) {
-    setModuleActive('limiter', true);
-  }
-  updateEqUI();
-  drawEq();
-
-  // WebSocket küldés ha él a híd (EQ-sávok + preamp együtt)
-  if (typeof pipewireWs !== 'undefined' && pipewireWs && pipewireWs.readyState === WebSocket.OPEN) {
-    lastSentPreamp = currentPreamp;
-    pipewireWs.send(JSON.stringify({
+  if (useSplitBoth) {
+    const bandsL = toNormBands(rwMeasuredData.bands_left);
+    const bandsR = toNormBands(rwMeasuredData.bands_right);
+    targetPreamp = computeRwPreampDb(bandsL, bandsR);
+    autoPreampMode = false;
+    applyRwPreampUi(targetPreamp);
+    setEqChannels(bandsL, bandsR, true);
+    setModuleActive('eq', bandsL.length > 0 || bandsR.length > 0);
+    wsPayload = {
       type: 'apply_measurement',
-      channel: rwMeasuredData.channel || 'both',
+      channel: 'both',
+      delay_ms: rwMeasuredData.delay_ms || 0.0,
+      invert: rwMeasuredData.inverted || false,
+      preamp_db: currentPreamp,
+      split: true,
+      bands: rwMeasuredData.bands_left,
+      bands_r: rwMeasuredData.bands_right
+    };
+  } else if (ch === 'left' || ch === 'right') {
+    // Egycsatornás mérés: pontosan azt állítjuk be, amit a motor (F2/2: ha előtte nem volt split,
+    // a másik csatorna a korábbi közös sávokat örökli, ne maradjon elavult vagy üres)
+    const newBands = toNormBands(rwMeasuredData.bands);
+    const prevL = rwLastBackupL.map((b, i) => normBand(b, i));
+    const prevR = (rwLastBackupSplit ? rwLastBackupR : rwLastBackupL).map((b, i) => normBand(b, i));
+    const bandsL = (ch === 'left') ? newBands : prevL;
+    const bandsR = (ch === 'right') ? newBands : prevR;
+    targetPreamp = computeRwPreampDb(bandsL, bandsR);
+    autoPreampMode = false;
+    applyRwPreampUi(targetPreamp);
+    setEqChannels(bandsL, bandsR, true);
+    if (ch === 'right') switchEqEditChannel('R');
+    setModuleActive('eq', bandsL.length > 0 || bandsR.length > 0);
+    wsPayload = {
+      type: 'apply_measurement',
+      channel: ch,
       delay_ms: rwMeasuredData.delay_ms || 0.0,
       invert: rwMeasuredData.inverted || false,
       preamp_db: currentPreamp,
       bands: rwMeasuredData.bands
-    }));
+    };
+  } else {
+    const newBands = toNormBands(rwMeasuredData.bands);
+    targetPreamp = computeRwPreampDb(newBands, null);
+    autoPreampMode = false;
+    applyRwPreampUi(targetPreamp);
+    setEqChannels(newBands, [], false);
+    setModuleActive('eq', newBands.length > 0);
+    wsPayload = {
+      type: 'apply_measurement',
+      channel: 'both',
+      delay_ms: rwMeasuredData.delay_ms || 0.0,
+      invert: rwMeasuredData.inverted || false,
+      preamp_db: currentPreamp,
+      split: false,
+      bands: rwMeasuredData.bands
+    };
   }
 
+  if (targetPreamp < 0 && typeof isLimiterEnabled !== 'undefined' && !isLimiterEnabled) {
+    setModuleActive('limiter', true);
+  }
+  updateEqUI();
+  // WebSocket küldés ha él a híd (EQ-sávok + preamp együtt; előtte szinkron-aláírás frissítése, hogy ne menjen dupla set_eq)
+  if (typeof pipewireWs !== 'undefined' && pipewireWs && pipewireWs.readyState === WebSocket.OPEN && wsPayload) {
+    lastSentEqSig = eqFullSig();
+    lastSentPreamp = currentPreamp;
+    pipewireWs.send(JSON.stringify(wsPayload));
+  }
+  drawEq();
+
+  const btnAb = document.getElementById('btnRwAbCompare');
+  if (btnAb) btnAb.textContent = t('room.abBtn');
   const notice = document.getElementById('rwApplyResultNotice');
   if (notice) notice.textContent = t('rw.appliedWithPreamp', { preamp: fmtNum(currentPreamp, 1) });
 }

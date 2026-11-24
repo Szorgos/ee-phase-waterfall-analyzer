@@ -1191,5 +1191,19 @@
   "rw.helpLimitsP": "EQ mainly tames bass peaks (below 500 Hz). Deep narrow room nulls and roll-off below the speaker's natural limit are not boosted heavily – moving the speakers or listening spot helps there.",
   "eq.reduceMin": "The band count is already minimal (≤ 5).",
   "eq.reducePrompt": "How many EQ bands do you want to keep? (e.g. 5, 7, or 10)",
-  "eq.reduceDone": "Reduced to {n} bands. Largest omitted gain: {diff} dB."
+  "eq.reduceDone": "Reduced to {n} bands. Largest omitted gain: {diff} dB.",
+  "rw.modeLabel": "Mode de correction :",
+  "rw.modeSplit": "Par canal (recommandé)",
+  "rw.modeCommon": "Correction commune",
+  "rw.modeHelpBtn": "Quel mode choisir ?",
+  "rw.modeHelpText": "La correction par canal est généralement meilleure car les enceintes gauche et droite occupent des positions différentes dans la pièce et excitent des modes distincts. La correction commune est utile si le placement est symétrique ou si le mode par canal semble inhabituel.",
+  "rw.lrDiffRight": "L’enceinte droite est plus forte de {db} dB ; réglez ceci avec la balance, la correction ne le modifie pas.",
+  "rw.lrDiffLeft": "L’enceinte gauche est plus forte de {db} dB ; réglez ceci avec la balance, la correction ne le modifie pas.",
+  "rw.legendMeasuredL": "● Mesuré (G)",
+  "rw.legendMeasuredR": "● Mesuré (D)",
+  "rw.legendCorrectedL": "● Corrigé (G)",
+  "rw.legendCorrectedR": "● Corrigé (D)",
+  "rw.filterListLeft": "Canal gauche (L) :",
+  "rw.filterListRight": "Canal droit (R) :",
+  "rw.filterListNone": "(aucune bande)"
 }

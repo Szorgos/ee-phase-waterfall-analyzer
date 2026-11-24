@@ -1191,5 +1191,19 @@
   "rw.helpLimitsP": "EQ mainly tames bass peaks (below 500 Hz). Deep narrow room nulls and roll-off below the speaker's natural limit are not boosted heavily – moving the speakers or listening spot helps there.",
   "eq.reduceMin": "The band count is already minimal (≤ 5).",
   "eq.reducePrompt": "How many EQ bands do you want to keep? (e.g. 5, 7, or 10)",
-  "eq.reduceDone": "Reduced to {n} bands. Largest omitted gain: {diff} dB."
+  "eq.reduceDone": "Reduced to {n} bands. Largest omitted gain: {diff} dB.",
+  "rw.modeLabel": "Correction mode:",
+  "rw.modeSplit": "Per-channel (recommended)",
+  "rw.modeCommon": "Shared correction",
+  "rw.modeHelpBtn": "Which mode should I choose?",
+  "rw.modeHelpText": "Per-channel correction is usually better because the left and right speakers sit in different spots in the room (e.g. one closer to a wall or corner) and excite different room modes. Shared correction is useful if the room and speaker placement are symmetric, or if per-channel correction sounds unusual.",
+  "rw.lrDiffRight": "The right speaker is {db} dB louder; adjust this with the volume balance, the correction does not change it.",
+  "rw.lrDiffLeft": "The left speaker is {db} dB louder; adjust this with the volume balance, the correction does not change it.",
+  "rw.legendMeasuredL": "● Measured (L)",
+  "rw.legendMeasuredR": "● Measured (R)",
+  "rw.legendCorrectedL": "● Corrected (L)",
+  "rw.legendCorrectedR": "● Corrected (R)",
+  "rw.filterListLeft": "Left channel (L):",
+  "rw.filterListRight": "Right channel (R):",
+  "rw.filterListNone": "(no bands)"
 }
