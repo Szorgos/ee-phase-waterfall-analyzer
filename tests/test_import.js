@@ -236,8 +236,10 @@ assertEq(calTwoPts.ok, false, "2 pontos kalibrációs fájl elutasítva (< 3)");
 assertEq(calTwoPts.error, "tooFewPoints", "2 pont hibakód");
 
 const calDesc = parseMicCalibration("20 0.0\n2000 0.5\n500 -0.2\n");
-assertEq(calDesc.ok, false, "Nem növekvő frekvencia elutasítva");
-assertEq(calDesc.error, "notIncreasing", "Nem növekvő hibakód");
+assertEq(calDesc.ok, true, "Nem növekvő frekvencia rendezve elfogadva");
+assertEq(calDesc.points.length, 3, "Rendezés után 3 pont");
+assertApprox(calDesc.points[1].freq, 500.0, 0.01, "Rendezés után a 2. pont 500 Hz");
+assertApprox(calDesc.points[2].freq, 2000.0, 0.01, "Rendezés után a 3. pont 2000 Hz");
 
 const calText = parseMicCalibration("Ez egy sima szöveges dokumentum\nami nem tartalmaz méréseket.\nSemmi szám.\n");
 assertEq(calText.ok, false, "Szöveges fájl elutasítva");
@@ -266,6 +268,54 @@ assertApprox(calTabComma.points[0].db, 0.8, 0.001, "tab + tizedesvessző: +0,8 d
 assertApprox(calTabComma.points[0].phase, 5.5, 0.001, "tab + tizedesvessző: fázis 5,5");
 const csvDecComma = parseCsvPoints("45;6,0;10\n100;0,5;0\n");
 assertApprox(csvDecComma[0][1], 6.0, 0.001, "mérési CSV: 45;6,0 → +6 dB");
+
+// 20. Kalibrációs mintafájlok robusztussága (mikrofon-kal/)
+console.log("Teszt 20: Mikrofon-kalibráció robusztusság (mikrofon-kal/)");
+const CAL_DIR = path.join(DATA_DIR, "mikrofon-kal");
+
+const k01 = parseMicCalibration(fs.readFileSync(path.join(CAL_DIR, "01-sens-nincs-nulla-90deg.txt"), "utf8"), "01-sens-nincs-nulla-90deg.txt");
+assertEq(k01.ok, true, "k01 Sens Factor =-.7423dB elfogadva");
+assertApprox(k01.sensitivity, -0.7423, 0.0005, "k01 érzékenység -.7423 kinyerve");
+assertEq(k01.calAngle, 90, "k01 90° felismerve (nem 0°)");
+
+const k02 = parseMicCalibration(fs.readFileSync(path.join(CAL_DIR, "02-bom-utf8.cal"), "utf8"), "02-bom-utf8.cal");
+assertEq(k02.ok, true, "k02 UTF-8 BOM-os fájl elfogadva");
+assertApprox(k02.sensitivity, -0.7423, 0.0005, "k02 BOM utáni Sens Factor kinyerve");
+assertEq(k02.points.length, 3, "k02 3 pont");
+
+const k03 = parseMicCalibration(fs.readFileSync(path.join(CAL_DIR, "03-pontosvesszo-tizedesvesszo.csv"), "utf8"), "03-pontosvesszo-tizedesvesszo.csv");
+assertEq(k03.ok, true, "k03 pontosvessző + tizedesvessző");
+assertApprox(k03.points[0].db, 0.8, 0.001, "k03 20 Hz +0,8 dB");
+
+const k04 = parseMicCalibration(fs.readFileSync(path.join(CAL_DIR, "04-tabulator-3oszlop.frd"), "utf8"), "04-tabulator-3oszlop.frd");
+assertEq(k04.ok, true, "k04 tabulátor 3 oszlop");
+assertEq(k04.points.length, 4, "k04 4 pont");
+assertApprox(k04.points[0].phase, 12.5, 0.01, "k04 fázis oszlop");
+
+const k05 = parseMicCalibration(fs.readFileSync(path.join(CAL_DIR, "05-rendezetlen-dupla.txt"), "utf8"), "05-rendezetlen-dupla.txt");
+assertEq(k05.ok, true, "k05 rendezetlen és ismétlődő sorok rendezve és összevonva");
+assertEq(k05.points.length, 4, "k05 5 sorból 4 egyedi frekvencia (1000 Hz összevonva)");
+assertApprox(k05.points[1].freq, 500.0, 0.01, "k05 rendezve: 500 Hz");
+assertApprox(k05.points[2].freq, 1000.0, 0.01, "k05 rendezve: 1000 Hz");
+assertApprox(k05.points[2].db, 0.0, 0.01, "k05 1000 Hz átlag (+0.2 és -0.2 -> 0.0)");
+
+const k06 = parseMicCalibration(fs.readFileSync(path.join(CAL_DIR, "06-keves-pont.txt"), "utf8"), "06-keves-pont.txt");
+assertEq(k06.ok, false, "k06 túl kevés pont elutasítva");
+assertEq(k06.error, "tooFewPoints", "k06 tooFewPoints hibakód");
+
+const k07 = parseMicCalibration(fs.readFileSync(path.join(CAL_DIR, "07-fejlec-szamokkal-0deg.txt"), "utf8"), "07-fejlec-szamokkal-0deg.txt");
+assertEq(k07.ok, true, "k07 idézőjel nélküli, számokat tartalmazó fejlécsorok elfogadva");
+assertApprox(k07.sensitivity, -0.7423, 0.0005, "k07 idézőjel nélküli Sens Factor kinyerve");
+assertEq(k07.calAngle, 0, "k07 0° felismerve a fejlécből");
+assertEq(k07.points.length, 4, "k07 4 adatpont");
+
+const k08 = parseMicCalibration(fs.readFileSync(path.join(CAL_DIR, "08-mikrofon-90deg.cal"), "utf8"), "08-mikrofon-90deg.cal");
+assertEq(k08.ok, true, "k08 90°-os fájlnév");
+assertEq(k08.calAngle, 90, "k08 fájlnévből 90° felismerve");
+
+const k09 = parseMicCalibration(fs.readFileSync(path.join(CAL_DIR, "09-mikrofon-0deg.cal"), "utf8"), "09-mikrofon-0deg.cal");
+assertEq(k09.ok, true, "k09 0°-os fájlnév");
+assertEq(k09.calAngle, 0, "k09 fájlnévből 0° felismerve");
 
 console.log(`\n========================================`);
 console.log(`MINDEN TESZT SIKERES: ${passed} / ${total} ellenőrzés rendben!`);

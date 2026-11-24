@@ -2619,6 +2619,19 @@ private:
             handleApplyMeasurement(msg);
             return;
         }
+        if (type == "measurement_recompute") {
+            handleRecomputeMeasurement(msg);
+            return;
+        }
+        if (type == "measurement_delete_point") {
+            handleDeleteMeasurementPoint(msg);
+            return;
+        }
+        if (type == "measurement_clear_points") {
+            if (measure_) measure_->clearPoints();
+            sendText("{\"type\":\"measurement_points_updated\",\"point_count\":0,\"points\":[]}");
+            return;
+        }
         if (type == "list_audio_devices") {
             handleListAudioDevices();
             return;
@@ -3769,26 +3782,72 @@ private:
             errMsg = "Érvénytelen kalibrációs formátum.";
             return false;
         }
-        std::vector<aqulify::room::FreqPoint> pts;
-        pts.reserve(arr->arr.size());
-        float prevFreq = 0.0f;
+        std::vector<aqulify::room::FreqPoint> raw;
+        raw.reserve(arr->arr.size());
+        size_t row = 0;
         for (const auto& item : arr->arr) {
+            ++row;
             if (item.type != json::Value::Type::Object) continue;
             float f = static_cast<float>(num(item, "freq", 0.0));
             float db = static_cast<float>(num(item, "db", 0.0));
-            if (f < 10.0f || f > 30000.0f || std::abs(db) > 30.0f || f <= prevFreq) {
-                errMsg = "A mikrofon-kalibrációs pontok érvénytelenek (10 Hz - 30 kHz, növekvő frekvencia, |dB| <= 30).";
+            float phase = static_cast<float>(num(item, "phase", 0.0));
+            if (!std::isfinite(f) || !std::isfinite(db) || f < 10.0f || f > 30000.0f || std::abs(db) > 30.0f) {
+                errMsg = "A mikrofon-kalibráció " + std::to_string(row) +
+                         ". pontja érvénytelen (10 Hz - 30 kHz, |dB| <= 30).";
                 return false;
             }
-            prevFreq = f;
-            pts.push_back({ f, db });
+            raw.push_back({ f, db, std::isfinite(phase) ? phase : 0.0f });
         }
-        if (!pts.empty() && pts.size() < 3) {
-            errMsg = "Túl kevés kalibrációs pont (minimum 3 szükséges).";
+        if (raw.empty()) return true;
+        // Rendezés frekvencia szerint és azonos frekvenciák összevonása (átlag)
+        std::sort(raw.begin(), raw.end(), [](const auto& a, const auto& b) { return a.freq < b.freq; });
+        std::vector<aqulify::room::FreqPoint> pts;
+        pts.reserve(raw.size());
+        for (size_t i = 0; i < raw.size(); ) {
+            size_t j = i + 1;
+            double sumDb = raw[i].magDb;
+            double sumPh = raw[i].phaseDeg;
+            const float eps = std::max(1e-4f, raw[i].freq * 1e-6f);
+            while (j < raw.size() && std::fabs(raw[j].freq - raw[i].freq) <= eps) {
+                sumDb += raw[j].magDb;
+                sumPh += raw[j].phaseDeg;
+                ++j;
+            }
+            const double cnt = static_cast<double>(j - i);
+            pts.push_back({ raw[i].freq, static_cast<float>(sumDb / cnt), static_cast<float>(sumPh / cnt) });
+            i = j;
+        }
+        if (pts.size() < 3) {
+            errMsg = "Túl kevés egyedi kalibrációs pont (minimum 3 szükséges).";
             return false;
         }
         cfg.micCal = std::move(pts);
         return true;
+    }
+
+    static void parseTargetAndSmoothingIntoConfig(const json::Value& msg, aqulify::room::MeasureConfig& mcfg) {
+        if (const json::Value* tgt = msg.get("target")) {
+            std::string t = tgt->stringOr("room_balanced");
+            if (t == "channel_match") t = "room_balanced";
+            mcfg.targetType = t;
+        }
+        const json::Value* bassV = msg.get("target_bass_db");
+        const json::Value* trebV = msg.get("target_treble_db");
+        const json::Value* kneeV = msg.get("target_knee_hz");
+        if (bassV || trebV || kneeV) {
+            mcfg.customTargetParams = true;
+            if (bassV) mcfg.targetBassDb = std::clamp(static_cast<float>(bassV->numberOr(4.0)), -6.0f, 10.0f);
+            if (trebV) mcfg.targetTrebleDb = std::clamp(static_cast<float>(trebV->numberOr(-3.0)), -6.0f, 3.0f);
+            if (kneeV) mcfg.targetKneeHz = std::clamp(static_cast<float>(kneeV->numberOr(160.0)), 60.0f, 250.0f);
+        }
+        if (const json::Value* sm = msg.get("smoothing")) {
+            if (sm->type == json::Value::Type::String && sm->stringOr("") == "var") {
+                mcfg.smoothingFraction = -1;
+            } else {
+                const int sv = static_cast<int>(sm->numberOr(6.0));
+                mcfg.smoothingFraction = (sv < 0) ? -1 : std::clamp(sv, 1, 24);
+            }
+        }
     }
 
     void handleStartMeasurement(const json::Value& msg, bool remote) {
@@ -3800,15 +3859,13 @@ private:
         const float levelDb = std::clamp(static_cast<float>(num(msg, "level_db", -20.0)), -60.0f, -6.0f);
         const std::string channel = msg.get("channel") ? msg.get("channel")->stringOr("both") : "both";
         const std::string inputDev = msg.get("input_device") ? msg.get("input_device")->stringOr("") : "";
+        const bool append = msg.get("append") && msg.get("append")->b;
 
         aqulify::room::MeasureConfig mcfg{};
         mcfg.channel = channel;
         mcfg.levelDb = levelDb;
         mcfg.durationSec = std::clamp(static_cast<float>(num(msg, "duration", 3.0)), 0.5f, 15.0f);
-        if (const json::Value* tgt = msg.get("target")) mcfg.targetType = tgt->stringOr("room_balanced");
-        if (const json::Value* sm = msg.get("smoothing")) {
-            mcfg.smoothingFraction = std::clamp(static_cast<int>(sm->numberOr(6.0)), 1, 24);
-        }
+        parseTargetAndSmoothingIntoConfig(msg, mcfg);
         std::string calErr;
         if (!parseCalPointsIntoConfig(msg.get("cal_points"), mcfg, calErr)) {
             sendText("{\"type\":\"measurement_error\",\"step_id\":\"calibration\",\"error\":\"INVALID_CAL\",\"message\":\"" +
@@ -3823,11 +3880,39 @@ private:
             return;
         }
         std::string err;
-        if (!measure_->startMeasurement(mcfg, inputDev, err)) {
+        if (!measure_->startMeasurement(mcfg, inputDev, err, append)) {
             sendText("{\"type\":\"measurement_error\",\"step_id\":\"measuring\",\"error\":\"BUSY\",\"message\":\"Már fut egy mérés vagy szintpróba.\"}");
             return;
         }
         sendText("{\"type\":\"measurement_started\",\"channel\":\"" + media::jsonEscape(channel) + "\",\"level_db\":" + std::to_string(levelDb) + "}");
+    }
+
+    void handleRecomputeMeasurement(const json::Value& msg) {
+        if (!measure_) {
+            sendText("{\"type\":\"measurement_error\",\"step_id\":\"analysis\",\"error\":\"NOT_IMPLEMENTED\",\"message\":\"A mikrofonos mérés ezen a gépen még nem érhető el.\"}");
+            return;
+        }
+        aqulify::room::MeasureConfig mcfg = lastMeasureConfig_;
+        parseTargetAndSmoothingIntoConfig(msg, mcfg);
+        lastMeasureConfig_ = mcfg;
+        std::string err;
+        if (!measure_->recompute(mcfg, err)) {
+            sendText("{\"type\":\"measurement_error\",\"step_id\":\"analysis\",\"error\":\"" + media::jsonEscape(err) +
+                     "\",\"message\":\"Nincs újraszámolható mérési pont.\"}");
+        }
+    }
+
+    void handleDeleteMeasurementPoint(const json::Value& msg) {
+        if (!measure_) return;
+        const int pointId = static_cast<int>(num(msg, "point_id", 0.0));
+        aqulify::room::MeasureConfig mcfg = lastMeasureConfig_;
+        parseTargetAndSmoothingIntoConfig(msg, mcfg);
+        lastMeasureConfig_ = mcfg;
+        std::string err;
+        if (!measure_->deletePoint(pointId, mcfg, err)) {
+            sendText("{\"type\":\"measurement_error\",\"step_id\":\"analysis\",\"error\":\"" + media::jsonEscape(err) +
+                     "\",\"message\":\"A törölni kívánt mérési pont nem található.\"}");
+        }
     }
 
     void handleStartLevelCheck(const json::Value& msg, bool remote) {
@@ -3933,6 +4018,24 @@ private:
         } else {
             ParamData p = cb_.getParams();
             p.set(kFlagEq, true);
+            if (const json::Value* preV = msg.get("preamp_db")) {
+                p.preampDb = std::clamp(static_cast<float>(preV->numberOr(0.0)), -36.0f, 12.0f);
+            } else {
+                // Ha a kliens nem küldött külön preamp_db-t, legalább az összegzett pozitív emelést kompenzáljuk
+                float maxPos = 0.0f;
+                for (int i = 0; i <= 200; ++i) {
+                    const float f = static_cast<float>(20.0 * std::pow(1000.0, static_cast<double>(i) / 200.0));
+                    float sum = 0.0f;
+                    for (const auto& bd : newBands) {
+                        aqulify::room::AutoEqBand ab{ bd.type, bd.freq, bd.gainDb, bd.q };
+                        sum += aqulify::room::evalFilterDb(ab, f);
+                    }
+                    if (sum > maxPos) maxPos = sum;
+                }
+                if (maxPos > 0.05f && p.preampDb > -maxPos) {
+                    p.preampDb = std::clamp(-maxPos, -36.0f, 0.0f);
+                }
+            }
             if (ch == "left") {
                 p.eqSplit = true;
                 p.numBands = static_cast<int32_t>(std::min<size_t>(newBands.size(), kMaxEqBands));

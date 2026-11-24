@@ -83,8 +83,10 @@ inline bool writeStereoFloatWav(const std::string& path, const std::vector<float
 class MeasurementSession {
 public:
     static constexpr uint32_t kRate = 48000;
-    static constexpr double kLeadSec = 0.5;      // csend a mérőjel előtt (a lejátszás indulásához)
-    static constexpr double kTailSec = 1.5;      // a mérőjel utáni felvétel (lecsengés + rendszerkésés)
+    static constexpr double kLeadSec = 0.5;        // csend a mérőjel előtt (a lejátszás indulásához)
+    static constexpr double kTailSec = 1.5;        // a mérőjel utáni felvétel (lecsengés + rendszerkésés)
+    static constexpr double kStartTrimSec = 0.20;  // az USB-mikrofon indítási kattanásának eldobása (200 ms)
+    static constexpr double kNoiseWindowSec = 0.20;// a háttérzaj a lejátszás előtti utolsó 200 ms-ból
 
     explicit MeasurementSession(SessionDeps d) : d_(std::move(d)) {}
     ~MeasurementSession() { stop(); join(); }
@@ -111,11 +113,53 @@ public:
         return o.str();
     }
 
-    /** Mérés indítása a háttérben; false: már fut egy mérés (error = "BUSY"). */
-    bool startMeasurement(const MeasureConfig& cfg, const std::string& device, std::string& error) {
+    /** Mérés indítása a háttérben; false: már fut egy mérés (error = "BUSY"). append=true: hozzáfűzi a pontokhoz. */
+    bool startMeasurement(const MeasureConfig& cfg, const std::string& device, std::string& error, bool append = false) {
         if (!begin(error)) return false;
-        worker_ = std::thread([this, cfg, device] { runMeasurement(cfg, device); finish(); });
+        worker_ = std::thread([this, cfg, device, append] { runMeasurement(cfg, device, append); finish(); });
         return true;
+    }
+
+    /** A tárolt mérési pontok teljesítményátlagának, célgörbéjének és EQ-sávjainak újraszámítása. */
+    bool recompute(const MeasureConfig& cfg, std::string& error) {
+        if (busy()) { error = "BUSY"; return false; }
+        if (!recomputeAndPost(cfg, true, nullptr)) { error = "NO_POINTS"; return false; }
+        return true;
+    }
+
+    /** Egy rossz mérési pont törlése ID alapján; ha marad pont, újraszámol és küldi az új eredményt. */
+    bool deletePoint(int pointId, const MeasureConfig& cfg, std::string& error) {
+        if (busy()) { error = "BUSY"; return false; }
+        bool found = false;
+        bool emptyAfter = false;
+        {
+            std::lock_guard<std::mutex> lk(pointsMu_);
+            auto it = std::remove_if(points_.begin(), points_.end(),
+                                     [pointId](const StoredPoint& p) { return p.id == pointId; });
+            if (it != points_.end()) {
+                points_.erase(it, points_.end());
+                found = true;
+            }
+            emptyAfter = points_.empty();
+        }
+        if (!found) { error = "NOT_FOUND"; return false; }
+        if (emptyAfter) {
+            post("{\"type\":\"measurement_points_updated\",\"point_count\":0,\"points\":[]}");
+            return true;
+        }
+        recomputeAndPost(cfg, true, nullptr);
+        return true;
+    }
+
+    /** Összes tárolt mérési pont törlése (új munkamenet indításához). */
+    void clearPoints() {
+        std::lock_guard<std::mutex> lk(pointsMu_);
+        points_.clear();
+    }
+
+    size_t pointCount() const {
+        std::lock_guard<std::mutex> lk(pointsMu_);
+        return points_.size();
     }
 
     /** Szintellenőrzés: rózsaszín zaj a megadott szinten és csatornán, közben "mic_level" üzenetek. */
@@ -129,10 +173,25 @@ public:
     void stop() { stopReq_ = true; }
 
 private:
+    struct LrCompare { bool valid = false; double delayMs = 0.0; bool polarityDiffers = false; };
+    struct StoredPoint {
+        int id = 0;
+        std::string channel;
+        std::vector<FreqPoint> rawResponse;
+        std::vector<FreqPoint> rawLeft;
+        std::vector<FreqPoint> rawRight;
+        float snrDb = 0.0f;
+        float peakLevelDbfs = -100.0f;
+        LrCompare lr{};
+    };
+
     SessionDeps d_;
     std::thread worker_;
     std::atomic<bool> busy_{false};
     std::atomic<bool> stopReq_{false};
+    mutable std::mutex pointsMu_;
+    std::vector<StoredPoint> points_;
+    int nextPointId_ = 1;
 
     bool begin(std::string& error) {
         bool expected = false;
@@ -176,7 +235,8 @@ private:
      */
     bool playAndRecord(const std::string& device, const std::string& wavPath, double recordSec,
                        const std::function<bool(double elapsed, float peak)>& onTick,
-                       std::vector<float>& recorded, size_t& framesAtPlay, std::string& step) {
+                       std::vector<float>& recorded, size_t& framesAtPlay, std::string& step,
+                       int preSilentMs = 450) {
         if (d_.pauseMedia) d_.pauseMedia();
         auto mic = d_.makeMic ? d_.makeMic() : nullptr;
         if (!mic) {
@@ -188,8 +248,8 @@ private:
             postError("microphone", "MIC_" + err, micErrorText(err));
             return false;
         }
-        // Háttérzaj: 300 ms csend a lejátszás előtt
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        // Indítási stabilizálódás + háttérzaj (mérésnél 450 ms, szintpróbánál 200 ms)
+        if (preSilentMs > 0) std::this_thread::sleep_for(std::chrono::milliseconds(preSilentMs));
         mic->takePeak();
         if (d_.bypassChain) d_.bypassChain(true);
         std::this_thread::sleep_for(std::chrono::milliseconds(120));   // a paraméterek érvénybe lépése
@@ -227,7 +287,7 @@ private:
      */
     static constexpr double kGapSec = 1.0;
 
-    void runMeasurement(MeasureConfig cfg, const std::string& device) {
+    void runMeasurement(MeasureConfig cfg, const std::string& device, bool append) {
         const float amp = static_cast<float>(std::pow(10.0, std::clamp(cfg.levelDb, -60.0f, -6.0f) / 20.0));
         const auto sweep = generateLogSweep(cfg.startFreq, cfg.endFreq, cfg.durationSec, kRate, amp);
         const bool both = cfg.channel != "left" && cfg.channel != "right";
@@ -267,11 +327,31 @@ private:
         std::filesystem::remove(wav, ec);
         if (!ok) return;
 
-        // Háttérzaj a lejátszás előtti csendből
-        double ns = 0.0;
+        // Induláskori mikrofon-kattanás eldobása (első ~200 ms)
+        const size_t trim = static_cast<size_t>(kStartTrimSec * kRate);
+        if (rec.size() > trim + kRate / 2) {
+            rec.erase(rec.begin(), rec.begin() + static_cast<std::ptrdiff_t>(trim));
+            atPlay = (atPlay > trim) ? (atPlay - trim) : 0;
+        }
+
+        // Háttérzaj a lejátszás előtti utolsó ~200 ms-ból, DC-eltávolítással
         const size_t nn = std::min(atPlay, rec.size());
-        for (size_t i = 0; i < nn; ++i) ns += double(rec[i]) * rec[i];
-        cfg.noiseRms = nn > 0 ? static_cast<float>(std::sqrt(ns / nn)) : 0.0f;
+        const size_t noiseWin = static_cast<size_t>(kNoiseWindowSec * kRate);
+        const size_t nStart = nn > noiseWin ? (nn - noiseWin) : 0;
+        const size_t nCount = nn - nStart;
+        if (nCount > 0) {
+            double mean = 0.0;
+            for (size_t i = nStart; i < nn; ++i) mean += rec[i];
+            mean /= static_cast<double>(nCount);
+            double ns = 0.0;
+            for (size_t i = nStart; i < nn; ++i) {
+                const double d = static_cast<double>(rec[i]) - mean;
+                ns += d * d;
+            }
+            cfg.noiseRms = static_cast<float>(std::sqrt(ns / static_cast<double>(nCount)));
+        } else {
+            cfg.noiseRms = 0.0f;
+        }
         cfg.durationSec = static_cast<float>(sweep.size()) / kRate;
 
         MeasurementManager mgr;
@@ -281,48 +361,133 @@ private:
               << ",\"status\":" << jsonStr(txt) << "}";
             post(o.str());
         };
+
+        StoredPoint pt;
+        pt.channel = cfg.channel;
         if (!both) {
-            MeasureResult res = mgr.processMeasurement(cfg, kRate, rec, progress);
+            MeasureResult res = mgr.analyzeRecording(cfg, kRate, rec, progress);
             if (!res.success) {
                 postError("analysis", res.errorCode.empty() ? "ANALYSIS_FAILED" : res.errorCode, res.errorMessage);
                 return;
             }
-            post(resultJson(cfg, res, nullptr));
-            return;
+            pt.rawResponse = std::move(res.rawResponse);
+            pt.snrDb = res.snrDb;
+            pt.peakLevelDbfs = res.peakLevelDbfs;
+        } else {
+            // "both": a felvétel kettévágása a két sweep közti szünet közepénél (a rendszerkésés < 0,5 s)
+            const size_t split = std::min(rec.size(), atPlay + lead + sweep.size() + gap / 2);
+            std::vector<float> recL(rec.begin(), rec.begin() + static_cast<std::ptrdiff_t>(split));
+            std::vector<float> recR(rec.begin() + static_cast<std::ptrdiff_t>(split), rec.end());
+            MeasureResult rl = mgr.analyzeRecording(cfg, kRate, recL, progress);
+            if (!rl.success) {
+                postError("analysis", rl.errorCode.empty() ? "ANALYSIS_FAILED" : rl.errorCode, "Bal csatorna: " + rl.errorMessage);
+                return;
+            }
+            MeasureConfig cr = cfg;
+            cr.noiseRms = 0.0f;   // a jobb szakasz elején a bal lecsengése szól: a zajszint a bal elejéről már ismert
+            MeasureResult rr = mgr.analyzeRecording(cr, kRate, recR, progress);
+            if (!rr.success) {
+                postError("analysis", rr.errorCode.empty() ? "ANALYSIS_FAILED" : rr.errorCode, "Jobb csatorna: " + rr.errorMessage);
+                return;
+            }
+            // Érkezési különbség: a jobb a fájlban (secondStart − lead) mintával később indult
+            const double arrL = rl.measuredDelayMs;
+            const double arrR = rr.measuredDelayMs + (static_cast<double>(split) - static_cast<double>(secondStart - lead)) * 1000.0 / kRate;
+            pt.lr = LrCompare{ true, arrR - arrL, rl.invertedPolarity != rr.invertedPolarity };
+            pt.rawLeft = std::move(rl.rawResponse);
+            pt.rawRight = std::move(rr.rawResponse);
+            // Bal + jobb egyesítése teljesítményátlaggal (energiában)
+            pt.rawResponse = powerAveragePositions({ pt.rawLeft, pt.rawRight });
+            pt.snrDb = std::min(rl.snrDb, rr.snrDb);
+            pt.peakLevelDbfs = std::max(rl.peakLevelDbfs, rr.peakLevelDbfs);
         }
 
-        // "both": a felvétel kettévágása a két sweep közti szünet közepénél (a rendszerkésés < 0,5 s)
-        const size_t split = std::min(rec.size(), atPlay + lead + sweep.size() + gap / 2);
-        std::vector<float> recL(rec.begin(), rec.begin() + static_cast<std::ptrdiff_t>(split));
-        std::vector<float> recR(rec.begin() + static_cast<std::ptrdiff_t>(split), rec.end());
-        MeasureResult rl = mgr.analyzeRecording(cfg, kRate, recL, progress);
-        if (!rl.success) {
-            postError("analysis", rl.errorCode.empty() ? "ANALYSIS_FAILED" : rl.errorCode, "Bal csatorna: " + rl.errorMessage);
-            return;
+        {
+            std::lock_guard<std::mutex> lk(pointsMu_);
+            if (!append) points_.clear();
+            pt.id = nextPointId_++;
+            points_.push_back(std::move(pt));
         }
-        MeasureConfig cr = cfg;
-        cr.noiseRms = 0.0f;   // a jobb szakasz elején a bal lecsengése szól: a zajszint a bal elejéről már ismert
-        MeasureResult rr = mgr.analyzeRecording(cr, kRate, recR, progress);
-        if (!rr.success) {
-            postError("analysis", rr.errorCode.empty() ? "ANALYSIS_FAILED" : rr.errorCode, "Jobb csatorna: " + rr.errorMessage);
-            return;
-        }
-        // Érkezési különbség: a jobb a fájlban (secondStart − lead) mintával később indult
-        const double arrL = rl.measuredDelayMs;
-        const double arrR = rr.measuredDelayMs + (static_cast<double>(split) - static_cast<double>(secondStart - lead)) * 1000.0 / kRate;
-        LrCompare lr{ true, arrR - arrL, rl.invertedPolarity != rr.invertedPolarity };
-
-        // A javaslat a két csatorna átlagából (mindkét csatornára ugyanaz; dB-ben átlagolva)
-        MeasureResult avg = rl;
-        const size_t np = std::min(rl.smoothedResponse.size(), rr.smoothedResponse.size());
-        avg.smoothedResponse.resize(np);
-        for (size_t i = 0; i < np; ++i) avg.smoothedResponse[i].magDb = 0.5f * (rl.smoothedResponse[i].magDb + rr.smoothedResponse[i].magDb);
-        avg.snrDb = std::min(rl.snrDb, rr.snrDb);
-        mgr.finalize(cfg, avg, progress);
-        post(resultJson(cfg, avg, &lr, &rl, &rr));
+        recomputeAndPost(cfg, false, progress);
     }
 
-    struct LrCompare { bool valid = false; double delayMs = 0.0; bool polarityDiffers = false; };
+    /** A tárolt pontok simítása, teljesítményátlagolása, 0 dB-re igazítása és kiértékelése (finalize). */
+    bool recomputeAndPost(const MeasureConfig& cfg, bool isRecompute,
+                          MeasurementManager::ProgressCallback progress) {
+        std::vector<StoredPoint> pts;
+        {
+            std::lock_guard<std::mutex> lk(pointsMu_);
+            if (points_.empty()) return false;
+            pts = points_;
+        }
+
+        std::vector<std::vector<FreqPoint>> smoothedAll;
+        std::vector<std::vector<FreqPoint>> smoothedL, smoothedR;
+        smoothedAll.reserve(pts.size());
+        float minSnr = pts[0].snrDb;
+        float maxPeak = pts[0].peakLevelDbfs;
+        bool allHaveLr = true;
+        double sumLrDelay = 0.0;
+        bool anyPolarityDiff = false;
+
+        for (const auto& pt : pts) {
+            smoothedAll.push_back(smoothSpectrum(pt.rawResponse, cfg.smoothingFraction));
+            if (!pt.rawLeft.empty() && !pt.rawRight.empty()) {
+                smoothedL.push_back(smoothSpectrum(pt.rawLeft, cfg.smoothingFraction));
+                smoothedR.push_back(smoothSpectrum(pt.rawRight, cfg.smoothingFraction));
+            }
+            minSnr = std::min(minSnr, pt.snrDb);
+            maxPeak = std::max(maxPeak, pt.peakLevelDbfs);
+            if (pt.lr.valid) {
+                sumLrDelay += pt.lr.delayMs;
+                anyPolarityDiff = anyPolarityDiff || pt.lr.polarityDiffers;
+            } else {
+                allHaveLr = false;
+            }
+        }
+
+        MeasureResult avg;
+        avg.smoothedResponse = powerAveragePositions(smoothedAll);
+        avg.snrDb = minSnr;
+        avg.peakLevelDbfs = maxPeak;
+
+        // A 300 Hz – 3 kHz középtartomány 0 dB-re igazítása (többpontos átlag után is pontos)
+        double refSum = 0.0;
+        int refCnt = 0;
+        for (const auto& p : avg.smoothedResponse) {
+            if (p.freq >= 300.0f && p.freq <= 3000.0f) { refSum += p.magDb; ++refCnt; }
+        }
+        const float refDb = refCnt > 0 ? static_cast<float>(refSum / refCnt) : 0.0f;
+        for (auto& p : avg.smoothedResponse) p.magDb -= refDb;
+
+        MeasureResult avgL, avgR;
+        const MeasureResult* pL = nullptr;
+        const MeasureResult* pR = nullptr;
+        if (smoothedL.size() == pts.size() && smoothedR.size() == pts.size()) {
+            avgL.smoothedResponse = powerAveragePositions(smoothedL);
+            avgR.smoothedResponse = powerAveragePositions(smoothedR);
+            for (auto& p : avgL.smoothedResponse) p.magDb -= refDb;
+            for (auto& p : avgR.smoothedResponse) p.magDb -= refDb;
+            pL = &avgL;
+            pR = &avgR;
+        }
+
+        LrCompare lr{};
+        const LrCompare* pLr = nullptr;
+        if (allHaveLr && !pts.empty()) {
+            lr.valid = true;
+            lr.delayMs = sumLrDelay / static_cast<double>(pts.size());
+            lr.polarityDiffers = anyPolarityDiff;
+            pLr = &lr;
+        }
+
+        MeasurementManager mgr;
+        MeasureConfig effCfg = cfg;
+        if (effCfg.channel.empty()) effCfg.channel = pts.back().channel;
+        mgr.finalize(effCfg, avg, progress);
+        post(resultJson(effCfg, avg, pLr, pL, pR, pts, isRecompute));
+        return true;
+    }
 
     void runLevelCheck(const std::string& device, float levelDb, const std::string& channel) {
         const double secs = 15.0;
@@ -343,9 +508,26 @@ private:
             pk = std::max(pk, std::fabs(pink[i]));
         }
         const size_t fade = kRate / 10;
+        // 2,2 s .. 4,2 s között −6 dB lépcső (20 ms átmenettel) az automatikus erősítés (AGC) észlelésére
+        const size_t stepStart = static_cast<size_t>(2.2 * kRate);
+        const size_t stepEnd = static_cast<size_t>(4.2 * kRate);
+        const size_t ramp = kRate / 50; // 20 ms
+        const float halfGain = 0.5011872f; // -6.0 dB
         std::vector<float> st(n * 2, 0.0f);
         for (size_t i = 0; i < n; ++i) {
-            float v = pink[i] / pk * amp;
+            float g = 1.0f;
+            if (i >= stepStart && i < stepEnd) {
+                if (i < stepStart + ramp) {
+                    const float t = static_cast<float>(i - stepStart) / ramp;
+                    g = 1.0f - (1.0f - halfGain) * t;
+                } else if (i + ramp > stepEnd) {
+                    const float t = static_cast<float>(stepEnd - i) / ramp;
+                    g = 1.0f - (1.0f - halfGain) * t;
+                } else {
+                    g = halfGain;
+                }
+            }
+            float v = pink[i] / pk * amp * g;
             if (i < fade) v *= static_cast<float>(i) / fade;
             if (wantL(channel)) st[i * 2] = v;
             if (wantR(channel)) st[i * 2 + 1] = v;
@@ -359,14 +541,38 @@ private:
         size_t atPlay = 0;
         std::string step;
         float hold = 0.0f;
+        std::vector<float> hiDbs, loDbs;
+        bool agcChecked = false;
+        bool agcWarning = false;
+        float measuredDropDb = 6.0f;
+        auto medianOf = [](std::vector<float>& v) -> float {
+            std::sort(v.begin(), v.end());
+            return v[v.size() / 2];
+        };
         playAndRecord(device, wav, secs, [&](double el, float peak) {
             hold = std::max(peak, hold * 0.7f);
+            const float curDb = peakDbfs(peak);
+            if (el >= 0.6 && el < 2.0) hiDbs.push_back(curDb);
+            else if (el >= 2.8 && el < 4.0) loDbs.push_back(curDb);
+            if (!agcChecked && el >= 4.0 && hiDbs.size() >= 5 && loDbs.size() >= 5) {
+                agcChecked = true;
+                const float hiMed = medianOf(hiDbs);
+                const float loMed = medianOf(loDbs);
+                if (hiMed > -45.0f) {
+                    measuredDropDb = hiMed - loMed;
+                    if (std::fabs(measuredDropDb - 6.0f) > 1.5f) {
+                        agcWarning = true;
+                    }
+                }
+            }
             std::ostringstream o;
-            o << "{\"type\":\"mic_level\",\"peak_db\":" << peakDbfs(peak) << ",\"hold_db\":" << peakDbfs(hold)
-              << ",\"remaining\":" << std::max(0.0, secs - el) << "}";
+            o << "{\"type\":\"mic_level\",\"peak_db\":" << curDb << ",\"hold_db\":" << peakDbfs(hold)
+              << ",\"remaining\":" << std::max(0.0, secs - el);
+            if (agcWarning) o << ",\"agc_warning\":true,\"agc_drop_db\":" << measuredDropDb;
+            o << "}";
             post(o.str());
             return el < secs;
-        }, rec, atPlay, step);
+        }, rec, atPlay, step, 200);
         std::error_code ec;
         std::filesystem::remove(wav, ec);
         if (step == "done") post("{\"type\":\"mic_level_done\"}");
@@ -383,12 +589,27 @@ private:
      * két csatorna görbéje is (measured_left_dbs / measured_right_dbs) és a bal–jobb összevetés (lr_*).
      */
     std::string resultJson(const MeasureConfig& cfg, const MeasureResult& r, const LrCompare* lr,
-                           const MeasureResult* rl = nullptr, const MeasureResult* rr = nullptr) {
+                           const MeasureResult* rl, const MeasureResult* rr,
+                           const std::vector<StoredPoint>& pts, bool isRecompute) {
         std::ostringstream o;
         o.setf(std::ios::fixed);
         o.precision(2);
         o << "{\"type\":\"measurement_result\",\"channel\":" << jsonStr(cfg.channel) << ",\"snr_db\":" << r.snrDb
-          << ",\"peak_db\":" << r.peakLevelDbfs << ",\"freqs\":[";
+          << ",\"peak_db\":" << r.peakLevelDbfs
+          << ",\"recommended_preamp_db\":" << r.recommendedPreampDb
+          << ",\"speaker_low_cutoff_hz\":" << r.speakerLowCutoffHz
+          << ",\"point_count\":" << pts.size()
+          << ",\"recomputed\":" << (isRecompute ? "true" : "false")
+          << ",\"points\":[";
+        for (size_t i = 0; i < pts.size(); ++i) {
+            o << (i ? "," : "") << "{\"id\":" << pts[i].id << ",\"snr_db\":" << pts[i].snrDb
+              << ",\"peak_db\":" << pts[i].peakLevelDbfs << '}';
+        }
+        o << "],\"skipped_dips\":[";
+        for (size_t i = 0; i < r.skippedDips.size(); ++i) {
+            o << (i ? "," : "") << r.skippedDips[i];
+        }
+        o << "],\"freqs\":[";
         for (size_t i = 0; i < r.smoothedResponse.size(); ++i) o << (i ? "," : "") << r.smoothedResponse[i].freq;
         o << ']';
         appendCurve(o, "measured_dbs", r.smoothedResponse);

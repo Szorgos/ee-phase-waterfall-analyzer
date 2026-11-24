@@ -192,6 +192,54 @@ int main() {
               fp.upsampleReason().c_str());
     }
 
+    std::printf("[4] Élő mérés kalibrációs görbével, 2 pont teljesítményátlagával és recompute-tal\n");
+    {
+        for (int i = 0; i < 100 && s.busy(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        MeasureConfig cfg;
+        cfg.channel = "left";
+        cfg.durationSec = 1.5f;
+        cfg.levelDb = -12.0f;
+        cfg.targetType = "flat";
+        cfg.smoothingFraction = -1; // változó simítás
+        cfg.micCal = {
+            { 20.0f, 0.0f, 0.0f },
+            { 1000.0f, 0.0f, 0.0f },
+            { 5000.0f, 3.0f, 0.0f },
+            { 20000.0f, 3.0f, 0.0f }
+        };
+        std::string res2;
+        for (int pt = 0; pt < 2; ++pt) {
+            { std::lock_guard<std::mutex> lk(g_mu); g_posts.clear(); }
+            std::string err;
+            CHECK(s.startMeasurement(cfg, "dac_st", err, /*append=*/pt > 0), "4.%d: kalibrált pont indul", pt + 1);
+            res2 = waitFor(s, "measurement_result", 30.0);
+            CHECK(!res2.empty(), "4.%d: eredmény érkezett", pt + 1);
+        }
+        if (!res2.empty()) {
+            CHECK(static_cast<int>(jsonNum(res2, "point_count")) == 2, "4: 2 mérési pont átlagolva (point_count=2)");
+            const auto f = jsonArr(res2, "freqs"), m = jsonArr(res2, "measured_dbs");
+            double v10k = 0.0, best = 1e9;
+            for (size_t i = 0; i < f.size() && i < m.size(); ++i) {
+                double d = std::fabs(std::log(f[i] / 10000.0));
+                if (d < best) { best = d; v10k = m[i]; }
+            }
+            std::printf("     kalibrált 2 pontos hurok 10 kHz-en: %+.2f dB (várt ~ -3.0 dB)\n", v10k);
+            CHECK(std::fabs(v10k - (-3.0)) < 0.8, "4: kalibráció levonása 10 kHz-en ~ -3.0 dB (%.2f)", v10k);
+        }
+        // Recompute új célgörbére
+        { std::lock_guard<std::mutex> lk(g_mu); g_posts.clear(); }
+        MeasureConfig cfgRec = cfg;
+        cfgRec.targetType = "room_balanced";
+        cfgRec.customTargetParams = true;
+        cfgRec.targetBassDb = 4.0f;
+        cfgRec.targetTrebleDb = -3.0f;
+        cfgRec.targetKneeHz = 160.0f;
+        std::string rerr;
+        CHECK(s.recompute(cfgRec, rerr), "4: recompute sikeres (%s)", rerr.c_str());
+        const std::string recRes = waitFor(s, "measurement_result", 5.0);
+        CHECK(!recRes.empty() && recRes.find("\"recomputed\":true") != std::string::npos, "4: recompute eredmény érkezett");
+    }
+
     std::printf(g_fail ? "\nHIBA: %d ellenőrzés nem sikerült\n" : "\nMINDEN TESZT SIKERES (0 hiba)\n", g_fail);
     return g_fail ? 1 : 0;
 }

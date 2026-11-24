@@ -6454,25 +6454,52 @@ var qrcode = function() {
     <div id="modalRoomWizard" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:9999; align-items:center; justify-content:center; backdrop-filter:blur(3px);">
       <div class="aq-modal" style="width:720px; max-width:calc(100vw - 32px); max-height:90vh; display:flex; flex-direction:column; padding:20px; background:var(--aq-bg-card); border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,0.4); color:var(--aq-text);">
         <!-- Fejléc -->
-        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-border); padding-bottom:12px; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--aq-border); padding-bottom:12px; margin-bottom:12px;">
           <div style="display:flex; align-items:center; gap:8px;">
             <svg class="aq-icon" style="color:var(--aq-amber);" aria-hidden="true"><use href="#i-magic"/></svg>
             <h3 style="margin:0; font-size:1.2rem;" data-i18n="room.wizardTitle">Szobakorrekció varázsló</h3>
           </div>
-          <button class="icon-btn" onclick="closeRoomWizard()" title="Bezárás" data-i18n-title="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <button type="button" id="rwHelpBtn" class="mini-btn" style="padding:2px 9px; font-weight:700; font-size:0.8rem;" onclick="toggleRwHelp()" title="Súgó a méréshez" data-i18n-title="rw.helpBtn" aria-expanded="false" aria-controls="rwHelpBox">i</button>
+            <button class="icon-btn" onclick="closeRoomWizard()" title="Bezárás" data-i18n-title="common.close"><svg class="aq-icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+          </div>
+        </div>
+
+        <!-- Mérési súgó ("i") panel -->
+        <div id="rwHelpBox" style="display:none; background:var(--aq-bg); border:1px solid var(--aq-border); border-radius:8px; padding:10px 14px; margin-bottom:12px; font-size:0.82rem; line-height:1.45; max-height:220px; overflow-y:auto;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <strong data-i18n="rw.helpTitle">Mérési tanácsok (valódi mikrofonhoz)</strong>
+            <button type="button" class="mini-btn" style="min-width:22px; padding:0 6px;" onclick="toggleRwHelp(false)" aria-label="×">×</button>
+          </div>
+          <div style="margin-bottom:6px;">
+            <div style="font-weight:600; color:var(--aq-amber);" data-i18n="rw.helpMicH">Mikrofon és 90°-os kalibráció</div>
+            <div data-i18n="rw.helpMicP">Állítsd a mérőmikrofont felfelé (a plafon felé) a hallgatási helyen, fülmagasságban, és töltsd be a 90°-os kalibrációs fájlt. A 0°-os fájl a hangszóró felé néző elrendezéshez való – a kettő összekeverése mérési hibát ad.</div>
+          </div>
+          <div style="margin-bottom:6px;">
+            <div style="font-weight:600; color:var(--aq-amber);" data-i18n="rw.helpPointsH">Több mérési pont (3–5 pont)</div>
+            <div data-i18n="rw.helpPointsP">Egyetlen pont félrevezető lehet a szobamódusok miatt. Mérj 3–5 pontot a hallgatási hely körül (balra-jobbra, előre-hátra és kissé fel-le mozgatva, rálátással a magassugárzókra). Az Aqulify teljesítményben átlagolja a pontokat, a rossz vagy zajos pontot pedig törölheted.</div>
+          </div>
+          <div style="margin-bottom:6px;">
+            <div style="font-weight:600; color:var(--aq-amber);" data-i18n="rw.helpPrepH">Előkészület és Windows hangjavítások</div>
+            <div data-i18n="rw.helpPrepP">Kapcsold ki a Windows hangjavításait (zajcsökkentés, automatikus erősítés, visszhangszűrés) a mikrofon tulajdonságainál, és minden más külső EQ-t vagy térhatást. Az Aqulify a mérés idejére automatikusan kikapcsolja a saját effektláncát (a keresztváltó és a limiter védelemből bekapcsolva marad).</div>
+          </div>
+          <div>
+            <div style="font-weight:600; color:var(--aq-amber);" data-i18n="rw.helpLimitsH">Korrekciós határok</div>
+            <div data-i18n="rw.helpLimitsP">Az EQ főleg a mély tartomány (500 Hz alatti) kiemeléseit vágja le. Mély, keskeny akusztikai kioltásokat és a hangszóró alsó határa alatti esést nem szabad erővel feltölteni – ott a hangszóró vagy a hallgatási hely mozgatása segít.</div>
+          </div>
         </div>
 
         <!-- Lépésjelző sáv (1 .. 5) -->
-        <div style="display:flex; justify-content:space-between; margin-bottom:16px; position:relative;">
-          <div id="rwStepPill1" class="step-pill active" style="flex:1; text-align:center; padding:6px; border-bottom:3px solid var(--aq-amber); font-weight:600; font-size:0.85rem;" data-i18n="room.step1Title">1. Mikrofon</div>
-          <div id="rwStepPill2" class="step-pill" style="flex:1; text-align:center; padding:6px; border-bottom:3px solid var(--aq-border); font-size:0.85rem; color:var(--aq-text-2);" data-i18n="room.step2Title">2. Szintellenőrzés</div>
-          <div id="rwStepPill3" class="step-pill" style="flex:1; text-align:center; padding:6px; border-bottom:3px solid var(--aq-border); font-size:0.85rem; color:var(--aq-text-2);" data-i18n="room.step3Title">3. Mérés</div>
-          <div id="rwStepPill4" class="step-pill" style="flex:1; text-align:center; padding:6px; border-bottom:3px solid var(--aq-border); font-size:0.85rem; color:var(--aq-text-2);" data-i18n="room.step4Title">4. Eredmény</div>
-          <div id="rwStepPill5" class="step-pill" style="flex:1; text-align:center; padding:6px; border-bottom:3px solid var(--aq-border); font-size:0.85rem; color:var(--aq-text-2);" data-i18n="room.step5Title">5. Alkalmazás</div>
+        <div style="display:flex; flex-wrap:wrap; gap:4px; justify-content:space-between; margin-bottom:14px; position:relative;">
+          <div id="rwStepPill1" class="step-pill active" style="flex:1 1 88px; min-width:0; text-align:center; padding:5px 4px; border-bottom:3px solid var(--aq-amber); font-weight:600; font-size:0.8rem;" data-i18n="room.step1Title">1. Mikrofon</div>
+          <div id="rwStepPill2" class="step-pill" style="flex:1 1 88px; min-width:0; text-align:center; padding:5px 4px; border-bottom:3px solid var(--aq-border); font-size:0.8rem; color:var(--aq-text-2);" data-i18n="room.step2Title">2. Szintellenőrzés</div>
+          <div id="rwStepPill3" class="step-pill" style="flex:1 1 88px; min-width:0; text-align:center; padding:5px 4px; border-bottom:3px solid var(--aq-border); font-size:0.8rem; color:var(--aq-text-2);" data-i18n="room.step3Title">3. Mérés</div>
+          <div id="rwStepPill4" class="step-pill" style="flex:1 1 88px; min-width:0; text-align:center; padding:5px 4px; border-bottom:3px solid var(--aq-border); font-size:0.8rem; color:var(--aq-text-2);" data-i18n="room.step4Title">4. Eredmény</div>
+          <div id="rwStepPill5" class="step-pill" style="flex:1 1 88px; min-width:0; text-align:center; padding:5px 4px; border-bottom:3px solid var(--aq-border); font-size:0.8rem; color:var(--aq-text-2);" data-i18n="room.step5Title">5. Alkalmazás</div>
         </div>
 
         <!-- LÉPÉS 1: Mikrofon és kalibráció -->
-        <div id="rwStep1" class="rw-step-pane" style="display:flex; flex-direction:column; gap:12px; flex:1;">
+        <div id="rwStep1" class="rw-step-pane" style="display:flex; flex-direction:column; gap:12px; flex:1; overflow-y:auto;">
           <!-- Kísérleti funkció (2.5.0): a figyelmeztetés egy későbbi kiadásban, elegendő visszajelzés után kerül le -->
           <div id="rwExperimentalNote" role="note" style="background:rgba(229,165,10,0.15); border:1px solid #e5a50a; padding:8px 12px; border-radius:6px; font-size:0.85rem; line-height:1.4;">
             <strong data-i18n="rw.experimentalTitle">Kísérleti funkció</strong> —
@@ -6489,27 +6516,27 @@ var qrcode = function() {
             Előkészület: kapcsold ki a korábbi korrekciókat és térhatást; az erősítő beállításait hagyd változatlanul.
           </div>
           <div style="display:flex; flex-direction:column; gap:6px;">
-            <label style="font-weight:600; font-size:0.85rem;">Mérőmikrofon:</label>
+            <label style="font-weight:600; font-size:0.85rem;" data-i18n="rw.micLabel">Mérőmikrofon:</label>
             <select id="rwMicSelect" class="ee-select" style="width:100%;" onchange="onRwMicChanged()">
               <option value="default" data-i18n="rw.micDefault">Alapértelmezett mikrofon</option>
             </select>
             <span id="rwMicAvailNote" style="font-size:0.8rem; color:#e5a50a;"></span>
           </div>
           <div style="display:flex; flex-direction:column; gap:6px;">
-            <label style="font-weight:600; font-size:0.85rem;">Kalibrációs fájl (.cal / .txt / .frd / .csv) - opcionális:</label>
+            <label style="font-weight:600; font-size:0.85rem;" data-i18n="rw.calFileLabel">Kalibrációs fájl (.cal / .txt / .frd / .csv) – opcionális:</label>
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               <input type="file" id="rwCalFileInput" accept=".cal,.txt,.frd,.csv" class="ee-input" style="flex:1; min-width:200px;" onchange="onRwCalFileLoaded(this)">
               <button type="button" class="adw-btn" id="btnRwClearCal" onclick="clearRwMicCal()" style="display:none;" data-i18n="rw.clearCal">Kalibráció törlése</button>
             </div>
-            <span id="rwCalFileStatus" style="font-size:0.8rem; color:var(--aq-text-2);">Nincs kalibráció betöltve (lineáris mikrofon átvitel).</span>
+            <span id="rwCalFileStatus" style="font-size:0.8rem; color:var(--aq-text-2);" data-i18n="rw.calNone">Nincs kalibráció betöltve (lineáris mikrofon átvitel).</span>
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
             <div style="display:flex; gap:12px; align-items:center;">
-              <label style="font-weight:600; font-size:0.85rem;">Mért csatorna:</label>
+              <label style="font-weight:600; font-size:0.85rem;" data-i18n="rw.channelLabel">Mért csatorna:</label>
               <select id="rwChannelSelect" class="ee-select">
-                <option value="both" selected>Mindkét csatorna (Sztereó)</option>
-                <option value="left">Bal csatorna (Left)</option>
-                <option value="right">Jobb csatorna (Right)</option>
+                <option value="both" selected data-i18n="rw.chBoth">Mindkét csatorna (sztereó)</option>
+                <option value="left" data-i18n="rw.chLeft">Bal csatorna</option>
+                <option value="right" data-i18n="rw.chRight">Jobb csatorna</option>
               </select>
             </div>
             <label class="adw-btn" style="cursor:pointer; font-size:0.8rem; padding:4px 10px;">
@@ -6521,22 +6548,25 @@ var qrcode = function() {
 
         <!-- LÉPÉS 2: Szintellenőrzés -->
         <div id="rwStep2" class="rw-step-pane" style="display:none; flex-direction:column; gap:14px; flex:1;">
-          <p style="margin:0; font-size:0.9rem;">Ellenőrizd, hogy a szobában csend van-e, és a teszthang nem túl halk vagy túl hangos.</p>
-          <div style="display:flex; gap:10px; align-items:center;">
+          <p style="margin:0; font-size:0.9rem;" data-i18n="rw.levelHelp">Ellenőrizd, hogy a szobában csend van-e, és a teszthang nem túl halk vagy túl hangos.</p>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <button type="button" class="adw-btn primary" id="btnRwTestLevel" onclick="startRwLevelCheck()" data-i18n="rw.levelStart">Teszthang indítása</button>
-            <span id="rwLevelStatusText" style="font-weight:600; font-size:0.9rem; color:var(--aq-text);">Kattints a teszthang indítására.</span>
+            <span id="rwLevelStatusText" style="font-weight:600; font-size:0.9rem; color:var(--aq-text);" data-i18n="rw.levelIdlePrompt">Kattints a teszthang indítására.</span>
+          </div>
+          <div id="rwAgcWarning" style="display:none; background:rgba(237,51,59,0.14); border-left:3px solid #ed333b; padding:8px 12px; border-radius:4px; font-size:0.82rem; line-height:1.35;" data-i18n="rw.agcWarning">
+            Figyelem: a mikrofon automatikus erősítést használ – kapcsold ki a Windows hangjavításait!
           </div>
           <!-- Szintjelző sáv -->
           <div style="display:flex; flex-direction:column; gap:4px;">
             <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:var(--aq-text-2);">
-              <span>-60 dBFS (Csend)</span><span>-20 dBFS (Ideális)</span><span>0 dBFS (Túlvezérelt)</span>
+              <span data-i18n="rw.levelScaleQuiet">-60 dBFS (Csend)</span><span data-i18n="rw.levelScaleIdeal">-20 dBFS (Ideális)</span><span data-i18n="rw.levelScaleClip">0 dBFS (Túlvezérelt)</span>
             </div>
             <div style="width:100%; height:16px; background:var(--aq-border); border-radius:8px; overflow:hidden; position:relative;">
               <div id="rwLevelMeterBar" style="width:0%; height:100%; background:var(--aq-green); transition:width 0.1s linear;"></div>
             </div>
           </div>
           <div style="display:flex; gap:10px; align-items:center;">
-            <label style="font-size:0.85rem;">Mérési hangerő (dBFS):</label>
+            <label style="font-size:0.85rem;" data-i18n="rw.levelVolumeLabel">Mérési hangerő (dBFS):</label>
             <input type="range" id="rwLevelSlider" min="-40" max="-6" value="-20" step="1" oninput="document.getElementById('rwLevelVal').textContent = this.value + ' dBFS';">
             <span id="rwLevelVal" style="font-weight:700; width:65px;">-20 dBFS</span>
           </div>
@@ -6544,40 +6574,52 @@ var qrcode = function() {
 
         <!-- LÉPÉS 3: Mérés -->
         <div id="rwStep3" class="rw-step-pane" style="display:none; flex-direction:column; gap:14px; flex:1;">
-          <p style="margin:0; font-size:0.9rem;">A mérés alatt logaritmikus szinusz sweep hangot játszunk le. Kérjük maradj csendben.</p>
+          <p style="margin:0; font-size:0.9rem;" data-i18n="rw.sweepHelp">A mérés alatt logaritmikus szinusz sweep hangot játszunk le. Kérjük maradj csendben.</p>
           <div style="display:flex; gap:12px; align-items:center;">
-            <button type="button" class="adw-btn primary" id="btnRwStartSweep" onclick="startRwSweepMeasurement()">Mérés indítása</button>
-            <button type="button" class="adw-btn danger" id="btnRwEmergencyStop" onclick="emergencyStopMeasurement()" style="display:none;">Azonnali leállítás</button>
+            <button type="button" class="adw-btn primary" id="btnRwStartSweep" onclick="startRwSweepMeasurement()" data-i18n="rw.startSweep">Mérés indítása</button>
+            <button type="button" class="adw-btn danger" id="btnRwEmergencyStop" onclick="emergencyStopMeasurement()" style="display:none;" data-i18n="rw.emergencyStop">Azonnali leállítás</button>
           </div>
           <!-- Folyamatjelző csík -->
           <div style="display:flex; flex-direction:column; gap:6px;">
             <div style="display:flex; justify-content:space-between; font-size:0.85rem;">
-              <span id="rwSweepStatusText">Várakozás az indításra...</span>
+              <span id="rwSweepStatusText" data-i18n="rw.waitingStart">Várakozás az indításra…</span>
               <span id="rwSweepProgressPct">0%</span>
             </div>
             <div style="width:100%; height:12px; background:var(--aq-border); border-radius:6px; overflow:hidden;">
               <div id="rwSweepProgressBar" style="width:0%; height:100%; background:var(--aq-amber); transition:width 0.15s ease-out;"></div>
             </div>
           </div>
-          <div id="rwMultiPointControls" style="display:flex; gap:10px; align-items:center; margin-top:8px;">
-            <span id="rwPointCountLabel" style="font-size:0.85rem; color:var(--aq-text-2);">Mért pontok száma: 0</span>
-            <button type="button" class="adw-btn" id="btnRwNextPoint" onclick="prepareNextRwPoint()" style="display:none;">+ További pont mérése</button>
+          <div id="rwMultiPointControls" style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <span id="rwPointCountLabel" style="font-size:0.85rem; font-weight:600; color:var(--aq-text);">Mért pontok száma: 0</span>
+              <span style="font-size:0.78rem; color:var(--aq-text-2);" data-i18n="rw.multiPointTip">3–5 pont ajánlott a hallgatási hely körül</span>
+              <button type="button" class="adw-btn" id="btnRwNextPoint" onclick="prepareNextRwPoint()" style="display:none;" data-i18n="rw.nextPointBtn">+ További pont mérése</button>
+            </div>
+            <div id="rwPointList" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
           </div>
         </div>
 
         <!-- LÉPÉS 4: Eredmény és értékelés (Közérthető, Rule 0) -->
         <div id="rwStep4" class="rw-step-pane" style="display:none; flex-direction:column; gap:12px; flex:1; overflow-y:auto;">
           <div style="background:rgba(255,191,0,0.1); border-left:4px solid var(--aq-amber); padding:10px 14px; border-radius:4px;">
-            <h4 style="margin:0 0 6px 0; font-size:1rem; color:var(--aq-amber);">Kiértékelés</h4>
-            <div id="rwHumanSummaryText" style="font-size:0.9rem; line-height:1.4; white-space:pre-line;">Mérés feldolgozása...</div>
+            <h4 style="margin:0 0 6px 0; font-size:1rem; color:var(--aq-amber);" data-i18n="rw.resultsHeading">Kiértékelés</h4>
+            <div id="rwHumanSummaryText" style="font-size:0.9rem; line-height:1.4; white-space:pre-line;" data-i18n="rw.processing">Mérés feldolgozása…</div>
+          </div>
+
+          <!-- Többpontos állapot a 4. lépésben is (pontok átlaga, rossz pont törlése, új pont felvétele) -->
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:0.8rem;">
+            <span id="rwPointCountStep4" style="font-weight:600;"></span>
+            <span style="color:var(--aq-text-2);" data-i18n="rw.multiPointTip">3–5 pont ajánlott a hallgatási hely körül</span>
+            <button type="button" class="mini-btn" id="btnRwAddPointStep4" onclick="prepareNextRwPoint()" data-i18n="rw.nextPointBtn">+ További pont mérése</button>
+            <div id="rwPointListStep4" style="display:flex; gap:6px; flex-wrap:wrap; width:100%;"></div>
           </div>
 
           <!-- Egyszerű grafikon előnézet -->
           <canvas id="rwCurveCanvas" width="660" height="180" style="width:100%; height:180px; background:#18181c; border-radius:6px;"></canvas>
           <div style="display:flex; gap:16px; justify-content:center; font-size:0.75rem;">
-            <span style="color:#888;">● Eredeti (mért) válasz</span>
-            <span style="color:#00aaff;">● Célgörbe</span>
-            <span style="color:#00ff88;">● Korrigált válasz</span>
+            <span style="color:#888;" data-i18n="rw.legendMeasured">● Eredeti (mért) válasz</span>
+            <span style="color:#00aaff;" data-i18n="rw.legendTarget">● Célgörbe</span>
+            <span style="color:#00ff88;" data-i18n="rw.legendCorrected">● Korrigált válasz</span>
           </div>
 
           <!-- Egyszerű mód: Két közérthető csúszka + Hangerő-tartalék -->
@@ -6606,26 +6648,25 @@ var qrcode = function() {
 
           <!-- Haladó részletek kapcsológomb -->
           <div>
-            <button type="button" class="mini-btn" onclick="toggleRwAdvancedDetails()" style="font-size:0.8rem;">Haladó részletek megjelenítése ▼</button>
+            <button type="button" class="mini-btn" onclick="toggleRwAdvancedDetails()" style="font-size:0.8rem;" data-i18n="rw.advancedToggle">Haladó részletek ▼</button>
             <div id="rwAdvancedDetails" style="display:none; margin-top:8px; padding:10px; background:var(--aq-bg); border-radius:6px; font-size:0.8rem;">
               <div style="display:flex; gap:12px; margin-bottom:8px; flex-wrap:wrap; align-items:center;">
-                <label>Célgörbe modell:</label>
-                <select id="rwTargetSelect" class="ee-select" onchange="recalculateRwTarget()">
+                <label data-i18n="rw.targetModelLabel">Célgörbe modell:</label>
+                <select id="rwTargetSelect" class="ee-select" onchange="onRwTargetPresetChange()">
                   <option value="room_balanced" data-i18n="rw.targetBalanced">Kiegyensúlyozott szobahang (Olive 2009 / 2013)</option>
                   <option value="room_warm" data-i18n="rw.targetWarm">Meleg szobahang (+6 dB mélyek)</option>
                   <option value="flat" data-i18n="rw.targetFlat">Lineáris / Egyenes (Flat - 0 dB)</option>
-                  <option value="channel_match" data-i18n="rw.targetChannelMatch">Csak a csatornák kiegyenlítése (kalibráció nélkül is ajánlott)</option>
                 </select>
-                <label>Térdpont:</label>
-                <input type="range" id="rwKneeSlider" min="60" max="250" value="160" step="10" oninput="document.getElementById('rwKneeVal').textContent = this.value + ' Hz'; recalculateRwTarget();" style="width:90px;">
+                <label data-i18n="rw.kneeLabel">Töréspont:</label>
+                <input type="range" id="rwKneeSlider" min="60" max="250" value="160" step="10" oninput="document.getElementById('rwKneeVal').textContent = this.value + ' Hz'; requestRwRecompute();" style="width:90px;">
                 <span id="rwKneeVal">160 Hz</span>
-                <label>Simítás:</label>
-                <select id="rwSmoothingSelect" class="ee-select" onchange="recalculateRwTarget()">
-                  <option value="var" selected>Változó simítás (alul 1/12, felül 1/3)</option>
-                  <option value="1">1/1 oktáv</option>
-                  <option value="3">1/3 oktáv</option>
-                  <option value="6">1/6 oktáv</option>
-                  <option value="12">1/12 oktáv</option>
+                <label data-i18n="rw.smoothingLabel">Simítás:</label>
+                <select id="rwSmoothingSelect" class="ee-select" onchange="requestRwRecompute()">
+                  <option value="var" selected data-i18n="rw.smoothVar">Változó simítás (alul 1/24, felül 1/3)</option>
+                  <option value="1">1/1</option>
+                  <option value="3">1/3</option>
+                  <option value="6">1/6</option>
+                  <option value="12">1/12</option>
                 </select>
                 <button type="button" class="mini-btn" onclick="saveRwSessionToFile()" data-i18n="rw.saveSession">Mérés mentése</button>
               </div>
@@ -6636,7 +6677,7 @@ var qrcode = function() {
 
         <!-- LÉPÉS 5: Alkalmazás és teszt -->
         <div id="rwStep5" class="rw-step-pane" style="display:none; flex-direction:column; gap:14px; flex:1;">
-          <p style="margin:0; font-size:0.9rem;">Próbáld ki a korrekciót zenehallgatás közben, és hasonlítsd össze az eredetivel!</p>
+          <p style="margin:0; font-size:0.9rem;" data-i18n="rw.applyHelp">Próbáld ki a korrekciót zenehallgatás közben, és hasonlítsd össze az eredetivel!</p>
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
             <button type="button" class="adw-btn primary" id="btnRwApply" onclick="applyRwCorrection()" data-i18n="room.applyBtn">Korrekció alkalmazása</button>
             <button type="button" class="adw-btn" id="btnRwAbCompare" onclick="toggleRwAbCompare()" data-i18n="room.abBtn">A/B Összehasonlítás</button>
@@ -6648,10 +6689,10 @@ var qrcode = function() {
 
         <!-- Alsó navigációs gombok -->
         <div style="display:flex; justify-content:space-between; margin-top:20px; border-top:1px solid var(--aq-border); padding-top:12px;">
-          <button type="button" class="adw-btn" id="btnRwBack" onclick="rwNavBack()" style="visibility:hidden;">Vissza</button>
+          <button type="button" class="adw-btn" id="btnRwBack" onclick="rwNavBack()" style="visibility:hidden;" data-i18n="rw.navBack">Vissza</button>
           <div style="display:flex; gap:10px;">
             <button type="button" class="adw-btn" onclick="closeRoomWizard()" data-i18n="common.close">Bezárás</button>
-            <button type="button" class="adw-btn primary" id="btnRwNext" onclick="rwNavNext()">Tovább</button>
+            <button type="button" class="adw-btn primary" id="btnRwNext" onclick="rwNavNext()" data-i18n="rw.navNext">Tovább</button>
           </div>
         </div>
       </div>
@@ -6908,6 +6949,11 @@ function setLanguage(code, persist) {
   }
   applyI18nDom();
   if (typeof refreshDynamicTexts === "function") refreshDynamicTexts();
+  if (typeof renderRwCalStatus === "function") renderRwCalStatus();
+  if (typeof updateRwPointCountUi === "function") updateRwPointCountUi();
+  if (typeof renderRwResults === "function") renderRwResults();
+  const rwNotice = document.getElementById("rwApplyResultNotice");
+  if (rwNotice) rwNotice.textContent = "";
   if (aqNowPlaying) aqNowPlaying.setLang(code);
   if (aqLibrary) aqLibrary.setLang(code);
 }
@@ -14215,7 +14261,12 @@ function initPipewireBridge() {
         }
         if (data && data.type === "measurement_result") {
           handleRwMeasurementResult(data);
-          setRoomWizardStep(4);
+          if (!data.recomputed) setRoomWizardStep(4);
+        }
+        if (data && data.type === "measurement_points_updated") {
+          rwServerPoints = Array.isArray(data.points) ? data.points : [];
+          if (rwServerPoints.length === 0) { rwPoints = []; rwMeasuredData = null; }
+          updateRwPointCountUi();
         }
         if (data && data.type === "measurement_error") {
           const msg = rwErrorText(data);
@@ -14240,11 +14291,17 @@ function initPipewireBridge() {
         }
         if (data && data.type === "level_check_started") {
           rwLevelRunning = true;
+          const agcEl = document.getElementById('rwAgcWarning');
+          if (agcEl) agcEl.style.display = 'none';
           const btn = document.getElementById('btnRwTestLevel');
           if (btn) btn.textContent = t('rw.levelStop');
         }
         if (data && data.type === "mic_level") {
           renderRwLevel(data.peak_db, data.hold_db);
+          if (data.agc_warning) {
+            const agcEl = document.getElementById('rwAgcWarning');
+            if (agcEl) agcEl.style.display = 'block';
+          }
         }
         if (data && (data.type === "mic_level_done" || data.type === "measurement_stopped")) {
           if (rwLevelRunning) { rwLevelRunning = false; renderRwLevelIdle(); }
@@ -16272,11 +16329,25 @@ let rwLastBackupL = null;
 let rwLastBackupR = null;
 let rwLastBackupSplit = false;
 let rwLastBackupPreamp = 0.0;
+let rwLastBackupAutoPreamp = false;
+let rwLastBackupEqOn = true;
 let rwMeasuredData = null;
-let rwPoints = [];          // több hallgatási pont nyers mérési adatai
+let rwPoints = [];          // több hallgatási pont adatai (offline / betöltéshez is)
+let rwServerPoints = [];    // a motor által tárolt pontok listája: [{id, snr_db, peak_db}]
+let rwAppendNextPoint = false;
+let rwRecomputeTimer = null;
 let rwAbOriginal = null;
 let rwAbActive = false;
 let rwActiveMicCal = null;  // { fileName, parsed }
+
+function toggleRwHelp(forceState) {
+  const box = document.getElementById('rwHelpBox');
+  const btn = document.getElementById('rwHelpBtn');
+  if (!box) return;
+  const show = (typeof forceState === 'boolean') ? forceState : (box.style.display === 'none');
+  box.style.display = show ? 'block' : 'none';
+  if (btn) btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+}
 
 function getRwMicId() {
   const sel = document.getElementById('rwMicSelect');
@@ -16327,11 +16398,19 @@ function renderRwCalStatus(errMsg) {
   let txt = t('rw.calSummary', { file: rwActiveMicCal.fileName, n: p.points.length,
     fmin: fmtNum(Math.round(p.minFreq)), fmax: fmtNum(Math.round(p.maxFreq)), max: maxStr });
   if (typeof p.sensitivity === 'number') txt += ' · ' + t('rw.calSens', { sens: fmtNum(p.sensitivity, 1) });
-  if (/0\s*(?:°|deg)/i.test(rwActiveMicCal.fileName)) {
+  const angle = (typeof p.calAngle === 'number')
+    ? p.calAngle
+    : ((typeof AqulifyImport !== 'undefined' && typeof AqulifyImport.detectMicCalAngle === 'function')
+        ? AqulifyImport.detectMicCalAngle(rwActiveMicCal.fileName) : null);
+  if (angle === 90) {
+    txt += ' · ' + t('rw.cal90Detected');
+  } else if (angle === 0) {
     txt += ' — ' + t('rw.cal0DegWarn');
+  } else {
+    txt += ' · ' + t('rw.calAngleTip');
   }
   status.textContent = txt;
-  status.style.color = 'var(--aq-green)';
+  status.style.color = (angle === 0) ? 'var(--aq-amber)' : 'var(--aq-green)';
   if (btnClear) btnClear.style.display = 'inline-block';
 }
 
@@ -16347,6 +16426,7 @@ function openRoomWizard() {
   rwStep = 1;
   setRoomWizardStep(1);
   loadRwCalForCurrentMic();
+  updateRwPointCountUi();
   const modal = document.getElementById('modalRoomWizard');
   if (modal) modal.style.display = 'flex';
   
@@ -16416,7 +16496,7 @@ function onRwCalFileLoaded(input) {
       input.value = '';
       return;
     }
-    const parsed = AqulifyImport.parseMicCalibration(text);
+    const parsed = AqulifyImport.parseMicCalibration(text, file.name);
     if (!parsed.ok) {
       const msgMap = {
         empty: 'rw.calErrEmpty', tooFewPoints: 'rw.calErrFew', notIncreasing: 'rw.calErrOrder',
@@ -16492,12 +16572,29 @@ function rwErrorText(data) {
   const map = {
     NOT_IMPLEMENTED: 'rw.notImplemented', BUSY: 'rw.errBusy', UNAUTHORIZED: 'rw.errAuth',
     NO_INPUT_DEVICE: 'rw.errNoMic', MIC_no_device: 'rw.errNoMic', MIC_busy: 'rw.errMicBusy',
-    MIC_permission: 'rw.errMicPermission', MIC_TOO_QUIET: 'rw.levelLow', MIC_CLIPPING: 'rw.levelHigh',
+    MIC_permission: 'rw.errMicPermission', MIC_format: 'rw.errMicFormat',
+    MIC_TOO_QUIET: 'rw.levelLow', MIC_CLIPPING: 'rw.levelHigh',
     NOISY_ROOM: 'rw.errNoisy', NO_SIGNAL: 'rw.errNoSignal', PLAYBACK_FAILED: 'rw.errPlayback',
     INVALID_CAL: 'rw.calErrFormat'
   };
   if (map[code]) return t(map[code]);
   return t('rw.errGeneric', { code: code || '?' });
+}
+
+function getRwTargetAndSmoothingParams() {
+  const target = document.getElementById('rwTargetSelect') ? document.getElementById('rwTargetSelect').value : 'room_balanced';
+  const bassDb = document.getElementById('rwBassSlider') ? parseFloat(document.getElementById('rwBassSlider').value) : 4.0;
+  const trebleDb = document.getElementById('rwTrebleSlider') ? parseFloat(document.getElementById('rwTrebleSlider').value) : -3.0;
+  const kneeHz = document.getElementById('rwKneeSlider') ? parseFloat(document.getElementById('rwKneeSlider').value) : 160.0;
+  const smoothingSel = document.getElementById('rwSmoothingSelect') ? document.getElementById('rwSmoothingSelect').value : 'var';
+  const smoothing = (smoothingSel === 'var') ? 'var' : (parseInt(smoothingSel, 10) || 6);
+  return {
+    target,
+    target_bass_db: bassDb,
+    target_treble_db: trebleDb,
+    target_knee_hz: kneeHz,
+    smoothing
+  };
 }
 
 // 3. Mérés indítása és kezelése (kizárólag valós mérés, szimuláció nélkül)
@@ -16513,9 +16610,7 @@ function startRwSweepMeasurement() {
 
   const channel = document.getElementById('rwChannelSelect') ? document.getElementById('rwChannelSelect').value : 'both';
   const levelDb = document.getElementById('rwLevelSlider') ? parseFloat(document.getElementById('rwLevelSlider').value) : -20.0;
-  const target = document.getElementById('rwTargetSelect') ? document.getElementById('rwTargetSelect').value : 'room_balanced';
-  const smoothingSel = document.getElementById('rwSmoothingSelect') ? document.getElementById('rwSmoothingSelect').value : '6';
-  const smoothing = smoothingSel === 'var' ? 6 : (parseInt(smoothingSel, 10) || 6);
+  const params = getRwTargetAndSmoothingParams();
 
   if (typeof pipewireWs !== 'undefined' && pipewireWs && pipewireWs.readyState === WebSocket.OPEN) {
     if (statusText) {
@@ -16527,8 +16622,12 @@ function startRwSweepMeasurement() {
       channel: channel,
       level_db: levelDb,
       duration: 3.0,
-      target: target,
-      smoothing: smoothing,
+      target: params.target,
+      target_bass_db: params.target_bass_db,
+      target_treble_db: params.target_treble_db,
+      target_knee_hz: params.target_knee_hz,
+      smoothing: params.smoothing,
+      append: !!rwAppendNextPoint,
       input_device: getRwMicId()
     };
     if (rwActiveMicCal && rwActiveMicCal.parsed && Array.isArray(rwActiveMicCal.parsed.points)) {
@@ -16542,7 +16641,7 @@ function startRwSweepMeasurement() {
     if (progressBar) progressBar.style.width = '0%';
     if (progressPct) progressPct.textContent = '0%';
     if (statusText) {
-      statusText.textContent = (typeof t === 'function' ? t('rw.notImplemented') : '') || 'A mikrofonos mérés ezen a gépen még nem érhető el.';
+      statusText.textContent = t('rw.notImplemented');
       statusText.style.color = '#ed333b';
     }
   }
@@ -16562,12 +16661,14 @@ function emergencyStopMeasurement() {
   if (progressBar) progressBar.style.width = '0%';
   if (progressPct) progressPct.textContent = '0%';
   if (statusText) {
-    statusText.textContent = (typeof t === 'function' ? t('rw.stopped') : '') || 'Mérés leállítva.';
+    statusText.textContent = t('rw.stopped');
     statusText.style.color = 'var(--aq-text)';
   }
 }
 
 function prepareNextRwPoint() {
+  rwAppendNextPoint = true;
+  if (rwStep !== 3) setRoomWizardStep(3);
   const statusText = document.getElementById('rwSweepStatusText');
   const progressBar = document.getElementById('rwSweepProgressBar');
   const progressPct = document.getElementById('rwSweepProgressPct');
@@ -16577,22 +16678,83 @@ function prepareNextRwPoint() {
   if (btnStop) btnStop.style.display = 'none';
   if (progressBar) progressBar.style.width = '0%';
   if (progressPct) progressPct.textContent = '0%';
+  const nextNum = (rwServerPoints.length > 0 ? rwServerPoints.length : rwPoints.length) + 1;
   if (statusText) {
-    statusText.textContent = `Helyezd át a mikrofont a ${rwPoints.length + 1}. ponthoz, majd indítsd a mérést.`;
+    statusText.textContent = t('rw.moveMicPrompt', { n: nextNum });
     statusText.style.color = 'var(--aq-text)';
   }
 }
 
+function deleteRwPoint(pointId) {
+  if (typeof pipewireWs !== 'undefined' && pipewireWs && pipewireWs.readyState === WebSocket.OPEN && rwServerPoints.length > 0) {
+    const params = getRwTargetAndSmoothingParams();
+    pipewireWs.send(JSON.stringify({
+      type: 'measurement_delete_point',
+      point_id: pointId,
+      target: params.target,
+      target_bass_db: params.target_bass_db,
+      target_treble_db: params.target_treble_db,
+      target_knee_hz: params.target_knee_hz,
+      smoothing: params.smoothing
+    }));
+  } else {
+    rwPoints = rwPoints.filter((_, i) => (i + 1) !== pointId);
+    rwMeasuredData = rwPoints.length ? rwPoints[rwPoints.length - 1] : null;
+    updateRwPointCountUi();
+    if (rwMeasuredData) renderRwResults();
+  }
+}
+
+function renderRwPointChips(container) {
+  if (!container) return;
+  container.innerHTML = '';
+  const list = rwServerPoints.length > 0
+    ? rwServerPoints
+    : rwPoints.map((p, i) => ({ id: i + 1, snr_db: typeof p.snr_db === 'number' ? p.snr_db : 0 }));
+  list.forEach((pt, idx) => {
+    const chip = document.createElement('span');
+    chip.style.cssText = 'display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px; background:var(--aq-bg); border:1px solid var(--aq-border); font-size:0.75rem;';
+    const txt = document.createElement('span');
+    txt.textContent = t('rw.pointItem', { n: idx + 1, snr: Math.round(pt.snr_db || 0) });
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.textContent = '×';
+    del.title = t('rw.deletePoint');
+    del.setAttribute('aria-label', t('rw.deletePoint'));
+    del.style.cssText = 'border:none; background:none; color:#ed333b; cursor:pointer; font-weight:700; padding:0 2px; line-height:1;';
+    del.onclick = () => deleteRwPoint(pt.id);
+    chip.appendChild(txt);
+    chip.appendChild(del);
+    container.appendChild(chip);
+  });
+}
+
 function updateRwPointCountUi() {
+  const n = rwServerPoints.length > 0 ? rwServerPoints.length : rwPoints.length;
   const lbl = document.getElementById('rwPointCountLabel');
+  const lbl4 = document.getElementById('rwPointCountStep4');
   const btnNext = document.getElementById('btnRwNextPoint');
-  if (lbl) lbl.textContent = `Mért pontok száma: ${rwPoints.length}`;
-  if (btnNext) btnNext.style.display = rwPoints.length > 0 ? 'inline-block' : 'none';
+  const txt = t('rw.pointCount', { n });
+  if (lbl) lbl.textContent = txt;
+  if (lbl4) lbl4.textContent = txt;
+  if (btnNext) btnNext.style.display = n > 0 ? 'inline-block' : 'none';
+  renderRwPointChips(document.getElementById('rwPointList'));
+  renderRwPointChips(document.getElementById('rwPointListStep4'));
 }
 
 function handleRwMeasurementResult(res) {
   if (!res) return;
-  rwPoints.push(res);
+  const btnStart = document.getElementById('btnRwStartSweep');
+  const btnStop = document.getElementById('btnRwEmergencyStop');
+  if (btnStart) btnStart.style.display = 'inline-block';
+  if (btnStop) btnStop.style.display = 'none';
+  if (Array.isArray(res.points)) {
+    rwServerPoints = res.points;
+  } else if (!res.recomputed) {
+    if (!rwAppendNextPoint) rwPoints = [];
+    rwPoints.push(res);
+  }
+  if (!res.recomputed) rwAppendNextPoint = false;
   rwMeasuredData = res;
   updateRwPointCountUi();
   renderRwResults();
@@ -16707,6 +16869,26 @@ function toggleRwAdvancedDetails() {
   if (el) el.style.display = (el.style.display === 'none') ? 'block' : 'none';
 }
 
+function onRwTargetPresetChange() {
+  const sel = document.getElementById('rwTargetSelect');
+  const mode = sel ? sel.value : 'room_balanced';
+  const bEl = document.getElementById('rwBassSlider');
+  const tEl = document.getElementById('rwTrebleSlider');
+  const kEl = document.getElementById('rwKneeSlider');
+  const presets = {
+    room_balanced: { bass: 4.0, treble: -3.0, knee: 160 },
+    room_warm:     { bass: 6.0, treble: -3.0, knee: 160 },
+    flat:          { bass: 0.0, treble:  0.0, knee: 160 }
+  };
+  const pr = presets[mode] || presets.room_balanced;
+  if (bEl) bEl.value = String(pr.bass);
+  if (tEl) tEl.value = String(pr.treble);
+  if (kEl) kEl.value = String(pr.knee);
+  const kVal = document.getElementById('rwKneeVal');
+  if (kVal) kVal.textContent = pr.knee + ' Hz';
+  onRwTargetSliderChange();
+}
+
 function onRwTargetSliderChange() {
   const bEl = document.getElementById('rwBassSlider');
   const tEl = document.getElementById('rwTrebleSlider');
@@ -16714,7 +16896,7 @@ function onRwTargetSliderChange() {
   const tVal = document.getElementById('rwTrebleVal');
   if (bEl && bVal) bVal.textContent = (parseFloat(bEl.value) > 0 ? '+' : '') + parseFloat(bEl.value).toFixed(1) + ' dB';
   if (tEl && tVal) tVal.textContent = (parseFloat(tEl.value) > 0 ? '+' : '') + parseFloat(tEl.value).toFixed(1) + ' dB';
-  recalculateRwTarget();
+  requestRwRecompute();
 }
 
 function onRwHeadroomSliderChange() {
@@ -16723,44 +16905,27 @@ function onRwHeadroomSliderChange() {
   if (hEl && hVal) hVal.textContent = parseFloat(hEl.value).toFixed(1) + ' dB';
 }
 
+/** A célgörbét és a sávokat mindig a motor számolja újra (nincs második JS auto-EQ). */
+function requestRwRecompute() {
+  if (rwRecomputeTimer) clearTimeout(rwRecomputeTimer);
+  rwRecomputeTimer = setTimeout(() => {
+    rwRecomputeTimer = null;
+    if (typeof pipewireWs === 'undefined' || !pipewireWs || pipewireWs.readyState !== WebSocket.OPEN) return;
+    if (rwServerPoints.length === 0 && !rwMeasuredData) return;
+    const params = getRwTargetAndSmoothingParams();
+    pipewireWs.send(JSON.stringify({
+      type: 'measurement_recompute',
+      target: params.target,
+      target_bass_db: params.target_bass_db,
+      target_treble_db: params.target_treble_db,
+      target_knee_hz: params.target_knee_hz,
+      smoothing: params.smoothing
+    }));
+  }, 80);
+}
+
 function recalculateRwTarget() {
-  if (!rwMeasuredData || !rwMeasuredData.freqs) return;
-  const targetMode = document.getElementById('rwTargetSelect') ? document.getElementById('rwTargetSelect').value : 'room_balanced';
-  const bassGain = document.getElementById('rwBassSlider') ? parseFloat(document.getElementById('rwBassSlider').value) : 4.0;
-  const trebleGain = document.getElementById('rwTrebleSlider') ? parseFloat(document.getElementById('rwTrebleSlider').value) : -3.0;
-  const kneeFreq = document.getElementById('rwKneeSlider') ? parseFloat(document.getElementById('rwKneeSlider').value) : 160.0;
-
-  // Célgörbe újraszámítása a log-frekvenciás modellen
-  const freqs = rwMeasuredData.freqs;
-  const newTargets = [];
-
-  for (let i = 0; i < freqs.length; ++i) {
-    const f = freqs[i];
-    let tg = 0.0;
-    if (targetMode === 'flat') {
-      tg = 0.0;
-    } else if (targetMode === 'channel_match') {
-      // Csak csatornák kiegyenlítése: nem alkalmaz szobagörbét
-      tg = rwMeasuredData.measured_dbs ? rwMeasuredData.measured_dbs[i] * 0.5 : 0.0;
-    } else {
-      // Szobagörbe modell (Olive AES 2009 / Olive-Welti-McMullin 2013)
-      const bMax = (targetMode === 'room_warm') ? (bassGain + 2.0) : bassGain;
-      if (f <= 20.0) {
-        tg = bMax;
-      } else if (f < kneeFreq) {
-        const ratio = (Math.log10(kneeFreq) - Math.log10(f)) / (Math.log10(kneeFreq) - Math.log10(20.0));
-        tg = bMax * ratio;
-      } else if (f <= 1000.0) {
-        tg = 0.0;
-      } else {
-        const ratio = (Math.log10(f) - Math.log10(1000.0)) / (Math.log10(20000.0) - Math.log10(1000.0));
-        tg = trebleGain * ratio;
-      }
-    }
-    newTargets.push(Math.round(tg * 10) / 10);
-  }
-  rwMeasuredData.target_dbs = newTargets;
-  renderRwResults();
+  requestRwRecompute();
 }
 
 function saveRwSessionToFile() {
@@ -16800,6 +16965,27 @@ function loadRwSessionFromFile(input) {
 }
 
 // 5. Alkalmazás, A/B és visszavonás
+/** Összegzett EQ-görbe csúcsa és a tartalék csúszka alapján számolt biztonságos előerősítés (dB). */
+function computeRwPreampDb(bands) {
+  const maxPosEq = (typeof curvePeakDbFor === 'function' && bands && bands.length > 0)
+    ? Math.max(0, curvePeakDbFor(bands))
+    : ((rwMeasuredData && typeof rwMeasuredData.recommended_preamp_db === 'number')
+        ? Math.max(0, -rwMeasuredData.recommended_preamp_db) : 0);
+  const hEl = document.getElementById('rwHeadroomSlider');
+  const hVal = hEl ? parseFloat(hEl.value) : -4.0;
+  const margin = Number.isFinite(hVal) ? Math.abs(Math.min(0, hVal)) : 4.0;
+  return Math.max(-36.0, Math.round(-(maxPosEq + margin) * 10) / 10);
+}
+
+function applyRwPreampUi(val) {
+  currentPreamp = Math.max(-36.0, Math.min(12.0, val));
+  const inp = document.getElementById('inputPreamp');
+  if (inp) inp.value = currentPreamp.toFixed(1);
+  if (typeof setPreampBadge === 'function') {
+    setPreampBadge(currentPreamp < 0 ? 'preamp.guard' : 'preamp.clean', currentPreamp, currentPreamp < 0 ? 'info' : 'optimal');
+  }
+}
+
 function applyRwCorrection() {
   if (!rwMeasuredData || !rwMeasuredData.bands) return;
 
@@ -16809,6 +16995,8 @@ function applyRwCorrection() {
   rwLastBackupR = JSON.parse(JSON.stringify(nodesR_store));
   rwLastBackupSplit = eqSplit;
   rwLastBackupPreamp = currentPreamp;
+  rwLastBackupAutoPreamp = autoPreampMode;
+  rwLastBackupEqOn = isEqEnabled;
   rwAbActive = false;
 
   const newBands = rwMeasuredData.bands.map((b, i) => normBand({
@@ -16820,24 +17008,34 @@ function applyRwCorrection() {
     slope: 0
   }, i));
 
+  // Előerősítés = -(összegzett EQ-görbe legnagyobb pozitív értéke) - a tartalék csúszka értéke
+  const targetPreamp = computeRwPreampDb(newBands);
+  autoPreampMode = false;
+  applyRwPreampUi(targetPreamp);
+
   setEqChannels(newBands, [], false);
   setModuleActive('eq', newBands.length > 0);
+  if (targetPreamp < 0 && typeof isLimiterEnabled !== 'undefined' && !isLimiterEnabled) {
+    setModuleActive('limiter', true);
+  }
   updateEqUI();
   drawEq();
 
-  // WebSocket küldés ha él a híd
+  // WebSocket küldés ha él a híd (EQ-sávok + preamp együtt)
   if (typeof pipewireWs !== 'undefined' && pipewireWs && pipewireWs.readyState === WebSocket.OPEN) {
+    lastSentPreamp = currentPreamp;
     pipewireWs.send(JSON.stringify({
       type: 'apply_measurement',
       channel: rwMeasuredData.channel || 'both',
       delay_ms: rwMeasuredData.delay_ms || 0.0,
       invert: rwMeasuredData.inverted || false,
+      preamp_db: currentPreamp,
       bands: rwMeasuredData.bands
     }));
   }
 
   const notice = document.getElementById('rwApplyResultNotice');
-  if (notice) notice.textContent = t('rw.appliedNotice') || 'A szobakorrekció sikeresen érvénybe lépett!';
+  if (notice) notice.textContent = t('rw.appliedWithPreamp', { preamp: fmtNum(currentPreamp, 1) });
 }
 
 function toggleRwAbCompare() {
@@ -16849,50 +17047,63 @@ function toggleRwAbCompare() {
     rwAbOriginal = {
       L: JSON.parse(JSON.stringify(nodesL_store)),
       R: JSON.parse(JSON.stringify(nodesR_store)),
-      split: eqSplit
+      split: eqSplit,
+      preamp: currentPreamp,
+      eqOn: isEqEnabled
     };
+    autoPreampMode = false;
+    applyRwPreampUi(rwLastBackupPreamp);
     setEqChannels(rwLastBackupL.map((b, i) => normBand(b, i)), rwLastBackupR.map((b, i) => normBand(b, i)), rwLastBackupSplit);
+    setModuleActive('eq', rwLastBackupEqOn);
     updateEqUI();
     drawEq();
-    if (btn) btn.textContent = t('rw.abOriginal') || 'A/B: Eredeti hangzás (kattints a korrekcióhoz)';
+    if (typeof sendParamToPipewire === 'function') sendParamToPipewire('set_preamp', currentPreamp);
+    if (btn) btn.textContent = t('rw.abOriginal');
   } else {
     if (rwAbOriginal) {
+      autoPreampMode = false;
+      applyRwPreampUi(rwAbOriginal.preamp);
       setEqChannels(rwAbOriginal.L.map((b, i) => normBand(b, i)), rwAbOriginal.R.map((b, i) => normBand(b, i)), rwAbOriginal.split);
+      setModuleActive('eq', rwAbOriginal.eqOn);
       updateEqUI();
       drawEq();
+      if (typeof sendParamToPipewire === 'function') sendParamToPipewire('set_preamp', currentPreamp);
     }
-    if (btn) btn.textContent = t('rw.abCorrected') || 'A/B: Korrigált hangzás';
+    if (btn) btn.textContent = t('rw.abCorrected');
   }
 }
 
 function undoRwCorrection() {
   if (!rwLastBackupL) return;
+  rwAbActive = false;
+  autoPreampMode = rwLastBackupAutoPreamp;
+  applyRwPreampUi(rwLastBackupPreamp);
   setEqChannels(rwLastBackupL.map((b, i) => normBand(b, i)), rwLastBackupR.map((b, i) => normBand(b, i)), rwLastBackupSplit);
-  currentPreamp = rwLastBackupPreamp;
-  const inp = document.getElementById('inputPreamp');
-  if (inp) inp.value = currentPreamp.toFixed(1);
+  setModuleActive('eq', rwLastBackupEqOn);
   updateEqUI();
   drawEq();
+  if (typeof sendParamToPipewire === 'function') sendParamToPipewire('set_preamp', currentPreamp);
+  const btn = document.getElementById('btnRwAbCompare');
+  if (btn) btn.textContent = t('room.abBtn');
   const notice = document.getElementById('rwApplyResultNotice');
-  if (notice) notice.textContent = t('rw.undoneNotice') || 'A korrekció visszavonva (korábbi állapot visszaállítva).';
+  if (notice) notice.textContent = t('rw.undoneNotice');
 }
 
 function saveRwAsProfile() {
-  const name = prompt(t('rw.promptProfileName') || 'Add meg az új szobakorrekciós profil nevét:',
-                      t('rw.defaultProfileName') || 'Szobakorrekció');
+  const name = prompt(t('rw.promptProfileName'), t('rw.defaultProfileName'));
   if (!name || !name.trim()) return;
   const savedName = createPresetFromCurrent(name.trim(), 'room');
   const notice = document.getElementById('rwApplyResultNotice');
-  if (notice) notice.textContent = (t('rw.profileSavedNotice') || 'Profil elmentve: ') + savedName;
+  if (notice) notice.textContent = t('rw.profileSavedNotice') + savedName;
 }
 
 // Sávcsökkentő (Band Reducer)
 function promptReduceBands() {
   if (typeof nodes === 'undefined' || nodes.length <= 5) {
-    alert('A sávok száma már most is minimális (<= 5).');
+    alert(t('eq.reduceMin'));
     return;
   }
-  const targetCountStr = prompt('Hány sávra szeretnéd csökkenteni az EQ-t? (pl. 5, 7 vagy 10)', '7');
+  const targetCountStr = prompt(t('eq.reducePrompt'), '7');
   if (!targetCountStr) return;
   const targetCount = parseInt(targetCountStr, 10);
   if (isNaN(targetCount) || targetCount < 1 || targetCount >= nodes.length) return;
@@ -16913,7 +17124,7 @@ function promptReduceBands() {
   updateEqUI();
   drawEq();
 
-  alert(`A sávok számát sikeresen ${targetCount}-re csökkentettük.\nLegnagyobb elhagyott eltérés: ${maxDiff.toFixed(1)} dB.`);
+  alert(t('eq.reduceDone', { n: targetCount, diff: fmtNum(maxDiff, 1) }));
 }
 
 // Equalizer APO Export

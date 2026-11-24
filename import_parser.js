@@ -507,16 +507,29 @@
   }
 
   /**
-   * Mikrofon-kalibrációs fájl (.cal, .txt, .frd, .csv) szigorú értelmezése és ellenőrzése.
-   * Elvárások: legalább 3 pont, szigorúan növekvő frekvencia, 10 Hz – 30 kHz, |dB| <= 30.
-   * Az idézőjeles ("Sens Factor...") és * / # fejlécsorok kimaradnak.
+   * Mikrofon-kalibrációs fájl (.cal, .txt, .frd, .csv) értelmezése és ellenőrzése.
+   * Elvárások: legalább 3 egyedi pont, 10 Hz – 30 kHz, |dB| <= 30.
+   * Kezeli az UTF-8 BOM-ot, a vezető nulla nélküli érzékenységet (pl. -.7423dB),
+   * az idézőjel nélküli fejlécsorokat (számokkal is), a 3. fázis oszlopot,
+   * valamint a nem növekvő / ismétlődő frekvenciák rendezését és összevonását.
    */
-  function parseMicCalibration(text) {
+  function detectMicCalAngle(text) {
+    if (!text) return null;
+    const s = String(text);
+    if (/(?:^|[^0-9])90\s*(?:°|deg)(?:[^a-z0-9]|$)/i.test(s)) return 90;
+    if (/(?:^|[^0-9])0\s*(?:°|deg)(?:[^a-z0-9]|$)/i.test(s)) return 0;
+    return null;
+  }
+
+  function parseMicCalibration(text, fileName) {
     const emptyRes = (error, detail) => ({
       ok: false,
       error,
       errorDetail: detail || "",
       sensitivity: null,
+      calAngle: null,
+      wasSorted: false,
+      mergedDuplicates: 0,
       points: [],
       minFreq: 0,
       maxFreq: 0,
@@ -524,26 +537,29 @@
       maxCorrectionDb: 0
     });
 
-    if (!text || !String(text).trim()) {
+    const rawText = String(text || "").replace(/^\uFEFF/, "");
+    if (!rawText.trim()) {
       return emptyRes("empty", "");
     }
 
     const numRe = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
-    const lines = String(text).split(/\r?\n/);
-    const points = [];
+    const sensRe = /Sens\s*Factor\s*[:=]\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*dB/i;
+    const lines = rawText.split(/\r?\n/);
+    const rawPoints = [];
     let sensitivity = null;
-    let invalidDataLines = 0;
+    let calAngle = null;
+    let headerTextLines = 0;
 
-    for (let rawLine of lines) {
-      const line = rawLine.trim();
+    for (let idx = 0; idx < lines.length; ++idx) {
+      const lineNo = idx + 1;
+      const line = lines[idx].trim();
       if (!line) continue;
 
-      // Érzékenység kinyerése a fejlécből (pl. "Sens Factor =-38.2dB, SERNO: 0000001")
+      // Komment- vagy idézőjeles fejlécsor (pl. "Sens Factor =-.7423dB, SERNO: 0000001")
       if (line.startsWith('"') || line.startsWith("*") || line.startsWith("#")) {
-        const mSens = line.match(/Sens\s*Factor\s*[:=]\s*([+-]?\d+(?:\.\d+)?)\s*dB/i);
-        if (mSens) {
-          sensitivity = parseFloat(mSens[1]);
-        }
+        const mSens = line.match(sensRe);
+        if (mSens) sensitivity = parseFloat(mSens[1]);
+        if (calAngle === null) calAngle = detectMicCalAngle(line);
         continue;
       }
 
@@ -557,22 +573,75 @@
         const db = parseFloat(tokens[1]);
         const phase = (tokens.length >= 3 && numRe.test(tokens[2])) ? parseFloat(tokens[2]) : 0.0;
         if (!Number.isFinite(f) || !Number.isFinite(db)) {
-          return emptyRes("unparsable", line);
+          return emptyRes("unparsable", `L${lineNo}: ${line}`);
         }
-        points.push({ freq: f, db: db, phase: Number.isFinite(phase) ? phase : 0.0 });
+        rawPoints.push({ freq: f, db: db, phase: Number.isFinite(phase) ? phase : 0.0, lineNo });
       } else {
-        // Oszlopfejléc (pl. "Freq dB" az első adat előtt) csak akkor engedhető át, ha még nincs adatpont és max 1 ilyen van
-        if (points.length === 0 && invalidDataLines === 0 && /^[A-Za-z"\s,;()\[\]\/_-]+$/.test(line)) {
-          invalidDataLines++;
+        // Az első adatpont előtti fejlécsorok (idézőjel nélkül, számokkal is, pl. dátum, szög, Sens Factor, oszlopnevek)
+        if (rawPoints.length === 0 && headerTextLines < 12) {
+          const mSens = line.match(sensRe);
+          if (mSens) sensitivity = parseFloat(mSens[1]);
+          if (calAngle === null) calAngle = detectMicCalAngle(line);
+          headerTextLines++;
           continue;
         }
-        return emptyRes("unparsable", line);
+        return emptyRes("unparsable", `L${lineNo}: ${line}`);
       }
     }
 
-    if (points.length === 0) {
-      return emptyRes(invalidDataLines > 0 ? "unparsable" : "empty", "");
+    if (calAngle === null && fileName) {
+      calAngle = detectMicCalAngle(fileName);
     }
+
+    if (rawPoints.length === 0) {
+      return emptyRes(headerTextLines > 0 ? "unparsable" : "empty", "");
+    }
+
+    // Tartomány ellenőrzése sorszámmal
+    for (let i = 0; i < rawPoints.length; ++i) {
+      const p = rawPoints[i];
+      if (p.freq < 10.0 || p.freq > 30000.0) {
+        return emptyRes("outOfFreqRange", `L${p.lineNo}: ${p.freq} Hz`);
+      }
+      if (Math.abs(p.db) > 30.0) {
+        return emptyRes("outOfGainRange", `L${p.lineNo}: ${p.db} dB`);
+      }
+    }
+
+    // Nem növekvő sorrend ellenőrzése és rendezése
+    let wasSorted = false;
+    for (let i = 1; i < rawPoints.length; ++i) {
+      if (rawPoints[i].freq < rawPoints[i - 1].freq) {
+        wasSorted = true;
+        break;
+      }
+    }
+    if (wasSorted) {
+      rawPoints.sort((a, b) => a.freq - b.freq);
+    }
+
+    // Azonos frekvenciájú sorok összevonása (átlagolás)
+    const points = [];
+    let mergedDuplicates = 0;
+    for (let i = 0; i < rawPoints.length; ) {
+      let j = i + 1;
+      let sumDb = rawPoints[i].db;
+      let sumPhase = rawPoints[i].phase;
+      while (j < rawPoints.length && Math.abs(rawPoints[j].freq - rawPoints[i].freq) <= Math.max(1e-4, rawPoints[i].freq * 1e-6)) {
+        sumDb += rawPoints[j].db;
+        sumPhase += rawPoints[j].phase;
+        j++;
+      }
+      const cnt = j - i;
+      if (cnt > 1) mergedDuplicates += (cnt - 1);
+      points.push({
+        freq: rawPoints[i].freq,
+        db: sumDb / cnt,
+        phase: sumPhase / cnt
+      });
+      i = j;
+    }
+
     // errorDetail: nyelvfüggetlen (a hibás érték vagy sor); a mondatot a felület fordítja
     if (points.length < 3) {
       return emptyRes("tooFewPoints", String(points.length));
@@ -585,15 +654,6 @@
 
     for (let i = 0; i < points.length; ++i) {
       const p = points[i];
-      if (p.freq < 10.0 || p.freq > 30000.0) {
-        return emptyRes("outOfFreqRange", `${p.freq} Hz`);
-      }
-      if (Math.abs(p.db) > 30.0) {
-        return emptyRes("outOfGainRange", `${p.db} dB`);
-      }
-      if (i > 0 && p.freq <= points[i - 1].freq) {
-        return emptyRes("notIncreasing", `${points[i - 1].freq} Hz → ${p.freq} Hz`);
-      }
       if (p.freq < minFreq) minFreq = p.freq;
       if (p.freq > maxFreq) maxFreq = p.freq;
       if (Math.abs(p.db) >= maxAbsDb) {
@@ -607,6 +667,9 @@
       error: "",
       errorDetail: "",
       sensitivity,
+      calAngle,
+      wasSorted,
+      mergedDuplicates,
       points,
       minFreq,
       maxFreq,
@@ -620,7 +683,7 @@
    */
   function parseCsvPoints(text) {
     const points = [];
-    const lines = (text || "").split(/\r?\n/);
+    const lines = String(text || "").replace(/^\uFEFF/, "").split(/\r?\n/);
     for (let rawLine of lines) {
       const line = rawLine.trim();
       if (!line || line.startsWith("#") || line.startsWith("*") || line.startsWith('"')) continue;
@@ -750,6 +813,7 @@
     parseCamillaDspYaml,
     parseCsvPoints,
     parseMicCalibration,
+    detectMicCalAngle,
     reduceBands,
     exportApoConfig
   };

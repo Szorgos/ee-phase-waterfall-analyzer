@@ -24,16 +24,19 @@ struct FreqPoint {
 /**
  * Frakcionális oktáv simítás egy pontsorozatra vagy spektrumra.
  * @param rawPoints Bemeneti (freq, magDb) pontok
- * @param octaveFraction Az oktáv tört része (pl. 1, 3, 6, 12, 24, 48)
+ * @param octaveFraction Az oktáv tört része (pl. 1, 3, 6, 12, 24, 48);
+ *                       0: nincs simítás; negatív (pl. -1): változó simítás
+ *                       (1/24 oktáv 200 Hz alatt, 1/3 oktáv 2 kHz fölött, közte logaritmikus átmenet).
  */
 inline std::vector<FreqPoint> smoothSpectrum(const std::vector<FreqPoint>& rawPoints,
                                              int octaveFraction = 6) {
     if (rawPoints.empty()) return {};
-    if (octaveFraction <= 0) return rawPoints;
+    if (octaveFraction == 0) return rawPoints;
 
     std::vector<FreqPoint> out = rawPoints;
     const size_t n = rawPoints.size();
-    const double factor = std::pow(2.0, 1.0 / (2.0 * octaveFraction));
+    const bool variable = (octaveFraction < 0);
+    const double fixedFactor = variable ? 1.0 : std::pow(2.0, 1.0 / (2.0 * octaveFraction));
 
     // Lineáris energiák előkészítése
     std::vector<double> power(n);
@@ -43,8 +46,23 @@ inline std::vector<FreqPoint> smoothSpectrum(const std::vector<FreqPoint>& rawPo
 
     for (size_t i = 0; i < n; ++i) {
         const double f0 = rawPoints[i].freq;
+        double factor = fixedFactor;
+        if (variable) {
+            // 200 Hz alatt 1/24 oktáv, 2 kHz fölött 1/3 oktáv, közte sima logaritmikus átmenet
+            double octWidth;
+            if (f0 <= 200.0) {
+                octWidth = 1.0 / 24.0;
+            } else if (f0 >= 2000.0) {
+                octWidth = 1.0 / 3.0;
+            } else {
+                const double t = std::log(f0 / 200.0) / std::log(10.0);
+                octWidth = (1.0 / 24.0) * std::pow(8.0, t);
+            }
+            factor = std::pow(2.0, octWidth * 0.5);
+        }
         const double fMin = f0 / factor;
         const double fMax = f0 * factor;
+        const double maxDist = std::log2(factor);
 
         double sumPower = 0.0;
         double sumWeights = 0.0;
@@ -52,10 +70,9 @@ inline std::vector<FreqPoint> smoothSpectrum(const std::vector<FreqPoint>& rawPo
         for (size_t k = 0; k < n; ++k) {
             const double f = rawPoints[k].freq;
             if (f >= fMin && f <= fMax) {
-                // Háromszög vagy Gauss simító súly
+                // Háromszög simító súly log-frekvencián
                 const double dist = std::abs(std::log2(f / f0));
-                const double maxDist = std::log2(factor);
-                const double w = std::max(0.0, 1.0 - dist / maxDist);
+                const double w = maxDist > 1e-12 ? std::max(0.0, 1.0 - dist / maxDist) : 1.0;
                 sumPower += power[k] * w;
                 sumWeights += w;
             }

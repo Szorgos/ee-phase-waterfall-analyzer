@@ -50,11 +50,16 @@ struct MeasureConfig {
     float startFreq = 10.0f;        // A sweep kezdőfrekvenciája Hz (egy oktávval a kiértékelt 20 Hz alatt: a sávszél
                                     // be- és kifutása így nem torzítja a mély tartományt)
     float endFreq = 20000.0f;       // Végfrekvencia Hz
-    int smoothingFraction = 6;      // 1/6 oktávos simítás alapértelmezetten
-    float maxBoostDb = 3.0f;        // Legnagyobb megengedett kiemelés (biztonság: max +3 dB)
+    int smoothingFraction = 6;      // 1/6 oktávos simítás alapértelmezetten (-1: változó simítás)
+    float maxBoostDb = 3.0f;        // Legnagyobb megengedett kiemelés (összegzetten is, alapból +3 dB)
     float maxCutDb = -24.0f;        // Legnagyobb megengedett vágás
     int maxBands = 10;              // Parametrikus sávok száma
-    std::string targetType = "balanced"; // "flat", "balanced" (+3 dB), "bass_boost" (+6 dB)
+    std::string targetType = "room_balanced"; // "flat", "room_balanced"/"balanced", "room_warm"/"bass_boost"
+    float targetBassDb = 4.0f;      // 20 Hz-es mély cél (dB, -6..+10)
+    float targetTrebleDb = -3.0f;   // 20 kHz-es magas cél (dB, -6..+3)
+    float targetKneeHz = 160.0f;    // Mély töréspont (Hz, 60..250)
+    bool customTargetParams = false;// true: a targetBassDb / targetTrebleDb / targetKneeHz közvetlenül érvényes
+    AutoEqLimits eqLimits{};        // Korrekciós biztonsági határok
     std::vector<FreqPoint> micCal;  // Opcionális mikrofon kalibrációs görbe
     float noiseRms = 0.0f;          // a háttérzaj RMS-e (a lejátszás előtti csendből); 0: nincs zajellenőrzés
 };
@@ -70,6 +75,9 @@ struct MeasureResult {
     bool invertedPolarity = false;
     float snrDb = 0.0f;
     float peakLevelDbfs = -100.0f;
+    float recommendedPreampDb = 0.0f;
+    float speakerLowCutoffHz = 20.0f;
+    std::vector<float> skippedDips;
     std::vector<FreqPoint> rawResponse;
     std::vector<FreqPoint> smoothedResponse;
     std::vector<FreqPoint> targetCurve;
@@ -77,6 +85,52 @@ struct MeasureResult {
     std::string humanSummaryHu = "";
     std::string humanSummaryEn = "";
 };
+
+/**
+ * Egységes szobai célgörbe generálása a motorban (log-frekvencián szakaszonként egyenes):
+ *  - "flat": 0 dB mindenhol;
+ *  - egyébként: 20 Hz -> targetBassDb, lineárisan (log f) 0 dB-ig a targetKneeHz töréspontig,
+ *    targetKneeHz .. 1000 Hz között 0 dB, 1000 Hz .. 20 kHz között lineárisan (log f) targetTrebleDb-ig.
+ */
+inline std::vector<FreqPoint> buildTargetCurve(const std::vector<FreqPoint>& referenceCurve,
+                                               const MeasureConfig& cfg) {
+    std::vector<FreqPoint> out = referenceCurve;
+    if (cfg.targetType == "flat") {
+        for (auto& pt : out) pt.magDb = 0.0f;
+        return out;
+    }
+
+    const float bassDb = cfg.customTargetParams
+        ? std::clamp(cfg.targetBassDb, -6.0f, 10.0f)
+        : ((cfg.targetType == "room_warm" || cfg.targetType == "bass_boost") ? 6.0f : 4.0f);
+    const float trebleDb = cfg.customTargetParams
+        ? std::clamp(cfg.targetTrebleDb, -6.0f, 3.0f)
+        : -3.0f;
+    const float kneeHz = std::clamp(cfg.targetKneeHz, 60.0f, 250.0f);
+
+    const double log20 = std::log10(20.0);
+    const double logKnee = std::log10(static_cast<double>(kneeHz));
+    const double log1k = std::log10(1000.0);
+    const double log20k = std::log10(20000.0);
+
+    for (auto& pt : out) {
+        const double f = pt.freq;
+        double tg = 0.0;
+        if (f <= 20.0) {
+            tg = bassDb;
+        } else if (f < kneeHz) {
+            const double ratio = (logKnee - std::log10(f)) / std::max(1e-6, logKnee - log20);
+            tg = bassDb * ratio;
+        } else if (f <= 1000.0) {
+            tg = 0.0;
+        } else {
+            const double ratio = std::min(1.0, (std::log10(f) - log1k) / (log20k - log1k));
+            tg = trebleDb * ratio;
+        }
+        pt.magDb = static_cast<float>(tg);
+    }
+    return out;
+}
 
 class MeasurementManager {
 public:
@@ -116,12 +170,18 @@ public:
             return false;
         }
 
+        // DC-eltolás levonása a szint- és zajszámítás előtt (egyes USB-mikrofonok DC-vel indulnak)
+        double mean = 0.0;
+        for (float s : testSignal) mean += static_cast<double>(s);
+        mean /= static_cast<double>(testSignal.size());
+
         float maxPeak = 0.0f;
         double sumSq = 0.0;
         for (float s : testSignal) {
-            float absS = std::fabs(s);
+            const double ac = static_cast<double>(s) - mean;
+            const float absS = static_cast<float>(std::fabs(ac));
             if (absS > maxPeak) maxPeak = absS;
-            sumSq += double(s) * s;
+            sumSq += ac * ac;
         }
         float rms = static_cast<float>(std::sqrt(sumSq / testSignal.size()));
         float peakDb = maxPeak > 1e-6f ? 20.0f * std::log10(maxPeak) : -120.0f;
@@ -195,7 +255,18 @@ public:
             return res;
         }
 
-        if (!checkLevels(recordedSamples, cfg.noiseRms, res)) {
+        // DC-eltávolítás a szintellenőrzés és dekonvolúció előtt
+        std::vector<float> cleanSamples(recordedSamples.size());
+        {
+            double mean = 0.0;
+            for (float s : recordedSamples) mean += static_cast<double>(s);
+            mean /= static_cast<double>(recordedSamples.size());
+            for (size_t i = 0; i < recordedSamples.size(); ++i) {
+                cleanSamples[i] = static_cast<float>(static_cast<double>(recordedSamples[i]) - mean);
+            }
+        }
+
+        if (!checkLevels(cleanSamples, cfg.noiseRms, res)) {
             state_ = MeasureState::Error;
             return res;
         }
@@ -214,7 +285,7 @@ public:
         state_ = MeasureState::Deconvolving;
         if (onProgress) onProgress("deconvolution", 0.5f, "Impulzusválasz számítása...");
 
-        FarinaResult dRes = farinaDeconvolve(recordedSamples, invFilter, sampleRate);
+        FarinaResult dRes = farinaDeconvolve(cleanSamples, invFilter, sampleRate);
         if (!dRes.ok) {
             res.success = false;
             res.errorCode = "NO_SIGNAL";
@@ -292,29 +363,21 @@ public:
         // 6. Célgörbe és korrekciós EQ szűrők számítása
         if (onProgress) onProgress("auto_eq", 0.85f, "Optimális akusztikai szűrők számítása...");
 
-        float bassBoost = 3.0f; // Alapértelmezett kiegyensúlyozott célgörbe
-        if (cfg.targetType == "bass_boost" || cfg.targetType == "room_warm") bassBoost = 6.0f;
-        else if (cfg.targetType == "flat" || cfg.targetType == "channel_match") bassBoost = 0.0f;
-
-        res.targetCurve = res.smoothedResponse;
-        for (auto& pt : res.targetCurve) {
-            double boost = 0.0;
-            if (bassBoost > 0.0f) {
-                const double w = pt.freq / 100.0;
-                boost = bassBoost / (1.0 + w * w);
-            }
-            pt.magDb = static_cast<float>(boost);
-        }
+        res.targetCurve = buildTargetCurve(res.smoothedResponse, cfg);
 
         // Biztonsági korlátokkal szűrők számítása
         auto eqRes = calculateAutoEq(
             res.smoothedResponse,
             res.targetCurve,
             cfg.maxBands,
-            cfg.maxBoostDb, // <= +3.0 dB
-            cfg.maxCutDb    // pl. -24.0 dB
+            cfg.maxBoostDb, // <= +3.0 dB (összegzetten is)
+            cfg.maxCutDb,   // pl. -24.0 dB
+            cfg.eqLimits
         );
         res.correctionBands = eqRes.bands;
+        res.recommendedPreampDb = eqRes.targetPreampDb;
+        res.speakerLowCutoffHz = eqRes.speakerLowCutoffHz;
+        res.skippedDips = eqRes.skippedDips;
 
         // 7. Közérthető összefoglaló szöveg készítése (Egyszerű mód, Rule 0)
         generateHumanSummary(res);
@@ -366,6 +429,12 @@ private:
                << maxBoost << " dB, hangszóróvédelmi korláttal).\n";
             en << "• Proposed: gently lift the dip around " << static_cast<int>(std::round(maxBoostFreq))
                << " Hz (+" << std::fixed << std::setprecision(1) << maxBoost << " dB, speaker protection active).\n";
+        }
+        if (!res.skippedDips.empty()) {
+            hu << "• A " << static_cast<int>(std::round(res.skippedDips.front()))
+               << " Hz körüli mély kioltást kihagytuk – ezt EQ nem javítja; próbáld a hangszóró vagy a hallgatási hely mozgatását.\n";
+            en << "• Skipped the deep dip around " << static_cast<int>(std::round(res.skippedDips.front()))
+               << " Hz – EQ cannot fix this; try moving the speakers or the listening position.\n";
         }
         if (res.correctionBands.empty()) {
             hu << "• A mért görbe közel van a célhoz; korrekció nem szükséges.\n";
