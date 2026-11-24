@@ -39,8 +39,9 @@ public:
     }
 
     /**
-     * Közvetlen (kizárólagos) kimenet lezárása vagy sikertelen megnyitása után, a megosztott kimenet megnyitása
-     * előtt hívódik: a motor itt várhat rövid ideig, amíg a hangrendszer (WirePlumber) visszaveszi a DAC-ot.
+     * Egy működő közvetlen (kizárólagos) kimenet lezárása után, a megosztott kimenet megnyitása előtt hívódik:
+     * a motor itt várhat rövid ideig, amíg a hangrendszer (WirePlumber) visszaveszi az imént elengedett DAC-ot.
+     * Ha korábban nem volt aktív kizárólagos kimenet (csak a nyitása sikertelen volt), nem fut le.
      */
     void setBeforeFallbackToSharedHook(std::function<void()> fn) {
         std::lock_guard<std::mutex> lk(cbMu_);
@@ -50,9 +51,7 @@ public:
     bool open(uint32_t sampleRate, RenderFn render, std::string* error) override {
         const bool wasExclusive = exclusiveActive();
         close();
-        bool triedExclusive = false;
         if (want_.load() && exclusive_) {
-            triedExclusive = true;
             std::string why;
             if (exclusive_->open(sampleRate, render, &why)) {
                 setFallback("");
@@ -64,7 +63,7 @@ public:
         } else {
             setFallback("");
         }
-        if (wasExclusive || triedExclusive) {
+        if (wasExclusive) {
             std::function<void()> hook;
             { std::lock_guard<std::mutex> lk(cbMu_); hook = beforeFallbackToShared_; }
             if (hook) hook();

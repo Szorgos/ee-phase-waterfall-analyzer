@@ -438,7 +438,23 @@ int main() {
         CHECK(fallbackHookCalls == 1 && sharedOpensAtHook == opensBefore && shared7->opens.load() == opensBefore + 1,
               "ALSA -> megosztott váltáskor a hook pontosan a shared->open() előtt futott");
 
-        // 4. Kizárólagos sikertelen megnyitás (nem létező eszköz) -> fallback hook szintén lefut
+        // 4. Működő kizárólagos ALSA lezárása után sikertelen újranyitás -> visszalépésnél lefut a hook (wasExclusive == true)
+        int openAttempt = 0;
+        alsa7->setOpenHooksForTest(
+            [&](snd_pcm_t** p, const char* dev) {
+                if (++openAttempt == 1) return snd_pcm_open(p, dev, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
+                return -EINVAL;
+            },
+            200, 2000);
+        sel7->setExclusive(true);
+        CHECK(sel7->open(44100, silence, nullptr) && sel7->exclusiveActive(), "2. kizárólagos megnyitás (null) rendben");
+        const int opensBeforeFallback = shared7->opens.load();
+        CHECK(sel7->open(96000, silence, nullptr) && !sel7->exclusiveActive(),
+              "aktív ALSA utáni sikertelen újranyitásnál visszalépés megosztottra");
+        CHECK(fallbackHookCalls == 2 && sharedOpensAtHook == opensBeforeFallback && shared7->opens.load() == opensBeforeFallback + 1,
+              "aktív kizárólagos lezárása utáni fallbacknél a hook a shared->open() előtt futott");
+
+        // 5. Kizárólagos sikertelen megnyitás előzetes aktív kizárólagos nélkül -> NINCS várakozás / hook (wasExclusive == false)
         delete sel7;
         auto* alsaFail7 = new AlsaPlayerOutput("hw:99,0");
         auto* sharedFail7 = new NullShared;
@@ -446,8 +462,8 @@ int main() {
         int failHookCalls = 0;
         selFail7.setBeforeFallbackToSharedHook([&]() { ++failHookCalls; });
         selFail7.setExclusive(true);
-        CHECK(selFail7.open(96000, silence, nullptr) && !selFail7.exclusiveActive() && failHookCalls == 1,
-              "sikertelen kizárólagos megnyitásnál (fallback) is lefut az átmeneti hook");
+        CHECK(selFail7.open(96000, silence, nullptr) && !selFail7.exclusiveActive() && failHookCalls == 0,
+              "előzetes aktív ALSA nélküli sikertelen kizárólagos nyitáskor nincs felesleges várakozás (hook = 0)");
     }
 
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);

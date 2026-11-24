@@ -444,7 +444,7 @@ public:
         // Előbb a playback streamet bontjuk szálbiztosan (capture RT in-flight megvárásával), utána a capture-t
         destroyPlaybackSafe();
         if (capture) { pw_stream_destroy(capture); capture = nullptr; }
-        waitRtIdle(captureInFlight_);
+        waitRtIdle(captureInFlight_, "capture");
         liveBridge_.stop();
         if (registry_) { pw_proxy_destroy(reinterpret_cast<struct pw_proxy*>(registry_)); registry_ = nullptr; }
         knownSinksById_.clear();
@@ -505,10 +505,15 @@ private:
         }
     };
 
-    static void waitRtIdle(std::atomic<int>& counter) {
+    static void waitRtIdle(std::atomic<int>& counter, const char* name) {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
         while (counter.load(std::memory_order_acquire) > 0 && std::chrono::steady_clock::now() < deadline) {
             std::this_thread::yield();
+        }
+        const int rem = counter.load(std::memory_order_acquire);
+        if (rem > 0) {
+            std::cerr << "[PipeWire] Figyelem: a(z) " << name
+                      << " RT visszahívás 200 ms után sem lépett ki (aktív: " << rem << ").\n";
         }
     }
 
@@ -519,11 +524,11 @@ private:
         updateOutputHeartbeatExpected();
         struct pw_stream* old = playbackPtr_.exchange(nullptr, std::memory_order_acq_rel);
         playback = nullptr;
-        waitRtIdle(captureInFlight_);
+        waitRtIdle(captureInFlight_, "capture");
         if (old) {
             pw_stream_destroy(old);
         }
-        waitRtIdle(playbackInFlight_);
+        waitRtIdle(playbackInFlight_, "playback");
     }
     static int64_t monoNs() {
         struct timespec ts;
@@ -588,8 +593,8 @@ private:
         // de a liveBridge_ újrakonfigurálása előtt megvárjuk a futó RT capture/playback hívásokat!
         if (want.enable && self->liveUpsApplied_.enable && want.dstRate == self->liveUpsApplied_.dstRate) {
             self->liveUpsActive_.store(false, std::memory_order_release);
-            self->waitRtIdle(self->captureInFlight_);
-            self->waitRtIdle(self->playbackInFlight_);
+            self->waitRtIdle(self->captureInFlight_, "capture");
+            self->waitRtIdle(self->playbackInFlight_, "playback");
             if (self->liveBridge_.configure(want.srcRate, want.dstRate, want.opts) && self->liveBridge_.start()) {
                 self->liveUpsApplied_ = want;
                 self->liveUpsActive_.store(true, std::memory_order_release);
@@ -617,7 +622,7 @@ private:
             self->liveUpsActive_.store(true, std::memory_order_release);
             if (!self->createAndConnectPlayback()) {
                 self->liveUpsActive_.store(false, std::memory_order_release);
-                self->waitRtIdle(self->captureInFlight_);
+                self->waitRtIdle(self->captureInFlight_, "capture");
                 self->liveBridge_.stop();
                 self->liveUpsApplied_ = LiveUpsRequest{};
                 self->createAndConnectPlayback();
@@ -923,7 +928,7 @@ private:
                               pparams, 1) < 0) {
             playbackPtr_.store(nullptr, std::memory_order_release);
             playback = nullptr;
-            waitRtIdle(playbackInFlight_);
+            waitRtIdle(playbackInFlight_, "playback");
             pw_stream_destroy(s);
             return false;
         }

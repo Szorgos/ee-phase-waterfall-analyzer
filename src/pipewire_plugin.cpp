@@ -882,7 +882,7 @@ int main(int argc, char* argv[]) {
         node.setExternalExclusiveActive(active);
     });
     selOut->setBeforeFallbackToSharedHook([&node]() {
-        // Közvetlen ALSA lezárása / sikertelen nyitása után a WirePlumbernek idő kell a DAC visszavételéhez:
+        // Működő közvetlen ALSA lezárása után a WirePlumbernek idő kell a DAC visszavételéhez:
         // kérjük az újracsatlakozást, és legfeljebb ~1,2 s-ig megvárjuk, amíg a fizikai kimenet újra kész.
         node.requestReconnectIfNeeded();
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(1200);

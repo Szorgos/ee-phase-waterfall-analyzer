@@ -8,7 +8,9 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <iostream>
 #include <map>
 #include <mutex>
 #include <string>
@@ -151,7 +153,29 @@ public:
         // Felmintavételezésnél (io_ratio < 1) a libsoxr megköveteli: stopband_begin - 1 <= 1 - passband_end
         // ("imaging greater than rolloff"), különben soxr_create() hibával visszatér.
         const double maxSoxrStopband = (dstRate > srcRate) ? std::max(1.0, 2.0 - passbandEnd) : 1.50;
-        q_spec.stopband_begin = std::clamp(stopbandBegin, passbandEnd + 0.003, maxSoxrStopband);
+        const double clampedStopband = std::clamp(stopbandBegin, passbandEnd + 0.003, maxSoxrStopband);
+        q_spec.stopband_begin = clampedStopband;
+        if (dstRate > srcRate && std::abs(clampedStopband - stopbandBegin) > 1e-6) {
+            static std::mutex s_stopbandLogMu;
+            static double s_lastReq = -1.0;
+            static double s_lastClamped = -1.0;
+            bool shouldLog = false;
+            {
+                std::lock_guard<std::mutex> lk(s_stopbandLogMu);
+                if (std::abs(stopbandBegin - s_lastReq) > 1e-6 || std::abs(clampedStopband - s_lastClamped) > 1e-6) {
+                    s_lastReq = stopbandBegin;
+                    s_lastClamped = clampedStopband;
+                    shouldLog = true;
+                }
+            }
+            if (shouldLog) {
+                char msg[160];
+                std::snprintf(msg, sizeof(msg),
+                              "[Felmintavételezés] stopband %.4f -> %.4f (libsoxr korlát felmintavételezésnél)\n",
+                              stopbandBegin, clampedStopband);
+                std::cout << msg;
+            }
+        }
 
         soxr_io_spec_t io_spec = soxr_io_spec(SOXR_FLOAT32_I, SOXR_FLOAT32_I);
         soxr_runtime_spec_t rt_spec = soxr_runtime_spec(1);
