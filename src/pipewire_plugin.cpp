@@ -597,21 +597,31 @@ int main(int argc, char* argv[]) {
                 if (!node.externalExclusiveActive_.load(std::memory_order_acquire)) {
                     const int st = node.playbackState.load(std::memory_order_relaxed);
                     const std::string curTarget = node.outputTarget();
-                    const bool needTarget = (st == PW_STREAM_STATE_ERROR || st == PW_STREAM_STATE_UNCONNECTED ||
-                                             curTarget.empty() || pw_reconnect::isDummyOrNullSink(curTarget));
-                    if (needTarget) {
-                        std::unordered_set<std::string> physSet;
-                        for (const auto& s : listPhysicalSinks()) physSet.insert(s.name);
-                        const std::string best = pw_reconnect::resolveTargetOrFallback(linux_store::loadOutputSink(), physSet);
+                    const auto phys = listPhysicalSinks();
+                    std::string siId, curSinkId, actualPhysName;
+                    if (findOwnSinkInput(siId, curSinkId)) {
+                        for (const auto& s : phys)
+                            if (s.id == curSinkId) { actualPhysName = s.name; break; }
+                    }
+                    const bool streamBroken = (st == PW_STREAM_STATE_ERROR || st == PW_STREAM_STATE_UNCONNECTED);
+                    const bool onDummyOrUnbound = !streamBroken && actualPhysName.empty() && !phys.empty();
+                    if (streamBroken || onDummyOrUnbound) {
+                        const std::string stored = linux_store::loadOutputSink();
+                        std::string best = node.bestPhysicalSink(stored);
+                        if (best.empty()) {
+                            std::unordered_set<std::string> physSet;
+                            for (const auto& s : phys) physSet.insert(s.name);
+                            best = pw_reconnect::resolveTargetOrFallback(stored, physSet);
+                        }
                         if (!best.empty()) {
                             node.setPreferredOutput(best);
-                            if (node.playbackStreaming.load(std::memory_order_acquire)) {
-                                applyOutputSink(best, false, true);
-                            } else {
-                                node.requestReconnectIfNeeded();
-                            }
+                            if (!streamBroken) applyOutputSink(best, false, true);
+                            else node.requestReconnectIfNeeded();
                         }
-                    } else if (cachedVolPct.load(std::memory_order_relaxed) < 0 || (++volTick % 10 == 0)) {
+                    } else if (!actualPhysName.empty() && (curTarget.empty() || pw_reconnect::isDummyOrNullSink(curTarget))) {
+                        // A stream már valódi fizikai sinken szól: rögzítsük rá, ne mozgassuk el más kártyára
+                        applyOutputSink(actualPhysName, false, true);
+                    } else if (!curTarget.empty() && (cachedVolPct.load(std::memory_order_relaxed) < 0 || (++volTick % 10 == 0))) {
                         double lv = 0.0;
                         bool mu = false;
                         if (sinkVolume(curTarget, lv, mu)) {

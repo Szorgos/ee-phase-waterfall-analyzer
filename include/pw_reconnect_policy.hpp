@@ -59,29 +59,44 @@ inline bool isDummyOrNullSink(const std::string& name) {
            low.find("null_sink") != std::string::npos;
 }
 
+/** Külső PipeWire Audio/Sink jelölt névvel és munkamenet-prioritással (priority.session). */
+struct SinkCandidate {
+    std::string name;
+    int priority = 0;
+};
+
 /**
  * Determinisztikus tartalék-választás valódi külső nyelők közül (nem saját aqulify*, nem auto_null/dummy).
- * USB hangkártyák előnyben részesülnek, egyébként alfabetikus sorrendben az első valódi nyelő.
+ * Sorrend: magasabb priority.session előbb (mint a WirePlumbernél), egyenlőnél USB előnyben, végül alfabetikusan.
+ */
+inline std::string selectFallbackSinkByPriority(const std::vector<SinkCandidate>& candidates,
+                                                const std::string& sinkName = "aqulify_sink") {
+    std::vector<SinkCandidate> valid;
+    valid.reserve(candidates.size());
+    for (const auto& c : candidates) {
+        if (c.name.empty() || isOwnAqulifyNode(c.name, sinkName) || isDummyOrNullSink(c.name)) continue;
+        valid.push_back(c);
+    }
+    if (valid.empty()) return {};
+    std::sort(valid.begin(), valid.end(), [](const SinkCandidate& a, const SinkCandidate& b) {
+        if (a.priority != b.priority) return a.priority > b.priority;
+        const bool aUsb = toLowerAscii(a.name).find("usb") != std::string::npos;
+        const bool bUsb = toLowerAscii(b.name).find("usb") != std::string::npos;
+        if (aUsb != bUsb) return aUsb;
+        return a.name < b.name;
+    });
+    return valid.front().name;
+}
+
+/**
+ * Determinisztikus tartalék-választás névhalmazból (prioritás nélkül: USB előnyben, majd alfabetikusan).
  */
 inline std::string selectFallbackSink(const std::unordered_set<std::string>& knownExternalSinks,
                                       const std::string& sinkName = "aqulify_sink") {
-    std::vector<std::string> usbSinks;
-    std::vector<std::string> otherSinks;
-    for (const auto& s : knownExternalSinks) {
-        if (s.empty() || isOwnAqulifyNode(s, sinkName) || isDummyOrNullSink(s)) continue;
-        const std::string low = toLowerAscii(s);
-        if (low.find("usb") != std::string::npos) usbSinks.push_back(s);
-        else otherSinks.push_back(s);
-    }
-    if (!usbSinks.empty()) {
-        std::sort(usbSinks.begin(), usbSinks.end());
-        return usbSinks.front();
-    }
-    if (!otherSinks.empty()) {
-        std::sort(otherSinks.begin(), otherSinks.end());
-        return otherSinks.front();
-    }
-    return {};
+    std::vector<SinkCandidate> candidates;
+    candidates.reserve(knownExternalSinks.size());
+    for (const auto& s : knownExternalSinks) candidates.push_back({ s, 0 });
+    return selectFallbackSinkByPriority(candidates, sinkName);
 }
 
 /**
@@ -100,10 +115,21 @@ inline std::string resolveTarget(const std::string& preferredTarget,
 }
 
 /**
- * Céleszköz-választás automatikus fizikai tartalékkal:
- * ha az aqulify_sink a rendszer alapértelmezett kimenete, az üres target.object WirePlumber-hibához
- * („no target node available”) vagy auto_null-ra kötéshez vezethet. Ezért ha a választott eszköz nincs meg
- * vagy üres, a gráfban látott valódi (nem saját, nem dummy) külső nyelők közül választunk egyet.
+ * Céleszköz-választás automatikus fizikai tartalékkal (priority.session sorrenddel).
+ */
+inline std::string resolveTargetOrFallbackByPriority(const std::string& preferredTarget,
+                                                     const std::vector<SinkCandidate>& candidates,
+                                                     const std::string& sinkName = "aqulify_sink") {
+    if (!preferredTarget.empty() && !isOwnAqulifyNode(preferredTarget, sinkName) && !isDummyOrNullSink(preferredTarget)) {
+        for (const auto& c : candidates) {
+            if (c.name == preferredTarget) return preferredTarget;
+        }
+    }
+    return selectFallbackSinkByPriority(candidates, sinkName);
+}
+
+/**
+ * Céleszköz-választás automatikus fizikai tartalékkal (névhalmazból).
  */
 inline std::string resolveTargetOrFallback(const std::string& preferredTarget,
                                            const std::unordered_set<std::string>& knownExternalSinks,

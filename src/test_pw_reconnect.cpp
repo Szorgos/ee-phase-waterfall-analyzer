@@ -101,6 +101,17 @@ int main() {
     check(imm.schedule && imm.delayMs == kNewSinkDelayMs && st4.pending(),
           "requestImmediate() beállítja a pending állapotot és gyors időzítőt kér");
 
+    const std::vector<SinkCandidate> prioCands = {
+        { "aq_test_speaker", 500 },
+        { "dac_b", 1000 },
+        { "dac_a", 2000 },
+        { "auto_null", 9999 }
+    };
+    check(resolveTargetOrFallbackByPriority("", prioCands) == "dac_a",
+          "priority.session sorrend: dac_a (2000) megelőzi az alfabetikusan előrébb álló aq_test_speaker-t (500) és az auto_null-t");
+    check(resolveTargetOrFallbackByPriority("dac_b", prioCands) == "dac_b",
+          "explicit választott kimenet (dac_b) megelőzi a magasabb prioritású tartalékot");
+
     std::printf("\n%s (%d hiba)\n", fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", fail);
     return fail ? 1 : 0;
 }

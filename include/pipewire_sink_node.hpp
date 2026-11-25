@@ -271,6 +271,17 @@ public:
         outputTarget_ = target;
     }
 
+    /** A regiszterben látott legmagasabb prioritású valódi fizikai nyelő (bármely szálról). */
+    std::string bestPhysicalSink(const std::string& preferred = {}) const {
+        std::vector<pw_reconnect::SinkCandidate> cands;
+        {
+            std::lock_guard<std::mutex> lk(sinksMu_);
+            cands.reserve(knownSinksById_.size());
+            for (const auto& [id, ks] : knownSinksById_) cands.push_back(ks);
+        }
+        return pw_reconnect::resolveTargetOrFallbackByPriority(preferred, cands, sinkName_);
+    }
+
     /** Kérés a fő huroknak: ellenőrizze a kimeneti streamet, és ha hibás / rögzítetlen, csatlakozzon újra. */
     void requestReconnectIfNeeded() {
         if (loop && targetEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), targetEvent_);
@@ -447,7 +458,10 @@ public:
         waitRtIdle(captureInFlight_, "capture");
         liveBridge_.stop();
         if (registry_) { pw_proxy_destroy(reinterpret_cast<struct pw_proxy*>(registry_)); registry_ = nullptr; }
-        knownSinksById_.clear();
+        {
+            std::lock_guard<std::mutex> lk(sinksMu_);
+            knownSinksById_.clear();
+        }
         physicalSinkCount_.store(0, std::memory_order_release);
         if (core) { pw_core_disconnect(core); core = nullptr; }
         if (context) { pw_context_destroy(context); context = nullptr; }
@@ -481,7 +495,8 @@ private:
     struct spa_source* reconnectTimer_ = nullptr;     // csak a fő hurok szála (lejátszó stream újracsatlakozás)
     struct spa_source* targetEvent_ = nullptr;        // csak a fő hurok szála (célváltozás / ALSA elengedés ébresztése)
     pw_reconnect::State reconnect_;                   // csak a fő hurok szála
-    std::unordered_map<uint32_t, std::string> knownSinksById_; // külső (nem aqulify*, nem dummy) Audio/Sink csomópontok
+    mutable std::mutex sinksMu_;
+    std::unordered_map<uint32_t, pw_reconnect::SinkCandidate> knownSinksById_; // külső (nem aqulify*, nem dummy) Audio/Sink csomópontok
     std::atomic<int> physicalSinkCount_{0};
     std::mutex targetMu_;
     std::string preferredTarget_;                     // felhasználó által választott kimenet (ha van)
@@ -869,10 +884,13 @@ private:
             std::lock_guard<std::mutex> lk(targetMu_);
             pref = preferredTarget_;
         }
-        std::unordered_set<std::string> known;
-        known.reserve(knownSinksById_.size());
-        for (const auto& [id, name] : knownSinksById_) known.insert(name);
-        const std::string target = pw_reconnect::resolveTargetOrFallback(pref, known, sinkName_);
+        std::vector<pw_reconnect::SinkCandidate> known;
+        {
+            std::lock_guard<std::mutex> lk(sinksMu_);
+            known.reserve(knownSinksById_.size());
+            for (const auto& [id, ks] : knownSinksById_) known.push_back(ks);
+        }
+        const std::string target = pw_reconnect::resolveTargetOrFallbackByPriority(pref, known, sinkName_);
 
         const bool decoupled = liveUpsApplied_.enable && liveUpsApplied_.dstRate > 0;
         struct pw_properties* pprops = pw_properties_new(
@@ -999,8 +1017,16 @@ private:
                 self->duplicateAqulifySink_.store(self->aqulifySinkIds_.size() > 1, std::memory_order_relaxed);
             } else if (nodeName && !pw_reconnect::isOwnAqulifyNode(nodeName, self->sinkName_) &&
                        !pw_reconnect::isDummyOrNullSink(nodeName)) {
-                self->knownSinksById_[id] = nodeName;
-                self->physicalSinkCount_.store(static_cast<int>(self->knownSinksById_.size()), std::memory_order_release);
+                int prio = 0;
+                if (const char* ps = spa_dict_lookup(props, PW_KEY_PRIORITY_SESSION)) prio = std::atoi(ps);
+                else if (const char* pd = spa_dict_lookup(props, PW_KEY_PRIORITY_DRIVER)) prio = std::atoi(pd);
+                int count = 0;
+                {
+                    std::lock_guard<std::mutex> lk(self->sinksMu_);
+                    self->knownSinksById_[id] = { nodeName, prio };
+                    count = static_cast<int>(self->knownSinksById_.size());
+                }
+                self->physicalSinkCount_.store(count, std::memory_order_release);
                 if (!self->externalExclusiveActive_.load(std::memory_order_acquire)) {
                     const auto a = self->reconnect_.onNewExternalSink(nodeName, self->sinkName_);
                     if (a.schedule) {
@@ -1009,9 +1035,13 @@ private:
                         std::string pref;
                         { std::lock_guard<std::mutex> lk(self->targetMu_); pref = self->preferredTarget_; }
                         const std::string curTarget = self->outputTarget();
-                        const bool unpinned = curTarget.empty() || pw_reconnect::isDummyOrNullSink(curTarget);
+                        const int st = self->playbackState.load(std::memory_order_relaxed);
+                        const bool notRunning = (st == PW_STREAM_STATE_ERROR || st == PW_STREAM_STATE_UNCONNECTED);
+                        const bool dummyTarget = pw_reconnect::isDummyOrNullSink(curTarget);
                         const bool prefReturned = !pref.empty() && pref == nodeName && curTarget != pref;
-                        if (unpinned || prefReturned) {
+                        // Működő (PAUSED/STREAMING) streamet üres curTarget miatt ne kössünk át önkényesen:
+                        // azt a defaultThread rögzíti a tényleges sinkre, kivéve ha hibás/dummy vagy a választott DAC tért vissza.
+                        if (notRunning || dummyTarget || prefReturned) {
                             const auto req = self->reconnect_.requestImmediate(pw_reconnect::kNewSinkDelayMs);
                             if (req.schedule) self->scheduleReconnect(req.delayMs);
                         }
@@ -1033,8 +1063,15 @@ private:
 
     static void onRegistryGlobalRemove(void* data, uint32_t id) {
         auto* self = static_cast<AetherSinkNode*>(data);
-        if (self->knownSinksById_.erase(id) > 0) {
-            self->physicalSinkCount_.store(static_cast<int>(self->knownSinksById_.size()), std::memory_order_release);
+        bool erased = false;
+        int count = 0;
+        {
+            std::lock_guard<std::mutex> lk(self->sinksMu_);
+            erased = self->knownSinksById_.erase(id) > 0;
+            count = static_cast<int>(self->knownSinksById_.size());
+        }
+        if (erased) {
+            self->physicalSinkCount_.store(count, std::memory_order_release);
         }
         auto it = std::find(self->aqulifySinkIds_.begin(), self->aqulifySinkIds_.end(), id);
         if (it != self->aqulifySinkIds_.end()) {
