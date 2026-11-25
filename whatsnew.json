@@ -5,194 +5,96 @@
       "date": "2026-11-25",
       "notes": {
         "hu": [
-          "Felmintavételezés és Linux csomagok: javítottuk a záró sáv korlátozását extrém szűk sávszélességnél is (Fedora és Arch csomagok stabil működése), és ez a kiadás tartalmazza a 3.0.1 összes PipeWire és USB DAC javítását."
+          "Linux: stabilabb hang USB DAC-kal – nincs több összeomlás vagy néma kimenet, újraindulás és DAC-csere után magától visszatalál a valódi hangkártyára.",
+          "Felmintavételezés: szélsőséges szűrőbeállításnál is megbízhatóan működik, és pontosabban ismeri fel a 48 kHz-es USB DAC-ok képességeit."
         ],
         "en": [
-          "Upsampling and Linux packages: fixed stopband clamping at very narrow transition bands (fixing Fedora and Arch package checks); includes all 3.0.1 PipeWire and USB DAC fixes."
+          "Linux: more reliable audio with USB DACs – no more crashes or silent output, and it automatically reconnects to your real sound card after a restart or DAC switch.",
+          "Upsampling: works reliably even with extreme filter settings, and detects the capabilities of 48 kHz USB DACs more accurately."
         ],
         "es": [
-          "Sobremuestreo y paquetes Linux: corregida la limitación de la banda de rechazo con transiciones muy estrechas (paquetes Fedora y Arch); incluye todas las correcciones de PipeWire y DAC USB de la 3.0.1."
+          "Linux: sonido más estable con DAC USB – sin cierres inesperados ni salidas mudas, y vuelve a conectarse automáticamente a tu tarjeta de sonido real tras reiniciar o cambiar de DAC.",
+          "Sobremuestreo: funciona de forma fiable incluso con ajustes extremos de filtro y detecta con mayor precisión las capacidades de los DAC USB de 48 kHz."
         ],
         "fr": [
-          "Suréchantillonnage et paquets Linux : correction du bornage de la bande coupée pour les transitions très étroites (paquets Fedora et Arch) ; inclut tous les correctifs PipeWire et DAC USB de la 3.0.1."
+          "Linux : son plus stable avec les DAC USB – plus de plantages ni de sortie muette, reconnexion automatique à la vraie carte son après un redémarrage ou un changement de DAC.",
+          "Suréchantillonnage : fonctionne de manière fiable même avec des réglages de filtre extrêmes et détecte plus précisément les capacités des DAC USB 48 kHz."
         ],
         "zh": [
-          "升频采样与 Linux 软件包：修复了极窄过渡带下的阻带限幅问题（修复 Fedora 与 Arch 软件包检查）；包含 3.0.1 的全部 PipeWire 与 USB DAC 修复。"
+          "Linux：USB DAC 音频更稳定——不再崩溃或无声，重启或更换 DAC 后会自动重新连接到真实声卡。",
+          "升频采样：即使采用极端滤波器设置也能可靠运行，并更准确地识别 48 kHz USB DAC 的支持能力。"
         ],
         "de": [
-          "Upsampling und Linux-Pakete: Stopband-Begrenzung auch bei sehr schmalen Übergangsbändern korrigiert (Fedora- und Arch-Pakete); enthält alle PipeWire- und USB-DAC-Korrekturen aus 3.0.1."
+          "Linux: stabilerer Klang mit USB-DACs – keine Abstürze oder stummen Ausgänge mehr, und nach Neustart oder DAC-Wechsel verbindet sich die Ausgabe automatisch wieder mit der echten Soundkarte.",
+          "Upsampling: arbeitet auch bei extremen Filtereinstellungen zuverlässig und erkennt die Möglichkeiten von 48-kHz-USB-DACs genauer."
         ],
         "it": [
-          "Sovracampionamento e pacchetti Linux: corretta la limitazione della banda di arresto con bande di transizione molto strette (pacchetti Fedora e Arch); include tutte le correzioni PipeWire e DAC USB della 3.0.1."
+          "Linux: audio più stabile con i DAC USB – niente più arresti anomali o uscite mute, e riconnessione automatica alla vera scheda audio dopo un riavvio o cambio di DAC.",
+          "Sovracampionamento: funziona in modo affidabile anche con impostazioni estreme del filtro e riconosce con maggiore precisione le capacità dei DAC USB a 48 kHz."
         ],
         "nl": [
-          "Upsampling en Linux-pakketten: stopband-begrenzing bij zeer smalle overgangsbanden hersteld (Fedora- en Arch-pakketten); bevat alle PipeWire- en USB-DAC-oplossingen uit 3.0.1."
+          "Linux: stabieler geluid met USB-DAC’s – geen crashes of stille uitvoer meer, en na een herstart of DAC-wissel verbindt de uitvoer vanzelf weer met de echte geluidskaart.",
+          "Upsampling: werkt betrouwbaar ook bij extreme filterinstellingen en herkent de mogelijkheden van 48 kHz USB-DAC’s nauwkeuriger."
         ],
         "pl": [
-          "Nadpróbkowanie i pakiety Linux: poprawiono ograniczanie pasma zaporowego przy bardzo wąskich pasmach przejściowych (pakiety Fedora i Arch); zawiera wszystkie poprawki PipeWire i USB DAC z 3.0.1."
+          "Linux: stabilniejszy dźwięk z USB DAC – koniec z awariami i ciszą na wyjściu, po restarcie lub zmianie DAC-a automatycznie wraca na prawdziwą kartę dźwiękową.",
+          "Nadpróbkowanie: działa niezawodnie nawet przy skrajnych ustawieniach filtra i dokładniej rozpoznaje możliwości przetworników USB DAC 48 kHz."
         ],
         "ru": [
-          "Апсемплинг и пакеты Linux: исправлено ограничение полосы задерживания при очень узкой переходной полосе (пакеты Fedora и Arch); включает все исправления PipeWire и USB-ЦАП из 3.0.1."
+          "Linux: более стабильный звук с USB-ЦАП — без сбоев и пропадания звука, после перезапуска или смены ЦАП вывод автоматически возвращается на реальную звуковую карту.",
+          "Апсемплинг: надёжно работает даже при крайних настройках фильтра и точнее определяет возможности USB-ЦАП до 48 кГц."
         ],
         "pt": [
-          "Sobreamostragem e pacotes Linux: corrigida a limitação da banda de rejeição em transições muito estreitas (pacotes Fedora e Arch); inclui todas as correções de PipeWire e DAC USB da 3.0.1."
+          "Linux: som mais estável com DACs USB – sem mais falhas nem saída muda, voltando automaticamente à placa de som real após reiniciar ou trocar de DAC.",
+          "Sobreamostragem: funciona de forma fiável mesmo com definições extremas de filtro e deteta com maior precisão as capacidades dos DACs USB de 48 kHz."
         ],
         "ro": [
-          "Supraeșantionare și pachete Linux: corectată limitarea benzii de oprire la benzi de tranziție foarte înguste (pachetele Fedora și Arch); include toate remedierile PipeWire și USB DAC din 3.0.1."
+          "Linux: sunet mai stabil cu DAC-uri USB – fără blocări sau ieșire mută, reconectare automată la placa de sunet reală după repornire sau schimbarea DAC-ului.",
+          "Supraeșantionare: funcționează sigur chiar și la setări extreme ale filtrului și recunoaște mai precis capacitățile DAC-urilor USB de 48 kHz."
         ],
         "el": [
-          "Υπερδειγματοληψία και πακέτα Linux: διορθώθηκε ο περιορισμός ζώνης αποκοπής σε πολύ στενές ζώνες μετάβασης (πακέτα Fedora και Arch)· περιλαμβάνει όλες τις διορθώσεις PipeWire και USB DAC της 3.0.1."
+          "Linux: πιο σταθερός ήχος με USB DAC – χωρίς πλέον καταρρεύσεις ή σιωπηλή έξοδο, με αυτόματη επανασύνδεση στην πραγματική κάρτα ήχου μετά από επανεκκίνηση ή αλλαγή DAC.",
+          "Υπερδειγματοληψία: λειτουργεί αξιόπιστα ακόμη και σε ακραίες ρυθμίσεις φίλτρου και αναγνωρίζει ακριβέστερα τις δυνατότητες των USB DAC 48 kHz."
         ],
         "tr": [
-          "Yukarı örnekleme ve Linux paketleri: çok dar geçiş bantlarında durdurma bandı sınırlaması düzeltildi (Fedora ve Arch paketleri); 3.0.1 sürümündeki tüm PipeWire ve USB DAC düzeltmelerini içerir."
+          "Linux: USB DAC’lerle daha kararlı ses – artık çökme veya sessiz çıkış yok, yeniden başlatma ya da DAC değişikliğinden sonra otomatik olarak gerçek ses kartına bağlanır.",
+          "Yukarı örnekleme: uç filtre ayarlarında bile güvenilir biçimde çalışır ve 48 kHz USB DAC’lerin yeteneklerini daha doğru algılar."
         ],
         "fi": [
-          "Ylinäytteistys ja Linux-paketit: korjattu estosuodattimen rajoitus hyvin kapeilla siirtymäkaistoilla (Fedora- ja Arch-paketit); sisältää kaikki 3.0.1:n PipeWire- ja USB-DAC-korjaukset."
+          "Linux: vakaampi ääni USB-DACeilla – ei enää kaatumisia tai mykkää lähtöä, yhdistää uudelleenkäynnistyksen tai DAC-vaihdon jälkeen automaattisesti oikeaan äänikorttiin.",
+          "Ylinäytteistys: toimii luotettavasti myös äärimmäisillä suodinasetuksilla ja tunnistaa 48 kHz USB-DACien ominaisuudet tarkemmin."
         ],
         "da": [
-          "Opsampling og Linux-pakker: rettet stopbåndsbegrænsning ved meget smalle overgangsbånd (Fedora- og Arch-pakker); indeholder alle PipeWire- og USB-DAC-rettelser fra 3.0.1."
+          "Linux: mere stabil lyd med USB-DAC’er – slut med nedbrud og tavs udgang, og den finder selv tilbage til det rigtige lydkort efter genstart eller DAC-skift.",
+          "Opsampling: fungerer pålideligt selv ved ekstreme filterindstillinger og genkender 48 kHz USB-DAC’ers muligheder mere præcist."
         ],
         "nb": [
-          "Oppsampling og Linux-pakker: rettet stoppbåndsbegrensning ved svært smale overgangsbånd (Fedora- og Arch-pakker); inkluderer alle PipeWire- og USB-DAC-rettelser fra 3.0.1."
+          "Linux: mer stabil lyd med USB-DAC-er – slutt på krasj og stille utgang, og den kobler seg automatisk tilbake til det ekte lydkortet etter omstart eller DAC-bytte.",
+          "Oppsampling: fungerer pålitelig også ved ekstreme filterinnstillinger og gjenkjenner egenskapene til 48 kHz USB-DAC-er mer nøyaktig."
         ],
         "sv": [
-          "Uppsampling och Linux-paket: åtgärdade stoppbandsbegränsning vid mycket smala övergångsband (Fedora- och Arch-paket); innehåller alla PipeWire- och USB-DAC-rättningar från 3.0.1."
+          "Linux: stabilare ljud med USB-DAC:er – inga fler krascher eller tysta utgångar, och den hittar själv tillbaka till det riktiga ljudkortet efter omstart eller DAC-byte.",
+          "Uppsampling: fungerar pålitligt även med extrema filterinställningar och känner igen egenskaperna hos 48 kHz USB-DAC:er mer exakt."
         ],
         "he": [
-          "העלאת קצב דגימה וחבילות Linux: תוקנה הגבלת פס העצירה בפסי מעבר צרים מאוד (חבילות Fedora ו-Arch); כולל את כל תיקוני PipeWire ו-USB DAC מגרסה 3.0.1."
+          "Linux: שמע יציב יותר עם USB DAC – אין עוד קריסות או יציאה שקטה, ולאחר הפעלה מחדש או החלפת DAC המערכת מתחברת מחדש אוטומטית לכרטיס הקול האמיתי.",
+          "העלאת קצב דגימה: פועלת באמינות גם בהגדרות מסנן קיצוניות ומזהה בדיוק רב יותר את היכולות של USB DAC של 48 kHz."
         ],
         "ja": [
-          "アップサンプリングと Linux パッケージ：非常に狭い遷移帯域でのストップバンド制限を修正しました（Fedora / Arch パッケージ対応）。3.0.1 の PipeWire および USB DAC 修正をすべて含みます。"
+          "Linux：USB DAC での音声がより安定——クラッシュや無音がなくなり、再起動や DAC 切り替え後も自動で実際のサウンドカードへ再接続されます。",
+          "アップサンプリング：極端なフィルター設定でも安定して動作し、48 kHz 対応 USB DAC の性能をより正確に認識します。"
         ],
         "ko": [
-          "업샘플링 및 Linux 패키지: 매우 좁은 전이 대역에서의 스톱밴드 제한을 수정했습니다(Fedora 및 Arch 패키지 대응). 3.0.1의 모든 PipeWire 및 USB DAC 수정 사항이 포함됩니다."
+          "Linux: USB DAC에서 더 안정적인 사운드 – 충돌이나 무음 출력 없이 재시작이나 DAC 변경 후 자동으로 실제 사운드 카드에 다시 연결됩니다.",
+          "업샘플링: 극단적인 필터 설정에서도 안정적으로 작동하며 48 kHz USB DAC의 지원 성능을 더 정확하게 인식합니다."
         ],
         "cs": [
-          "Převzorkování nahoru a balíčky pro Linux: opraveno omezení zádržného pásma při velmi úzkém přechodovém pásmu (balíčky Fedora a Arch); obsahuje všechny opravy PipeWire a USB DAC z 3.0.1."
+          "Linux: stabilnější zvuk s USB DAC – žádné pády ani tichý výstup, po restartu či výměně DAC se sám znovu připojí ke skutečné zvukové kartě.",
+          "Převzorkování nahoru: spolehlivě funguje i při krajním nastavení filtru a přesněji rozpoznává možnosti 48kHz USB DAC."
         ],
         "uk": [
-          "Підвищення частоти дискретизації та пакунки Linux: виправлено обмеження смуги затримання для дуже вузьких перехідних смуг (пакунки Fedora й Arch); містить усі виправлення PipeWire та USB-ЦАП із 3.0.1."
-        ]
-      }
-    },
-    {
-      "version": "3.0.1",
-      "date": "2026-11-25",
-      "notes": {
-        "hu": [
-          "Linux és Raspberry Pi stabilitás: javítottuk a hangkártya ébren tartása és a rendszerhang-felmintavételezés („Minden hang”) együttes használatakor előforduló összeomlást.",
-          "PipeWire és USB DAC: a kimenet újraindulás vagy DAC-váltás után magától a valódi hangkártyára csatlakozik vissza (nem ragad álkimeneten), és kizárólagos ALSA-módból való visszaváltás után sem marad néma a DAC.",
-          "Felmintavételezés: a záró sáv csúszkája szélsőséges beállításnál is biztonságos tartományban marad, és a 48 kHz-es USB DAC-ok képességeit pontosabban ismeri fel a lejátszó."
-        ],
-        "en": [
-          "Linux and Raspberry Pi stability: fixed a crash that could happen when “Keep sound card awake” and system audio upsampling (“All audio”) were used together.",
-          "PipeWire and USB DACs: after a restart or DAC change the output now reconnects to the real sound card on its own (never gets stuck on a dummy output), and switching back from exclusive ALSA mode no longer leaves the DAC silent.",
-          "Upsampling: the stopband slider stays within a safe range even at extreme settings, and the player detects the supported rates of 48 kHz USB DACs more reliably."
-        ],
-        "es": [
-          "Estabilidad en Linux y Raspberry Pi: corregido un cierre inesperado al usar a la vez «Mantener tarjeta de sonido activa» y el sobremuestreo del sonido del sistema («Todo el audio»).",
-          "PipeWire y DAC USB: tras reiniciar o cambiar de DAC, la salida vuelve a conectarse sola a la tarjeta de sonido real (sin quedarse en una salida ficticia) y el DAC ya no queda en silencio al salir del modo ALSA exclusivo.",
-          "Sobremuestreo: el control de banda de rechazo se mantiene en un rango seguro incluso en valores extremos, y el reproductor detecta mejor las frecuencias admitidas por los DAC USB de 48 kHz."
-        ],
-        "fr": [
-          "Stabilité sous Linux et Raspberry Pi : correction d’un plantage pouvant survenir lorsque « Maintenir la carte son active » et le suréchantillonnage système (« Tout l’audio ») étaient utilisés ensemble.",
-          "PipeWire et DAC USB : après un redémarrage ou un changement de DAC, la sortie se reconnecte automatiquement à la vraie carte son (sans rester bloquée sur une sortie factice) et le retour depuis le mode ALSA exclusif ne laisse plus le DAC muet.",
-          "Suréchantillonnage : le curseur de bande coupée reste dans une plage sûre même aux réglages extrêmes, et le lecteur reconnaît mieux les fréquences des DAC USB 48 kHz."
-        ],
-        "zh": [
-          "Linux 与 Raspberry Pi 稳定性：修复了同时开启“保持声卡唤醒”与系统音频升频（“全部音频”）时可能发生的崩溃问题。",
-          "PipeWire 与 USB DAC：重启或切换 DAC 后，输出会自动重新连接到真实声卡（不再停留在虚拟输出），从独占 ALSA 模式切回共享模式后 DAC 也不会静音。",
-          "升频采样：即使在极端设置下，阻带滑块也会保持在安全范围内，且播放器能更准确地识别 48 kHz USB DAC 支持的采样率。"
-        ],
-        "de": [
-          "Stabilität unter Linux und Raspberry Pi: Absturz behoben, der bei gleichzeitiger Nutzung von „Soundkarte wach halten“ und Systemaudio-Upsampling („Gesamter Ton“) auftreten konnte.",
-          "PipeWire und USB-DACs: Nach einem Neustart oder DAC-Wechsel verbindet sich die Ausgabe automatisch wieder mit der echten Soundkarte (bleibt nicht auf einer Dummy-Ausgabe hängen), und beim Wechsel zurück aus dem exklusiven ALSA-Modus bleibt der DAC nicht mehr stumm.",
-          "Upsampling: Der Stopband-Regler bleibt auch bei extremen Einstellungen im sicheren Bereich, und der Player erkennt die Raten von 48-kHz-USB-DACs zuverlässiger."
-        ],
-        "it": [
-          "Stabilità su Linux e Raspberry Pi: corretto un arresto anomalo che poteva verificarsi usando insieme «Mantieni attiva la scheda audio» e il sovracampionamento di sistema («Tutto l’audio»).",
-          "PipeWire e DAC USB: dopo un riavvio o cambio di DAC, l’uscita si riconnette da sola alla vera scheda audio (senza restare su un’uscita fittizia) e il passaggio dalla modalità ALSA esclusiva non lascia più il DAC muto.",
-          "Sovracampionamento: il cursore della banda di arresto resta in un intervallo sicuro anche con valori estremi, e il lettore riconosce meglio le frequenze dei DAC USB a 48 kHz."
-        ],
-        "nl": [
-          "Stabiliteit op Linux en Raspberry Pi: een crash verholpen die kon optreden wanneer ‘Geluidskaart wakker houden’ en systeembreed upsamplen (‘Alle audio’) samen werden gebruikt.",
-          "PipeWire en USB-DAC’s: na een herstart of DAC-wissel verbindt de uitvoer vanzelf weer met de echte geluidskaart (blijft niet hangen op een dummy-uitvoer), en na terugschakelen uit exclusieve ALSA-modus blijft de DAC niet meer stil.",
-          "Upsampling: de stopband-schuifregelaar blijft ook bij extreme instellingen binnen een veilig bereik, en de speler herkent de ondersteunde frequenties van 48 kHz USB-DAC’s betrouwbaarder."
-        ],
-        "pl": [
-          "Stabilność na Linuksie i Raspberry Pi: naprawiono awarię, która mogła wystąpić przy jednoczesnym włączeniu utrzymywania aktywności karty dźwiękowej i nadpróbkowania dźwięku systemowego („Cały dźwięk”).",
-          "PipeWire i przetworniki USB DAC: po restarcie lub zmianie DAC-a wyjście samo wraca na prawdziwą kartę dźwiękową (nie utyka na wyjściu atrapowym), a powrót z trybu wyłącznego ALSA nie wycisza już DAC-a.",
-          "Nadpróbkowanie: suwak pasma zaporowego pozostaje w bezpiecznym zakresie nawet przy skrajnych ustawieniach, a odtwarzacz dokładniej rozpoznaje częstotliwości obsługiwane przez USB DAC 48 kHz."
-        ],
-        "ru": [
-          "Стабильность на Linux и Raspberry Pi: исправлен сбой, который мог возникать при одновременном использовании удержания звуковой карты активной и апсемплинга системного звука («Весь звук»).",
-          "PipeWire и USB-ЦАП: после перезапуска или смены ЦАП вывод автоматически подключается обратно к реальной звуковой карте (не застревая на фиктивном выходе), а при выходе из эксклюзивного режима ALSA ЦАП больше не остаётся без звука.",
-          "Апсемплинг: ползунок полосы задерживания остаётся в безопасных пределах даже при крайних настройках, а плеер точнее определяет частоты USB-ЦАП до 48 кГц."
-        ],
-        "pt": [
-          "Estabilidade no Linux e Raspberry Pi: corrigida uma falha que podia ocorrer ao usar em conjunto «Manter a placa de som ativa» e a sobreamostragem do áudio do sistema («Todo o áudio»).",
-          "PipeWire e DACs USB: após reiniciar ou mudar de DAC, a saída volta a ligar-se automaticamente à placa de som real (sem ficar presa numa saída fictícia) e regressar do modo ALSA exclusivo já não deixa o DAC em silêncio.",
-          "Sobreamostragem: o controlo de banda de rejeição mantém-se num intervalo seguro mesmo em definições extremas, e o leitor reconhece melhor as taxas suportadas por DACs USB de 48 kHz."
-        ],
-        "ro": [
-          "Stabilitate pe Linux și Raspberry Pi: am remediat o blocare care putea apărea la folosirea simultană a opțiunii „Menține placa de sunet trează” și a supraeșantionării sunetului de sistem („Tot sunetul”).",
-          "PipeWire și DAC-uri USB: după repornire sau schimbarea DAC-ului, ieșirea se reconectează automat la placa de sunet reală (nu rămâne pe o ieșire falsă), iar revenirea din modul ALSA exclusiv nu mai lasă DAC-ul fără sunet.",
-          "Supraeșantionare: cursorul benzii de oprire rămâne într-un interval sigur chiar și la valori extreme, iar playerul detectează mai precis ratele DAC-urilor USB de 48 kHz."
-        ],
-        "el": [
-          "Σταθερότητα σε Linux και Raspberry Pi: διορθώθηκε σφάλμα κατάρρευσης που μπορούσε να συμβεί όταν ήταν ενεργά ταυτόχρονα η διατήρηση κάρτας ήχου σε εγρήγορση και η υπερδειγματοληψία ήχου συστήματος («Όλος ο ήχος»).",
-          "PipeWire και USB DAC: μετά από επανεκκίνηση ή αλλαγή DAC η έξοδος επανασυνδέεται αυτόματα στην πραγματική κάρτα ήχου (χωρίς να κολλάει σε εικονική έξοδο) και η επιστροφή από αποκλειστική λειτουργία ALSA δεν αφήνει πλέον το DAC χωρίς ήχο.",
-          "Υπερδειγματοληψία: το ρυθμιστικό ζώνης αποκοπής παραμένει σε ασφαλές εύρος ακόμη και σε ακραίες ρυθμίσεις, και ο αναπαραγωγέας αναγνωρίζει πιο αξιόπιστα τους ρυθμούς των USB DAC 48 kHz."
-        ],
-        "tr": [
-          "Linux ve Raspberry Pi kararlılığı: “Ses kartını uyanık tut” ile sistem sesi yukarı örnekleme (“Tüm ses”) birlikte kullanıldığında oluşabilen çökme giderildi.",
-          "PipeWire ve USB DAC’ler: yeniden başlatma veya DAC değişikliğinden sonra çıkış otomatik olarak gerçek ses kartına yeniden bağlanır (sahte çıkışta takılı kalmaz) ve özel ALSA modundan dönüşte DAC artık sessiz kalmaz.",
-          "Yukarı örnekleme: durdurma bandı kaydırıcısı uç ayarlarda bile güvenli aralıkta kalır ve oynatıcı 48 kHz USB DAC’lerin desteklediği hızları daha doğru algılar."
-        ],
-        "fi": [
-          "Vakaus Linuxilla ja Raspberry Pi:llä: korjattu kaatuminen, joka saattoi ilmetä käytettäessä samanaikaisesti äänikortin hereilläpitoa ja järjestelmän äänen ylinäytteistystä (”Kaikki ääni”).",
-          "PipeWire ja USB-DACit: uudelleenkäynnistyksen tai DAC-vaihdon jälkeen lähtö yhdistää automaattisesti takaisin oikeaan äänikorttiin (ei jää valelähtöön), eikä eksklusiivisesta ALSA-tilasta palaaminen enää mykistä DACia.",
-          "Ylinäytteistys: estosuodattimen kaistasäädin pysyy turvallisella alueella myös äärisäädöillä, ja soitin tunnistaa 48 kHz USB-DACien tuetut taajuudet luotettavammin."
-        ],
-        "da": [
-          "Stabilitet på Linux og Raspberry Pi: rettet et nedbrud, der kunne opstå, når “Hold lydkortet vågent” og opsampling af systemlyd (“Al lyd”) blev brugt sammen.",
-          "PipeWire og USB-DAC’er: efter genstart eller DAC-skift genopretter udgangen selv forbindelsen til det rigtige lydkort (sidder ikke fast på en dummy-udgang), og skift tilbage fra eksklusiv ALSA-tilstand efterlader ikke længere DAC’en tavs.",
-          "Opsampling: stopbåndsskyderen forbliver inden for et sikkert område selv ved ekstreme indstillinger, og afspilleren genkender 48 kHz USB-DAC’ers understøttede frekvenser mere pålideligt."
-        ],
-        "nb": [
-          "Stabilitet på Linux og Raspberry Pi: rettet en krasj som kunne oppstå når «Hold lydkortet våkent» og oppsampling av systemlyd («All lyd») ble brukt samtidig.",
-          "PipeWire og USB-DAC-er: etter omstart eller bytte av DAC kobler utgangen seg automatisk til det ekte lydkortet igjen (blir ikke stående på en dummy-utgang), og bytte tilbake fra eksklusiv ALSA-modus etterlater ikke lenger DAC-en stille.",
-          "Oppsampling: stoppbåndsgleideren holder seg innenfor et trygt område selv ved ekstreme innstillinger, og spilleren gjenkjenner støttede frekvenser på 48 kHz USB-DAC-er mer pålitelig."
-        ],
-        "sv": [
-          "Stabilitet på Linux och Raspberry Pi: åtgärdade en krasch som kunde inträffa när ”Håll ljudkortet vaket” och uppsampling av systemljud (”Allt ljud”) användes tillsammans.",
-          "PipeWire och USB-DAC:er: efter omstart eller DAC-byte återansluter utgången själv till det riktiga ljudkortet (fastnar inte på en dummy-utgång), och återgång från exklusivt ALSA-läge lämnar inte längre DAC:en tyst.",
-          "Uppsampling: stoppbandreglaget hålls inom ett säkert intervall även vid extrema inställningar, och spelaren känner igen stödda frekvenser hos 48 kHz USB-DAC:er mer tillförlitligt."
-        ],
-        "he": [
-          "יציבות ב-Linux וב-Raspberry Pi: תוקנה קריסה שעלולה הייתה להתרחש בשימוש משולב של ״שמירת כרטיס הקול ער״ והעלאת קצב דגימה לכלל שמע המערכת (״כל השמע״).",
-          "PipeWire ו-USB DAC: לאחר הפעלה מחדש או החלפת DAC, היציאה מתחברת מחדש אוטומטית לכרטיס הקול האמיתי (ולא נתקעת ביציאת דמה), והחזרה ממצב ALSA בלעדי כבר אינה משתיקה את ה-DAC.",
-          "העלאת קצב דגימה: מחוון פס העצירה נשאר בטווח בטוח גם בהגדרות קיצוניות, והנגן מזהה באופן אמין יותר את הקצבים הנתמכים ב-USB DAC של 48 kHz."
-        ],
-        "ja": [
-          "Linux / Raspberry Pi の安定性：「サウンドカードをスリープさせない」とシステム音声のアップサンプリング（「すべての音声」）を併用した際に発生することがあったクラッシュを修正しました。",
-          "PipeWire と USB DAC：再起動や DAC の切り替え後に自動で実際のサウンドカードへ再接続されるようになり（ダミー出力に張り付かない）、ALSA 排他モードから戻った際に無音になる問題も解消しました。",
-          "アップサンプリング：極端な設定でもストップバンドのスライダーが安全な範囲に保たれ、48 kHz 対応 USB DAC の対応レートもより正確に認識されます。"
-        ],
-        "ko": [
-          "Linux 및 Raspberry Pi 안정성: ‘사운드 카드 절전 방지’와 시스템 오디오 업샘플링(‘모든 오디오’)을 함께 사용할 때 발생할 수 있던 충돌을 수정했습니다.",
-          "PipeWire 및 USB DAC: 재시작이나 DAC 변경 후 출력이 실제 사운드 카드에 자동으로 다시 연결되며(더미 출력에 머물지 않음), ALSA 독점 모드에서 돌아올 때 DAC가 무음이 되던 문제도 해결했습니다.",
-          "업샘플링: 극단적인 설정에서도 스톱밴드 슬라이더가 안전한 범위 내에 유지되며, 48 kHz USB DAC의 지원 샘플레이트를 더 정확히 인식합니다."
-        ],
-        "cs": [
-          "Stabilita na Linuxu a Raspberry Pi: opraven pád, ke kterému mohlo dojít při současném použití funkce „Udržovat zvukovou kartu probuzenou“ a převzorkování systémového zvuku („Veškerý zvuk“).",
-          "PipeWire a USB DAC: po restartu nebo změně DAC se výstup sám znovu připojí ke skutečné zvukové kartě (nezůstane viset na falešném výstupu) a návrat z výhradního režimu ALSA už nenechá DAC zticha.",
-          "Převzorkování nahoru: posuvník zádržného pásma zůstává v bezpečném rozsahu i při krajních hodnotách a přehrávač spolehlivěji rozpoznává frekvence 48kHz USB DAC."
-        ],
-        "uk": [
-          "Стабільність у Linux і Raspberry Pi: виправлено аварійне завершення, яке могло виникати під час одночасного використання утримання звукової карти активною та підвищення частоти системного звуку («Весь звук»).",
-          "PipeWire та USB-ЦАП: після перезапуску або зміни ЦАП вихід автоматично підключається до справжньої звукової карти (не застрягає на фіктивному виході), а повернення з ексклюзивного режиму ALSA більше не залишає ЦАП без звуку.",
-          "Підвищення частоти дискретизації: повзунок смуги затримання залишається в безпечних межах навіть за крайніх налаштувань, а плеєр точніше визначає частоти USB-ЦАП до 48 кГц."
+          "Linux: стабільніший звук із USB-ЦАП — більше жодних збоїв чи тиші на виході, після перезапуску або зміни ЦАП автоматично повертається до справжньої звукової карти.",
+          "Підвищення частоти дискретизації: надійно працює навіть за крайніх налаштувань фільтра й точніше визначає можливості USB-ЦАП до 48 кГц."
         ]
       }
     },
