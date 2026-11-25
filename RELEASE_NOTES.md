@@ -1,3 +1,19 @@
+### Újdonságok (3.0.1)
+
+**Letöltés (3.0.1):**
+- Windows 11: [Aqulify-Setup-3.0.1.exe](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.1/Aqulify-Setup-3.0.1.exe) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.1/Aqulify-Setup-3.0.1.exe.sha256))
+- macOS 12+ (Apple Silicon és Intel): [Aqulify-3.0.1-macOS.dmg](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.1/Aqulify-3.0.1-macOS.dmg) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.1/Aqulify-3.0.1-macOS.dmg.sha256))
+- Linux (bármely disztribúció, `bash install.sh`): [Aqulify-Linux-3.0.1.tar.gz](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.1/Aqulify-Linux-3.0.1.tar.gz) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.1/Aqulify-Linux-3.0.1.tar.gz.sha256))
+- Fedora: [aqulify-3.0.1-1.fc45.x86_64.rpm](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.1/aqulify-3.0.1-1.fc45.x86_64.rpm) · Debian / Ubuntu: [aqulify_3.0.1-1_amd64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.1/aqulify_3.0.1-1_amd64.deb) · Arch: [aqulify-3.0.1-1-x86_64.pkg.tar.zst](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.1/aqulify-3.0.1-1-x86_64.pkg.tar.zst)
+- Raspberry Pi 4 / 5 (Raspberry Pi OS, 64 bit): [aqulify_3.0.1-1.pi1_arm64.deb](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.1/aqulify_3.0.1-1.pi1_arm64.deb) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.1/aqulify_3.0.1-1.pi1_arm64.deb.sha256)) · útmutató: `docs/pi.md`
+- Android-távirányító (Android 8+, változatlan): [Aqulify-Remote-1.5.4.apk](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/Aqulify-Remote-1.5.4.apk) ([sha256](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/download/v3.0.0/Aqulify-Remote-1.5.4.apk.sha256))
+- Mindig a legújabb: [Windows](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Setup.exe) · [macOS](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-macOS.dmg) · [Linux](https://github.com/Szorgos/ee-phase-waterfall-analyzer/releases/latest/download/Aqulify-Linux.tar.gz)
+
+- **Linux és Raspberry Pi, PipeWire stabilitás:** javítottuk azt az összeomlást (SIGSEGV), amely a „Hangkártya ébren tartása” (`keepAwake`) és a rendszerhang-felmintavételezés („Minden hang”) együttes bekapcsolásakor vagy a felmintavételező szűrőinek módosításakor fordulhatott elő; a kimeneti stream leállítása és cseréje mostantól szálbiztosan megvárja a valós idejű szál végét.
+- **Automatikus visszacsatlakozás valódi hangkártyára (Linux / Raspberry Pi):** ha a PipeWire kimeneti stream hibára fut (például újraindulás vagy DAC-váltás után), a motor a rendszer prioritása (`priority.session`) alapján automatikusan a valódi hangkártyára csatlakozik vissza, és kiszűri az álkimeneteket (`auto_null` / `Dummy Output`).
+- **Kizárólagos ALSA és megosztott PipeWire mód közötti váltás:** ha a beépített lejátszó kizárólagos ALSA módból megosztott PipeWire módra vált (például 48 kHz-es USB DAC-on 96 kHz-es szám indításakor), a váltás megvárja, míg a PipeWire visszaveszi az eszközt – nem marad néma a DAC, és megszűntek a kizárólagos lejátszás közbeni téves őrszem-riasztások.
+- **Felmintavételezés (`libsoxr` záró sáv és 48 kHz-es DAC-ok):** felmintavételezésnél a `libsoxr` záró sáv (`stopband`) értéke automatikusan a könyvtár által támogatott tartományban marad (szélsőséges csúszkaértéknél sem esik vissza hibával), valamint pontosabb lett a legfeljebb 48 kHz-es USB DAC-ok mintavételeinek felismerése.
+
 ### Újdonságok (3.0.0)
 
 **Letöltés (3.0.0):**
