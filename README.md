@@ -11,7 +11,7 @@
 
 **Aqulify** is a free, open-source (GPL-3.0), local desktop DSP suite and music player for **Windows 10/11**, **macOS 12+**, **Linux (PipeWire)**, and **Raspberry Pi 4/5**, with an optional **Android remote** app.
 
-It combines system-wide real-time audio processing (parametric EQ with 8,850 AutoEq headphone profiles, convolution, `libbs2b` crossfeed, True Peak limiter, loudness, and Magic Touch restoration) with a live GPU-accelerated 3D acoustic waterfall, phase/group-delay visualization, and a bit-perfect built-in player supporting PCM up to 768 kHz and DSD up to DSD1024.
+It combines system-wide real-time audio processing (parametric EQ with 8,850 AutoEq headphone profiles, convolution, `libbs2b` crossfeed, True Peak limiter, loudness, and Magic Touch restoration) with a live GPU-accelerated 3D acoustic waterfall, phase/group-delay visualization, and a bit-perfect built-in player supporting PCM up to 768 kHz and DSD up to DSD1024 (native DSD / DoP output on Linux and Windows; on macOS DSD is converted to PCM for now, see [Limitations](#limitations-known-issues--what-it-does-not-do-yet)).
 
 Everything runs locally on your machine. No account, no subscription, no telemetry by default.
 
@@ -41,12 +41,12 @@ Everything runs locally on your machine. No account, no subscription, no telemet
 - **GPU-Accelerated WebGL (`three.js`):** offloads rendering from the audio thread; supports 3D isometric, side profile, and top spectrogram views, up/down flow, heatmap fade, and keystone correction. Pauses automatically when minimized/covered.
 
 ### 4. Built-in Player, High-Res PCM, DSD & Upsampling
-- **Supported Audio File Formats:** `FLAC`, `WAV`, `AIFF` / `AIFF-C` (`.aif`, `.aiff`, `.aifc`), `MP3`, `Ogg Vorbis` (`.ogg`, `.oga`), `ALAC` (`.m4a`, `.alac`, `.caf`), `Opus`, `WavPack` (`.wv`), and `DSD` (`.dsf`, `.dff` from DSD64 to DSD1024).
+- **Supported Audio File Formats:** `FLAC`, `WAV`, `AIFF` / `AIFF-C` (`.aif`, `.aiff`, `.aifc`), `MP3`, `Ogg Vorbis` (`.ogg`, `.oga`), `ALAC` (`.m4a`, `.alac`, `.caf`), `Opus`, `WavPack` (`.wv`), and `DSD` (`.dsf`, `.dff` from DSD64 to DSD1024; bit-exact native DSD / DoP output on Linux and Windows only, on macOS DSD is converted to PCM).
 - **Internet Radio & UPnP / DLNA Renderer:** play custom station streams (`MP3`, `Ogg Vorbis`, `Opus`, `FLAC`, `AAC` / `HE-AAC` / `HE-AACv2` via FAAD2) or cast from UPnP/DLNA controllers through the full DSP chain.
 - **Exclusive / Direct Outputs:**
   - **Windows:** `WASAPI Exclusive` and `ASIO` (Steinberg ASIO SDK 2.3.4, GPLv3) for the built-in player; Equalizer APO plugin (`Aqulify.dll`) for system-wide audio.
   - **Linux / Raspberry Pi:** `PipeWire` virtual sink (`Aqulify`) for system-wide audio; direct exclusive `ALSA` (including native DSD `DSD_U32_BE/LE`, `U16_BE/LE`, `U8` or DoP 1.1) and follow-the-source sample rate.
-  - **macOS:** Core Audio Tap (macOS 14.2+, no virtual driver required) or `BlackHole 2ch` (macOS 12–14.1), plus Core Audio hog/exclusive mode.
+  - **macOS:** Core Audio Tap (macOS 14.2+, no virtual driver required) or `BlackHole 2ch` (macOS 12–14.1), plus Core Audio hog/exclusive mode for PCM. DSD plays converted to PCM (DoP is not implemented on macOS yet).
 - **Software Upsampling (off by default):** choose between `libsoxr`, `Aqulify FFT64` (64-bit single-stage Kaiser-sinc), and `Aqulify FFT-DD` (106-bit Double-Double, scored **99.85%** Overall Balanced Quality in [HydrogenAudio SRC Comparisons](https://src.hydrogenaudio.org/compareresults?id1=1e745780-027e-4323-9f8d-212c349e715c&id2=0)), with selectable phase (minimum / intermediate / linear) and optional **"All audio"** system-wide upsampling bridge.
 
 ### 5. Experimental Features & Android Remote
@@ -109,7 +109,7 @@ Honest status as of **v3.0.2**:
 - **Windows multi-output:** simultaneous 2–4 DAC outputs and active multi-way crossovers work on Linux and macOS only; Windows support is not implemented yet.
 - **Room measurement & correction (experimental):** verified extensively with automated tests and a simulated microphone, **not yet validated in the field with a real physical measurement microphone**.
 - **"Filter at DAC rate" upsampling & Raspberry Pi DSD:** the v3.0.0 "filter at DAC rate" mode and real-time `DSD1024 -> PCM` throughput on physical Raspberry Pi hardware have not yet been fully benchmarked on real DACs/hardware.
-- **macOS DSD:** on macOS, DSD files always convert to PCM (88.2 / 96 kHz); native DSD and DoP are not implemented on macOS yet.
+- **macOS DSD:** on macOS, DSD files always convert to PCM (88.2 / 96 kHz), with the DSP chain applied; native DSD and DoP output are not implemented on macOS yet (DoP is planned; native DSD is not, as Core Audio has no common API for it). Even with DoP, DSD1024 converts to PCM on every platform (its DoP stream is 2.8224 MHz, which no DAC accepts), and DSD512 only passes through if the DAC accepts a 1.4112 MHz stream.
 - **DSP sample-rate ceiling (`384 kHz`):** DSP modules process up to `384 kHz`. At `705.6 / 768 kHz`, audio passes through untouched and bit-perfect (shown in the UI).
 - **AutoEq / REW manual import:** imports parametric filter lists (`Filter N: ON ...`), and intentionally skips `GraphicEQ` lines and raw CSV frequency-response curves.
 - **Linux multi-output clock sync:** outputs 2–4 are independent zones and are not sample-locked (up to ~2 PipeWire quanta offset on Linux).
