@@ -152,19 +152,24 @@ public:
         q_spec.passband_end = passbandEnd;
         // Felmintavételezésnél (io_ratio < 1) a libsoxr megköveteli: stopband_begin - 1 <= 1 - passband_end
         // ("imaging greater than rolloff"), különben soxr_create() hibával visszatér.
-        const double maxSoxrStopband = (dstRate > srcRate) ? std::max(1.0, 2.0 - passbandEnd) : 1.50;
-        const double clampedStopband = std::clamp(stopbandBegin, passbandEnd + 0.003, maxSoxrStopband);
-        q_spec.stopband_begin = clampedStopband;
-        if (dstRate > srcRate && std::abs(clampedStopband - stopbandBegin) > 1e-6) {
+        // Érvénytelen passbandEnd >= 1.0 vagy stopbandBegin <= passbandEnd esetén nem módosítjuk,
+        // hogy a soxr_create() a megszokott módon elutasítsa (és ne legyen std::clamp hi < lo UB).
+        double effectiveStopband = stopbandBegin;
+        if (dstRate > srcRate && passbandEnd < 1.0 && stopbandBegin > passbandEnd) {
+            const double maxSoxrStopband = std::max(1.0, 2.0 - passbandEnd);
+            if (effectiveStopband > maxSoxrStopband) effectiveStopband = maxSoxrStopband;
+        }
+        q_spec.stopband_begin = effectiveStopband;
+        if (dstRate > srcRate && std::abs(effectiveStopband - stopbandBegin) > 1e-6) {
             static std::mutex s_stopbandLogMu;
             static double s_lastReq = -1.0;
             static double s_lastClamped = -1.0;
             bool shouldLog = false;
             {
                 std::lock_guard<std::mutex> lk(s_stopbandLogMu);
-                if (std::abs(stopbandBegin - s_lastReq) > 1e-6 || std::abs(clampedStopband - s_lastClamped) > 1e-6) {
+                if (std::abs(stopbandBegin - s_lastReq) > 1e-6 || std::abs(effectiveStopband - s_lastClamped) > 1e-6) {
                     s_lastReq = stopbandBegin;
-                    s_lastClamped = clampedStopband;
+                    s_lastClamped = effectiveStopband;
                     shouldLog = true;
                 }
             }
@@ -172,7 +177,7 @@ public:
                 char msg[160];
                 std::snprintf(msg, sizeof(msg),
                               "[Felmintavételezés] stopband %.4f -> %.4f (libsoxr korlát felmintavételezésnél)\n",
-                              stopbandBegin, clampedStopband);
+                              stopbandBegin, effectiveStopband);
                 std::cout << msg;
             }
         }

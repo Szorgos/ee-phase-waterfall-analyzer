@@ -506,6 +506,14 @@ static void testK5PhaseAndStopband() {
               rej100_mid, rej120_mid, rej120_hi);
         std::printf("K_METRIC: {\"test\":\"K5b_stopband\",\"sb100_109pct_dB\":%.2f,\"sb120_109pct_dB\":%.2f,\"sb120_136pct_dB\":%.2f}\n",
                     rej100_mid, rej120_mid, rej120_hi);
+
+        // Extrém szűk átmeneti sáv (passband > 0.9985, pl. 0.999 és 0.9995) felmintavételezésnél:
+        // _GLIBCXX_ASSERTIONS alatt sem okozhat std::clamp hi < lo hibát;
+        // 0.999 -> stopband 1.001 (tbw=0.002 >= 0.2%) sikeres, 0.9995 -> stopband 1.0005 (tbw=0.001 < 0.2%) tisztán elutasítva.
+        EngT eng999, eng9995;
+        bool ok999  = eng999.init(44100, 88200, 1, 24, 25.0, 0.999,  1.15, 0.0f);
+        bool ok9995 = eng9995.init(44100, 88200, 1, 24, 25.0, 0.9995, 1.15, 0.0f);
+        CHECK(ok999 && !ok9995, "K5b: passband 0.999 (ok) és 0.9995 (elutasítva) + stopband 1.15 UB nélkül lefut");
     }
 }
 
