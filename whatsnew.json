@@ -1,6 +1,81 @@
 {
   "versions": [
     {
+      "version": "3.0.2",
+      "date": "2026-11-25",
+      "notes": {
+        "hu": [
+          "Felmintavételezés és Linux csomagok: javítottuk a záró sáv korlátozását extrém szűk sávszélességnél is (Fedora és Arch csomagok stabil működése), és ez a kiadás tartalmazza a 3.0.1 összes PipeWire és USB DAC javítását."
+        ],
+        "en": [
+          "Upsampling and Linux packages: fixed stopband clamping at very narrow transition bands (fixing Fedora and Arch package checks); includes all 3.0.1 PipeWire and USB DAC fixes."
+        ],
+        "es": [
+          "Sobremuestreo y paquetes Linux: corregida la limitación de la banda de rechazo con transiciones muy estrechas (paquetes Fedora y Arch); incluye todas las correcciones de PipeWire y DAC USB de la 3.0.1."
+        ],
+        "fr": [
+          "Suréchantillonnage et paquets Linux : correction du bornage de la bande coupée pour les transitions très étroites (paquets Fedora et Arch) ; inclut tous les correctifs PipeWire et DAC USB de la 3.0.1."
+        ],
+        "zh": [
+          "升频采样与 Linux 软件包：修复了极窄过渡带下的阻带限幅问题（修复 Fedora 与 Arch 软件包检查）；包含 3.0.1 的全部 PipeWire 与 USB DAC 修复。"
+        ],
+        "de": [
+          "Upsampling und Linux-Pakete: Stopband-Begrenzung auch bei sehr schmalen Übergangsbändern korrigiert (Fedora- und Arch-Pakete); enthält alle PipeWire- und USB-DAC-Korrekturen aus 3.0.1."
+        ],
+        "it": [
+          "Sovracampionamento e pacchetti Linux: corretta la limitazione della banda di arresto con bande di transizione molto strette (pacchetti Fedora e Arch); include tutte le correzioni PipeWire e DAC USB della 3.0.1."
+        ],
+        "nl": [
+          "Upsampling en Linux-pakketten: stopband-begrenzing bij zeer smalle overgangsbanden hersteld (Fedora- en Arch-pakketten); bevat alle PipeWire- en USB-DAC-oplossingen uit 3.0.1."
+        ],
+        "pl": [
+          "Nadpróbkowanie i pakiety Linux: poprawiono ograniczanie pasma zaporowego przy bardzo wąskich pasmach przejściowych (pakiety Fedora i Arch); zawiera wszystkie poprawki PipeWire i USB DAC z 3.0.1."
+        ],
+        "ru": [
+          "Апсемплинг и пакеты Linux: исправлено ограничение полосы задерживания при очень узкой переходной полосе (пакеты Fedora и Arch); включает все исправления PipeWire и USB-ЦАП из 3.0.1."
+        ],
+        "pt": [
+          "Sobreamostragem e pacotes Linux: corrigida a limitação da banda de rejeição em transições muito estreitas (pacotes Fedora e Arch); inclui todas as correções de PipeWire e DAC USB da 3.0.1."
+        ],
+        "ro": [
+          "Supraeșantionare și pachete Linux: corectată limitarea benzii de oprire la benzi de tranziție foarte înguste (pachetele Fedora și Arch); include toate remedierile PipeWire și USB DAC din 3.0.1."
+        ],
+        "el": [
+          "Υπερδειγματοληψία και πακέτα Linux: διορθώθηκε ο περιορισμός ζώνης αποκοπής σε πολύ στενές ζώνες μετάβασης (πακέτα Fedora και Arch)· περιλαμβάνει όλες τις διορθώσεις PipeWire και USB DAC της 3.0.1."
+        ],
+        "tr": [
+          "Yukarı örnekleme ve Linux paketleri: çok dar geçiş bantlarında durdurma bandı sınırlaması düzeltildi (Fedora ve Arch paketleri); 3.0.1 sürümündeki tüm PipeWire ve USB DAC düzeltmelerini içerir."
+        ],
+        "fi": [
+          "Ylinäytteistys ja Linux-paketit: korjattu estosuodattimen rajoitus hyvin kapeilla siirtymäkaistoilla (Fedora- ja Arch-paketit); sisältää kaikki 3.0.1:n PipeWire- ja USB-DAC-korjaukset."
+        ],
+        "da": [
+          "Opsampling og Linux-pakker: rettet stopbåndsbegrænsning ved meget smalle overgangsbånd (Fedora- og Arch-pakker); indeholder alle PipeWire- og USB-DAC-rettelser fra 3.0.1."
+        ],
+        "nb": [
+          "Oppsampling og Linux-pakker: rettet stoppbåndsbegrensning ved svært smale overgangsbånd (Fedora- og Arch-pakker); inkluderer alle PipeWire- og USB-DAC-rettelser fra 3.0.1."
+        ],
+        "sv": [
+          "Uppsampling och Linux-paket: åtgärdade stoppbandsbegränsning vid mycket smala övergångsband (Fedora- och Arch-paket); innehåller alla PipeWire- och USB-DAC-rättningar från 3.0.1."
+        ],
+        "he": [
+          "העלאת קצב דגימה וחבילות Linux: תוקנה הגבלת פס העצירה בפסי מעבר צרים מאוד (חבילות Fedora ו-Arch); כולל את כל תיקוני PipeWire ו-USB DAC מגרסה 3.0.1."
+        ],
+        "ja": [
+          "アップサンプリングと Linux パッケージ：非常に狭い遷移帯域でのストップバンド制限を修正しました（Fedora / Arch パッケージ対応）。3.0.1 の PipeWire および USB DAC 修正をすべて含みます。"
+        ],
+        "ko": [
+          "업샘플링 및 Linux 패키지: 매우 좁은 전이 대역에서의 스톱밴드 제한을 수정했습니다(Fedora 및 Arch 패키지 대응). 3.0.1의 모든 PipeWire 및 USB DAC 수정 사항이 포함됩니다."
+        ],
+        "cs": [
+          "Převzorkování nahoru a balíčky pro Linux: opraveno omezení zádržného pásma při velmi úzkém přechodovém pásmu (balíčky Fedora a Arch); obsahuje všechny opravy PipeWire a USB DAC z 3.0.1."
+        ],
+        "uk": [
+          "Підвищення частоти дискретизації та пакунки Linux: виправлено обмеження смуги затримання для дуже вузьких перехідних смуг (пакунки Fedora й Arch); містить усі виправлення PipeWire та USB-ЦАП із 3.0.1."
+        ]
+      }
+    },
+    {
       "version": "3.0.1",
       "date": "2026-11-25",
       "notes": {
