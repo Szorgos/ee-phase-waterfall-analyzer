@@ -949,6 +949,7 @@
   "ups.statusOff": "Ylinäytteistys pois päältä",
   "ups.liveActive": "Järjestelmän ääni (esim. MPD): {src} → {dst} · PipeWire muuntaa – suodatinasetukset eivät koske tätä",
   "ups.liveUnsupported": "Järjestelmän ääni: ei muunnosta, DAC ei tue kohdenäytteenottotaajuutta ({src}) · EQ:n sisäinen ylinäytteistys (Decramp) toimii silti DAC:n omalla taajuudella.",
+  "ups.liveRateMismatch": "Järjestelmän ääni: sisäänrakennettu moottori ei voi muuntaa juuri nyt (äänijärjestelmän näytteenottotaajuus poikkeaa), suora tila.",
   "ups.liveFixedRate": "Järjestelmän ääni: ei ylinäytteistystä kiinteällä näytteenottotaajuudella",
   "ups.statusClipped": "Leikkautuneet näytteet: {count}",
   "ups.helpBtn": "Ylinäytteistyksen ohje",

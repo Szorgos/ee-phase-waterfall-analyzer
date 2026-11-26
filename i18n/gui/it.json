@@ -949,6 +949,7 @@
   "ups.statusOff": "Sovracampionamento disattivato",
   "ups.liveActive": "Audio di sistema (ad es. MPD): {src} → {dst} · convertito da PipeWire – le impostazioni del filtro qui non si applicano",
   "ups.liveUnsupported": "Audio di sistema: nessuna conversione, il DAC non supporta la frequenza di destinazione ({src}) · Il sovracampionamento interno dell'EQ (Decramp) funziona comunque, alla frequenza propria del DAC.",
+  "ups.liveRateMismatch": "Audio di sistema: il motore integrato non può convertire ora (frequenza di campionamento del sistema audio diversa), modalità diretta.",
   "ups.liveFixedRate": "Audio di sistema: nessun sovracampionamento con frequenza di campionamento fissa",
   "ups.statusClipped": "Campioni distorti: {count}",
   "ups.helpBtn": "Guida al sovracampionamento",

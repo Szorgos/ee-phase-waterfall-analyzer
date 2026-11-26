@@ -949,6 +949,7 @@
   "ups.statusOff": "Převzorkování vypnuto",
   "ups.liveActive": "Systémový zvuk (např. MPD): {src} → {dst} · převádí PipeWire – nastavení filtru se zde neuplatní",
   "ups.liveUnsupported": "Systémový zvuk: bez převodu, DAC nepodporuje cílovou vzorkovací frekvenci ({src}) · Vnitřní převzorkování EQ (Decramp) funguje i tak, na vlastní frekvenci DAC.",
+  "ups.liveRateMismatch": "Systémový zvuk: vestavěný engine nyní nemůže převzorkovat (odlišná vzorkovací frekvence zvukového systému), přímý režim.",
   "ups.liveFixedRate": "Systémový zvuk: žádné převzorkování nahoru při pevné vzorkovací frekvenci",
   "ups.statusClipped": "Přebuzené vzorky: {count}",
   "ups.helpBtn": "Nápověda k převzorkování",

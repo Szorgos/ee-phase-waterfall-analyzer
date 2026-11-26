@@ -949,6 +949,7 @@
   "ups.statusOff": "Upsampling ausgeschaltet",
   "ups.liveActive": "Systemton (z. B. MPD): {src} → {dst} · von PipeWire umgewandelt – die Filtereinstellungen gelten hier nicht",
   "ups.liveUnsupported": "Systemton: keine Umwandlung, der DAC unterstützt die Zielabtastrate nicht ({src}) · Das interne Oversampling des EQ (Decramp) funktioniert trotzdem, mit der eigenen Rate des DAC.",
+  "ups.liveRateMismatch": "Systemaudio: Der eigene Resampler kann derzeit nicht umwandeln (abweichende Abtastrate des Audiosystems), Direktmodus.",
   "ups.liveFixedRate": "Systemton: kein Upsampling bei fester Abtastrate",
   "ups.statusClipped": "Übersteuerte Samples: {count}",
   "ups.helpBtn": "Hilfe zum Upsampling",

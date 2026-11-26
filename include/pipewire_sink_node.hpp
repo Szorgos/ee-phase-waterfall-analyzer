@@ -53,6 +53,7 @@
 #include "multi_output.hpp"
 #include "aq_i18n.hpp"
 #include "param_block.hpp"
+#include "pw_live_upsample_policy.hpp"
 #include "pw_reconnect_policy.hpp"
 #include "tap_ring.hpp"
 
@@ -237,8 +238,30 @@ public:
         if (loop && liveUpsEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), liveUpsEvent_);
     }
 
-    /** Aktív-e a saját motorral működő élő rendszerhang-felmintavételezés. */
-    bool liveUpsampleActive() const { return liveUpsActive_.load(std::memory_order_acquire); }
+    /** Aktív-e a saját motorral működő élő rendszerhang-felmintavételezés (csak ha a stream-ráták is egyeznek). */
+    bool liveUpsampleActive() const {
+        return liveUpsActive_.load(std::memory_order_acquire) &&
+               liveBridgeRateMatched_.load(std::memory_order_acquire);
+    }
+
+    /** A ráta-invariáns őrző utolsó visszalépési ok-kódja (pl. "dac_unsupported", "no_output_device", vagy üres). */
+    std::string liveUpsampleGuardReason() const {
+        std::lock_guard<std::mutex> lk(liveUpsGuardMu_);
+        return liveUpsGuardReason_;
+    }
+
+    /** A ráta-invariáns őrző ping-pong tiltásának törlése (pl. beállítás- vagy kimenetváltáskor). */
+    void resetLiveUpsampleGuard() {
+        {
+            std::lock_guard<std::mutex> lk(liveUpsMu_);
+            liveUpsGuardResetWanted_ = true;
+        }
+        if (loop && liveUpsEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), liveUpsEvent_);
+    }
+
+    /** A capture és playback streamek tényleges, PipeWire által kitárgyalt mintavételei (diagnosztika). */
+    uint32_t captureRate() const { return captureRate_.load(std::memory_order_relaxed); }
+    uint32_t playbackRate() const { return playbackRate_.load(std::memory_order_relaxed); }
 
     /** A saját motoros élő felmintavételező híd telemetriája (szálbiztos). */
     livebridge::BridgeStatus liveUpsampleStatus() const { return liveBridge_.status(); }
@@ -246,12 +269,18 @@ public:
     /** A felhasználó által választott kimeneti eszköz (bármely szálról). Saját aqulify* vagy dummy csomópont elutasítva. */
     void setPreferredOutput(const std::string& target) {
         bool valid = false;
+        bool changed = false;
         {
             std::lock_guard<std::mutex> lk(targetMu_);
             if (target.empty() || (!pw_reconnect::isOwnAqulifyNode(target, sinkName_) && !pw_reconnect::isDummyOrNullSink(target))) {
+                changed = (preferredTarget_ != target);
                 preferredTarget_ = target;
                 valid = !target.empty();
             }
+        }
+        // Kimenetváltáskor az élő felmintavételezés őrzője újraértékelhet (pl. hangszóró -> USB DAC)
+        if (changed && loop && liveUpsEvent_) {
+            pw_loop_signal_event(pw_main_loop_get_loop(loop), liveUpsEvent_);
         }
         // Ha a kimeneti stream hibás vagy még nincs fizikai célra rögzítve, ébresszük a fő hurkot az újracsatlakozáshoz
         if (valid && loop && targetEvent_) {
@@ -267,8 +296,15 @@ public:
     /** Külső áthelyezés (pactl move-sink-input) után az aktuális céleszköz frissítése a diagnosztikához. */
     void noteCurrentOutputTarget(const std::string& target) {
         if (target.empty() || pw_reconnect::isOwnAqulifyNode(target, sinkName_) || pw_reconnect::isDummyOrNullSink(target)) return;
-        std::lock_guard<std::mutex> lk(diagMu_);
-        outputTarget_ = target;
+        bool changed = false;
+        {
+            std::lock_guard<std::mutex> lk(diagMu_);
+            changed = (outputTarget_ != target);
+            outputTarget_ = target;
+        }
+        if (changed && loop && liveUpsEvent_) {
+            pw_loop_signal_event(pw_main_loop_get_loop(loop), liveUpsEvent_);
+        }
     }
 
     /** A regiszterben látott legmagasabb prioritású valódi fizikai nyelő (bármely szálról). */
@@ -412,6 +448,7 @@ public:
 
         // 2. Lejátszó stream a valódi hangeszköz felé (hiba után a fő hurok időzítője újracsatlakoztatja)
         reconnectTimer_ = pw_loop_add_timer(l, onReconnectTimer, this);
+        liveUpsGuardTimer_ = pw_loop_add_timer(l, onLiveUpsGuardTimer, this);
         if (!createAndConnectPlayback()) return fail("a lejátszó stream nem csatlakoztatható");
         if (keepAwakeWanted_.load()) createKeepAlive();
 
@@ -440,10 +477,12 @@ public:
 
     void shutdown() {
         reconnect_.reset();
+        liveBridgeRateMatched_.store(false, std::memory_order_release);
         liveUpsActive_.store(false, std::memory_order_release);
         if (loop) {
             struct pw_loop* l = pw_main_loop_get_loop(loop);
             if (reconnectTimer_) { pw_loop_destroy_source(l, reconnectTimer_); reconnectTimer_ = nullptr; }
+            if (liveUpsGuardTimer_) { pw_loop_destroy_source(l, liveUpsGuardTimer_); liveUpsGuardTimer_ = nullptr; }
             if (resumeTimer_) { pw_loop_destroy_source(l, resumeTimer_); resumeTimer_ = nullptr; }
             if (liveUpsEvent_) { pw_loop_destroy_source(l, liveUpsEvent_); liveUpsEvent_ = nullptr; }
             if (targetEvent_) { pw_loop_destroy_source(l, targetEvent_); targetEvent_ = nullptr; }
@@ -535,7 +574,10 @@ private:
     /** A playback stream szálbiztos megszüntetése a fő hurok szálán: előbb elrejti az RT capture elől, majd megvárja. */
     void destroyPlaybackSafe() {
         playbackTriggerReady_.store(false, std::memory_order_release);
+        liveBridgeRateMatched_.store(false, std::memory_order_release);
         playbackStreaming.store(false, std::memory_order_release);
+        playbackRate_.store(0, std::memory_order_relaxed);
+        driverClockRate_.store(0, std::memory_order_relaxed);
         updateOutputHeartbeatExpected();
         struct pw_stream* old = playbackPtr_.exchange(nullptr, std::memory_order_acq_rel);
         playback = nullptr;
@@ -550,6 +592,7 @@ private:
         clock_gettime(CLOCK_MONOTONIC, &ts);
         return static_cast<int64_t>(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
     }
+    static int64_t monoMs() { return monoNs() / 1000000; }
     /** Nem néma bemenet jelzése (valós idejű szál: csak egy atomikus írás, ha a csúcs ~−100 dBFS fölött van). */
     void noteInput(const float* a, const float* b, uint32_t n) {
         float pk = 0.0f;
@@ -566,7 +609,7 @@ private:
     std::vector<float> capInterleaved_, playInterleaved_;
     std::array<std::vector<float>, kExtraZones> zoneL_, zoneR_;
 
-    // Saját motoros (libsoxr / Aqulify FFT64) élő rendszerhang-felmintavételezés
+    // Saját motoros (libsoxr / Aqulify FFT64 / FFT-DD) élő rendszerhang-felmintavételezés
     struct LiveUpsRequest {
         bool enable = false;
         uint32_t srcRate = 0;
@@ -575,14 +618,141 @@ private:
     };
     livebridge::LiveUpsampleBridge liveBridge_;
     std::atomic<bool> liveUpsActive_{false};          // true: capture -> liveBridge_ -> playback (szétválasztott)
-    std::atomic<uint32_t> captureRate_{48000};        // a capture stream aktuális mintavétele
+    std::atomic<bool> liveBridgeRateMatched_{false};  // RT kapu: csak ha captureRate == bridgeSrc és playbackRate == bridgeDst
+    std::atomic<uint32_t> captureRate_{48000};        // a capture stream aktuális mintavétele (SPA_PARAM_Format)
+    std::atomic<uint32_t> playbackRate_{0};           // a playback stream aktuális mintavétele (SPA_PARAM_Format)
+    std::atomic<uint32_t> driverClockRate_{0};        // a playback stream pw_stream_get_time_n valódi driver-órajele
+    std::atomic<uint32_t> liveBridgeSrcRate_{0};      // a híd konfigurált bemeneti mintavétele (RT kapuhoz)
+    std::atomic<uint32_t> liveBridgeDstRate_{0};      // a híd konfigurált kimeneti mintavétele (RT kapuhoz)
     struct spa_source* liveUpsEvent_ = nullptr;       // csak a fő hurok szála
+    struct spa_source* liveUpsGuardTimer_ = nullptr;  // csak a fő hurok szála (ráta-invariáns őrző időzítő)
     std::mutex liveUpsMu_;
     LiveUpsRequest liveUpsWanted_;                    // liveUpsMu_ alatt
+    bool liveUpsGuardResetWanted_ = false;            // liveUpsMu_ alatt
     LiveUpsRequest liveUpsApplied_;                   // csak a fő hurok szála
+    pw_live_ups::RateInvariantGuard liveUpsGuard_;    // csak a fő hurok szála
+    mutable std::mutex liveUpsGuardMu_;
+    std::string liveUpsGuardReason_;                  // liveUpsGuardMu_ alatt
+
+    void setLiveUpsGuardReason(const std::string& reason) {
+        std::lock_guard<std::mutex> lk(liveUpsGuardMu_);
+        liveUpsGuardReason_ = reason;
+    }
+
+    void updateLiveBridgeRateGate() {
+        const bool ok = liveUpsActive_.load(std::memory_order_acquire) &&
+                        pw_live_ups::ratesMatchBridge(
+                            captureRate_.load(std::memory_order_relaxed),
+                            playbackRate_.load(std::memory_order_relaxed),
+                            liveBridgeSrcRate_.load(std::memory_order_relaxed),
+                            liveBridgeDstRate_.load(std::memory_order_relaxed));
+        liveBridgeRateMatched_.store(ok, std::memory_order_release);
+    }
+
+    void startLiveUpsGuardTimer() {
+        if (!loop || !liveUpsGuardTimer_) return;
+        struct pw_loop* l = pw_main_loop_get_loop(loop);
+        struct timespec iv{ 0, pw_live_ups::kGuardCheckIntervalMs * 1000000L };
+        pw_loop_update_timer(l, liveUpsGuardTimer_, &iv, &iv, false);
+    }
+
+    void stopLiveUpsGuardTimer() {
+        if (!loop || !liveUpsGuardTimer_) return;
+        struct pw_loop* l = pw_main_loop_get_loop(loop);
+        struct timespec zero{ 0, 0 };
+        pw_loop_update_timer(l, liveUpsGuardTimer_, &zero, &zero, false);
+    }
+
+    /** Aktuálisan elérhető, érvényes külső fizikai céleszköz (üres, ha nincs biztonságos cél). */
+    std::string resolvePhysicalTargetForLiveUps() {
+        std::string pref;
+        {
+            std::lock_guard<std::mutex> lk(targetMu_);
+            pref = preferredTarget_;
+        }
+        std::vector<pw_reconnect::SinkCandidate> known;
+        {
+            std::lock_guard<std::mutex> lk(sinksMu_);
+            known.reserve(knownSinksById_.size());
+            for (const auto& [id, ks] : knownSinksById_) known.push_back(ks);
+        }
+        std::string target = pw_reconnect::resolveTargetOrFallbackByPriority(pref, known, sinkName_);
+        if (!pw_live_ups::hasValidPhysicalTarget(target, sinkName_)) {
+            const std::string cur = outputTarget();
+            if (pw_live_ups::hasValidPhysicalTarget(cur, sinkName_)) {
+                for (const auto& ks : known) {
+                    if (ks.name == cur) { target = cur; break; }
+                }
+            }
+        }
+        return pw_live_ups::hasValidPhysicalTarget(target, sinkName_) ? target : std::string();
+    }
+
+    /** Ráta-eltérés vagy hiányzó fizikai cél esetén tiszta visszalépés közvetlen módba (0,5x/2x védelem). */
+    void fallbackLiveUpsToDirect(const pw_live_ups::FallbackKey& key, const char* reasonCode,
+                                 const char* detailHu, pw_live_ups::GuardVerdict verdict) {
+        const uint32_t capR = captureRate_.load(std::memory_order_relaxed);
+        const uint32_t playR = playbackRate_.load(std::memory_order_relaxed);
+        const uint32_t clkR = driverClockRate_.load(std::memory_order_relaxed);
+        const uint32_t bSrc = liveUpsApplied_.srcRate;
+        const uint32_t bDst = liveUpsApplied_.dstRate;
+        stopLiveUpsGuardTimer();
+        liveUpsGuard_.stopSession();
+        if (key.valid()) liveUpsGuard_.blockKey(key, reasonCode, verdict);
+        else liveUpsGuard_.setTransientReason(reasonCode);
+        setLiveUpsGuardReason(reasonCode);
+        liveBridgeRateMatched_.store(false, std::memory_order_release);
+        liveBridgeSrcRate_.store(0, std::memory_order_relaxed);
+        liveBridgeDstRate_.store(0, std::memory_order_relaxed);
+        liveUpsActive_.store(false, std::memory_order_release);
+        destroyPlaybackSafe();
+        liveBridge_.stop();
+        liveUpsApplied_ = LiveUpsRequest{};
+        createAndConnectPlayback();
+        std::cout << "[Felmintavételezés] Saját motor (rendszerhang) visszalépett közvetlen módba ("
+                  << (detailHu && *detailHu ? detailHu : reasonCode)
+                  << "; kért: " << bSrc << " -> " << bDst
+                  << " Hz, capture=" << capR << " Hz, playback=" << playR
+                  << " Hz, DAC=" << clkR << " Hz).\n";
+    }
+
+    /** A fő hurok szálán: az aktív szétválasztott híd ráta-invariánsának ellenőrzése. */
+    void evaluateLiveUpsGuard() {
+        if (!liveUpsActive_.load(std::memory_order_acquire) || !liveUpsApplied_.enable) return;
+        updateLiveBridgeRateGate();
+        const std::string target = resolvePhysicalTargetForLiveUps();
+        if (!pw_live_ups::hasValidPhysicalTarget(target, sinkName_)) {
+            fallbackLiveUpsToDirect(pw_live_ups::FallbackKey{}, "no_output_device",
+                                    "nincs érvényes fizikai kimeneti eszköz", pw_live_ups::GuardVerdict::Ok);
+            return;
+        }
+        const auto verdict = liveUpsGuard_.evaluate(
+            monoMs(),
+            captureRate_.load(std::memory_order_relaxed),
+            playbackRate_.load(std::memory_order_relaxed),
+            driverClockRate_.load(std::memory_order_relaxed),
+            playbackStreaming.load(std::memory_order_acquire));
+        if (verdict == pw_live_ups::GuardVerdict::FallbackCaptureMismatch ||
+            verdict == pw_live_ups::GuardVerdict::FallbackPlaybackMismatch ||
+            verdict == pw_live_ups::GuardVerdict::FallbackDacRateMismatch) {
+            const pw_live_ups::FallbackKey key{
+                target, liveUpsApplied_.srcRate, liveUpsApplied_.dstRate,
+                static_cast<int>(liveUpsApplied_.opts.rateMode)
+            };
+            fallbackLiveUpsToDirect(key,
+                                    pw_live_ups::verdictReasonCode(verdict),
+                                    pw_live_ups::verdictDetailHu(verdict),
+                                    verdict);
+        }
+    }
+
+    static void onLiveUpsGuardTimer(void* data, uint64_t) {
+        static_cast<AetherSinkNode*>(data)->evaluateLiveUpsGuard();
+    }
 
     static bool sameLiveUpsConfig(const LiveUpsRequest& a, const LiveUpsRequest& b) {
         return a.enable == b.enable && a.srcRate == b.srcRate && a.dstRate == b.dstRate &&
+               a.opts.rateMode == b.opts.rateMode &&
                a.opts.upsampleEngine == b.opts.upsampleEngine &&
                a.opts.upsamplePreset == b.opts.upsamplePreset &&
                a.opts.upsamplePrecision == b.opts.upsamplePrecision &&
@@ -598,30 +768,91 @@ private:
     static void onLiveUpsEvent(void* data, uint64_t) {
         auto* self = static_cast<AetherSinkNode*>(data);
         LiveUpsRequest want;
+        bool resetGuard = false;
         {
             std::lock_guard<std::mutex> lk(self->liveUpsMu_);
             want = self->liveUpsWanted_;
+            resetGuard = self->liveUpsGuardResetWanted_;
+            self->liveUpsGuardResetWanted_ = false;
         }
-        if (sameLiveUpsConfig(want, self->liveUpsApplied_)) return;
+        if (resetGuard) {
+            self->liveUpsGuard_.clearBlocked();
+            self->setLiveUpsGuardReason("");
+        }
+
+        const std::string target = self->resolvePhysicalTargetForLiveUps();
+        self->liveUpsGuard_.onTargetChanged(target);
+        if (want.enable) {
+            self->liveUpsGuard_.onRateModeChanged(static_cast<int>(want.opts.rateMode));
+        }
+
+        if (want.enable) {
+            // Visszacsatolás-védelem: érvényes külső fizikai kimenet nélkül nem lépünk szétválasztott módba
+            if (!pw_live_ups::hasValidPhysicalTarget(target, self->sinkName_)) {
+                if (self->liveUpsApplied_.enable) {
+                    self->fallbackLiveUpsToDirect(pw_live_ups::FallbackKey{}, "no_output_device",
+                                                  "nincs érvényes fizikai kimeneti eszköz",
+                                                  pw_live_ups::GuardVerdict::Ok);
+                } else {
+                    self->liveUpsGuard_.setTransientReason("no_output_device");
+                    self->setLiveUpsGuardReason("no_output_device");
+                }
+                return;
+            }
+            // Ping-pong védelem: ha erre a (kimenet, forrás->cél, rateMode) négyesre az őrző már visszalépett,
+            // nem indítjuk újra ciklikusan, csak megtartjuk az őszinte ok-kódot
+            const pw_live_ups::FallbackKey key{
+                target, want.srcRate, want.dstRate, static_cast<int>(want.opts.rateMode)
+            };
+            if (self->liveUpsGuard_.isBlocked(key)) {
+                self->setLiveUpsGuardReason(self->liveUpsGuard_.lastReason());
+                return;
+            }
+            if (sameLiveUpsConfig(want, self->liveUpsApplied_)) {
+                self->evaluateLiveUpsGuard();
+                return;
+            }
+        } else {
+            if (!self->liveUpsApplied_.enable) {
+                if (self->liveUpsGuard_.lastReason() == "no_output_device") {
+                    self->liveUpsGuard_.setTransientReason("");
+                    self->setLiveUpsGuardReason("");
+                }
+                return;
+            }
+        }
 
         // Ha mindkét állapot aktív és a kimeneti mintavétel (dstRate) nem változott, a playback stream maradhat,
         // de a liveBridge_ újrakonfigurálása előtt megvárjuk a futó RT capture/playback hívásokat!
         if (want.enable && self->liveUpsApplied_.enable && want.dstRate == self->liveUpsApplied_.dstRate) {
+            self->liveBridgeRateMatched_.store(false, std::memory_order_release);
             self->liveUpsActive_.store(false, std::memory_order_release);
             self->waitRtIdle(self->captureInFlight_, "capture");
             self->waitRtIdle(self->playbackInFlight_, "playback");
             if (self->liveBridge_.configure(want.srcRate, want.dstRate, want.opts) && self->liveBridge_.start()) {
                 self->liveUpsApplied_ = want;
+                self->liveBridgeSrcRate_.store(want.srcRate, std::memory_order_relaxed);
+                self->liveBridgeDstRate_.store(want.dstRate, std::memory_order_relaxed);
+                self->liveUpsGuard_.resetSession(monoMs(), want.srcRate, want.dstRate);
+                self->setLiveUpsGuardReason("");
                 self->liveUpsActive_.store(true, std::memory_order_release);
+                self->updateLiveBridgeRateGate();
+                self->startLiveUpsGuardTimer();
                 std::cout << "[Felmintavételezés] Saját motor (rendszerhang) frissítve: " << want.srcRate << " -> "
                           << want.dstRate << " Hz ("
                           << audioopt::upsampleEngineLabel(want.opts.upsampleEngine)
                           << ").\n";
+                self->evaluateLiveUpsGuard();
                 return;
             }
         }
 
         // Üzemmód- vagy célmintavétel-váltás: a playback streamet szálbiztosan leállítjuk, majd az új módban nyitjuk újra
+        self->stopLiveUpsGuardTimer();
+        self->liveUpsGuard_.stopSession();
+        self->liveBridgeRateMatched_.store(false, std::memory_order_release);
+        self->liveBridgeSrcRate_.store(0, std::memory_order_relaxed);
+        self->liveBridgeDstRate_.store(0, std::memory_order_relaxed);
         self->liveUpsActive_.store(false, std::memory_order_release);
         self->destroyPlaybackSafe();
         if (want.enable) {
@@ -634,8 +865,17 @@ private:
                 std::cerr << "[Felmintavételezés] A saját motoros híd nem indítható; visszatérés alapmódba.\n";
                 return;
             }
+            self->liveBridgeSrcRate_.store(want.srcRate, std::memory_order_relaxed);
+            self->liveBridgeDstRate_.store(want.dstRate, std::memory_order_relaxed);
+            self->liveUpsGuard_.resetSession(monoMs(), want.srcRate, want.dstRate);
+            self->setLiveUpsGuardReason("");
             self->liveUpsActive_.store(true, std::memory_order_release);
+            self->updateLiveBridgeRateGate();
             if (!self->createAndConnectPlayback()) {
+                self->liveUpsGuard_.stopSession();
+                self->liveBridgeRateMatched_.store(false, std::memory_order_release);
+                self->liveBridgeSrcRate_.store(0, std::memory_order_relaxed);
+                self->liveBridgeDstRate_.store(0, std::memory_order_relaxed);
                 self->liveUpsActive_.store(false, std::memory_order_release);
                 self->waitRtIdle(self->captureInFlight_, "capture");
                 self->liveBridge_.stop();
@@ -644,6 +884,7 @@ private:
                 std::cerr << "[Felmintavételezés] A szétválasztott kimeneti stream nem indítható; visszatérés alapmódba.\n";
                 return;
             }
+            self->startLiveUpsGuardTimer();
             std::cout << "[Felmintavételezés] Saját motor (rendszerhang): " << want.srcRate << " -> "
                       << want.dstRate << " Hz ("
                       << audioopt::upsampleEngineLabel(want.opts.upsampleEngine)
@@ -892,7 +1133,8 @@ private:
         }
         const std::string target = pw_reconnect::resolveTargetOrFallbackByPriority(pref, known, sinkName_);
 
-        const bool decoupled = liveUpsApplied_.enable && liveUpsApplied_.dstRate > 0;
+        const bool decoupled = liveUpsApplied_.enable && liveUpsApplied_.dstRate > 0 &&
+                               pw_live_ups::hasValidPhysicalTarget(target, sinkName_);
         struct pw_properties* pprops = pw_properties_new(
             PW_KEY_MEDIA_CLASS, "Stream/Output/Audio",
             PW_KEY_NODE_NAME, (sinkName_ + "_output").c_str(),
@@ -1027,6 +1269,9 @@ private:
                     count = static_cast<int>(self->knownSinksById_.size());
                 }
                 self->physicalSinkCount_.store(count, std::memory_order_release);
+                if (self->liveUpsGuard_.lastReason() == "no_output_device" && self->loop && self->liveUpsEvent_) {
+                    pw_loop_signal_event(pw_main_loop_get_loop(self->loop), self->liveUpsEvent_);
+                }
                 if (!self->externalExclusiveActive_.load(std::memory_order_acquire)) {
                     const auto a = self->reconnect_.onNewExternalSink(nodeName, self->sinkName_);
                     if (a.schedule) {
@@ -1147,9 +1392,15 @@ private:
         struct spa_audio_info_raw info{};
         if (spa_format_audio_raw_parse(param, &info) >= 0 && info.rate > 0) {
             self->captureRate_.store(info.rate, std::memory_order_relaxed);
-            // Szétválasztott felmintavételezésnél a DSP lánc a playback mintavételén fut, nem a capture-én
-            if (!self->liveUpsActive_.load(std::memory_order_acquire))
+            // Szétválasztott felmintavételezésnél a DSP lánc a playback mintavételén fut, nem a capture-én;
+            // a ráta-invariáns kapu azonnal frissül, és a fő hurok őrzője megvizsgálja az esetleges eltérést
+            if (self->liveUpsActive_.load(std::memory_order_acquire)) {
+                self->updateLiveBridgeRateGate();
+                if (self->loop && self->liveUpsEvent_)
+                    pw_loop_signal_event(pw_main_loop_get_loop(self->loop), self->liveUpsEvent_);
+            } else {
                 self->sampleRate.store(info.rate, std::memory_order_relaxed);
+            }
         }
     }
 
@@ -1158,10 +1409,16 @@ private:
         if (!param || id != SPA_PARAM_Format) return;
         struct spa_audio_info_raw info{};
         if (spa_format_audio_raw_parse(param, &info) >= 0 && info.rate > 0) {
+            self->playbackRate_.store(info.rate, std::memory_order_relaxed);
             const uint32_t prev = self->graphRate.exchange(info.rate, std::memory_order_relaxed);
             self->sampleRate.store(info.rate, std::memory_order_relaxed);
             if (prev > 0 && prev != info.rate) {
                 std::cout << "[PipeWire] Mintavétel-követés: " << prev << " → " << info.rate << " Hz\n";
+            }
+            if (self->liveUpsActive_.load(std::memory_order_acquire)) {
+                self->updateLiveBridgeRateGate();
+                if (self->loop && self->liveUpsEvent_)
+                    pw_loop_signal_event(pw_main_loop_get_loop(self->loop), self->liveUpsEvent_);
             }
         }
     }
@@ -1203,9 +1460,11 @@ private:
             }
             return;
         }
-        // Szétválasztott mód (saját motoros rendszerhang-felmintavételezés): capture -> SPSC gyűrű (0 allokáció, 0 zár)
+        // Szétválasztott mód (saját motoros rendszerhang-felmintavételezés): capture -> SPSC gyűrű (0 allokáció, 0 zár).
+        // Csak egyező rátapár (liveBridgeRateMatched_) esetén tápláljuk a hidat, hogy 0,5x/2x tempóhiba ne léphessen fel.
+        const bool gateOk = self->liveBridgeRateMatched_.load(std::memory_order_acquire);
         while (struct pw_buffer* in = pw_stream_dequeue_buffer(self->capture)) {
-            if (in->buffer->n_datas >= 2) {
+            if (gateOk && in->buffer->n_datas >= 2) {
                 struct spa_data* d0 = &in->buffer->datas[0];
                 struct spa_data* d1 = &in->buffer->datas[1];
                 const uint32_t off0 = std::min(d0->chunk->offset, d0->maxsize);
@@ -1275,11 +1534,16 @@ private:
             n = out->requested ? std::min<uint32_t>(static_cast<uint32_t>(out->requested), maxFrames) : 0;
             if (n == 0) n = std::min<uint32_t>(1024, maxFrames);
             n = std::min<uint32_t>(n, kScratch);
-            float* buf = self->playInterleaved_.data();
-            self->liveBridge_.pullOutput(buf, n);
-            for (uint32_t i = 0; i < n; ++i) {
-                outL[i] = buf[i * 2];
-                outR[i] = buf[i * 2 + 1];
+            if (self->liveBridgeRateMatched_.load(std::memory_order_acquire)) {
+                float* buf = self->playInterleaved_.data();
+                self->liveBridge_.pullOutput(buf, n);
+                for (uint32_t i = 0; i < n; ++i) {
+                    outL[i] = buf[i * 2];
+                    outR[i] = buf[i * 2 + 1];
+                }
+            } else {
+                std::memset(outL, 0, n * sizeof(float));
+                std::memset(outR, 0, n * sizeof(float));
             }
         } else {
             if (in && in->buffer->n_datas >= 2) {
@@ -1311,6 +1575,7 @@ private:
         struct pw_time pwt{};
         if (pw_stream_get_time_n(pb, &pwt, sizeof(pwt)) == 0 && pwt.rate.denom > 0) {
             self->graphRate.store(pwt.rate.denom, std::memory_order_relaxed);
+            self->driverClockRate_.store(pwt.rate.denom, std::memory_order_relaxed);
         }
         // Mintavétel-váltás (allowed-rates): ritka esemény, a lánc újrahangolása itt történik
         const uint32_t sr = self->sampleRate.load(std::memory_order_relaxed);

@@ -1,0 +1,194 @@
+/**
+ * Egységteszt: PipeWire saját motoros rendszerhang-felmintavételezés ráta-invariáns őrzője (#51, #52).
+ *
+ * Ellenőrzi:
+ *  [1] Sebesség- és hangmagasság-invariáns: #52 (capture=96k, playback=96k, híd=48->96k -> 0,5x) és
+ *      #51 (capture=48k, playback=48k, híd=48->96k -> 0,5x) azonnali felismerése és tiltása.
+ *  [2] Valódi LiveUpsampleBridge frekvencia-szimuláció: az őrző nélkül 96 kHz bemenettel 500 Hz (0,5x) szól,
+ *      egyező 48->96 kHz rátákkal pontos 1000 Hz (0 overrun).
+ *  [3] Fizikai cél visszacsatolás-védelme: üres, aqulify_sink, auto_null, dummy elutasítva; valódi DAC elfogadva.
+ *  [4] RateInvariantGuard állapotgép: #52 capture-eltérés, #51 hardveres 48 kHz-en ragadó DAC (sof-hda-dsp),
+ *      ping-pong blokkolás, majd feloldás kimenetváltáskor (dac_a -> dac_b) és rateMode-váltáskor (system -> follow).
+ */
+#include <cmath>
+#include <cstdio>
+#include <string>
+#include <vector>
+
+#include "audio_options.hpp"
+#include "live_upsample_bridge.hpp"
+#include "pw_live_upsample_policy.hpp"
+
+using namespace ee_analyzer;
+using namespace ee_analyzer::pw_live_ups;
+
+static int g_fail = 0;
+#define CHECK(cond, ...)                                                           \
+    do {                                                                           \
+        if (!(cond)) {                                                             \
+            ++g_fail;                                                              \
+            std::printf("  [HIBA] " __VA_ARGS__);                                  \
+        } else {                                                                   \
+            std::printf("  [OK]   " __VA_ARGS__);                                  \
+        }                                                                          \
+        std::printf("\n");                                                         \
+    } while (0)
+
+static constexpr double kPi = 3.14159265358979323846;
+
+static double db(double v) { return 20.0 * std::log10(std::max(v, 1e-30)); }
+
+/** Hann-ablakolt egypontos DFT amplitúdó sztereó bal csatornán. */
+static double toneAmp(const std::vector<float>& stereo, size_t startFrame, size_t lenFrames,
+                      double freqHz, double rateHz) {
+    double cr = 0.0, ci = 0.0, wsum = 0.0;
+    for (size_t i = 0; i < lenFrames; ++i) {
+        const double w = 0.5 * (1.0 - std::cos(2.0 * kPi * static_cast<double>(i) / static_cast<double>(lenFrames)));
+        const double x = static_cast<double>(stereo[(startFrame + i) * 2]) * w;
+        const double ph = 2.0 * kPi * freqHz * static_cast<double>(i) / rateHz;
+        cr += x * std::cos(ph);
+        ci -= x * std::sin(ph);
+        wsum += w;
+    }
+    return 2.0 * std::hypot(cr, ci) / std::max(wsum, 1e-12);
+}
+
+int main() {
+    std::printf("[1] Ráta-invariáns és sebességarány (#51, #52)\n");
+    {
+        CHECK(ratesMatchBridge(48000, 96000, 48000, 96000), "egyező ráták (48 -> 96 kHz): engedélyezett");
+        CHECK(std::abs(effectiveSpeedRatio(48000, 96000, 48000, 96000) - 1.0) < 1e-9,
+              "egyező rátáknál a sebességarány pontosan 1,0");
+
+        // #52: a capture stream 96 kHz-re váltott a gráffal, miközben a híd 48->96 kHz
+        CHECK(!ratesMatchBridge(96000, 96000, 48000, 96000),
+              "#52: capture=96k, playback=96k, híd=48->96k -> elutasítva");
+        CHECK(std::abs(effectiveSpeedRatio(96000, 96000, 48000, 96000) - 0.5) < 1e-9,
+              "#52: az elmaradt védelem pontosan 0,5x sebességet (-1 oktáv) okozna");
+
+        // #51: a playback stream 48 kHz-en maradt, miközben a híd 48->96 kHz
+        CHECK(!ratesMatchBridge(48000, 48000, 48000, 96000),
+              "#51: capture=48k, playback=48k, híd=48->96k -> elutasítva");
+        CHECK(std::abs(effectiveSpeedRatio(48000, 48000, 48000, 96000) - 0.5) < 1e-9,
+              "#51: 48 kHz-es playback + 48->96 híd pontosan 0,5x sebességet okozna");
+
+        // Ismeretlen (0) vagy érvénytelen ráták
+        CHECK(!ratesMatchBridge(0, 96000, 48000, 96000), "ismeretlen captureRate (0) -> elutasítva");
+        CHECK(!ratesMatchBridge(48000, 0, 48000, 96000), "ismeretlen playbackRate (0) -> elutasítva");
+        CHECK(!ratesMatchBridge(48000, 48000, 48000, 48000), "nem felmintavételező (48->48) -> elutasítva");
+    }
+
+    std::printf("[2] Valódi LiveUpsampleBridge frekvencia-ellenőrzés (48k vs hibás 96k betáplálás)\n");
+    {
+        audioopt::AudioOptions o;
+        o.upsampleEngine = 0;
+        o.upsamplePhase = 25.0;
+        o.upsampleHeadroomDb = 0.0f;
+
+        auto runSim = [&](uint32_t actualCaptureRate) {
+            livebridge::LiveUpsampleBridge br;
+            br.configure(48000, 96000, o, nullptr, /*enableDriftControl=*/false);
+            const size_t playPerTick = 960; // 10 ms @ 96 kHz
+            const size_t capPerTick = actualCaptureRate / 100;
+            std::vector<float> inBlk(capPerTick * 2), outBlk(playPerTick * 2), tail;
+            uint64_t idx = 0;
+            for (int tick = 0; tick < 120; ++tick) {
+                for (size_t i = 0; i < capPerTick; ++i) {
+                    const float v = 0.5f * std::sin(2.0f * static_cast<float>(kPi) * 1000.0f *
+                                                    static_cast<float>(idx++) / static_cast<float>(actualCaptureRate));
+                    inBlk[2 * i] = v;
+                    inBlk[2 * i + 1] = v;
+                }
+                br.pushInput(inBlk.data(), capPerTick);
+                while (br.stepOnce()) {}
+                br.pullOutput(outBlk.data(), playPerTick);
+                if (tick >= 80) tail.insert(tail.end(), outBlk.begin(), outBlk.end());
+            }
+            const double a1k = toneAmp(tail, 0, 16384, 1000.0, 96000.0);
+            const double a500 = toneAmp(tail, 0, 16384, 500.0, 96000.0);
+            return std::pair<double, double>{ db(a1k / 0.5), db(a500 / 0.5) };
+        };
+
+        const auto [good1k, good500] = runSim(48000);
+        CHECK(std::abs(good1k) <= 0.05 && good500 <= -80.0,
+              "egyező 48 kHz capture -> 96 kHz playback: 1 kHz=%.2f dB, 500 Hz=%.1f dB", good1k, good500);
+
+        const auto [bad1k, bad500] = runSim(96000);
+        CHECK(std::abs(bad500) <= 0.05 && bad1k <= -80.0,
+              "őrző nélküli #52 (96 kHz capture -> 48->96 híd): 1 kHz eltűnik (%.1f dB), 500 Hz=%.2f dB (-1 oktáv)",
+              bad1k, bad500);
+    }
+
+    std::printf("[3] Fizikai cél visszacsatolás-védelme\n");
+    {
+        CHECK(!hasValidPhysicalTarget(""), "üres cél elutasítva");
+        CHECK(!hasValidPhysicalTarget("aqulify_sink"), "saját aqulify_sink elutasítva");
+        CHECK(!hasValidPhysicalTarget("aqulify_sink_output"), "saját aqulify_sink_output elutasítva");
+        CHECK(!hasValidPhysicalTarget("auto_null"), "auto_null dummy nyelő elutasítva");
+        CHECK(!hasValidPhysicalTarget("alsa_output.dummy"), "dummy nyelő elutasítva");
+        CHECK(hasValidPhysicalTarget("alsa_output.pci-0000_00_1f.3-platform-skl_hda_dsp_generic.HiFi__Speaker__sink"),
+              "Intel sof-hda-dsp hangszóró elfogadva");
+        CHECK(hasValidPhysicalTarget("alsa_output.usb-Generic_USB_Audio-00.analog-stereo"),
+              "USB DAC elfogadva");
+        CHECK(hasValidPhysicalTarget("dac_a"), "teszt fizikai nyelő (dac_a) elfogadva");
+    }
+
+    std::printf("[4] RateInvariantGuard állapotgép (#52, #51, ping-pong védelem, kimenet- és módváltás)\n");
+    {
+        RateInvariantGuard g;
+        g.resetSession(/*nowMs=*/1000, 48000, 96000);
+
+        // #52 eset: a playback elindul 96 kHz-en, de a capture is 96 kHz-re vált
+        CHECK(g.evaluate(1100, 96000, 96000, 96000, true) == GuardVerdict::WaitSettle,
+              "#52: 1. eltérésnél megerősítésre vár (0 ms)");
+        CHECK(g.evaluate(1300, 96000, 96000, 96000, true) == GuardVerdict::WaitSettle,
+              "#52: 200 ms-nál még a megerősítési ablakon belül");
+        const GuardVerdict v52 = g.evaluate(1500, 96000, 96000, 96000, true);
+        CHECK(v52 == GuardVerdict::FallbackCaptureMismatch && std::string(verdictReasonCode(v52)) == "rate_mismatch",
+              "#52: 400 ms után azonnali FallbackCaptureMismatch -> rate_mismatch");
+
+        // Playback-formátum eltérés (48 kHz maradt 96 kHz helyett) -> szintén rate_mismatch
+        RateInvariantGuard gPlay;
+        gPlay.resetSession(/*nowMs=*/2000, 48000, 96000);
+        gPlay.evaluate(2100, 48000, 48000, 48000, true);
+        const GuardVerdict vPlay = gPlay.evaluate(2500, 48000, 48000, 48000, true);
+        CHECK(vPlay == GuardVerdict::FallbackPlaybackMismatch && std::string(verdictReasonCode(vPlay)) == "rate_mismatch",
+              "playback formátum-eltérés (48k != 96k): FallbackPlaybackMismatch -> rate_mismatch");
+
+        // Ping-pong blokkolás az adott (speaker, 48k->96k, follow) kulcsra
+        const FallbackKey kSpeakerFollow{ "alsa_output.sof.Speaker", 48000, 96000, 1 };
+        g.blockKey(kSpeakerFollow, verdictReasonCode(v52), v52);
+        CHECK(g.isBlocked(kSpeakerFollow) && g.lastReason() == "rate_mismatch",
+              "ping-pong védelem: ugyanaz a (kimenet, 48->96, follow) kulcs blokkolva marad (rate_mismatch)");
+
+        // Kimenetváltás USB DAC-ra (dac_a -> dac_b): a tiltás azonnal feloldódik!
+        g.onTargetChanged("alsa_output.usb.DAC");
+        CHECK(!g.isBlocked(kSpeakerFollow) && g.lastReason().empty(),
+              "kimenetváltáskor (hangszóró -> USB DAC) a tiltás feloldódik");
+
+        // #51 eset: capture=48k, playback=96k (PipeWire SPA adapter), DE a hardveres driverClockRate 48k marad!
+        g.resetSession(/*nowMs=*/5000, 48000, 96000);
+        CHECK(g.evaluate(5800, 48000, 96000, 48000, true) == GuardVerdict::WaitSettle,
+              "#51 (sof-hda-dsp 48 kHz): türelmi ablakon belül (800 ms) még vár");
+        const GuardVerdict v51 = g.evaluate(6600, 48000, 96000, 48000, true);
+        CHECK(v51 == GuardVerdict::FallbackDacRateMismatch && std::string(verdictReasonCode(v51)) == "dac_unsupported",
+              "#51 (sof-hda-dsp 48 kHz): 1600 ms után FallbackDacRateMismatch -> dac_unsupported (nincs dupla 48->96->48)");
+
+        // rateMode váltás (system=0 -> follow=1): a tiltás feloldódik!
+        const FallbackKey kSystem{ "dac_a", 48000, 96000, 0 };
+        g.blockKey(kSystem, "dac_unsupported", v51);
+        CHECK(g.isBlocked(kSystem), "system módban blokkolt kulcs");
+        g.onRateModeChanged(1);
+        CHECK(!g.isBlocked(kSystem), "rateMode váltáskor (system -> follow) a tiltás feloldódik");
+
+        // Tökéletes szétválasztott állapot: capture=48k, playback=96k, driverClock=96k
+        g.resetSession(/*nowMs=*/10000, 48000, 96000);
+        CHECK(g.evaluate(10500, 48000, 96000, 96000, true) == GuardVerdict::Ok,
+              "egyező rátáknál (capture=48k, playback=96k, clock=96k) végig Ok");
+        CHECK(g.evaluate(25000, 48000, 96000, 96000, true) == GuardVerdict::Ok,
+              "hosszú futás után is Ok marad");
+    }
+
+    std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN PW LIVE UPSAMPLE TESZT SIKERES", g_fail);
+    return g_fail ? 1 : 0;
+}

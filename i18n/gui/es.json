@@ -949,6 +949,7 @@
   "ups.statusOff": "Sobremuestreo desactivado",
   "ups.liveActive": "Sonido del sistema (p. ej. MPD): {src} → {dst} · convertido por PipeWire – los ajustes del filtro no se aplican aquí",
   "ups.liveUnsupported": "Sonido del sistema: sin conversión, el DAC no admite la frecuencia objetivo ({src}) · El sobremuestreo interno del EQ (Decramp) funciona igualmente, a la frecuencia propia del DAC.",
+  "ups.liveRateMismatch": "Audio del sistema: el motor propio no puede convertir ahora (la frecuencia de muestreo del sistema de audio no coincide); modo directo.",
   "ups.liveFixedRate": "Sonido del sistema: sin sobremuestreo con frecuencia de muestreo fija",
   "ups.statusClipped": "Muestras recortadas: {count}",
   "ups.helpBtn": "Ayuda de sobremuestreo",

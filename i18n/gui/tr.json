@@ -949,6 +949,7 @@
   "ups.statusOff": "Yukarı örnekleme kapalı",
   "ups.liveActive": "Sistem sesi (ör. MPD): {src} → {dst} · PipeWire tarafından dönüştürülüyor – filtre ayarları burada geçerli değil",
   "ups.liveUnsupported": "Sistem sesi: dönüştürme yok, DAC hedef örnekleme hızını desteklemiyor ({src}) · EQ'nun dahili üst örneklemesi (Decramp) yine de çalışır, DAC'ın kendi hızında.",
+  "ups.liveRateMismatch": "Sistem sesi: yerleşik motor şu an dönüştüremiyor (ses sistemi örnekleme hızı uyuşmuyor), doğrudan mod.",
   "ups.liveFixedRate": "Sistem sesi: sabit örnekleme hızında yukarı örnekleme yok",
   "ups.statusClipped": "Kırpılan örnekler: {count}",
   "ups.helpBtn": "Yukarı örnekleme yardımı",

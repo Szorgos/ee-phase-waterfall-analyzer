@@ -953,6 +953,7 @@
   "ups.statusOff": "Felmintavételezés kikapcsolva",
   "ups.liveActive": "Rendszerhang (pl. MPD): {src} → {dst} · a PipeWire átalakítójával – a szűrőbeállítások itt nem érvényesek",
   "ups.liveUnsupported": "Rendszerhang: nincs átalakítás, a DAC nem tudja a célmintavételt ({src}) · Az EQ belső túlmintavételezése (Decramp) ettől függetlenül működik, a DAC saját rátáján.",
+  "ups.liveRateMismatch": "Rendszerhang: a saját motor most nem tud átalakítani (a hangrendszer mintavétele eltér), közvetlen mód.",
   "ups.liveFixedRate": "Rendszerhang: fix mintavételnél nincs felmintavételezés",
   "ups.statusClipped": "Túlvezérelt minták: {count}",
   "ups.helpBtn": "Súgó a felmintavételezéshez",

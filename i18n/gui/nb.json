@@ -949,6 +949,7 @@
   "ups.statusOff": "Oppsampling er av",
   "ups.liveActive": "Systemlyd (f.eks. MPD): {src} → {dst} · konvertert av PipeWire – filterinnstillingene gjelder ikke her",
   "ups.liveUnsupported": "Systemlyd: ingen konvertering, DAC-en støtter ikke målsamplingsfrekvensen ({src}) · EQ-ens interne oversampling (Decramp) virker likevel, på DAC-ens egen frekvens.",
+  "ups.liveRateMismatch": "Systemlyd: den innebygde motoren kan ikke konvertere akkurat nå (lydsystemets samplingsfrekvens avviker), direkte modus.",
   "ups.liveFixedRate": "Systemlyd: ingen oppsampling med fast samplingsfrekvens",
   "ups.statusClipped": "Klippede samplinger: {count}",
   "ups.helpBtn": "Hjelp for oppsampling",

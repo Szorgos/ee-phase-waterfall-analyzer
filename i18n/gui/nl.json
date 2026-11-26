@@ -949,6 +949,7 @@
   "ups.statusOff": "Upsampling uitgeschakeld",
   "ups.liveActive": "Systeemgeluid (bijv. MPD): {src} → {dst} · omgezet door PipeWire – de filterinstellingen gelden hier niet",
   "ups.liveUnsupported": "Systeemgeluid: geen omzetting, de DAC ondersteunt de doelsamplefrequentie niet ({src}) · De interne oversampling van de EQ (Decramp) werkt gewoon, op de eigen frequentie van de DAC.",
+  "ups.liveRateMismatch": "Systeemaudio: de eigen resampler kan nu niet omzetten (afwijkende samplefrequentie van het audiosysteem), directe modus.",
   "ups.liveFixedRate": "Systeemgeluid: geen upsampling bij een vaste samplefrequentie",
   "ups.statusClipped": "Overstuurde samples: {count}",
   "ups.helpBtn": "Hulp bij upsampling",

@@ -949,6 +949,7 @@
   "ups.statusOff": "Uppsampling avstängd",
   "ups.liveActive": "Systemljud (t.ex. MPD): {src} → {dst} · konverteras av PipeWire – filterinställningarna gäller inte här",
   "ups.liveUnsupported": "Systemljud: ingen konvertering, DAC:en stöder inte målsamplingsfrekvensen ({src}) · EQ:ns interna översampling (Decramp) fungerar ändå, på DAC:ens egen frekvens.",
+  "ups.liveRateMismatch": "Systemljud: den inbyggda motorn kan inte konvertera just nu (ljudsystemets samplingsfrekvens avviker), direktläge.",
   "ups.liveFixedRate": "Systemljud: ingen uppsampling med fast samplingsfrekvens",
   "ups.statusClipped": "Klippta sampel: {count}",
   "ups.helpBtn": "Hjälp om uppsampling",

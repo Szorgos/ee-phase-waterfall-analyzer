@@ -949,6 +949,7 @@
   "ups.statusOff": "升频已关闭",
   "ups.liveActive": "系统声音（如 MPD）：{src} → {dst} · 由 PipeWire 转换 – 此处滤波器设置不适用",
   "ups.liveUnsupported": "系统声音：不转换，DAC 不支持目标采样率（{src}） · EQ 的内部过采样（Decramp）仍然有效，按 DAC 自身的采样率运行。",
+  "ups.liveRateMismatch": "系统音频：内置引擎当前无法转换（音频系统采样率不匹配），已切换为直通模式。",
   "ups.liveFixedRate": "系统声音：采样率固定时不进行升频采样",
   "ups.statusClipped": "削波采样数：{count}",
   "ups.helpBtn": "升频说明",

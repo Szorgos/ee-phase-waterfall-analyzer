@@ -949,6 +949,7 @@
   "ups.statusOff": "Suréchantillonnage désactivé",
   "ups.liveActive": "Son système (p. ex. MPD) : {src} → {dst} · converti par PipeWire – les réglages du filtre ne s'appliquent pas ici",
   "ups.liveUnsupported": "Son système : pas de conversion, le DAC ne prend pas en charge la fréquence cible ({src}) · Le suréchantillonnage interne de l'EQ (Decramp) fonctionne malgré tout, à la fréquence propre du DAC.",
+  "ups.liveRateMismatch": "Audio système : le moteur intégré ne peut pas convertir pour le moment (fréquence d’échantillonnage du système audio différente) ; mode direct.",
   "ups.liveFixedRate": "Son système : pas de suréchantillonnage avec une fréquence d'échantillonnage fixe",
   "ups.statusClipped": "Échantillons écrêtés : {count}",
   "ups.helpBtn": "Aide sur le suréchantillonnage",

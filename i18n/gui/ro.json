@@ -949,6 +949,7 @@
   "ups.statusOff": "Supraeșantionare oprită",
   "ups.liveActive": "Sunet de sistem (de ex. MPD): {src} → {dst} · convertit de PipeWire – setările filtrului nu se aplică aici",
   "ups.liveUnsupported": "Sunet de sistem: fără conversie, DAC-ul nu poate folosi frecvența țintă ({src}) · Supraeșantionarea internă a EQ-ului (Decramp) funcționează oricum, la rata proprie a DAC-ului.",
+  "ups.liveRateMismatch": "Audio de sistem: motorul propriu nu poate converti acum (rata de eșantionare a sistemului audio diferă), mod direct.",
   "ups.liveFixedRate": "Sunet de sistem: fără supraeșantionare cu frecvență de eșantionare fixă",
   "ups.statusClipped": "Eșantioane supramodulate: {count}",
   "ups.helpBtn": "Ajutor supraeșantionare",

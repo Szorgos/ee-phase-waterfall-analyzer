@@ -949,6 +949,7 @@
   "ups.statusOff": "Sobreamostragem desligada",
   "ups.liveActive": "Som do sistema (p. ex. MPD): {src} → {dst} · convertido pelo PipeWire – as definições do filtro não se aplicam aqui",
   "ups.liveUnsupported": "Som do sistema: sem conversão, o DAC não suporta a taxa de destino ({src}) · A sobreamostragem interna do EQ (Decramp) funciona na mesma, à taxa própria do DAC.",
+  "ups.liveRateMismatch": "Áudio do sistema: o motor integrado não pode converter agora (taxa de amostragem do sistema de áudio diferente), modo direto.",
   "ups.liveFixedRate": "Som do sistema: sem sobreamostragem com taxa de amostragem fixa",
   "ups.statusClipped": "Amostras ceifadas: {count}",
   "ups.helpBtn": "Ajuda de sobreamostragem",

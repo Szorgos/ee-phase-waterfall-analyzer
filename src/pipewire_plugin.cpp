@@ -1495,17 +1495,23 @@ int main(int argc, char* argv[]) {
             // Szám közti szünetnél (nincs forrás) nem engedjük el rögtön: 3 s után
             idleTicks = (d.reason == "no_source") ? idleTicks + 1 : 0;
             if (o.upsampleSystemAudio) {
-                // Saját motoros mód (libsoxr / Aqulify FFT64): a capture marad a forrás natív mintavételén,
-                // a playback stream külön órajelen, a cél mintavételen megy a DAC-ra.
+                // Saját motoros mód (libsoxr / Aqulify FFT64 / FFT-DD): a ráta-invariáns őrző a fő hurok szálán
+                // ellenőrzi a tényleges capture/playback/DAC mintavételeket, és eltérésnél közvetlen módra lép vissza.
                 if (liveForced != 0) liveReleaseLocked(o.rateMode);
                 if (d.forceRate > 0 && d.srcRate > 0 && d.forceRate > d.srcRate) {
                     node.setLiveUpsample(true, d.srcRate, d.forceRate, o);
                     liveOwnTarget = d.forceRate;
-                } else if (liveOwnTarget != 0 && (d.reason != "no_source" || idleTicks >= 3)) {
-                    node.setLiveUpsample(false, 0, 0, o);
-                    liveOwnTarget = 0;
+                } else {
+                    if (d.reason == "off" || d.reason == "rate_mode") {
+                        node.resetLiveUpsampleGuard();
+                    }
+                    if (liveOwnTarget != 0 && (d.reason != "no_source" || idleTicks >= 3)) {
+                        node.setLiveUpsample(false, 0, 0, o);
+                        liveOwnTarget = 0;
+                    }
                 }
             } else {
+                node.resetLiveUpsampleGuard();
                 if (liveOwnTarget != 0) {
                     node.setLiveUpsample(false, 0, 0, o);
                     liveOwnTarget = 0;
@@ -1568,8 +1574,14 @@ int main(int argc, char* argv[]) {
             wantDop = dopVal->b;
         }
         if (o == audioOpts && wantDop == dsdDop) return;
+        const bool livePolicyChanged = (o.rateMode != audioOpts.rateMode ||
+                                        o.upsampleSystemAudio != audioOpts.upsampleSystemAudio ||
+                                        o.upsampleRule != audioOpts.upsampleRule ||
+                                        o.upsampleMaxRate != audioOpts.upsampleMaxRate ||
+                                        o.upsampleCustom != audioOpts.upsampleCustom);
         audioOpts = o;
         dsdDop = wantDop;
+        if (livePolicyChanged) node.resetLiveUpsampleGuard();
         health.setEnabled(o.errorReports);
         reportService.setEnabled(o.errorReports);
         applyAudio(o);
@@ -1651,22 +1663,26 @@ int main(int argc, char* argv[]) {
                           uResampleWarn ? "true" : "false", uReason.c_str(),
                           static_cast<unsigned long long>(uClipped),
                           static_cast<unsigned long long>(uProcessed), uDelayMs);
-            // Élő út (más programból az Aqulify eszközre szóló hang): saját motor (libsoxr / Aqulify FFT64) vagy PipeWire
+            // Élő út (más programból az Aqulify eszközre szóló hang): saját motor (libsoxr / Aqulify FFT64 / FFT-DD) vagy PipeWire
             char lbuf[384];
             {
                 std::lock_guard<std::mutex> lk(liveMu);
                 const bool ownOn = node.liveUpsampleActive() && liveOwnTarget > 0;
                 const auto bst = ownOn ? node.liveUpsampleStatus() : livebridge::BridgeStatus{};
+                const std::string guardReason = (!ownOn && liveOwnTarget > 0) ? node.liveUpsampleGuardReason() : std::string();
+                const bool active = ownOn || liveForced > 0;
                 const char* conv = ownOn
                     ? audioopt::upsampleConverterCode(bst.engineType)
-                    : "pipewire";
+                    : (liveForced > 0 ? "pipewire" : "none");
                 const uint32_t tgtRate = ownOn ? liveOwnTarget : liveForced;
+                const std::string effectiveReason = active ? std::string()
+                                                           : (!guardReason.empty() ? guardReason : liveState.reason);
                 std::snprintf(lbuf, sizeof(lbuf),
                               ",\"liveUpsample\":{\"active\":%s,\"ownEngine\":%s,\"engine\":%d,"
                               "\"srcRate\":%u,\"targetRate\":%u,\"actualDacRate\":%u,"
                               "\"latencyMs\":%.1f,\"driftPpm\":%.1f,\"underruns\":%llu,"
                               "\"reason\":\"%s\",\"dacRatesKnown\":%s,\"converter\":\"%s\"}",
-                              (ownOn || liveForced > 0) ? "true" : "false",
+                              active ? "true" : "false",
                               ownOn ? "true" : "false",
                               ownOn ? bst.engineType : 0,
                               ownOn ? bst.srcRate : liveState.srcRate,
@@ -1674,7 +1690,7 @@ int main(int argc, char* argv[]) {
                               ownOn ? bst.latencyMs : 0.0,
                               ownOn ? bst.driftPpm : 0.0,
                               static_cast<unsigned long long>(ownOn ? bst.underruns : 0),
-                              jsonEscape(liveState.reason).c_str(), liveDacKnown ? "true" : "false", conv);
+                              jsonEscape(effectiveReason).c_str(), liveDacKnown ? "true" : "false", conv);
             }
             audioopt::AudioOptions curOpts;
             { std::lock_guard<std::mutex> lk(audioMutex); curOpts = audioOpts; }
@@ -1823,8 +1839,13 @@ int main(int argc, char* argv[]) {
         const std::string target = node.outputTarget();
         const int volPct = cachedVolPct.load(std::memory_order_relaxed);
         const int volMut = cachedVolMuted.load(std::memory_order_relaxed);
+        const std::string guardReason = node.liveUpsampleGuardReason();
         const std::string diag = "\"output_target\":\"" + jsonEscape(target.empty() ? std::string("(default)") : target) +
                                  "\",\"output_state\":\"" + node.playbackStateName() +
+                                 "\",\"capture_rate\":" + std::to_string(node.captureRate()) +
+                                 ",\"graph_rate\":" + std::to_string(node.actualGraphRate()) +
+                                 ",\"live_upsample_active\":" + (node.liveUpsampleActive() ? "true" : "false") +
+                                 ",\"live_upsample_guard\":\"" + jsonEscape(guardReason) +
                                  "\",\"input_signal_age_ms\":" + std::to_string(node.inputSignalAgeMs()) +
                                  ",\"output_volume_pct\":" + std::to_string(volPct) +
                                  ",\"output_muted\":" + (volMut < 0 ? "null" : (volMut ? "true" : "false")) +

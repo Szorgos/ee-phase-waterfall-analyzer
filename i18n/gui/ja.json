@@ -949,6 +949,7 @@
   "ups.statusOff": "アップサンプリングはオフ",
   "ups.liveActive": "システムサウンド (例：MPD)：{src} → {dst} · PipeWire が変換 – フィルター設定はここには適用されません",
   "ups.liveUnsupported": "システムサウンド：変換なし。DAC が目標レート ({src}) に対応していません · EQ の内部オーバーサンプリング (Decramp) は、DAC 自身のレートでそのまま動作します。",
+  "ups.liveRateMismatch": "システム音声：内蔵エンジンは現在変換できません（オーディオシステムのサンプルレートが一致しません）。ダイレクトモード。",
   "ups.liveFixedRate": "システムサウンド：サンプリングレートが固定のため、アップサンプリングは行いません",
   "ups.statusClipped": "クリップしたサンプル数: {count}",
   "ups.helpBtn": "アップサンプリングのヘルプ",

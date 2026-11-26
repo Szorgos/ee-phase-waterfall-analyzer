@@ -953,6 +953,7 @@
   "ups.statusOff": "Upsampling off",
   "ups.liveActive": "System sound (e.g. MPD): {src} → {dst} · converted by PipeWire – the filter settings do not apply here",
   "ups.liveUnsupported": "System sound: no conversion, the DAC cannot do the target rate ({src}) · The EQ's internal oversampling (Decramp) still works, at the DAC's own rate.",
+  "ups.liveRateMismatch": "System audio: the built-in resampler cannot convert right now (audio system sample rate mismatch); direct mode.",
   "ups.liveFixedRate": "System sound: no upsampling with a fixed sample rate",
   "ups.statusClipped": "Clipped samples: {count}",
   "ups.helpBtn": "Upsampling help",
