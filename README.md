@@ -45,9 +45,9 @@ Everything runs locally on your machine. No account, no subscription, no telemet
 - **Internet Radio & UPnP / DLNA Renderer:** play custom station streams (`MP3`, `Ogg Vorbis`, `Opus`, `FLAC`, `AAC` / `HE-AAC` / `HE-AACv2` via FAAD2) or cast from UPnP/DLNA controllers through the full DSP chain.
 - **Exclusive / Direct Outputs:**
   - **Windows:** `WASAPI Exclusive` and `ASIO` (Steinberg ASIO SDK 2.3.4, GPLv3) for the built-in player; Equalizer APO plugin (`Aqulify.dll`) for system-wide audio.
-  - **Linux / Raspberry Pi:** `PipeWire` virtual sink (`Aqulify`) for system-wide audio; direct exclusive `ALSA` (including native DSD `DSD_U32_BE/LE`, `U16_BE/LE`, `U8` or DoP 1.1) and follow-the-source sample rate.
+  - **Linux / Raspberry Pi:** `PipeWire` virtual sink (`Aqulify`) for system-wide audio; direct exclusive `ALSA` (including native DSD `DSD_U32_BE/LE`, `U16_BE/LE`, `U8` or DoP 1.1), follow-the-source sample rate with silent keep-awake pause during playback, and native target-sink hardware rate monitoring.
   - **macOS:** Core Audio Tap (macOS 14.2+, no virtual driver required) or `BlackHole 2ch` (macOS 12–14.1), plus Core Audio hog/exclusive mode for PCM. DSD plays converted to PCM (DoP is not implemented on macOS yet).
-- **Software Upsampling (off by default):** choose between `libsoxr`, `Aqulify FFT64` (64-bit single-stage Kaiser-sinc), and `Aqulify FFT-DD` (106-bit Double-Double, scored **99.85%** Overall Balanced Quality in [HydrogenAudio SRC Comparisons](https://src.hydrogenaudio.org/compareresults?id1=1e745780-027e-4323-9f8d-212c349e715c&id2=0)), with selectable phase (minimum / intermediate / linear) and optional **"All audio"** system-wide upsampling bridge.
+- **Software Upsampling (off by default):** choose between `libsoxr`, `Aqulify FFT64` (64-bit single-stage Kaiser-sinc), and `Aqulify FFT-DD` (106-bit Double-Double, scored **99.85%** Overall Balanced Quality in [HydrogenAudio SRC Comparisons](https://src.hydrogenaudio.org/compareresults?id1=1e745780-027e-4323-9f8d-212c349e715c&id2=0)), with selectable phase (minimum / intermediate / linear) and optional **"All audio"** system-wide upsampling bridge (on Linux, two independent PipeWire clock domains with live output switching and clean direct-mode fallback when the hardware does not support the target rate).
 
 ### 5. Experimental Features & Android Remote
 - **Room Measurement & Correction (experimental):** 5-step swept-sine wizard with mic calibration (`.cal`, `.txt`, `.frd`, `.csv`), multi-point power averaging, per-channel L/R EQ capped at `+3.0 dB` boost, and automatic preamp.
@@ -104,7 +104,7 @@ bash install.sh
 
 ## Limitations, Known Issues & "What It Does Not Do Yet"
 
-Honest status as of **v3.0.2**:
+Honest status as of **v3.0.3**:
 
 - **Windows multi-output:** simultaneous 2–4 DAC outputs and active multi-way crossovers work on Linux and macOS only; Windows support is not implemented yet.
 - **Room measurement & correction (experimental):** verified extensively with automated tests and a simulated microphone, **not yet validated in the field with a real physical measurement microphone**.
