@@ -1060,15 +1060,30 @@ static void testWayEqSeed50Impl() {
             CfgT cEq = base;
             cEq.outputs[targetWay].way.on = true;
             cEq.outputs[targetWay].way.numBands = nBands;
+            double maxTau = 0.0;
             for (int b = 0; b < nBands; ++b) {
                 auto& band = cEq.outputs[targetWay].way.bands[b];
                 band.type = static_cast<int32_t>(types[rng() % types.size()]);
                 band.freq = static_cast<float>(std::exp(std::uniform_real_distribution<double>(std::log(25.0), std::log(16000.0))(rng)));
                 band.gainDb = static_cast<float>(std::uniform_real_distribution<double>(-18.0, 6.0)(rng));
                 band.q = static_cast<float>(std::uniform_real_distribution<double>(0.3, 10.0)(rng));
+                // A leglassabb biquad pólus időállandója: alacsony frekvencián és nagy Q-nál az 1,5 s IR-ablak
+                // csonkolná a lecsengést (-78 dB vs -90 dB mérési küszöb, pl. AQ_CHECK_SEED=1795716055).
+                const AnalyticBiquad bq = makeAnalyticEq(static_cast<EqBandType>(band.type), band.freq, band.gainDb, band.q, sr);
+                const double disc = bq.a1 * bq.a1 - 4.0 * bq.a2;
+                const double r = (disc <= 0.0)
+                                     ? std::sqrt(std::max(0.0, bq.a2))
+                                     : 0.5 * (std::fabs(bq.a1) + std::sqrt(disc));
+                if (r > 0.0 && r < 1.0) {
+                    const double tau = -1.0 / (sr * std::log(r));
+                    maxTau = std::max(maxTau, tau);
+                }
             }
 
-            const size_t len = static_cast<size_t>(sr * 1.5);
+            // Legalább -140 dB lecsengés a leglassabb póluson (~16,5 * tau), hogy a -90 dB-es vizsgálati határon
+            // ne maradjon IR-csonkolási szivárgás (a 0,05 dB tűréshatár változatlanul szigorú marad).
+            const double irSec = std::clamp(std::max(1.5, 16.5 * maxTau), 1.5, 8.0);
+            const size_t len = static_cast<size_t>(sr * irSec);
             std::vector<float> imp(len, 0.0f);
             imp[0] = 1.0f;
 
