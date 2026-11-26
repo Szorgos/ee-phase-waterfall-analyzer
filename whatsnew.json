@@ -1,6 +1,104 @@
 {
   "versions": [
     {
+      "version": "3.0.3",
+      "date": "2026-11-26",
+      "notes": {
+        "hu": [
+          "Linux: a rendszerhang saját motorral történő felmintavételezése két külön PipeWire-órajelen fut – megszűnt a félsebességű, mélyre torzult lejátszás, és felmintavételezés közben is simán váltható a kimeneti eszköz.",
+          "Linux és Raspberry Pi: forrást követő módban az ébren tartás nem rántja vissza a mintavételt 48 kHz-re és nem zajong a naplóban számváltáskor; ha a hangkártya nem tudja a célmintavételt, a felület pontosan jelzi a közvetlen módot."
+        ],
+        "en": [
+          "Linux: system-audio upsampling with the built-in engine now runs on two independent PipeWire clock domains – fixing half-speed, low-pitched playback and enabling smooth output switching during active upsampling.",
+          "Linux & Raspberry Pi: in follow-source mode, keep-awake no longer pulls the sample rate back to 48 kHz or spams the log between tracks; if the sound card does not support the target rate, the UI accurately reports direct mode."
+        ],
+        "es": [
+          "Linux: el sobremuestreo del audio del sistema con el motor propio ahora funciona en dos dominios de reloj independientes de PipeWire, corrigiendo la reproducción a media velocidad y tono grave y permitiendo cambiar de salida sobre la marcha.",
+          "Linux y Raspberry Pi: en modo de seguimiento de fuente, mantener despierto ya no devuelve la frecuencia a 48 kHz ni llena el registro entre pistas; si la tarjeta no admite la frecuencia destino, la interfaz indica con precisión el modo directo."
+        ],
+        "fr": [
+          "Linux : le suréchantillonnage de l’audio système avec le moteur intégré fonctionne désormais sur deux domaines d’horloge PipeWire indépendants – finie la lecture ralentie et grave, et le changement de sortie reste fluide en cours d’écoute.",
+          "Linux et Raspberry Pi : en mode suivi de source, le maintien en éveil ne ramène plus la fréquence à 48 kHz et n’encombre plus le journal entre les pistes ; si la carte son ne gère pas la fréquence demandée, l’interface indique fidèlement le mode direct."
+        ],
+        "zh": [
+          "Linux：使用内置引擎对系统音频升频采样现已在两个独立的 PipeWire 时钟域运行——彻底修复半速低沉变调播放问题，并在升频过程中支持平滑切换输出设备。",
+          "Linux 与 Raspberry Pi：在跟随音源模式下，保持唤醒不再将采样率拉回 48 kHz 或在切歌时刷屏日志；若声卡不支持目标采样率，界面会如实显示已回退至直通模式。"
+        ],
+        "de": [
+          "Linux: Systemaudio-Upsampling mit der eigenen Engine läuft nun in zwei getrennten PipeWire-Taktdomänen – halbe Geschwindigkeit und zu tiefe Tonhöhe sind behoben, und der Ausgang lässt sich auch im Betrieb nahtlos wechseln.",
+          "Linux & Raspberry Pi: Im Modus „Quelle folgen“ zieht die Wachhalte-Funktion die Abtastrate nicht mehr auf 48 kHz zurück und erzeugt kein Log-Rauschen beim Titelwechsel; unterstützt die Soundkarte die Zielrate nicht, zeigt die Oberfläche ehrlich den Direktmodus an."
+        ],
+        "it": [
+          "Linux: il sovracampionamento dell’audio di sistema con il motore integrato ora gira su due domini di clock PipeWire indipendenti, risolvendo la riproduzione rallentata e grave e consentendo di cambiare uscita senza intoppi.",
+          "Linux e Raspberry Pi: in modalità segui sorgente, mantieni attivo non riporta più la frequenza a 48 kHz né riempie il registro tra i brani; se la scheda audio non supporta la frequenza richiesta, l’interfaccia segnala chiaramente la modalità diretta."
+        ],
+        "nl": [
+          "Linux: upsampling van systeemaudio met de eigen engine draait nu op twee onafhankelijke PipeWire-klokdomeinen – vertraagd en te laag klinkend geluid is verholpen en wisselen van uitgang werkt vloeiend tijdens upsampling.",
+          "Linux & Raspberry Pi: bij bron-volgen trekt wakker houden de samplefrequentie niet langer terug naar 48 kHz en voorkomt logruis tussen nummers; ondersteunt de geluidskaart de gevraagde frequentie niet, dan meldt de interface eerlijk de directe modus."
+        ],
+        "pl": [
+          "Linux: nadpróbkowanie dźwięku systemowego własnym silnikiem działa teraz na dwóch niezależnych zegarach PipeWire – koniec z odtwarzaniem w połowie prędkości i obniżonym tonem, a wyjście można płynnie przełączać w trakcie pracy.",
+          "Linux i Raspberry Pi: w trybie śledzenia źródła utrzymywanie aktywności nie cofa już częstotliwości do 48 kHz i nie zaśmieca dziennika między utworami; gdy karta nie obsługuje docelowej częstotliwości, interfejs rzetelnie informuje o trybie bezpośrednim."
+        ],
+        "ru": [
+          "Linux: апсемплинг системного звука собственным движком теперь работает в двух независимых тактовых доменах PipeWire — устранено замедленное и заниженное воспроизведение, а переключение выхода работает плавно прямо во время апсемплинга.",
+          "Linux и Raspberry Pi: в режиме следования за источником поддержание активности больше не сбрасывает частоту на 48 кГц и не засоряет журнал при смене треков; если карта не поддерживает целевую частоту, интерфейс точно сообщает о прямом режиме."
+        ],
+        "pt": [
+          "Linux: a sobreamostragem do áudio do sistema com o motor próprio passa a correr em dois domínios de relógio PipeWire independentes, corrigindo a reprodução lenta e grave e permitindo trocar de saída suavemente durante a sobreamostragem.",
+          "Linux e Raspberry Pi: no modo seguir a fonte, manter ativo deixa de puxar a frequência de volta para 48 kHz ou poluir o registo entre faixas; se a placa de som não suportar a taxa pedida, a interface indica claramente o modo direto."
+        ],
+        "ro": [
+          "Linux: supraeșantionarea sunetului de sistem cu motorul propriu rulează acum pe două domenii independente de ceas PipeWire – eliminând redarea lentă cu ton coborât și permițând schimbarea lină a ieșirii în timpul supraeșantionării.",
+          "Linux și Raspberry Pi: în modul de urmărire a sursei, menținerea activă nu mai trage rata înapoi la 48 kHz și nu mai încarcă jurnalul între piese; dacă placa de sunet nu suportă rata cerută, interfața indică clar modul direct."
+        ],
+        "el": [
+          "Linux: η υπερδειγματοληψία ήχου συστήματος με την ενσωματωμένη μηχανή εκτελείται πλέον σε δύο ανεξάρτητα ρολόγια PipeWire, διορθώνοντας την αργή και χαμηλότονη αναπαραγωγή και επιτρέποντας ομαλή αλλαγή εξόδου εν κινήσει.",
+          "Linux & Raspberry Pi: στη λειτουργία παρακολούθησης πηγής, η διατήρηση εγρήγορσης δεν επαναφέρει πλέον τη συχνότητα στα 48 kHz ούτε γεμίζει το αρχείο καταγραφής μεταξύ κομματιών· αν η κάρτα ήχου δεν υποστηρίζει τον στόχο, η διεπαφή δείχνει καθαρά την άμεση λειτουργία."
+        ],
+        "tr": [
+          "Linux: yerleşik motorla sistem sesi yukarı örnekleme artık iki bağımsız PipeWire saat alanında çalışıyor – yarı hızda kalın ses sorunu giderildi ve aktif yukarı örnekleme sırasında çıkış sorunsuz değiştirilebiliyor.",
+          "Linux ve Raspberry Pi: kaynağı izle modunda uyanık tutma artık örnekleme hızını 48 kHz’e geri çekmiyor ve parça geçişlerinde günlüğü doldurmuyor; ses kartı hedef hızı desteklemiyorsa arayüz doğrudan moda geçildiğini açıkça bildiriyor."
+        ],
+        "fi": [
+          "Linux: järjestelmä-äänen ylinäytteistys omalla moottorilla toimii nyt kahdessa erillisessä PipeWire-kellopiirissä – puolinopeuksinen, matala toisto on korjattu ja lähdön vaihto onnistuu saumattomasti käytön aikana.",
+          "Linux ja Raspberry Pi: lähdettä seuraavassa tilassa hereilläpito ei enää vedä näytteenottotaajuutta takaisin 48 kHz:iin eikä täytä lokia kappaleiden välissä; jos äänikortti ei tue tavoitetaajuutta, käyttöliittymä kertoo selkeästi suorasta tilasta."
+        ],
+        "da": [
+          "Linux: opsampling af systemlyd med den indbyggede motor kører nu i to uafhængige PipeWire-urdomæner – halv hastighed og dyb tonehøjde er rettet, og udgangen kan skiftes gnidningsfrit under aktiv opsampling.",
+          "Linux og Raspberry Pi: i følg-kilde-tilstand trækker hold-vågen ikke længere samplingsfrekvensen tilbage til 48 kHz eller fylder loggen mellem numre; understøtter lydkortet ikke målfrekvensen, viser brugerfladen tydeligt direkte tilstand."
+        ],
+        "nb": [
+          "Linux: oppsampling av systemlyd med egen motor kjører nå i to uavhengige PipeWire-klokkedomener – halv hastighet og dyp tonehøyde er rettet, og utgangen kan byttes sømløst under aktiv oppsampling.",
+          "Linux og Raspberry Pi: i følg-kilde-modus trekker hold-våken ikke lenger samplingsfrekvensen tilbake til 48 kHz eller fyller loggen mellom spor; hvis lydkortet ikke støtter målfrekvensen, viser grensesnittet tydelig direkte modus."
+        ],
+        "sv": [
+          "Linux: uppsampling av systemljud med den inbyggda motorn körs nu i två oberoende PipeWire-klockdomäner – halvfart och för låg tonhöjd är åtgärdat, och utgången kan bytas smidigt under aktiv uppsampling.",
+          "Linux och Raspberry Pi: i följ-källa-läge drar håll-vaken inte längre tillbaka samplingsfrekvensen till 48 kHz eller fyller loggen mellan spår; om ljudkortet inte stöder målfrekvensen visar gränssnittet tydligt direktläge."
+        ],
+        "he": [
+          "Linux: העלאת קצב דגימה של שמע המערכת במנוע המובנה פועלת כעת בשני תחומי שעון עצמאיים של PipeWire – תוקנה הבעיה של ניגון בחצי מהירות ובטון נמוך, והחלפת יציאה פועלת בצורה חלקה גם בזמן העלאת קצב.",
+          "Linux ו-Raspberry Pi: במצב מעקב אחר המקור, שמירה על ערות כבר אינה מחזירה את קצב הדגימה ל-48 kHz ואינה מציפה את היומן בין רצועות; אם כרטיס הקול אינו תומך בקצב המבוקש, הממשק מדווח במדויק על מעבר למצב ישיר."
+        ],
+        "ja": [
+          "Linux：内蔵エンジンによるシステム音声のアップサンプリングが独立した2つの PipeWire クロック領域で動作するようになり、半速・低音化の問題を解消し、アップサンプリング中でも出力先を滑らかに切り替えられます。",
+          "Linux / Raspberry Pi：ソース追従モードでスリープ防止がサンプルレートを 48 kHz に引き戻したり曲間でログを乱発したりしなくなりました。サウンドカードが目標レート非対応の場合は、ダイレクトモードへの切り替えを正確に表示します。"
+        ],
+        "ko": [
+          "Linux: 내장 엔진을 이용한 시스템 오디오 업샘플링이 이제 독립된 두 개의 PipeWire 클록 영역에서 실행되어, 절반 속도·저음 재생 문제를 해결하고 업샘플링 중에도 출력을 매끄럽게 전환할 수 있습니다.",
+          "Linux 및 Raspberry Pi: 소스 추적 모드에서 깨우기 유지가 샘플 레이트를 48 kHz로 되돌리거나 트랙 전환 시 로그를 반복 기록하지 않으며, 사운드 카드가 목표 레이트를 지원하지 않으면 직접 모드로 전환됨을 정확히 안내합니다."
+        ],
+        "cs": [
+          "Linux: převzorkování systémového zvuku vlastním jádrem nyní běží na dvou nezávislých hodinových doménách PipeWire – odstraněno přehrávání poloviční rychlostí s hlubokým tónem a výstup lze plynule přepínat i za chodu.",
+          "Linux a Raspberry Pi: v režimu sledování zdroje udržování v bdělém stavu už nestahuje vzorkovací frekvenci zpět na 48 kHz a nezahltí protokol mezi skladbami; nepodporuje-li karta cílovou frekvenci, rozhraní přesně ukáže přímý režim."
+        ],
+        "uk": [
+          "Linux: підвищення частоти дискретизації системного звуку власним рушієм тепер працює у двох незалежних тактових доменах PipeWire — усунуто сповільнене відтворення зі зниженим тоном, а перемикання виходу працює плавно на льоту.",
+          "Linux і Raspberry Pi: у режимі слідування за джерелом підтримання активності більше не повертає частоту до 48 kHz і не засмічує журнал між треками; якщо звукова карта не підтримує цільову частоту, інтерфейс точно показує прямий режим."
+        ]
+      }
+    },
+    {
       "version": "3.0.2",
       "date": "2026-11-25",
       "notes": {
