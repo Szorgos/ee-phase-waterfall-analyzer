@@ -257,6 +257,20 @@ bool applyOutputSink(const std::string& targetSink, bool remember, bool pin = fa
     }
     if (resolved.empty() || !isSafeSinkName(resolved)) return false;
 
+    // Szétválasztott rendszerhang-felmintavételezésnél a playback stream node.dont-reconnect=true tulajdonsággal fut
+    // (visszacsatolás-védelem). Kimenetváltáskor ezért nem pactl move-sink-input-tal mozgatjuk, hanem a fő hurokban
+    // közvetlenül újraépíttetjük a playback streamet az új fizikai céllal.
+    if (g_node && g_node->liveUpsampleDecoupled()) {
+        g_node->setPreferredOutput(resolved);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(400);
+        while (std::chrono::steady_clock::now() < deadline && g_node->outputTarget() != resolved) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        }
+        std::cout << "[PipeWire] Kimeneti eszköz (szétválasztott mód): " << resolved << "\n";
+        if (remember) linux_store::saveOutputSink(resolved);
+        return true;
+    }
+
     std::string sinkInputId, curSinkId;
     if (!findOwnSinkInput(sinkInputId, curSinkId)) {
         // A lejátszó stream épp hiba / újracsatlakozás alatt állhat: a célt akkor is beállítjuk és elindítjuk az újrakötést

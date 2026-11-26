@@ -131,6 +131,20 @@ int main() {
         CHECK(hasValidPhysicalTarget("alsa_output.usb-Generic_USB_Audio-00.analog-stereo"),
               "USB DAC elfogadva");
         CHECK(hasValidPhysicalTarget("dac_a"), "teszt fizikai nyelő (dac_a) elfogadva");
+
+        CHECK(!canUseDecoupledPlayback(true, 96000, ""), "üres céllal nem engedélyezett a szétválasztott mód");
+        CHECK(!canUseDecoupledPlayback(true, 96000, "aqulify_sink"), "saját aqulify_sink céllal tilos a szétválasztott mód");
+        CHECK(!canUseDecoupledPlayback(true, 96000, "auto_null"), "auto_null céllal tilos a szétválasztott mód");
+        CHECK(!canUseDecoupledPlayback(false, 96000, "dac_a"), "kikapcsolva nem szétválasztott");
+        CHECK(!canUseDecoupledPlayback(true, 0, "dac_a"), "0 célrátával nem szétválasztott");
+        CHECK(canUseDecoupledPlayback(true, 96000, "dac_a"), "valid fizikai céllal (dac_a) engedélyezett");
+
+        CHECK(needsPlaybackRebuildForTarget(true, "dac_a", "dac_b"),
+              "kimenetváltás szétválasztott módban (dac_a -> dac_b) playback újraépítést kér");
+        CHECK(!needsPlaybackRebuildForTarget(true, "dac_a", "dac_a"),
+              "azonos cél (dac_a -> dac_a) nem építi újra a playback streamet");
+        CHECK(!needsPlaybackRebuildForTarget(false, "dac_a", "dac_b"),
+              "közvetlen módban nem a szétválasztott újraépítés fut");
     }
 
     std::printf("[4] RateInvariantGuard állapotgép (#52, #51, ping-pong védelem, kimenet- és módváltás)\n");

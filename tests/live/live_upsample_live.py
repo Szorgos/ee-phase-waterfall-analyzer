@@ -44,6 +44,14 @@ def live():
     return ul.get_status().get("liveUpsample", {})
 
 
+def set_output_sink(sink_name):
+    ws = ul.WS(ul.PORT)
+    ws.send({"type": "hello", "client": "live_upsample"})
+    ws.send({"type": "set_output_sink", "sink": sink_name})
+    time.sleep(0.3)
+    ws.s.close()
+
+
 def wait_for(pred, seconds):
     end = time.time() + seconds
     while time.time() < end:
@@ -136,72 +144,138 @@ def main():
     check(lu.get("active") is False and lu.get("reason") == "no_source" and force_rate() == 0,
           f"K14d: a hangfolyam vége után a kényszer megszűnt (force-rate {force_rate()}, {lu})")
 
-    # --- K14e / K14f: Saját motoros rendszerhang-felmintavételezés (#51 és #52 regresszió)
+    # --- K14e / K14g / K14f: Saját motoros rendszerhang-felmintavételezés (#51 és #52 regresszió, 2. fázis)
     wav48 = os.path.join(work, "live_48k.wav")
-    ul.make_sine_wav(wav48, sr=48000, freq=1000.0, seconds=30.0, amp=0.3)
+    ul.make_sine_wav(wav48, sr=48000, freq=1000.0, seconds=60.0, amp=0.3)
 
-    print("[K14e] Saját motor (rendszerhang): follow + ×2, 48 kHz 1 kHz szinusz — nincs 0,5x/2x tempóhiba és őszinte állapot")
+    print("[K14e] Saját motor (rendszerhang): follow + ×2, 48 kHz -> 96 kHz — valódi szétválasztás, 1 kHz pontos, nincs 500 Hz")
     ul.set_opts(rateMode="follow", keepAwake=False, upsampleRule=1, upsampleSystemAudio=True, upsampleEngine=0)
     p48 = play(wav48)
     try:
-        time.sleep(4.0)
+        lu = wait_for(lambda: (lambda x: x if x.get("active") and x.get("ownEngine") else None)(live()), 7.0) or live()
+        time.sleep(1.0)
         lu = live()
         cap_sr = ul.pw_node_rate("aqulify_sink")
         dac_sr = ul.pw_node_rate("dac_a")
         rec_sr = dac_sr if dac_sr > 0 else 48000
         tones = record_tones("dac_a", rec_sr, duration=1.5)
+        check(lu.get("active") is True and lu.get("ownEngine") is True and
+              lu.get("converter") == "libsoxr" and
+              lu.get("srcRate") == 48000 and lu.get("targetRate") == 96000 and
+              cap_sr == 48000 and dac_sr == 96000,
+              f"K14e (libsoxr): valódi szétválasztott mód (cap_sr={cap_sr}, dac_sr={dac_sr}, liveUpsample={lu})")
         if tones is not None:
             ok_pitch = (tones["db1000"] > -25.0 and
                         (tones["db1000"] - tones["db500"]) >= 40.0 and
                         (tones["db1000"] - tones["db2000"]) >= 40.0)
             check(ok_pitch,
-                  f"K14e: hangmagasság/sebesség pontos (1 kHz={tones['db1000']:.1f} dB, 500 Hz={tones['db500']:.1f} dB, "
-                  f"2 kHz={tones['db2000']:.1f} dB, rec_sr={rec_sr}, cap_sr={cap_sr}, dac_sr={dac_sr})")
+                  f"K14e (libsoxr): 1 kHz pontos, nincs 500 Hz/2 kHz (1 kHz={tones['db1000']:.1f} dB, "
+                  f"500 Hz={tones['db500']:.1f} dB, 2 kHz={tones['db2000']:.1f} dB)")
+            if tones["dbImg"] is not None:
+                rej = tones["db1000"] - tones["dbImg"]
+                check(rej >= 70.0,
+                      f"K14e (libsoxr): 47 kHz tükörkép elnyomása {rej:.1f} dB (1 kHz={tones['db1000']:.1f}, 47 kHz={tones['dbImg']:.1f})")
         else:
-            check(False, f"K14e: felvétel sikertelen a dac_a nyelőről (rec_sr={rec_sr})")
-        if lu.get("active") is True and lu.get("ownEngine") is True:
-            honest = (cap_sr == 48000 and dac_sr == 96000 and
-                      lu.get("srcRate") == 48000 and lu.get("targetRate") == 96000)
+            check(False, f"K14e (libsoxr): felvétel sikertelen a dac_a nyelőről (rec_sr={rec_sr})")
+
+        # Motorváltás futás közben Aqulify FFT64-re
+        ul.set_opts(upsampleEngine=1)
+        lu_fft = wait_for(lambda: (lambda x: x if x.get("active") and x.get("converter") == "fft64" else None)(live()), 6.0) or live()
+        time.sleep(1.0)
+        cap_sr = ul.pw_node_rate("aqulify_sink")
+        dac_sr = ul.pw_node_rate("dac_a")
+        tones_fft = record_tones("dac_a", dac_sr if dac_sr > 0 else 48000, duration=1.5)
+        check(lu_fft.get("active") is True and lu_fft.get("ownEngine") is True and
+              lu_fft.get("converter") == "fft64" and cap_sr == 48000 and dac_sr == 96000,
+              f"K14e (FFT64): futás közbeni motorváltás aktív (cap_sr={cap_sr}, dac_sr={dac_sr}, liveUpsample={lu_fft})")
+        if tones_fft is not None:
+            ok_fft = (tones_fft["db1000"] > -25.0 and
+                      (tones_fft["db1000"] - tones_fft["db500"]) >= 40.0 and
+                      (tones_fft["db1000"] - tones_fft["db2000"]) >= 40.0)
+            check(ok_fft,
+                  f"K14e (FFT64): 1 kHz pontos (1 kHz={tones_fft['db1000']:.1f} dB, 500 Hz={tones_fft['db500']:.1f} dB)")
         else:
-            honest = (lu.get("active") is False and lu.get("ownEngine") is False and
-                      lu.get("reason") == "rate_mismatch" and lu.get("converter") == "none")
-        check(honest, f"K14e: őszinte állapot (cap_sr={cap_sr}, dac_sr={dac_sr}, liveUpsample={lu})")
-        # Ping-pong ellenőrzés: 2,5 s múlva sem kapcsol vissza hibásan és a hang 1 kHz marad
-        time.sleep(2.5)
-        lu2 = live()
-        if lu.get("active") is False:
-            check(lu2.get("active") is False and lu2.get("ownEngine") is False and lu2.get("reason") == "rate_mismatch",
-                  f"K14e: visszalépés után nincs ping-pong (liveUpsample={lu2})")
+            check(False, "K14e (FFT64): felvétel sikertelen")
+
+        # --- K14g: Élő kimenetváltás (dac_a -> dac_b -> dac_a) felmintavételezés közben (node.dont-reconnect=true mellett)
+        print("[K14g] Kimenetváltás aktív rendszerhang-felmintavételezés közben (dac_a -> dac_b -> dac_a)")
+        ul.set_opts(upsampleEngine=0)
+        time.sleep(1.0)
+        set_output_sink("dac_b")
+        st_b = wait_for(lambda: (lambda s: s if s.get("currentSink") == "dac_b" and
+                                 s.get("liveUpsample", {}).get("active") and
+                                 s.get("liveUpsample", {}).get("ownEngine") else None)(ul.get_status()), 8.0) or ul.get_status()
+        time.sleep(1.0)
+        lu_b = st_b.get("liveUpsample", {})
+        cap_b = ul.pw_node_rate("aqulify_sink")
+        dac_b = ul.pw_node_rate("dac_b")
+        tones_b = record_tones("dac_b", dac_b if dac_b > 0 else 48000, duration=1.5)
+        check(st_b.get("currentSink") == "dac_b" and lu_b.get("active") is True and
+              lu_b.get("ownEngine") is True and cap_b == 48000 and dac_b == 96000,
+              f"K14g (dac_b): átváltás sikerült (currentSink={st_b.get('currentSink')}, cap_sr={cap_b}, dac_b={dac_b}, lu={lu_b})")
+        if tones_b is not None:
+            ok_b = (tones_b["db1000"] > -25.0 and
+                    (tones_b["db1000"] - tones_b["db500"]) >= 40.0 and
+                    (tones_b["db1000"] - tones_b["db2000"]) >= 40.0)
+            check(ok_b,
+                  f"K14g (dac_b): átváltás után 1 kHz pontos, nincs 500 Hz (1 kHz={tones_b['db1000']:.1f} dB, "
+                  f"500 Hz={tones_b['db500']:.1f} dB, 2 kHz={tones_b['db2000']:.1f} dB)")
+        else:
+            check(False, f"K14g (dac_b): felvétel sikertelen a dac_b nyelőről (dac_b={dac_b})")
+
+        # Visszaváltás dac_a-ra
+        set_output_sink("dac_a")
+        st_a2 = wait_for(lambda: (lambda s: s if s.get("currentSink") == "dac_a" and
+                                  s.get("liveUpsample", {}).get("active") and
+                                  s.get("liveUpsample", {}).get("ownEngine") else None)(ul.get_status()), 8.0) or ul.get_status()
+        time.sleep(1.0)
+        cap_a2 = ul.pw_node_rate("aqulify_sink")
+        dac_a2 = ul.pw_node_rate("dac_a")
+        tones_a2 = record_tones("dac_a", dac_a2 if dac_a2 > 0 else 48000, duration=1.5)
+        check(st_a2.get("currentSink") == "dac_a" and cap_a2 == 48000 and dac_a2 == 96000 and
+              tones_a2 is not None and tones_a2["db1000"] > -25.0 and (tones_a2["db1000"] - tones_a2["db500"]) >= 40.0,
+              f"K14g (vissza dac_a): visszaváltás után 1 kHz pontos (cap_sr={cap_a2}, dac_a={dac_a2}, "
+              f"1 kHz={tones_a2['db1000'] if tones_a2 else None}, 500 Hz={tones_a2['db500'] if tones_a2 else None})")
+
+        # --- K14f: 48 kHz-re zárt kimenet (sof-hda-dsp szimuláció: audio.allowed-rates=[48000], node.lock-rate=true)
+        print("[K14f] Csak 48 kHz-et tudó kimenet (dac_48k_only) — őszinte dac_unsupported visszalépés, 1 kHz marad")
+        pw_create = subprocess.run(
+            ["pw-cli", "create-node", "adapter",
+             'factory.name=support.null-audio-sink node.name=dac_48k_only node.description="48k Only Speaker" '
+             'media.class=Audio/Sink audio.position="[ FL FR ]" object.linger=true node.driver=true '
+             'priority.driver=1500 priority.session=1500 audio.rate=48000 audio.allowed-rates="[ 48000 ]" '
+             'node.lock-rate=true'],
+            capture_output=True, text=True, timeout=5,
+        )
+        time.sleep(1.0)
+        set_output_sink("dac_48k_only")
+        time.sleep(3.5)
+        st_48 = ul.get_status()
+        lu_48 = st_48.get("liveUpsample", {})
+        dac_48 = ul.pw_node_rate("dac_48k_only")
+        tones_48 = record_tones("dac_48k_only", 48000, duration=1.5)
+        check(pw_create.returncode == 0 and st_48.get("currentSink") == "dac_48k_only" and dac_48 == 48000 and
+              lu_48.get("active") is False and lu_48.get("ownEngine") is False and
+              lu_48.get("reason") == "dac_unsupported" and lu_48.get("converter") == "none",
+              f"K14f: csak 48 kHz-es kimenetnél őszinte dac_unsupported (sink={st_48.get('currentSink')}, dac_48={dac_48}, lu={lu_48})")
+        if tones_48 is not None:
+            check(tones_48["db1000"] > -25.0 and (tones_48["db1000"] - tones_48["db500"]) >= 40.0,
+                  f"K14f: 48 kHz-es kimeneten 1 kHz pontos (1 kHz={tones_48['db1000']:.1f} dB, 500 Hz={tones_48['db500']:.1f} dB)")
+        else:
+            check(False, "K14f: felvétel sikertelen a dac_48k_only nyelőről")
+
+        # Vissza dac_a-ra: a dac_unsupported tiltás feloldódik, a saját motor újra 96 kHz-en aktív!
+        set_output_sink("dac_a")
+        st_back = wait_for(lambda: (lambda s: s if s.get("currentSink") == "dac_a" and
+                                    s.get("liveUpsample", {}).get("active") and
+                                    s.get("liveUpsample", {}).get("ownEngine") else None)(ul.get_status()), 8.0) or ul.get_status()
+        lu_back = st_back.get("liveUpsample", {})
+        check(st_back.get("currentSink") == "dac_a" and lu_back.get("active") is True and
+              lu_back.get("ownEngine") is True and ul.pw_node_rate("dac_a") == 96000,
+              f"K14f: dac_a-ra visszaváltva a saját motor újra aktív 96 kHz-en (lu={lu_back})")
     finally:
         p48.terminate()
         p48.wait(timeout=5)
-    time.sleep(0.8)
-
-    print("[K14f] Saját motor (rendszerhang): 48 kHz-re zárt kimenet (system mód) — tiszta visszalépés, nincs 0,5x/dupla konverzió")
-    ul.set_opts(rateMode="system", keepAwake=False, upsampleRule=1, upsampleSystemAudio=True, upsampleEngine=0)
-    p48b = play(wav48)
-    try:
-        time.sleep(4.0)
-        lu = live()
-        cap_sr = ul.pw_node_rate("aqulify_sink")
-        dac_sr = ul.pw_node_rate("dac_a")
-        rec_sr = dac_sr if dac_sr > 0 else 48000
-        tones = record_tones("dac_a", rec_sr, duration=1.5)
-        if tones is not None:
-            ok_pitch = (tones["db1000"] > -25.0 and
-                        (tones["db1000"] - tones["db500"]) >= 40.0 and
-                        (tones["db1000"] - tones["db2000"]) >= 40.0)
-            check(ok_pitch,
-                  f"K14f: 48 kHz-re zárt kimeneten 1 kHz pontos (1 kHz={tones['db1000']:.1f} dB, 500 Hz={tones['db500']:.1f} dB, "
-                  f"2 kHz={tones['db2000']:.1f} dB, dac_sr={dac_sr})")
-        else:
-            check(False, f"K14f: felvétel sikertelen (rec_sr={rec_sr})")
-        check(dac_sr == 48000 and lu.get("active") is False and lu.get("ownEngine") is False and
-              lu.get("reason") == "rate_mismatch" and lu.get("converter") == "none",
-              f"K14f: 48 kHz-es kimenetnél őszinte rate_mismatch állapot (dac_sr={dac_sr}, cap_sr={cap_sr}, liveUpsample={lu})")
-    finally:
-        p48b.terminate()
-        p48b.wait(timeout=5)
 
     ul.set_opts(rateMode="system", upsampleRule=0, upsampleSystemAudio=False)
     print(f"\n{('SIKERTELEN' if fails else 'MINDEN TESZT SIKERES')} ({fails} hiba)")

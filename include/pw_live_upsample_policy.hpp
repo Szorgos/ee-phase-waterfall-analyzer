@@ -33,6 +33,24 @@ inline bool hasValidPhysicalTarget(const std::string& target, const std::string&
 }
 
 /**
+ * Szétválasztott (link-group nélküli, node.dont-reconnect=true) playback stream létrehozásának feltétele:
+ * kizárólag aktív kérésnél, érvényes dstRate > 0 és validált külső fizikai cél esetén (visszacsatolás-védelem).
+ */
+inline bool canUseDecoupledPlayback(bool enable, uint32_t dstRate, const std::string& target,
+                                    const std::string& sinkName = "aqulify_sink") {
+    return enable && dstRate > 0 && hasValidPhysicalTarget(target, sinkName);
+}
+
+/**
+ * Kimenetváltás szétválasztott módban (node.dont-reconnect=true): ha a kívánt fizikai cél eltér attól,
+ * amelyre a jelenlegi playback stream épült, a streamet az új céllal újra kell építeni.
+ */
+inline bool needsPlaybackRebuildForTarget(bool decoupledActive, const std::string& appliedTarget,
+                                          const std::string& wantedTarget) {
+    return decoupledActive && !wantedTarget.empty() && appliedTarget != wantedTarget;
+}
+
+/**
  * Valós idejű ráta-invariáns: a híd csak akkor dolgozhat, ha a capture stream tényleges rátája megegyezik
  * a híd bemeneti rátájával, és a playback stream tényleges rátája megegyezik a híd kimeneti rátájával.
  */

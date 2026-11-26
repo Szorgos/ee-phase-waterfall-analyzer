@@ -85,7 +85,12 @@ public:
 
     std::atomic<uint32_t> sampleRate{48000};
     std::atomic<uint32_t> graphRate{0};
-    uint32_t actualGraphRate() const { const uint32_t g = graphRate.load(std::memory_order_relaxed); return g > 0 ? g : sampleRate.load(std::memory_order_relaxed); }
+    uint32_t actualGraphRate() const {
+        const uint32_t tr = targetSinkRate_.load(std::memory_order_relaxed);
+        if (tr > 0) return tr;
+        const uint32_t g = graphRate.load(std::memory_order_relaxed);
+        return g > 0 ? g : sampleRate.load(std::memory_order_relaxed);
+    }
     std::atomic<bool> playbackStreaming{false};
     std::atomic<bool> coreError{false};
 
@@ -243,6 +248,9 @@ public:
         return liveUpsActive_.load(std::memory_order_acquire) &&
                liveBridgeRateMatched_.load(std::memory_order_acquire);
     }
+
+    /** Szétválasztott (link-group nélküli, node.dont-reconnect=true) módban van-e a playback stream. */
+    bool liveUpsampleDecoupled() const { return liveUpsActive_.load(std::memory_order_acquire); }
 
     /** A ráta-invariáns őrző utolsó visszalépési ok-kódja (pl. "dac_unsupported", "no_output_device", vagy üres). */
     std::string liveUpsampleGuardReason() const {
@@ -405,6 +413,7 @@ public:
         }();
         pw_stream_add_listener(capture, &captureListener, &captureEvents, this);
         group_ = group;
+        appliedCaptureGroup_ = group;
         sinkName_ = sinkName;
         description_ = description;
         zoneEvent_ = pw_loop_add_event(pw_main_loop_get_loop(loop), onZoneEvent, this);
@@ -492,10 +501,12 @@ public:
         chain.stopWorker();
         multi_.stopWorkers();
         // Előbb a playback streamet bontjuk szálbiztosan (capture RT in-flight megvárásával), utána a capture-t
+        setCaptureDecoupledProps(false, 0);
         destroyPlaybackSafe();
         if (capture) { pw_stream_destroy(capture); capture = nullptr; }
         waitRtIdle(captureInFlight_, "capture");
         liveBridge_.stop();
+        unbindTargetSinkMonitor();
         if (registry_) { pw_proxy_destroy(reinterpret_cast<struct pw_proxy*>(registry_)); registry_ = nullptr; }
         {
             std::lock_guard<std::mutex> lk(sinksMu_);
@@ -621,7 +632,11 @@ private:
     std::atomic<bool> liveBridgeRateMatched_{false};  // RT kapu: csak ha captureRate == bridgeSrc és playbackRate == bridgeDst
     std::atomic<uint32_t> captureRate_{48000};        // a capture stream aktuális mintavétele (SPA_PARAM_Format)
     std::atomic<uint32_t> playbackRate_{0};           // a playback stream aktuális mintavétele (SPA_PARAM_Format)
-    std::atomic<uint32_t> driverClockRate_{0};        // a playback stream pw_stream_get_time_n valódi driver-órajele
+    std::atomic<uint32_t> driverClockRate_{0};        // a playback stream pw_stream_get_time_n órajele
+    std::atomic<uint32_t> targetSinkRate_{0};         // a fizikai célszköz (pw_node) valódi SPA_PARAM_Format mintavétele
+    struct pw_node* targetNodeProxy_ = nullptr;       // csak a fő hurok szála (cél-sink valódi rátájának figyelése)
+    struct spa_hook targetNodeListener_{};
+    uint32_t targetNodeId_ = 0;                       // csak a fő hurok szála
     std::atomic<uint32_t> liveBridgeSrcRate_{0};      // a híd konfigurált bemeneti mintavétele (RT kapuhoz)
     std::atomic<uint32_t> liveBridgeDstRate_{0};      // a híd konfigurált kimeneti mintavétele (RT kapuhoz)
     struct spa_source* liveUpsEvent_ = nullptr;       // csak a fő hurok szála
@@ -630,9 +645,94 @@ private:
     LiveUpsRequest liveUpsWanted_;                    // liveUpsMu_ alatt
     bool liveUpsGuardResetWanted_ = false;            // liveUpsMu_ alatt
     LiveUpsRequest liveUpsApplied_;                   // csak a fő hurok szála
+    std::string liveUpsAppliedTarget_;                // a szétválasztott playback stream aktuális fizikai célja (fő hurok)
+    uint32_t appliedCaptureForceRate_ = 0;            // a capture streamen beállított node.force-rate (csak a fő hurok szála)
+    std::string appliedCaptureGroup_;                 // a capture stream aktuális node.group tulajdonsága (csak a fő hurok szála)
+    std::string dummyDriverGroup_{"pipewire.dummy"};  // a PipeWire Dummy-Driver csoportneve (regiszterből frissítve)
     pw_live_ups::RateInvariantGuard liveUpsGuard_;    // csak a fő hurok szála
     mutable std::mutex liveUpsGuardMu_;
     std::string liveUpsGuardReason_;                  // liveUpsGuardMu_ alatt
+
+    /**
+     * A capture stream (aqulify_sink) node.force-rate és node.group tulajdonságainak frissítése (stream törlése nélkül).
+     * Szétválasztott módban a Dummy-Driver csoportjába (pipewire.dummy) és a forrás natív mintavételére (srcRate)
+     * helyezi a capture streamet, így teljesen külön órajel-szigeten fut a fizikai DAC-ot hajtó playback streamtől.
+     * Közvetlen módba visszatérve visszaállítja a saját aqulify-<pid> csoportot és a 0 (szabad) force-rate-et.
+     */
+    void setCaptureDecoupledProps(bool decoupled, uint32_t srcRate) {
+        if (!capture) return;
+        const uint32_t wantRate = decoupled ? srcRate : 0;
+        const std::string wantGroup = decoupled ? dummyDriverGroup_ : group_;
+        if (wantRate == appliedCaptureForceRate_ && wantGroup == appliedCaptureGroup_) return;
+        appliedCaptureForceRate_ = wantRate;
+        appliedCaptureGroup_ = wantGroup;
+        char rateBuf[24];
+        std::snprintf(rateBuf, sizeof(rateBuf), "%u", wantRate);
+        struct spa_dict_item items[2] = {
+            SPA_DICT_ITEM_INIT(PW_KEY_NODE_FORCE_RATE, rateBuf),
+            SPA_DICT_ITEM_INIT(PW_KEY_NODE_GROUP, wantGroup.c_str()),
+        };
+        struct spa_dict dict = SPA_DICT_INIT(items, 2);
+        pw_stream_update_properties(capture, &dict);
+    }
+
+    /** A cél fizikai Audio/Sink csomópont valódi SPA_PARAM_Format mintavételének figyelése (fő hurok szála). */
+    void unbindTargetSinkMonitor() {
+        if (targetNodeProxy_) {
+            spa_hook_remove(&targetNodeListener_);
+            pw_proxy_destroy(reinterpret_cast<struct pw_proxy*>(targetNodeProxy_));
+            targetNodeProxy_ = nullptr;
+        }
+        targetNodeId_ = 0;
+        targetSinkRate_.store(0, std::memory_order_relaxed);
+    }
+
+    void bindTargetSinkMonitorByName(const std::string& targetName) {
+        if (!registry_ || targetName.empty()) {
+            unbindTargetSinkMonitor();
+            return;
+        }
+        uint32_t foundId = 0;
+        {
+            std::lock_guard<std::mutex> lk(sinksMu_);
+            for (const auto& [id, ks] : knownSinksById_) {
+                if (ks.name == targetName) { foundId = id; break; }
+            }
+        }
+        if (foundId == 0) {
+            unbindTargetSinkMonitor();
+            return;
+        }
+        if (targetNodeProxy_ && targetNodeId_ == foundId) return;
+        unbindTargetSinkMonitor();
+        auto* node = static_cast<struct pw_node*>(
+            pw_registry_bind(registry_, foundId, PW_TYPE_INTERFACE_Node, PW_VERSION_NODE, 0));
+        if (!node) return;
+        static const struct pw_node_events nodeEvents = [] {
+            pw_node_events e{};
+            e.version = PW_VERSION_NODE_EVENTS;
+            e.param = onTargetNodeParam;
+            return e;
+        }();
+        spa_zero(targetNodeListener_);
+        pw_node_add_listener(node, &targetNodeListener_, &nodeEvents, this);
+        uint32_t paramIds[1] = { SPA_PARAM_Format };
+        pw_node_subscribe_params(node, paramIds, 1);
+        targetNodeProxy_ = node;
+        targetNodeId_ = foundId;
+    }
+
+    static void onTargetNodeParam(void* data, int, uint32_t id, uint32_t, uint32_t, const struct spa_pod* param) {
+        auto* self = static_cast<AetherSinkNode*>(data);
+        if (!param || id != SPA_PARAM_Format) return;
+        struct spa_audio_info_raw info{};
+        if (spa_format_audio_raw_parse(param, &info) >= 0 && info.rate > 0) {
+            self->targetSinkRate_.store(info.rate, std::memory_order_relaxed);
+            if (self->liveUpsActive_.load(std::memory_order_acquire) && self->loop && self->liveUpsEvent_) {
+                pw_loop_signal_event(pw_main_loop_get_loop(self->loop), self->liveUpsEvent_);
+            }
+        }
+    }
 
     void setLiveUpsGuardReason(const std::string& reason) {
         std::lock_guard<std::mutex> lk(liveUpsGuardMu_);
@@ -693,10 +793,12 @@ private:
                                  const char* detailHu, pw_live_ups::GuardVerdict verdict) {
         const uint32_t capR = captureRate_.load(std::memory_order_relaxed);
         const uint32_t playR = playbackRate_.load(std::memory_order_relaxed);
-        const uint32_t clkR = driverClockRate_.load(std::memory_order_relaxed);
+        const uint32_t tSinkR = targetSinkRate_.load(std::memory_order_relaxed);
+        const uint32_t clkR = tSinkR > 0 ? tSinkR : driverClockRate_.load(std::memory_order_relaxed);
         const uint32_t bSrc = liveUpsApplied_.srcRate;
         const uint32_t bDst = liveUpsApplied_.dstRate;
         stopLiveUpsGuardTimer();
+        unbindTargetSinkMonitor();
         liveUpsGuard_.stopSession();
         if (key.valid()) liveUpsGuard_.blockKey(key, reasonCode, verdict);
         else liveUpsGuard_.setTransientReason(reasonCode);
@@ -705,9 +807,11 @@ private:
         liveBridgeSrcRate_.store(0, std::memory_order_relaxed);
         liveBridgeDstRate_.store(0, std::memory_order_relaxed);
         liveUpsActive_.store(false, std::memory_order_release);
+        setCaptureDecoupledProps(false, 0);
         destroyPlaybackSafe();
         liveBridge_.stop();
         liveUpsApplied_ = LiveUpsRequest{};
+        liveUpsAppliedTarget_.clear();
         createAndConnectPlayback();
         std::cout << "[Felmintavételezés] Saját motor (rendszerhang) visszalépett közvetlen módba ("
                   << (detailHu && *detailHu ? detailHu : reasonCode)
@@ -726,11 +830,13 @@ private:
                                     "nincs érvényes fizikai kimeneti eszköz", pw_live_ups::GuardVerdict::Ok);
             return;
         }
+        const uint32_t tSinkR = targetSinkRate_.load(std::memory_order_relaxed);
+        const uint32_t effectiveDacClock = tSinkR > 0 ? tSinkR : driverClockRate_.load(std::memory_order_relaxed);
         const auto verdict = liveUpsGuard_.evaluate(
             monoMs(),
             captureRate_.load(std::memory_order_relaxed),
             playbackRate_.load(std::memory_order_relaxed),
-            driverClockRate_.load(std::memory_order_relaxed),
+            effectiveDacClock,
             playbackStreaming.load(std::memory_order_acquire));
         if (verdict == pw_live_ups::GuardVerdict::FallbackCaptureMismatch ||
             verdict == pw_live_ups::GuardVerdict::FallbackPlaybackMismatch ||
@@ -781,6 +887,8 @@ private:
         }
 
         const std::string target = self->resolvePhysicalTargetForLiveUps();
+        const bool targetChanged = pw_live_ups::needsPlaybackRebuildForTarget(
+            self->liveUpsApplied_.enable, self->liveUpsAppliedTarget_, target);
         self->liveUpsGuard_.onTargetChanged(target);
         if (want.enable) {
             self->liveUpsGuard_.onRateModeChanged(static_cast<int>(want.opts.rateMode));
@@ -808,7 +916,7 @@ private:
                 self->setLiveUpsGuardReason(self->liveUpsGuard_.lastReason());
                 return;
             }
-            if (sameLiveUpsConfig(want, self->liveUpsApplied_)) {
+            if (!targetChanged && sameLiveUpsConfig(want, self->liveUpsApplied_)) {
                 self->evaluateLiveUpsGuard();
                 return;
             }
@@ -822,15 +930,16 @@ private:
             }
         }
 
-        // Ha mindkét állapot aktív és a kimeneti mintavétel (dstRate) nem változott, a playback stream maradhat,
+        // Ha mindkét állapot aktív, a kimeneti eszköz ÉS a célmintavétel (dstRate) nem változott, a playback stream maradhat,
         // de a liveBridge_ újrakonfigurálása előtt megvárjuk a futó RT capture/playback hívásokat!
-        if (want.enable && self->liveUpsApplied_.enable && want.dstRate == self->liveUpsApplied_.dstRate) {
+        if (!targetChanged && want.enable && self->liveUpsApplied_.enable && want.dstRate == self->liveUpsApplied_.dstRate) {
             self->liveBridgeRateMatched_.store(false, std::memory_order_release);
             self->liveUpsActive_.store(false, std::memory_order_release);
             self->waitRtIdle(self->captureInFlight_, "capture");
             self->waitRtIdle(self->playbackInFlight_, "playback");
             if (self->liveBridge_.configure(want.srcRate, want.dstRate, want.opts) && self->liveBridge_.start()) {
                 self->liveUpsApplied_ = want;
+                self->setCaptureDecoupledProps(true, want.srcRate);
                 self->liveBridgeSrcRate_.store(want.srcRate, std::memory_order_relaxed);
                 self->liveBridgeDstRate_.store(want.dstRate, std::memory_order_relaxed);
                 self->liveUpsGuard_.resetSession(monoMs(), want.srcRate, want.dstRate);
@@ -847,8 +956,9 @@ private:
             }
         }
 
-        // Üzemmód- vagy célmintavétel-váltás: a playback streamet szálbiztosan leállítjuk, majd az új módban nyitjuk újra
+        // Üzemmód-, kimenet- vagy célmintavétel-váltás: a playback streamet szálbiztosan leállítjuk, majd az új módban/céllal nyitjuk újra
         self->stopLiveUpsGuardTimer();
+        self->unbindTargetSinkMonitor();
         self->liveUpsGuard_.stopSession();
         self->liveBridgeRateMatched_.store(false, std::memory_order_release);
         self->liveBridgeSrcRate_.store(0, std::memory_order_relaxed);
@@ -857,14 +967,20 @@ private:
         self->destroyPlaybackSafe();
         if (want.enable) {
             self->liveUpsApplied_ = want;
+            self->liveUpsAppliedTarget_ = target;
             const bool bridgeOk = self->liveBridge_.configure(want.srcRate, want.dstRate, want.opts) &&
                                   self->liveBridge_.start();
             if (!bridgeOk) {
+                self->setCaptureDecoupledProps(false, 0);
                 self->liveUpsApplied_ = LiveUpsRequest{};
+                self->liveUpsAppliedTarget_.clear();
                 self->createAndConnectPlayback();
                 std::cerr << "[Felmintavételezés] A saját motoros híd nem indítható; visszatérés alapmódba.\n";
                 return;
             }
+            // A capture stream (aqulify_sink) külön órajel-szigeten (Dummy-Driver) marad a forrás natív mintavételén
+            self->setCaptureDecoupledProps(true, want.srcRate);
+            self->bindTargetSinkMonitorByName(target);
             self->liveBridgeSrcRate_.store(want.srcRate, std::memory_order_relaxed);
             self->liveBridgeDstRate_.store(want.dstRate, std::memory_order_relaxed);
             self->liveUpsGuard_.resetSession(monoMs(), want.srcRate, want.dstRate);
@@ -872,14 +988,17 @@ private:
             self->liveUpsActive_.store(true, std::memory_order_release);
             self->updateLiveBridgeRateGate();
             if (!self->createAndConnectPlayback()) {
+                self->unbindTargetSinkMonitor();
                 self->liveUpsGuard_.stopSession();
                 self->liveBridgeRateMatched_.store(false, std::memory_order_release);
                 self->liveBridgeSrcRate_.store(0, std::memory_order_relaxed);
                 self->liveBridgeDstRate_.store(0, std::memory_order_relaxed);
                 self->liveUpsActive_.store(false, std::memory_order_release);
+                self->setCaptureDecoupledProps(false, 0);
                 self->waitRtIdle(self->captureInFlight_, "capture");
                 self->liveBridge_.stop();
                 self->liveUpsApplied_ = LiveUpsRequest{};
+                self->liveUpsAppliedTarget_.clear();
                 self->createAndConnectPlayback();
                 std::cerr << "[Felmintavételezés] A szétválasztott kimeneti stream nem indítható; visszatérés alapmódba.\n";
                 return;
@@ -888,10 +1007,12 @@ private:
             std::cout << "[Felmintavételezés] Saját motor (rendszerhang): " << want.srcRate << " -> "
                       << want.dstRate << " Hz ("
                       << audioopt::upsampleEngineLabel(want.opts.upsampleEngine)
-                      << ").\n";
+                      << ", kimenet: " << target << ").\n";
         } else {
+            self->setCaptureDecoupledProps(false, 0);
             self->liveBridge_.stop();
             self->liveUpsApplied_ = LiveUpsRequest{};
+            self->liveUpsAppliedTarget_.clear();
             self->createAndConnectPlayback();
             std::cout << "[Felmintavételezés] Saját motor (rendszerhang): ki (visszatérés közvetlen módba).\n";
         }
@@ -1133,13 +1254,12 @@ private:
         }
         const std::string target = pw_reconnect::resolveTargetOrFallbackByPriority(pref, known, sinkName_);
 
-        const bool decoupled = liveUpsApplied_.enable && liveUpsApplied_.dstRate > 0 &&
-                               pw_live_ups::hasValidPhysicalTarget(target, sinkName_);
+        const bool decoupled = pw_live_ups::canUseDecoupledPlayback(
+            liveUpsApplied_.enable, liveUpsApplied_.dstRate, target, sinkName_);
         struct pw_properties* pprops = pw_properties_new(
             PW_KEY_MEDIA_CLASS, "Stream/Output/Audio",
             PW_KEY_NODE_NAME, (sinkName_ + "_output").c_str(),
             PW_KEY_NODE_DESCRIPTION, aq_i18n::fmt(aq_i18n::Msg::pw_outputNode, { { "name", description_ } }).c_str(),
-            PW_KEY_NODE_LINK_GROUP, group_.c_str(),
             PW_KEY_NODE_PASSIVE, decoupled ? "false" : "true",
             PW_KEY_AUDIO_CHANNELS, "2",
             SPA_KEY_AUDIO_POSITION, "FL,FR",
@@ -1147,9 +1267,13 @@ private:
             nullptr);
         if (!decoupled) {
             pw_properties_set(pprops, PW_KEY_NODE_GROUP, group_.c_str());
+            pw_properties_set(pprops, PW_KEY_NODE_LINK_GROUP, group_.c_str());
         } else {
-            // Szétválasztott mód: saját órajel és cél mintavétel (a capture maradhat a forrás natív mintavételén)
+            // Szétválasztott mód (2 külön PipeWire driver-sziget): a node.group és a node.link-group is elhagyva,
+            // így a capture (Dummy-Driver @ srcRate) és a playback (fizikai DAC @ dstRate) független órajelen fut.
+            // Visszacsatolás-védelem: target garantáltan validált fizikai nyelő + node.dont-reconnect = true.
             pw_properties_setf(pprops, PW_KEY_NODE_FORCE_RATE, "%u", liveUpsApplied_.dstRate);
+            pw_properties_set(pprops, PW_KEY_NODE_DONT_RECONNECT, "true");
         }
         if (!target.empty()) pw_properties_set(pprops, PW_KEY_TARGET_OBJECT, target.c_str());
         { std::lock_guard<std::mutex> lk(diagMu_); outputTarget_ = target; }
@@ -1216,6 +1340,16 @@ private:
     static void onReconnectTimer(void* data, uint64_t) {
         auto* self = static_cast<AetherSinkNode*>(data);
         if (!self->reconnect_.pending() || !self->core) return;
+        if (self->liveUpsActive_.load(std::memory_order_acquire)) {
+            const std::string target = self->resolvePhysicalTargetForLiveUps();
+            if (!pw_live_ups::canUseDecoupledPlayback(self->liveUpsApplied_.enable, self->liveUpsApplied_.dstRate, target, self->sinkName_)) {
+                self->fallbackLiveUpsToDirect({}, "no_output_device",
+                                              "nincs érvényes fizikai kimeneti eszköz", pw_live_ups::GuardVerdict::Ok);
+                return;
+            }
+            self->liveUpsAppliedTarget_ = target;
+            self->bindTargetSinkMonitorByName(target);
+        }
         self->destroyPlaybackSafe();
         if (!self->createAndConnectPlayback()) {
             const auto a = self->reconnect_.onAttemptFailed();
@@ -1250,6 +1384,11 @@ private:
         if (!type || !props || std::strcmp(type, PW_TYPE_INTERFACE_Node) != 0) return;
         const char* cls = spa_dict_lookup(props, PW_KEY_MEDIA_CLASS);
         const char* nodeName = spa_dict_lookup(props, PW_KEY_NODE_NAME);
+        if (nodeName && std::strcmp(nodeName, "Dummy-Driver") == 0) {
+            if (const char* dg = spa_dict_lookup(props, PW_KEY_NODE_GROUP); dg && *dg) {
+                self->dummyDriverGroup_ = dg;
+            }
+        }
         if (!cls) return;
         if (std::strcmp(cls, "Audio/Sink") == 0) {
             // Második Aqulify virtuális eszköz észlelése (régi, flock nélküli 2.7.0–2.8.3 motor)
@@ -1269,8 +1408,16 @@ private:
                     count = static_cast<int>(self->knownSinksById_.size());
                 }
                 self->physicalSinkCount_.store(count, std::memory_order_release);
-                if (self->liveUpsGuard_.lastReason() == "no_output_device" && self->loop && self->liveUpsEvent_) {
-                    pw_loop_signal_event(pw_main_loop_get_loop(self->loop), self->liveUpsEvent_);
+                {
+                    std::string pref;
+                    { std::lock_guard<std::mutex> lk(self->targetMu_); pref = self->preferredTarget_; }
+                    const bool needLiveReeval =
+                        self->liveUpsGuard_.lastReason() == "no_output_device" ||
+                        (self->liveUpsActive_.load(std::memory_order_acquire) &&
+                         (self->targetNodeId_ == 0 || (!pref.empty() && pref == nodeName && self->liveUpsAppliedTarget_ != pref)));
+                    if (needLiveReeval && self->loop && self->liveUpsEvent_) {
+                        pw_loop_signal_event(pw_main_loop_get_loop(self->loop), self->liveUpsEvent_);
+                    }
                 }
                 if (!self->externalExclusiveActive_.load(std::memory_order_acquire)) {
                     const auto a = self->reconnect_.onNewExternalSink(nodeName, self->sinkName_);
@@ -1308,6 +1455,7 @@ private:
 
     static void onRegistryGlobalRemove(void* data, uint32_t id) {
         auto* self = static_cast<AetherSinkNode*>(data);
+        if (id == self->targetNodeId_) self->unbindTargetSinkMonitor();
         bool erased = false;
         int count = 0;
         {
@@ -1317,6 +1465,9 @@ private:
         }
         if (erased) {
             self->physicalSinkCount_.store(count, std::memory_order_release);
+            if (self->liveUpsActive_.load(std::memory_order_acquire) && self->loop && self->liveUpsEvent_) {
+                pw_loop_signal_event(pw_main_loop_get_loop(self->loop), self->liveUpsEvent_);
+            }
         }
         auto it = std::find(self->aqulifySinkIds_.begin(), self->aqulifySinkIds_.end(), id);
         if (it != self->aqulifySinkIds_.end()) {
