@@ -649,6 +649,9 @@ private:
     uint32_t appliedCaptureForceRate_ = 0;            // a capture streamen beállított node.force-rate (csak a fő hurok szála)
     std::string appliedCaptureGroup_;                 // a capture stream aktuális node.group tulajdonsága (csak a fő hurok szála)
     std::string dummyDriverGroup_{"pipewire.dummy"};  // a PipeWire Dummy-Driver csoportneve (regiszterből frissítve)
+    uint32_t dummyDriverId_ = 0;                      // a PipeWire Dummy-Driver csomópont ID-ja (fő hurok)
+    bool dummyDriverAvailable_ = false;               // észleltünk-e élő Dummy-Driver csomópontot (fő hurok)
+    bool loggedMissingDummyDriver_ = false;           // napló-zaj elleni jelző, amíg nincs Dummy-Driver
     pw_live_ups::RateInvariantGuard liveUpsGuard_;    // csak a fő hurok szála
     mutable std::mutex liveUpsGuardMu_;
     std::string liveUpsGuardReason_;                  // liveUpsGuardMu_ alatt
@@ -837,7 +840,16 @@ private:
             captureRate_.load(std::memory_order_relaxed),
             playbackRate_.load(std::memory_order_relaxed),
             effectiveDacClock,
-            playbackStreaming.load(std::memory_order_acquire));
+            playbackStreaming.load(std::memory_order_acquire),
+            dummyDriverAvailable_);
+        if (verdict == pw_live_ups::GuardVerdict::FallbackMissingDummyDriver) {
+            fallbackLiveUpsToDirect(pw_live_ups::FallbackKey{},
+                                    pw_live_ups::verdictReasonCode(verdict),
+                                    pw_live_ups::verdictDetailHu(verdict),
+                                    verdict);
+            loggedMissingDummyDriver_ = true;
+            return;
+        }
         if (verdict == pw_live_ups::GuardVerdict::FallbackCaptureMismatch ||
             verdict == pw_live_ups::GuardVerdict::FallbackPlaybackMismatch ||
             verdict == pw_live_ups::GuardVerdict::FallbackDacRateMismatch) {
@@ -907,6 +919,27 @@ private:
                 }
                 return;
             }
+            // Két órajel-sziget feltétele: a PipeWire-ben jelen kell lennie a Dummy-Driver csomópontnak
+            if (!self->dummyDriverAvailable_) {
+                if (self->liveUpsApplied_.enable) {
+                    self->fallbackLiveUpsToDirect(
+                        pw_live_ups::FallbackKey{},
+                        pw_live_ups::verdictReasonCode(pw_live_ups::GuardVerdict::FallbackMissingDummyDriver),
+                        pw_live_ups::verdictDetailHu(pw_live_ups::GuardVerdict::FallbackMissingDummyDriver),
+                        pw_live_ups::GuardVerdict::FallbackMissingDummyDriver);
+                    self->loggedMissingDummyDriver_ = true;
+                } else {
+                    self->liveUpsGuard_.setTransientReason("rate_mismatch");
+                    self->setLiveUpsGuardReason("rate_mismatch");
+                    if (!self->loggedMissingDummyDriver_) {
+                        self->loggedMissingDummyDriver_ = true;
+                        std::cout << "[Felmintavételezés] Saját motor (rendszerhang) visszalépett közvetlen módba ("
+                                  << pw_live_ups::verdictDetailHu(pw_live_ups::GuardVerdict::FallbackMissingDummyDriver)
+                                  << "; kért: " << want.srcRate << " -> " << want.dstRate << " Hz).\n";
+                    }
+                }
+                return;
+            }
             // Ping-pong védelem: ha erre a (kimenet, forrás->cél, rateMode) négyesre az őrző már visszalépett,
             // nem indítjuk újra ciklikusan, csak megtartjuk az őszinte ok-kódot
             const pw_live_ups::FallbackKey key{
@@ -922,9 +955,11 @@ private:
             }
         } else {
             if (!self->liveUpsApplied_.enable) {
-                if (self->liveUpsGuard_.lastReason() == "no_output_device") {
+                if (self->liveUpsGuard_.lastReason() == "no_output_device" ||
+                    (!self->dummyDriverAvailable_ && self->liveUpsGuard_.lastReason() == "rate_mismatch")) {
                     self->liveUpsGuard_.setTransientReason("");
                     self->setLiveUpsGuardReason("");
+                    self->loggedMissingDummyDriver_ = false;
                 }
                 return;
             }
@@ -1255,7 +1290,7 @@ private:
         const std::string target = pw_reconnect::resolveTargetOrFallbackByPriority(pref, known, sinkName_);
 
         const bool decoupled = pw_live_ups::canUseDecoupledPlayback(
-            liveUpsApplied_.enable, liveUpsApplied_.dstRate, target, sinkName_);
+            liveUpsApplied_.enable, liveUpsApplied_.dstRate, target, sinkName_, dummyDriverAvailable_);
         struct pw_properties* pprops = pw_properties_new(
             PW_KEY_MEDIA_CLASS, "Stream/Output/Audio",
             PW_KEY_NODE_NAME, (sinkName_ + "_output").c_str(),
@@ -1341,8 +1376,18 @@ private:
         auto* self = static_cast<AetherSinkNode*>(data);
         if (!self->reconnect_.pending() || !self->core) return;
         if (self->liveUpsActive_.load(std::memory_order_acquire)) {
+            if (!self->dummyDriverAvailable_) {
+                self->fallbackLiveUpsToDirect(
+                    pw_live_ups::FallbackKey{},
+                    pw_live_ups::verdictReasonCode(pw_live_ups::GuardVerdict::FallbackMissingDummyDriver),
+                    pw_live_ups::verdictDetailHu(pw_live_ups::GuardVerdict::FallbackMissingDummyDriver),
+                    pw_live_ups::GuardVerdict::FallbackMissingDummyDriver);
+                self->loggedMissingDummyDriver_ = true;
+                return;
+            }
             const std::string target = self->resolvePhysicalTargetForLiveUps();
-            if (!pw_live_ups::canUseDecoupledPlayback(self->liveUpsApplied_.enable, self->liveUpsApplied_.dstRate, target, self->sinkName_)) {
+            if (!pw_live_ups::canUseDecoupledPlayback(self->liveUpsApplied_.enable, self->liveUpsApplied_.dstRate,
+                                                      target, self->sinkName_, self->dummyDriverAvailable_)) {
                 self->fallbackLiveUpsToDirect({}, "no_output_device",
                                               "nincs érvényes fizikai kimeneti eszköz", pw_live_ups::GuardVerdict::Ok);
                 return;
@@ -1385,8 +1430,16 @@ private:
         const char* cls = spa_dict_lookup(props, PW_KEY_MEDIA_CLASS);
         const char* nodeName = spa_dict_lookup(props, PW_KEY_NODE_NAME);
         if (nodeName && std::strcmp(nodeName, "Dummy-Driver") == 0) {
+            self->dummyDriverId_ = id;
+            self->dummyDriverAvailable_ = true;
+            self->loggedMissingDummyDriver_ = false;
             if (const char* dg = spa_dict_lookup(props, PW_KEY_NODE_GROUP); dg && *dg) {
                 self->dummyDriverGroup_ = dg;
+            }
+            if (self->liveUpsGuard_.lastReason() == "rate_mismatch" &&
+                !self->liveUpsActive_.load(std::memory_order_acquire) &&
+                self->loop && self->liveUpsEvent_) {
+                pw_loop_signal_event(pw_main_loop_get_loop(self->loop), self->liveUpsEvent_);
             }
         }
         if (!cls) return;
@@ -1456,6 +1509,13 @@ private:
     static void onRegistryGlobalRemove(void* data, uint32_t id) {
         auto* self = static_cast<AetherSinkNode*>(data);
         if (id == self->targetNodeId_) self->unbindTargetSinkMonitor();
+        if (id == self->dummyDriverId_) {
+            self->dummyDriverId_ = 0;
+            self->dummyDriverAvailable_ = false;
+            if (self->liveUpsActive_.load(std::memory_order_acquire)) {
+                self->evaluateLiveUpsGuard();
+            }
+        }
         bool erased = false;
         int count = 0;
         {

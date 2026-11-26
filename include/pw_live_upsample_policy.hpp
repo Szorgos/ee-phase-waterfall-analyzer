@@ -34,11 +34,13 @@ inline bool hasValidPhysicalTarget(const std::string& target, const std::string&
 
 /**
  * Szétválasztott (link-group nélküli, node.dont-reconnect=true) playback stream létrehozásának feltétele:
- * kizárólag aktív kérésnél, érvényes dstRate > 0 és validált külső fizikai cél esetén (visszacsatolás-védelem).
+ * kizárólag aktív kérésnél, érvényes dstRate > 0, elérhető PipeWire Dummy-Driver és validált külső fizikai cél
+ * esetén (visszacsatolás- és elakadás-védelem).
  */
 inline bool canUseDecoupledPlayback(bool enable, uint32_t dstRate, const std::string& target,
-                                    const std::string& sinkName = "aqulify_sink") {
-    return enable && dstRate > 0 && hasValidPhysicalTarget(target, sinkName);
+                                    const std::string& sinkName = "aqulify_sink",
+                                    bool hasDummyDriver = true) {
+    return enable && dstRate > 0 && hasDummyDriver && hasValidPhysicalTarget(target, sinkName);
 }
 
 /**
@@ -81,11 +83,12 @@ struct FallbackKey {
 };
 
 enum class GuardVerdict {
-    Ok,                       // a capture, playback és hardver-órajel összhangban van a híddal
-    WaitSettle,               // még a beállási vagy megerősítési ablakon belül vagyunk
-    FallbackCaptureMismatch,  // a capture stream rátája eltér a híd srcRate-jétől (pl. 96 kHz 48 helyett -> 0,5x lenne)
-    FallbackPlaybackMismatch, // a playback stream formátum-rátája eltér a híd dstRate-jétől
-    FallbackDacRateMismatch   // a fizikai DAC / driver tényleges órajele nem váltott dstRate-re (pl. 48 kHz-es kártya)
+    Ok,                        // a capture, playback és hardver-órajel összhangban van a híddal
+    WaitSettle,                // még a beállási vagy megerősítési ablakon belül vagyunk
+    FallbackCaptureMismatch,   // a capture stream rátája eltér a híd srcRate-jétől (pl. 96 kHz 48 helyett -> 0,5x lenne)
+    FallbackPlaybackMismatch,  // a playback stream formátum-rátája eltér a híd dstRate-jétől
+    FallbackDacRateMismatch,   // a fizikai DAC / driver tényleges órajele nem váltott dstRate-re (pl. 48 kHz-es kártya)
+    FallbackMissingDummyDriver // nincs Dummy-Driver a PipeWire-ben (nem váltható le külön órajel-szigetre a capture)
 };
 
 /** A felület (gui_integrated_system.html) és a diagnosztika által értelmezett nyelvfüggetlen ok-kód. */
@@ -93,6 +96,7 @@ inline const char* verdictReasonCode(GuardVerdict v) {
     switch (v) {
         case GuardVerdict::FallbackCaptureMismatch:
         case GuardVerdict::FallbackPlaybackMismatch:
+        case GuardVerdict::FallbackMissingDummyDriver:
             return "rate_mismatch";
         case GuardVerdict::FallbackDacRateMismatch:
             return "dac_unsupported";
@@ -110,6 +114,8 @@ inline const char* verdictDetailHu(GuardVerdict v) {
             return "a kimeneti stream nem a célmintavételen nyílt meg";
         case GuardVerdict::FallbackDacRateMismatch:
             return "a hangkártya tényleges órajele nem váltott a célmintavételre";
+        case GuardVerdict::FallbackMissingDummyDriver:
+            return "nincs Dummy-Driver a PipeWire-ben";
         default:
             return "";
     }
@@ -186,8 +192,10 @@ public:
                           uint32_t captureRate,
                           uint32_t playbackRate,
                           uint32_t driverClockRate,
-                          bool playbackStreaming) {
+                          bool playbackStreaming,
+                          bool hasDummyDriver = true) {
         if (!active_) return GuardVerdict::Ok;
+        if (!hasDummyDriver) return GuardVerdict::FallbackMissingDummyDriver;
 
         const bool streamRatesOk = (captureRate == bridgeSrc_) && (playbackRate == bridgeDst_);
         const bool dacClockOk = (driverClockRate == 0 || driverClockRate == bridgeDst_);

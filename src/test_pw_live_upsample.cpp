@@ -203,6 +203,27 @@ int main() {
               "hosszú futás után is Ok marad");
     }
 
+    std::printf("[5] Dummy-Driver hiánya (egyedi/minimál PipeWire-konfiguráció)\n");
+    {
+        CHECK(!canUseDecoupledPlayback(true, 96000, "dac_a", "aqulify_sink", /*hasDummyDriver=*/false),
+              "Dummy-Driver nélkül tilos a szétválasztott mód (hasDummyDriver=false)");
+        CHECK(canUseDecoupledPlayback(true, 96000, "dac_a", "aqulify_sink", /*hasDummyDriver=*/true),
+              "Dummy-Driver meglétével és valid fizikai céllal engedélyezett");
+
+        // Menet közben eltűnik a Dummy-Driver -> azonnali visszalépés közvetlen módba (rate_mismatch)
+        RateInvariantGuard gDummy;
+        gDummy.resetSession(/*nowMs=*/1000, 48000, 96000);
+        CHECK(gDummy.evaluate(1200, 48000, 96000, 96000, true, /*hasDummyDriver=*/true) == GuardVerdict::Ok,
+              "Dummy-Driverrel aktív marad");
+        const GuardVerdict vNoDummy = gDummy.evaluate(1250, 48000, 96000, 96000, true, /*hasDummyDriver=*/false);
+        CHECK(vNoDummy == GuardVerdict::FallbackMissingDummyDriver,
+              "Dummy-Driver eltűnésekor azonnali FallbackMissingDummyDriver (türelmi ablak nélkül)");
+        CHECK(std::string(verdictReasonCode(vNoDummy)) == "rate_mismatch",
+              "Dummy-Driver hiányának okkódja a meglévő rate_mismatch");
+        CHECK(std::string(verdictDetailHu(vNoDummy)) == "nincs Dummy-Driver a PipeWire-ben",
+              "Dummy-Driver hiányának naplóoka pontosan 'nincs Dummy-Driver a PipeWire-ben'");
+    }
+
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN PW LIVE UPSAMPLE TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }
