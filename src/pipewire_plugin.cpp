@@ -1241,6 +1241,7 @@ int main(int argc, char* argv[]) {
         pwSetSetting("clock.force-rate", rm == audioopt::RateMode::System && !origForceRate.empty() ? origForceRate : "0");
         std::cout << "[Felmintavételezés] Élő út: a gráf mintavétele újra szabad.\n";
         liveForced = 0;
+        node.setLiveRateForced(false);
     };
     auto applyAudio = [&](const audioopt::AudioOptions& o) {
         audioopt::resampleQuality().store(o.resampleQuality);
@@ -1268,7 +1269,8 @@ int main(int argc, char* argv[]) {
             lastAppliedBufFrames = o.bufferFrames;
         }
         const bool pauseForPlayer = o.rateMode == audioopt::RateMode::Follow && playerStreamOpen();
-        node.setAudioOptions(o.bufferFrames, o.keepAwake && !pauseForPlayer, cachedAutoQuantum);
+        node.setAudioOptions(o.bufferFrames, o.keepAwake, cachedAutoQuantum);
+        node.setKeepAliveSuppressedForPlayer(pauseForPlayer);
         node.setRateFollow(o.rateMode == audioopt::RateMode::Follow);
         {
             // Az alábbi ágak a force-rate-et felülírják (forrás-követés, fix, vagy visszaállítás): az élő út kényszere
@@ -1446,7 +1448,7 @@ int main(int argc, char* argv[]) {
         {
             std::lock_guard<std::mutex> lk(audioMutex);
             if (audioOpts.rateMode == audioopt::RateMode::Follow && audioOpts.keepAwake) {
-                node.setAudioOptions(audioOpts.bufferFrames, false, cachedAutoQuantum);
+                node.setKeepAliveSuppressedForPlayer(true);
                 paused = true;
             }
         }
@@ -1458,9 +1460,7 @@ int main(int argc, char* argv[]) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1500));
             if (s_playerTicket.load() != ticket || s_engineQuit.load()) return;   // közben új szám nyílt, vagy leállás
             s_playerOpen = false;
-            std::lock_guard<std::mutex> lk(audioMutex);
-            if (!audioOpts.keepAwake) return;
-            node.setAudioOptions(audioOpts.bufferFrames, true, cachedAutoQuantum);
+            node.setKeepAliveSuppressedForPlayer(false);
         }).detach();
     };
     // Az élő út figyelője: másodpercenként megnézi, milyen mintavételű külső hangfolyam szól az Aqulify eszközre, és
@@ -1537,6 +1537,7 @@ int main(int argc, char* argv[]) {
                                   << " Hz (a PipeWire átalakítójával; a DAC mintavételei: "
                                   << (dacRates.empty() ? std::string("ismeretlen") : std::to_string(dacRates.size()) + " db") << ").\n";
                         liveForced = d.forceRate;
+                        node.setLiveRateForced(true);
                     }
                 } else if (liveForced != 0 && (d.reason != "no_source" || idleTicks >= 3)) {
                     liveReleaseLocked(o.rateMode);

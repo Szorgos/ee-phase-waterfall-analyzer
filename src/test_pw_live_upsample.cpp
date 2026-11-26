@@ -13,10 +13,12 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "audio_options.hpp"
 #include "live_upsample_bridge.hpp"
+#include "pw_keepalive_policy.hpp"
 #include "pw_live_upsample_policy.hpp"
 
 using namespace ee_analyzer;
@@ -222,6 +224,106 @@ int main() {
               "Dummy-Driver hiányának okkódja a meglévő rate_mismatch");
         CHECK(std::string(verdictDetailHu(vNoDummy)) == "nincs Dummy-Driver a PipeWire-ben",
               "Dummy-Driver hiányának naplóoka pontosan 'nincs Dummy-Driver a PipeWire-ben'");
+    }
+
+    std::printf("[6] KeepAlivePolicy (#46, #53: csendes szünet, regiszter-újraszámolás, felső határ)\n");
+    {
+        using namespace ee_analyzer::pw_keepalive;
+
+        // 1. Regiszter Stream/Output/Audio újraszámolása (nincs növelő/csökkentő számláló)
+        std::unordered_map<uint32_t, RegistryStreamNode> reg;
+        reg[10] = { 10, "aqulify_sink_output", "Aqulify" };
+        reg[11] = { 11, "aqulify_sink_keepalive", "Aqulify" };
+        reg[12] = { 12, "player_out", "Aqulify" };
+        CHECK(!hasExternalAudioOutputStream(reg), "csak saját Aqulify streamek -> nincs külső forrás");
+        reg[20] = { 20, "Brave", "Brave" };
+        CHECK(hasExternalAudioOutputStream(reg), "külső Stream/Output/Audio (Brave) jelenléte felismerve");
+        reg.erase(20);
+        CHECK(!hasExternalAudioOutputStream(reg), "eltávolítás után azonnal nincs külső forrás (nem ragadhat be)");
+
+        // 2. Felhasználói kapcsolás naplózása vs belső szünetek (0 naplózaj)
+        KeepAlivePolicy kp;
+        KeepAliveInputs in{};
+        in.nowMs = 1000;
+        in.userWanted = false;
+        auto d = kp.evaluate(in);
+        CHECK(!d.shouldRun && !d.logUserChange, "alapból kikapcsolva: nem fut és nem naplóz");
+
+        in.nowMs = 1100;
+        in.userWanted = true;
+        in.rateFollow = true;
+        d = kp.evaluate(in);
+        CHECK(d.shouldRun && d.logUserChange && d.userEnabled,
+              "felhasználói bekapcsolás: keepAlive indul és 1x naplóz (be)");
+
+        // Beépített lejátszó nyit -> csendes szünet (0 naplósor)
+        in.nowMs = 2000;
+        in.playerSuppressed = true;
+        d = kp.evaluate(in);
+        CHECK(!d.shouldRun && !d.logUserChange, "beépített lejátszó alatt csendesen szünetel (nincs ki napló)");
+
+        // Beépített lejátszó bezár -> csendes visszakapcsolás (0 naplósor)
+        in.nowMs = 5000;
+        in.playerSuppressed = false;
+        d = kp.evaluate(in);
+        CHECK(d.shouldRun && !d.logUserChange, "beépített lejátszó után csendesen visszakapcsol (nincs be napló)");
+
+        // Saját motoros felmintavételezés (liveUpsActive) alatt végig szünetel
+        in.nowMs = 6000;
+        in.liveUpsampleActive = true;
+        d = kp.evaluate(in);
+        CHECK(!d.shouldRun && !d.logUserChange, "aktív saját motoros felmintavételezés alatt szünetel");
+        in.nowMs = 12000;
+        d = kp.evaluate(in);
+        CHECK(!d.shouldRun && !d.logUserChange, "hosszú (6 s) saját motoros felmintavételezés alatt sem indul vissza");
+        in.nowMs = 13000;
+        in.liveUpsampleActive = false;
+        d = kp.evaluate(in);
+        CHECK(d.shouldRun && !d.logUserChange, "saját motor leállása után csendesen visszakapcsol");
+
+        // 3. Aktív külső forrás (follow): amíg szól, nem indul vissza 1,5 s után sem; leállása után visszakapcsol
+        in.nowMs = 20000;
+        in.hasExternalStream = true;
+        in.externalAudioActive = false; // épp most nyílt, még indul
+        d = kp.evaluate(in);
+        CHECK(!d.shouldRun && !d.logUserChange, "új külső forrásnál azonnal szünetel");
+        in.nowMs = 20500;
+        in.externalAudioActive = true;
+        d = kp.evaluate(in);
+        CHECK(!d.shouldRun, "aktív külső hangfolyamnál szünetel (0,5 s)");
+        in.nowMs = 25000;
+        d = kp.evaluate(in);
+        CHECK(!d.shouldRun, "aktív külső hangfolyamnál 5 s után sem indul vissza (nincs 48<->96 oszcilláció)");
+        // Külső forrás leáll
+        in.nowMs = 26000;
+        in.hasExternalStream = false;
+        in.externalAudioActive = false;
+        d = kp.evaluate(in);
+        CHECK(!d.shouldRun, "külső forrás vége után rövid lecsengési ablak (számváltás ellen)");
+        in.nowMs = 26000 + kExternalPauseGraceMs;
+        d = kp.evaluate(in);
+        CHECK(d.shouldRun && !d.logUserChange, "külső forrás leállása után a keepAlive csendesen visszakapcsol");
+
+        // 4. Biztonsági felső határ: bent maradó külső stream (pl. PAUSED tab), de nincs aktív hang
+        in.nowMs = 30000;
+        in.hasExternalStream = true;
+        in.externalAudioActive = false;
+        d = kp.evaluate(in);
+        CHECK(!d.shouldRun, "új külső stream hang nélkül: kezdeti ablakban szünetel");
+        in.nowMs = 30000 + kExternalPauseGraceMs + kIdleSuppressCapMs - 100;
+        d = kp.evaluate(in);
+        CHECK(!d.shouldRun, "biztonsági felső határ előtt még szünetel");
+        in.nowMs = 30000 + kExternalPauseGraceMs + kIdleSuppressCapMs + 100;
+        d = kp.evaluate(in);
+        CHECK(d.shouldRun && !d.logUserChange,
+              "biztonsági felső határ: hang nélkül maradó szünet legkésőbb néhány mp múlva visszakapcsol");
+
+        // 5. Felhasználói kikapcsolás -> pontosan 1x naplóz (ki)
+        in.nowMs = 40000;
+        in.userWanted = false;
+        d = kp.evaluate(in);
+        CHECK(!d.shouldRun && d.logUserChange && !d.userEnabled,
+              "felhasználói kikapcsolás: leáll és 1x naplóz (ki)");
     }
 
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN PW LIVE UPSAMPLE TESZT SIKERES", g_fail);

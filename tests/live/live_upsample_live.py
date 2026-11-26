@@ -277,7 +277,50 @@ def main():
         p48.terminate()
         p48.wait(timeout=5)
 
-    ul.set_opts(rateMode="system", upsampleRule=0, upsampleSystemAudio=False)
+    # --- K14h (#46, #53): follow + keepAwake=True + 48->96 kHz: nincs 48<->96 oszcilláció, nincs keepAwake naplózaj,
+    #     és a külső forrás leállása után a keepAlive visszakapcsol
+    print("[K14h] Forrást követő + ébren tartás + 48->96 kHz: nincs 48<->96 oszcilláció, nincs naplózaj, utána keepAlive visszatér")
+    engine_log_path = os.path.join(os.environ.get("AQ_WORK", "/tmp"), "engine.log")
+    log_pos_h = os.path.getsize(engine_log_path) if os.path.exists(engine_log_path) else 0
+    ul.set_opts(rateMode="follow", keepAwake=True, upsampleRule=1, upsampleSystemAudio=True, upsampleEngine=0)
+    ka_init = wait_for(lambda: True if ul.get_status().get("path", {}).get("keepAwake") is True else None, 6.0)
+    check(ka_init is True, f"K14h: külső forrás előtt a keepAlive aktív (keepAwake={ka_init})")
+    p48_h = subprocess.Popen(["pw-play", "--target", "aqulify_sink", wav48],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        st_h = wait_for(lambda: (lambda s: s if s.get("liveUpsample", {}).get("active") and
+                                 s.get("liveUpsample", {}).get("ownEngine") else None)(ul.get_status()), 8.0) or ul.get_status()
+        # 4,5 másodpercen át figyeljük: a keepAlive nem tér vissza közben és a DAC végig 96 kHz marad (nincs 48<->96)
+        rates_seen = []
+        ka_seen_during = []
+        for _ in range(9):
+            time.sleep(0.5)
+            rates_seen.append(ul.pw_node_rate("dac_a"))
+            ka_seen_during.append(ul.get_status().get("path", {}).get("keepAwake"))
+        check(all(r == 96000 for r in rates_seen),
+              f"K14h: 4,5 s alatt a DAC végig 96000 Hz, nincs 48<->96 oszcilláció (mért={rates_seen})")
+        check(all(k is False for k in ka_seen_during),
+              f"K14h: aktív felmintavételezés közben a keepAlive végig szünetel (mért={ka_seen_during})")
+    finally:
+        p48_h.terminate()
+        p48_h.wait(timeout=5)
+    # A külső forrás leállása után a saját motor (3 s no_source) leáll, majd a keepAlive visszakapcsol
+    ka_resumed = wait_for(lambda: True if ul.get_status().get("path", {}).get("keepAwake") is True else None, 10.0)
+    check(ka_resumed is True, f"K14h: a külső forrás leállása után a keepAlive visszakapcsolt (keepAwake={ka_resumed})")
+    ul.set_opts(rateMode="system", keepAwake=False, upsampleRule=0, upsampleSystemAudio=False)
+    time.sleep(1.0)
+    if os.path.exists(engine_log_path):
+        with open(engine_log_path, "r", encoding="utf-8", errors="replace") as lf:
+            lf.seek(log_pos_h)
+            delta_h = lf.read()
+        ka_on_h = delta_h.count("[PipeWire] Hangkártya ébren tartása: be")
+        ka_off_h = delta_h.count("[PipeWire] Hangkártya ébren tartása: ki")
+        osc_back = delta_h.count("Mintavétel-követés: 96000 → 48000")
+        osc_up = delta_h.count("Mintavétel-követés: 48000 → 96000")
+        check(ka_on_h == 1 and ka_off_h == 1,
+              f"K14h: ébren tartás csak felhasználói kapcsoláskor naplózott (be={ka_on_h}, ki={ka_off_h}, várt 1/1)")
+        check(osc_back <= 1 and osc_up <= 1,
+              f"K14h: nincs 48000 <-> 96000 napló-oszcilláció (48->96={osc_up}, 96->48={osc_back})")
     print(f"\n{('SIKERTELEN' if fails else 'MINDEN TESZT SIKERES')} ({fails} hiba)")
     return 1 if fails else 0
 

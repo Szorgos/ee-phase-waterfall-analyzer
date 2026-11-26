@@ -50,9 +50,11 @@
 #include "aether_chain.hpp"
 #include "audio_options.hpp"
 #include "live_upsample_bridge.hpp"
+#include "log_debounce.hpp"
 #include "multi_output.hpp"
 #include "aq_i18n.hpp"
 #include "param_block.hpp"
+#include "pw_keepalive_policy.hpp"
 #include "pw_live_upsample_policy.hpp"
 #include "pw_reconnect_policy.hpp"
 #include "tap_ring.hpp"
@@ -152,7 +154,6 @@ public:
     static constexpr int kExtraZones = multiout::kMaxOutputs - 1;
     static constexpr uint32_t kZoneRing = 32768;      // kb. 0,7 s 48 kHz-en
     static constexpr uint32_t kScratch = 16384;       // a legnagyobb feldolgozott quantum
-    static constexpr int kKeepAlivePauseMs = 1500;    // forrás-követésnél új külső hangfolyamkor ennyi ideig nincs ébren tartás
 
     /** Egy további kimenet (2.–4.): lejátszó stream a céleszköz felé és a gyűrűpuffere. */
     struct ZoneStream {
@@ -221,11 +222,25 @@ public:
     }
 
     /**
-     * Forrás-követés (bármely szálról): ha be van kapcsolva és az ébren tartás is, egy új külső hangfolyam
-     * indulásakor az ébren tartás rövid időre szünetel, hogy a gráf (ha tétlen) át tudjon váltani a forrás
-     * mintavételére. Egyéb módban nincs szünet.
+     * Forrás-követés (bármely szálról): ha be van kapcsolva és az ébren tartás is, külső hangfolyam idején
+     * az ébren tartás csendesen szünetel, hogy a gráf a forrás mintavételét kövesse.
      */
-    void setRateFollow(bool on) { rateFollow_.store(on); }
+    void setRateFollow(bool on) {
+        rateFollow_.store(on, std::memory_order_release);
+        if (loop && optsEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), optsEvent_);
+    }
+
+    /** A beépített lejátszó miatti belső, csendes keepAlive szüneteltetés (nem írja felül a felhasználói beállítást). */
+    void setKeepAliveSuppressedForPlayer(bool suppressed) {
+        playerKeepAliveSuppressed_.store(suppressed, std::memory_order_release);
+        if (loop && optsEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), optsEvent_);
+    }
+
+    /** PipeWire-átalakítós élő felmintavételezés (clock.force-rate aktív) miatti csendes keepAlive szüneteltetés. */
+    void setLiveRateForced(bool forced) {
+        liveRateForced_.store(forced, std::memory_order_release);
+        if (loop && optsEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), optsEvent_);
+    }
 
     /**
      * Saját motorral (libsoxr / Aqulify FFT64) történő élő rendszerhang-felmintavételezés be- vagy kikapcsolása
@@ -459,9 +474,9 @@ public:
         reconnectTimer_ = pw_loop_add_timer(l, onReconnectTimer, this);
         liveUpsGuardTimer_ = pw_loop_add_timer(l, onLiveUpsGuardTimer, this);
         if (!createAndConnectPlayback()) return fail("a lejátszó stream nem csatlakoztatható");
-        if (keepAwakeWanted_.load()) createKeepAlive();
+        reconcileKeepAlive();
 
-        // Az ébren tartás visszakapcsolása a szünet után (negyedmásodpercenként ellenőrzi)
+        // Az ébren tartás és a mintavétel-naplózás időzített kiértékelése (negyedmásodpercenként)
         resumeTimer_ = pw_loop_add_timer(l, onResumeTimer, this);
         struct timespec iv{ 0, 250 * 1000000L };
         pw_loop_update_timer(l, resumeTimer_, &iv, &iv, false);
@@ -534,11 +549,16 @@ private:
     std::atomic<uint32_t> autoLatency_{1024};         // automatikusra visszaváltáskor kért érték
     uint32_t appliedLatency_ = 0;                     // csak a fő hurok szála
     std::atomic<bool> keepAwakeWanted_{false};
-    struct pw_stream* keepAlive_ = nullptr;           // csak a fő hurok szála
+    std::atomic<bool> playerKeepAliveSuppressed_{false}; // belső szünet a beépített lejátszó miatt (nem írja felül userWanted-et)
+    std::atomic<bool> liveRateForced_{false};            // PipeWire-átalakítós élő felmintavételezés (clock.force-rate aktív)
+    struct pw_stream* keepAlive_ = nullptr;              // csak a fő hurok szála
     struct spa_hook keepAliveListener_{};
     std::atomic<bool> keepAliveStreaming_{false};
-    std::atomic<bool> rateFollow_{false};             // a forrást követi (setRateFollow)
-    std::chrono::steady_clock::time_point keepAlivePauseUntil_{};   // csak a fő hurok szála
+    std::atomic<bool> rateFollow_{false};                // a forrást követi (setRateFollow)
+    std::unordered_map<uint32_t, pw_keepalive::RegistryStreamNode> registryOutputStreams_; // regiszter Stream/Output/Audio csomópontjai (fő hurok)
+    pw_keepalive::KeepAlivePolicy keepAlivePolicy_;      // csak a fő hurok szála
+    aq::log::StableStateLogger rateChangeLogger_{1200};  // Mintavétel-követés napló-hiszterézis (fő hurok)
+    uint32_t lastLoggedGraphRate_ = 0;                   // utolsó naplózott gráf-mintavétel (fő hurok)
     struct pw_registry* registry_ = nullptr;          // csak a fő hurok szála
     struct spa_hook registryListener_{};
     struct spa_source* resumeTimer_ = nullptr;        // csak a fő hurok szála
@@ -816,6 +836,7 @@ private:
         liveUpsApplied_ = LiveUpsRequest{};
         liveUpsAppliedTarget_.clear();
         createAndConnectPlayback();
+        reconcileKeepAlive();
         std::cout << "[Felmintavételezés] Saját motor (rendszerhang) visszalépett közvetlen módba ("
                   << (detailHu && *detailHu ? detailHu : reasonCode)
                   << "; kért: " << bSrc << " -> " << bDst
@@ -1021,6 +1042,7 @@ private:
             self->liveUpsGuard_.resetSession(monoMs(), want.srcRate, want.dstRate);
             self->setLiveUpsGuardReason("");
             self->liveUpsActive_.store(true, std::memory_order_release);
+            self->reconcileKeepAlive();
             self->updateLiveBridgeRateGate();
             if (!self->createAndConnectPlayback()) {
                 self->unbindTargetSinkMonitor();
@@ -1035,6 +1057,7 @@ private:
                 self->liveUpsApplied_ = LiveUpsRequest{};
                 self->liveUpsAppliedTarget_.clear();
                 self->createAndConnectPlayback();
+                self->reconcileKeepAlive();
                 std::cerr << "[Felmintavételezés] A szétválasztott kimeneti stream nem indítható; visszatérés alapmódba.\n";
                 return;
             }
@@ -1049,6 +1072,7 @@ private:
             self->liveUpsApplied_ = LiveUpsRequest{};
             self->liveUpsAppliedTarget_.clear();
             self->createAndConnectPlayback();
+            self->reconcileKeepAlive();
             std::cout << "[Felmintavételezés] Saját motor (rendszerhang): ki (visszatérés közvetlen módba).\n";
         }
     }
@@ -1207,10 +1231,47 @@ private:
             for (auto& z : self->zones_) if (z && z->stream) pw_stream_update_properties(z->stream, &dict);
             std::cout << "[PipeWire] Pufferméret: " << (n ? std::to_string(n) + " minta" : std::string("automatikus")) << "\n";
         }
-        const bool want = self->keepAwakeWanted_.load();
-        if (want && !self->keepAlive_ && !self->keepAlivePaused()) self->createKeepAlive();
-        else if (!want && self->keepAlive_) self->destroyKeepAlive();
+        self->reconcileKeepAlive();
         onZoneEvent(data, 0);   // az újramintavételezés minősége változhatott
+    }
+
+    /**
+     * A keepAlive stream állapotának összevetése a KeepAlivePolicy döntésével (csak a fő hurok szálán).
+     * A külső Stream/Output/Audio állapot minden híváskor frissen számítódik újra a regiszterből (nincs számláló).
+     */
+    void reconcileKeepAlive() {
+        pw_keepalive::KeepAliveInputs in{};
+        in.nowMs = monoMs();
+        in.userWanted = keepAwakeWanted_.load(std::memory_order_acquire);
+        in.rateFollow = rateFollow_.load(std::memory_order_acquire);
+        in.playerSuppressed = playerKeepAliveSuppressed_.load(std::memory_order_acquire);
+        in.liveUpsampleActive = liveUpsActive_.load(std::memory_order_acquire);
+        in.hasExternalStream = pw_keepalive::hasExternalAudioOutputStream(registryOutputStreams_);
+        in.externalAudioActive = (keepAlive_ == nullptr) && playbackStreaming.load(std::memory_order_acquire);
+        in.liveRateForced = liveRateForced_.load(std::memory_order_acquire);
+        const auto d = keepAlivePolicy_.evaluate(in);
+        if (d.logUserChange) {
+            std::cout << "[PipeWire] Hangkártya ébren tartása: " << (d.userEnabled ? "be" : "ki") << "\n" << std::flush;
+        }
+        if (d.shouldRun && !keepAlive_) {
+            createKeepAlive(/*silent=*/true);
+        } else if (!d.shouldRun && keepAlive_) {
+            destroyKeepAlive(/*silent=*/true);
+        }
+    }
+
+    /** Tartós gráf-mintavétel-váltás naplózása hiszterézissel (1,2 s), tranziens villanások elnyomásával (fő hurok). */
+    void reconcileRateLog() {
+        const uint32_t cur = graphRate.load(std::memory_order_relaxed);
+        if (cur == 0) return;
+        int logged = 0;
+        if (rateChangeLogger_.update(static_cast<int>(cur), static_cast<uint64_t>(monoMs()), logged)) {
+            const uint32_t prev = lastLoggedGraphRate_;
+            lastLoggedGraphRate_ = static_cast<uint32_t>(logged);
+            if (prev > 0 && prev != lastLoggedGraphRate_) {
+                std::cout << "[PipeWire] Mintavétel-követés: " << prev << " → " << lastLoggedGraphRate_ << " Hz\n" << std::flush;
+            }
+        }
     }
 
     /**
@@ -1267,11 +1328,8 @@ private:
         pw_stream_destroy(keepAlive_);
         keepAlive_ = nullptr;
         keepAliveStreaming_ = false;
-        if (!silent) std::cout << "[PipeWire] Hangkártya ébren tartása: ki\n";
+        if (!silent) std::cout << "[PipeWire] Hangkártya ébren tartása: ki\n" << std::flush;
     }
-
-    /** Ébren tartás szünetel-e (forrás-követés: új külső hangfolyam). A fő hurok szálán hívandó. */
-    bool keepAlivePaused() const { return std::chrono::steady_clock::now() < keepAlivePauseUntil_; }
 
     /** Lejátszó stream létrehozása és csatlakoztatása (a fő hurok szálán: induláskor és újracsatlakozáskor). */
     bool createAndConnectPlayback() {
@@ -1496,14 +1554,13 @@ private:
             return;
         }
         if (std::strcmp(cls, "Stream/Output/Audio") != 0) return;
-        // a saját streamjeink (fő kimenet, zónák, lejátszó, ébren tartás) nem számítanak: nevük „aqulify…”,
-        // az ébren tartó és a lejátszó alkalmazásneve „Aqulify” (az application.process.id nem megbízható)
         const char* appName = spa_dict_lookup(props, PW_KEY_APP_NAME);
-        if (nodeName && std::strncmp(nodeName, "aqulify", 7) == 0) return;
-        if (appName && std::strcmp(appName, "Aqulify") == 0) return;
-        if (!self->rateFollow_.load() || !self->keepAwakeWanted_.load()) return;
-        self->keepAlivePauseUntil_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(kKeepAlivePauseMs);
-        if (self->keepAlive_) self->destroyKeepAlive(/*silent=*/true);
+        self->registryOutputStreams_[id] = pw_keepalive::RegistryStreamNode{
+            id,
+            nodeName ? std::string(nodeName) : std::string(),
+            appName ? std::string(appName) : std::string()
+        };
+        self->reconcileKeepAlive();
     }
 
     static void onRegistryGlobalRemove(void* data, uint32_t id) {
@@ -1515,6 +1572,9 @@ private:
             if (self->liveUpsActive_.load(std::memory_order_acquire)) {
                 self->evaluateLiveUpsGuard();
             }
+        }
+        if (self->registryOutputStreams_.erase(id) > 0) {
+            self->reconcileKeepAlive();
         }
         bool erased = false;
         int count = 0;
@@ -1536,11 +1596,11 @@ private:
         }
     }
 
-    /** Az ébren tartás visszakapcsolása a szünet végén (a fő hurok szálán). */
+    /** Az ébren tartás és a mintavétel-naplózás időzített kiértékelése (a fő hurok szálán). */
     static void onResumeTimer(void* data, uint64_t) {
         auto* self = static_cast<AetherSinkNode*>(data);
-        if (self->keepAwakeWanted_.load() && !self->keepAlive_ && !self->keepAlivePaused())
-            self->createKeepAlive(/*silent=*/true);
+        self->reconcileKeepAlive();
+        self->reconcileRateLog();
     }
 
     static void onKeepAliveState(void* data, enum pw_stream_state, enum pw_stream_state state, const char*) {
@@ -1621,11 +1681,9 @@ private:
         struct spa_audio_info_raw info{};
         if (spa_format_audio_raw_parse(param, &info) >= 0 && info.rate > 0) {
             self->playbackRate_.store(info.rate, std::memory_order_relaxed);
-            const uint32_t prev = self->graphRate.exchange(info.rate, std::memory_order_relaxed);
+            self->graphRate.store(info.rate, std::memory_order_relaxed);
             self->sampleRate.store(info.rate, std::memory_order_relaxed);
-            if (prev > 0 && prev != info.rate) {
-                std::cout << "[PipeWire] Mintavétel-követés: " << prev << " → " << info.rate << " Hz\n";
-            }
+            self->reconcileRateLog();
             if (self->liveUpsActive_.load(std::memory_order_acquire)) {
                 self->updateLiveBridgeRateGate();
                 if (self->loop && self->liveUpsEvent_)

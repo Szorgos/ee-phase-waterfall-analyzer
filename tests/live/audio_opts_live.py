@@ -129,7 +129,9 @@ check(setting("clock.allowed-rates") == orig_allowed and setting("clock.force-ra
 
 # --- a beépített lejátszó: „A forrást követi” mellett a gráf a fájl mintavételére vált (ébren tartással is)
 flac = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "player_stereo44.flac")
+engine_log_path = os.path.join(WORK, "engine.log")
 for keep in (False, True):
+    log_pos = os.path.getsize(engine_log_path) if os.path.exists(engine_log_path) else 0
     opts(rateMode="follow", keepAwake=keep)
     time.sleep(1.0)
     ws = WS(PORT)
@@ -151,6 +153,14 @@ for keep in (False, True):
     time.sleep(2.5)
     if keep:
         check(status().get("keepAwake") is True, "a lejátszás vége után az ébren tartás visszakapcsolt")
+        if os.path.exists(engine_log_path):
+            with open(engine_log_path, "r", encoding="utf-8", errors="replace") as lf:
+                lf.seek(log_pos)
+                delta = lf.read()
+            ka_on = delta.count("[PipeWire] Hangkártya ébren tartása: be")
+            ka_off = delta.count("[PipeWire] Hangkártya ébren tartása: ki")
+            check(ka_on == 1 and ka_off == 0,
+                  f"ébren tartás naplózaj nélkül (beépített lejátszó nyitás/zárás): be={ka_on} (várt 1), ki={ka_off} (várt 0)")
 opts(rateMode="system", keepAwake=False)
 time.sleep(0.5)
 
