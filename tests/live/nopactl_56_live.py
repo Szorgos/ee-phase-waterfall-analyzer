@@ -47,6 +47,19 @@ def wait_for(pred, seconds):
     return pred()
 
 
+def dump_pw_nodes():
+    out = subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=5).stdout or ""
+    for o in ul._parse_pw_dump_objects(out):
+        if not isinstance(o, dict) or o.get("type") != "PipeWire:Interface:Node":
+            continue
+        info = o.get("info", {})
+        props = info.get("props", {})
+        nm = props.get("node.name", "")
+        if nm in ("aqulify_sink", "aqulify_sink_output", "aqulify_player", "dac_burrbrown", "dac_fix48", "dac_alt"):
+            fmts = [f.get("rate") for f in info.get("params", {}).get("Format", []) if isinstance(f, dict) and f.get("rate")]
+            print(f"    [pw-dump] id={o.get('id')} {nm}: state={info.get('state')} fmt={fmts} grp={props.get('node.group')} force={props.get('node.force-rate')} target={props.get('target.object')}")
+
+
 def record_1khz(sink_name, sr=44100, dur=1.4):
     raw_path = os.path.join(WORK, f"rec56_{sink_name}_{sr}.raw")
     if os.path.exists(raw_path):
@@ -168,8 +181,11 @@ def main():
           u3.get("srcRate") == 48000 and u3.get("targetRate") == 48000 and
           u3.get("actualDacRate") == 48000 and u3.get("resampleWarning") is False,
           f"#56-3c: nem-USB EnumFormat fix 48 kHz -> filter_only 48000 Hz (NEM 96000 Hz): {u3}")
-    check(fix_sr == 48000 and fix_aq_sr == 48000 and tone3 is not None and tone3 > -20.0,
+    ok3d = (fix_sr == 48000 and fix_aq_sr == 48000 and tone3 is not None and tone3 > -20.0)
+    check(ok3d,
           f"#56-3d: dac_fix48={fix_sr} Hz, aqulify_sink={fix_aq_sr} Hz, 1 kHz jel={tone3:.1f} dBFS" if tone3 is not None else "#56-3d: felvétel sikertelen")
+    if not ok3d:
+        dump_pw_nodes()
 
     ws.send({"type": "player_stop"})
     ws.wait_type("player_result", limit=300)
