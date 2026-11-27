@@ -3022,6 +3022,70 @@ static void testLibraryHardening() {
     fs::remove_all(base, ec);
 }
 
+static void testBeforePlayCallback() {
+    std::printf("[20] Külső lejátszók szüneteltetése (setBeforePlayCallback): indítás, sorrend, szünetmentes váltás\n");
+    auto* out = new FakeOutput;
+    FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
+
+    std::atomic<int> cbCalls{0};
+    std::atomic<int> opensAtLastCb{-1};
+    p.setBeforePlayCallback([&]() {
+        opensAtLastCb.store(out->opens.load());
+        cbCalls.fetch_add(1);
+    });
+
+    // 1. Hibás / nem létező fájl: NEM hívhatja a visszahívást (ne állítsa le a szóló külső lejátszót hiba esetén)
+    std::string err;
+    CHECK(!p.open(kData + "/nem_letezo_hangfajl.flac", &err) && cbCalls.load() == 0,
+          "nem létező fájl megnyitása nem hívja a beforePlay visszahívást");
+
+    // 2. Érvényes fájl megnyitása: a visszahívás a hangfolyam megnyitása ELŐTT fut le (opens == 0 volt híváskor)
+    CHECK(p.open(kData + "/player_stereo44.flac", &err) && cbCalls.load() == 1 && opensAtLastCb.load() == 0 &&
+          out->opens.load() == 1,
+          "open() sikeres dekódolás után, de még a kimenet megnyitása előtt hívja a beforePlay-t");
+
+    // 3. Már Playing állapotban lévő play() nem hívja újra
+    p.play();
+    CHECK(cbCalls.load() == 1, "már szóló lejátszónál a play() nem hívja újra a beforePlay-t");
+
+    // 4. Szüneteltetett szám újranyitása (reopenOutput) NEM hívja; szünetből folytatás (play) IGEN
+    p.pause();
+    p.reopenOutput();
+    CHECK(cbCalls.load() == 1 && p.state() == FilePlayer::State::Paused,
+          "szüneteltetett szám reopenOutput() hívása nem hívja a beforePlay-t");
+    p.play();
+    CHECK(cbCalls.load() == 2 && p.state() == FilePlayer::State::Playing,
+          "szünetből való play() folytatás meghívja a beforePlay-t");
+
+    // 5. Szünetmentes (gapless) következő szám a dekódoló szálról NEM hívja újra a beforePlay-t
+    int nextCalls = 0;
+    p.setNextProvider([&](uint64_t, std::string& path, uint64_t& tok) {
+        if (++nextCalls == 1) {
+            path = kData + "/player_stereo44.flac";
+            tok = 2;
+            return true;
+        }
+        return false;
+    });
+    std::vector<float> tmp(4096 * 2);
+    for (int i = 0; i < 60 && p.currentToken() != 2; ++i) {
+        out->pull(tmp.data(), 4096);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    CHECK(p.currentToken() == 2 && cbCalls.load() == 2,
+          "szünetmentes számléptetésnél a beforePlay nem fut le feleslegesen");
+
+    p.stop();
+
+    // 6. Élő folyam (openStream) érvényes dekóderrel meghívja, érvénytelennel nem
+    CHECK(!p.openStream(nullptr, "ures", &err) && cbCalls.load() == 2,
+          "érvénytelen openStream nem hívja a beforePlay-t");
+    auto dec = openDecoder(kData + "/player_stereo44.flac", &err);
+    CHECK(dec && p.openStream(std::move(dec), "teszt folyam", &err) && cbCalls.load() == 3,
+          "érvényes openStream meghívja a beforePlay-t");
+    p.stop();
+}
+
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);   // hiba esetén se vesszen el a kimenet (pl. CI, átirányítás)
     std::printf("========================================================\n");
@@ -3047,6 +3111,7 @@ int main() {
     testDsdDop();
     testUpsamplePlayerK1K6K7K8K16();
     testFilterOnlyPlayer();
+    testBeforePlayCallback();
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

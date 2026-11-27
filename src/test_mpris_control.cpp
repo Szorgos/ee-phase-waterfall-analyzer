@@ -78,11 +78,45 @@ void testFormatMprisCommandLog() {
     }
 }
 
+void testAutoPausePolicy() {
+    std::cout << "[3] selectPlayingMprisTargets() és PII-mentes auto-pause napló...\n";
+    using ee_analyzer::media::MprisPlayerEntry;
+    using ee_analyzer::media::formatMprisAutoPauseLog;
+    using ee_analyzer::media::isOwnAqulifyMprisName;
+    using ee_analyzer::media::selectPlayingMprisTargets;
+
+    check(isOwnAqulifyMprisName("org.mpris.MediaPlayer2.aqulify"), "saját aqulify busznév kiszűrve");
+    check(isOwnAqulifyMprisName("org.mpris.MediaPlayer2.Aqulify.instance123"), "nagybetűs Aqulify busznév is kiszűrve");
+    check(!isOwnAqulifyMprisName("org.mpris.MediaPlayer2.sone"), "külső lejátszó busznév nem saját");
+
+    const std::vector<MprisPlayerEntry> input = {
+        { "org.mpris.MediaPlayer2.sone", "Playing" },
+        { "org.mpris.MediaPlayer2.chromium.instance42", "Paused" },
+        { "org.mpris.MediaPlayer2.vlc", "Stopped" },
+        { "org.mpris.MediaPlayer2.aqulify", "Playing" },
+        { "org.mpris.MediaPlayer2.sone", "Playing" },
+        { "org.mpris.MediaPlayer2.firefox.instance99", "Playing" },
+    };
+    const auto targets = selectPlayingMprisTargets(input);
+    check(targets.size() == 2 &&
+          targets[0].busName == "org.mpris.MediaPlayer2.sone" &&
+          targets[1].busName == "org.mpris.MediaPlayer2.firefox.instance99",
+          "csak az egyedi, külső, Playing állapotú lejátszók kerülnek kiválasztásra (Paused/Stopped/saját kihagyva)");
+
+    const std::string log1 = formatMprisAutoPauseLog(1, 0);
+    check(log1 == "[Média] Külső lejátszók szüneteltetése a helyi lejátszás előtt: 1 szüneteltetve",
+          "auto-pause napló sikeres szüneteltetésnél pontos és PII-mentes");
+    const std::string log2 = formatMprisAutoPauseLog(1, 1);
+    check(log2 == "[Média] Külső lejátszók szüneteltetése a helyi lejátszás előtt: 1 szüneteltetve, 1 még nem jelzett szünetet",
+          "auto-pause napló részleges szüneteltetésnél jelzi a még futók számát");
+}
+
 } // namespace
 
 int main() {
     testPlanMprisMethod();
     testFormatMprisCommandLog();
+    testAutoPausePolicy();
     std::cout << "\nEredmény: " << g_pass << " OK, " << g_fail << " HIBA.\n";
     return g_fail == 0 ? 0 : 1;
 }

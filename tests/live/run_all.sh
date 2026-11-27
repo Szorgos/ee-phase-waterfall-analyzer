@@ -16,6 +16,7 @@ run "Motor: DSP-modulok" python3 -I "$HERE/modules_live.py"
 run "Motor: haladó hangkimenet" python3 -I "$HERE/audio_opts_live.py"
 run "Motor: felmintavételezés" python3 -I "$HERE/upsample_live.py"
 run "Motor: felmintavételezés az élő úton" python3 -I "$HERE/live_upsample_live.py"
+run "Motor: külső lejátszók automatikus szüneteltetése (MPRIS)" python3 -I "$HERE/mpris_autopause_live.py"
 run "Motor: nagy felbontás (352,8–768 kHz)" python3 -I "$HERE/hires_live.py"
 NR_DIR=$(mktemp -d)
 PATH="$HERE/fake_netrecv:$PATH" AQ_FAKE_NETRECV_DIR="$NR_DIR" run "Motor: hálózati vevő (hamis program)" python3 -I "$HERE/netrecv_live.py"

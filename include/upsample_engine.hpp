@@ -302,6 +302,24 @@ public:
     }
 
     /**
+     * A libsoxr belső kimeneti pufferében maradt minták kiolvasása új bemenet és EOS-kiürítés nélkül.
+     * Akkor hasznos, ha egy nagy pontosságú szűrőlökés megtöltötte az előző process() kimeneti pufferét.
+     */
+    bool drainBuffered(float* out, size_t outCapacityFrames, size_t& outFrames) {
+        outFrames = 0;
+        if (!active_ || useFft64_ || !soxr_ || !out || outCapacityFrames == 0) return true;
+        // Nem-null bemeneti mutató + 0 keret: a libsoxr nem indít EOS-kiürítést, csak kiadja a belső pufferből a maradékot
+        static const float kDummy[8] = {};
+        if (!down_) return processMain(kDummy, 0, out, outCapacityFrames, outFrames, true);
+        const size_t midCap = std::min<size_t>(outCapacityFrames * 2 + 4096, 65536u);
+        if (mid_.size() < midCap * channels_) mid_.resize(midCap * channels_);
+        size_t midFrames = 0;
+        bool ok = processMain(kDummy, 0, mid_.data(), midCap, midFrames, false);
+        ok = runDown(mid_.data(), midFrames, out, outCapacityFrames, outFrames) && ok;
+        return ok;
+    }
+
+    /**
      * Belső szűrő kiürítése (a forrásfolyam végén).
      */
     bool flush(float* out, size_t outCapacityFrames, size_t& outFrames) {
@@ -435,9 +453,10 @@ private:
     }
 
     static soxr_error_t runOne(soxr_t s, const float* in, size_t inFrames, float* out, size_t outCap, size_t& odone) {
-        size_t idone = 0;
         odone = 0;
-        return soxr_process(s, in, inFrames, &idone, out, outCap, &odone);
+        // idone = nullptr: a libsoxr garantáltan az összes bemeneti keretet átveszi (nem dob el kereteket, ha egy
+        // nagy blokklökés eléri az outCap határát; a többlet kimenet a belső pufferben marad a következő hívásig).
+        return soxr_process(s, in, inFrames, nullptr, out, outCap, &odone);
     }
 
     /** countClips: a túlvezérelt minták számlálása (csak a DAC-ra menő jelben). */

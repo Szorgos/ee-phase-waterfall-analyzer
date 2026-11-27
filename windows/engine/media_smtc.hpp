@@ -15,8 +15,11 @@
 #include <asyncinfo.h>
 #include <hstring.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <cstdint>
 #include <iostream>
 #include <mutex>
 #include <string>
@@ -191,6 +194,8 @@ public:
 
     void stop() {
         if (!running_.exchange(false)) return;
+        wake_ = true;
+        pauseCv_.notify_all();
         if (thread_.joinable()) thread_.join();
     }
 
@@ -208,6 +213,24 @@ public:
             if (pending_.size() < 16) pending_.push_back({ action, value });
         }
         wake_ = true;
+    }
+
+    /**
+     * Az összes éppen szóló (Playing) külső SMTC munkamenet szüneteltetése a beépített lejátszó indítása előtt.
+     * A művelet a COM MTA médiaszálon fut, korlátos várakozással (legfeljebb waitMs ms).
+     */
+    size_t pauseAllPlaying(int waitMs = 400) {
+        if (!running_.load() || apiFailed_.load()) return 0;
+        uint64_t targetSeq = 0;
+        {
+            std::lock_guard<std::mutex> lk(pauseMu_);
+            targetSeq = ++pauseReqSeq_;
+        }
+        wake_ = true;
+        std::unique_lock<std::mutex> lk(pauseMu_);
+        pauseCv_.wait_for(lk, std::chrono::milliseconds(std::clamp(waitMs, 50, 1500)),
+                          [&] { return pauseDoneSeq_ >= targetSeq || !running_.load() || apiFailed_.load(); });
+        return lastPausedCount_;
     }
 
     bool art(const std::string& id, std::string& mime, std::string& bytes, std::string& /*url*/) const {
@@ -402,20 +425,67 @@ private:
         }
     }
 
+    /** Az összes éppen Playing (status == 4) állapotú külső SMTC munkamenet szüneteltetése (csak a COM szálról). */
+    size_t pauseAllPlayingOnComThread() {
+        if (!initManager()) return 0;
+        smtc::Ref<smtc::IVectorView> list;
+        UINT32 n = 0;
+        if (FAILED(manager_->GetSessions(list.put())) || !list || FAILED(list->get_Size(&n))) return 0;
+        size_t pausedCount = 0;
+        for (UINT32 i = 0; i < n && i < 32; ++i) {
+            smtc::Ref<smtc::ISession> s;
+            if (FAILED(list->GetAt(i, s.put())) || !s) continue;
+            smtc::Ref<smtc::IPlaybackInfo> pi;
+            INT32 status = 0;
+            if (SUCCEEDED(s->GetPlaybackInfo(pi.put())) && pi) pi->get_PlaybackStatus(&status);
+            if (status != 4) continue;   // csak a valóban szóló (Playing) munkameneteket szüneteltetjük
+            smtc::Ref<smtc::IAsyncOp> op;
+            smtc::boolean8 ok = 0;
+            bool done = SUCCEEDED(s->TryPauseAsync(op.put())) && await(op.p, &ok, 200) && ok;
+            if (!done) {
+                op.reset();
+                ok = 0;
+                done = SUCCEEDED(s->TryTogglePlayPauseAsync(op.put())) && await(op.p, &ok, 200) && ok;
+            }
+            if (done) ++pausedCount;
+        }
+        if (pausedCount > 0) {
+            std::cout << "[Média] Külső lejátszók szüneteltetése a helyi lejátszás előtt: "
+                      << pausedCount << " szüneteltetve\n" << std::flush;
+        }
+        return pausedCount;
+    }
+
     void loop() {
         if (!api_.load()) {
+            apiFailed_ = true;
+            pauseCv_.notify_all();
             std::cout << "[Média] A rendszer médiavezérlése nem érhető el (combase.dll), a „most szól” nem működik.\n";
             return;
         }
         const HRESULT init = api_.RoInitialize(1);   // RO_INIT_MULTITHREADED
         while (running_) {
+            uint64_t reqSeq = 0;
+            {
+                std::lock_guard<std::mutex> lk(pauseMu_);
+                if (pauseReqSeq_ > pauseDoneSeq_) reqSeq = pauseReqSeq_;
+            }
+            if (reqSeq > 0) {
+                const size_t cnt = pauseAllPlayingOnComThread();
+                {
+                    std::lock_guard<std::mutex> lk(pauseMu_);
+                    lastPausedCount_ = cnt;
+                    pauseDoneSeq_ = reqSeq;
+                }
+                pauseCv_.notify_all();
+            }
             std::vector<std::pair<std::string, double>> todo;
             {
                 std::lock_guard<std::mutex> lk(mutex_);
                 todo.swap(pending_);
             }
             for (const auto& [a, v] : todo) execute(a, v);
-            if (!todo.empty()) std::this_thread::sleep_for(std::chrono::milliseconds(150));   // a lejátszó frissítse az állapotát
+            if (!todo.empty() || reqSeq > 0) std::this_thread::sleep_for(std::chrono::milliseconds(100));
             refresh();
             for (int i = 0; i < 16 && running_ && !wake_.exchange(false); ++i)
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));   // kb. 0,8 s-onként, parancs után azonnal
@@ -423,6 +493,7 @@ private:
         session_.reset();
         manager_.reset();
         if (SUCCEEDED(init) && api_.RoUninitialize) api_.RoUninitialize();
+        pauseCv_.notify_all();
     }
 
     smtc::Api api_;
@@ -431,12 +502,18 @@ private:
     std::string lastActive_, lastActiveCandidate_, loadedArt_;
 
     std::atomic<bool> running_{false};
+    std::atomic<bool> apiFailed_{false};
     std::atomic<bool> wake_{false};
     std::thread thread_;
     mutable std::mutex mutex_;
     Info info_;
     std::string artBytes_, artMime_;
     std::vector<std::pair<std::string, double>> pending_;
+    std::mutex pauseMu_;
+    std::condition_variable pauseCv_;
+    uint64_t pauseReqSeq_ = 0;
+    uint64_t pauseDoneSeq_ = 0;
+    size_t lastPausedCount_ = 0;
 };
 
 } // namespace ee_analyzer::media

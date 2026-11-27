@@ -135,6 +135,7 @@ public:
         hist_.clear();
         phase_ = 0.0;
         seeded_ = false;
+        bypass_ = true;
     }
 
     /**
@@ -146,20 +147,41 @@ public:
         if (!inStereo || inFrames == 0) return;
 
         const double dr = std::clamp(driftRatio, -0.0005, 0.0005);  // ±500 ppm korlát
-        // Ha a két órajel gyakorlatilag szinkronban van és nincs fáziseltolás, 1:1 bitpontos átengedés
-        if (std::abs(dr) < 1e-7 && (!seeded_ || std::abs(phase_) < 1e-9)) {
+        // Ha a két órajel gyakorlatilag szinkronban van és még nem léptünk ki az átengedésből, 1:1 bitpontos kimenet
+        if (std::abs(dr) < 1e-7 && bypass_) {
             outStereo.assign(inStereo, inStereo + inFrames * 2);
-            // Az utolsó 4 keretet megőrizzük, hogy ha később drift indulna, zökkenőmentesen válthasson
-            const size_t keep = std::min<size_t>(inFrames, 4);
-            hist_.assign(inStereo + (inFrames - keep) * 2, inStereo + inFrames * 2);
+            // Az utolsó 2 keretet megőrizzük (prev[N-2], prev[N-1]), hogy drift indulásakor kattogás és
+            // keretismétlés nélkül, C1-folytonosan tudjunk átváltani Hermite-interpolációra.
+            if (inFrames >= 2) {
+                hist_.assign(inStereo + (inFrames - 2) * 2, inStereo + inFrames * 2);
+            } else {
+                if (hist_.size() >= 4) {
+                    hist_[0] = hist_[2];
+                    hist_[1] = hist_[3];
+                    hist_.resize(2);
+                } else if (hist_.empty()) {
+                    hist_.assign(2, 0.0f);
+                }
+                hist_.push_back(inStereo[0]);
+                hist_.push_back(inStereo[1]);
+            }
             phase_ = 0.0;
-            seeded_ = (keep >= 4);
+            seeded_ = true;
             return;
         }
 
-        if (!seeded_) {
-            hist_.assign(4 * 2, 0.0f);  // 4 keret előzmény a Hermite-ablakhoz
-            phase_ = 1.0;
+        if (bypass_) {
+            // Átmenet 1:1 átengedésből Hermite-módba: hist_ pontosan [prev[N-2], prev[N-1]] (2 keret),
+            // az utolsó kiadott minta az 1-es indexű volt, így a következő pontos helye 2.0 + dr.
+            if (!seeded_ || hist_.size() < 4) {
+                hist_.assign(2 * 2, 0.0f);
+                seeded_ = true;
+            }
+            phase_ = static_cast<double>(hist_.size() / 2) + dr;
+            bypass_ = false;
+        } else if (!seeded_) {
+            hist_.assign(2 * 2, 0.0f);
+            phase_ = 2.0;
             seeded_ = true;
         }
 
@@ -206,6 +228,7 @@ private:
     std::vector<float> hist_;
     double phase_ = 0.0;
     bool seeded_ = false;
+    bool bypass_ = true;
 };
 
 /** Élő rendszerhang-felmintavételezés állapotpillanatképe a GUI és a diagnosztika számára. */
@@ -277,6 +300,9 @@ public:
         errIntegral_ = 0.0;
         driftLocked_ = false;
         driftTargetFrames_ = 0.0;
+        driftWarmupSec_ = 0.0;
+        driftWarmupFillAcc_ = 0.0;
+        lastUnderrunsSeen_ = 0;
         driftRatio_.store(0.0, std::memory_order_relaxed);
         underruns_.store(0, std::memory_order_relaxed);
         overruns_.store(0, std::memory_order_relaxed);
@@ -298,24 +324,40 @@ public:
         }
 
         // Cél puffer-kitöltöttség a kimeneti gyűrűpufferben:
-        // libsoxr: ~90 ms (elnyeli a 28/32 bites VHQ blokk-lökéseit is), FFT64: elég nagy az Overlap-Save blokkhoz.
+        // - FFT64 / FFT-DD: elég nagy a választott Overlap-Save blokkhoz (FFT-DD saját blokkméret-képlettel);
+        // - libsoxr: alapesetben ~90 ms, meredek átmenetnél vagy 32 bites pontosságnál (pl. Referencia 99,7%)
+        //   arányosan megnövelt előtöltés és átmeneti puffer, hogy a nagy FFT-blokklökések között ne ürüljön ki.
         const bool isFft = upsampler_.isFft64();
-        size_t target = isFft ? static_cast<size_t>(dstRate) * 240 / 1000
-                              : static_cast<size_t>(dstRate) * 90 / 1000;
+        const bool isDD = (upsampler_.engineType() == 2);
+        const double trans = std::max(0.002, opts.upsampleStopbandBegin - opts.upsamplePassbandEnd);
+        const bool sharpSoxr = !isFft && (srcRate != dstRate) && (opts.upsamplePrecision >= 32 || trans < 0.03);
+        size_t target = 0;
         if (isFft) {
+            target = static_cast<size_t>(dstRate) * 240 / 1000;
             size_t nIn = 0, nOut = 0;
-            if (srcconv::fft64::computeBlockSizes(srcRate, dstRate, nIn, nOut)) {
+            const bool okBlock = isDD ? srcconv::fft64::computeBlockSizesDD(srcRate, dstRate, nIn, nOut)
+                                      : srcconv::fft64::computeBlockSizes(srcRate, dstRate, nIn, nOut);
+            if (okBlock) {
                 target = std::max(target, nOut / 2 + 8192);
             }
         } else {
-            target = std::max<size_t>(target, 8192);
+            double targetMs = 90.0;
+            if (sharpSoxr) {
+                const double precScale = (opts.upsamplePrecision >= 32) ? 1.5
+                                       : (opts.upsamplePrecision >= 28 ? 1.0 : 0.75);
+                targetMs = std::clamp(90.0 + precScale * (0.05 / trans) * 18.0, 150.0, 600.0);
+            }
+            target = static_cast<size_t>(std::ceil(static_cast<double>(dstRate) * targetMs / 1000.0));
+            target = std::max<size_t>(target, sharpSoxr ? 16384u : 8192u);
         }
         targetFillFrames_ = std::clamp<size_t>(target, 4096, outRing_.capacity() / 2);
         prefillFrames_ = targetFillFrames_;
+        minOutFreeFrames_ = (isFft || sharpSoxr) ? 65536u : 16384u;
 
         const size_t ratioCeil = static_cast<size_t>(std::ceil(static_cast<double>(dstRate) / static_cast<double>(srcRate))) + 1;
         inStage_.assign(kWorkChunk * 2, 0.0f);
-        upStage_.assign(std::max<size_t>(kWorkChunk * ratioCeil + 4096, isFft ? 65536u : 16384u) * 2, 0.0f);
+        const size_t stageMin = (isFft || sharpSoxr) ? 65536u : 16384u;
+        upStage_.assign(std::max<size_t>(kWorkChunk * ratioCeil + 4096, stageMin) * 2, 0.0f);
         driftStage_.reserve(upStage_.size());
 
         // Állapot-pillanatkép atomikus gyorsítótára: a status() így soha nem olvas közvetlenül az upsampler_-ből
@@ -406,66 +448,107 @@ public:
         if (!configured_.load(std::memory_order_acquire)) return false;
         const size_t availIn = inRing_.available();
         if (availIn == 0) return false;
-        const size_t minOutFree = upsampler_.isFft64() ? 65536u : 8192u;
-        if (outRing_.freeSpace() < minOutFree) return false;
+        if (outRing_.freeSpace() < minOutFreeFrames_) return false;
 
         const size_t take = std::min(availIn, kWorkChunk);
         const size_t got = inRing_.pop(inStage_.data(), take);
         if (got == 0) return false;
 
-        const float* prodPtr = inStage_.data();
-        size_t prodFrames = got;
+        const auto emitOutput = [&](const float* prodPtr, size_t prodFrames) {
+            if (prodFrames == 0) return;
 
-        if (srcRate_ != dstRate_) {
-            size_t outFrames = 0;
-            if (!upsampler_.process(inStage_.data(), got, upStage_.data(), upStage_.size() / 2, outFrames)) {
-                return true;
+            // Ha közben alulcsordulás történt, az előző PI-felhalmozást töröljük és újra mérjük az alapkitöltöttséget
+            const uint64_t curUnd = underruns_.load(std::memory_order_relaxed);
+            if (curUnd != lastUnderrunsSeen_) {
+                lastUnderrunsSeen_ = curUnd;
+                errFiltered_ = 0.0;
+                errIntegral_ = 0.0;
+                driftLocked_ = false;
+                driftWarmupSec_ = 0.0;
+                driftWarmupFillAcc_ = 0.0;
             }
+
+            // PI órajel-drift szabályzó: a teljes csővezeték-kitöltöttség (bemeneti gyűrű + szűrőkésleltetés + kimeneti gyűrű)
+            // átlagát követi. Az 1,0 s bemelegedő átlagolás és a 3,0 s aluláteresztő szűrő kiszűri a nem egész arányú
+            // (pl. 44,1 -> 96 kHz, 23,2 ms vs 21,3 ms) kvantum-lebegést, így a szabályzó nem ütközik ±500 ppm-re,
+            // ugyanakkor a valódi kvarc-driftet (±500 ppm-ig) biztonsággal követi.
+            double dr = 0.0;
+            if (driftEnabled_ && prefilled_.load(std::memory_order_acquire)) {
+                const double ratio = static_cast<double>(dstRate_) / static_cast<double>(srcRate_);
+                const double pipeFill = static_cast<double>(inRing_.available()) * ratio +
+                                        ((srcRate_ != dstRate_) ? upsampler_.delayFrames() : 0.0) +
+                                        static_cast<double>(outRing_.available()) +
+                                        static_cast<double>(prodFrames);
+                const double dt = static_cast<double>(prodFrames) / static_cast<double>(dstRate_);
+                if (!driftLocked_) {
+                    driftWarmupFillAcc_ += pipeFill * dt;
+                    driftWarmupSec_ += dt;
+                    if (driftWarmupSec_ >= 1.0) {
+                        driftTargetFrames_ = driftWarmupFillAcc_ / driftWarmupSec_;
+                        driftLocked_ = true;
+                        errFiltered_ = 0.0;
+                        errIntegral_ = 0.0;
+                    }
+                } else {
+                    const double errSec = (pipeFill - driftTargetFrames_) / static_cast<double>(dstRate_);
+                    const double alpha = std::clamp(dt / 3.0, 0.001, 0.12);
+                    errFiltered_ += alpha * (errSec - errFiltered_);
+                    // Kíméletes PI anti-windup védelemmel: a kvantum-lebegést kiszűri, a valódi ±500 ppm driftet követi
+                    constexpr double kKp = 0.08;
+                    constexpr double kKi = 0.0045;
+                    constexpr double kMaxDr = 0.0005;
+                    const double rawDr = kKp * errFiltered_ + kKi * errIntegral_;
+                    const bool satHi = rawDr >= kMaxDr && errFiltered_ > 0.0;
+                    const bool satLo = rawDr <= -kMaxDr && errFiltered_ < 0.0;
+                    if (!satHi && !satLo) {
+                        errIntegral_ = std::clamp(errIntegral_ + errFiltered_ * dt, -0.12, 0.12);
+                    }
+                    dr = std::clamp(kKp * errFiltered_ + kKi * errIntegral_, -kMaxDr, kMaxDr);
+                }
+                driftRatio_.store(dr, std::memory_order_relaxed);
+            } else {
+                driftRatio_.store(0.0, std::memory_order_relaxed);
+            }
+
+            drift_.process(prodPtr, prodFrames, dr, driftStage_);
+            const size_t finalFrames = driftStage_.size() / 2;
+            if (finalFrames == 0) return;
+
+            if (dspCb_) {
+                dspCb_(driftStage_.data(), finalFrames, dstRate_);
+            }
+
+            // Ha a kimeneti gyűrűpufferben átmenetileg kevés hely van, a lehető legtöbbet írjuk be
+            const size_t written = outRing_.push(driftStage_.data(), finalFrames);
+            if (written < finalFrames) {
+                overruns_.fetch_add(finalFrames - written, std::memory_order_relaxed);
+            }
+        };
+
+        if (srcRate_ == dstRate_) {
+            emitOutput(inStage_.data(), got);
+            return true;
+        }
+
+        const size_t stageCap = upStage_.size() / 2;
+        size_t outFrames = 0;
+        if (!upsampler_.process(inStage_.data(), got, upStage_.data(), stageCap, outFrames)) {
+            return true;
+        }
+        statusDelayFrames_.store(upsampler_.delayFrames(), std::memory_order_relaxed);
+        statusClipped_.store(upsampler_.clippedSamples(), std::memory_order_relaxed);
+        emitOutput(upStage_.data(), outFrames);
+
+        // Ha egy nagy libsoxr-lökés teljesen megtöltötte az upStage_-t, a belső pufferben maradt mintákat is
+        // azonnal kiürítjük (legfeljebb 4 kör, amíg van szabad hely a kimeneti gyűrűben).
+        for (int drainIter = 0; !upsampler_.isFft64() && outFrames == stageCap && drainIter < 4 &&
+                                outRing_.freeSpace() >= stageCap;
+             ++drainIter) {
+            outFrames = 0;
+            if (!upsampler_.drainBuffered(upStage_.data(), stageCap, outFrames) || outFrames == 0) break;
             statusDelayFrames_.store(upsampler_.delayFrames(), std::memory_order_relaxed);
             statusClipped_.store(upsampler_.clippedSamples(), std::memory_order_relaxed);
-            prodPtr = upStage_.data();
-            prodFrames = outFrames;
-        }
-
-        if (prodFrames == 0) return true;
-
-        // PI órajel-drift szabályzó: a teljes csővezeték-kitöltöttség (bemeneti gyűrű + szűrőkésleltetés + kimeneti gyűrű)
-        // teljesen mentes a libsoxr/FFT64 blokklökések fűrészfog-ingadozásától — kizárólag a valódi órajel-driftet látja!
-        double dr = 0.0;
-        if (driftEnabled_ && prefilled_.load(std::memory_order_acquire)) {
-            const double ratio = static_cast<double>(dstRate_) / static_cast<double>(srcRate_);
-            const double pipeFill = static_cast<double>(inRing_.available()) * ratio +
-                                    ((srcRate_ != dstRate_) ? upsampler_.delayFrames() : 0.0) +
-                                    static_cast<double>(outRing_.available()) +
-                                    static_cast<double>(prodFrames);
-            if (!driftLocked_) {
-                driftTargetFrames_ = pipeFill;
-                driftLocked_ = true;
-            }
-            const double errSec = (pipeFill - driftTargetFrames_) / static_cast<double>(dstRate_);
-            const double dt = static_cast<double>(prodFrames) / static_cast<double>(dstRate_);
-            const double alpha = std::clamp(dt / 0.4, 0.005, 0.35);
-            errFiltered_ += alpha * (errSec - errFiltered_);
-            errIntegral_ = std::clamp(errIntegral_ + errFiltered_ * dt, -0.05, 0.05);
-            // Kritikusan csillapított PI (omega_n = 0,20 rad/s, zeta = 1,0): ~10 s beállás, zéró túllövés
-            dr = std::clamp(0.40 * errFiltered_ + 0.04 * errIntegral_, -0.0005, 0.0005);
-            driftRatio_.store(dr, std::memory_order_relaxed);
-        } else {
-            driftRatio_.store(0.0, std::memory_order_relaxed);
-        }
-
-        drift_.process(prodPtr, prodFrames, dr, driftStage_);
-        size_t finalFrames = driftStage_.size() / 2;
-        if (finalFrames == 0) return true;
-
-        if (dspCb_) {
-            dspCb_(driftStage_.data(), finalFrames, dstRate_);
-        }
-
-        // Ha a kimeneti gyűrűpufferben átmenetileg kevés hely van, a lehető legtöbbet írjuk be
-        size_t written = outRing_.push(driftStage_.data(), finalFrames);
-        if (written < finalFrames) {
-            overruns_.fetch_add(finalFrames - written, std::memory_order_relaxed);
+            emitOutput(upStage_.data(), outFrames);
         }
         return true;
     }
@@ -540,6 +623,7 @@ private:
     audioopt::AudioOptions opts_;
     size_t targetFillFrames_ = 4096;
     size_t prefillFrames_ = 4096;
+    size_t minOutFreeFrames_ = 16384;
 
     // Atomikus telemetria-gyorsítótár a status() számára (így nem olvas közvetlenül upsampler_-ből / soxr_-ből)
     std::atomic<uint32_t> statusSrcRate_{0};
@@ -552,6 +636,9 @@ private:
     double errIntegral_ = 0.0;
     bool driftLocked_ = false;
     double driftTargetFrames_ = 0.0;
+    double driftWarmupSec_ = 0.0;
+    double driftWarmupFillAcc_ = 0.0;
+    uint64_t lastUnderrunsSeen_ = 0;
     std::atomic<double> driftRatio_{0.0};
     std::atomic<bool> prefilled_{false};
     std::atomic<uint64_t> underruns_{0};

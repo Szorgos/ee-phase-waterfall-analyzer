@@ -372,6 +372,139 @@ int main() {
               "párhuzamos configure/status/push/pull: összeomlás és NaN nélkül lefutott");
     }
 
+    std::printf("[L7] Referencia libsoxr (32 bit / 99,7%%) és Aqulify FFT-DD: 44,1 -> 96 kHz, 0 alulcsordulás\n");
+    {
+        struct SharpCase { int eng; const char* name; };
+        const SharpCase cases[] = {
+            {0, "libsoxr Referencia (32 bit / 99,7%) 44,1 -> 96 kHz"},
+            {2, "Aqulify FFT-DD 44,1 -> 96 kHz"},
+        };
+        for (const auto& tc : cases) {
+            audioopt::AudioOptions o;
+            o.upsampleEngine = tc.eng;
+            if (tc.eng == 0) {
+                audioopt::applyUpsamplePreset(o, audioopt::kUpsamplePresetReference);
+            } else {
+                o.upsamplePhase = 25.0;
+                o.upsamplePassbandEnd = 0.95;
+                o.upsampleStopbandBegin = 1.00;
+                o.upsamplePrecision = 28;
+            }
+            o.upsampleHeadroomDb = 0.0f;
+
+            const uint32_t sr = 44100, dr = 96000;
+            LiveUpsampleBridge br;
+            CHECK(br.configure(sr, dr, o, nullptr, /*enableDriftControl=*/true), tc.name);
+
+            // Valósághű aszinkron PipeWire ütemezés: Dummy-Driver 1024@44.1k (23,22 ms), DAC 2048@96k (21,33 ms)
+            const double dtCap = 1024.0 / static_cast<double>(sr);
+            const double dtPlay = 2048.0 / static_cast<double>(dr);
+            double tCap = dtCap, tPlay = dtPlay;
+            const double durSec = 4.0;
+            uint64_t inIdx = 0;
+            std::vector<float> inBlk(1024 * 2), outBlk(2048 * 2), tailOut;
+            tailOut.reserve(65536 * 2);
+            double maxAbsDrift = 0.0;
+
+            while (tCap <= durSec || tPlay <= durSec) {
+                if (tCap <= tPlay) {
+                    for (size_t i = 0; i < 1024; ++i) {
+                        const float v = static_cast<float>(0.5 * std::sin(2.0 * kPi * 10000.0 *
+                                                        static_cast<double>(inIdx++) / static_cast<double>(sr)));
+                        inBlk[2 * i] = v;
+                        inBlk[2 * i + 1] = -v;
+                    }
+                    br.pushInput(inBlk.data(), 1024);
+                    while (br.stepOnce()) {}
+                    tCap += dtCap;
+                } else {
+                    br.pullOutput(outBlk.data(), 2048);
+                    const double dppm = std::abs(br.status().driftPpm);
+                    if (dppm > maxAbsDrift) maxAbsDrift = dppm;
+                    if (tPlay >= durSec - 0.8) {
+                        tailOut.insert(tailOut.end(), outBlk.begin(), outBlk.end());
+                    }
+                    tPlay += dtPlay;
+                }
+            }
+            const BridgeStatus st = br.status();
+            const size_t measLen = std::min<size_t>(32768, tailOut.size() / 2);
+            // A finom drift-szabályzó (±100 ppm = ±1 Hz @ 10 kHz) miatt a pontos csúcsot ±2 Hz-en belül keressük
+            double a10 = 0.0;
+            for (int k = -20; k <= 20; ++k) {
+                const double f = 10000.0 + 0.1 * static_cast<double>(k);
+                a10 = std::max(a10, toneAmp(tailOut, 0, 0, measLen, f, dr));
+            }
+            const double aImg = toneAmp(tailOut, 0, 0, measLen, static_cast<double>(sr) - 10000.0, dr);
+            std::printf("         %s: 10 kHz=%.4f dB, tükörkép=%.1f dB, max|drift|=%.1f ppm, und=%llu, ovr=%llu\n",
+                        tc.name, db(a10 / 0.5), db(aImg / 0.5), maxAbsDrift,
+                        static_cast<unsigned long long>(st.underruns), static_cast<unsigned long long>(st.overruns));
+            CHECK(st.prefilled && st.underruns == 0 && st.overruns == 0 &&
+                  std::abs(db(a10 / 0.5)) <= 0.08 && db(aImg / 0.5) <= -110.0 && maxAbsDrift < 120.0,
+                  "0 alulcsordulás, 0 túlcsordulás, tiszta spektrum és nincs ±500 ppm drift-ütközés");
+        }
+    }
+
+    std::printf("[L8] Aszinkron kvantum-lebegés (1024@44,1k vs 2048@96k, 10 s, 0 ppm valós drift)\n");
+    {
+        audioopt::AudioOptions o;
+        o.upsampleEngine = 0;
+        o.upsamplePhase = 25.0;
+        o.upsampleHeadroomDb = 0.0f;
+        const uint32_t sr = 44100, dr = 96000;
+        LiveUpsampleBridge br;
+        CHECK(br.configure(sr, dr, o, nullptr, /*enableDriftControl=*/true), "kvantum-lebegés configure");
+
+        const double dtCap = 1024.0 / static_cast<double>(sr);
+        const double dtPlay = 2048.0 / static_cast<double>(dr);
+        double tCap = dtCap, tPlay = dtPlay;
+        uint64_t inIdx = 0;
+        std::vector<float> inBlk(1024 * 2), outBlk(2048 * 2);
+        double maxAbsDrift = 0.0;
+        while (tCap <= 10.0 || tPlay <= 10.0) {
+            if (tCap <= tPlay) {
+                for (size_t i = 0; i < 1024; ++i) {
+                    const float v = 0.4f * std::sin(2.0f * static_cast<float>(kPi) * 1000.0f *
+                                                    static_cast<float>(inIdx++) / static_cast<float>(sr));
+                    inBlk[2 * i] = v;
+                    inBlk[2 * i + 1] = v;
+                }
+                br.pushInput(inBlk.data(), 1024);
+                while (br.stepOnce()) {}
+                tCap += dtCap;
+            } else {
+                br.pullOutput(outBlk.data(), 2048);
+                maxAbsDrift = std::max(maxAbsDrift, std::abs(br.status().driftPpm));
+                tPlay += dtPlay;
+            }
+        }
+        const BridgeStatus st = br.status();
+        std::printf("         10 s 44,1->96 kHz: max|drift|=%.1f ppm, végső=%.1f ppm, und=%llu, ovr=%llu\n",
+                    maxAbsDrift, st.driftPpm,
+                    static_cast<unsigned long long>(st.underruns), static_cast<unsigned long long>(st.overruns));
+        CHECK(st.underruns == 0 && st.overruns == 0 && maxAbsDrift < 80.0 && std::abs(st.driftPpm) < 40.0,
+              "nem egész arányú kvantum-lebegésnél a PI szabályzó nyugodt marad (< 80 ppm, nem ±500 ppm)");
+
+        // MicroDriftCompensator: 1:1 átengedés -> ±50 ppm átmenet kattanásmentessége (10 kHz @ 96 kHz)
+        for (double drSign : { +50e-6, -50e-6 }) {
+            MicroDriftCompensator mc;
+            std::vector<float> a(2048 * 2), b(2048 * 2), out1, out2;
+            for (size_t i = 0; i < 4096; ++i) {
+                const float v = static_cast<float>(0.5 * std::sin(2.0 * kPi * 10000.0 * static_cast<double>(i) / 96000.0));
+                if (i < 2048) { a[2 * i] = v; a[2 * i + 1] = -v; }
+                else          { b[2 * (i - 2048)] = v; b[2 * (i - 2048) + 1] = -v; }
+            }
+            mc.process(a.data(), 2048, 0.0, out1);
+            mc.process(b.data(), 2048, drSign, out2);
+            // A határmenti lépésnek pontosan 1 minta (2*pi*10000/96000 rad) fázislépéshez közelinek kell lennie
+            const double expected = 0.5 * std::sin(2.0 * kPi * 10000.0 * (2048.0 + drSign) / 96000.0);
+            const double err = (!out2.empty()) ? std::abs(static_cast<double>(out2[0]) - expected) : 1.0;
+            CHECK(out1.size() == 2048 * 2 && out2.size() >= 2040 * 2 && err < 1e-3,
+                  drSign > 0 ? "MicroDriftCompensator: 0 -> +50 ppm kattanásmentes átmenet"
+                             : "MicroDriftCompensator: 0 -> -50 ppm kattanásmentes átmenet");
+        }
+    }
+
     if (g_fail == 0) std::printf("\nMINDEN LIVE BRIDGE TESZT SIKERES (0 hiba)\n");
     else std::printf("\n%d HIBA: SIKERTELEN\n", g_fail);
     return g_fail == 0 ? 0 : 1;

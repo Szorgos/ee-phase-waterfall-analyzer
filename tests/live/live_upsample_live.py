@@ -321,6 +321,60 @@ def main():
               f"K14h: ébren tartás csak felhasználói kapcsoláskor naplózott (be={ka_on_h}, ki={ka_off_h}, várt 1/1)")
         check(osc_back <= 1 and osc_up <= 1,
               f"K14h: nincs 48000 <-> 96000 napló-oszcilláció (48->96={osc_up}, 96->48={osc_back})")
+
+    # ---- K14i: 44,1 -> 96 kHz Referencia előbeállítás (32 bit / 99,7%, libsoxr): 0 alulcsordulás, nyugodt drift ----
+    print("\n[K14i] 44,1 -> 96 kHz Referencia (32 bit / 99,7%, libsoxr) élő teszt")
+    set_output_sink("dac_a")
+    ul.set_opts(
+        rateMode="follow",
+        keepAwake=False,
+        upsampleRule=3,
+        upsampleMaxRate=96000,
+        upsampleEngine=0,
+        upsampleSystemAudio=True,
+        upsamplePreset=4,
+        upsamplePassbandEnd=0.997,
+        upsampleStopbandBegin=1.0,
+        upsamplePrecision=32,
+        upsamplePhase=50.0,
+    )
+    pa_ref = play(wav)
+    try:
+        lu_ref = wait_for(
+            lambda: (lambda x: x if (x.get("active") and x.get("ownEngine") and x.get("targetRate") == 96000) else None)(live()),
+            10.0,
+        ) or live()
+        time.sleep(3.0)
+        rec_ref = record_tones("dac_a", 96000, duration=2.0)
+        lu_ref2 = live()
+        check(
+            lu_ref2.get("active") is True and lu_ref2.get("ownEngine") is True
+            and lu_ref2.get("srcRate") == 44100 and lu_ref2.get("targetRate") == 96000,
+            f"K14i: 44,1 -> 96 kHz Referencia aktív maradt (lu={lu_ref2})",
+        )
+        check(
+            lu_ref2.get("underruns", 999) == 0,
+            f"K14i: Referencia 44,1 -> 96 kHz 0 alulcsordulással fut (underruns={lu_ref2.get('underruns')})",
+        )
+        check(
+            abs(lu_ref2.get("driftPpm", 999.0)) < 200.0,
+            f"K14i: 44,1 -> 96 kHz drift nem ütközik ±500 ppm-re (driftPpm={lu_ref2.get('driftPpm')})",
+        )
+        if rec_ref:
+            check(rec_ref["db1000"] > -20.0 and rec_ref["db500"] < rec_ref["db1000"] - 40.0,
+                  f"K14i: tiszta 1 kHz kimenet Referencia előbeállítással (1k={rec_ref['db1000']:.1f} dB, 500Hz={rec_ref['db500']:.1f} dB)")
+        else:
+            check(False, "K14i: nem sikerült felvételt készíteni a dac_a kimenetről")
+    finally:
+        pa_ref.terminate()
+        try:
+            pa_ref.wait(timeout=3)
+        except Exception:
+            pa_ref.kill()
+        ul.set_opts(rateMode="system", keepAwake=False, upsampleRule=0, upsampleMaxRate=0, upsampleSystemAudio=False,
+                    upsamplePreset=1, upsamplePassbandEnd=0.95, upsamplePrecision=28, upsamplePhase=25.0)
+        time.sleep(0.5)
+
     print(f"\n{('SIKERTELEN' if fails else 'MINDEN TESZT SIKERES')} ({fails} hiba)")
     return 1 if fails else 0
 

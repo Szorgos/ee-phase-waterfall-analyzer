@@ -1027,9 +1027,6 @@ int main(int argc, char* argv[]) {
     auto pwOut = std::make_unique<player::PwPlayerOutput>("aqulify_sink");
     pwPlayerRaw = pwOut.get();
     auto selOut = std::make_unique<player::SelectablePlayerOutput>(std::move(pwOut), std::move(alsaOut));
-    selOut->setExclusiveChangedCallback([&node](bool active) {
-        node.setExternalExclusiveActive(active);
-    });
     selOut->setBeforeFallbackToSharedHook([&node]() {
         // Működő közvetlen ALSA lezárása után a WirePlumbernek idő kell a DAC visszavételéhez:
         // kérjük az újracsatlakozást, és legfeljebb ~1,2 s-ig megvárjuk, amíg a fizikai kimenet újra kész.
@@ -1189,6 +1186,12 @@ int main(int argc, char* argv[]) {
     radioStations.load(linux_store::loadRadio());
     radio::RadioController radioCtl(filePlayer, radioStations);
     radio::attachRadio(cb, radioCtl, radioStations);
+    // Helyi zene / rádió / UPnP indítása előtt minden éppen szóló külső lejátszót (MPRIS) szüneteltetünk,
+    // és megszakítjuk az esetlegesen még csatlakozó internetrádiót, így nem szólhat két zene egymásra.
+    filePlayer.setBeforePlayCallback([&]() {
+        radioCtl.cancelPendingIfExternal();
+        mediaSession.pauseAllPlaying();
+    });
     cb.loadRemote = [] { return linux_store::loadRemote(); };
     cb.saveRemote = [](const std::string& doc) { return linux_store::saveRemote(doc); };
     cb.loadTargets = [] { return linux_store::loadRemoteTargets(); };
@@ -1620,8 +1623,48 @@ int main(int argc, char* argv[]) {
             if (s_playerTicket.load() != ticket || s_engineQuit.load()) return;   // közben új szám nyílt, vagy leállás
             s_playerOpen = false;
             node.setKeepAliveSuppressedForPlayer(false);
+            {
+                std::lock_guard<std::mutex> lk(liveMu);
+                liveWake = true;
+            }
+            liveCv.notify_all();
         }).detach();
     };
+#if defined(AQ_HAVE_ALSA)
+    // Kizárólagos ALSA módnál a pwBeforeOpenHook nem fut le, ezért itt is szinkronban tartjuk az élő felmintavételező
+    // szállal (s_playerOpen), hogy a háttérben ne maradjon beragadva a régi rendszerhang-híd vagy force-rate.
+    if (playerSel) {
+        playerSel->setExclusiveChangedCallback([&](bool active) {
+            node.setExternalExclusiveActive(active);
+            if (active) {
+                s_playerTicket.fetch_add(1);
+                s_playerOpen = true;
+                audioopt::RateMode rm = audioopt::RateMode::System;
+                { std::lock_guard<std::mutex> lk(audioMutex); rm = audioOpts.rateMode; }
+                {
+                    std::lock_guard<std::mutex> lk(liveMu);
+                    liveReleaseLocked(rm);
+                    if (liveOwnTarget != 0) {
+                        node.setLiveUpsample(false, 0, 0, audioopt::AudioOptions{});
+                        liveOwnTarget = 0;
+                    }
+                }
+            } else {
+                const uint64_t ticket = s_playerTicket.fetch_add(1) + 1;
+                std::thread([&, ticket] {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+                    if (s_playerTicket.load() != ticket || s_engineQuit.load()) return;
+                    s_playerOpen = false;
+                    {
+                        std::lock_guard<std::mutex> lk(liveMu);
+                        liveWake = true;
+                    }
+                    liveCv.notify_all();
+                }).detach();
+            }
+        });
+    }
+#endif
     // Az élő út figyelője: másodpercenként megnézi, milyen mintavételű külső hangfolyam szól az Aqulify eszközre, és
     // bekapcsolt felmintavételezésnél a gráfot a célra állítja. Csak akkor kérdez (pactl), ha van mit eldönteni.
     std::thread liveThread([&] {
@@ -1702,6 +1745,10 @@ int main(int argc, char* argv[]) {
         }
     });
     auto stopLiveThread = [&] {
+        filePlayer.setBeforePlayCallback(nullptr);
+#if defined(AQ_HAVE_ALSA)
+        if (playerSel) playerSel->setExclusiveChangedCallback(nullptr);
+#endif
         {
             std::lock_guard<std::mutex> lk(liveMu);
             liveQuit = true;
@@ -2034,6 +2081,10 @@ int main(int argc, char* argv[]) {
     std::cout << "[Info] Leállítás...\n";
     bridge->stop();
     s_engineQuit = true;
+    filePlayer.setBeforePlayCallback(nullptr);
+#if defined(AQ_HAVE_ALSA)
+    if (playerSel) playerSel->setExclusiveChangedCallback(nullptr);
+#endif
     player::pwBeforeOpenHook() = nullptr;
     player::pwAfterCloseHook() = nullptr;
     player::pwAllowedRatesHook() = nullptr;

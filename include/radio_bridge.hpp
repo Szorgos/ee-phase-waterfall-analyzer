@@ -330,6 +330,27 @@ public:
         if (core && !RadioDecoder::closed(*core)) fp_.stop();
     }
 
+    /**
+     * Folyamatban lévő rádiókapcsolódás megszakítása, ha más (pl. helyi fájl) indul a beépített lejátszón.
+     * Ha a saját rádió-szál hívja (fp_.openStream közben), nem szakítja meg önmagát.
+     */
+    void cancelPendingIfExternal() {
+        if (std::this_thread::get_id() == th_.get_id()) return;
+        bool wake = false;
+        {
+            std::lock_guard<std::mutex> lk(m_);
+            if (connecting_ || !want_.empty()) {
+                want_.clear();
+                ++gen_;
+                cancel_ = true;
+                connecting_ = false;
+                station_.clear();
+                wake = true;
+            }
+        }
+        if (wake) cv_.notify_all();
+    }
+
     /** Az állapotüzenet "radio" mezője. */
     std::string statusJson() const {
         std::string state = "idle", station, error, codec;

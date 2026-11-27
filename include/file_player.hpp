@@ -97,11 +97,19 @@ public:
      * szál hívja, a lejátszó zárja alatt: a függvény nem hívhatja vissza a lejátszót.
      */
     using NextProvider = std::function<bool(uint64_t afterToken, std::string& path, uint64_t& token)>;
+    /**
+     * Felhasználói lejátszásindítás előtt hívódik (open / openStream / play — zár nélkül, sikeres fájlmegnyitás után;
+     * a dekódoló szál szünetmentes léptetésekor NEM). A motor itt állíthatja meg a külső lejátszókat (MPRIS/SMTC/MediaRemote).
+     */
+    using BeforePlayCallback = std::function<void()>;
 
     explicit FilePlayer(std::unique_ptr<PlayerOutput> out);
     ~FilePlayer();
     FilePlayer(const FilePlayer&) = delete;
     FilePlayer& operator=(const FilePlayer&) = delete;
+
+    /** Visszahívás regisztrálása (vagy törlése: nullptr) felhasználói lejátszásindítás elé. */
+    void setBeforePlayCallback(BeforePlayCallback cb);
 
     /**
      * A fájl megnyitása és lejátszása (az előző leáll). token: a sor jele a számhoz (0: nem a sorból).
@@ -255,6 +263,10 @@ private:
     };
 
     std::unique_ptr<Segment> makeSegment(const std::string& path, std::string* error, uint64_t token, bool bypassUpsample = false);
+    /** A felhasználói indítás előtti visszahívás futtatása a m_ zár nélkül. */
+    void invokeBeforePlay();
+    /** Belső megnyitás: runBeforePlay=false, ha szüneteltetett szám kimenetét nyitjuk újra. */
+    bool openInternal(const std::string& path, std::string* error, uint64_t token, bool bypassUpsample, bool runBeforePlay);
     /** A kész szakasz lejátszása (open és openStream közös része). */
     bool openSegment(std::unique_ptr<Segment> seg, std::string* error);
     float gainFor(const TrackTags& t) const;
@@ -276,6 +288,8 @@ private:
     const Segment* audibleLocked() const;
 
     std::unique_ptr<PlayerOutput> out_;
+    mutable std::mutex beforePlayMu_;
+    BeforePlayCallback beforePlay_;
     mutable std::mutex m_;
     std::condition_variable cv_;
     std::thread thread_;

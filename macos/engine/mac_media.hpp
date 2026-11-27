@@ -27,6 +27,8 @@ public:
     Info snapshot() const;
     std::string json() const { return toJson(snapshot()); }
     void command(const std::string& action, double value);
+    /** Ha külső alkalmazás épp lejátszik, szünetelteti a beépített lejátszó indulása előtt (korlátos várakozással). */
+    void pauseIfPlaying(int waitMs = 350);
     bool art(const std::string& id, std::string& mime, std::string& bytes, std::string& url) const;
 
 private:

@@ -326,6 +326,53 @@ int main() {
               "felhasználói kikapcsolás: leáll és 1x naplóz (ki)");
     }
 
+    std::printf("[7] Capture órajel-eltérés, tartós híd-alulcsordulás, node.latency és közvetlen mód védelem\n");
+    {
+        // node.latency nevezője szétválasztott módban külön-külön a capture és a playback mintavételét kapja
+        CHECK(computeStreamLatencyRate(true, true, 44100, 96000, 44100, 96000, 96000) == 44100,
+              "szétválasztott capture node.latency nevezője 44100 Hz (nem 96000)");
+        CHECK(computeStreamLatencyRate(true, false, 44100, 96000, 44100, 96000, 44100) == 96000,
+              "szétválasztott playback node.latency nevezője 96000 Hz (nem 44100)");
+        CHECK(computeStreamLatencyRate(false, true, 96000, 96000, 0, 0, 48000) == 96000,
+              "közvetlen módban a tényleges stream-mintavétel (96000 Hz) a nevező");
+        CHECK(computeStreamLatencyRate(false, true, 44100, 96000, 0, 0, 96000) == 96000,
+              "szétválasztott módból visszatérve a közvetlen capture a playback (96000 Hz) nevezőt veszi át");
+
+        // Közvetlen módban capture != playback -> másolás tiltása
+        CHECK(directModeRatesMismatch(false, 48000, 96000),
+              "közvetlen mód: capture=48k != playback=96k -> eltérés észlelve");
+        CHECK(!directModeRatesMismatch(false, 96000, 96000),
+              "közvetlen mód: egyező 96k/96k -> nincs eltérés");
+        CHECK(!directModeRatesMismatch(true, 44100, 96000),
+              "szétválasztott módban a 44,1/96 eltérés szándékos -> nem közvetlen-mód hiba");
+
+        // Capture driver-órajel eltérés (Dummy-Driver 48k miközben a híd 44,1 -> 96k)
+        RateInvariantGuard gCap;
+        gCap.resetSession(/*nowMs=*/1000, 44100, 96000);
+        CHECK(gCap.evaluate(1200, 44100, 96000, 96000, true, true, 48000, 0) == GuardVerdict::WaitSettle,
+              "capture driver-órajel eltérés: előbb megerősítési ablak");
+        CHECK(gCap.evaluate(1600, 44100, 96000, 96000, true, true, 48000, 0) == GuardVerdict::FallbackCaptureMismatch,
+              "capture driver-órajel tartós eltérés (48k != 44,1k) -> FallbackCaptureMismatch");
+
+        // Egyszeri kis xrun nem lép vissza, de tartós alulcsordulás (>1,5 s és >=250 ms) visszalép
+        RateInvariantGuard gStarv;
+        gStarv.resetSession(/*nowMs=*/1000, 44100, 96000);
+        CHECK(gStarv.evaluate(3000, 44100, 96000, 96000, true, true, 44100, 512) == GuardVerdict::Ok,
+              "egyszeri kis xrun (512 keret) még Ok");
+        CHECK(gStarv.evaluate(3500, 44100, 96000, 96000, true, true, 44100, 512) == GuardVerdict::Ok,
+              "megálló xrun számláló nullázza a sorozatot (Ok)");
+        // Tartós növekedés: 4000 ms-tól 6000 ms-ig +30000 keret (~312 ms @ 96 kHz)
+        CHECK(gStarv.evaluate(4000, 44100, 96000, 96000, true, true, 44100, 4000) == GuardVerdict::Ok,
+              "xrun-sorozat indulása még az ablakon belül Ok");
+        CHECK(gStarv.evaluate(4800, 44100, 96000, 96000, true, true, 44100, 15000) == GuardVerdict::Ok,
+              "xrun-sorozat 800 ms-nál még Ok");
+        const GuardVerdict vStarv = gStarv.evaluate(5600, 44100, 96000, 96000, true, true, 44100, 32000);
+        CHECK(vStarv == GuardVerdict::FallbackBridgeStarvation,
+              "tartós híd-alulcsordulás (1,6 s, >250 ms) -> FallbackBridgeStarvation");
+        CHECK(std::string(verdictReasonCode(vStarv)) == "rate_mismatch",
+              "tartós híd-alulcsordulás okkódja rate_mismatch");
+    }
+
     std::printf("\n%s (%d hiba)\n", g_fail ? "SIKERTELEN" : "MINDEN PW LIVE UPSAMPLE TESZT SIKERES", g_fail);
     return g_fail ? 1 : 0;
 }

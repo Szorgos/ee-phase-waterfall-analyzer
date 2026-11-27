@@ -6,7 +6,9 @@
 #import <Foundation/Foundation.h>
 
 #include <dlfcn.h>
+#include <unistd.h>
 
+#include <algorithm>
 #include <mutex>
 
 #include "mac_media.hpp"
@@ -184,6 +186,46 @@ void MacMediaSession::command(const std::string& action, double value) {
         else if (a == "seek" && p->api.setElapsed) p->api.setElapsed(value > 0.0 ? value : 0.0);
         p->refresh();   // a felület gyorsan lássa a változást
     });
+}
+
+void MacMediaSession::pauseIfPlaying(int waitMs) {
+    Impl* p = p_.get();
+    if (!p->loaded || !p->queue || !p->api.sendCommand) return;
+    const pid_t selfPid = getpid();
+    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+    dispatch_async(p->queue, ^{
+        void (^doPauseIfExternal)(bool) = ^(bool isPlaying) {
+            if (!isPlaying) {
+                dispatch_semaphore_signal(sem);
+                return;
+            }
+            if (p->api.getPid) {
+                p->api.getPid(p->queue, ^(int pid) {
+                    if (pid != static_cast<int>(selfPid)) {
+                        p->api.sendCommand(kMRPause, nullptr);
+                        p->refresh();
+                    }
+                    dispatch_semaphore_signal(sem);
+                });
+            } else {
+                p->api.sendCommand(kMRPause, nullptr);
+                p->refresh();
+                dispatch_semaphore_signal(sem);
+            }
+        };
+        if (p->api.getIsPlaying) {
+            p->api.getIsPlaying(p->queue, ^(Boolean playing) { doPauseIfExternal(playing != 0); });
+        } else {
+            bool playing = false;
+            {
+                std::lock_guard<std::mutex> lk(p->mutex);
+                playing = p->info.playing;
+            }
+            doPauseIfExternal(playing);
+        }
+    });
+    const int clamped = std::clamp(waitMs, 50, 1500);
+    dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, static_cast<int64_t>(clamped) * NSEC_PER_MSEC));
 }
 
 bool MacMediaSession::art(const std::string& id, std::string& mime, std::string& bytes, std::string& /*url*/) const {

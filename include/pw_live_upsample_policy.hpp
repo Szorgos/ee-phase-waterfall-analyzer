@@ -24,6 +24,34 @@ namespace ee_analyzer::pw_live_ups {
 inline constexpr int kGuardCheckIntervalMs = 200;
 inline constexpr int kSettleGraceMs = 1500;       // indulás utáni türelmi ablak a driver-órajel beállásáig
 inline constexpr int kMismatchConfirmMs = 350;    // stream formátum-eltérés megerősítése (callback-sorrend ellen)
+inline constexpr int kBridgeStarvationWindowMs = 1500; // tartós híd-alul-/túlcsordulás megerősítési ablaka
+
+/**
+ * Egy PipeWire hangfolyam node.latency nevezőjének meghatározása: szétválasztott módban a capture és a playback
+ * külön mintavételen fut, ezért a nevezőnek a saját stream mintavételéhez kell igazodnia (különben pl. 128/96000
+ * kerülne a 44,1 kHz-es bemenetre, ami csak ~58 minta).
+ */
+inline uint32_t computeStreamLatencyRate(bool decoupled, bool isCapture,
+                                         uint32_t captureRate, uint32_t playbackRate,
+                                         uint32_t bridgeSrc, uint32_t bridgeDst,
+                                         uint32_t fallbackRate) {
+    if (decoupled) {
+        const uint32_t r = isCapture ? (bridgeSrc > 0 ? bridgeSrc : captureRate)
+                                     : (bridgeDst > 0 ? bridgeDst : playbackRate);
+        if (r > 0) return r;
+    } else {
+        // Közvetlen módban a capture és a playback közös link-group-ban fut a playback/DAC órajelén,
+        // ezért szétválasztott módból való visszatéréskor sem szabad az elavult captureRate-et örökölni.
+        const uint32_t r = playbackRate > 0 ? playbackRate : captureRate;
+        if (r > 0) return r;
+    }
+    return fallbackRate > 0 ? fallbackRate : 48000u;
+}
+
+/** Közvetlen módban eltér-e egymástól a capture és a playback mintavétele (0,5x/2x másolás tiltása). */
+inline bool directModeRatesMismatch(bool liveUpsActive, uint32_t captureRate, uint32_t playbackRate) {
+    return !liveUpsActive && captureRate > 0 && playbackRate > 0 && captureRate != playbackRate;
+}
 
 /** Valódi külső fizikai kimeneti eszköz-e (üres, saját aqulify* vagy dummy/auto_null elutasítva). */
 inline bool hasValidPhysicalTarget(const std::string& target, const std::string& sinkName = "aqulify_sink") {
@@ -88,7 +116,8 @@ enum class GuardVerdict {
     FallbackCaptureMismatch,   // a capture stream rátája eltér a híd srcRate-jétől (pl. 96 kHz 48 helyett -> 0,5x lenne)
     FallbackPlaybackMismatch,  // a playback stream formátum-rátája eltér a híd dstRate-jétől
     FallbackDacRateMismatch,   // a fizikai DAC / driver tényleges órajele nem váltott dstRate-re (pl. 48 kHz-es kártya)
-    FallbackMissingDummyDriver // nincs Dummy-Driver a PipeWire-ben (nem váltható le külön órajel-szigetre a capture)
+    FallbackMissingDummyDriver,// nincs Dummy-Driver a PipeWire-ben (nem váltható le külön órajel-szigetre a capture)
+    FallbackBridgeStarvation   // a felmintavételező híd tartósan alul- vagy túlcsordul (pl. inkompatibilis órajel / túlterhelés)
 };
 
 /** A felület (gui_integrated_system.html) és a diagnosztika által értelmezett nyelvfüggetlen ok-kód. */
@@ -97,6 +126,7 @@ inline const char* verdictReasonCode(GuardVerdict v) {
         case GuardVerdict::FallbackCaptureMismatch:
         case GuardVerdict::FallbackPlaybackMismatch:
         case GuardVerdict::FallbackMissingDummyDriver:
+        case GuardVerdict::FallbackBridgeStarvation:
             return "rate_mismatch";
         case GuardVerdict::FallbackDacRateMismatch:
             return "dac_unsupported";
@@ -116,6 +146,8 @@ inline const char* verdictDetailHu(GuardVerdict v) {
             return "a hangkártya tényleges órajele nem váltott a célmintavételre";
         case GuardVerdict::FallbackMissingDummyDriver:
             return "nincs Dummy-Driver a PipeWire-ben";
+        case GuardVerdict::FallbackBridgeStarvation:
+            return "a felmintavételező híd tartósan alul- vagy túlcsordult";
         default:
             return "";
     }
@@ -132,6 +164,9 @@ public:
         bridgeDst_ = bridgeDst;
         startedMs_ = nowMs;
         mismatchSinceMs_ = 0;
+        xrunStreakStartMs_ = 0;
+        xrunStreakBase_ = 0;
+        lastXrunFrames_ = 0;
         lastVerdict_ = GuardVerdict::Ok;
     }
 
@@ -141,6 +176,9 @@ public:
         bridgeDst_ = 0;
         startedMs_ = 0;
         mismatchSinceMs_ = 0;
+        xrunStreakStartMs_ = 0;
+        xrunStreakBase_ = 0;
+        lastXrunFrames_ = 0;
     }
 
     void blockKey(const FallbackKey& key, const std::string& reason, GuardVerdict verdict) {
@@ -187,21 +225,49 @@ public:
      * - playbackRate: a playback stream (aqulify_sink_output) SPA_PARAM_Format mintavétele (0: még ismeretlen)
      * - driverClockRate: a playback stream pw_stream_get_time_n valódi driver-órajele (0: még nem érkezett)
      * - playbackStreaming: PW_STREAM_STATE_STREAMING állapotban van-e a playback stream
+     * - captureDriverClockRate: a capture stream (Dummy-Driver) pw_stream_get_time_n órajele (0: még nem érkezett)
+     * - bridgeXrunFrames: a híd kumulált underrun + overrun keretszáma (tartós akadozás felismeréséhez)
      */
     GuardVerdict evaluate(int64_t nowMs,
                           uint32_t captureRate,
                           uint32_t playbackRate,
                           uint32_t driverClockRate,
                           bool playbackStreaming,
-                          bool hasDummyDriver = true) {
+                          bool hasDummyDriver = true,
+                          uint32_t captureDriverClockRate = 0,
+                          uint64_t bridgeXrunFrames = 0) {
         if (!active_) return GuardVerdict::Ok;
         if (!hasDummyDriver) return GuardVerdict::FallbackMissingDummyDriver;
 
-        const bool streamRatesOk = (captureRate == bridgeSrc_) && (playbackRate == bridgeDst_);
+        const bool captureClockOk = (captureDriverClockRate == 0 || captureDriverClockRate == bridgeSrc_);
+        const bool streamRatesOk = (captureRate == bridgeSrc_) && (playbackRate == bridgeDst_) && captureClockOk;
         const bool dacClockOk = (driverClockRate == 0 || driverClockRate == bridgeDst_);
 
         if (streamRatesOk && dacClockOk) {
             mismatchSinceMs_ = 0;
+            // Beállás után a híd tartós alul-/túlcsordulását is figyeljük (egyszeri kis hiba nem vált vissza)
+            if (playbackStreaming && nowMs - startedMs_ >= kSettleGraceMs) {
+                if (bridgeXrunFrames > lastXrunFrames_) {
+                    if (xrunStreakStartMs_ == 0) {
+                        xrunStreakStartMs_ = nowMs;
+                        xrunStreakBase_ = lastXrunFrames_;
+                    }
+                    lastXrunFrames_ = bridgeXrunFrames;
+                    const uint64_t delta = bridgeXrunFrames - xrunStreakBase_;
+                    const uint64_t threshold = std::max<uint64_t>(bridgeDst_ / 4, 8192u);
+                    if (nowMs - xrunStreakStartMs_ >= kBridgeStarvationWindowMs && delta >= threshold) {
+                        return GuardVerdict::FallbackBridgeStarvation;
+                    }
+                } else {
+                    xrunStreakStartMs_ = 0;
+                    xrunStreakBase_ = bridgeXrunFrames;
+                    lastXrunFrames_ = bridgeXrunFrames;
+                }
+            } else {
+                xrunStreakStartMs_ = 0;
+                xrunStreakBase_ = bridgeXrunFrames;
+                lastXrunFrames_ = bridgeXrunFrames;
+            }
             return GuardVerdict::Ok;
         }
 
@@ -210,7 +276,7 @@ public:
         if (playbackStreaming && captureRate > 0 && playbackRate > 0 && !streamRatesOk) {
             if (mismatchSinceMs_ == 0) mismatchSinceMs_ = nowMs;
             if (nowMs - mismatchSinceMs_ >= kMismatchConfirmMs) {
-                return (captureRate != bridgeSrc_)
+                return (captureRate != bridgeSrc_ || !captureClockOk)
                            ? GuardVerdict::FallbackCaptureMismatch
                            : GuardVerdict::FallbackPlaybackMismatch;
             }
@@ -222,7 +288,7 @@ public:
             return GuardVerdict::WaitSettle;
         }
 
-        if (captureRate != bridgeSrc_) return GuardVerdict::FallbackCaptureMismatch;
+        if (captureRate != bridgeSrc_ || !captureClockOk) return GuardVerdict::FallbackCaptureMismatch;
         if (playbackRate != bridgeDst_) return GuardVerdict::FallbackPlaybackMismatch;
         if (driverClockRate > 0 && driverClockRate != bridgeDst_) return GuardVerdict::FallbackDacRateMismatch;
         return GuardVerdict::Ok;
@@ -234,6 +300,9 @@ private:
     uint32_t bridgeDst_ = 0;
     int64_t startedMs_ = 0;
     int64_t mismatchSinceMs_ = 0;
+    int64_t xrunStreakStartMs_ = 0;
+    uint64_t xrunStreakBase_ = 0;
+    uint64_t lastXrunFrames_ = 0;
     bool hasBlocked_ = false;
     FallbackKey blockedKey_{};
     std::string lastReason_;

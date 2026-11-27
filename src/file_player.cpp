@@ -176,7 +176,8 @@ void FilePlayer::reopenAudible(bool dsdOnly) {
     }
     if (!reopenPath.empty()) {
         if (!dsdOnly) forceNewStream_ = true;
-        if (open(reopenPath, nullptr, reopenToken)) {
+        if (openInternal(reopenPath, nullptr, reopenToken, /*bypassUpsample=*/false,
+                         /*runBeforePlay=*/(prevState == State::Playing))) {
             if (reopenPos > 0.0) seek(reopenPos);
             if (prevState == State::Paused) pause();
         }
@@ -223,13 +224,33 @@ std::unique_ptr<FilePlayer::Segment> FilePlayer::makeSegment(const std::string& 
     return s;
 }
 
+void FilePlayer::setBeforePlayCallback(BeforePlayCallback cb) {
+    std::lock_guard<std::mutex> lk(beforePlayMu_);
+    beforePlay_ = std::move(cb);
+}
+
+void FilePlayer::invokeBeforePlay() {
+    BeforePlayCallback cb;
+    {
+        std::lock_guard<std::mutex> lk(beforePlayMu_);
+        cb = beforePlay_;
+    }
+    if (cb) cb();
+}
+
 bool FilePlayer::open(const std::string& path, std::string* error, uint64_t token, bool bypassUpsample) {
+    return openInternal(path, error, token, bypassUpsample, /*runBeforePlay=*/true);
+}
+
+bool FilePlayer::openInternal(const std::string& path, std::string* error, uint64_t token, bool bypassUpsample, bool runBeforePlay) {
     std::string err;
     auto seg = makeSegment(path, &err, token, bypassUpsample);
     if (!seg) {
         if (error) *error = err;
         return false;
     }
+    // Csak sikeres fájlmegnyitás után (és a m_ zár nélkül) állítjuk meg a külső lejátszókat
+    if (runBeforePlay) invokeBeforePlay();
     return openSegment(std::move(seg), error);
 }
 
@@ -238,6 +259,7 @@ bool FilePlayer::openStream(std::unique_ptr<AudioDecoder> dec, const std::string
         if (error) *error = "format";
         return false;
     }
+    invokeBeforePlay();
     auto s = std::make_unique<Segment>();
     s->channels = dec->channels();
     s->total = 0;           // ismeretlen hossz: nem tekerhető
@@ -462,6 +484,10 @@ void FilePlayer::stop() {
 }
 
 void FilePlayer::play() {
+    const State pre = state_.load();
+    if (pre == State::Idle || pre == State::Playing) return;
+    // A m_ zár nélkül állítjuk meg a külső lejátszókat szünet / végéről újraindításkor
+    invokeBeforePlay();
     std::lock_guard<std::mutex> lk(m_);
     const State s = state_.load();
     if (s == State::Idle || s == State::Playing) return;
@@ -804,7 +830,9 @@ bool FilePlayer::fillLocked() {
         }
 
         if (upsampleActive_.load()) {
-            size_t neededOut = static_cast<size_t>(std::ceil(got * (static_cast<double>(rate_) / s.dec->sampleRate()))) + 256;
+            size_t neededOut = std::max<size_t>(
+                static_cast<size_t>(std::ceil(got * (static_cast<double>(rate_) / s.dec->sampleRate()))) + 256,
+                16384u);
             if (upsampleOutBuf_.size() < neededOut * 2) upsampleOutBuf_.resize(neededOut * 2);
             const size_t cap = std::min(free, upsampleOutBuf_.size() / 2);
             size_t outFrames = 0;

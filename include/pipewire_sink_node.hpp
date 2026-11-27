@@ -703,6 +703,7 @@ private:
     std::atomic<bool> liveBridgeRateMatched_{false};  // RT kapu: csak ha captureRate == bridgeSrc és playbackRate == bridgeDst
     std::atomic<uint32_t> captureRate_{48000};        // a capture stream aktuális mintavétele (SPA_PARAM_Format)
     std::atomic<uint32_t> playbackRate_{0};           // a playback stream aktuális mintavétele (SPA_PARAM_Format)
+    std::atomic<uint32_t> captureDriverClockRate_{0}; // a capture stream (Dummy-Driver) pw_stream_get_time_n órajele
     std::atomic<uint32_t> driverClockRate_{0};        // a playback stream pw_stream_get_time_n órajele
     std::atomic<uint32_t> targetSinkRate_{0};         // a fizikai célszköz (pw_node) valódi SPA_PARAM_Format mintavétele
     struct pw_node* targetNodeProxy_ = nullptr;       // csak a fő hurok szála (cél-sink valódi rátájának figyelése)
@@ -719,6 +720,7 @@ private:
     std::string liveUpsAppliedTarget_;                // a szétválasztott playback stream aktuális fizikai célja (fő hurok)
     uint32_t appliedCaptureForceRate_ = 0;            // a capture streamen beállított node.force-rate (csak a fő hurok szála)
     std::string appliedCaptureGroup_;                 // a capture stream aktuális node.group tulajdonsága (csak a fő hurok szála)
+    bool captureLatencyTouched_ = false;              // true, ha a capture streamre már írtunk node.latency értéket (fő hurok)
     std::string dummyDriverGroup_{"pipewire.dummy"};  // a PipeWire Dummy-Driver csoportneve (regiszterből frissítve)
     uint32_t dummyDriverId_ = 0;                      // a PipeWire Dummy-Driver csomópont ID-ja (fő hurok)
     bool dummyDriverAvailable_ = false;               // észleltünk-e élő Dummy-Driver csomópontot (fő hurok)
@@ -740,14 +742,37 @@ private:
         if (wantRate == appliedCaptureForceRate_ && wantGroup == appliedCaptureGroup_) return;
         appliedCaptureForceRate_ = wantRate;
         appliedCaptureGroup_ = wantGroup;
+        captureDriverClockRate_.store(0, std::memory_order_relaxed);
         char rateBuf[24];
         std::snprintf(rateBuf, sizeof(rateBuf), "%u", wantRate);
-        struct spa_dict_item items[2] = {
-            SPA_DICT_ITEM_INIT(PW_KEY_NODE_FORCE_RATE, rateBuf),
-            SPA_DICT_ITEM_INIT(PW_KEY_NODE_GROUP, wantGroup.c_str()),
-        };
-        struct spa_dict dict = SPA_DICT_INIT(items, 2);
-        pw_stream_update_properties(capture, &dict);
+        char latBuf[32];
+        const uint32_t latReq = latencyReq_.load(std::memory_order_relaxed);
+        if (latReq > 0 || captureLatencyTouched_) {
+            const uint32_t req = latReq > 0 ? latReq : autoLatency_.load(std::memory_order_relaxed);
+            const uint32_t latRate = pw_live_ups::computeStreamLatencyRate(
+                decoupled, /*isCapture=*/true,
+                captureRate_.load(std::memory_order_relaxed),
+                playbackRate_.load(std::memory_order_relaxed),
+                wantRate, liveUpsApplied_.dstRate, sampleRate.load(std::memory_order_relaxed));
+            std::snprintf(latBuf, sizeof(latBuf), "%u/%u", req, latRate);
+            captureLatencyTouched_ = true;
+            struct spa_dict_item items[3] = {
+                SPA_DICT_ITEM_INIT(PW_KEY_NODE_FORCE_RATE, rateBuf),
+                SPA_DICT_ITEM_INIT(PW_KEY_NODE_GROUP, wantGroup.c_str()),
+                SPA_DICT_ITEM_INIT(PW_KEY_NODE_LATENCY, latBuf),
+            };
+            struct spa_dict dict = SPA_DICT_INIT(items, 3);
+            pw_stream_update_properties(capture, &dict);
+        } else {
+            struct spa_dict_item items[2] = {
+                SPA_DICT_ITEM_INIT(PW_KEY_NODE_FORCE_RATE, rateBuf),
+                SPA_DICT_ITEM_INIT(PW_KEY_NODE_GROUP, wantGroup.c_str()),
+            };
+            struct spa_dict dict = SPA_DICT_INIT(items, 2);
+            pw_stream_update_properties(capture, &dict);
+        }
+        // PipeWire 1.0.x audioadapter have_format nullázása csoport- vagy force-rate váltáskor is
+        suspendOwnCaptureNode(/*retrigger=*/false, /*allowDecoupled=*/true);
     }
 
     /** A saját aqulify_sink pw_node proxy felszabadítása (fő hurok szála). */
@@ -779,8 +804,8 @@ private:
      * újra a capture streamet, ha a cél-driver rátája önmagában nem változott.
      * retrigger=true esetén a már futó playback mellett egy node deactivate/activate párossal újra is indítja a gráfot.
      */
-    void suspendOwnCaptureNode(bool retrigger) {
-        if (!capture || liveUpsActive_.load(std::memory_order_acquire)) return;
+    void suspendOwnCaptureNode(bool retrigger, bool allowDecoupled = false) {
+        if (!capture || (!allowDecoupled && liveUpsActive_.load(std::memory_order_acquire))) return;
         struct pw_node* proxy = ensureOwnSinkProxy();
         if (!proxy) return;
         struct spa_command cmd = SPA_NODE_COMMAND_INIT(SPA_NODE_COMMAND_Suspend);
@@ -1066,13 +1091,16 @@ private:
         }
         const uint32_t tSinkR = targetSinkRate_.load(std::memory_order_relaxed);
         const uint32_t effectiveDacClock = tSinkR > 0 ? tSinkR : driverClockRate_.load(std::memory_order_relaxed);
+        const auto bst = liveBridge_.status();
         const auto verdict = liveUpsGuard_.evaluate(
             monoMs(),
             captureRate_.load(std::memory_order_relaxed),
             playbackRate_.load(std::memory_order_relaxed),
             effectiveDacClock,
             playbackStreaming.load(std::memory_order_acquire),
-            dummyDriverAvailable_);
+            dummyDriverAvailable_,
+            captureDriverClockRate_.load(std::memory_order_relaxed),
+            bst.underruns + bst.overruns);
         if (verdict == pw_live_ups::GuardVerdict::FallbackMissingDummyDriver) {
             fallbackLiveUpsToDirect(pw_live_ups::FallbackKey{},
                                     pw_live_ups::verdictReasonCode(verdict),
@@ -1083,7 +1111,8 @@ private:
         }
         if (verdict == pw_live_ups::GuardVerdict::FallbackCaptureMismatch ||
             verdict == pw_live_ups::GuardVerdict::FallbackPlaybackMismatch ||
-            verdict == pw_live_ups::GuardVerdict::FallbackDacRateMismatch) {
+            verdict == pw_live_ups::GuardVerdict::FallbackDacRateMismatch ||
+            verdict == pw_live_ups::GuardVerdict::FallbackBridgeStarvation) {
             const pw_live_ups::FallbackKey key{
                 target, liveUpsApplied_.srcRate, liveUpsApplied_.dstRate,
                 static_cast<int>(liveUpsApplied_.opts.rateMode)
@@ -1421,9 +1450,10 @@ private:
     }
 
     /** A kért pufferméret a létrehozandó hangfolyam tulajdonságai közé (node.latency = N/mintavétel). */
-    void applyLatencyProp(struct pw_properties* props) const {
+    void applyLatencyProp(struct pw_properties* props, uint32_t rateOverride = 0) const {
         const uint32_t n = latencyReq_.load();
-        if (n > 0) pw_properties_setf(props, PW_KEY_NODE_LATENCY, "%u/%u", n, sampleRate.load());
+        const uint32_t r = rateOverride > 0 ? rateOverride : sampleRate.load();
+        if (n > 0 && r > 0) pw_properties_setf(props, PW_KEY_NODE_LATENCY, "%u/%u", n, r);
     }
 
     /** A fő hurok szálán: a pufferméret frissítése a meglévő hangfolyamokon, az ébren tartás be / ki. */
@@ -1432,13 +1462,35 @@ private:
         const uint32_t n = self->latencyReq_.load();
         if (n != self->appliedLatency_) {
             self->appliedLatency_ = n;
-            char val[32];
-            std::snprintf(val, sizeof(val), "%u/%u", n > 0 ? n : self->autoLatency_.load(), self->sampleRate.load());
-            struct spa_dict_item item = SPA_DICT_ITEM_INIT(PW_KEY_NODE_LATENCY, val);
-            struct spa_dict dict = SPA_DICT_INIT(&item, 1);
-            for (struct pw_stream* st : { self->capture, self->playback, self->keepAlive_ })
-                if (st) pw_stream_update_properties(st, &dict);
-            for (auto& z : self->zones_) if (z && z->stream) pw_stream_update_properties(z->stream, &dict);
+            const uint32_t req = n > 0 ? n : self->autoLatency_.load();
+            const bool dec = self->liveUpsActive_.load(std::memory_order_acquire);
+            const uint32_t capRate = pw_live_ups::computeStreamLatencyRate(
+                dec, /*isCapture=*/true,
+                self->captureRate_.load(std::memory_order_relaxed),
+                self->playbackRate_.load(std::memory_order_relaxed),
+                self->liveBridgeSrcRate_.load(std::memory_order_relaxed),
+                self->liveBridgeDstRate_.load(std::memory_order_relaxed),
+                self->sampleRate.load(std::memory_order_relaxed));
+            const uint32_t pbRate = pw_live_ups::computeStreamLatencyRate(
+                dec, /*isCapture=*/false,
+                self->captureRate_.load(std::memory_order_relaxed),
+                self->playbackRate_.load(std::memory_order_relaxed),
+                self->liveBridgeSrcRate_.load(std::memory_order_relaxed),
+                self->liveBridgeDstRate_.load(std::memory_order_relaxed),
+                self->sampleRate.load(std::memory_order_relaxed));
+            auto updateStreamLat = [req](struct pw_stream* st, uint32_t rate) {
+                if (!st) return;
+                char val[32];
+                std::snprintf(val, sizeof(val), "%u/%u", req, rate);
+                struct spa_dict_item item = SPA_DICT_ITEM_INIT(PW_KEY_NODE_LATENCY, val);
+                struct spa_dict dict = SPA_DICT_INIT(&item, 1);
+                pw_stream_update_properties(st, &dict);
+            };
+            updateStreamLat(self->capture, capRate);
+            self->captureLatencyTouched_ = true;
+            updateStreamLat(self->playback, pbRate);
+            updateStreamLat(self->keepAlive_, pbRate);
+            for (auto& z : self->zones_) if (z && z->stream) updateStreamLat(z->stream, pbRate);
             std::cout << "[PipeWire] Pufferméret: " << (n ? std::to_string(n) + " minta" : std::string("automatikus")) << "\n";
         }
         self->reconcileKeepAlive();
@@ -1582,7 +1634,7 @@ private:
         if (!target.empty()) pw_properties_set(pprops, PW_KEY_TARGET_OBJECT, target.c_str());
         { std::lock_guard<std::mutex> lk(diagMu_); outputTarget_ = target; }
         syncTargetSinkMonitor();
-        applyLatencyProp(pprops);
+        applyLatencyProp(pprops, decoupled ? liveUpsApplied_.dstRate : 0);
         // Lokális mutatóval hozzuk létre és csatlakoztatjuk; trigger engedélyezés csak sikeres connect után!
         struct pw_stream* s = pw_stream_new(core, (sinkName_ + "_output").c_str(), pprops);
         if (!s) return false;
@@ -1843,7 +1895,8 @@ private:
             const uint32_t capR = self->captureRate_.load(std::memory_order_relaxed);
             if (pbR > 0 && capR > 0 && capR != pbR) {
                 ++self->captureMismatchTicks_;
-                if (self->captureMismatchTicks_ == 2 || self->captureMismatchTicks_ == 6) {
+                const int t = self->captureMismatchTicks_;
+                if (t == 2 || t == 6 || t == 14 || (t >= 30 && (t % 20 == 0))) {
                     self->suspendOwnCaptureNode(/*retrigger=*/true);
                 }
             } else {
@@ -1990,6 +2043,10 @@ private:
         }
         // Szétválasztott mód (saját motoros rendszerhang-felmintavételezés): capture -> SPSC gyűrű (0 allokáció, 0 zár).
         // Csak egyező rátapár (liveBridgeRateMatched_) esetén tápláljuk a hidat, hogy 0,5x/2x tempóhiba ne léphessen fel.
+        struct pw_time cwt{};
+        if (pw_stream_get_time_n(self->capture, &cwt, sizeof(cwt)) == 0 && cwt.rate.denom > 0) {
+            self->captureDriverClockRate_.store(cwt.rate.denom, std::memory_order_relaxed);
+        }
         const bool gateOk = self->liveBridgeRateMatched_.load(std::memory_order_acquire);
         while (struct pw_buffer* in = pw_stream_dequeue_buffer(self->capture)) {
             if (gateOk && in->buffer->n_datas >= 2) {
@@ -2074,7 +2131,12 @@ private:
                 std::memset(outR, 0, n * sizeof(float));
             }
         } else {
-            if (in && in->buffer->n_datas >= 2) {
+            // Közvetlen módban, ha a capture és a playback mintavétele átmenetileg eltér (pl. PipeWire 1.0.x have_format),
+            // nem másoljuk át 1:1-ben a puffert (az 0,5x/2x szétesést okozna); csendet adunk, amíg a suspend újratárgyalja.
+            const bool rateMismatch = pw_live_ups::directModeRatesMismatch(
+                false, self->captureRate_.load(std::memory_order_relaxed),
+                self->playbackRate_.load(std::memory_order_relaxed));
+            if (!rateMismatch && in && in->buffer->n_datas >= 2) {
                 struct spa_data* d0 = &in->buffer->datas[0];
                 struct spa_data* d1 = &in->buffer->datas[1];
                 const uint32_t off0 = std::min(d0->chunk->offset, d0->maxsize);

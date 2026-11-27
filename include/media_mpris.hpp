@@ -68,6 +68,78 @@ public:
         wake_ = true;
     }
 
+    /**
+     * Az összes éppen „Playing” állapotú külső MPRIS lejátszó szüneteltetése szinkronban, korlátos várakozással
+     * (pl. a beépített lejátszó indítása előtt, hogy ne szóljon egymásra két zene). Már szüneteltetett vagy
+     * leállított lejátszónak nem küld parancsot. Visszaadja a sikeresen szüneteltetett külső lejátszók számát.
+     */
+    size_t pauseAllPlaying(int waitMs = 350) {
+        const auto names = listMprisBusNames();
+        if (names.empty()) return 0;
+
+        std::vector<MprisPlayerEntry> entries;
+        entries.reserve(names.size());
+        for (const auto& name : names) {
+            if (isOwnAqulifyMprisName(name)) continue;
+            entries.push_back({ name, readPlaybackStatus(name) });
+        }
+        const auto targets = selectPlayingMprisTargets(entries);
+        if (targets.empty()) return 0;
+
+        // 1. kör: minden Playing lejátszóra Pause (ha hibával tér vissza, PlayPause tartalék — mivel biztosan Playing volt)
+        std::vector<bool> usedToggle(targets.size(), false);
+        for (size_t i = 0; i < targets.size(); ++i) {
+            const bool ok = run({ "busctl", "--user", "call", targets[i].busName, kPath, kPlayer, "Pause" });
+            if (!ok) {
+                run({ "busctl", "--user", "call", targets[i].busName, kPath, kPlayer, "PlayPause" });
+                usedToggle[i] = true;
+            }
+        }
+
+        // 2. kör: rövid, korlátos visszaellenőrzés, hogy a külső lejátszó valóban megállt-e a helyi zene indulása előtt
+        const auto tStart = std::chrono::steady_clock::now();
+        const auto deadline = tStart + std::chrono::milliseconds(std::clamp(waitMs, 0, 1500));
+        std::vector<bool> paused(targets.size(), false);
+        size_t pausedCount = 0;
+        for (;;) {
+            pausedCount = 0;
+            const auto elapsedMs =
+                std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - tStart).count();
+            for (size_t i = 0; i < targets.size(); ++i) {
+                if (paused[i]) {
+                    ++pausedCount;
+                    continue;
+                }
+                const std::string st = readPlaybackStatus(targets[i].busName);
+                if (st != "Playing") {
+                    paused[i] = true;
+                    ++pausedCount;
+                } else if (!usedToggle[i] && elapsedMs >= 100) {
+                    // Egyes Electron/böngésző kliensek a Pause hívást 0-val visszaadják, de figyelmen kívül hagyják:
+                    // mivel 100 ms után is biztosan Playing, egyszeri PlayPause-zal állítjuk meg.
+                    run({ "busctl", "--user", "call", targets[i].busName, kPath, kPlayer, "PlayPause" });
+                    usedToggle[i] = true;
+                }
+            }
+            if (pausedCount == targets.size() || std::chrono::steady_clock::now() >= deadline) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(40));
+        }
+
+        {
+            std::lock_guard<std::mutex> lk(mutex_);
+            for (size_t i = 0; i < targets.size(); ++i) {
+                if (active_ == targets[i].busName && paused[i]) {
+                    info_.playing = false;
+                    activeStatus_ = "Paused";
+                }
+            }
+        }
+        wake_ = true;
+        const size_t stillPlaying = targets.size() - pausedCount;
+        std::cout << formatMprisAutoPauseLog(pausedCount, stillPlaying) << "\n" << std::flush;
+        return pausedCount;
+    }
+
     /** A borító: helyi fájl (file://) bájtjai, vagy a lejátszó https címe. */
 
     bool art(const std::string& id, std::string& mime, std::string& bytes, std::string& url) const {
@@ -185,6 +257,37 @@ private:
     static bool flag(const json::Value& dict, const char* key) {
         const json::Value* d = field(dict, key);
         return d && ((d->type == json::Value::Type::Bool && d->b) || d->numberOr(0.0) != 0.0);
+    }
+
+    /** Összes érvényes org.mpris.MediaPlayer2.* busznév listázása (tetszőleges szálról hívható). */
+    static std::vector<std::string> listMprisBusNames() {
+        std::vector<std::string> out;
+        json::Value names;
+        if (callJson({ "busctl", "--user", "--json=short", "call", "org.freedesktop.DBus", "/org/freedesktop/DBus",
+                       "org.freedesktop.DBus", "ListNames" }, names) &&
+            names.type == json::Value::Type::Array) {
+            for (const auto& n : names.arr) {
+                if (n.type == json::Value::Type::String &&
+                    n.str.rfind("org.mpris.MediaPlayer2.", 0) == 0 &&
+                    validBusName(n.str)) {
+                    out.push_back(n.str);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Egyetlen MPRIS lejátszó aktuális PlaybackStatus értékének gyors lekérdezése (tetszőleges szálról hívható). */
+    static std::string readPlaybackStatus(const std::string& name) {
+        json::Value variant;
+        if (callJson({ "busctl", "--user", "--json=short", "call", name, kPath,
+                       "org.freedesktop.DBus.Properties", "Get", "ss", kPlayer, "PlaybackStatus" }, variant)) {
+            if (const json::Value* d = variant.get("data"); d && d->type == json::Value::Type::String) {
+                return d->str;
+            }
+            if (variant.type == json::Value::Type::String) return variant.str;
+        }
+        return {};
     }
 
     struct Player {

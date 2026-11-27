@@ -1215,6 +1215,12 @@ int main(int argc, char** argv) {
     radioStations.load(readSmallFile(userFilePath(L"radio.json", false), 1u << 20));
     radio::RadioController radioCtl(filePlayer, radioStations);
     radio::attachRadio(cb, radioCtl, radioStations);
+    // Helyi zene / rádió / UPnP indítása előtt minden éppen szóló külső lejátszót (SMTC) szüneteltetünk,
+    // és megszakítjuk az esetlegesen még csatlakozó internetrádiót, így nem szólhat két zene egymásra.
+    filePlayer.setBeforePlayCallback([&]() {
+        radioCtl.cancelPendingIfExternal();
+        mediaSession.pauseAllPlaying();
+    });
     // UPnP / DLNA lejátszó (upnp_bridge.hpp): a telefonos vezérlők (BubbleUPnP, mconnect, foobar2000, …) a beépített
     // lejátszón át, a teljes láncon (kizárólagos WASAPI / ASIO, DoP / natív DSD). Alapból ki (audio.json).
     upnp::UpnpService upnpService(filePlayer, playQueue, cb.setVolume, cb.getVolume);
@@ -1557,6 +1563,7 @@ int main(int argc, char** argv) {
     bridge->stop();
     updater.stop();
     winLiveBridge.stop();
+    filePlayer.setBeforePlayCallback(nullptr);
     filePlayer.stop();
     mediaSession.stop();
     loopback->stop();

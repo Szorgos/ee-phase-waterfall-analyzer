@@ -740,6 +740,12 @@ struct Core {
     }, &c->phoneCache);
     c->radioStations.load(linux_store::loadRadio());
     radio::attachRadio(cb, c->radioCtl, c->radioStations);
+    // Helyi zene / rádió / UPnP indítása előtt a szóló külső lejátszót (MediaRemote) szüneteltetjük,
+    // és megszakítjuk az esetlegesen még csatlakozó internetrádiót, így nem szólhat két zene egymásra.
+    c->filePlayer.setBeforePlayCallback([c]() {
+        c->radioCtl.cancelPendingIfExternal();
+        c->media.pauseIfPlaying();
+    });
     cb.loadRemote = [] { return linux_store::loadRemote(); };
     cb.saveRemote = [](const std::string& doc) { return linux_store::saveRemote(doc); };
     cb.loadTargets = [] { return linux_store::loadRemoteTargets(); };
@@ -947,6 +953,7 @@ struct Core {
     core_->broadcast = nullptr;
     if (core_->bridge) core_->bridge->stop();
     core_->updater.stop();
+    core_->filePlayer.setBeforePlayCallback(nullptr);
     core_->media.stop();
     core_->engine.stop();
     if (core_->upnpService) core_->upnpService->apply(false, "", false, "");
