@@ -25,6 +25,7 @@
  * virtuális eszközünkre, így a lánc és a hangkártya akkor sem alszik el, ha éppen senki nem játszik.
  */
 #include <pipewire/pipewire.h>
+#include <spa/node/command.h>
 #include <spa/param/audio/format-utils.h>
 #include <spa/pod/builder.h>
 #include <spa/utils/result.h>
@@ -450,6 +451,9 @@ public:
             PW_KEY_NODE_VIRTUAL, "true",
             PW_KEY_NODE_GROUP, group.c_str(),
             PW_KEY_NODE_LINK_GROUP, group.c_str(),
+            // PipeWire 1.0.x audioadapter csak Suspend parancsnál nullázza a korábbi formátumot (have_format);
+            // üresjáratban így tisztán újratárgyalja a mintavételt, ha új vagy fix rátájú DAC-ra váltunk.
+            PW_KEY_NODE_SUSPEND_ON_IDLE, "true",
             PW_KEY_AUDIO_CHANNELS, "2",
             SPA_KEY_AUDIO_POSITION, "FL,FR",
             "device.icon-name", "audio-card",
@@ -467,7 +471,6 @@ public:
         }();
         pw_stream_add_listener(capture, &captureListener, &captureEvents, this);
         group_ = group;
-        linkGroup_ = group;
         appliedCaptureGroup_ = group;
         sinkName_ = sinkName;
         description_ = description;
@@ -562,6 +565,7 @@ public:
         waitRtIdle(captureInFlight_, "capture");
         liveBridge_.stop();
         unbindTargetSinkMonitor();
+        unbindOwnSinkProxy();
         if (registry_) { pw_proxy_destroy(reinterpret_cast<struct pw_proxy*>(registry_)); registry_ = nullptr; }
         {
             std::lock_guard<std::mutex> lk(sinksMu_);
@@ -649,14 +653,7 @@ private:
         playbackStreaming.store(false, std::memory_order_release);
         playbackRate_.store(0, std::memory_order_relaxed);
         driverClockRate_.store(0, std::memory_order_relaxed);
-        if (capturePinnedRate_ != 0) {
-            capturePinnedRate_ = 0;
-            updateCaptureEnumFormat(0);
-        }
-        capturePinAttempts_ = 0;
-        if (!liveUpsActive_.load(std::memory_order_acquire) && appliedCaptureForceRate_ != 0) {
-            setCaptureForceRate(0);
-        }
+        captureMismatchTicks_ = 0;
         updateOutputHeartbeatExpected();
         struct pw_stream* old = playbackPtr_.exchange(nullptr, std::memory_order_acq_rel);
         playback = nullptr;
@@ -685,9 +682,11 @@ private:
     std::atomic<uint32_t> lastQuantum_{0};
     std::atomic<float> loadAvg_{0.0f}, loadPeak_{0.0f};
     std::atomic<uint32_t> overruns_{0};
-    std::string group_, linkGroup_, sinkName_, description_;
-    uint32_t groupGen_ = 0;                           // node.group generáció kimenetváltáskor (PipeWire 1.0.x driver-leválasztás)
+    std::string group_, sinkName_, description_;
     bool playbackCreatedOnce_ = false;                // csak a fő hurok szála
+    struct pw_node* ownSinkProxy_ = nullptr;          // saját aqulify_sink pw_node proxy (SPA_NODE_COMMAND_Suspend küldéséhez)
+    uint32_t ownSinkProxyId_ = 0;                     // csak a fő hurok szála
+    int captureMismatchTicks_ = 0;                    // közvetlen módban tartós capture!=playback ráta-eltérés számláló (fő hurok)
     std::vector<float> inL_, inR_;
     std::vector<float> capInterleaved_, playInterleaved_;
     std::array<std::vector<float>, kExtraZones> zoneL_, zoneR_;
@@ -719,8 +718,6 @@ private:
     LiveUpsRequest liveUpsApplied_;                   // csak a fő hurok szála
     std::string liveUpsAppliedTarget_;                // a szétválasztott playback stream aktuális fizikai célja (fő hurok)
     uint32_t appliedCaptureForceRate_ = 0;            // a capture streamen beállított node.force-rate (csak a fő hurok szála)
-    uint32_t capturePinnedRate_ = 0;                  // a playbackhez igazított capture EnumFormat ráta (0: szabad; fő hurok)
-    int capturePinAttempts_ = 0;                      // azonos célrátára legfeljebb 3 újratárgyalási kísérlet (fő hurok)
     std::string appliedCaptureGroup_;                 // a capture stream aktuális node.group tulajdonsága (csak a fő hurok szála)
     std::string dummyDriverGroup_{"pipewire.dummy"};  // a PipeWire Dummy-Driver csoportneve (regiszterből frissítve)
     uint32_t dummyDriverId_ = 0;                      // a PipeWire Dummy-Driver csomópont ID-ja (fő hurok)
@@ -738,10 +735,6 @@ private:
      */
     void setCaptureDecoupledProps(bool decoupled, uint32_t srcRate) {
         if (!capture) return;
-        if (decoupled && capturePinnedRate_ != 0) {
-            capturePinnedRate_ = 0;
-            updateCaptureEnumFormat(0);
-        }
         const uint32_t wantRate = decoupled ? srcRate : 0;
         const std::string wantGroup = decoupled ? dummyDriverGroup_ : group_;
         if (wantRate == appliedCaptureForceRate_ && wantGroup == appliedCaptureGroup_) return;
@@ -757,71 +750,45 @@ private:
         pw_stream_update_properties(capture, &dict);
     }
 
-    /** A capture stream PW_KEY_NODE_FORCE_RATE tulajdonságának frissítése (0: szabad; fő hurok). */
-    void setCaptureForceRate(uint32_t rate) {
-        if (!capture || rate == appliedCaptureForceRate_) return;
-        appliedCaptureForceRate_ = rate;
-        char rateBuf[24];
-        std::snprintf(rateBuf, sizeof(rateBuf), "%u", rate);
-        struct spa_dict_item item = SPA_DICT_ITEM_INIT(PW_KEY_NODE_FORCE_RATE, rateBuf);
-        struct spa_dict dict = SPA_DICT_INIT(&item, 1);
-        pw_stream_update_properties(capture, &dict);
-    }
-
-    /**
-     * Közvetlen kimenetváltáskor / playback újraépítésekor új node.group névre lépünk (link-group változatlan marad),
-     * így PipeWire 1.0.x alatt is leválik a capture stream az előző, még idle maradt DAC driveréről.
-     */
-    void bumpDirectGroup() {
-        if (!capture || linkGroup_.empty()) return;
-        group_ = linkGroup_ + "-" + std::to_string(++groupGen_);
-        appliedCaptureGroup_ = group_;
-        appliedCaptureForceRate_ = 0;
-        struct spa_dict_item items[2] = {
-            SPA_DICT_ITEM_INIT(PW_KEY_NODE_GROUP, group_.c_str()),
-            SPA_DICT_ITEM_INIT(PW_KEY_NODE_FORCE_RATE, "0"),
-        };
-        struct spa_dict dict = SPA_DICT_INIT(items, 2);
-        pw_stream_update_properties(capture, &dict);
-        struct spa_dict_item zitem = SPA_DICT_ITEM_INIT(PW_KEY_NODE_GROUP, group_.c_str());
-        struct spa_dict zdict = SPA_DICT_INIT(&zitem, 1);
-        for (auto& z : zones_) {
-            if (z && z->stream) pw_stream_update_properties(z->stream, &zdict);
+    /** A saját aqulify_sink pw_node proxy felszabadítása (fő hurok szála). */
+    void unbindOwnSinkProxy() {
+        if (ownSinkProxy_) {
+            pw_proxy_destroy(reinterpret_cast<struct pw_proxy*>(ownSinkProxy_));
+            ownSinkProxy_ = nullptr;
         }
+        ownSinkProxyId_ = 0;
     }
 
-    /** A capture stream (aqulify_sink) EnumFormat rátájának frissítése (0: szabad; >0: adott rátára kényszerítés). */
-    void updateCaptureEnumFormat(uint32_t rate) {
-        if (!capture) return;
-        uint8_t buf[1024];
-        struct spa_audio_info_raw info{};
-        info.format = SPA_AUDIO_FORMAT_F32P;
-        info.channels = 2;
-        info.position[0] = SPA_AUDIO_CHANNEL_FL;
-        info.position[1] = SPA_AUDIO_CHANNEL_FR;
-        info.rate = rate;
-        struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buf, sizeof(buf));
-        const struct spa_pod* cparams[1] = { spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &info) };
-        pw_stream_set_active(capture, false);
-        pw_stream_update_params(capture, cparams, 1);
-        pw_stream_set_active(capture, true);
+    /** A saját aqulify_sink csomóponthoz kötött pw_node proxy lekérése (on-demand; fő hurok szála). */
+    struct pw_node* ensureOwnSinkProxy() {
+        if (!registry_) return nullptr;
+        const uint32_t id = ownSinkNodeId_.load(std::memory_order_acquire);
+        if (id == 0) return nullptr;
+        if (ownSinkProxy_ && ownSinkProxyId_ == id) return ownSinkProxy_;
+        unbindOwnSinkProxy();
+        ownSinkProxy_ = static_cast<struct pw_node*>(
+            pw_registry_bind(registry_, id, PW_TYPE_INTERFACE_Node, PW_VERSION_NODE, 0));
+        if (ownSinkProxy_) ownSinkProxyId_ = id;
+        return ownSinkProxy_;
     }
 
     /**
-     * Közvetlen módban, ha a capture stream (aqulify_sink) a playback streamtől eltérő rátán ragadt (pl. kimenetváltás
-     * vagy reconnect után, PipeWire 1.0.x és 1.6.x alatt is), a playback pontos rátájára igazítjuk a capture
-     * EnumFormat-ját és átmenetileg a node.force-rate tulajdonságát is (amint onParamChanged visszaigazolja, a
-     * force-rate visszakerül 0-ra, hogy a későbbi rátaváltások szabadon működjenek).
+     * Közvetlen módban a saját aqulify_sink csomópont SPA_NODE_COMMAND_Suspend parancsának elküldése.
+     * PipeWire 1.0.x alatt az audioadapter kizárólag Suspend parancsnál nullázza a korábbi formátumot (have_format),
+     * így kimenetváltáskor (pl. 44,1 kHz-es DAC-ról fix 48 kHz-es DAC-ra) akkor is az új driver rátájára tárgyalja
+     * újra a capture streamet, ha a cél-driver rátája önmagában nem változott.
+     * retrigger=true esetén a már futó playback mellett egy node deactivate/activate párossal újra is indítja a gráfot.
      */
-    void pinCaptureFormatToRate(uint32_t targetRate) {
-        if (!capture || targetRate == 0 || liveUpsActive_.load(std::memory_order_acquire)) return;
-        if (capturePinnedRate_ != targetRate) capturePinAttempts_ = 0;
-        if (capturePinnedRate_ == targetRate &&
-            (captureRate_.load(std::memory_order_relaxed) == targetRate || capturePinAttempts_ >= 3)) return;
-        capturePinnedRate_ = targetRate;
-        ++capturePinAttempts_;
-        setCaptureForceRate(targetRate);
-        updateCaptureEnumFormat(targetRate);
+    void suspendOwnCaptureNode(bool retrigger) {
+        if (!capture || liveUpsActive_.load(std::memory_order_acquire)) return;
+        struct pw_node* proxy = ensureOwnSinkProxy();
+        if (!proxy) return;
+        struct spa_command cmd = SPA_NODE_COMMAND_INIT(SPA_NODE_COMMAND_Suspend);
+        pw_node_send_command(proxy, &cmd);
+        if (retrigger) {
+            pw_stream_set_active(capture, false);
+            pw_stream_set_active(capture, true);
+        }
     }
 
     /** A cél fizikai Audio/Sink csomópont valódi SPA_PARAM_Format mintavételének figyelése (fő hurok szála). */
@@ -1350,7 +1317,7 @@ private:
             PW_KEY_NODE_NAME, name.c_str(),
             PW_KEY_NODE_DESCRIPTION, desc.c_str(),
             PW_KEY_NODE_GROUP, group_.c_str(),           // egy ütemező: az órajelek eltérését a PipeWire kezeli
-            PW_KEY_NODE_LINK_GROUP, linkGroup_.c_str(),  // soha nem kötődik a saját virtuális eszközünkre
+            PW_KEY_NODE_LINK_GROUP, group_.c_str(),      // soha nem kötődik a saját virtuális eszközünkre
             PW_KEY_TARGET_OBJECT, z.target.c_str(),
             PW_KEY_NODE_DONT_RECONNECT, "true",          // a céleszköz eltűnésekor nem szól máshol
             PW_KEY_NODE_PASSIVE, "true",
@@ -1602,9 +1569,9 @@ private:
             PW_KEY_MEDIA_ROLE, "DSP",
             nullptr);
         if (!decoupled) {
-            if (playbackCreatedOnce_) bumpDirectGroup();
+            if (playbackCreatedOnce_) suspendOwnCaptureNode(/*retrigger=*/false);
             pw_properties_set(pprops, PW_KEY_NODE_GROUP, group_.c_str());
-            pw_properties_set(pprops, PW_KEY_NODE_LINK_GROUP, linkGroup_.c_str());
+            pw_properties_set(pprops, PW_KEY_NODE_LINK_GROUP, group_.c_str());
         } else {
             // Szétválasztott mód (2 külön PipeWire driver-sziget): a node.group és a node.link-group is elhagyva,
             // így a capture (Dummy-Driver @ srcRate) és a playback (fizikai DAC @ dstRate) független órajelen fut.
@@ -1831,6 +1798,7 @@ private:
     static void onRegistryGlobalRemove(void* data, uint32_t id) {
         auto* self = static_cast<AetherSinkNode*>(data);
         if (id == self->targetNodeId_) self->unbindTargetSinkMonitor();
+        if (id == self->ownSinkProxyId_) self->unbindOwnSinkProxy();
         if (id == self->dummyDriverId_) {
             self->dummyDriverId_ = 0;
             self->dummyDriverAvailable_ = false;
@@ -1874,8 +1842,15 @@ private:
             const uint32_t pbR = self->playbackRate_.load(std::memory_order_relaxed);
             const uint32_t capR = self->captureRate_.load(std::memory_order_relaxed);
             if (pbR > 0 && capR > 0 && capR != pbR) {
-                self->pinCaptureFormatToRate(pbR);
+                ++self->captureMismatchTicks_;
+                if (self->captureMismatchTicks_ == 2 || self->captureMismatchTicks_ == 6) {
+                    self->suspendOwnCaptureNode(/*retrigger=*/true);
+                }
+            } else {
+                self->captureMismatchTicks_ = 0;
             }
+        } else {
+            self->captureMismatchTicks_ = 0;
         }
     }
 
@@ -1953,13 +1928,7 @@ private:
                 const uint32_t pbRate = self->playbackRate_.load(std::memory_order_relaxed);
                 if (pbRate == 0 || info.rate == pbRate) {
                     self->sampleRate.store(info.rate, std::memory_order_relaxed);
-                }
-                if (self->capturePinnedRate_ != 0 && info.rate == self->capturePinnedRate_ &&
-                    self->appliedCaptureForceRate_ != 0) {
-                    self->setCaptureForceRate(0);
-                }
-                if (pbRate > 0 && info.rate != pbRate) {
-                    self->pinCaptureFormatToRate(pbRate);
+                    self->captureMismatchTicks_ = 0;
                 }
             }
         }
@@ -1978,8 +1947,6 @@ private:
                 self->updateLiveBridgeRateGate();
                 if (self->loop && self->liveUpsEvent_)
                     pw_loop_signal_event(pw_main_loop_get_loop(self->loop), self->liveUpsEvent_);
-            } else if (self->captureRate_.load(std::memory_order_relaxed) != info.rate) {
-                self->pinCaptureFormatToRate(info.rate);
             }
         }
     }
