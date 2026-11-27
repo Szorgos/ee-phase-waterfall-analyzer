@@ -41,7 +41,7 @@ Everything runs locally on your machine. No account, no subscription, no telemet
 - **GPU-Accelerated WebGL (`three.js`):** offloads rendering from the audio thread; supports 3D isometric, side profile, and top spectrogram views, up/down flow, heatmap fade, and keystone correction. Pauses automatically when minimized/covered.
 
 ### 4. Built-in Player, High-Res PCM, DSD & Upsampling
-- **Supported Audio File Formats:** `FLAC`, `WAV`, `AIFF` / `AIFF-C` (`.aif`, `.aiff`, `.aifc`), `MP3`, `Ogg Vorbis` (`.ogg`, `.oga`), `ALAC` (`.m4a`, `.alac`, `.caf`), `Opus`, `WavPack` (`.wv`), and `DSD` (`.dsf`, `.dff` from DSD64 to DSD1024; bit-exact native DSD / DoP output on Linux and Windows only, on macOS DSD is converted to PCM).
+- **Supported Audio File Formats:** `FLAC`, `WAV`, `AIFF` / `AIFF-C` (`.aif`, `.aiff`, `.aifc`), `MP3`, `Ogg Vorbis` (`.ogg`, `.oga`), `AAC` / `ALAC` (`.m4a`, `.aac`, `.alac`, `.caf`), `Opus`, `WavPack` (`.wv`), and `DSD` (`.dsf`, `.dff` from DSD64 to DSD1024; bit-exact native DSD / DoP output on Linux and Windows only, on macOS DSD is converted to PCM).
 - **Internet Radio & UPnP / DLNA Renderer:** play custom station streams (`MP3`, `Ogg Vorbis`, `Opus`, `FLAC`, `AAC` / `HE-AAC` / `HE-AACv2` via FAAD2) or cast from UPnP/DLNA controllers through the full DSP chain.
 - **Exclusive / Direct Outputs:**
   - **Windows:** `WASAPI Exclusive` and `ASIO` (Steinberg ASIO SDK 2.3.4, GPLv3) for the built-in player; Equalizer APO plugin (`Aqulify.dll`) for system-wide audio.
@@ -104,7 +104,7 @@ bash install.sh
 
 ## Limitations, Known Issues & "What It Does Not Do Yet"
 
-Honest status as of **v3.0.4**:
+Honest status as of **v3.0.5**:
 
 - **Windows multi-output:** simultaneous 2–4 DAC outputs and active multi-way crossovers work on Linux and macOS only; Windows support is not implemented yet.
 - **Room measurement & correction (experimental):** verified extensively with automated tests and a simulated microphone, **not yet validated in the field with a real physical measurement microphone**.
