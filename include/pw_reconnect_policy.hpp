@@ -10,6 +10,7 @@
  */
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -59,25 +60,30 @@ inline bool isDummyOrNullSink(const std::string& name) {
            low.find("null_sink") != std::string::npos;
 }
 
-/** Külső PipeWire Audio/Sink jelölt névvel és munkamenet-prioritással (priority.session). */
+/** Külső PipeWire Audio/Sink jelölt névvel, munkamenet-prioritással és natív regiszter-metaadatokkal. */
 struct SinkCandidate {
     std::string name;
     int priority = 0;
+    uint32_t nodeId = 0;
+    std::string description;
+    int alsaCard = -1;
+    std::string alsaId;
+    std::vector<uint32_t> allowedRates;
+    std::vector<uint32_t> enumFormatRates;
 };
 
 /**
- * Determinisztikus tartalék-választás valódi külső nyelők közül (nem saját aqulify*, nem auto_null/dummy).
- * Sorrend: magasabb priority.session előbb (mint a WirePlumbernél), egyenlőnél USB előnyben, végül alfabetikusan.
+ * Érvényes (nem saját aqulify*, nem auto_null/dummy) jelöltek rendezése: magasabb priority.session előbb
+ * (mint a WirePlumbernél), egyenlőnél USB előnyben, végül alfabetikusan.
  */
-inline std::string selectFallbackSinkByPriority(const std::vector<SinkCandidate>& candidates,
-                                                const std::string& sinkName = "aqulify_sink") {
+inline std::vector<SinkCandidate> sortPhysicalSinkCandidates(const std::vector<SinkCandidate>& candidates,
+                                                             const std::string& sinkName = "aqulify_sink") {
     std::vector<SinkCandidate> valid;
     valid.reserve(candidates.size());
     for (const auto& c : candidates) {
         if (c.name.empty() || isOwnAqulifyNode(c.name, sinkName) || isDummyOrNullSink(c.name)) continue;
         valid.push_back(c);
     }
-    if (valid.empty()) return {};
     std::sort(valid.begin(), valid.end(), [](const SinkCandidate& a, const SinkCandidate& b) {
         if (a.priority != b.priority) return a.priority > b.priority;
         const bool aUsb = toLowerAscii(a.name).find("usb") != std::string::npos;
@@ -85,7 +91,39 @@ inline std::string selectFallbackSinkByPriority(const std::vector<SinkCandidate>
         if (aUsb != bUsb) return aUsb;
         return a.name < b.name;
     });
-    return valid.front().name;
+    return valid;
+}
+
+/**
+ * Determinisztikus tartalék-választás valódi külső nyelők közül (nem saját aqulify*, nem auto_null/dummy).
+ * Sorrend: magasabb priority.session előbb (mint a WirePlumbernél), egyenlőnél USB előnyben, végül alfabetikusan.
+ */
+inline std::string selectFallbackSinkByPriority(const std::vector<SinkCandidate>& candidates,
+                                                const std::string& sinkName = "aqulify_sink") {
+    const auto valid = sortPhysicalSinkCandidates(candidates, sinkName);
+    return valid.empty() ? std::string() : valid.front().name;
+}
+
+/**
+ * Céleszköz-választás teljes metaadatokkal (explicit cél, különben priority.session szerinti tartalék).
+ * Igazat ad vissza, ha talált érvényes külső fizikai nyelőt.
+ */
+inline bool resolveCandidateOrFallbackByPriority(const std::string& preferredTarget,
+                                                 const std::vector<SinkCandidate>& candidates,
+                                                 SinkCandidate& out,
+                                                 const std::string& sinkName = "aqulify_sink") {
+    if (!preferredTarget.empty() && !isOwnAqulifyNode(preferredTarget, sinkName) && !isDummyOrNullSink(preferredTarget)) {
+        for (const auto& c : candidates) {
+            if (c.name == preferredTarget) {
+                out = c;
+                return true;
+            }
+        }
+    }
+    const auto valid = sortPhysicalSinkCandidates(candidates, sinkName);
+    if (valid.empty()) return false;
+    out = valid.front();
+    return true;
 }
 
 /**
@@ -95,7 +133,11 @@ inline std::string selectFallbackSink(const std::unordered_set<std::string>& kno
                                       const std::string& sinkName = "aqulify_sink") {
     std::vector<SinkCandidate> candidates;
     candidates.reserve(knownExternalSinks.size());
-    for (const auto& s : knownExternalSinks) candidates.push_back({ s, 0 });
+    for (const auto& s : knownExternalSinks) {
+        SinkCandidate sc;
+        sc.name = s;
+        candidates.push_back(std::move(sc));
+    }
     return selectFallbackSinkByPriority(candidates, sinkName);
 }
 

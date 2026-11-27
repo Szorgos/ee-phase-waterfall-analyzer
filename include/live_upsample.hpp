@@ -12,6 +12,7 @@
  * /proc/asound szövegének értelmezése és a célmintavétel döntése.
  */
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <string>
@@ -190,6 +191,194 @@ inline std::vector<uint32_t> parseStream0PlaybackRates(const std::string& txt) {
     std::sort(out.begin(), out.end());
     out.erase(std::unique(out.begin(), out.end()), out.end());
     return out;
+}
+
+/**
+ * Mintavételi frekvenciák kiolvasása PipeWire lista-szövegből (pl. "[ 32000 44100 48000 ]" vagy "44100,48000").
+ * 8000..768000 Hz tartományra szűrve, rendezve és egyediesítve.
+ */
+inline std::vector<uint32_t> parseRatesList(const std::string& raw) {
+    std::vector<uint32_t> out;
+    uint32_t cur = 0;
+    bool inNum = false;
+    for (char ch : raw) {
+        if (ch >= '0' && ch <= '9') {
+            if (cur <= 1000000u) cur = cur * 10u + static_cast<uint32_t>(ch - '0');
+            inNum = true;
+        } else if (inNum) {
+            if (cur >= 8000u && cur <= 768000u) out.push_back(cur);
+            cur = 0;
+            inNum = false;
+        }
+    }
+    if (inNum && cur >= 8000u && cur <= 768000u) out.push_back(cur);
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return out;
+}
+
+/** Szöveges ALSA kártyaszám (pl. "0", "2") biztonságos értelmezése; érvénytelen esetén -1. */
+inline int parseAlsaCardNumber(const std::string& raw) {
+    if (raw.empty() || raw.size() > 4) return -1;
+    if (!std::all_of(raw.begin(), raw.end(), [](char c) { return c >= '0' && c <= '9'; })) return -1;
+    return std::atoi(raw.c_str());
+}
+
+/**
+ * ALSA kártyaszám kinyerése PipeWire útvonalból (api.alsa.path / object.path), pl.:
+ *   "front:0", "hw:1,0", "iec958:2", "alsa:pcm:0:front:0:playback" -> 0 / 1 / 2;
+ * nem numerikus azonosítónál (pl. "hw:DAC,0") -1.
+ */
+inline int parseAlsaCardFromPath(const std::string& path) {
+    if (path.empty()) return -1;
+    size_t pos = 0;
+    if (path.rfind("alsa:pcm:", 0) == 0) {
+        pos = 9;
+    } else {
+        const size_t colon = path.find(':');
+        if (colon == std::string::npos || colon + 1 >= path.size()) return -1;
+        pos = colon + 1;
+    }
+    size_t end = pos;
+    while (end < path.size() && path[end] >= '0' && path[end] <= '9') ++end;
+    if (end == pos) return -1;
+    if (end < path.size() && path[end] != ',' && path[end] != ':') return -1;
+    return parseAlsaCardNumber(path.substr(pos, end - pos));
+}
+
+/**
+ * ALSA kártyaszám kikeresése a /proc/asound/cards szövegéből kártya-azonosító (alsa.id, pl. "DAC") alapján.
+ * Sorformátum: " 0 [DAC            ]: USB-Audio - ...". Nem található esetén -1.
+ */
+inline int parseAlsaCardByIdFromCardsTxt(const std::string& cardsTxt, const std::string& cardId) {
+    if (cardsTxt.empty() || cardId.empty()) return -1;
+    size_t pos = 0;
+    while (pos < cardsTxt.size()) {
+        size_t eol = cardsTxt.find('\n', pos);
+        if (eol == std::string::npos) eol = cardsTxt.size();
+        const std::string line = trimLeft(cardsTxt.substr(pos, eol - pos));
+        pos = eol + 1;
+        const size_t lb = line.find('[');
+        const size_t rb = (lb == std::string::npos) ? std::string::npos : line.find(']', lb + 1);
+        if (lb == std::string::npos || rb == std::string::npos) continue;
+        std::string id = trimLeft(line.substr(lb + 1, rb - lb - 1));
+        while (!id.empty() && (id.back() == ' ' || id.back() == '\t' || id.back() == '\r')) id.pop_back();
+        if (id != cardId) continue;
+        std::string num = line.substr(0, lb);
+        while (!num.empty() && (num.back() == ' ' || num.back() == '\t')) num.pop_back();
+        const int card = parseAlsaCardNumber(num);
+        if (card >= 0) return card;
+    }
+    return -1;
+}
+
+/** ALSA kimeneti csomópont neve-e (pl. "alsa_output.usb-..."). */
+inline bool isAlsaSinkName(const std::string& name) {
+    return name.rfind("alsa_output.", 0) == 0;
+}
+
+/**
+ * PipeWire SPA_PARAM_EnumFormat SPA_CHOICE_Range tartományának szűrése és szabványos mintavételekre bontása.
+ * Az audioadapter szoftveres resamplere nyitott (pl. 1..2147483647) tartományt hirdet — ezeket kiszűrjük (üres vektor).
+ * Csak valós hardveres határok (8000 <= lo <= hi <= 768000) kerülnek elfogadásra.
+ */
+inline std::vector<uint32_t> expandHardwareRateRange(int64_t lo, int64_t hi) {
+    if (lo < 8000 || hi > 768000 || lo > hi) return {};
+    std::vector<uint32_t> out;
+    if (lo == hi) {
+        out.push_back(static_cast<uint32_t>(lo));
+        return out;
+    }
+    for (uint32_t r : standardRates()) {
+        if (static_cast<int64_t>(r) >= lo && static_cast<int64_t>(r) <= hi) out.push_back(r);
+    }
+    if (out.empty()) {
+        out.push_back(static_cast<uint32_t>(lo));
+        out.push_back(static_cast<uint32_t>(hi));
+    }
+    return out;
+}
+
+/**
+ * A DAC és a PipeWire közös támogatott mintavételi rátáinak feloldása:
+ *  - nodeAllowedRates: a cél PipeWire Audio/Sink csomópont audio.allowed-rates listája (üres, ha nincs korlátozás)
+ *  - stream0Rates: az USB DAC /proc/asound/cardN/stream0 lejátszási rátái (üres, ha nem USB / nem olvasható)
+ *  - pwClockAllowedRates: a PipeWire globális clock.allowed-rates listája (üres, ha nincs beállítva)
+ *  - enumFormatRates: nem-USB (pl. I2S HAT, HDA, fix rátájú) csomópont SPA_PARAM_EnumFormat szűrt rátái
+ * Üres vektort ad vissza, ha egyik forrásból sem ismert korlát (ilyenkor a hívó a szokásos alaplistára lép).
+ */
+inline std::vector<uint32_t> resolveDacRates(const std::vector<uint32_t>& nodeAllowedRates,
+                                             const std::vector<uint32_t>& stream0Rates,
+                                             const std::vector<uint32_t>& pwClockAllowedRates,
+                                             const std::vector<uint32_t>& enumFormatRates = {}) {
+    auto intersect = [](const std::vector<uint32_t>& a, const std::vector<uint32_t>& b) {
+        std::vector<uint32_t> c;
+        for (uint32_t r : a) {
+            if (std::find(b.begin(), b.end(), r) != b.end() &&
+                std::find(c.begin(), c.end(), r) == c.end()) {
+                c.push_back(r);
+            }
+        }
+        std::sort(c.begin(), c.end());
+        return c;
+    };
+
+    // Hardveres forrás: USB-nél az egzakt stream0, nem-USB-nél a pw_node SPA_PARAM_EnumFormat
+    const std::vector<uint32_t>& hwSource = !stream0Rates.empty() ? stream0Rates : enumFormatRates;
+    std::vector<uint32_t> hw;
+    if (!nodeAllowedRates.empty() && !hwSource.empty()) {
+        hw = intersect(hwSource, nodeAllowedRates);
+        if (hw.empty()) hw = nodeAllowedRates;
+    } else if (!nodeAllowedRates.empty()) {
+        hw = nodeAllowedRates;
+    } else if (!hwSource.empty()) {
+        hw = hwSource;
+    }
+
+    if (!hw.empty()) {
+        if (!pwClockAllowedRates.empty()) {
+            const auto common = intersect(hw, pwClockAllowedRates);
+            if (!common.empty()) return common;
+        }
+        return hw;
+    }
+    return pwClockAllowedRates;
+}
+
+/**
+ * A `LC_ALL=C wpctl get-volume <id>` kimenetének értelmezése (pl. "Volume: 0.75" vagy "Volume: 0.50 [MUTED]").
+ * Sikeres értelmezésnél igazat ad vissza, és kitölti level (0.0..1.5+) és muted értékét.
+ */
+inline bool parseWpctlVolume(const std::string& txt, double& level, bool& muted) {
+    const size_t p = txt.find("Volume:");
+    if (p == std::string::npos) return false;
+    const char* start = txt.c_str() + p + 7;
+    char* end = nullptr;
+    const double v = std::strtod(start, &end);
+    if (end == start || !std::isfinite(v) || v < 0.0 || v > 10.0) return false;
+    level = v;
+    muted = txt.find("[MUTED]") != std::string::npos;
+    return true;
+}
+
+/**
+ * Egy kulcs kiolvasása a `wpctl inspect <id|@DEFAULT_AUDIO_SINK@>` kimenetéből.
+ * A wpctl a sorok elejére opcionálisan "*" jelölőt tesz (pl. "  * node.name = \"aqulify_sink\"").
+ */
+inline std::string parseWpctlInspectProp(const std::string& txt, const char* key) {
+    if (!key || !*key) return {};
+    size_t pos = 0;
+    while (pos < txt.size()) {
+        size_t eol = txt.find('\n', pos);
+        if (eol == std::string::npos) eol = txt.size();
+        std::string line = trimLeft(txt.substr(pos, eol - pos));
+        pos = eol + 1;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!line.empty() && line[0] == '*') line = trimLeft(line.substr(1));
+        std::string val;
+        if (propValue(line, key, val)) return val;
+    }
+    return {};
 }
 
 /** A döntés eredménye: a gráf kért mintavétele (0: nincs kényszer) és az ok (a felületnek). */

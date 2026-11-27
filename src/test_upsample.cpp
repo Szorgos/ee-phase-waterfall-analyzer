@@ -727,6 +727,92 @@ static void testK13LiveUpsample() {
     o.upsampleRule = audioopt::UpsampleRule::Double;
     d = liveups::decide(352800, o, rCont, fallback, false);
     CHECK(d.forceRate == 0 && d.reason == "source_rate", "K13: 192 kHz fölötti forrásnál nincs átalakítás");
+
+    // K13b (#56): pactl nélküli PipeWire DAC-ráta feloldás, ALSA kártya-azonosítás, wpctl értelmezés és 48 kHz-es DAC
+    std::printf("\n[K13b] Pactl nélküli DAC-ráta feloldás, ALSA kártyaszám, wpctl és #56 regresszió\n");
+    CHECK((liveups::parseRatesList("[ 48000 32000 44100 48000 999 ]") == std::vector<uint32_t>{ 32000, 44100, 48000 }),
+          "K13b: parseRatesList szűr, rendez és egyediesít");
+    CHECK(liveups::parseAlsaCardNumber("0") == 0 && liveups::parseAlsaCardNumber("12") == 12 &&
+              liveups::parseAlsaCardNumber("") == -1 && liveups::parseAlsaCardNumber("DAC") == -1 &&
+              liveups::parseAlsaCardNumber("12345") == -1,
+          "K13b: parseAlsaCardNumber érvényes és hibás bemenetek");
+    CHECK(liveups::parseAlsaCardFromPath("front:0") == 0 &&
+              liveups::parseAlsaCardFromPath("hw:1,0") == 1 &&
+              liveups::parseAlsaCardFromPath("alsa:pcm:2:front:2:playback") == 2 &&
+              liveups::parseAlsaCardFromPath("hw:DAC,0") == -1 &&
+              liveups::parseAlsaCardFromPath("") == -1,
+          "K13b: parseAlsaCardFromPath PipeWire api.alsa.path / object.path formátumokra");
+    const std::string cards56 =
+        " 0 [DAC            ]: USB-Audio - USB AUDIO    DAC\n"
+        "                      BurrBrown from Texas Instruments USB AUDIO    DAC at usb-0000:01:00.0-1.4, full\n"
+        " 1 [vc4hdmi0       ]: vc4-hdmi - vc4-hdmi-0\n";
+    CHECK(liveups::parseAlsaCardByIdFromCardsTxt(cards56, "DAC") == 0 &&
+              liveups::parseAlsaCardByIdFromCardsTxt(cards56, "vc4hdmi0") == 1 &&
+              liveups::parseAlsaCardByIdFromCardsTxt(cards56, "missing") == -1,
+          "K13b: parseAlsaCardByIdFromCardsTxt (#56 /proc/asound/cards)");
+    CHECK(liveups::isAlsaSinkName("alsa_output.usb-BurrBrown-00.analog-stereo") &&
+              !liveups::isAlsaSinkName("dac_a") && !liveups::isAlsaSinkName("bluez_output.AA_BB"),
+          "K13b: isAlsaSinkName");
+
+    double wpLvl = -1.0;
+    bool wpMuted = true;
+    CHECK(liveups::parseWpctlVolume("Volume: 0.75\n", wpLvl, wpMuted) &&
+              std::abs(wpLvl - 0.75) < 1e-6 && !wpMuted,
+          "K13b: parseWpctlVolume nem némított (0.75)");
+    CHECK(liveups::parseWpctlVolume("Volume: 0.40 [MUTED]\n", wpLvl, wpMuted) &&
+              std::abs(wpLvl - 0.40) < 1e-6 && wpMuted,
+          "K13b: parseWpctlVolume némított (0.40 [MUTED])");
+    CHECK(!liveups::parseWpctlVolume("Error: not found\n", wpLvl, wpMuted),
+          "K13b: parseWpctlVolume hibás kimenetet elutasít");
+    const std::string wpInspect =
+        "id 57, type PipeWire:Interface:Node\n"
+        "  * alsa.card = \"0\"\n"
+        "  * node.name = \"alsa_output.usb-BurrBrown_from_Texas_Instruments_USB_AUDIO_DAC-00.analog-stereo\"\n"
+        "    node.description = \"USB AUDIO DAC Analog Stereo\"\n";
+    CHECK(liveups::parseWpctlInspectProp(wpInspect, "node.name") ==
+              "alsa_output.usb-BurrBrown_from_Texas_Instruments_USB_AUDIO_DAC-00.analog-stereo" &&
+              liveups::parseWpctlInspectProp(wpInspect, "alsa.card") == "0" &&
+              liveups::parseWpctlInspectProp(wpInspect, "node.description") == "USB AUDIO DAC Analog Stereo" &&
+              liveups::parseWpctlInspectProp(wpInspect, "missing").empty(),
+          "K13b: parseWpctlInspectProp csillagos és sima sorokra");
+
+    // #56 pontos forgatókönyv: BurrBrown USB DAC (32/44.1/48 kHz) + follow clock.allowed-rates (44.1..768 kHz)
+    const std::vector<uint32_t> followClock = { 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000 };
+    const auto resolved56 = liveups::resolveDacRates({}, rFixed, followClock);
+    CHECK((resolved56 == std::vector<uint32_t>{ 44100, 48000 }),
+          "K13b (#56): BurrBrown stream0 ∩ follow clock.allowed-rates = {44100, 48000}");
+    std::string reason56;
+    const uint32_t tgt56 = UpsampleEngine::selectTargetRate(
+        44100, audioopt::UpsampleRule::Double, resolved56, {}, false, false, &reason56, 0, false);
+    CHECK(tgt56 == 44100 && reason56 == "dac_unsupported",
+          "K13b (#56): 44,1 kHz forrás ×2 a 48 kHz-es DAC-on NEM kér 88,2 kHz-et (target=%u, ok=%s)", tgt56, reason56.c_str());
+    // Rendszer mód (clock=[48000]) metszete a BurrBrown DAC-kal -> csak 48000 (44.1 kHz-nél ne legyen hamis filter_only)
+    CHECK((liveups::resolveDacRates({}, rFixed, { 48000 }) == std::vector<uint32_t>{ 48000 }),
+          "K13b: system mód [48000] ∩ BurrBrown = {48000}");
+    // PipeWire node audio.allowed-rates=[48000] (pl. dac_48k_only) felülírja a bő follow clock.allowed-rates-et
+    CHECK((liveups::resolveDacRates({ 48000 }, {}, followClock) == std::vector<uint32_t>{ 48000 }),
+          "K13b: node audio.allowed-rates=[48000] felülírja a tág follow clock.allowed-rates listát");
+    // Ha se node, se stream0 nem ismert (pl. null teszt DAC), marad a PipeWire clock.allowed-rates
+    CHECK((liveups::resolveDacRates({}, {}, followClock) == followClock),
+          "K13b: ismeretlen DAC-nál a clock.allowed-rates marad (K12a kompatibilitás)");
+
+    // Nem-USB (I2S HAT / HDA / fix rátájú) SPA_PARAM_EnumFormat szűrés és feloldás
+    CHECK(liveups::expandHardwareRateRange(1, 2147483647).empty(),
+          "K13b: nyitott audioadapter tartomány (1..INT_MAX) kiszűrve");
+    CHECK(liveups::expandHardwareRateRange(1, 384000).empty(),
+          "K13b: 8000 Hz alatti alsó korlátú tartomány kiszűrve");
+    CHECK((liveups::expandHardwareRateRange(48000, 48000) == std::vector<uint32_t>{ 48000 }),
+          "K13b: fix 48 kHz tartomány -> {48000}");
+    CHECK((liveups::expandHardwareRateRange(44100, 96000) == std::vector<uint32_t>{ 44100, 48000, 88200, 96000 }),
+          "K13b: valós hardveres tartomány (44,1..96 kHz) szabványos rátákra bontva");
+    CHECK((liveups::resolveDacRates({}, {}, followClock, { 48000 }) == std::vector<uint32_t>{ 48000 }),
+          "K13b: nem-USB fix 48 kHz EnumFormat korlátozza a tág follow listát");
+    CHECK((liveups::resolveDacRates({}, {}, followClock, { 44100, 48000, 88200, 96000, 192000 }) ==
+           std::vector<uint32_t>{ 44100, 48000, 88200, 96000, 192000 }),
+          "K13b: I2S HAT 192 kHz-es EnumFormat 192 kHz-ig enged, 352,8/384 kHz-et nem");
+    // USB stream0 elsőbbsége EnumFormat fölött (pl. ha az adapter 48 kHz-et jelzett, de stream0 32/44.1/48)
+    CHECK((liveups::resolveDacRates({}, rFixed, followClock, { 48000 }) == std::vector<uint32_t>{ 44100, 48000 }),
+          "K13b: USB stream0 elsőbbséget élvez a nem-USB EnumFormat fölött");
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -878,6 +964,27 @@ static void testFilterOnlyEngine() {
         CHECK(!plain.isFilterOnly(), "SZ: a rendes felmintavételezés egy lépésben marad");
         e.clear();
         CHECK(e.delayFrames() >= 0.0, "SZ: clear() után a késleltetés érvényes (%.1f)", e.delayFrames());
+    }
+
+    // #56 pontos egyéni szűrőparamétereivel (stopband 1.088154 -> 1.0646, precision 32, phase 18.56, headroom -3 dB)
+    {
+        audioopt::AudioOptions opts56;
+        opts56.upsampleRule = audioopt::UpsampleRule::Double;
+        opts56.upsampleEngine = 0;
+        opts56.upsamplePassbandEnd = 0.935408;
+        opts56.upsampleStopbandBegin = 1.088154;
+        opts56.upsamplePrecision = 32;
+        opts56.upsamplePhase = 18.556479;
+        opts56.upsampleHeadroomDb = -3.0f;
+        UpsampleEngine eng56;
+        CHECK(eng56.initFilterOnly(sr, 2, opts56) && eng56.isActive() && eng56.isFilterOnly(),
+              "SZ (#56): initFilterOnly sikeres a #56 pontos egyéni szűrőparamétereivel");
+        const std::vector<float> y56 = runEngineAll(eng56, x, 1.0);
+        const double g56 = std::pow(10.0, -3.0 / 20.0);
+        const double d56 = 20.0 * std::log10(toneAmp(y56, 0, sr, sr, 1000.0, sr) / (0.5 * g56));
+        CHECK(y56.size() / 2 + 2 >= n && y56.size() / 2 <= n + 2 && std::abs(d56) <= 0.15,
+              "SZ (#56): filter_only kimenet nem néma (%zu keret, 1 kHz eltérés a -3 dB fejtértől %.4f dB)",
+              y56.size() / 2, d56);
     }
 }
 

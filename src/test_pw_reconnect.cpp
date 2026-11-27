@@ -101,16 +101,73 @@ int main() {
     check(imm.schedule && imm.delayMs == kNewSinkDelayMs && st4.pending(),
           "requestImmediate() beállítja a pending állapotot és gyors időzítőt kér");
 
+    auto makeCand = [](const char* name, int prio) {
+        SinkCandidate sc;
+        sc.name = name;
+        sc.priority = prio;
+        return sc;
+    };
     const std::vector<SinkCandidate> prioCands = {
-        { "aq_test_speaker", 500 },
-        { "dac_b", 1000 },
-        { "dac_a", 2000 },
-        { "auto_null", 9999 }
+        makeCand("aq_test_speaker", 500),
+        makeCand("dac_b", 1000),
+        makeCand("dac_a", 2000),
+        makeCand("auto_null", 9999)
     };
     check(resolveTargetOrFallbackByPriority("", prioCands) == "dac_a",
           "priority.session sorrend: dac_a (2000) megelőzi az alfabetikusan előrébb álló aq_test_speaker-t (500) és az auto_null-t");
     check(resolveTargetOrFallbackByPriority("dac_b", prioCands) == "dac_b",
           "explicit választott kimenet (dac_b) megelőzi a magasabb prioritású tartalékot");
+
+    std::printf("[4] Natív regiszter metaadatok és jelölt-feloldás (#56: pactl nélküli PipeWire)\n");
+    {
+        SinkCandidate usbDac;
+        usbDac.name = "alsa_output.usb-BurrBrown_from_Texas_Instruments_USB_AUDIO_DAC-00.analog-stereo";
+        usbDac.priority = 1009;
+        usbDac.nodeId = 57;
+        usbDac.description = "USB AUDIO DAC Analog Stereo";
+        usbDac.alsaCard = 0;
+        usbDac.alsaId = "DAC";
+        usbDac.allowedRates = { 32000, 44100, 48000 };
+
+        SinkCandidate spk;
+        spk.name = "alsa_output.platform-bcm2835_audio.stereo-fallback";
+        spk.priority = 1000;
+        spk.nodeId = 48;
+        spk.description = "Built-in Audio";
+        spk.alsaCard = 1;
+
+        SinkCandidate dummy;
+        dummy.name = "auto_null";
+        dummy.priority = 9999;
+        dummy.nodeId = 40;
+
+        SinkCandidate own;
+        own.name = "aqulify_sink";
+        own.priority = 9999;
+        own.nodeId = 61;
+
+        const std::vector<SinkCandidate> reg = { dummy, own, spk, usbDac };
+        const auto sorted = sortPhysicalSinkCandidates(reg);
+        check(sorted.size() == 2 && sorted[0].name == usbDac.name && sorted[1].name == spk.name,
+              "sortPhysicalSinkCandidates: kiszűri auto_null-t és aqulify_sink-et, priority.session szerint rendez");
+
+        SinkCandidate resolved;
+        check(resolveCandidateOrFallbackByPriority("", reg, resolved) &&
+                  resolved.name == usbDac.name && resolved.nodeId == 57 &&
+                  resolved.alsaCard == 0 && resolved.alsaId == "DAC" &&
+                  resolved.description == "USB AUDIO DAC Analog Stereo" &&
+                  resolved.allowedRates == std::vector<uint32_t>{ 32000, 44100, 48000 },
+              "üres cél esetén a legjobb fizikai sink teljes metaadatait (alsaCard, nodeId, allowedRates) adja vissza");
+
+        SinkCandidate explicitRes;
+        check(resolveCandidateOrFallbackByPriority(spk.name, reg, explicitRes) &&
+                  explicitRes.name == spk.name && explicitRes.nodeId == 48 && explicitRes.alsaCard == 1,
+              "explicit választott kimenetnél az adott sink metaadatai maradnak meg");
+
+        SinkCandidate emptyRes;
+        check(!resolveCandidateOrFallbackByPriority("", { dummy, own }, emptyRes),
+              "csak dummy és saját csomópontnál false");
+    }
 
     std::printf("\n%s (%d hiba)\n", fail ? "SIKERTELEN" : "MINDEN TESZT SIKERES", fail);
     return fail ? 1 : 0;

@@ -138,6 +138,13 @@ std::vector<SinkInfo> listPhysicalSinks() {
             continue; // a saját virtuális nyelőnk és a dummy/auto_null nem valódi fizikai cél
         v.push_back(std::move(s));
     }
+    // Ha a pactl / pipewire-pulse nem elérhető (pl. minimál headless Raspberry Pi), a natív PipeWire regiszterből soroljuk fel
+    if (v.empty() && g_node) {
+        for (const auto& sc : g_node->knownPhysicalSinks()) {
+            if (!isSafeSinkName(sc.name)) continue;
+            v.push_back(SinkInfo{ std::to_string(sc.nodeId), sc.name });
+        }
+    }
     return v;
 }
 
@@ -213,17 +220,28 @@ std::string sinkKind(const std::string& name) {
 
 std::string getOutputSinksJson(std::string* outCurrentSink = nullptr) {
     std::string siId, curSinkId;
-    findOwnSinkInput(siId, curSinkId);
+    const bool hasPactlInput = findOwnSinkInput(siId, curSinkId);
+    std::string fallbackActiveName;
+    if (!hasPactlInput && g_node) {
+        fallbackActiveName = g_node->outputTarget();
+        if (fallbackActiveName.empty()) fallbackActiveName = g_node->bestPhysicalSink(linux_store::loadOutputSink());
+    }
     std::string currentSinkName;
     std::string json = "[";
     bool first = true;
     const auto descs = sinkDescriptions();
+    const auto nativeSinks = g_node ? g_node->knownPhysicalSinks() : std::vector<pw_reconnect::SinkCandidate>{};
     for (const auto& s : listPhysicalSinks()) {
-        const bool active = !curSinkId.empty() && curSinkId == s.id;
+        const bool active = hasPactlInput ? (!curSinkId.empty() && curSinkId == s.id)
+                                          : (!fallbackActiveName.empty() && fallbackActiveName == s.name);
         if (active) currentSinkName = s.name;
         std::string desc;
         for (const auto& d : descs)
             if (d.first == s.name) { desc = d.second; break; }
+        if (desc.empty()) {
+            for (const auto& ns : nativeSinks)
+                if (ns.name == s.name && !ns.description.empty()) { desc = ns.description; break; }
+        }
         if (!first) json += ",";
         first = false;
         // kind + desc: a felület ezekből építi a feliratot a választott nyelven; a label nyelvfüggetlen tartalék
@@ -273,8 +291,19 @@ bool applyOutputSink(const std::string& targetSink, bool remember, bool pin = fa
 
     std::string sinkInputId, curSinkId;
     if (!findOwnSinkInput(sinkInputId, curSinkId)) {
-        // A lejátszó stream épp hiba / újracsatlakozás alatt állhat: a célt akkor is beállítjuk és elindítjuk az újrakötést
-        if (g_node) g_node->setPreferredOutput(resolved);
+        // Nincs pactl / pipewire-pulse, vagy a lejátszó stream épp újracsatlakozik: natív PipeWire úton rögzítjük
+        if (g_node) {
+            if (g_node->outputTarget() != resolved) {
+                g_node->switchPlaybackTarget(resolved);
+                const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(400);
+                while (std::chrono::steady_clock::now() < deadline && g_node->outputTarget() != resolved) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(25));
+                }
+                std::cout << "[PipeWire] Kimeneti eszköz: " << resolved << "\n";
+            } else {
+                g_node->setPreferredOutput(resolved);
+            }
+        }
         if (remember) linux_store::saveOutputSink(resolved);
         return true;
     }
@@ -294,11 +323,32 @@ bool applyOutputSink(const std::string& targetSink, bool remember, bool pin = fa
         return true;
     }
     const std::string cmd = "LC_ALL=C pactl move-sink-input " + sinkInputId + " '" + resolved + "' >/dev/null 2>&1";
-    if (std::system(cmd.c_str()) != 0) return false;
-    std::cout << "[PipeWire] Kimeneti eszköz: " << resolved << " (sink-input #" << sinkInputId << ")\n";
-    if (g_node) {
-        g_node->noteCurrentOutputTarget(resolved);
-        g_node->setPreferredOutput(resolved);
+    const bool movedByPactl = (std::system(cmd.c_str()) == 0);
+    // Ha a playback stream PW_KEY_TARGET_OBJECT tulajdonsággal lett létrehozva (pl. szétválasztott módból visszatérés
+    // vagy újracsatlakozás után), a WirePlumber a régi célon tarthatja a pactl move-sink-input ellenére is: ellenőrizzük,
+    // és ha nem mozdult át, a fő hurokban közvetlenül az új PW_KEY_TARGET_OBJECT-tel nyitjuk újra.
+    bool actuallyMoved = false;
+    if (movedByPactl) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(60));
+        std::string siAfter, curAfter;
+        actuallyMoved = findOwnSinkInput(siAfter, curAfter) && curAfter == resolvedId;
+    }
+    if (!actuallyMoved) {
+        if (!g_node) return false;
+        g_node->switchPlaybackTarget(resolved);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(400);
+        while (std::chrono::steady_clock::now() < deadline) {
+            std::string siAfter, curAfter;
+            if (g_node->outputTarget() == resolved && (!findOwnSinkInput(siAfter, curAfter) || curAfter == resolvedId)) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        }
+        std::cout << "[PipeWire] Kimeneti eszköz (újracsatlakoztatva): " << resolved << "\n";
+    } else {
+        std::cout << "[PipeWire] Kimeneti eszköz: " << resolved << " (sink-input #" << sinkInputId << ")\n";
+        if (g_node) {
+            g_node->noteCurrentOutputTarget(resolved);
+            g_node->setPreferredOutput(resolved);
+        }
     }
     if (remember) linux_store::saveOutputSink(resolved);
     return true;
@@ -355,25 +405,54 @@ bool sinkVolume(const std::string& sink, double& level, bool& muted) {
     if (sink.empty() || !isSafeSinkName(sink)) return false;
     const std::string v = runCapture("pactl get-sink-volume '" + sink + "'");   // "Volume: front-left: 65536 / 100% / ..."
     const size_t pct = v.find('%');
-    if (pct == std::string::npos) return false;
-    size_t b = pct;
-    while (b > 0 && std::isdigit(static_cast<unsigned char>(v[b - 1]))) --b;
-    if (b == pct) return false;
-    level = std::atoi(v.substr(b, pct - b).c_str()) / 100.0;
-    muted = runCapture("pactl get-sink-mute '" + sink + "'").find("yes") != std::string::npos;
-    return true;
+    if (pct != std::string::npos) {
+        size_t b = pct;
+        while (b > 0 && std::isdigit(static_cast<unsigned char>(v[b - 1]))) --b;
+        if (b < pct) {
+            level = std::atoi(v.substr(b, pct - b).c_str()) / 100.0;
+            muted = runCapture("pactl get-sink-mute '" + sink + "'").find("yes") != std::string::npos;
+            return true;
+        }
+    }
+    // Tartalék pactl nélkül (WirePlumber wpctl): a csomópont PipeWire node ID-ja alapján
+    if (g_node) {
+        pw_reconnect::SinkCandidate sc;
+        if (g_node->resolvePhysicalSink(sink, sc) && sc.name == sink && sc.nodeId > 0) {
+            const std::string w = runCapture("wpctl get-volume " + std::to_string(sc.nodeId));
+            if (liveups::parseWpctlVolume(w, level, muted)) return true;
+        }
+    }
+    return false;
 }
 
 void setSinkVolume(const std::string& sink, double level, int mute) {
     if (sink.empty() || !isSafeSinkName(sink)) return;
+    uint32_t wpNodeId = 0;
+    auto resolveNodeId = [&]() -> uint32_t {
+        if (wpNodeId == 0 && g_node) {
+            pw_reconnect::SinkCandidate sc;
+            if (g_node->resolvePhysicalSink(sink, sc) && sc.name == sink) wpNodeId = sc.nodeId;
+        }
+        return wpNodeId;
+    };
     if (level >= 0.0) {
         const int pct = static_cast<int>(std::lround(std::clamp(level, 0.0, 1.0) * 100.0));
         const std::string cmd = "LC_ALL=C pactl set-sink-volume '" + sink + "' " + std::to_string(pct) + "% >/dev/null 2>&1";
-        if (std::system(cmd.c_str()) != 0) std::cerr << "[PipeWire] A hangerő nem állítható: " << sink << "\n";
+        if (std::system(cmd.c_str()) != 0) {
+            const uint32_t id = resolveNodeId();
+            const std::string wcmd = id > 0 ? ("LC_ALL=C wpctl set-volume " + std::to_string(id) + " " + std::to_string(pct) + "% >/dev/null 2>&1") : std::string();
+            if (wcmd.empty() || std::system(wcmd.c_str()) != 0)
+                std::cerr << "[PipeWire] A hangerő nem állítható: " << sink << "\n";
+        }
     }
     if (mute >= 0) {
         const std::string cmd = "LC_ALL=C pactl set-sink-mute '" + sink + "' " + (mute ? "1" : "0") + " >/dev/null 2>&1";
-        if (std::system(cmd.c_str()) != 0) std::cerr << "[PipeWire] A némítás nem állítható: " << sink << "\n";
+        if (std::system(cmd.c_str()) != 0) {
+            const uint32_t id = resolveNodeId();
+            const std::string wcmd = id > 0 ? ("LC_ALL=C wpctl set-mute " + std::to_string(id) + " " + (mute ? "1" : "0") + " >/dev/null 2>&1") : std::string();
+            if (wcmd.empty() || std::system(wcmd.c_str()) != 0)
+                std::cerr << "[PipeWire] A némítás nem állítható: " << sink << "\n";
+        }
     }
 }
 
@@ -603,6 +682,33 @@ int main(int argc, char* argv[]) {
             }
             std::string cur = runCapture("pactl get-default-sink");
             while (!cur.empty() && (cur.back() == '\n' || cur.back() == '\r' || cur.back() == ' ')) cur.pop_back();
+            bool viaWpctl = false;
+            if (cur.empty()) {
+                cur = liveups::parseWpctlInspectProp(runCapture("wpctl inspect @DEFAULT_AUDIO_SINK@"), "node.name");
+                viaWpctl = !cur.empty();
+            }
+            // Ha se pactl, se wpctl nem érhető el, a natív PipeWire regiszterből akkor is rögzítjük a fizikai célt
+            if (cur.empty()) {
+                startup = false;
+                if (!node.externalExclusiveActive_.load(std::memory_order_acquire)) {
+                    const std::string curTarget = node.outputTarget();
+                    const int st = node.playbackState.load(std::memory_order_relaxed);
+                    const bool streamBroken = (st == PW_STREAM_STATE_ERROR || st == PW_STREAM_STATE_UNCONNECTED);
+                    const bool unpinned = curTarget.empty() || pw_reconnect::isDummyOrNullSink(curTarget);
+                    if (streamBroken || unpinned) {
+                        const std::string best = node.bestPhysicalSink(linux_store::loadOutputSink());
+                        if (!best.empty()) {
+                            if (streamBroken) {
+                                node.setPreferredOutput(best);
+                                node.requestReconnectIfNeeded();
+                            } else {
+                                node.switchPlaybackTarget(best);
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
             if (cur == "aqulify_sink") {
                 startup = false;
                 warned = false;
@@ -613,9 +719,14 @@ int main(int argc, char* argv[]) {
                     const std::string curTarget = node.outputTarget();
                     const auto phys = listPhysicalSinks();
                     std::string siId, curSinkId, actualPhysName;
-                    if (findOwnSinkInput(siId, curSinkId)) {
+                    const bool hasPactlInput = findOwnSinkInput(siId, curSinkId);
+                    if (hasPactlInput) {
                         for (const auto& s : phys)
                             if (s.id == curSinkId) { actualPhysName = s.name; break; }
+                    } else if (!curTarget.empty() && !pw_reconnect::isOwnAqulifyNode(curTarget) &&
+                               !pw_reconnect::isDummyOrNullSink(curTarget)) {
+                        for (const auto& s : phys)
+                            if (s.name == curTarget) { actualPhysName = s.name; break; }
                     }
                     const bool streamBroken = (st == PW_STREAM_STATE_ERROR || st == PW_STREAM_STATE_UNCONNECTED);
                     const bool onDummyOrUnbound = !streamBroken && actualPhysName.empty() && !phys.empty();
@@ -646,7 +757,11 @@ int main(int argc, char* argv[]) {
                 }
                 continue;
             }
-            if (runCapture("pactl list short sinks").find("\taqulify_sink\t") == std::string::npos) continue;   // még nem látszik
+            if (viaWpctl) {
+                if (node.ownSinkNodeId() == 0) continue;   // még nem jelent meg a regiszterben
+            } else {
+                if (runCapture("pactl list short sinks").find("\taqulify_sink\t") == std::string::npos) continue;   // még nem látszik
+            }
             std::vector<std::string> others;
             for (const auto& s : listPhysicalSinks()) others.push_back(s.name);
             const defsink::Action a = defsink::decide(cur, others, startup, hasStoredChoice);
@@ -655,11 +770,21 @@ int main(int argc, char* argv[]) {
             const std::string pinTarget = !a.dspTarget.empty() ? a.dspTarget : a.setDefault ? linux_store::loadOutputSink() : "";
             if (!pinTarget.empty()) node.setPreferredOutput(pinTarget);
             if (a.setDefault) {
-                if (std::system("LC_ALL=C pactl set-default-sink aqulify_sink >/dev/null 2>&1") == 0) {
+                bool defOk = false;
+                if (!viaWpctl) {
+                    defOk = (std::system("LC_ALL=C pactl set-default-sink aqulify_sink >/dev/null 2>&1") == 0);
+                }
+                if (!defOk) {
+                    const uint32_t ownId = node.ownSinkNodeId();
+                    if (ownId > 0) {
+                        defOk = (std::system(("LC_ALL=C wpctl set-default " + std::to_string(ownId) + " >/dev/null 2>&1").c_str()) == 0);
+                    }
+                }
+                if (defOk) {
                     std::cout << "[PipeWire] Alapértelmezett kimenet: Aqulify (előtte: " << cur << ")\n";
                     warned = false;
                 } else if (!warned) {
-                    std::cerr << "[PipeWire] Az Aqulify nem állítható be alapértelmezett kimenetnek (pactl set-default-sink).\n";
+                    std::cerr << "[PipeWire] Az Aqulify nem állítható be alapértelmezett kimenetnek (pactl / wpctl).\n";
                     warned = true;
                 }
             }
@@ -1373,58 +1498,92 @@ int main(int argc, char* argv[]) {
     static std::atomic<uint64_t> s_playerTicket{0};
     static std::atomic<bool> s_engineQuit{false};
     std::atomic<bool>& s_playerOpen = playerStreamOpenFlag;
-    auto parseAllowedRates = [](const std::string& raw) -> std::vector<uint32_t> {
-        std::vector<uint32_t> out;
-        uint32_t cur = 0;
-        bool inNum = false;
-        for (char ch : raw) {
-            if (ch >= '0' && ch <= '9') {
-                cur = cur * 10u + static_cast<uint32_t>(ch - '0');
-                inNum = true;
-            } else if (inNum) {
-                if (cur >= 8000 && cur <= 768000) out.push_back(cur);
-                cur = 0;
-                inNum = false;
-            }
-        }
-        if (inNum && cur >= 8000 && cur <= 768000) out.push_back(cur);
-        return out;
-    };
-    auto detectCurrentDacRates = [&]() -> std::vector<uint32_t> {
-        std::string siId, outSinkId;
-        findOwnSinkInput(siId, outSinkId);
-        if (outSinkId.empty()) {
-            const std::string t = node.outputTarget();
-            if (!t.empty()) outSinkId = liveups::sinkIdByName(runCapture("pactl list short sinks"), t);
-        }
-        if (outSinkId.empty()) return {};
-        const int card = liveups::alsaCardOfSink(runCapture("pactl list sinks"), outSinkId);
+    auto readCardStream0Rates = [](int card) -> std::vector<uint32_t> {
         if (card < 0) return {};
         std::ifstream f("/proc/asound/card" + std::to_string(card) + "/stream0");
         if (!f) return {};
         const std::string txt((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
         return liveups::parseStream0PlaybackRates(txt);
     };
-    player::pwAllowedRatesHook() = [&, parseAllowedRates, detectCurrentDacRates]() -> std::vector<uint32_t> {
+    auto readAlsaCardsTxt = []() -> std::string {
+        std::ifstream f("/proc/asound/cards");
+        if (!f) return {};
+        return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    };
+    // Végső tartalék: ha csak egyetlen USB hangkártya van a gépen (/proc/asound/card*/stream0), annak rátáit olvassuk ki
+    auto readSingleUsbStream0Rates = [&]() -> std::vector<uint32_t> {
+        DIR* d = opendir("/proc/asound");
+        if (!d) return {};
+        std::vector<uint32_t> found;
+        int usbCards = 0;
+        while (const dirent* e = readdir(d)) {
+            const std::string n = e->d_name;
+            if (n.rfind("card", 0) != 0 || n.size() <= 4) continue;
+            const int card = liveups::parseAlsaCardNumber(n.substr(4));
+            if (card < 0) continue;
+            auto rates = readCardStream0Rates(card);
+            if (!rates.empty()) {
+                if (++usbCards == 1) found = std::move(rates);
+                else found.clear();   // egynél több USB kártya: nem találgatunk
+            }
+        }
+        closedir(d);
+        return usbCards == 1 ? found : std::vector<uint32_t>{};
+    };
+    // Az aktív fizikai DAC valós támogatott rátáinak felderítése (pactl nélkül is: natív PipeWire regiszter, EnumFormat és stream0)
+    auto detectTargetDacCapabilities = [&](const std::string& explicitSinkId,
+                                           std::vector<uint32_t>& nodeAllowedOut,
+                                           std::vector<uint32_t>& stream0Out,
+                                           std::vector<uint32_t>& enumFormatOut) {
+        nodeAllowedOut.clear();
+        stream0Out.clear();
+        enumFormatOut.clear();
+        int card = -1;
+        std::string outSinkId = explicitSinkId;
+        std::string sinkName;
+        if (outSinkId.empty()) {
+            std::string siId;
+            findOwnSinkInput(siId, outSinkId);
+        }
+        if (!outSinkId.empty()) {
+            card = liveups::alsaCardOfSink(runCapture("pactl list sinks"), outSinkId);
+            for (const auto& s : listPhysicalSinks()) {
+                if (s.id == outSinkId) { sinkName = s.name; break; }
+            }
+        }
+        if (sinkName.empty()) sinkName = node.outputTarget();
+        if (sinkName.empty()) sinkName = node.bestPhysicalSink(linux_store::loadOutputSink());
+
+        pw_reconnect::SinkCandidate sc;
+        if (node.resolvePhysicalSink(sinkName, sc)) {
+            if (sinkName.empty()) sinkName = sc.name;
+            nodeAllowedOut = sc.allowedRates;
+            enumFormatOut = sc.enumFormatRates;
+            if (card < 0 && sc.alsaCard >= 0) card = sc.alsaCard;
+            if (card < 0 && !sc.alsaId.empty()) {
+                card = liveups::parseAlsaCardByIdFromCardsTxt(readAlsaCardsTxt(), sc.alsaId);
+            }
+        }
+        if (card >= 0) {
+            stream0Out = readCardStream0Rates(card);
+        }
+        if (stream0Out.empty() && (sinkName.empty() || liveups::isAlsaSinkName(sinkName))) {
+            stream0Out = readSingleUsbStream0Rates();
+        }
+    };
+    player::pwAllowedRatesHook() = [&, detectTargetDacCapabilities]() -> std::vector<uint32_t> {
         audioopt::RateMode rm = audioopt::RateMode::System;
         uint32_t fixedRate = 0;
         { std::lock_guard<std::mutex> lk(audioMutex); rm = audioOpts.rateMode; fixedRate = static_cast<uint32_t>(std::max(0, audioOpts.fixedRate)); }
         // Rögzített mintavétel: a gráf csak ezen szól, a lejátszó ide alakít (fel- vagy lefelé) a választott motorral
         if (rm == audioopt::RateMode::Fixed && fixedRate > 0) return { fixedRate };
-        // Rendszer és „forrást követi”: ha az USB DAC valós hardveres rátái kiolvashatók (/proc/asound/cardN/stream0),
-        // azokat vesszük alapul (és metsszük a PipeWire allowed-rates listájával), így pl. 48 kHz-es DAC-ra nem kér 96 kHz-et
-        const auto pwRates = parseAllowedRates(pwSetting("clock.allowed-rates"));
-        const auto dacRates = detectCurrentDacRates();
-        if (!dacRates.empty()) {
-            if (!pwRates.empty()) {
-                std::vector<uint32_t> common;
-                for (uint32_t r : dacRates)
-                    if (std::find(pwRates.begin(), pwRates.end(), r) != pwRates.end()) common.push_back(r);
-                if (!common.empty()) return common;
-            }
-            return dacRates;
-        }
-        if (!pwRates.empty()) return pwRates;
+        // Rendszer és „forrást követi”: a PipeWire csomópont (audio.allowed-rates), az USB DAC (/proc/asound/cardN/stream0),
+        // a nem-USB SPA_PARAM_EnumFormat és a PipeWire clock.allowed-rates közös rátái — pactl nélkül is
+        const auto pwRates = liveups::parseRatesList(pwSetting("clock.allowed-rates"));
+        std::vector<uint32_t> nodeAllowed, stream0Rates, enumFormatRates;
+        detectTargetDacCapabilities("", nodeAllowed, stream0Rates, enumFormatRates);
+        const auto resolved = liveups::resolveDacRates(nodeAllowed, stream0Rates, pwRates, enumFormatRates);
+        if (!resolved.empty()) return resolved;
         return { 44100, 48000, 88200, 96000, 176400, 192000 };
     };
     player::pwActualRateHook() = [&]() -> uint32_t {
@@ -1490,15 +1649,12 @@ int main(int argc, char* argv[]) {
                 std::string outSink;
                 for (const auto& s : inputs)
                     if (s.nodeName == "aqulify_sink_output") outSink = s.sinkId;
-                if (src > 0 && outSink != dacSinkId) {   // a DAC (a mi kimenetünk célja) tudott mintavételei
-                    dacSinkId = outSink;
-                    dacRates.clear();
-                    const int card = liveups::alsaCardOfSink(runCapture("pactl list sinks"), outSink);
-                    if (card >= 0) {
-                        std::ifstream f("/proc/asound/card" + std::to_string(card) + "/stream0");
-                        const std::string txt((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-                        dacRates = liveups::parseStream0PlaybackRates(txt);
-                    }
+                const std::string sinkKey = outSink + "|" + node.outputTarget();
+                if (src > 0 && sinkKey != dacSinkId) {   // a DAC (a mi kimenetünk célja) tudott mintavételei
+                    dacSinkId = sinkKey;
+                    std::vector<uint32_t> nodeAllowed, stream0Rates, enumFormatRates;
+                    detectTargetDacCapabilities(outSink, nodeAllowed, stream0Rates, enumFormatRates);
+                    dacRates = liveups::resolveDacRates(nodeAllowed, stream0Rates, {}, enumFormatRates);
                 }
             }
             const liveups::Decision d = liveups::decide(src, o, dacRates, fallback, playerOpen);

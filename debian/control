@@ -10,7 +10,7 @@ Rules-Requires-Root: no
 Package: aqulify
 Architecture: amd64 arm64
 Depends: ${shlibs:Depends}, ${misc:Depends}, pipewire, hicolor-icon-theme
-Recommends: curl
+Recommends: curl, wireplumber
 Suggests: shairport-sync, pipewire-pulse
 Description: Headphone EQ, convolver and limiter for PipeWire with a live 3D waterfall
  Aqulify creates a virtual "Aqulify" audio output on PipeWire. Everything played

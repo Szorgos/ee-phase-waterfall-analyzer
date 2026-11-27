@@ -23,6 +23,8 @@ rm -rf "$NR_DIR"
 run "Motor: UPnP / DLNA renderer (felfedezés, SetURI / Play / Seek / SetNext / Stop)" python3 -I "$HERE/upnp_live.py"
 echo; echo "=================== Motor: PipeWire újracsatlakozás (AQ-19)"
 bash "$HERE/reconnect_live.sh" "$BUILD" || fail=1
+echo; echo "=================== Motor: pactl nélküli PipeWire, wpctl és 48 kHz-es DAC (#56)"
+bash "$HERE/nopactl_56_live.sh" "$BUILD" || fail=1
 if command -v node >/dev/null 2>&1 && node -e "require('playwright')" 2>/dev/null; then
     run "Felület: több kimenet" node "$HERE/gui_multiout_live.js"
     run "Felület: útonkénti EQ" node "$HERE/gui_way_eq_live.js"

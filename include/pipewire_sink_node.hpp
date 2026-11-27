@@ -49,6 +49,7 @@
 
 #include "aether_chain.hpp"
 #include "audio_options.hpp"
+#include "live_upsample.hpp"
 #include "live_upsample_bridge.hpp"
 #include "log_debounce.hpp"
 #include "multi_output.hpp"
@@ -316,7 +317,7 @@ public:
         }
     }
 
-    /** Külső áthelyezés (pactl move-sink-input) után az aktuális céleszköz frissítése a diagnosztikához. */
+    /** Külső áthelyezés (pactl move-sink-input) után az aktuális céleszköz frissítése a diagnosztikához és a rátafigyelőhöz. */
     void noteCurrentOutputTarget(const std::string& target) {
         if (target.empty() || pw_reconnect::isOwnAqulifyNode(target, sinkName_) || pw_reconnect::isDummyOrNullSink(target)) return;
         bool changed = false;
@@ -325,20 +326,58 @@ public:
             changed = (outputTarget_ != target);
             outputTarget_ = target;
         }
-        if (changed && loop && liveUpsEvent_) {
-            pw_loop_signal_event(pw_main_loop_get_loop(loop), liveUpsEvent_);
+        if (changed && loop) {
+            if (targetEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), targetEvent_);
+            if (liveUpsEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), liveUpsEvent_);
         }
     }
 
-    /** A regiszterben látott legmagasabb prioritású valódi fizikai nyelő (bármely szálról). */
-    std::string bestPhysicalSink(const std::string& preferred = {}) const {
+    /**
+     * Közvetlen (pactl nélküli) kimenetváltás és rögzítés a fő hurok szálán: beállítja a választott fizikai
+     * céleszközt, és szükség esetén újracsatlakoztatja a playback streamet az új PW_KEY_TARGET_OBJECT-tel.
+     */
+    void switchPlaybackTarget(const std::string& target) {
+        if (target.empty() || pw_reconnect::isOwnAqulifyNode(target, sinkName_) || pw_reconnect::isDummyOrNullSink(target)) return;
+        {
+            std::lock_guard<std::mutex> lk(targetMu_);
+            preferredTarget_ = target;
+        }
+        rebuildTargetWanted_.store(true, std::memory_order_release);
+        if (loop) {
+            if (targetEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), targetEvent_);
+            if (liveUpsEvent_) pw_loop_signal_event(pw_main_loop_get_loop(loop), liveUpsEvent_);
+        }
+    }
+
+    /** Az Aqulify saját virtuális nyelójének (aqulify_sink) PipeWire csomópont-azonosítója (0, ha még nem ismert). */
+    uint32_t ownSinkNodeId() const { return ownSinkNodeId_.load(std::memory_order_acquire); }
+
+    /** A regiszterben látott összes valódi külső fizikai nyelő (priority.session sorrendben; szálbiztos). */
+    std::vector<pw_reconnect::SinkCandidate> knownPhysicalSinks() const {
         std::vector<pw_reconnect::SinkCandidate> cands;
         {
             std::lock_guard<std::mutex> lk(sinksMu_);
             cands.reserve(knownSinksById_.size());
             for (const auto& [id, ks] : knownSinksById_) cands.push_back(ks);
         }
-        return pw_reconnect::resolveTargetOrFallbackByPriority(preferred, cands, sinkName_);
+        return pw_reconnect::sortPhysicalSinkCandidates(cands, sinkName_);
+    }
+
+    /** Adott nevű (vagy a legjobb tartalék) külső fizikai nyelő teljes regiszter-metaadatainak lekérése (szálbiztos). */
+    bool resolvePhysicalSink(const std::string& preferred, pw_reconnect::SinkCandidate& out) const {
+        std::vector<pw_reconnect::SinkCandidate> cands;
+        {
+            std::lock_guard<std::mutex> lk(sinksMu_);
+            cands.reserve(knownSinksById_.size());
+            for (const auto& [id, ks] : knownSinksById_) cands.push_back(ks);
+        }
+        return pw_reconnect::resolveCandidateOrFallbackByPriority(preferred, cands, out, sinkName_);
+    }
+
+    /** A regiszterben látott legmagasabb prioritású valódi fizikai nyelő (bármely szálról). */
+    std::string bestPhysicalSink(const std::string& preferred = {}) const {
+        pw_reconnect::SinkCandidate sc;
+        return resolvePhysicalSink(preferred, sc) ? sc.name : std::string();
     }
 
     /** Kérés a fő huroknak: ellenőrizze a kimeneti streamet, és ha hibás / rögzítetlen, csatlakozzon újra. */
@@ -631,7 +670,9 @@ private:
         if (pk > 1e-5f) lastInputSignalNs.store(monoNs(), std::memory_order_relaxed);
     }
     std::vector<uint32_t> aqulifySinkIds_;            // látott aqulify_sink csomópontok (dupla példány jelzéséhez)
+    std::atomic<uint32_t> ownSinkNodeId_{0};          // a saját aqulify_sink PipeWire node ID-ja (wpctl tartalékhoz)
     std::atomic<bool> duplicateAqulifySink_{false};
+    std::atomic<bool> rebuildTargetWanted_{false};    // közvetlen (pactl nélküli) kimenetváltási kérés a fő hurok felé
     std::atomic<uint32_t> lastQuantum_{0};
     std::atomic<float> loadAvg_{0.0f}, loadPeak_{0.0f};
     std::atomic<uint32_t> overruns_{0};
@@ -667,6 +708,7 @@ private:
     LiveUpsRequest liveUpsApplied_;                   // csak a fő hurok szála
     std::string liveUpsAppliedTarget_;                // a szétválasztott playback stream aktuális fizikai célja (fő hurok)
     uint32_t appliedCaptureForceRate_ = 0;            // a capture streamen beállított node.force-rate (csak a fő hurok szála)
+    uint32_t lastCaptureRenegotiateRate_ = 0;         // utoljára kért capture formátum-újratárgyalás célrátája (fő hurok)
     std::string appliedCaptureGroup_;                 // a capture stream aktuális node.group tulajdonsága (csak a fő hurok szála)
     std::string dummyDriverGroup_{"pipewire.dummy"};  // a PipeWire Dummy-Driver csoportneve (regiszterből frissítve)
     uint32_t dummyDriverId_ = 0;                      // a PipeWire Dummy-Driver csomópont ID-ja (fő hurok)
@@ -699,6 +741,25 @@ private:
         pw_stream_update_properties(capture, &dict);
     }
 
+    /**
+     * Közvetlen módban a capture stream (aqulify_sink) formátumának újratárgyaltatása a gráf / playback rátájához.
+     * Ha a playback stream új cél-DAC-on épül újra (pl. kimenetváltás / reconnect), az idle maradt capture stream
+     * különben a régi mintavételen ragadhatna (pl. 44,1 kHz a 48 / 88,2 kHz-es playback mellett).
+     */
+    void renegotiateCaptureFormat(uint32_t targetRate) {
+        if (!capture || liveUpsActive_.load(std::memory_order_acquire)) return;
+        lastCaptureRenegotiateRate_ = targetRate;
+        uint8_t buf[1024];
+        struct spa_audio_info_raw info{};
+        info.format = SPA_AUDIO_FORMAT_F32P;
+        info.channels = 2;
+        info.position[0] = SPA_AUDIO_CHANNEL_FL;
+        info.position[1] = SPA_AUDIO_CHANNEL_FR;
+        struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buf, sizeof(buf));
+        const struct spa_pod* cparams[1] = { spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &info) };
+        pw_stream_update_params(capture, cparams, 1);
+    }
+
     /** A cél fizikai Audio/Sink csomópont valódi SPA_PARAM_Format mintavételének figyelése (fő hurok szála). */
     void unbindTargetSinkMonitor() {
         if (targetNodeProxy_) {
@@ -708,6 +769,41 @@ private:
         }
         targetNodeId_ = 0;
         targetSinkRate_.store(0, std::memory_order_relaxed);
+    }
+
+    /** PipeWire globális vagy pw_node_info tulajdonságok kiolvasása egy külső Audio/Sink jelöltbe. */
+    static void applySinkProps(pw_reconnect::SinkCandidate& sc, const struct spa_dict* props) {
+        if (!props) return;
+        if (const char* ps = spa_dict_lookup(props, PW_KEY_PRIORITY_SESSION)) sc.priority = std::atoi(ps);
+        else if (const char* pd = spa_dict_lookup(props, PW_KEY_PRIORITY_DRIVER)) sc.priority = std::atoi(pd);
+        if (const char* desc = spa_dict_lookup(props, PW_KEY_NODE_DESCRIPTION); desc && *desc) {
+            sc.description = desc;
+            if (sc.description.size() > 200) sc.description.resize(200);
+        }
+        if (const char* ac = spa_dict_lookup(props, "alsa.card"); ac && *ac) {
+            const int c = liveups::parseAlsaCardNumber(ac);
+            if (c >= 0) sc.alsaCard = c;
+        } else if (const char* aac = spa_dict_lookup(props, "api.alsa.card"); aac && *aac) {
+            const int c = liveups::parseAlsaCardNumber(aac);
+            if (c >= 0) sc.alsaCard = c;
+        }
+        if (sc.alsaCard < 0) {
+            if (const char* ap = spa_dict_lookup(props, "api.alsa.path"); ap && *ap) {
+                const int c = liveups::parseAlsaCardFromPath(ap);
+                if (c >= 0) sc.alsaCard = c;
+            } else if (const char* op = spa_dict_lookup(props, "object.path"); op && *op) {
+                const int c = liveups::parseAlsaCardFromPath(op);
+                if (c >= 0) sc.alsaCard = c;
+            }
+        }
+        if (const char* aid = spa_dict_lookup(props, "alsa.id"); aid && *aid)
+            sc.alsaId = aid;
+        else if (const char* aaid = spa_dict_lookup(props, "api.alsa.card.id"); aaid && *aaid)
+            sc.alsaId = aaid;
+        if (const char* ar = spa_dict_lookup(props, "audio.allowed-rates"); ar && *ar) {
+            auto rates = liveups::parseRatesList(ar);
+            if (!rates.empty()) sc.allowedRates = std::move(rates);
+        }
     }
 
     void bindTargetSinkMonitorByName(const std::string& targetName) {
@@ -734,20 +830,103 @@ private:
         static const struct pw_node_events nodeEvents = [] {
             pw_node_events e{};
             e.version = PW_VERSION_NODE_EVENTS;
+            e.info = onTargetNodeInfo;
             e.param = onTargetNodeParam;
             return e;
         }();
         spa_zero(targetNodeListener_);
         pw_node_add_listener(node, &targetNodeListener_, &nodeEvents, this);
-        uint32_t paramIds[1] = { SPA_PARAM_Format };
-        pw_node_subscribe_params(node, paramIds, 1);
+        {
+            std::lock_guard<std::mutex> lk(sinksMu_);
+            auto it = knownSinksById_.find(foundId);
+            if (it != knownSinksById_.end()) it->second.enumFormatRates.clear();
+        }
+        uint32_t paramIds[2] = { SPA_PARAM_Format, SPA_PARAM_EnumFormat };
+        pw_node_subscribe_params(node, paramIds, 2);
         targetNodeProxy_ = node;
         targetNodeId_ = foundId;
     }
 
+    /** SPA_PARAM_EnumFormat objektumból a szűrt hardveres mintavételi frekvenciák kiolvasása (nyitott adapter-tartomány nélkül). */
+    static std::vector<uint32_t> extractEnumFormatRates(const struct spa_pod* param) {
+        std::vector<uint32_t> out;
+        if (!param || !spa_pod_is_object(param)) return out;
+        const struct spa_pod_prop* prop = spa_pod_find_prop(param, nullptr, SPA_FORMAT_AUDIO_rate);
+        if (!prop) return out;
+        const struct spa_pod* val = &prop->value;
+        if (spa_pod_is_int(val)) {
+            int32_t r = 0;
+            if (spa_pod_get_int(val, &r) == 0 && r >= 8000 && r <= 768000) {
+                out.push_back(static_cast<uint32_t>(r));
+            }
+            return out;
+        }
+        if (spa_pod_is_choice(val)) {
+            const auto* ch = reinterpret_cast<const struct spa_pod_choice*>(val);
+            if (ch->body.child.type != SPA_TYPE_Int) return out;
+            const uint32_t bodyBytes = ch->pod.size > sizeof(struct spa_pod_choice_body)
+                                           ? (ch->pod.size - sizeof(struct spa_pod_choice_body))
+                                           : 0u;
+            const uint32_t nVals = bodyBytes / sizeof(int32_t);
+            const auto* vals = reinterpret_cast<const int32_t*>(SPA_POD_CHOICE_VALUES(ch));
+            if (ch->body.type == SPA_CHOICE_None && nVals >= 1) {
+                if (vals[0] >= 8000 && vals[0] <= 768000) out.push_back(static_cast<uint32_t>(vals[0]));
+            } else if (ch->body.type == SPA_CHOICE_Enum && nVals >= 1) {
+                const uint32_t start = (nVals > 1) ? 1u : 0u;
+                for (uint32_t i = start; i < nVals; ++i) {
+                    if (vals[i] >= 8000 && vals[i] <= 768000) out.push_back(static_cast<uint32_t>(vals[i]));
+                }
+            } else if (ch->body.type == SPA_CHOICE_Range && nVals >= 3) {
+                out = liveups::expandHardwareRateRange(vals[1], vals[2]);
+            }
+        }
+        std::sort(out.begin(), out.end());
+        out.erase(std::unique(out.begin(), out.end()), out.end());
+        return out;
+    }
+
+    /** A cél pw_node teljes tulajdonságlistája (alsa.card, audio.allowed-rates stb. csak itt érkeznek meg!). */
+    static void onTargetNodeInfo(void* data, const struct pw_node_info* info) {
+        auto* self = static_cast<AetherSinkNode*>(data);
+        if (!info || !info->props || self->targetNodeId_ == 0) return;
+        std::lock_guard<std::mutex> lk(self->sinksMu_);
+        auto it = self->knownSinksById_.find(self->targetNodeId_);
+        if (it != self->knownSinksById_.end()) {
+            applySinkProps(it->second, info->props);
+        }
+    }
+
+    /** Az aktuális fizikai cél (vagy a legjobb ismert fizikai nyelő) SPA_PARAM_Format figyelésének frissítése (fő hurok). */
+    void syncTargetSinkMonitor() {
+        std::string monitorName = outputTarget();
+        if (monitorName.empty() || pw_reconnect::isOwnAqulifyNode(monitorName, sinkName_) ||
+            pw_reconnect::isDummyOrNullSink(monitorName)) {
+            monitorName = resolvePhysicalTargetForLiveUps();
+        }
+        if (!monitorName.empty()) bindTargetSinkMonitorByName(monitorName);
+    }
+
     static void onTargetNodeParam(void* data, int, uint32_t id, uint32_t, uint32_t, const struct spa_pod* param) {
         auto* self = static_cast<AetherSinkNode*>(data);
-        if (!param || id != SPA_PARAM_Format) return;
+        if (id == SPA_PARAM_EnumFormat) {
+            if (!param || self->targetNodeId_ == 0) return;
+            const auto rates = extractEnumFormatRates(param);
+            if (rates.empty()) return;
+            std::lock_guard<std::mutex> lk(self->sinksMu_);
+            auto it = self->knownSinksById_.find(self->targetNodeId_);
+            if (it != self->knownSinksById_.end()) {
+                auto& dst = it->second.enumFormatRates;
+                dst.insert(dst.end(), rates.begin(), rates.end());
+                std::sort(dst.begin(), dst.end());
+                dst.erase(std::unique(dst.begin(), dst.end()), dst.end());
+            }
+            return;
+        }
+        if (id != SPA_PARAM_Format) return;
+        if (!param) {
+            self->targetSinkRate_.store(0, std::memory_order_relaxed);
+            return;
+        }
         struct spa_audio_info_raw info{};
         if (spa_format_audio_raw_parse(param, &info) >= 0 && info.rate > 0) {
             self->targetSinkRate_.store(info.rate, std::memory_order_relaxed);
@@ -1370,6 +1549,7 @@ private:
         }
         if (!target.empty()) pw_properties_set(pprops, PW_KEY_TARGET_OBJECT, target.c_str());
         { std::lock_guard<std::mutex> lk(diagMu_); outputTarget_ = target; }
+        syncTargetSinkMonitor();
         applyLatencyProp(pprops);
         // Lokális mutatóval hozzuk létre és csatlakoztatjuk; trigger engedélyezés csak sikeres connect után!
         struct pw_stream* s = pw_stream_new(core, (sinkName_ + "_output").c_str(), pprops);
@@ -1410,6 +1590,7 @@ private:
             return false;
         }
         playbackTriggerReady_.store(!decoupled, std::memory_order_release);
+        if (!decoupled) renegotiateCaptureFormat(0);
         return true;
     }
 
@@ -1463,9 +1644,24 @@ private:
     /** Fő hurkos esemény: új céleszköz beállításakor vagy ALSA elengedésekor hibás/rögzítetlen stream újracsatlakoztatása. */
     static void onTargetEvent(void* data, uint64_t) {
         auto* self = static_cast<AetherSinkNode*>(data);
-        if (!self->core || self->externalExclusiveActive_.load(std::memory_order_acquire)) return;
+        if (!self->core) return;
+        self->syncTargetSinkMonitor();
+        if (self->externalExclusiveActive_.load(std::memory_order_acquire)) return;
+        const bool wantRebuild = self->rebuildTargetWanted_.exchange(false, std::memory_order_acq_rel);
         const int st = self->playbackState.load(std::memory_order_relaxed);
         const std::string cur = self->outputTarget();
+        if (wantRebuild && !self->liveUpsActive_.load(std::memory_order_acquire)) {
+            std::string pref;
+            { std::lock_guard<std::mutex> lk(self->targetMu_); pref = self->preferredTarget_; }
+            if (!pref.empty()) {
+                self->destroyPlaybackSafe();
+                if (!self->createAndConnectPlayback()) {
+                    const auto a = self->reconnect_.onAttemptFailed();
+                    if (a.schedule) self->scheduleReconnect(a.delayMs);
+                }
+                return;
+            }
+        }
         const bool broken = self->reconnect_.pending() || st == PW_STREAM_STATE_ERROR || st == PW_STREAM_STATE_UNCONNECTED;
         const bool unpinnedWithPhysical = !self->knownSinksById_.empty() &&
                                           (cur.empty() || pw_reconnect::isDummyOrNullSink(cur));
@@ -1506,19 +1702,23 @@ private:
             if (nodeName && self->sinkName_ == nodeName) {
                 if (std::find(self->aqulifySinkIds_.begin(), self->aqulifySinkIds_.end(), id) == self->aqulifySinkIds_.end())
                     self->aqulifySinkIds_.push_back(id);
+                if (!self->aqulifySinkIds_.empty())
+                    self->ownSinkNodeId_.store(self->aqulifySinkIds_.front(), std::memory_order_release);
                 self->duplicateAqulifySink_.store(self->aqulifySinkIds_.size() > 1, std::memory_order_relaxed);
             } else if (nodeName && !pw_reconnect::isOwnAqulifyNode(nodeName, self->sinkName_) &&
                        !pw_reconnect::isDummyOrNullSink(nodeName)) {
-                int prio = 0;
-                if (const char* ps = spa_dict_lookup(props, PW_KEY_PRIORITY_SESSION)) prio = std::atoi(ps);
-                else if (const char* pd = spa_dict_lookup(props, PW_KEY_PRIORITY_DRIVER)) prio = std::atoi(pd);
+                pw_reconnect::SinkCandidate sc;
+                sc.name = nodeName;
+                sc.nodeId = id;
+                applySinkProps(sc, props);
                 int count = 0;
                 {
                     std::lock_guard<std::mutex> lk(self->sinksMu_);
-                    self->knownSinksById_[id] = { nodeName, prio };
+                    self->knownSinksById_[id] = std::move(sc);
                     count = static_cast<int>(self->knownSinksById_.size());
                 }
                 self->physicalSinkCount_.store(count, std::memory_order_release);
+                if (self->targetNodeId_ == 0) self->syncTargetSinkMonitor();
                 {
                     std::string pref;
                     { std::lock_guard<std::mutex> lk(self->targetMu_); pref = self->preferredTarget_; }
@@ -1585,6 +1785,7 @@ private:
         }
         if (erased) {
             self->physicalSinkCount_.store(count, std::memory_order_release);
+            if (self->targetNodeId_ == 0 && count > 0) self->syncTargetSinkMonitor();
             if (self->liveUpsActive_.load(std::memory_order_acquire) && self->loop && self->liveUpsEvent_) {
                 pw_loop_signal_event(pw_main_loop_get_loop(self->loop), self->liveUpsEvent_);
             }
@@ -1592,6 +1793,8 @@ private:
         auto it = std::find(self->aqulifySinkIds_.begin(), self->aqulifySinkIds_.end(), id);
         if (it != self->aqulifySinkIds_.end()) {
             self->aqulifySinkIds_.erase(it);
+            self->ownSinkNodeId_.store(self->aqulifySinkIds_.empty() ? 0u : self->aqulifySinkIds_.front(),
+                                       std::memory_order_release);
             self->duplicateAqulifySink_.store(self->aqulifySinkIds_.size() > 1, std::memory_order_relaxed);
         }
     }
@@ -1647,8 +1850,12 @@ private:
     static void onCoreError(void* data, uint32_t id, int seq, int res, const char* message) {
         auto* self = static_cast<AetherSinkNode*>(data);
         (void)seq;
-        // Ha a lejátszó stream épp újracsatlakozásra vár (nincs céleszköz), a köztes ENOENT próbákat nem naplózzuk újra
-        if (!(res == -ENOENT && self->reconnect_.errorLogged())) {
+        // Ha a lejátszó stream épp újracsatlakozásra vár (nincs céleszköz), a köztes ENOENT próbákat nem naplózzuk újra;
+        // tétlen cél-sinknél a pw_node_subscribe_params(SPA_PARAM_Format) -EIO válasza szintén ártalmatlan.
+        const bool benignIdleFormat = (res == -EIO && message &&
+                                       (std::strstr(message, "enum params id:4") != nullptr ||
+                                        std::strstr(message, "enum params id:3") != nullptr));
+        if (!benignIdleFormat && !(res == -ENOENT && self->reconnect_.errorLogged())) {
             std::cerr << "[PipeWire] hiba (id " << id << "): " << (message ? message : "") << " (" << spa_strerror(res) << ")\n";
         }
         if (id == PW_ID_CORE && res == -EPIPE) {
@@ -1671,6 +1878,9 @@ private:
                     pw_loop_signal_event(pw_main_loop_get_loop(self->loop), self->liveUpsEvent_);
             } else {
                 self->sampleRate.store(info.rate, std::memory_order_relaxed);
+                if (info.rate == self->playbackRate_.load(std::memory_order_relaxed)) {
+                    self->lastCaptureRenegotiateRate_ = info.rate;
+                }
             }
         }
     }
@@ -1688,6 +1898,9 @@ private:
                 self->updateLiveBridgeRateGate();
                 if (self->loop && self->liveUpsEvent_)
                     pw_loop_signal_event(pw_main_loop_get_loop(self->loop), self->liveUpsEvent_);
+            } else if (self->captureRate_.load(std::memory_order_relaxed) != info.rate &&
+                       self->lastCaptureRenegotiateRate_ != info.rate) {
+                self->renegotiateCaptureFormat(info.rate);
             }
         }
     }
