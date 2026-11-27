@@ -1,6 +1,104 @@
 {
   "versions": [
     {
+      "version": "3.0.4",
+      "date": "2026-11-27",
+      "notes": {
+        "hu": [
+          "Raspberry Pi és Linux: fej nélküli és PulseAudio-réteg (pactl) nélküli PipeWire-rendszereken is működik a kimenetek listázása, a kimenetváltás, a hangerőszabályzás (wpctl) és a 48 kHz-es USB, valamint a nem-USB (I2S / alaplapi) DAC-ok mintavételeinek pontos felismerése – nincs felesleges felmintavételezés.",
+          "Linux (PipeWire): kimenetváltáskor és újracsatlakozáskor a virtuális bemenet is azonnal felveszi az új hangkártya mintavételét, megszüntetve a különböző rátájú DAC-ok közötti váltás utáni szakadozást."
+        ],
+        "en": [
+          "Raspberry Pi & Linux: output listing, output switching, volume control (wpctl), and accurate sample-rate detection for 48 kHz USB and non-USB (I2S / onboard) DACs now work natively on headless PipeWire systems without PulseAudio tools (pactl) – preventing unnecessary upsampling.",
+          "Linux (PipeWire): when switching outputs or reconnecting, the virtual input now immediately renegotiates to match the new DAC’s sample rate, eliminating dropouts after switching between DACs running at different rates."
+        ],
+        "es": [
+          "Raspberry Pi y Linux: el listado y cambio de salidas, el control de volumen (wpctl) y la detección precisa de frecuencias en DAC USB de 48 kHz y no USB (I2S / integrados) ahora funcionan de forma nativa en sistemas PipeWire sin PulseAudio (pactl), evitando sobremuestreos innecesarios.",
+          "Linux (PipeWire): al cambiar de salida o reconectar, la entrada virtual negocia de inmediato la frecuencia del nuevo DAC, eliminando cortes al alternar entre DAC con frecuencias distintas."
+        ],
+        "fr": [
+          "Raspberry Pi et Linux : la liste et le changement de sorties, le réglage du volume (wpctl) ainsi que la détection précise des fréquences des DAC USB 48 kHz et non USB (I2S / intégrés) fonctionnent désormais nativement sur PipeWire sans couche PulseAudio (pactl), évitant tout suréchantillonnage inutile.",
+          "Linux (PipeWire) : lors d’un changement de sortie ou d’une reconnexion, l’entrée virtuelle adopte immédiatement la fréquence du nouveau DAC, supprimant les coupures entre DAC à fréquences différentes."
+        ],
+        "zh": [
+          "Raspberry Pi 与 Linux：在无界面且未安装 PulseAudio 兼容层（pactl）的 PipeWire 系统上，输出列表、切换输出、音量控制（wpctl）以及 48 kHz USB 和非 USB（I2S / 板载）DAC 的采样率检测现已原生支持，避免不必要的升频。",
+          "Linux（PipeWire）：切换输出或重新连接时，虚拟输入端现在会立即重新协商以匹配新 DAC 的采样率，消除不同采样率 DAC 切换后的断续问题。"
+        ],
+        "de": [
+          "Raspberry Pi & Linux: Ausgangsliste, Ausgangswechsel, Lautstärkeregelung (wpctl) sowie die genaue Abtastratenerkennung für 48-kHz-USB- und Nicht-USB-DACs (I2S / Onboard) funktionieren nun nativ auf Headless-PipeWire-Systemen ohne PulseAudio-Tools (pactl) – ohne unnötiges Upsampling.",
+          "Linux (PipeWire): Beim Ausgangswechsel oder Neuverbinden übernimmt der virtuelle Eingang sofort die Abtastrate des neuen DACs und verhindert Aussetzer beim Wechsel zwischen DACs mit unterschiedlichen Raten."
+        ],
+        "it": [
+          "Raspberry Pi e Linux: elenco e cambio uscite, controllo volume (wpctl) e rilevamento preciso delle frequenze di campionamento per DAC USB a 48 kHz e non USB (I2S / integrati) funzionano ora nativamente su sistemi PipeWire headless senza strumenti PulseAudio (pactl), evitando sovracampionamenti inutili.",
+          "Linux (PipeWire): al cambio di uscita o alla riconnessione, l’ingresso virtuale rinegozia subito la frequenza del nuovo DAC, eliminando interruzioni nel passaggio tra DAC a frequenze diverse."
+        ],
+        "nl": [
+          "Raspberry Pi & Linux: uitgangen tonen en wisselen, volumeregeling (wpctl) en nauwkeurige detectie van samplefrequenties voor 48 kHz USB- en niet-USB-DAC’s (I2S / onboard) werken nu native op headless PipeWire-systemen zonder PulseAudio-tools (pactl), waardoor onnodige upsampling wordt voorkomen.",
+          "Linux (PipeWire): bij het wisselen van uitgang of opnieuw verbinden stemt de virtuele ingang zijn formaat direct af op de nieuwe DAC, wat haperingen bij wisselen tussen DAC’s met verschillende samplefrequenties verhelpt."
+        ],
+        "pl": [
+          "Raspberry Pi i Linux: lista wyjść, przełączanie wyjść, regulacja głośności (wpctl) oraz dokładne wykrywanie częstotliwości dla DAC-ów USB 48 kHz i innych niż USB (I2S / wbudowanych) działają teraz natywnie w bezekranowych systemach PipeWire bez narzędzi PulseAudio (pactl), zapobiegając zbędnemu nadpróbkowaniu.",
+          "Linux (PipeWire): przy przełączaniu wyjścia lub ponownym połączeniu wejście wirtualne od razu dostosowuje częstotliwość do nowego DAC-a, eliminując przerwy przy przełączaniu między przetwornikami o różnych częstotliwościach."
+        ],
+        "ru": [
+          "Raspberry Pi и Linux: список и переключение выходов, регулировка громкости (wpctl) и точное определение частот для USB-ЦАП 48 кГц и не-USB ЦАП (I2S / встроенных) теперь работают нативно в PipeWire без PulseAudio (pactl), исключая лишний апсемплинг.",
+          "Linux (PipeWire): при смене выхода или переподключении виртуальный вход сразу согласует частоту с новым ЦАП, устраняя прерывания при переключении между ЦАП с разными частотами."
+        ],
+        "pt": [
+          "Raspberry Pi e Linux: a listagem e troca de saídas, o controlo de volume (wpctl) e a deteção precisa das frequências de DACs USB de 48 kHz e não USB (I2S / integrados) funcionam agora nativamente em sistemas PipeWire sem ferramentas PulseAudio (pactl), evitando sobreamostragem desnecessária.",
+          "Linux (PipeWire): ao trocar de saída ou reconectar, a entrada virtual renegocia de imediato a frequência do novo DAC, eliminando falhas ao alternar entre DACs com taxas diferentes."
+        ],
+        "ro": [
+          "Raspberry Pi și Linux: listarea și schimbarea ieșirilor, controlul volumului (wpctl) și detectarea precisă a ratelor pentru DAC-uri USB de 48 kHz și non-USB (I2S / integrate) funcționează acum nativ pe sisteme PipeWire fără unelte PulseAudio (pactl), evitând supraeșantionarea inutilă.",
+          "Linux (PipeWire): la schimbarea ieșirii sau reconectare, intrarea virtuală preia imediat rata noului DAC, eliminând întreruperile la comutarea între DAC-uri cu rate diferite."
+        ],
+        "el": [
+          "Raspberry Pi & Linux: η λίστα και αλλαγή εξόδων, ο έλεγχος έντασης (wpctl) και η ακριβής ανίχνευση συχνοτήτων για USB DAC 48 kHz και μη-USB DAC (I2S / ενσωματωμένα) λειτουργούν πλέον εγγενώς σε PipeWire χωρίς εργαλεία PulseAudio (pactl), αποφεύγοντας περιττή υπερδειγματοληψία.",
+          "Linux (PipeWire): κατά την αλλαγή εξόδου ή επανασύνδεση, η εικονική είσοδος προσαρμόζει αμέσως τη συχνότητα στο νέο DAC, εξαλείφοντας διακοπές μεταξύ DAC διαφορετικής συχνότητας."
+        ],
+        "tr": [
+          "Raspberry Pi ve Linux: çıkış listeleme, çıkış değiştirme, ses kontrolü (wpctl) ve 48 kHz USB ile USB dışı (I2S / dahili) DAC’ların örnekleme hızı algılaması artık PulseAudio araçları (pactl) olmadan başsız PipeWire sistemlerinde yerel olarak çalışıyor; gereksiz yukarı örnekleme önleniyor.",
+          "Linux (PipeWire): çıkış değiştirildiğinde veya yeniden bağlanıldığında sanal giriş yeni DAC’ın örnekleme hızına anında uyum sağlayarak farklı hızlardaki DAC’lar arası geçişte kesilmeleri gideriyor."
+        ],
+        "fi": [
+          "Raspberry Pi ja Linux: lähtöjen listaus ja vaihto, äänenvoimakkuuden säätö (wpctl) sekä 48 kHz:n USB- ja muiden DAC-laitteiden (I2S / sisäänrakennettu) näytteenottotaajuuksien tarkka tunnistus toimivat nyt natiivisti näyttöttömissä PipeWire-järjestelmissä ilman PulseAudio-työkaluja (pactl), välttäen tarpeettoman ylinäytteistyksen.",
+          "Linux (PipeWire): lähtöä vaihdettaessa tai uudelleenyhdistettäessä virtuaalitulo neuvottelee heti uuden DAC:n taajuuden, poistaen pätkimisen eri taajuuksilla toimivien DAC-laitteiden välillä."
+        ],
+        "da": [
+          "Raspberry Pi & Linux: liste over og skift af udgange, lydstyrkekontrol (wpctl) samt præcis registrering af samplingsfrekvenser for 48 kHz USB- og ikke-USB-DAC’er (I2S / indbygget) fungerer nu direkte på hovedløse PipeWire-systemer uden PulseAudio-værktøjer (pactl) og forhindrer unødvendig opsampling.",
+          "Linux (PipeWire): ved udgangsskift eller genopkobling tilpasser den virtuelle indgang straks frekvensen til den nye DAC, så udfald mellem DAC’er med forskellige frekvenser undgås."
+        ],
+        "nb": [
+          "Raspberry Pi og Linux: oversikt over og bytte av utganger, volumkontroll (wpctl) samt nøyaktig deteksjon av samplingsfrekvenser for 48 kHz USB- og ikke-USB-DAC-er (I2S / innebygd) fungerer nå direkte på hodeløse PipeWire-systemer uten PulseAudio-verktøy (pactl), og hindrer unødvendig oppsampling.",
+          "Linux (PipeWire): ved utgangsbytte eller gjenoppkobling forhandler den virtuelle inngangen straks om til den nye DAC-ens frekvens, og fjerner hakk ved bytte mellom DAC-er med ulike frekvenser."
+        ],
+        "sv": [
+          "Raspberry Pi och Linux: lista och byte av utgångar, volymkontroll (wpctl) samt exakt avkänning av samplingsfrekvenser för 48 kHz USB- och icke-USB-DAC:er (I2S / inbyggda) fungerar nu direkt på skärmlösa PipeWire-system utan PulseAudio-verktyg (pactl) och förhindrar onödig uppsampling.",
+          "Linux (PipeWire): vid utgångsbyte eller återanslutning anpassar den virtuella ingången direkt sitt format till den nya DAC:ens frekvens, vilket eliminerar avbrott mellan DAC:er med olika frekvenser."
+        ],
+        "he": [
+          "Raspberry Pi ו-Linux: רשימת יציאות, החלפת יציאה, שליטה בעוצמת הקול (wpctl) וזיהוי מדויק של קצבי דגימה עבור ממירים 48 kHz ב-USB ושאינם USB (I2S / מובנים) פועלים כעת באופן מקורי במערכות PipeWire ללא מסך וללא כלי PulseAudio (pactl), ומונעים העלאת קצב מיותרת.",
+          "Linux (PipeWire): בעת החלפת יציאה או חיבור מחדש, הכניסה הווירטואלית מתאימה מיד את קצב הדגימה לממיר החדש ומונעת קיטועים במעבר בין ממירים בקצבים שונים."
+        ],
+        "ja": [
+          "Raspberry Pi / Linux：PulseAudio ツール（pactl）がないヘッドレス PipeWire 環境でも、出力一覧・出力切替・音量調整（wpctl）および 48 kHz USB / 非 USB（I2S・内蔵）DAC の対応サンプルレート検出がネイティブ動作し、不要なアップサンプリングを防ぎます。",
+          "Linux（PipeWire）：出力切替や再接続時に仮想入力も直ちに新しい DAC のサンプルレートへ再ネゴシエーションされ、異なるレートの DAC 切替後の音切れを解消しました。"
+        ],
+        "ko": [
+          "Raspberry Pi 및 Linux: PulseAudio 도구(pactl)가 없는 헤드리스 PipeWire 환경에서도 출력 목록, 출력 전환, 볼륨 제어(wpctl) 및 48 kHz USB·비USB(I2S/내장) DAC의 샘플 레이트 감지가 네이티브로 동작하여 불필요한 업샘플링을 방지합니다.",
+          "Linux(PipeWire): 출력 전환이나 재연결 시 가상 입력도 즉시 새 DAC의 샘플 레이트로 재협상되어 서로 다른 레이트의 DAC 전환 후 끊김 현상을 없앴습니다."
+        ],
+        "cs": [
+          "Raspberry Pi a Linux: výpis a přepínání výstupů, ovládání hlasitosti (wpctl) i přesná detekce vzorkovacích frekvencí u 48 kHz USB a ne-USB (I2S / integrovaných) DACů nyní fungují nativně na bezhlavých systémech PipeWire bez nástrojů PulseAudio (pactl), čímž odpadá zbytečné převzorkování.",
+          "Linux (PipeWire): při přepnutí výstupu nebo znovupřipojení se virtuální vstup ihned přizpůsobí frekvenci nového DACu, což odstraňuje výpadky při přepínání mezi DACy s různou frekvencí."
+        ],
+        "uk": [
+          "Raspberry Pi та Linux: список і перемикання виходів, керування гучністю (wpctl) і точне визначення частот для USB-ЦАП 48 кГц та не-USB ЦАП (I2S / вбудованих) тепер працюють нативно у PipeWire без інструментів PulseAudio (pactl), запобігаючи зайвому апсемплінгу.",
+          "Linux (PipeWire): під час перемикання виходу чи повторного підключення віртуальний вхід одразу узгоджує частоту з новим ЦАП, усуваючи переривання після переходу між ЦАП із різними частотами."
+        ]
+      }
+    },
+    {
       "version": "3.0.3",
       "date": "2026-11-26",
       "notes": {
