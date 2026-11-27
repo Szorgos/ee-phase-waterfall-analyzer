@@ -648,7 +648,6 @@ private:
         playbackStreaming.store(false, std::memory_order_release);
         playbackRate_.store(0, std::memory_order_relaxed);
         driverClockRate_.store(0, std::memory_order_relaxed);
-        lastCapturePinTarget_ = 0;
         if (capturePinnedRate_ != 0) {
             capturePinnedRate_ = 0;
             updateCaptureEnumFormat(0);
@@ -713,8 +712,7 @@ private:
     LiveUpsRequest liveUpsApplied_;                   // csak a fő hurok szála
     std::string liveUpsAppliedTarget_;                // a szétválasztott playback stream aktuális fizikai célja (fő hurok)
     uint32_t appliedCaptureForceRate_ = 0;            // a capture streamen beállított node.force-rate (csak a fő hurok szála)
-    uint32_t capturePinnedRate_ = 0;                  // ideiglenesen kért capture EnumFormat ráta (0: szabad; fő hurok)
-    uint32_t lastCapturePinTarget_ = 0;               // utoljára kényszerített célráta (ping-pong védelem; fő hurok)
+    uint32_t capturePinnedRate_ = 0;                  // a playbackhez igazított capture EnumFormat ráta (0: szabad; fő hurok)
     std::string appliedCaptureGroup_;                 // a capture stream aktuális node.group tulajdonsága (csak a fő hurok szála)
     std::string dummyDriverGroup_{"pipewire.dummy"};  // a PipeWire Dummy-Driver csoportneve (regiszterből frissítve)
     uint32_t dummyDriverId_ = 0;                      // a PipeWire Dummy-Driver csomópont ID-ja (fő hurok)
@@ -734,7 +732,6 @@ private:
         if (!capture) return;
         if (decoupled && capturePinnedRate_ != 0) {
             capturePinnedRate_ = 0;
-            lastCapturePinTarget_ = 0;
             updateCaptureEnumFormat(0);
         }
         const uint32_t wantRate = decoupled ? srcRate : 0;
@@ -764,19 +761,21 @@ private:
         info.rate = rate;
         struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buf, sizeof(buf));
         const struct spa_pod* cparams[1] = { spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &info) };
+        pw_stream_set_active(capture, false);
         pw_stream_update_params(capture, cparams, 1);
+        pw_stream_set_active(capture, true);
     }
 
     /**
      * Közvetlen módban, ha a capture stream (aqulify_sink) a playback streamtől eltérő rátán ragadt (pl. kimenetváltás
-     * vagy reconnect után, PipeWire 1.0.x és 1.6.x alatt is), ideiglenesen a playback rátájára kényszerítjük az
-     * EnumFormat-ot; amint onParamChanged visszaigazolja a rátát, újra szabadra (rate = 0) engedjük.
+     * vagy reconnect után, PipeWire 1.0.x és 1.6.x alatt is), a playback pontos rátájára igazítjuk a capture
+     * EnumFormat-ját, így PipeWire 1.0.x sem tudja visszahúzni a régi rátára. Kimenetváltáskor (destroyPlaybackSafe)
+     * vagy szétválasztott módba lépéskor visszaengedjük szabadra (rate = 0).
      */
     void pinCaptureFormatToRate(uint32_t targetRate) {
         if (!capture || targetRate == 0 || liveUpsActive_.load(std::memory_order_acquire)) return;
-        if (capturePinnedRate_ == targetRate || lastCapturePinTarget_ == targetRate) return;
+        if (capturePinnedRate_ == targetRate) return;
         capturePinnedRate_ = targetRate;
-        lastCapturePinTarget_ = targetRate;
         updateCaptureEnumFormat(targetRate);
     }
 
@@ -1900,10 +1899,7 @@ private:
                 if (pbRate == 0 || info.rate == pbRate) {
                     self->sampleRate.store(info.rate, std::memory_order_relaxed);
                 }
-                if (self->capturePinnedRate_ != 0 && info.rate == self->capturePinnedRate_) {
-                    self->capturePinnedRate_ = 0;
-                    self->updateCaptureEnumFormat(0);
-                } else if (pbRate > 0 && info.rate != pbRate) {
+                if (pbRate > 0 && info.rate != pbRate) {
                     self->pinCaptureFormatToRate(pbRate);
                 }
             }
