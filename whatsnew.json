@@ -1,6 +1,104 @@
 {
   "versions": [
     {
+      "version": "3.0.6",
+      "date": "2026-11-27",
+      "notes": {
+        "hu": [
+          "Linux (PipeWire) felmintavételezés és órajel-szinkron: megszűnt a széteső, lassuló és pattogó hang nem rögzített kimeneti mintavétel mellett (pl. 44,1 → 96 kHz, Referencia 32 bit / 99,7% és Aqulify FFT-DD esetén is), kattanásmentes lett az órajel-kompenzátor átmenete, a kimeneti pufferméret pontosan igazodik a bemeneti és kimeneti mintavételhez, és az ALSA kizárólagos mód nyitása/zárása szinkronban marad az élő felmintavételezéssel.",
+          "Külső lejátszók automatikus szüneteltetése (Linux, Windows, macOS): helyi zene elindításakor vagy folytatásakor a beépített lejátszó automatikusan szünetelteti a szóló külső médialejátszókat és megszakítja a függő internetrádió-csatlakozást, így nem szólhat két zene egymásra."
+        ],
+        "en": [
+          "Linux (PipeWire) upsampling & clock sync: fixed audio dropouts, slowdowns, and crackling when output rate is not fixed while upsampling to higher rates (such as 44.1 → 96 kHz, including Reference 32-bit / 99.7% and Aqulify FFT-DD), made clock-drift transitions click-free, matched buffer latency to each stream’s rate, and synced ALSA exclusive mode with the live upsampling thread.",
+          "Automatic pause of external players (Linux, Windows, macOS): starting or resuming local playback in the built-in player now automatically pauses currently playing external media players and cancels pending internet radio connections so two tracks never play over each other."
+        ],
+        "es": [
+          "Sobremuestreo y sincronización de reloj en Linux (PipeWire): se corrigieron los cortes, ralentizaciones y chasquidos al sobremuestrear sin frecuencia de salida fija (p. ej. 44,1 → 96 kHz, incluidos Referencia 32 bits / 99,7% y Aqulify FFT-DD), con transiciones sin clics del compensador de deriva, latencia ajustada a cada flujo y sincronización del modo exclusivo ALSA.",
+          "Pausa automática de reproductores externos (Linux, Windows, macOS): al iniciar o reanudar música local en el reproductor integrado se pausan automáticamente los reproductores externos activos y se cancela cualquier conexión de radio pendiente para evitar que suenen dos pistas a la vez."
+        ],
+        "fr": [
+          "Suréchantillonnage et synchronisation d’horloge Linux (PipeWire) : correction des coupures, ralentissements et craquements lors du suréchantillonnage sans fréquence de sortie fixe (ex. 44,1 → 96 kHz, y compris Référence 32 bits / 99,7% et Aqulify FFT-DD), transitions sans clic du compensateur de dérive, latence adaptée à chaque flux et synchronisation du mode exclusif ALSA.",
+          "Mise en pause automatique des lecteurs externes (Linux, Windows, macOS) : le lancement ou la reprise d’un morceau local dans le lecteur intégré met désormais en pause les lecteurs externes en cours et annule une connexion radio en attente afin d’éviter toute superposition sonore."
+        ],
+        "zh": [
+          "Linux（PipeWire）升频与时钟同步：修复输出采样率未固定时升频至更高采样率（如 44.1 → 96 kHz，含参考 32 位 / 99.7% 与 Aqulify FFT-DD）导致的破音、变慢与爆音，消除时钟漂移补偿切换时的咔嗒声，按各流采样率精确设置缓冲延迟，并同步 ALSA 独占模式与实时升频线程。",
+          "自动暂停外部播放器（Linux、Windows、macOS）：在内置播放器中开始或继续播放本地音乐时，自动暂停正在播放的外部媒体播放器并取消待连接的网络电台，避免两路音频叠加播放。"
+        ],
+        "de": [
+          "Linux (PipeWire) Upsampling & Taktsynchronisation: Aussetzer, Verlangsamung und Knistern beim Upsampling ohne feste Ausgaberate (z. B. 44,1 → 96 kHz, einschließlich Referenz 32 Bit / 99,7 % und Aqulify FFT-DD) behoben, klickfreier Übergang im Drift-Kompensator, korrekte Pufferlatenz pro Stream und Synchronisation des exklusiven ALSA-Modus.",
+          "Automatisches Pausieren externer Player (Linux, Windows, macOS): Beim Starten oder Fortsetzen lokaler Musik pausiert der integrierte Player automatisch laufende externe Medienplayer und bricht laufende Internetradio-Verbindungen ab, damit keine zwei Titel gleichzeitig spielen."
+        ],
+        "it": [
+          "Sovracampionamento e sincronizzazione su Linux (PipeWire): risolti scatti, rallentamenti e crepitii durante il sovracampionamento senza frequenza di uscita fissa (es. 44,1 → 96 kHz, inclusi Riferimento 32 bit / 99,7% e Aqulify FFT-DD), transizione senza clic del compensatore di deriva, latenza corretta per ciascun flusso e sincronizzazione della modalità esclusiva ALSA.",
+          "Pausa automatica dei lettori esterni (Linux, Windows, macOS): all’avvio o alla ripresa di un brano locale nel lettore integrato i lettori esterni in riproduzione vengono messi in pausa e le connessioni radio in corso vengono annullate per evitare sovrapposizioni."
+        ],
+        "nl": [
+          "Linux (PipeWire) upsampling & kloksync: haperingen, vertraging en gekraak verholpen bij upsampling zonder vaste uitvoerfrequentie (zoals 44,1 → 96 kHz, inclusief Referentie 32-bit / 99,7% en Aqulify FFT-DD), klikvrije overgang van de driftcompensator, juiste bufferlatentie per stream en synchronisatie met exclusieve ALSA-modus.",
+          "Automatisch pauzeren van externe spelers (Linux, Windows, macOS): bij het starten of hervatten van lokale muziek pauzeert de ingebouwde speler automatisch spelende externe mediaspelers en annuleert lopende internetradio-verbindingen zodat er geen twee nummers door elkaar spelen."
+        ],
+        "pl": [
+          "Linux (PipeWire) upsampling i synchronizacja zegara: usunięto zacinanie, spowalnianie i trzaski podczas upsamplingu bez zablokowanej częstotliwości wyjścia (np. 44,1 → 96 kHz, w tym Referencyjny 32 bit / 99,7% i Aqulify FFT-DD), zapewniono beztrzaskowe przejście kompensatora dryftu, właściwe opóźnienie bufora oraz synchronizację trybu wyłącznego ALSA.",
+          "Automatyczne wstrzymywanie zewnętrznych odtwarzaczy (Linux, Windows, macOS): uruchomienie lub wznowienie lokalnego utworu we wbudowanym odtwarzaczu automatycznie wstrzymuje grające zewnętrzne odtwarzacze i anuluje trwające łączenie z radiem internetowym, aby dwa utwory nie nakładały się na siebie."
+        ],
+        "ru": [
+          "Апсемплинг и синхронизация такта в Linux (PipeWire): устранены прерывания, замедление и треск при апсемплинге без фиксированной частоты выхода (например, 44,1 → 96 кГц, включая Эталон 32 бит / 99,7% и Aqulify FFT-DD), переход компенсатора дрейфа стал без щелчков, задержка буфера соответствует частоте каждого потока, а эксклюзивный режим ALSA синхронизирован с потоком апсемплинга.",
+          "Автопауза внешних плееров (Linux, Windows, macOS): при запуске или возобновлении локального трека встроенный плеер автоматически ставит на паузу играющие внешние медиаплееры и отменяет незавершённое подключение к интернет-радио, чтобы два источника не звучали одновременно."
+        ],
+        "pt": [
+          "Sobreamostragem e sincronização de relógio no Linux (PipeWire): corrigidos cortes, lentidão e estalos ao sobreamostrar sem taxa de saída fixa (ex. 44,1 → 96 kHz, incluindo Referência 32 bits / 99,7% e Aqulify FFT-DD), transição sem cliques no compensador de desvio, latência correta por fluxo e sincronização do modo exclusivo ALSA.",
+          "Pausa automática de leitores externos (Linux, Windows, macOS): ao iniciar ou retomar música local no leitor integrado, os leitores externos em reprodução são pausados automaticamente e ligações de rádio pendentes são canceladas para evitar duas músicas em simultâneo."
+        ],
+        "ro": [
+          "Supraeșantionare și sincronizare ceas pe Linux (PipeWire): remediate întreruperile, încetinirea și pocniturile la supraeșantionare fără rată de ieșire fixă (ex. 44,1 → 96 kHz, inclusiv Referință 32 biți / 99,7% și Aqulify FFT-DD), tranziție fără clicuri a compensatorului de derivă, latență corectă pe fiecare flux și sincronizarea modului exclusiv ALSA.",
+          "Pauză automată pentru playere externe (Linux, Windows, macOS): la pornirea sau reluarea muzicii locale în playerul integrat, playerele externe aflate în redare sunt puse automat pe pauză și conexiunile radio în curs sunt anulate, astfel încât două piese să nu se suprapună."
+        ],
+        "el": [
+          "Υπερδειγματοληψία και συγχρονισμός ρολογιού σε Linux (PipeWire): διορθώθηκαν διακοπές, επιβράδυνση και θόρυβοι κατά την υπερδειγματοληψία χωρίς σταθερή συχνότητα εξόδου (π.χ. 44,1 → 96 kHz, συμπεριλαμβανομένων Reference 32-bit / 99,7% και Aqulify FFT-DD), ομαλή μετάβαση χωρίς κλικ στον αντισταθμιστή ολίσθησης, σωστή καθυστέρηση ανά ροή και συγχρονισμός αποκλειστικής λειτουργίας ALSA.",
+          "Αυτόματη παύση εξωτερικών αναπαραγωγέων (Linux, Windows, macOS): κατά την έναρξη ή συνέχιση τοπικής μουσικής στον ενσωματωμένο αναπαραγωγέα γίνεται αυτόματα παύση στους ενεργούς εξωτερικούς αναπαραγωγείς και ακύρωση εκκρεμών συνδέσεων διαδικτυακού ραδιοφώνου ώστε να μην παίζουν δύο κομμάτια ταυτόχρονα."
+        ],
+        "tr": [
+          "Linux (PipeWire) yüksek örnekleme ve saat eşzamanlama: çıkış hızı sabit değilken daha yüksek hıza örneklemede (ör. 44,1 → 96 kHz, Referans 32-bit / %99,7 ve Aqulify FFT-DD dahil) oluşan kesinti, yavaşlama ve çıtırtılar giderildi; kayma telafisi geçişi tıkırtısız hale getirildi, tampon gecikmesi her akışın hızına uyarlandı ve ALSA özel modu canlı örnekleme ile eşzamanlandı.",
+          "Harici oynatıcıları otomatik duraklatma (Linux, Windows, macOS): dahili oynatıcıda yerel bir parça başlatıldığında veya sürdürüldüğünde çalan harici medya oynatıcıları otomatik olarak duraklatılır ve bekleyen internet radyosu bağlantıları iptal edilir; böylece iki parça üst üste çalmaz."
+        ],
+        "fi": [
+          "Linux (PipeWire) ylinäytteistys ja kellosynkronointi: korjattu pätkiminen, hidastuminen ja rätinä ylinäytteistettäessä ilman lukittua lähtötaajuutta (esim. 44,1 → 96 kHz, myös Referenssi 32-bit / 99,7 % ja Aqulify FFT-DD), napsahdukseton siirtymä ryömintäkorjaimessa, virrakohtainen puskuriviive ja ALSA-yksinoikeustilan synkronointi.",
+          "Ulkoisten soittimien automaattinen tauko (Linux, Windows, macOS): paikallisen kappaleen käynnistäminen tai jatkaminen sisäänrakennetussa soittimessa keskeyttää automaattisesti soivat ulkoiset mediasoittimet ja peruuttaa avoinna olevan nettiradioyhteyden, jotta kaksi kappaletta ei soi päällekkäin."
+        ],
+        "da": [
+          "Linux (PipeWire) opsampling og ursynkronisering: rettet udfald, langsom afspilning og knitren ved opsampling uden fast udgangsfrekvens (f.eks. 44,1 → 96 kHz, inkl. Reference 32-bit / 99,7 % og Aqulify FFT-DD), klikfri overgang i driftkompensatoren, korrekt bufferlatens pr. strøm og synkronisering med eksklusiv ALSA-tilstand.",
+          "Automatisk pause af eksterne afspillere (Linux, Windows, macOS): ved start eller genoptagelse af lokal musik i den indbyggede afspiller sættes spillende eksterne medieafspillere automatisk på pause og ventende netradioforbindelser afbrydes, så to numre ikke spiller oven i hinanden."
+        ],
+        "nb": [
+          "Linux (PipeWire) oppsampling og klokkesynk: rettet hakking, treg avspilling og knitring ved oppsampling uten låst utgangsfrekvens (f.eks. 44,1 → 96 kHz, inkludert Referanse 32-bit / 99,7 % og Aqulify FFT-DD), klikkfri overgang i driftkompensatoren, riktig bufferlatens per strøm og synkronisering av eksklusiv ALSA-modus.",
+          "Automatisk pause av eksterne spillere (Linux, Windows, macOS): ved start eller gjenopptakelse av lokal musikk i den innebygde spilleren settes spillende eksterne mediespillere automatisk på pause og ventende nettradiotilkoblinger avbrytes, slik at to spor ikke spiller oppå hverandre."
+        ],
+        "sv": [
+          "Linux (PipeWire) uppsampling och klocksynk: åtgärdade avbrott, långsam uppspelning och knaster vid uppsampling utan låst utgångsfrekvens (t.ex. 44,1 → 96 kHz, inklusive Referens 32-bit / 99,7 % och Aqulify FFT-DD), klickfri övergång i driftkompensatorn, rätt buffertlatens per ström och synkronisering med exklusivt ALSA-läge.",
+          "Automatisk paus av externa spelare (Linux, Windows, macOS): när lokal musik startas eller återupptas i den inbyggda spelaren pausas automatiskt spelande externa mediespelare och pågående webbradioanslutningar avbryts så att två spår inte spelar samtidigt."
+        ],
+        "he": [
+          "דגימה מעלה וסנכרון שעון ב-Linux (PipeWire): תוקנו קיטועים, האטה ורעשים בעת דגימה מעלה ללא קצב יציאה קבוע (כגון 44.1 → 96 kHz, כולל Reference 32-bit / 99.7% ו-Aqulify FFT-DD), מעבר ללא קליק במפצה הסחיפה, השהיית חוצץ תואמת לכל זרם וסנכרון מצב ALSA בלעדי.",
+          "השהיה אוטומטית של נגנים חיצוניים (Linux, Windows, macOS): הפעלה או המשך של קובץ מקומי בנגן המובנה משהה אוטומטית נגני מדיה חיצוניים פועלים ומבטלת חיבור רדיו אינטרנט ממתין, כך ששני קטעים לא יתנגנו יחד."
+        ],
+        "ja": [
+          "Linux（PipeWire）アップサンプリングとクロック同期：出力レート未固定時の高レート変換（44.1 → 96 kHz、リファレンス 32-bit / 99.7% および Aqulify FFT-DD を含む）で発生していた音切れ・減速・ノイズを解消し、ドリフト補償の無クリック遷移、ストリーム別バッファ遅延の整合、ALSA 排他モードとの同期を改善しました。",
+          "外部プレーヤーの自動一時停止（Linux / Windows / macOS）：内蔵プレーヤーでローカル曲の再生を開始または再開する際、再生中の外部メディアプレーヤーを自動で一時停止し接続中のネットラジオをキャンセルして、音が重ならないようにしました。"
+        ],
+        "ko": [
+          "Linux(PipeWire) 업샘플링 및 클럭 동기화: 출력 샘플레이트가 고정되지 않은 상태에서 높은 레이트로 업샘플링할 때(예: 44.1 → 96 kHz, 레퍼런스 32비트 / 99.7% 및 Aqulify FFT-DD 포함) 발생하던 끊김·느려짐·잡음을 해결하고, 드리프트 보정기의 무클릭 전환, 스트림별 버퍼 지연 정합 및 ALSA 단독 모드 동기화를 적용했습니다.",
+          "외부 플레이어 자동 일시정지(Linux, Windows, macOS): 내장 플레이어에서 로컬 음악을 시작하거나 재개할 때 재생 중인 외부 미디어 플레이어를 자동으로 일시정지하고 대기 중인 인터넷 라디오 연결을 취소해 두 곡이 겹쳐 재생되지 않도록 했습니다."
+        ],
+        "cs": [
+          "Linux (PipeWire) převzorkování a synchronizace hodin: opraveny výpadky, zpomalení a praskání při převzorkování bez pevné výstupní frekvence (např. 44,1 → 96 kHz včetně Referenčního 32 bit / 99,7 % a Aqulify FFT-DD), bezlupancový přechod kompenzátoru driftu, správná latence vyrovnávací paměti pro každý tok a synchronizace výhradního režimu ALSA.",
+          "Automatické pozastavení externích přehrávačů (Linux, Windows, macOS): při spuštění nebo pokračování místní hudby ve vestavěném přehrávači se automaticky pozastaví hrající externí přehrávače a zruší rozpracované připojení k internetovému rádiu, aby nehrály dvě skladby přes sebe."
+        ],
+        "uk": [
+          "Апсемплінг і синхронізація такту в Linux (PipeWire): усунено переривання, уповільнення та тріск під час апсемплінгу без фіксованої частоти виходу (напр. 44,1 → 96 кГц, зокрема Еталон 32 біт / 99,7% і Aqulify FFT-DD), перехід компенсатора дрейфу став без клацань, затримка буфера відповідає частоті кожного потоку, а ексклюзивний режим ALSA синхронізовано з потоком апсемплінгу.",
+          "Автопауза зовнішніх плеєрів (Linux, Windows, macOS): під час запуску або відновлення локального треку вбудований плеєр автоматично ставить на паузу активні зовнішні медіаплеєри та скасовує незавершене підключення до інтернет-радіо, щоб дві композиції не накладались одна на одну."
+        ]
+      }
+    },
+    {
       "version": "3.0.5",
       "date": "2026-11-27",
       "notes": {

@@ -104,7 +104,7 @@ bash install.sh
 
 ## Limitations, Known Issues & "What It Does Not Do Yet"
 
-Honest status as of **v3.0.5**:
+Honest status as of **v3.0.6**:
 
 - **Windows multi-output:** simultaneous 2–4 DAC outputs and active multi-way crossovers work on Linux and macOS only; Windows support is not implemented yet.
 - **Room measurement & correction (experimental):** verified extensively with automated tests and a simulated microphone, **not yet validated in the field with a real physical measurement microphone**.
