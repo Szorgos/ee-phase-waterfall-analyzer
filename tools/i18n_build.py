@@ -77,6 +77,15 @@ def validate(domain, d):
         for k in tbl:
             if k not in src:
                 errors.append(f"{domain}/{lang}: fölösleges kulcs {k}")
+    if domain == "gui":
+        # F3: a szobamérés kísérleti szövege egyik nyelven sem küldhet GitHubra, a beépített hibajelentő gombot nevezze meg
+        for lang, tbl in d.items():
+            exp = tbl.get("rw.experimentalText", "")
+            btn = tbl.get("er.reportBtn", "")
+            if "github" in exp.lower():
+                errors.append(f"gui/{lang}: rw.experimentalText nem tartalmazhatja a GitHub szót")
+            if btn and btn not in exp:
+                errors.append(f"gui/{lang}: rw.experimentalText nem tartalmazza er.reportBtn ({btn!r}) feliratát")
 
 
 def load_whatsnew():

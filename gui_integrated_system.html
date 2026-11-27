@@ -6479,7 +6479,7 @@ var qrcode = function() {
           </div>
           <div style="margin-bottom:6px;">
             <div style="font-weight:600; color:var(--aq-amber);" data-i18n="rw.helpPointsH">Több mérési pont (3–5 pont)</div>
-            <div data-i18n="rw.helpPointsP">Egyetlen pont félrevezető lehet a szobamódusok miatt. Mérj 3–5 pontot a hallgatási hely körül (balra-jobbra, előre-hátra és kissé fel-le mozgatva, rálátással a magassugárzókra). Az Aqulify teljesítményben átlagolja a pontokat, a rossz vagy zajos pontot pedig törölheted.</div>
+            <div data-i18n="rw.helpPointsP">Egyetlen pont félrevezető lehet a szobamódusok miatt. Mérj 3–5 pontot a hallgatási hely körül (balra-jobbra, előre-hátra és kissé fel-le mozgatva, rálátással a magassugárzókra). Az Aqulify teljesítményben átlagolja a pontokat, a rossz vagy zajos pontot pedig törölheted. Zajos szobában és egyetlen mérőpontból a keskenyebb vágások gyakran csak arra a helyre érvényesek – csendben, 3–5 pontból megbízhatóbb a korrekció.</div>
           </div>
           <div style="margin-bottom:6px;">
             <div style="font-weight:600; color:var(--aq-amber);" data-i18n="rw.helpPrepH">Előkészület és Windows hangjavítások</div>
@@ -6505,7 +6505,7 @@ var qrcode = function() {
           <!-- Kísérleti funkció (2.5.0): a figyelmeztetés egy későbbi kiadásban, elegendő visszajelzés után kerül le -->
           <div id="rwExperimentalNote" role="note" style="background:rgba(229,165,10,0.15); border:1px solid #e5a50a; padding:8px 12px; border-radius:6px; font-size:0.85rem; line-height:1.4;">
             <strong data-i18n="rw.experimentalTitle">Kísérleti funkció</strong> —
-            <span data-i18n="rw.experimentalText">A szobamérés új, még kevés gépen kipróbált. A javaslatot füllel is ellenőrizd (A/B), és ha valami furcsát tapasztalsz, írd meg nekünk a GitHubon (Issues) – a visszajelzésed segít.</span>
+            <span data-i18n="rw.experimentalText">A szobamérés új, még kevés gépen kipróbált. A javaslatot füllel is ellenőrizd (A/B), és ha valami furcsát tapasztalsz, használd a beépített „Hibát jelentek” gombot – a visszajelzésed segít.</span>
           </div>
           <p style="margin:0; font-size:0.9rem;" data-i18n="room.helpMic">Helyezd a mérőmikrofont a hallgatási pozícióba, fülmagasságban.</p>
           <div style="background:rgba(235,160,0,0.12); border-left:3px solid var(--aq-amber); padding:8px 12px; border-radius:4px; font-size:0.8rem; line-height:1.35;" data-i18n="rw.win11Warning">
@@ -6577,6 +6577,7 @@ var qrcode = function() {
         <!-- LÉPÉS 3: Mérés -->
         <div id="rwStep3" class="rw-step-pane" style="display:none; flex-direction:column; gap:14px; flex:1;">
           <p style="margin:0; font-size:0.9rem;" data-i18n="rw.sweepHelp">A mérés alatt logaritmikus szinusz sweep hangot játszunk le. Kérjük maradj csendben.</p>
+          <div id="rwStep3CalStatus" style="font-size:0.82rem; color:var(--aq-text-2);">Kalibráció nélkül</div>
           <div style="display:flex; gap:12px; align-items:center;">
             <button type="button" class="adw-btn primary" id="btnRwStartSweep" onclick="startRwSweepMeasurement()" data-i18n="rw.startSweep">Mérés indítása</button>
             <button type="button" class="adw-btn danger" id="btnRwEmergencyStop" onclick="emergencyStopMeasurement()" style="display:none;" data-i18n="rw.emergencyStop">Azonnali leállítás</button>
@@ -6606,6 +6607,7 @@ var qrcode = function() {
           <div style="background:rgba(255,191,0,0.1); border-left:4px solid var(--aq-amber); padding:10px 14px; border-radius:4px;">
             <h4 style="margin:0 0 6px 0; font-size:1rem; color:var(--aq-amber);" data-i18n="rw.resultsHeading">Kiértékelés</h4>
             <div id="rwHumanSummaryText" style="font-size:0.9rem; line-height:1.4; white-space:pre-line;" data-i18n="rw.processing">Mérés feldolgozása…</div>
+            <div id="rwResultCalInfo" style="margin-top:6px; font-size:0.8rem; color:var(--aq-text-2);"></div>
           </div>
 
           <!-- Többpontos állapot a 4. lépésben is (pontok átlaga, rossz pont törlése, új pont felvétele) -->
@@ -6712,6 +6714,7 @@ var qrcode = function() {
             <button type="button" class="adw-btn" id="btnRwSaveProfile" onclick="saveRwAsProfile()" data-i18n="room.saveProfileBtn">Mentés profilként</button>
           </div>
           <div id="rwApplyResultNotice" style="font-size:0.85rem; color:var(--aq-green); font-weight:600;"></div>
+          <div id="rwAbLevelNotice" style="display:none; font-size:0.82rem; color:var(--aq-text-2); line-height:1.35;"></div>
         </div>
 
         <!-- Alsó navigációs gombok -->
@@ -14344,8 +14347,14 @@ function initPipewireBridge() {
         }
         if (data && data.type === "audio_devices" && Array.isArray(data.inputs)) {
           const sel = document.getElementById("rwMicSelect");
+          const note = document.getElementById("rwMicAvailNote");
+          let missingMicName = "";
           if (sel) {
             const prev = sel.value;
+            const prevOpt = [...sel.options].find(o => o.value === prev);
+            const prevRawName = (prevOpt && prevOpt.dataset && prevOpt.dataset.rawName)
+              ? prevOpt.dataset.rawName
+              : (prevOpt ? prevOpt.textContent : prev);
             sel.innerHTML = "";
             const def = document.createElement("option");
             def.value = "default";
@@ -14355,13 +14364,29 @@ function initPipewireBridge() {
               const opt = document.createElement("option");
               opt.value = inp.id;
               opt.textContent = inp.name;
+              opt.dataset.rawName = inp.name;
               sel.appendChild(opt);
             });
-            if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
-            loadRwCalForCurrentMic();
+            if ([...sel.options].some(o => o.value === prev)) {
+              sel.value = prev;
+            } else if (prev && prev !== "default") {
+              // A korábban választott eszköz nincs a listában: maradjon kiválasztva "(nem elérhető)" jelöléssel
+              const missOpt = document.createElement("option");
+              missOpt.value = prev;
+              missOpt.dataset.unavailable = "1";
+              missOpt.dataset.rawName = prevRawName || prev;
+              missOpt.textContent = (prevRawName || prev) + " (" + t('rw.micUnavailableTag') + ")";
+              sel.appendChild(missOpt);
+              sel.value = prev;
+              missingMicName = prevRawName || prev;
+            }
+            loadRwCalForCurrentMic(true);
           }
-          const note = document.getElementById("rwMicAvailNote");
-          if (note) note.textContent = data.available === false ? t('rw.notImplemented') : '';
+          if (note) {
+            if (data.available === false) note.textContent = t('rw.notImplemented');
+            else if (missingMicName) note.textContent = t('rw.micUnavailableWarn', { name: missingMicName });
+            else note.textContent = '';
+          }
         }
         if (data && data.type === "auto_profile_switched" && data.profile) {
           if (typeof showToast === "function") showToast(t("profile.autoSwitch") + ": " + data.profile);
@@ -16516,6 +16541,7 @@ var rwRecomputeTimer = null;
 var rwAbOriginal = null;
 var rwAbActive = false;
 var rwActiveMicCal = null;  // { fileName, parsed }
+var rwPendingMeasCalName = null;  // a start_measurement pillanatában használt kalibrációs fájlnév (vagy null)
 
 function toggleRwHelp(forceState) {
   const box = document.getElementById('rwHelpBox');
@@ -16535,28 +16561,87 @@ function getRwCalStorageKey(micId) {
   return 'aq_mic_cal_' + String(micId || 'default');
 }
 
-function loadRwCalForCurrentMic() {
+function isValidRwMicCal(obj) {
+  return !!(obj && obj.parsed && obj.parsed.ok && Array.isArray(obj.parsed.points) && obj.parsed.points.length >= 3);
+}
+
+function loadRwCalForCurrentMic(keepCurrentIfMissing) {
   const micId = getRwMicId();
-  rwActiveMicCal = null;
+  const prevCal = rwActiveMicCal;
+  let loaded = null;
   try {
     const raw = localStorage.getItem(getRwCalStorageKey(micId));
     if (raw) {
       const obj = JSON.parse(raw);
-      if (obj && obj.parsed && obj.parsed.ok && Array.isArray(obj.parsed.points) && obj.parsed.points.length >= 3) {
-        rwActiveMicCal = obj;
+      if (isValidRwMicCal(obj)) {
+        loaded = obj;
       }
     }
   } catch (e) {}
+  if (loaded) {
+    rwActiveMicCal = loaded;
+    if (prevCal && prevCal.fileName !== loaded.fileName) {
+      const inp = document.getElementById('rwCalFileInput');
+      if (inp) inp.value = '';
+    }
+  } else if (keepCurrentIfMissing && isValidRwMicCal(prevCal)) {
+    // Ha az új mikrofonhoz nincs mentett kalibráció, de előtte volt aktív, maradjon aktív és mentődjön alá is
+    rwActiveMicCal = prevCal;
+    try {
+      localStorage.setItem(getRwCalStorageKey(micId), JSON.stringify(rwActiveMicCal));
+    } catch (e) {}
+  } else {
+    rwActiveMicCal = null;
+  }
   renderRwCalStatus();
 }
 
 function onRwMicChanged() {
-  loadRwCalForCurrentMic();
+  const sel = document.getElementById('rwMicSelect');
+  const note = document.getElementById('rwMicAvailNote');
+  if (sel && note) {
+    const curOpt = [...sel.options].find(o => o.value === sel.value);
+    if (!curOpt || curOpt.dataset.unavailable !== '1') {
+      note.textContent = '';
+    }
+  }
+  loadRwCalForCurrentMic(true);
+}
+
+function getRwCalAngle(calObj) {
+  if (!calObj || !calObj.parsed) return null;
+  if (typeof calObj.parsed.calAngle === 'number') return calObj.parsed.calAngle;
+  if (typeof AqulifyImport !== 'undefined' && typeof AqulifyImport.detectMicCalAngle === 'function') {
+    return AqulifyImport.detectMicCalAngle(calObj.fileName);
+  }
+  return null;
+}
+
+function renderRwStep3CalStatus() {
+  const el = document.getElementById('rwStep3CalStatus');
+  if (!el) return;
+  if (!rwActiveMicCal) {
+    el.textContent = t('rw.step3CalNone');
+    el.style.color = 'var(--aq-text-2)';
+    return;
+  }
+  const angle = getRwCalAngle(rwActiveMicCal);
+  if (angle === 90 || angle === 0) {
+    el.textContent = t('rw.step3CalFileAngle', { file: rwActiveMicCal.fileName, angle: angle });
+  } else {
+    el.textContent = t('rw.step3CalFile', { file: rwActiveMicCal.fileName });
+  }
+  el.style.color = (angle === 0) ? 'var(--aq-amber)' : 'var(--aq-green)';
 }
 
 function renderRwCalStatus(errMsg) {
   const status = document.getElementById('rwCalFileStatus');
   const btnClear = document.getElementById('btnRwClearCal');
+  const inp = document.getElementById('rwCalFileInput');
+  if (!rwActiveMicCal && inp && inp.value) {
+    inp.value = '';
+  }
+  renderRwStep3CalStatus();
   if (!status) return;
   if (errMsg) {
     status.textContent = errMsg;
@@ -16575,10 +16660,7 @@ function renderRwCalStatus(errMsg) {
   let txt = t('rw.calSummary', { file: rwActiveMicCal.fileName, n: p.points.length,
     fmin: fmtNum(Math.round(p.minFreq)), fmax: fmtNum(Math.round(p.maxFreq)), max: maxStr });
   if (typeof p.sensitivity === 'number') txt += ' · ' + t('rw.calSens', { sens: fmtNum(p.sensitivity, 1) });
-  const angle = (typeof p.calAngle === 'number')
-    ? p.calAngle
-    : ((typeof AqulifyImport !== 'undefined' && typeof AqulifyImport.detectMicCalAngle === 'function')
-        ? AqulifyImport.detectMicCalAngle(rwActiveMicCal.fileName) : null);
+  const angle = getRwCalAngle(rwActiveMicCal);
   if (angle === 90) {
     txt += ' · ' + t('rw.cal90Detected');
   } else if (angle === 0) {
@@ -16642,6 +16724,7 @@ function setRoomWizardStep(step) {
   const btnNext = document.getElementById('btnRwNext');
   if (btnBack) btnBack.style.visibility = (step === 1) ? 'hidden' : 'visible';
   if (btnNext) btnNext.style.display = (step === 5) ? 'none' : 'inline-block';
+  if (step === 3) renderRwStep3CalStatus();
 }
 
 function rwNavNext() {
@@ -16809,6 +16892,9 @@ function startRwSweepMeasurement() {
     };
     if (rwActiveMicCal && rwActiveMicCal.parsed && Array.isArray(rwActiveMicCal.parsed.points)) {
       payload.cal_points = rwActiveMicCal.parsed.points.map(p => ({ freq: p.freq, db: p.db }));
+      rwPendingMeasCalName = rwActiveMicCal.fileName || null;
+    } else {
+      rwPendingMeasCalName = null;
     }
     pipewireWs.send(JSON.stringify(payload));
   } else {
@@ -16957,6 +17043,11 @@ function handleRwMeasurementResult(res) {
   if (!res.recomputed) {
     rwAppendNextPoint = false;
     if (hasRwPerChannelData(res)) rwEqMode = 'split';
+    if (typeof res.cal_file === 'undefined') {
+      res.cal_file = rwPendingMeasCalName;
+    }
+  } else if (typeof res.cal_file === 'undefined' && rwMeasuredData && typeof rwMeasuredData.cal_file !== 'undefined') {
+    res.cal_file = rwMeasuredData.cal_file;
   }
   rwMeasuredData = res;
   updateRwPointCountUi();
@@ -16971,6 +17062,14 @@ function renderRwResults() {
     // A motor összefoglalója magyarul és angolul érkezik: magyar felületen a magyar, egyébként az angol
     sumEl.textContent = (aqLang === 'hu' ? rwMeasuredData.human_summary_hu : rwMeasuredData.human_summary_en) ||
       rwMeasuredData.human_summary_en || rwMeasuredData.human_summary_hu || '';
+  }
+  const calInfoEl = document.getElementById('rwResultCalInfo');
+  if (calInfoEl) {
+    const calName = (typeof rwMeasuredData.cal_file === 'string' && rwMeasuredData.cal_file.trim())
+      ? rwMeasuredData.cal_file.trim() : null;
+    calInfoEl.textContent = calName
+      ? t('rw.resultCalUsed', { file: calName })
+      : t('rw.resultCalNone');
   }
 
   // Csatornánkénti / közös választó (csak „both” mérésnél, ha megvannak az L/R sávok)
@@ -17198,9 +17297,13 @@ function saveRwSessionToFile() {
     alert(t('rw.noDataToSave') || 'Nincs menthető mérési adat.');
     return;
   }
-  const toSave = hasRwPerChannelData(rwMeasuredData)
-    ? Object.assign({}, rwMeasuredData, { eq_mode: rwEqMode })
-    : rwMeasuredData;
+  const toSave = Object.assign({}, rwMeasuredData, {
+    cal_file: (typeof rwMeasuredData.cal_file === 'string' && rwMeasuredData.cal_file.trim())
+      ? rwMeasuredData.cal_file.trim() : null
+  });
+  if (hasRwPerChannelData(rwMeasuredData)) {
+    toSave.eq_mode = rwEqMode;
+  }
   const blob = new Blob([JSON.stringify(toSave, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -17246,10 +17349,51 @@ function computeRwPreampDb(bandsL, bandsR) {
     maxPosEq = (rwMeasuredData && typeof rwMeasuredData.recommended_preamp_db === 'number')
       ? Math.max(0, -rwMeasuredData.recommended_preamp_db) : 0;
   }
+  // Ha az összegzett EQ-görbe csúcsa mindkét csatornán <= +0,05 dB (csak vágás), nincs szükség előerősítésre és tartalékra
+  if (maxPosEq <= 0.05) return 0.0;
   const hEl = document.getElementById('rwHeadroomSlider');
   const hVal = hEl ? parseFloat(hEl.value) : -4.0;
   const margin = Number.isFinite(hVal) ? Math.abs(Math.min(0, hVal)) : 4.0;
   return Math.max(-36.0, Math.round(-(maxPosEq + margin) * 10) / 10);
+}
+
+/** Összegzett EQ-görbe (preamppal együtt) átlaga 200 Hz–5 kHz között, log-frekvencián (dB). */
+function computeRwAbMidbandDeltaDb(bandsL, bandsR, preampDb) {
+  const pre = Number.isFinite(preampDb) ? preampDb : 0.0;
+  const avgOf = (list) => {
+    const arr = Array.isArray(list) ? list : [];
+    const N = 200;
+    const logMin = Math.log10(200);
+    const logMax = Math.log10(5000);
+    let sum = 0.0;
+    for (let i = 0; i <= N; i++) {
+      const f = Math.pow(10, logMin + (logMax - logMin) * (i / N));
+      let tot_re = 1, tot_im = 0;
+      if (typeof evalBiquad === 'function') {
+        for (const flt of arr) {
+          const h = evalBiquad(flt, f);
+          const nr = tot_re * h.re - tot_im * h.im;
+          const ni = tot_re * h.im + tot_im * h.re;
+          tot_re = nr; tot_im = ni;
+        }
+      }
+      sum += 20 * Math.log10(Math.max(1e-4, Math.hypot(tot_re, tot_im)));
+    }
+    return (sum / (N + 1)) + pre;
+  };
+  if (Array.isArray(bandsR)) {
+    return (avgOf(bandsL) + avgOf(bandsR)) / 2;
+  }
+  return avgOf(bandsL);
+}
+
+/** A/B tájékoztató szöveg a fő hangtartománybeli hangerő-eltérésről (csak |X| >= 1 dB esetén). */
+function formatRwAbLevelNotice(deltaDb) {
+  if (!Number.isFinite(deltaDb) || Math.abs(deltaDb) < 1.0) return '';
+  const absStr = fmtNum(Math.abs(deltaDb), 1);
+  return deltaDb < 0
+    ? t('rw.abQuieterNotice', { db: absStr })
+    : t('rw.abLouderNotice', { db: absStr });
 }
 
 function applyRwPreampUi(val) {
@@ -17287,10 +17431,14 @@ function applyRwCorrection() {
   const useSplitBoth = isRwSplitModeActive();
   let targetPreamp = 0.0;
   let wsPayload = null;
+  let appliedBandsL = [];
+  let appliedBandsR = null;
 
   if (useSplitBoth) {
     const bandsL = toNormBands(rwMeasuredData.bands_left);
     const bandsR = toNormBands(rwMeasuredData.bands_right);
+    appliedBandsL = bandsL;
+    appliedBandsR = bandsR;
     targetPreamp = computeRwPreampDb(bandsL, bandsR);
     autoPreampMode = false;
     applyRwPreampUi(targetPreamp);
@@ -17314,6 +17462,8 @@ function applyRwCorrection() {
     const prevR = (rwLastBackupSplit ? rwLastBackupR : rwLastBackupL).map((b, i) => normBand(b, i));
     const bandsL = (ch === 'left') ? newBands : prevL;
     const bandsR = (ch === 'right') ? newBands : prevR;
+    appliedBandsL = bandsL;
+    appliedBandsR = bandsR;
     targetPreamp = computeRwPreampDb(bandsL, bandsR);
     autoPreampMode = false;
     applyRwPreampUi(targetPreamp);
@@ -17330,6 +17480,8 @@ function applyRwCorrection() {
     };
   } else {
     const newBands = toNormBands(rwMeasuredData.bands);
+    appliedBandsL = newBands;
+    appliedBandsR = null;
     targetPreamp = computeRwPreampDb(newBands, null);
     autoPreampMode = false;
     applyRwPreampUi(targetPreamp);
@@ -17361,7 +17513,18 @@ function applyRwCorrection() {
   const btnAb = document.getElementById('btnRwAbCompare');
   if (btnAb) btnAb.textContent = t('room.abBtn');
   const notice = document.getElementById('rwApplyResultNotice');
-  if (notice) notice.textContent = t('rw.appliedWithPreamp', { preamp: fmtNum(currentPreamp, 1) });
+  if (notice) {
+    notice.textContent = (currentPreamp === 0)
+      ? t('rw.appliedCutOnly')
+      : t('rw.appliedWithPreamp', { preamp: fmtNum(currentPreamp, 1) });
+  }
+  const abNotice = document.getElementById('rwAbLevelNotice');
+  if (abNotice) {
+    const abDelta = computeRwAbMidbandDeltaDb(appliedBandsL, appliedBandsR, currentPreamp);
+    const abTxt = formatRwAbLevelNotice(abDelta);
+    abNotice.textContent = abTxt;
+    abNotice.style.display = abTxt ? 'block' : 'none';
+  }
 }
 
 function toggleRwAbCompare() {
@@ -17413,6 +17576,8 @@ function undoRwCorrection() {
   if (btn) btn.textContent = t('room.abBtn');
   const notice = document.getElementById('rwApplyResultNotice');
   if (notice) notice.textContent = t('rw.undoneNotice');
+  const abNotice = document.getElementById('rwAbLevelNotice');
+  if (abNotice) { abNotice.textContent = ''; abNotice.style.display = 'none'; }
 }
 
 function saveRwAsProfile() {
