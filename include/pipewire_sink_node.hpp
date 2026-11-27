@@ -648,6 +648,11 @@ private:
         playbackStreaming.store(false, std::memory_order_release);
         playbackRate_.store(0, std::memory_order_relaxed);
         driverClockRate_.store(0, std::memory_order_relaxed);
+        lastCapturePinTarget_ = 0;
+        if (capturePinnedRate_ != 0) {
+            capturePinnedRate_ = 0;
+            updateCaptureEnumFormat(0);
+        }
         updateOutputHeartbeatExpected();
         struct pw_stream* old = playbackPtr_.exchange(nullptr, std::memory_order_acq_rel);
         playback = nullptr;
@@ -708,7 +713,8 @@ private:
     LiveUpsRequest liveUpsApplied_;                   // csak a fő hurok szála
     std::string liveUpsAppliedTarget_;                // a szétválasztott playback stream aktuális fizikai célja (fő hurok)
     uint32_t appliedCaptureForceRate_ = 0;            // a capture streamen beállított node.force-rate (csak a fő hurok szála)
-    uint32_t lastCaptureRenegotiateRate_ = 0;         // utoljára kért capture formátum-újratárgyalás célrátája (fő hurok)
+    uint32_t capturePinnedRate_ = 0;                  // ideiglenesen kért capture EnumFormat ráta (0: szabad; fő hurok)
+    uint32_t lastCapturePinTarget_ = 0;               // utoljára kényszerített célráta (ping-pong védelem; fő hurok)
     std::string appliedCaptureGroup_;                 // a capture stream aktuális node.group tulajdonsága (csak a fő hurok szála)
     std::string dummyDriverGroup_{"pipewire.dummy"};  // a PipeWire Dummy-Driver csoportneve (regiszterből frissítve)
     uint32_t dummyDriverId_ = 0;                      // a PipeWire Dummy-Driver csomópont ID-ja (fő hurok)
@@ -726,6 +732,11 @@ private:
      */
     void setCaptureDecoupledProps(bool decoupled, uint32_t srcRate) {
         if (!capture) return;
+        if (decoupled && capturePinnedRate_ != 0) {
+            capturePinnedRate_ = 0;
+            lastCapturePinTarget_ = 0;
+            updateCaptureEnumFormat(0);
+        }
         const uint32_t wantRate = decoupled ? srcRate : 0;
         const std::string wantGroup = decoupled ? dummyDriverGroup_ : group_;
         if (wantRate == appliedCaptureForceRate_ && wantGroup == appliedCaptureGroup_) return;
@@ -741,23 +752,32 @@ private:
         pw_stream_update_properties(capture, &dict);
     }
 
-    /**
-     * Közvetlen módban a capture stream (aqulify_sink) formátumának újratárgyaltatása a gráf / playback rátájához.
-     * Ha a playback stream új cél-DAC-on épül újra (pl. kimenetváltás / reconnect), az idle maradt capture stream
-     * különben a régi mintavételen ragadhatna (pl. 44,1 kHz a 48 / 88,2 kHz-es playback mellett).
-     */
-    void renegotiateCaptureFormat(uint32_t targetRate) {
-        if (!capture || liveUpsActive_.load(std::memory_order_acquire)) return;
-        lastCaptureRenegotiateRate_ = targetRate;
+    /** A capture stream (aqulify_sink) EnumFormat rátájának frissítése (0: szabad; >0: adott rátára kényszerítés). */
+    void updateCaptureEnumFormat(uint32_t rate) {
+        if (!capture) return;
         uint8_t buf[1024];
         struct spa_audio_info_raw info{};
         info.format = SPA_AUDIO_FORMAT_F32P;
         info.channels = 2;
         info.position[0] = SPA_AUDIO_CHANNEL_FL;
         info.position[1] = SPA_AUDIO_CHANNEL_FR;
+        info.rate = rate;
         struct spa_pod_builder b = SPA_POD_BUILDER_INIT(buf, sizeof(buf));
         const struct spa_pod* cparams[1] = { spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &info) };
         pw_stream_update_params(capture, cparams, 1);
+    }
+
+    /**
+     * Közvetlen módban, ha a capture stream (aqulify_sink) a playback streamtől eltérő rátán ragadt (pl. kimenetváltás
+     * vagy reconnect után, PipeWire 1.0.x és 1.6.x alatt is), ideiglenesen a playback rátájára kényszerítjük az
+     * EnumFormat-ot; amint onParamChanged visszaigazolja a rátát, újra szabadra (rate = 0) engedjük.
+     */
+    void pinCaptureFormatToRate(uint32_t targetRate) {
+        if (!capture || targetRate == 0 || liveUpsActive_.load(std::memory_order_acquire)) return;
+        if (capturePinnedRate_ == targetRate || lastCapturePinTarget_ == targetRate) return;
+        capturePinnedRate_ = targetRate;
+        lastCapturePinTarget_ = targetRate;
+        updateCaptureEnumFormat(targetRate);
     }
 
     /** A cél fizikai Audio/Sink csomópont valódi SPA_PARAM_Format mintavételének figyelése (fő hurok szála). */
@@ -1590,7 +1610,6 @@ private:
             return false;
         }
         playbackTriggerReady_.store(!decoupled, std::memory_order_release);
-        if (!decoupled) renegotiateCaptureFormat(0);
         return true;
     }
 
@@ -1877,9 +1896,15 @@ private:
                 if (self->loop && self->liveUpsEvent_)
                     pw_loop_signal_event(pw_main_loop_get_loop(self->loop), self->liveUpsEvent_);
             } else {
-                self->sampleRate.store(info.rate, std::memory_order_relaxed);
-                if (info.rate == self->playbackRate_.load(std::memory_order_relaxed)) {
-                    self->lastCaptureRenegotiateRate_ = info.rate;
+                const uint32_t pbRate = self->playbackRate_.load(std::memory_order_relaxed);
+                if (pbRate == 0 || info.rate == pbRate) {
+                    self->sampleRate.store(info.rate, std::memory_order_relaxed);
+                }
+                if (self->capturePinnedRate_ != 0 && info.rate == self->capturePinnedRate_) {
+                    self->capturePinnedRate_ = 0;
+                    self->updateCaptureEnumFormat(0);
+                } else if (pbRate > 0 && info.rate != pbRate) {
+                    self->pinCaptureFormatToRate(pbRate);
                 }
             }
         }
@@ -1898,9 +1923,8 @@ private:
                 self->updateLiveBridgeRateGate();
                 if (self->loop && self->liveUpsEvent_)
                     pw_loop_signal_event(pw_main_loop_get_loop(self->loop), self->liveUpsEvent_);
-            } else if (self->captureRate_.load(std::memory_order_relaxed) != info.rate &&
-                       self->lastCaptureRenegotiateRate_ != info.rate) {
-                self->renegotiateCaptureFormat(info.rate);
+            } else if (self->captureRate_.load(std::memory_order_relaxed) != info.rate) {
+                self->pinCaptureFormatToRate(info.rate);
             }
         }
     }

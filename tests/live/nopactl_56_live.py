@@ -162,13 +162,14 @@ def main():
 
     u3 = ul.get_status().get("upsample", {})
     fix_sr = ul.pw_node_rate("dac_fix48")
+    fix_aq_sr = ul.pw_node_rate("aqulify_sink")
     tone3 = record_1khz("dac_fix48", sr=48000, dur=1.4)
     check(u3.get("active") is True and u3.get("reason") == "filter_only" and
           u3.get("srcRate") == 48000 and u3.get("targetRate") == 48000 and
           u3.get("actualDacRate") == 48000 and u3.get("resampleWarning") is False,
           f"#56-3c: nem-USB EnumFormat fix 48 kHz -> filter_only 48000 Hz (NEM 96000 Hz): {u3}")
-    check(fix_sr == 48000 and tone3 is not None and tone3 > -20.0,
-          f"#56-3d: dac_fix48 valódi ráta={fix_sr} Hz, 1 kHz jel={tone3:.1f} dBFS" if tone3 is not None else "#56-3d: felvétel sikertelen")
+    check(fix_sr == 48000 and fix_aq_sr == 48000 and tone3 is not None and tone3 > -20.0,
+          f"#56-3d: dac_fix48={fix_sr} Hz, aqulify_sink={fix_aq_sr} Hz, 1 kHz jel={tone3:.1f} dBFS" if tone3 is not None else "#56-3d: felvétel sikertelen")
 
     ws.send({"type": "player_stop"})
     ws.wait_type("player_result", limit=300)
@@ -187,13 +188,14 @@ def main():
 
     u4 = ul.get_status().get("upsample", {})
     alt_sr = ul.pw_node_rate("dac_alt")
+    alt_aq_sr = ul.pw_node_rate("aqulify_sink")
     tone4 = record_1khz("dac_alt", sr=88200, dur=1.4)
     check(u4.get("active") is True and u4.get("reason") == "" and
           u4.get("srcRate") == 44100 and u4.get("targetRate") == 88200 and
           u4.get("actualDacRate") == 88200 and u4.get("resampleWarning") is False,
           f"#56-4c: korlátozatlan DAC-on valódi 44,1 -> 88,2 kHz felmintavételezés: {u4}")
-    check(alt_sr == 88200 and tone4 is not None and tone4 > -20.0,
-          f"#56-4d: dac_alt valódi ráta={alt_sr} Hz, 1 kHz jel={tone4:.1f} dBFS" if tone4 is not None else "#56-4d: felvétel sikertelen")
+    check(alt_sr == 88200 and alt_aq_sr == 88200 and tone4 is not None and tone4 > -20.0,
+          f"#56-4d: dac_alt={alt_sr} Hz, aqulify_sink={alt_aq_sr} Hz, 1 kHz jel={tone4:.1f} dBFS" if tone4 is not None else "#56-4d: felvétel sikertelen")
 
     ws.send({"type": "player_stop"})
     ws.wait_type("player_result", limit=300)
