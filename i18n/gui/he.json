@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrected (R)",
   "rw.filterListLeft": "Left channel (L):",
   "rw.filterListRight": "Right channel (R):",
-  "rw.filterListNone": "(no bands)"
+  "rw.filterListNone": "(no bands)",
+  "library.errDenied": "הגישה לתיקייה זו נדחתה.",
+  "library.errNotFound": "התיקייה לא נמצאה.",
+  "library.errNotDir": "נתיב זה אינו תיקייה.",
+  "library.errTimeout": "תם הזמן הקצוב לקריאת התיקייה.",
+  "library.errGeneric": "שגיאת תיקייה: {err}",
+  "library.errSkipped": "{n} פריטים לא ניתנים לקריאה או לפענוח (דולגו).",
+  "library.errMacTccHint": "ב-macOS, אשר את Aqulify תחת הגדרות המערכת → פרטיות ואבטחה → קבצים ותיקיות.",
+  "library.errBadgeDenied": "הגישה נדחתה",
+  "library.errBadgeNotFound": "לא נמצא",
+  "library.errBadgeError": "שגיאה"
 }

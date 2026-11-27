@@ -1104,6 +1104,10 @@ body.aqnp-on { padding-bottom: 72px; }
       r_json: "A katalógus válasza nem értelmezhető.", r_size: "A katalógus válasza túl nagy.",
       empty: "A zenetár üres. A zenei mappák a PC-n állíthatók be (alapból a Zene mappa).",
       scanning: "A PC most indexeli a zenetárat ({n} fájl)...", noAlbums: "Nincs album.",
+      libErrDenied: "Egy vagy több zenei mappa nem olvasható (hozzáférés megtagadva). Ellenőrizd a Zenei mappák beállításait.",
+      libErrNotFound: "Egy vagy több megadott zenei mappa nem található. Ellenőrizd a Zenei mappák beállításait.",
+      libErrGeneric: "Hiba történt a zenei mappák beolvasásakor. Ellenőrizd a Zenei mappák beállításait.",
+      libErrMacHint: "macOS-en engedélyezd az Aqulify-t itt: Rendszerbeállítások → Adatvédelem és biztonság → Fájlok és mappák.",
       various: "Különböző előadók", tracks: "{n} szám", play: "Lejátszás", shuffle: "Keverve",
       playNext: "Következőként", playLast: "A sor végére", addToList: "Listához adás...", cancel: "Mégse", ok: "Rendben",
       folderEmpty: "Ez a mappa üres.", roots: "Zenei mappák", back: "Vissza",
@@ -1177,6 +1181,10 @@ body.aqnp-on { padding-bottom: 72px; }
       r_json: "The catalogue's answer could not be read.", r_size: "The catalogue's answer is too large.",
       empty: "The library is empty. Music folders are set on the PC (by default the Music folder).",
       scanning: "The PC is indexing the library ({n} files)...", noAlbums: "No albums.",
+      libErrDenied: "One or more music folders could not be read (access denied). Check Music Folders settings.",
+      libErrNotFound: "One or more configured music folders were not found. Check Music Folders settings.",
+      libErrGeneric: "An error occurred while scanning music folders. Check Music Folders settings.",
+      libErrMacHint: "On macOS, allow Aqulify in System Settings → Privacy & Security → Files & Folders.",
       various: "Various artists", tracks: "{n} tracks", play: "Play", shuffle: "Shuffle",
       playNext: "Play next", playLast: "Add to queue", addToList: "Add to playlist...", cancel: "Cancel", ok: "OK",
       folderEmpty: "This folder is empty.", roots: "Music folders", back: "Back",
@@ -4097,7 +4105,48 @@ body.aqnp-on { padding-bottom: 72px; }
     let view = { kind: "albums" };
     const history = [];
     let info = null, albums = [], albumsTotal = -1, albumsLoading = false;
+    let libRev = -1, libScanning = false, libScanned = -1;
     let queue = null, queueRev = -1, queueIndex = -2, lists = null, listsRev = -1, statsRev = -1;
+
+    function isMacClient() {
+      try {
+        const p = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || "";
+        return /mac/i.test(p);
+      } catch (e) { return false; }
+    }
+
+    function invalidateLibraryView(fetchNow) {
+      albums = [];
+      albumsTotal = -1;
+      albumsLoading = false;
+      lastRendered = null;
+      art.clear();
+      artBusy.clear();
+      artWait.length = 0;
+      if (fetchNow && !root.hidden && source === "pc") {
+        if (view.kind !== "albums") send({ type: "library_info" });
+        fetchFor(view);
+      }
+    }
+
+    function renderLibraryErrorHint() {
+      if (!info || info.scanning) return false;
+      const errs = Array.isArray(info.errors) ? info.errors : [];
+      const errCount = errs.length || (typeof info.errorCount === "number" ? info.errorCount : 0);
+      if (errCount <= 0) return false;
+      const hasDenied = errs.some(e => e && (e.error === "permission_denied" || e.error === "denied"));
+      const hasNotFound = errs.some(e => e && (e.error === "not_found" || e.error === "notfound" || e.error === "not_directory"));
+      let msg = hasDenied ? t("libErrDenied") : (hasNotFound ? t("libErrNotFound") : t("libErrGeneric"));
+      if (hasDenied && isMacClient()) msg += " " + t("libErrMacHint");
+      body.appendChild(el("div", "hint", msg));
+      if (desktop && opts.onOpenRoots) {
+        const wrap = el("div", "lib-actions");
+        wrap.style.justifyContent = "center";
+        wrap.appendChild(btn("📁 " + t("roots"), "lib-btn accent", () => opts.onOpenRoots()));
+        body.appendChild(wrap);
+      }
+      return true;
+    }
     let radio = null, radioRev = -1, radioSt = null, radioSearch = null, radioReqN = 0;
     const radioReqBase = Math.random().toString(36).slice(2, 8) + "-";   // a keresés jele (a válasz mindenkinek megy)
     let pendingOpenList = false;   // létrehozás / mentés után a válaszként jövő listát nyitjuk meg
@@ -4714,7 +4763,11 @@ body.aqnp-on { padding-bottom: 72px; }
 
     function renderAlbums() {
       if (info && info.scanning) body.appendChild(el("div", "hint", t("scanning", { n: info.scanned || 0 })));
-      if (albumsTotal === 0 && info && !info.scanning) { body.appendChild(el("div", "hint", t("empty"))); return; }
+      if (albumsTotal === 0 && info && !info.scanning) {
+        if (renderLibraryErrorHint()) return;
+        body.appendChild(el("div", "hint", t("empty")));
+        return;
+      }
       if (albumsTotal < 0) { body.appendChild(el("div", "hint", t("loading"))); return; }
       const grid = el("div", "lib-grid");
       albums.forEach(a => {
@@ -4779,7 +4832,13 @@ body.aqnp-on { padding-bottom: 72px; }
       body.replaceChildren();
       const isRoot = !f.id;
       body.appendChild(header(isRoot ? t("roots") : f.name, isRoot ? null : t("tracks", { n: f.tracks.length }), !isRoot));
-      if (isRoot && !f.folders.length) { body.appendChild(el("div", "hint", t("empty"))); return; }
+      if (isRoot && info && info.scanning) body.appendChild(el("div", "hint", t("scanning", { n: info.scanned || 0 })));
+      if (isRoot && !f.folders.length) {
+        if (info && info.scanning) return;
+        if (renderLibraryErrorHint()) return;
+        body.appendChild(el("div", "hint", t("empty")));
+        return;
+      }
       if (f.tracks.length) {
         const src = { source: "folder", id: f.id };
         const actions = playButtons(src, f.tracks);
@@ -5234,14 +5293,24 @@ body.aqnp-on { padding-bottom: 72px; }
           toast(t("error", { e: m.error || "Hiba" }));
           phoneStreaming = null;
           return true;
-        case "library":
+        case "library": {
+          const prevScanning = !!(info && info.scanning);
+          const prevRev = (info && typeof info.rev === "number") ? info.rev : libRev;
           info = m;
+          if (typeof m.rev === "number") libRev = m.rev;
+          libScanning = !!m.scanning;
+          libScanned = m.scanned || 0;
           renderStats();
-          if (view.kind === "albums") {
-            if (!m.scanning && albumsTotal >= 0 && albumsTotal !== m.albums) { albums = []; albumsTotal = -1; moreAlbums(); }
-            if (!root.hidden) render();
+          const finished = prevScanning && !m.scanning;
+          const revChanged = typeof m.rev === "number" && prevRev >= 0 && m.rev !== prevRev;
+          const countMismatch = !m.scanning && albumsTotal >= 0 && albumsTotal !== m.albums;
+          if (finished || revChanged || countMismatch) {
+            invalidateLibraryView(true);
+          } else if (!root.hidden && (view.kind === "albums" || view.kind === "folder")) {
+            render();
           }
           return true;
+        }
         case "library_albums":
           albumsLoading = false;
           if (m.offset === albums.length) albums = albums.concat(m.items || []);
@@ -5311,8 +5380,30 @@ body.aqnp-on { padding-bottom: 72px; }
       return false;
     }
 
-    /** Az állapotüzenet: ha a sor vagy a listák változtak, a nyitott nézet frissül. */
+    /** Az állapotüzenet: ha a zenetár, a sor vagy a listák változtak, a nyitott nézet frissül. */
     function onStatus(st) {
+      const l = st.library;
+      if (l) {
+        const revChanged = typeof l.rev === "number" && libRev >= 0 && l.rev !== libRev;
+        const scanEnded = libScanning && !l.scanning;
+        const scanProg = !!l.scanning && (!libScanning || (l.scanned || 0) !== libScanned);
+        if (typeof l.rev === "number") libRev = l.rev;
+        libScanning = !!l.scanning;
+        libScanned = l.scanned || 0;
+        if (revChanged || scanEnded) {
+          if (info) {
+            info = Object.assign({}, info, {
+              rev: l.rev, scanning: !!l.scanning, scanned: l.scanned || 0,
+              tracks: l.tracks, albums: l.albums, errorCount: l.errorCount || 0, skipped: l.skipped || 0
+            });
+          }
+          invalidateLibraryView(true);
+        } else if (scanProg && !root.hidden && source === "pc") {
+          info = Object.assign({}, info || {}, { scanning: true, scanned: l.scanned || 0 });
+          renderStats();
+          if (view.kind === "albums" || view.kind === "folder") render();
+        }
+      }
       const r = st.radio;
       if (r) {
         const changed = !radioSt || r.state !== radioSt.state || r.station !== radioSt.station || r.error !== radioSt.error ||
@@ -5347,6 +5438,14 @@ body.aqnp-on { padding-bottom: 72px; }
         render();
         if (source === "pc" || view.kind === "radio") fetchFor(view);
       },
+      refresh() {
+        invalidateLibraryView(false);
+        render();
+        if (source === "pc" || view.kind === "radio") {
+          if (source === "pc" && view.kind !== "albums") send({ type: "library_info" });
+          fetchFor(view);
+        }
+      },
       onMessage,
       onStatus,
       setLang(l) {
@@ -5354,7 +5453,12 @@ body.aqnp-on { padding-bottom: 72px; }
         setStaticTexts();
         render();
       },
-      reset() { art.clear(); artBusy.clear(); artWait.length = 0; albums = []; albumsTotal = -1; albumsLoading = false; info = null; lastRendered = null; },
+      reset() {
+        art.clear(); artBusy.clear(); artWait.length = 0;
+        albums = []; albumsTotal = -1; albumsLoading = false;
+        info = null; lastRendered = null;
+        libRev = -1; libScanning = false; libScanned = -1;
+      },
     };
   };
 })();

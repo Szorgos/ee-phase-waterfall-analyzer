@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrected (R)",
   "rw.filterListLeft": "Left channel (L):",
   "rw.filterListRight": "Right channel (R):",
-  "rw.filterListNone": "(no bands)"
+  "rw.filterListNone": "(no bands)",
+  "library.errDenied": "无权访问此文件夹。",
+  "library.errNotFound": "找不到该文件夹。",
+  "library.errNotDir": "此路径不是文件夹。",
+  "library.errTimeout": "读取文件夹超时。",
+  "library.errGeneric": "文件夹错误：{err}",
+  "library.errSkipped": "有 {n} 个项目无法读取或解码（已跳过）。",
+  "library.errMacTccHint": "在 macOS 上，请在“系统设置 → 隐私与安全性 → 文件和文件夹”中允许 Aqulify 访问。",
+  "library.errBadgeDenied": "拒绝访问",
+  "library.errBadgeNotFound": "未找到",
+  "library.errBadgeError": "错误"
 }

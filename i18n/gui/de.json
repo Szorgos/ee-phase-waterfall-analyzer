@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Korrigiert (R)",
   "rw.filterListLeft": "Linker Kanal (L):",
   "rw.filterListRight": "Rechter Kanal (R):",
-  "rw.filterListNone": "(keine Bänder)"
+  "rw.filterListNone": "(keine Bänder)",
+  "library.errDenied": "Zugriff auf diesen Ordner verweigert.",
+  "library.errNotFound": "Ordner nicht gefunden.",
+  "library.errNotDir": "Dieser Pfad ist kein Ordner.",
+  "library.errTimeout": "Zeitüberschreitung beim Lesen des Ordners.",
+  "library.errGeneric": "Ordnerfehler: {err}",
+  "library.errSkipped": "{n} Element(e) konnten nicht gelesen oder dekodiert werden (übersprungen).",
+  "library.errMacTccHint": "Erlaube Aqulify unter macOS in Systemeinstellungen → Datenschutz & Sicherheit → Dateien und Ordner.",
+  "library.errBadgeDenied": "Zugriff verweigert",
+  "library.errBadgeNotFound": "Nicht gefunden",
+  "library.errBadgeError": "Fehler"
 }

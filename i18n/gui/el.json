@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrected (R)",
   "rw.filterListLeft": "Left channel (L):",
   "rw.filterListRight": "Right channel (R):",
-  "rw.filterListNone": "(no bands)"
+  "rw.filterListNone": "(no bands)",
+  "library.errDenied": "Δεν επιτρέπεται η πρόσβαση σε αυτόν τον φάκελο.",
+  "library.errNotFound": "Ο φάκελος δεν βρέθηκε.",
+  "library.errNotDir": "Αυτή η διαδρομή δεν είναι φάκελος.",
+  "library.errTimeout": "Έληξε το χρονικό όριο ανάγνωσης του φακέλου.",
+  "library.errGeneric": "Σφάλμα φακέλου: {err}",
+  "library.errSkipped": "{n} στοιχείο(α) δεν ήταν δυνατή η ανάγνωση ή αποκωδικοποίησή τους (παραλείφθηκαν).",
+  "library.errMacTccHint": "Στο macOS, επιτρέψτε το Aqulify στις Ρυθμίσεις συστήματος → Απόρρητο και ασφάλεια → Αρχεία και φάκελοι.",
+  "library.errBadgeDenied": "Άρνηση πρόσβασης",
+  "library.errBadgeNotFound": "Δεν βρέθηκε",
+  "library.errBadgeError": "Σφάλμα"
 }

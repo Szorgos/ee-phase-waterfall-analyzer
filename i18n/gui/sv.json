@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrected (R)",
   "rw.filterListLeft": "Left channel (L):",
   "rw.filterListRight": "Right channel (R):",
-  "rw.filterListNone": "(no bands)"
+  "rw.filterListNone": "(no bands)",
+  "library.errDenied": "Åtkomst nekades till den här mappen.",
+  "library.errNotFound": "Mappen hittades inte.",
+  "library.errNotDir": "Den här sökvägen är inte en mapp.",
+  "library.errTimeout": "Tidsgränsen överskreds vid läsning av mappen.",
+  "library.errGeneric": "Mappfel: {err}",
+  "library.errSkipped": "{n} objekt kunde inte läsas eller avkodas (hoppades över).",
+  "library.errMacTccHint": "På macOS tillåter du Aqulify i Systeminställningar → Integritet och säkerhet → Filer och mappar.",
+  "library.errBadgeDenied": "Åtkomst nekad",
+  "library.errBadgeNotFound": "Hittades inte",
+  "library.errBadgeError": "Fel"
 }

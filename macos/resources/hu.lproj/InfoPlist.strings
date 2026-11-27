@@ -1,3 +1,8 @@
 /* Rendszerhang-rögzítés (Core Audio Tap) */
 "NSAudioCaptureUsageDescription" = "Az Aqulify a rendszerhangot dolgozza fel (EQ, crossfeed, konvolver, limiter), és megjeleníti az analizátorban. A hang nem hagyja el ezt a Macet.";
 "NSMicrophoneUsageDescription" = "Az Aqulify csak az általad indított szobamérés közben vesz fel a mikrofonról, hogy lemérje a hangfalaidat a szobában. Máskor nem rögzít a mikrofonról.";
+"NSDocumentsFolderUsageDescription" = "Az Aqulify csak a Zenei mappák ablakban kiválasztott mappákból olvas hangfájlokat a helyi zenetár indexeléséhez és lejátszásához.";
+"NSDesktopFolderUsageDescription" = "Az Aqulify csak a Zenei mappák ablakban kiválasztott mappákból olvas hangfájlokat a helyi zenetár indexeléséhez és lejátszásához.";
+"NSDownloadsFolderUsageDescription" = "Az Aqulify csak a Zenei mappák ablakban kiválasztott mappákból olvas hangfájlokat a helyi zenetár indexeléséhez és lejátszásához.";
+"NSRemovableVolumesUsageDescription" = "Az Aqulify csak akkor olvas cserélhető meghajtókról hangfájlokat, ha az ottani mappát felveszed a Zenei mappák közé.";
+"NSNetworkVolumesUsageDescription" = "Az Aqulify csak akkor olvas hálózati megosztásról hangfájlokat, ha az ottani mappát felveszed a Zenei mappák közé.";

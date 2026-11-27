@@ -513,7 +513,7 @@ if(APPLE)
     target_compile_definitions(Aqulify PRIVATE AQULIFY_VERSION="${PROJECT_VERSION}")
     target_link_libraries(Aqulify PRIVATE ee_dsp_core aq_player Threads::Threads
         "-framework AppKit" "-framework AudioToolbox" "-framework CoreAudio" "-framework CoreFoundation"
-        "-framework Foundation" "-framework ServiceManagement" "-framework WebKit")
+        "-framework Foundation" "-framework ServiceManagement" "-framework UniformTypeIdentifiers" "-framework WebKit")
     add_custom_command(TARGET Aqulify POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/windows/third_party/three/LICENSE
                 $<TARGET_BUNDLE_CONTENT_DIR:Aqulify>/Resources/gui/three.js-LICENSE.txt

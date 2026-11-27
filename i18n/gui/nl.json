@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrected (R)",
   "rw.filterListLeft": "Left channel (L):",
   "rw.filterListRight": "Right channel (R):",
-  "rw.filterListNone": "(no bands)"
+  "rw.filterListNone": "(no bands)",
+  "library.errDenied": "Toegang tot deze map geweigerd.",
+  "library.errNotFound": "Map niet gevonden.",
+  "library.errNotDir": "Dit pad is geen map.",
+  "library.errTimeout": "Time-out bij het lezen van de map.",
+  "library.errGeneric": "Mapfout: {err}",
+  "library.errSkipped": "{n} item(s) konden niet worden gelezen of gedecodeerd (overgeslagen).",
+  "library.errMacTccHint": "Geef Aqulify op macOS toegang via Systeeminstellingen → Privacy en beveiliging → Bestanden en mappen.",
+  "library.errBadgeDenied": "Geen toegang",
+  "library.errBadgeNotFound": "Niet gevonden",
+  "library.errBadgeError": "Fout"
 }

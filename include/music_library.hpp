@@ -57,12 +57,20 @@ struct Folder {
     std::string coverFile;
 };
 
+struct RootError {
+    std::string path;
+    std::string error;   // "permission_denied", "not_found", "not_directory", "error"
+    std::string detail;
+};
+
 struct Index {
     std::vector<Track> tracks;
     std::vector<Album> albums;           // előadó, év, cím szerint
     std::vector<Folder> folders;
     std::vector<size_t> roots;
     std::unordered_map<std::string, size_t> trackById, albumById, folderById;
+    std::vector<RootError> errors;       // sikertelen gyökérmappák (jogosultság, hiányzó mappa, I/O hiba)
+    size_t skipped = 0;                  // jogosultsági / olvasási / dekódolási hiba miatt kihagyott elemek
 };
 
 class MusicLibrary {
@@ -79,6 +87,8 @@ public:
     bool scanning() const { return scanning_.load(); }
     /** A gyorsítótárból van-e az index (amíg a háttérbejárás nem zárult le). */
     bool cached() const { return cached_.load(); }
+    /** Minden befejezett bejáráskor vagy gyökérváltáskor növekvő számláló (a felület automatikus frissítéséhez). */
+    uint64_t rev() const { return rev_.load(); }
     /** Megvárja a bejárás végét (tesztek); false: időtúllépés. */
     bool waitIdle(int timeoutMs) const;
     std::shared_ptr<const Index> snapshot() const;
@@ -93,8 +103,10 @@ public:
     void setScanStartDelay(std::chrono::milliseconds d) { scanStartDelay_ = d; }
 
     // ---- a protokoll üzenetei (JSON, "type" mezővel)
-    /** {"type":"library", scanning, scanned, tracks, albums, folders[, roots]}; a mappák csak helyi kliensnek. */
+    /** {"type":"library", rev, scanning, scanned, tracks, albums, folders, skipped, errorCount[, roots, errors]}; a mappák/hibás útvonalak csak helyi kliensnek. */
     std::string infoJson(bool includeRoots) const;
+    /** Könnyűsúlyú állapot-összefoglaló a periodikus status üzenethez (útvonalak nélkül, távoli kliensnek is biztonságos). */
+    std::string statusJson() const;
     /** {"type":"library_albums", offset, total, items:[…]} */
     std::string albumsJson(size_t offset, size_t limit) const;
     /** {"type":"library_album", …, tracks:[…]}; üres: ismeretlen azonosító. */
@@ -114,6 +126,11 @@ public:
 
     /** Az alapértelmezett zenei mappa (Linux: XDG_MUSIC_DIR, ~/Music; Windows: a Zene ismert mappa). */
     static std::string defaultMusicDir();
+    /**
+     * Felhasználói mappaútvonal normalizálása: idézőjelek, file:/// URI, ~ ($HOME / %USERPROFILE%),
+     * POSIX shell-escape (\ ) és fölösleges záró perjel rendezése.
+     */
+    static std::string normalizeRootPath(const std::string& raw);
 
 private:
     void startScan();
@@ -127,6 +144,8 @@ private:
     std::atomic<bool> scanning_{false}, cancel_{false};
     std::atomic<bool> rescanRequested_{false}, cached_{false};
     std::atomic<size_t> scanned_{0};
+    std::atomic<uint64_t> rev_{0};
+    std::string lastErrorLogSig_;
     std::mutex cvMutex_;
     std::condition_variable cv_;
     std::function<std::string()> loadCache_;

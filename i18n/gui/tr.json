@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrected (R)",
   "rw.filterListLeft": "Left channel (L):",
   "rw.filterListRight": "Right channel (R):",
-  "rw.filterListNone": "(no bands)"
+  "rw.filterListNone": "(no bands)",
+  "library.errDenied": "Bu klasöre erişim reddedildi.",
+  "library.errNotFound": "Klasör bulunamadı.",
+  "library.errNotDir": "Bu yol bir klasör değil.",
+  "library.errTimeout": "Klasör okunurken zaman aşımı oluştu.",
+  "library.errGeneric": "Klasör hatası: {err}",
+  "library.errSkipped": "{n} öğe okunamadı veya çözülemedi (atlandı).",
+  "library.errMacTccHint": "macOS'ta Sistem Ayarları → Gizlilik ve Güvenlik → Dosyalar ve Klasörler bölümünden Aqulify'a izin verin.",
+  "library.errBadgeDenied": "Erişim reddedildi",
+  "library.errBadgeNotFound": "Bulunamadı",
+  "library.errBadgeError": "Hata"
 }

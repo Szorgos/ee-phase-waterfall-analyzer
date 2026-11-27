@@ -83,7 +83,7 @@ jobs:
         run: |
           arch -x86_64 /usr/bin/true 2>/dev/null || sudo softwareupdate --install-rosetta --agree-to-license
           fail=0
-          for t in test_ringbuffer test_core test_dsp test_multiout test_dsd test_upsample test_hires_b test_src_ref test_watchdog test_report_sender test_mic_basic test_headless_pairing test_bt_bluez test_radio test_upnp; do
+          for t in test_ringbuffer test_core test_dsp test_multiout test_dsd test_player test_upsample test_hires_b test_src_ref test_watchdog test_report_sender test_mic_basic test_headless_pairing test_bt_bluez test_radio test_upnp; do
             echo "::group::$t (arm64)"
             if ./build-arm64/$t; then echo "$t arm64: OK"; else echo "::error::$t (arm64) sikertelen"; fail=1; fi
             echo "::endgroup::"

@@ -1,11 +1,11 @@
 #pragma once
 /**
  * @file audio_decoder.hpp
- * @brief Hangfájlok dekódolása a beépített lejátszóhoz (2.x): FLAC, WAV, MP3, Ogg Vorbis, ALAC (M4A / CAF), Opus, WavPack, DSD (DSF, DSDIFF).
+ * @brief Hangfájlok dekódolása a beépített lejátszóhoz (2.x): FLAC, WAV, AIFF, MP3, Ogg Vorbis, ALAC és AAC (M4A / CAF / ADTS AAC), Opus, WavPack, DSD (DSF, DSDIFF).
  *
- * A dekóderek a third_party/decoders könyvtárai (dr_flac, dr_wav, dr_mp3, stb_vorbis, Apple ALAC, libopus, WavPack; megengedő
- * licencek). A kimenet 32 bites lebegőpontos, a fájl saját csatornaszámával és mintavételi frekvenciájával; az
- * átalakítást (sztereóra, a kimenet frekvenciájára) a lejátszó és a rendszer végzi.
+ * A dekóderek a third_party/decoders és third_party/faad2 könyvtárai (dr_flac, dr_wav, dr_mp3, stb_vorbis, Apple ALAC,
+ * FAAD2, libopus, WavPack). A kimenet 32 bites lebegőpontos, a fájl saját csatornaszámával és mintavételi frekvenciájával;
+ * az átalakítást (sztereóra, a kimenet frekvenciájára) a lejátszó és a rendszer végzi.
  */
 #include <cstddef>
 #include <cmath>
@@ -55,7 +55,7 @@ protected:
     TrackTags tags_;
 };
 
-/** A kiterjesztés alapján támogatott-e (.flac, .wav, .mp3, .ogg, .oga, .m4a, .alac, .caf, .opus, .wv, .dsf, .dff); a tartalmat az openDecoder ellenőrzi. */
+/** A kiterjesztés alapján támogatott-e (.flac, .wav, .aif, .aiff, .aifc, .mp3, .ogg, .oga, .m4a, .aac, .alac, .caf, .opus, .wv, .dsf, .dff); a tartalmat az openDecoder ellenőrzi. */
 bool isSupportedFile(const std::string& path);
 
 /**

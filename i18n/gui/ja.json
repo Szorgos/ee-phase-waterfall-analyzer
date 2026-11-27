@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrected (R)",
   "rw.filterListLeft": "Left channel (L):",
   "rw.filterListRight": "Right channel (R):",
-  "rw.filterListNone": "(no bands)"
+  "rw.filterListNone": "(no bands)",
+  "library.errDenied": "このフォルダーへのアクセスが拒否されました。",
+  "library.errNotFound": "フォルダーが見つかりません。",
+  "library.errNotDir": "このパスはフォルダーではありません。",
+  "library.errTimeout": "フォルダーの読み込みがタイムアウトしました。",
+  "library.errGeneric": "フォルダーエラー: {err}",
+  "library.errSkipped": "{n} 件の項目を読み取りまたはデコードできませんでした（スキップ）。",
+  "library.errMacTccHint": "macOS では「システム設定 → プライバシーとセキュリティ → ファイルとフォルダー」で Aqulify を許可してください。",
+  "library.errBadgeDenied": "アクセス拒否",
+  "library.errBadgeNotFound": "見つかりません",
+  "library.errBadgeError": "エラー"
 }

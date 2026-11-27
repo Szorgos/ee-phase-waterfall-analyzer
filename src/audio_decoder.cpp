@@ -31,6 +31,7 @@
 #include "stb_vorbis.c"
 #include "alac/ALACDecoder.h"
 #include "alac/ALACBitUtilities.h"
+#include "neaacdec.h"
 #include "opusfile.h"
 #include "wavpack.h"
 
@@ -61,9 +62,35 @@ std::string lowerExt(const std::string& path) {
     return e;
 }
 
+uint16_t be16(const uint8_t* p) { return static_cast<uint16_t>((uint16_t(p[0]) << 8) | p[1]); }
 uint32_t be32(const uint8_t* p) { return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | p[3]; }
 uint64_t be64(const uint8_t* p) { return (static_cast<uint64_t>(be32(p)) << 32) | be32(p + 4); }
 uint32_t synchsafe(const uint8_t* p) { return (uint32_t(p[0] & 0x7f) << 21) | (uint32_t(p[1] & 0x7f) << 14) | (uint32_t(p[2] & 0x7f) << 7) | (p[3] & 0x7f); }
+
+bool fileSeek64(FILE* f, uint64_t off, int whence) {
+#ifdef _WIN32
+    return _fseeki64(f, static_cast<__int64>(off), whence) == 0;
+#else
+    return fseeko(f, static_cast<off_t>(off), whence) == 0;
+#endif
+}
+
+uint64_t fileTell64(FILE* f) {
+#ifdef _WIN32
+    const __int64 p = _ftelli64(f);
+#else
+    const off_t p = ftello(f);
+#endif
+    return p > 0 ? static_cast<uint64_t>(p) : 0;
+}
+
+FILE* openBinaryFile(const std::string& path) {
+#ifdef _WIN32
+    return _wfopen(widePath(path).c_str(), L"rb");
+#else
+    return std::fopen(path.c_str(), "rb");
+#endif
+}
 
 void appendUtf8(std::string& out, uint32_t cp) {
     if (cp < 0x80) out += static_cast<char>(cp);
@@ -334,29 +361,26 @@ private:
     uint64_t total_ = 0;
 };
 
-class AlacDecoder : public AudioDecoder {
+/**
+ * MP4 / M4A / CAF konténer alapú dekóder: támogatja az ALAC ('alac' MP4 és CAF) és az AAC ('mp4a' + 'esds', FAAD2)
+ * hangsávokat, külön trak-feldolgozással (fejezet- és borító-sávok nem zavarják), ilst címkékkel és borítóval.
+ */
+class Mp4AudioDecoder : public AudioDecoder {
 public:
-    ~AlacDecoder() override {
-        if (file_) std::fclose(file_);
-    }
+    ~Mp4AudioDecoder() override { closeHandles(); }
 
     bool open(const std::string& path, bool probe = false) {
-#ifdef _WIN32
-        file_ = _wfopen(widePath(path).c_str(), L"rb");
-#else
-        file_ = std::fopen(path.c_str(), "rb");
-#endif
+        file_ = openBinaryFile(path);
         if (!file_) return false;
 
-        std::fseek(file_, 0, SEEK_END);
-        const long sz = std::ftell(file_);
-        if (sz <= 8) return false;
-        const uint64_t fileSize = static_cast<uint64_t>(sz);
-        std::fseek(file_, 0, SEEK_SET);
+        if (!fileSeek64(file_, 0, SEEK_END)) return false;
+        const uint64_t fileSize = fileTell64(file_);
+        if (fileSize <= 8) return false;
+        if (!fileSeek64(file_, 0, SEEK_SET)) return false;
 
         uint8_t magic[4] = {};
         if (std::fread(magic, 1, 4, file_) != 4) return false;
-        std::fseek(file_, 0, SEEK_SET);
+        fileSeek64(file_, 0, SEEK_SET);
 
         bool ok = false;
         if (std::memcmp(magic, "caff", 4) == 0) {
@@ -364,30 +388,849 @@ public:
         } else {
             ok = parseMp4(fileSize);
         }
-        if (!ok || packets_.empty() || cookie_.empty() || channels_ == 0 || sampleRate_ == 0) return false;
+        if (!ok || codec_ == Codec::None || packets_.empty() || cookie_.empty()) return false;
 
         detail::finalizeTags(tags_);
-        if (probe) {
-            return true;
+
+        if (codec_ == Codec::Alac) {
+            if (channels_ == 0 || sampleRate_ == 0) return false;
+            if (probe) {
+                closeHandles();
+                return true;
+            }
+            if (alac_.Init(cookie_.data(), static_cast<uint32_t>(cookie_.size())) != 0) return false;
+            packetBuf_.resize(4096 * channels_);
+            pcmRaw_.resize(4096 * channels_ * 4);
+            return seek(0);
         }
 
-        if (dec_.Init(cookie_.data(), static_cast<uint32_t>(cookie_.size())) != 0) return false;
+        // MP4 AAC (FAAD2)
+        if (!initAac()) return false;
 
-        packetBuf_.resize(4096 * channels_);
-        pcmRaw_.resize(4096 * channels_ * 4);
+        // Az első nem üres csomag dekódolása megadja a valós kimeneti rátát, csatornaszámot és SBR-skálát
+        uint32_t decodedSr = 0, decodedCh = 0;
+        size_t firstFrames = 0;
+        size_t firstIdx = 0;
+        const size_t probeLimit = std::min<size_t>(packets_.size(), 8);
+        for (size_t i = 0; i < probeLimit; ++i) {
+            uint32_t sr = 0, ch = 0;
+            size_t outF = 0;
+            if (!decodeAacPacket(i, &sr, &ch, &outF)) continue;
+            if (outF > 0 && sr > 0 && ch > 0) {
+                decodedSr = sr;
+                decodedCh = ch;
+                firstFrames = outF;
+                firstIdx = i;
+                break;
+            }
+        }
+        if (decodedSr == 0 || decodedCh == 0 || firstFrames == 0) return false;
+
+        sampleRate_ = decodedSr;
+        channels_ = decodedCh;
+        bitDepth_ = 0;   // veszteséges (AAC)
+        aacPrimePackets_ = firstIdx;   // a FAAD2 első frame <= 1 csomagja(i) 0 mintát adnak ki (MDCT priming)
+
+        // SBR (HE-AAC) vagy eltérő timescale esetén a csomagok kimeneti keretszámának igazítása,
+        // a priming csomagok 0 kimeneti kerettel szerepelnek, így a startFrame egzaktul a dekódolt PCM pozíció
+        const uint32_t origDelta = packets_[firstIdx].frameCount;
+        uint32_t scaleNum = 1, scaleDen = 1;
+        if (origDelta > 0 && firstFrames != origDelta) {
+            if (firstFrames == static_cast<size_t>(origDelta) * 2) {
+                scaleNum = 2;
+            } else if (trackTimescale_ > 0 && trackTimescale_ != sampleRate_) {
+                scaleNum = sampleRate_;
+                scaleDen = trackTimescale_;
+            }
+        }
+        {
+            uint64_t cur = 0;
+            for (size_t i = 0; i < packets_.size(); ++i) {
+                auto& p = packets_[i];
+                if (i < aacPrimePackets_) {
+                    p.frameCount = 0;
+                    p.startFrame = 0;
+                    continue;
+                }
+                if (scaleNum != 1 || scaleDen != 1) {
+                    p.frameCount = static_cast<uint32_t>((static_cast<uint64_t>(p.frameCount) * scaleNum + scaleDen / 2) / scaleDen);
+                    if (p.frameCount == 0) p.frameCount = static_cast<uint32_t>(firstFrames);
+                }
+                p.startFrame = cur;
+                cur += p.frameCount;
+            }
+            rawTotalFrames_ = cur;
+        }
+
+        // Gapless vágás (iTunSMPB), ha érvényes és beleesik a nyers tartományba
+        skipStart_ = 0;
+        totalFrames_ = rawTotalFrames_;
+        if (aacValidFrames_ > 0 && scaleNum == 1 && scaleDen == 1 &&
+            aacDelay_ < 16384 && aacDelay_ + aacValidFrames_ <= rawTotalFrames_) {
+            skipStart_ = aacDelay_;
+            totalFrames_ = aacValidFrames_;
+        }
+
+        if (probe) {
+            closeHandles();
+            return true;
+        }
         return seek(0);
     }
 
     uint32_t sampleRate() const override { return sampleRate_; }
     uint32_t channels() const override { return channels_; }
-    uint32_t bitsPerSample() const override { return bitDepth_; }
+    uint32_t bitsPerSample() const override { return codec_ == Codec::Alac ? bitDepth_ : 0; }
     uint64_t totalFrames() const override { return totalFrames_; }
 
     size_t read(float* out, size_t frames) override {
+        if (!file_ || currentFrame_ >= totalFrames_) return 0;
+        const size_t limit = static_cast<size_t>(std::min<uint64_t>(frames, totalFrames_ - currentFrame_));
         size_t framesRead = 0;
-        while (framesRead < frames) {
+        while (framesRead < limit) {
             if (bufOffset_ < bufFrames_) {
-                const size_t toCopy = std::min(frames - framesRead, bufFrames_ - bufOffset_);
+                const size_t toCopy = std::min(limit - framesRead, bufFrames_ - bufOffset_);
+                std::memcpy(out + framesRead * channels_,
+                            packetBuf_.data() + bufOffset_ * channels_,
+                            toCopy * channels_ * sizeof(float));
+                framesRead += toCopy;
+                bufOffset_ += toCopy;
+                currentFrame_ += toCopy;
+            } else {
+                if (currentPkt_ >= packets_.size()) break;
+                if (!decodePacket(currentPkt_++)) break;
+                bufOffset_ = 0;
+            }
+        }
+        return framesRead;
+    }
+
+    bool seek(uint64_t frame) override {
+        if (!file_ || packets_.empty()) return false;
+        if (frame > totalFrames_) frame = totalFrames_;
+        if (frame == totalFrames_) {
+            currentPkt_ = packets_.size();
+            bufOffset_ = 0;
+            bufFrames_ = 0;
+            currentFrame_ = frame;
+            return true;
+        }
+        const uint64_t rawTarget = frame + skipStart_;
+        auto it = std::upper_bound(packets_.begin(), packets_.end(), rawTarget,
+            [](uint64_t f, const Packet& p) { return f < p.startFrame + p.frameCount; });
+        if (it == packets_.end()) it = packets_.end() - 1;
+        const size_t targetPkt = static_cast<size_t>(std::distance(packets_.begin(), it));
+
+        if (codec_ == Codec::Aac) {
+            // 2 csomagos elődekódolás (MDCT overlap + esetleges SBR QMF bemelegítés)
+            const size_t preStart = (targetPkt > aacPrimePackets_ + 2) ? (targetPkt - 2) : 0;
+            if (preStart == 0) {
+                if (!initAac()) return false;
+            } else {
+                NeAACDecPostSeekReset(aac_, static_cast<long>(preStart + 2));
+            }
+            for (size_t p = preStart; p < targetPkt; ++p) {
+                decodeAacPacket(p);
+            }
+            if (!decodeAacPacket(targetPkt)) return false;
+            size_t nextPkt = targetPkt + 1;
+            while (bufFrames_ == 0 && nextPkt < packets_.size()) {
+                if (!decodeAacPacket(nextPkt++)) break;
+            }
+            const uint64_t pktStart = packets_[targetPkt].startFrame;
+            const uint64_t rel = rawTarget > pktStart ? (rawTarget - pktStart) : 0;
+            bufOffset_ = static_cast<size_t>(std::min<uint64_t>(rel, bufFrames_));
+            currentPkt_ = nextPkt;
+            currentFrame_ = frame;
+            return true;
+        }
+
+        if (!decodeAlacPacket(targetPkt)) return false;
+        const uint64_t pktStart = packets_[targetPkt].startFrame;
+        const uint64_t rel = rawTarget > pktStart ? (rawTarget - pktStart) : 0;
+        bufOffset_ = static_cast<size_t>(std::min<uint64_t>(rel, bufFrames_));
+        currentPkt_ = targetPkt + 1;
+        currentFrame_ = frame;
+        return true;
+    }
+
+private:
+    enum class Codec { None, Alac, Aac };
+
+    struct Packet {
+        uint64_t fileOffset = 0;
+        uint32_t byteSize = 0;
+        uint32_t frameCount = 0;
+        uint64_t startFrame = 0;
+    };
+
+    struct SttsEntry { uint32_t count = 0, delta = 0; };
+    struct StscEntry { uint32_t firstChunk = 0, samplesPerChunk = 0, descIdx = 0; };
+
+    struct Mp4Track {
+        Codec codec = Codec::None;
+        uint32_t timescale = 0;
+        uint32_t sampleRate = 0, channels = 0, bitDepth = 0;
+        std::vector<uint8_t> cookie;
+        std::vector<uint32_t> sampleSizes;
+        std::vector<SttsEntry> stts;
+        std::vector<StscEntry> stsc;
+        std::vector<uint64_t> chunkOffsets;
+    };
+
+    void closeHandles() {
+        if (aac_) { NeAACDecClose(aac_); aac_ = nullptr; }
+        if (file_) { std::fclose(file_); file_ = nullptr; }
+    }
+
+    bool initAac() {
+        if (aac_) { NeAACDecClose(aac_); aac_ = nullptr; }
+        aac_ = NeAACDecOpen();
+        if (!aac_) return false;
+        NeAACDecConfigurationPtr cfg = NeAACDecGetCurrentConfiguration(aac_);
+        cfg->outputFormat = FAAD_FMT_FLOAT;
+        cfg->downMatrix = 1;
+        NeAACDecSetConfiguration(aac_, cfg);
+        unsigned long sr = 0;
+        unsigned char ch = 0;
+        if (NeAACDecInit2(aac_, cookie_.data(), static_cast<unsigned long>(cookie_.size()), &sr, &ch) < 0) {
+            NeAACDecClose(aac_);
+            aac_ = nullptr;
+            return false;
+        }
+        return true;
+    }
+
+    bool decodePacket(size_t idx) {
+        return codec_ == Codec::Aac ? decodeAacPacket(idx) : decodeAlacPacket(idx);
+    }
+
+    bool decodeAacPacket(size_t idx, uint32_t* outSr = nullptr, uint32_t* outCh = nullptr, size_t* outFrames = nullptr) {
+        if (idx >= packets_.size() || !file_ || !aac_) return false;
+        const auto& pkt = packets_[idx];
+        if (pkt.byteSize == 0 || pkt.byteSize > (1u << 20)) return false;
+        if (!fileSeek64(file_, pkt.fileOffset, SEEK_SET)) return false;
+        inBuf_.resize(pkt.byteSize);
+        if (std::fread(inBuf_.data(), 1, pkt.byteSize, file_) != pkt.byteSize) return false;
+
+        NeAACDecFrameInfo fi{};
+        void* pcm = NeAACDecDecode(aac_, &fi, inBuf_.data(), static_cast<unsigned long>(inBuf_.size()));
+        if (fi.error != 0) return false;
+        if (!pcm || fi.samples == 0 || fi.channels == 0) {
+            bufFrames_ = 0;
+            if (outFrames) *outFrames = 0;
+            return true;
+        }
+        const size_t nFrames = fi.samples / fi.channels;
+        if (channels_ > 0 && fi.channels != channels_) {
+            // Ritka csatornaváltás: igazítjuk a puffert
+            packetBuf_.resize(nFrames * channels_, 0.0f);
+            const float* src = static_cast<const float*>(pcm);
+            const size_t copyCh = std::min<size_t>(fi.channels, channels_);
+            for (size_t f = 0; f < nFrames; ++f) {
+                for (size_t c = 0; c < copyCh; ++c) packetBuf_[f * channels_ + c] = src[f * fi.channels + c];
+                if (fi.channels == 1 && channels_ == 2) packetBuf_[f * 2 + 1] = src[f];
+            }
+        } else {
+            const float* src = static_cast<const float*>(pcm);
+            packetBuf_.assign(src, src + fi.samples);
+        }
+        bufFrames_ = nFrames;
+        if (outSr) *outSr = static_cast<uint32_t>(fi.samplerate);
+        if (outCh) *outCh = fi.channels;
+        if (outFrames) *outFrames = nFrames;
+        return true;
+    }
+
+    bool decodeAlacPacket(size_t idx) {
+        if (idx >= packets_.size() || !file_) return false;
+        const auto& pkt = packets_[idx];
+        if (!fileSeek64(file_, pkt.fileOffset, SEEK_SET)) return false;
+        inBuf_.resize(pkt.byteSize);
+        if (std::fread(inBuf_.data(), 1, pkt.byteSize, file_) != pkt.byteSize) return false;
+        BitBuffer bits;
+        BitBufferInit(&bits, inBuf_.data(), pkt.byteSize);
+        uint32_t outFrames = 0;
+        if (alac_.Decode(&bits, pcmRaw_.data(), 4096, channels_, &outFrames) != 0) return false;
+        bufFrames_ = outFrames;
+        if (bitDepth_ == 16) {
+            const int16_t* s16 = reinterpret_cast<const int16_t*>(pcmRaw_.data());
+            for (size_t i = 0; i < outFrames * channels_; ++i) packetBuf_[i] = s16[i] / 32768.0f;
+        } else if (bitDepth_ == 20 || bitDepth_ == 24) {
+            const uint8_t* p = pcmRaw_.data();
+            for (size_t i = 0; i < outFrames * channels_; ++i, p += 3) {
+                const int32_t s = (static_cast<int32_t>(static_cast<int8_t>(p[2])) << 16) | (static_cast<uint32_t>(p[1]) << 8) | p[0];
+                packetBuf_[i] = s / 8388608.0f;
+            }
+        } else if (bitDepth_ == 32) {
+            const int32_t* s32 = reinterpret_cast<const int32_t*>(pcmRaw_.data());
+            for (size_t i = 0; i < outFrames * channels_; ++i) packetBuf_[i] = s32[i] / 2147483648.0f;
+        }
+        return true;
+    }
+
+    /** MPEG-4 descriptor hossz olvasása (1..4 bájt, 7 bit/bájt). */
+    static bool readDescLen(const uint8_t* p, size_t n, size_t& pos, size_t& lenOut) {
+        lenOut = 0;
+        for (int i = 0; i < 4 && pos < n; ++i) {
+            const uint8_t b = p[pos++];
+            lenOut = (lenOut << 7) | (b & 0x7Fu);
+            if ((b & 0x80u) == 0) return true;
+        }
+        return false;
+    }
+
+    /** AudioSpecificConfig kinyerése az MP4 esds doboz payloadjából (4 bájtos FullBox fejléc után). */
+    static bool parseEsds(const uint8_t* p, size_t n, std::vector<uint8_t>& ascOut) {
+        if (n < 4) return false;
+        size_t pos = 4;   // version (1) + flags (3)
+        auto parseDecoderConfig = [&](size_t start, size_t end) -> bool {
+            size_t q = start;
+            if (q + 13 > end) return false;
+            const uint8_t objType = p[q];
+            // 0x40 = MPEG-4 Audio (AAC), 0x66..0x68 = MPEG-2 AAC; MP3 (0x69/0x6B) stb. elutasítva
+            if (objType != 0x40 && objType != 0x66 && objType != 0x67 && objType != 0x68) return false;
+            q += 13;
+            while (q + 2 <= end) {
+                const uint8_t tag = p[q++];
+                size_t len = 0;
+                if (!readDescLen(p, end, q, len) || q + len > end) break;
+                if (tag == 0x05 && len >= 2 && len <= 64) {
+                    ascOut.assign(p + q, p + q + len);
+                    return true;
+                }
+                q += len;
+            }
+            return false;
+        };
+
+        while (pos + 2 <= n) {
+            const uint8_t tag = p[pos++];
+            size_t len = 0;
+            if (!readDescLen(p, n, pos, len)) break;
+            const size_t end = std::min(n, pos + len);
+            if (tag == 0x03) {   // ES_DescrTag
+                if (pos + 3 > end) break;
+                pos += 2;   // ES_ID
+                const uint8_t flags = p[pos++];
+                if (flags & 0x80u) { if (pos + 2 > end) break; pos += 2; }
+                if (flags & 0x40u) { if (pos + 1 > end) break; const uint8_t ulen = p[pos++]; if (pos + ulen > end) break; pos += ulen; }
+                if (flags & 0x20u) { if (pos + 2 > end) break; pos += 2; }
+                while (pos + 2 <= end) {
+                    const uint8_t subTag = p[pos++];
+                    size_t subLen = 0;
+                    if (!readDescLen(p, end, pos, subLen)) break;
+                    const size_t subEnd = std::min(end, pos + subLen);
+                    if (subTag == 0x04 && parseDecoderConfig(pos, subEnd)) return true;
+                    pos = subEnd;
+                }
+                return false;
+            } else if (tag == 0x04) {
+                if (parseDecoderConfig(pos, end)) return true;
+            }
+            pos = end;
+        }
+        return false;
+    }
+
+    /** Gyermek dobozok keresése az stsd hangbejegyzésében (QuickTime 'wave' burkolón belül is). */
+    static void scanSampleEntryChildren(const uint8_t* data, size_t start, size_t end, uint32_t fmt, Mp4Track& trk) {
+        size_t pos = start;
+        while (pos + 8 <= end) {
+            const uint32_t chSz = be32(data + pos);
+            const uint32_t chType = be32(data + pos + 4);
+            if (chSz < 8 || pos + chSz > end) break;
+            if (fmt == 0x616c6163 && chType == 0x616c6163 && chSz >= 12) {
+                const size_t cookieLen = chSz - 12;
+                trk.cookie.assign(data + pos + 12, data + pos + 12 + cookieLen);
+                if (trk.cookie.size() >= 24) {
+                    trk.codec = Codec::Alac;
+                    trk.bitDepth = trk.cookie[5];
+                    trk.channels = trk.cookie[9];
+                    trk.sampleRate = be32(trk.cookie.data() + 20);
+                }
+                return;
+            } else if (fmt == 0x6d703461 && chType == 0x65736473 && chSz >= 12) {
+                if (parseEsds(data + pos + 8, chSz - 8, trk.cookie)) {
+                    trk.codec = Codec::Aac;
+                    return;
+                }
+            } else if (chType == 0x77617665) {   // QuickTime 'wave' konténer
+                scanSampleEntryChildren(data, pos + 8, pos + chSz, fmt, trk);
+                if (trk.codec != Codec::None) return;
+            }
+            pos += chSz;
+        }
+    }
+
+    bool parseCaf(uint64_t fileSize) {
+        if (fileSize < 12) return false;
+        uint8_t hdr[8];
+        if (std::fread(hdr, 1, 8, file_) != 8) return false;
+        std::vector<uint32_t> paktSizes;
+        uint64_t dataOffset = 0;
+        while (fileTell64(file_) + 12 <= fileSize) {
+            uint8_t chdr[12];
+            if (std::fread(chdr, 1, 12, file_) != 12) break;
+            const uint32_t ctype = be32(chdr);
+            const int64_t csize = static_cast<int64_t>(be64(chdr + 4));
+            const uint64_t curPos = fileTell64(file_);
+            const uint64_t nextPos = (csize < 0) ? fileSize : std::min<uint64_t>(fileSize, curPos + static_cast<uint64_t>(csize));
+
+            if (ctype == 0x64657363 && csize >= 32) { // "desc"
+                uint8_t desc[32];
+                if (std::fread(desc, 1, 32, file_) == 32) {
+                    double sr = 0.0;
+                    uint64_t srBits = be64(desc);
+                    std::memcpy(&sr, &srBits, sizeof(double));
+                    sampleRate_ = static_cast<uint32_t>(sr);
+                    const uint32_t fmt = be32(desc + 8);
+                    if (fmt != 0x616c6163) return false;
+                    channels_ = be32(desc + 24);
+                    bitDepth_ = be32(desc + 28);
+                }
+            } else if (ctype == 0x6b756b69 && csize >= 24 && csize <= (1 << 20)) { // "kuki"
+                cookie_.resize(static_cast<size_t>(csize));
+                if (std::fread(cookie_.data(), 1, cookie_.size(), file_) == cookie_.size()) {
+                    if (cookie_.size() >= 24) {
+                        bitDepth_ = cookie_[5];
+                        channels_ = cookie_[9];
+                        sampleRate_ = be32(cookie_.data() + 20);
+                    }
+                }
+            } else if (ctype == 0x70616b74 && csize >= 24 && csize <= (32 << 20)) { // "pakt"
+                std::vector<uint8_t> pdata(static_cast<size_t>(csize));
+                if (std::fread(pdata.data(), 1, pdata.size(), file_) == pdata.size()) {
+                    const int64_t numPkts = static_cast<int64_t>(be64(pdata.data()));
+                    const int64_t validFrames = static_cast<int64_t>(be64(pdata.data() + 8));
+                    totalFrames_ = validFrames > 0 ? static_cast<uint64_t>(validFrames) : 0;
+                    size_t pos = 24;
+                    while (pos < pdata.size() && static_cast<int64_t>(paktSizes.size()) < numPkts) {
+                        uint32_t val = 0;
+                        while (pos < pdata.size()) {
+                            const uint8_t b = pdata[pos++];
+                            val = (val << 7) | (b & 0x7f);
+                            if ((b & 0x80) == 0) break;
+                        }
+                        paktSizes.push_back(val);
+                    }
+                }
+            } else if (ctype == 0x64617461) { // "data"
+                dataOffset = fileTell64(file_) + 4;
+            }
+            if (csize < 0) break;
+            fileSeek64(file_, nextPos, SEEK_SET);
+        }
+
+        if (paktSizes.empty() || dataOffset == 0) return false;
+        codec_ = Codec::Alac;
+        uint64_t curOff = dataOffset;
+        uint64_t curFrame = 0;
+        uint64_t rem = totalFrames_;
+        for (size_t i = 0; i < paktSizes.size(); ++i) {
+            Packet p;
+            p.fileOffset = curOff;
+            p.byteSize = paktSizes[i];
+            p.frameCount = static_cast<uint32_t>(std::min<uint64_t>(4096, rem > 0 ? rem : 4096));
+            p.startFrame = curFrame;
+            curFrame += p.frameCount;
+            if (rem > p.frameCount) rem -= p.frameCount; else rem = 0;
+            curOff += p.byteSize;
+            packets_.push_back(p);
+        }
+        if (totalFrames_ == 0) totalFrames_ = curFrame;
+        return true;
+    }
+
+    void parseIlst(uint64_t endPos) {
+        while (fileTell64(file_) + 8 <= endPos) {
+            const uint64_t boxStart = fileTell64(file_);
+            uint8_t hdr[8];
+            if (std::fread(hdr, 1, 8, file_) != 8) break;
+            const uint32_t boxSize = be32(hdr);
+            if (boxSize < 8) break;
+            const uint32_t tagCode = be32(hdr + 4);
+            const uint64_t nextBox = std::min(endPos, boxStart + static_cast<uint64_t>(boxSize));
+
+            if (tagCode == 0x2d2d2d2d) { // "----" freeform atom (iTunSMPB, ReplayGain)
+                std::string name, val;
+                while (fileTell64(file_) + 8 <= nextBox) {
+                    const uint64_t sStart = fileTell64(file_);
+                    uint8_t shdr[8];
+                    if (std::fread(shdr, 1, 8, file_) != 8) break;
+                    const uint32_t ssz = be32(shdr);
+                    const uint32_t stype = be32(shdr + 4);
+                    if (ssz < 8 || sStart + ssz > nextBox) break;
+                    if (stype == 0x6e616d65 && ssz > 12 && ssz < 1024) { // "name"
+                        fileSeek64(file_, sStart + 12, SEEK_SET);
+                        name.resize(ssz - 12);
+                        if (std::fread(name.data(), 1, name.size(), file_) != name.size()) name.clear();
+                    } else if (stype == 0x64617461 && ssz > 16 && ssz < 4096) { // "data"
+                        fileSeek64(file_, sStart + 16, SEEK_SET);
+                        val.resize(ssz - 16);
+                        if (std::fread(val.data(), 1, val.size(), file_) != val.size()) val.clear();
+                    }
+                    fileSeek64(file_, sStart + ssz, SEEK_SET);
+                }
+                if (name == "iTunSMPB" && !val.empty()) {
+                    unsigned long long z = 0, d = 0, pad = 0, valid = 0;
+                    if (std::sscanf(val.c_str(), " %llx %llx %llx %llx", &z, &d, &pad, &valid) == 4 && valid > 0) {
+                        aacDelay_ = static_cast<uint64_t>(d);
+                        aacValidFrames_ = static_cast<uint64_t>(valid);
+                    }
+                } else if (!name.empty() && !val.empty()) {
+                    detail::applyReplayGain(name, val, tags_);
+                }
+                fileSeek64(file_, nextBox, SEEK_SET);
+                continue;
+            }
+
+            while (fileTell64(file_) + 8 <= nextBox) {
+                const uint64_t dataStart = fileTell64(file_);
+                uint8_t dhdr[8];
+                if (std::fread(dhdr, 1, 8, file_) != 8) break;
+                const uint32_t dsz = be32(dhdr);
+                if (dsz < 16 || dataStart + dsz > nextBox) break;
+                const uint32_t dtype = be32(dhdr + 4);
+                if (dtype == 0x64617461) { // "data"
+                    uint8_t flags[8];
+                    if (std::fread(flags, 1, 8, file_) == 8) {
+                        const uint32_t type = be32(flags);
+                        const size_t psize = dsz - 16;
+                        if (psize <= kMaxArtBytes) {
+                            std::vector<uint8_t> pbuf(psize);
+                            if (std::fread(pbuf.data(), 1, psize, file_) == psize) {
+                                if (type == 1) { // UTF-8 text
+                                    const std::string str(pbuf.begin(), pbuf.end());
+                                    if (tagCode == 0xa96e616d && tags_.title.empty()) tags_.title = str;
+                                    else if (tagCode == 0xa9415254 && tags_.artist.empty()) tags_.artist = str;
+                                    else if (tagCode == 0x61415254 && tags_.albumArtist.empty()) tags_.albumArtist = str;
+                                    else if (tagCode == 0xa9616c62 && tags_.album.empty()) tags_.album = str;
+                                    else if (tagCode == 0xa9646179 && tags_.year == 0) tags_.year = detail::leadingNumber(str);
+                                    else if (tagCode == 0xa967656e && tags_.genre.empty()) tags_.genre = detail::normalizeGenre(str);
+                                } else if (tagCode == 0x74726b6e && psize >= 6) { // trkn
+                                    if (!tags_.track) tags_.track = (pbuf[2] << 8) | pbuf[3];
+                                } else if (tagCode == 0x6469736b && psize >= 6) { // disk
+                                    if (!tags_.disc) tags_.disc = (pbuf[2] << 8) | pbuf[3];
+                                } else if (tagCode == 0x676e7265 && psize >= 2) { // gnre
+                                    const int n = ((pbuf[0] << 8) | pbuf[1]) - 1;
+                                    if (tags_.genre.empty()) tags_.genre = detail::id3v1Genre(n);
+                                } else if (tagCode == 0x636f7672 && psize > 0) { // covr
+                                    const std::string mime = (type == 14) ? "image/png" : "image/jpeg";
+                                    offerArt(tags_, artType_, 3, mime, pbuf.data(), psize);
+                                }
+                            }
+                        }
+                    }
+                }
+                fileSeek64(file_, dataStart + dsz, SEEK_SET);
+            }
+            fileSeek64(file_, nextBox, SEEK_SET);
+        }
+    }
+
+    void walkMp4(uint64_t endPos, std::vector<Mp4Track>& tracks, Mp4Track* cur) {
+        constexpr uint64_t kMaxBoxRead = 32u << 20;
+        while (fileTell64(file_) + 8 <= endPos) {
+            const uint64_t boxStart = fileTell64(file_);
+            uint8_t hdr[8];
+            if (std::fread(hdr, 1, 8, file_) != 8) break;
+            const uint32_t sz32 = be32(hdr);
+            uint64_t boxSize = sz32;
+            uint32_t hdrLen = 8;
+            if (sz32 == 1) {
+                uint8_t hdr64[8];
+                if (std::fread(hdr64, 1, 8, file_) != 8) break;
+                boxSize = be64(hdr64);
+                hdrLen = 16;
+            } else if (sz32 == 0) {
+                boxSize = endPos - boxStart;
+            }
+            if (boxSize < hdrLen) break;
+            const uint32_t type = be32(hdr + 4);
+            const uint64_t nextBox = std::min(endPos, boxStart + boxSize);
+            const uint64_t payloadSize = nextBox - (boxStart + hdrLen);
+
+            if (type == 0x7472616b) { // "trak": külön sáv (fejezet / borító sáv nem keveredik a hanggal)
+                tracks.emplace_back();
+                walkMp4(nextBox, tracks, &tracks.back());
+            } else if (type == 0x6d6f6f76 || type == 0x6d646961 ||
+                       type == 0x6d696e66 || type == 0x75647461 || type == 0x7374626c) {
+                walkMp4(nextBox, tracks, cur);
+            } else if (type == 0x6d657461) { // "meta": ISO FullBox (+4 bájt) vagy ritka QuickTime konténer (+0)
+                if (payloadSize >= 8) {
+                    const uint64_t metaBody = fileTell64(file_);
+                    uint8_t peek[8] = {};
+                    if (std::fread(peek, 1, 8, file_) == 8) {
+                        const uint32_t t0 = be32(peek + 4);
+                        const bool nonFull = (t0 == 0x68646c72 || t0 == 0x696c7374 || t0 == 0x6b657973);
+                        fileSeek64(file_, metaBody + (nonFull ? 0 : 4), SEEK_SET);
+                        walkMp4(nextBox, tracks, cur);
+                    }
+                }
+            } else if (type == 0x6d646864 && cur && payloadSize >= 16 && payloadSize <= 1024) { // "mdhd"
+                std::vector<uint8_t> buf(static_cast<size_t>(payloadSize));
+                if (std::fread(buf.data(), 1, buf.size(), file_) == buf.size()) {
+                    const uint8_t ver = buf[0];
+                    if (ver == 0 && buf.size() >= 16) cur->timescale = be32(buf.data() + 12);
+                    else if (ver == 1 && buf.size() >= 24) cur->timescale = be32(buf.data() + 20);
+                }
+            } else if (type == 0x73747364 && cur && payloadSize >= 8 && payloadSize <= kMaxBoxRead) { // "stsd"
+                std::vector<uint8_t> buf(static_cast<size_t>(payloadSize));
+                if (std::fread(buf.data(), 1, buf.size(), file_) == buf.size()) {
+                    const uint32_t count = be32(buf.data() + 4);
+                    size_t pos = 8;
+                    for (uint32_t e = 0; e < count && pos + 8 <= buf.size(); ++e) {
+                        const uint32_t entrySize = be32(buf.data() + pos);
+                        const uint32_t fmt = be32(buf.data() + pos + 4);
+                        if (entrySize < 8) break;
+                        const size_t entryEnd = std::min(buf.size(), pos + static_cast<size_t>(entrySize));
+                        if ((fmt == 0x616c6163 || fmt == 0x6d703461) && pos + 36 <= entryEnd) {
+                            const uint16_t ver = be16(buf.data() + pos + 16);
+                            const size_t hdrOff = (ver == 1) ? 52 : (ver == 2) ? 72 : 36;
+                            if (fmt == 0x6d703461) {
+                                cur->channels = be16(buf.data() + pos + 24);
+                                cur->sampleRate = be32(buf.data() + pos + 32) >> 16;
+                            }
+                            if (pos + hdrOff < entryEnd) {
+                                scanSampleEntryChildren(buf.data(), pos + hdrOff, entryEnd, fmt, *cur);
+                            }
+                            if (cur->codec == Codec::None && hdrOff != 36 && pos + 36 < entryEnd) {
+                                scanSampleEntryChildren(buf.data(), pos + 36, entryEnd, fmt, *cur);
+                            }
+                        }
+                        pos = entryEnd;
+                    }
+                }
+            } else if (type == 0x73747473 && cur && payloadSize >= 8 && payloadSize <= kMaxBoxRead) { // "stts"
+                std::vector<uint8_t> buf(static_cast<size_t>(payloadSize));
+                if (std::fread(buf.data(), 1, buf.size(), file_) == buf.size()) {
+                    const uint32_t count = be32(buf.data() + 4);
+                    size_t pos = 8;
+                    for (uint32_t i = 0; i < count && pos + 8 <= buf.size(); ++i, pos += 8) {
+                        cur->stts.push_back({ be32(buf.data() + pos), be32(buf.data() + pos + 4) });
+                    }
+                }
+            } else if (type == 0x73747363 && cur && payloadSize >= 8 && payloadSize <= kMaxBoxRead) { // "stsc"
+                std::vector<uint8_t> buf(static_cast<size_t>(payloadSize));
+                if (std::fread(buf.data(), 1, buf.size(), file_) == buf.size()) {
+                    const uint32_t count = be32(buf.data() + 4);
+                    size_t pos = 8;
+                    for (uint32_t i = 0; i < count && pos + 12 <= buf.size(); ++i, pos += 12) {
+                        cur->stsc.push_back({ be32(buf.data() + pos), be32(buf.data() + pos + 4), be32(buf.data() + pos + 8) });
+                    }
+                }
+            } else if (type == 0x7374737a && cur && payloadSize >= 12 && payloadSize <= kMaxBoxRead) { // "stsz"
+                std::vector<uint8_t> buf(static_cast<size_t>(payloadSize));
+                if (std::fread(buf.data(), 1, buf.size(), file_) == buf.size()) {
+                    const uint32_t uniformSize = be32(buf.data() + 4);
+                    const uint32_t count = be32(buf.data() + 8);
+                    if (uniformSize != 0) {
+                        if (count <= 20000000u) cur->sampleSizes.assign(count, uniformSize);
+                    } else {
+                        size_t pos = 12;
+                        for (uint32_t i = 0; i < count && pos + 4 <= buf.size(); ++i, pos += 4) {
+                            cur->sampleSizes.push_back(be32(buf.data() + pos));
+                        }
+                    }
+                }
+            } else if (type == 0x7374636f && cur && payloadSize >= 8 && payloadSize <= kMaxBoxRead) { // "stco"
+                std::vector<uint8_t> buf(static_cast<size_t>(payloadSize));
+                if (std::fread(buf.data(), 1, buf.size(), file_) == buf.size()) {
+                    const uint32_t count = be32(buf.data() + 4);
+                    size_t pos = 8;
+                    for (uint32_t i = 0; i < count && pos + 4 <= buf.size(); ++i, pos += 4) {
+                        cur->chunkOffsets.push_back(be32(buf.data() + pos));
+                    }
+                }
+            } else if (type == 0x636f3634 && cur && payloadSize >= 8 && payloadSize <= kMaxBoxRead) { // "co64"
+                std::vector<uint8_t> buf(static_cast<size_t>(payloadSize));
+                if (std::fread(buf.data(), 1, buf.size(), file_) == buf.size()) {
+                    const uint32_t count = be32(buf.data() + 4);
+                    size_t pos = 8;
+                    for (uint32_t i = 0; i < count && pos + 8 <= buf.size(); ++i, pos += 8) {
+                        cur->chunkOffsets.push_back(be64(buf.data() + pos));
+                    }
+                }
+            } else if (type == 0x696c7374) {
+                parseIlst(nextBox);
+            }
+            fileSeek64(file_, nextBox, SEEK_SET);
+        }
+    }
+
+    bool parseMp4(uint64_t fileSize) {
+        std::vector<Mp4Track> tracks;
+        walkMp4(fileSize, tracks, nullptr);
+
+        // Az első érvényes hang-sáv kiválasztása (ALAC vagy AAC)
+        const Mp4Track* chosen = nullptr;
+        for (const auto& trk : tracks) {
+            if (trk.codec != Codec::None && !trk.cookie.empty() &&
+                !trk.sampleSizes.empty() && !trk.chunkOffsets.empty() && !trk.stsc.empty()) {
+                chosen = &trk;
+                break;
+            }
+        }
+        if (!chosen) return false;
+
+        codec_ = chosen->codec;
+        trackTimescale_ = chosen->timescale;
+        sampleRate_ = chosen->sampleRate;
+        channels_ = chosen->channels;
+        bitDepth_ = chosen->bitDepth;
+        cookie_ = chosen->cookie;
+
+        const auto& sampleSizes = chosen->sampleSizes;
+        const auto& sttsTable = chosen->stts;
+        const auto& stscTable = chosen->stsc;
+        const auto& chunkOffsets = chosen->chunkOffsets;
+
+        std::vector<uint32_t> samplesPerChunk(chunkOffsets.size(), 0);
+        for (size_t i = 0; i < stscTable.size(); ++i) {
+            const uint32_t first = stscTable[i].firstChunk > 0 ? stscTable[i].firstChunk - 1 : 0;
+            const uint32_t last = (i + 1 < stscTable.size() && stscTable[i + 1].firstChunk > 0)
+                ? (stscTable[i + 1].firstChunk - 1)
+                : static_cast<uint32_t>(chunkOffsets.size());
+            for (uint32_t c = first; c < last && c < chunkOffsets.size(); ++c) {
+                samplesPerChunk[c] = stscTable[i].samplesPerChunk;
+            }
+        }
+
+        std::vector<uint32_t> packetFrames;
+        for (const auto& e : sttsTable) {
+            if (packetFrames.size() + e.count > sampleSizes.size() + 64) break;
+            packetFrames.insert(packetFrames.end(), e.count, e.delta);
+        }
+
+        const uint32_t defaultDelta = (codec_ == Codec::Aac) ? 1024u : 4096u;
+        size_t pktIdx = 0;
+        uint64_t currentFrame = 0;
+        packets_.reserve(sampleSizes.size());
+        for (size_t c = 0; c < chunkOffsets.size(); ++c) {
+            uint64_t off = chunkOffsets[c];
+            const uint32_t count = samplesPerChunk[c];
+            for (uint32_t s = 0; s < count && pktIdx < sampleSizes.size(); ++s, ++pktIdx) {
+                Packet p;
+                p.fileOffset = off;
+                p.byteSize = sampleSizes[pktIdx];
+                p.frameCount = (pktIdx < packetFrames.size() && packetFrames[pktIdx] > 0) ? packetFrames[pktIdx] : defaultDelta;
+                p.startFrame = currentFrame;
+                currentFrame += p.frameCount;
+                off += p.byteSize;
+                packets_.push_back(p);
+            }
+        }
+        totalFrames_ = currentFrame;
+        return !packets_.empty();
+    }
+
+    FILE* file_ = nullptr;
+    Codec codec_ = Codec::None;
+    ALACDecoder alac_;
+    NeAACDecHandle aac_ = nullptr;
+    uint32_t trackTimescale_ = 0;
+    uint32_t sampleRate_ = 0, channels_ = 0, bitDepth_ = 0;
+    uint64_t totalFrames_ = 0, rawTotalFrames_ = 0;
+    uint64_t aacDelay_ = 0, aacValidFrames_ = 0, skipStart_ = 0;
+    size_t aacPrimePackets_ = 0;
+    std::vector<Packet> packets_;
+    std::vector<uint8_t> cookie_;
+    std::vector<uint8_t> inBuf_, pcmRaw_;
+    std::vector<float> packetBuf_;
+    size_t currentPkt_ = 0;
+    size_t bufOffset_ = 0;
+    size_t bufFrames_ = 0;
+    uint64_t currentFrame_ = 0;
+    uint32_t artType_ = 0;
+};
+
+/**
+ * Nyers ADTS AAC (.aac) fájlok dekódere FAAD2-vel (AAC-LC, HE-AAC / SBR, HE-AACv2 / PS), ID3v2 címke- és
+ * borítóolvasással, valamint csomagalapú tekeréssel.
+ */
+class AdtsAacDecoder : public AudioDecoder {
+public:
+    ~AdtsAacDecoder() override { closeHandles(); }
+
+    bool open(const std::string& path, bool probe = false) {
+        file_ = openBinaryFile(path);
+        if (!file_) return false;
+        if (!fileSeek64(file_, 0, SEEK_END)) return false;
+        const uint64_t fileSize = fileTell64(file_);
+        if (fileSize < 7) return false;
+        fileSeek64(file_, 0, SEEK_SET);
+
+        // Opcionális ID3v2 címke a fájl elején
+        uint64_t audioStart = 0;
+        uint8_t id3Hdr[10] = {};
+        if (fileSize >= 10 && std::fread(id3Hdr, 1, 10, file_) == 10 && std::memcmp(id3Hdr, "ID3", 3) == 0) {
+            const uint32_t bodyLen = synchsafe(id3Hdr + 6);
+            const uint32_t footer = (id3Hdr[5] & 0x10u) ? 10u : 0u;
+            const uint64_t totalTag = 10ull + bodyLen + footer;
+            if (totalTag <= fileSize && totalTag <= (16u << 20)) {
+                std::vector<uint8_t> tagBuf(static_cast<size_t>(10ull + bodyLen));
+                std::memcpy(tagBuf.data(), id3Hdr, 10);
+                if (bodyLen == 0 || std::fread(tagBuf.data() + 10, 1, bodyLen, file_) == bodyLen) {
+                    detail::parseId3v2(tagBuf.data(), tagBuf.size(), tags_);
+                }
+                audioStart = totalTag;
+            }
+        }
+        detail::finalizeTags(tags_);
+
+        // ADTS keretek indexelése (csak a fejlécek beolvasása, teljes dekódolás nélkül)
+        if (!scanAdtsFrames(audioStart, fileSize)) return false;
+        if (!initAac()) return false;
+
+        // Az első nem üres csomagból a valós mintavételi frekvencia, csatornaszám és kerethossz (SBR-nél 2048)
+        uint32_t sr = 0, ch = 0;
+        size_t pktFrames = 0;
+        size_t firstIdx = 0;
+        const size_t probeLim = std::min<size_t>(packets_.size(), 8);
+        for (size_t i = 0; i < probeLim; ++i) {
+            if (decodePacket(i, &sr, &ch, &pktFrames) && pktFrames > 0 && sr > 0 && ch > 0) {
+                firstIdx = i;
+                break;
+            }
+        }
+        if (sr == 0 || ch == 0 || pktFrames == 0) return false;
+
+        sampleRate_ = sr;
+        channels_ = ch;
+        primePackets_ = firstIdx;
+        uint64_t cur = 0;
+        for (size_t i = 0; i < packets_.size(); ++i) {
+            auto& p = packets_[i];
+            if (i < primePackets_) {
+                p.frameCount = 0;
+                p.startFrame = 0;
+                continue;
+            }
+            p.frameCount = static_cast<uint32_t>(pktFrames);
+            p.startFrame = cur;
+            cur += p.frameCount;
+        }
+        totalFrames_ = cur;
+
+        if (probe) {
+            closeHandles();
+            return true;
+        }
+        return seek(0);
+    }
+
+    uint32_t sampleRate() const override { return sampleRate_; }
+    uint32_t channels() const override { return channels_; }
+    uint64_t totalFrames() const override { return totalFrames_; }
+
+    size_t read(float* out, size_t frames) override {
+        if (!file_ || currentFrame_ >= totalFrames_) return 0;
+        const size_t limit = static_cast<size_t>(std::min<uint64_t>(frames, totalFrames_ - currentFrame_));
+        size_t framesRead = 0;
+        while (framesRead < limit) {
+            if (bufOffset_ < bufFrames_) {
+                const size_t toCopy = std::min(limit - framesRead, bufFrames_ - bufOffset_);
                 std::memcpy(out + framesRead * channels_,
                             packetBuf_.data() + bufOffset_ * channels_,
                             toCopy * channels_ * sizeof(float));
@@ -416,11 +1259,26 @@ public:
         auto it = std::upper_bound(packets_.begin(), packets_.end(), frame,
             [](uint64_t f, const Packet& p) { return f < p.startFrame + p.frameCount; });
         if (it == packets_.end()) it = packets_.end() - 1;
-        currentPkt_ = static_cast<size_t>(std::distance(packets_.begin(), it));
-        if (!decodePacket(currentPkt_)) return false;
-        bufOffset_ = static_cast<size_t>(frame - packets_[currentPkt_].startFrame);
+        const size_t targetPkt = static_cast<size_t>(std::distance(packets_.begin(), it));
+
+        const size_t preStart = (targetPkt > primePackets_ + 2) ? (targetPkt - 2) : 0;
+        if (preStart == 0) {
+            if (!initAac()) return false;
+        } else {
+            NeAACDecPostSeekReset(aac_, static_cast<long>(preStart + 2));
+        }
+        for (size_t p = preStart; p < targetPkt; ++p) {
+            decodePacket(p);
+        }
+        if (!decodePacket(targetPkt)) return false;
+        size_t nextPkt = targetPkt + 1;
+        while (bufFrames_ == 0 && nextPkt < packets_.size()) {
+            if (!decodePacket(nextPkt++)) break;
+        }
+        const uint64_t rel = frame > packets_[targetPkt].startFrame ? (frame - packets_[targetPkt].startFrame) : 0;
+        bufOffset_ = static_cast<size_t>(std::min<uint64_t>(rel, bufFrames_));
+        currentPkt_ = nextPkt;
         currentFrame_ = frame;
-        currentPkt_++;
         return true;
     }
 
@@ -432,343 +1290,156 @@ private:
         uint64_t startFrame = 0;
     };
 
-    struct SttsEntry { uint32_t count = 0, delta = 0; };
-    struct StscEntry { uint32_t firstChunk = 0, samplesPerChunk = 0, descIdx = 0; };
+    void closeHandles() {
+        if (aac_) { NeAACDecClose(aac_); aac_ = nullptr; }
+        if (file_) { std::fclose(file_); file_ = nullptr; }
+    }
 
-    bool decodePacket(size_t idx) {
-        if (idx >= packets_.size() || !file_) return false;
+    static bool validAdtsHeader(const uint8_t h[7], uint32_t& frameLenOut) {
+        if (h[0] != 0xFF || (h[1] & 0xF6u) != 0xF0u) return false;
+        const uint8_t srIdx = (h[2] >> 2) & 0x0Fu;
+        if (srIdx >= 13) return false;
+        const uint32_t hdrLen = (h[1] & 0x01u) ? 7u : 9u;
+        const uint32_t flen = (static_cast<uint32_t>(h[3] & 0x03u) << 11) |
+                              (static_cast<uint32_t>(h[4]) << 3) |
+                              (static_cast<uint32_t>(h[5] & 0xE0u) >> 5);
+        if (flen < hdrLen) return false;
+        frameLenOut = flen;
+        return true;
+    }
+
+    bool scanAdtsFrames(uint64_t startOff, uint64_t fileSize) {
+        // Első érvényes ADTS szinkron megkeresése (max 64 KB átugrása)
+        uint64_t pos = startOff;
+        const uint64_t searchLim = std::min<uint64_t>(fileSize, startOff + 65536ull);
+        if (!fileSeek64(file_, pos, SEEK_SET)) return false;
+        std::vector<uint8_t> probeBuf(static_cast<size_t>(searchLim - pos));
+        if (probeBuf.size() < 7 || std::fread(probeBuf.data(), 1, probeBuf.size(), file_) != probeBuf.size()) return false;
+
+        bool found = false;
+        for (size_t i = 0; i + 7 <= probeBuf.size(); ++i) {
+            uint32_t flen = 0;
+            if (!validAdtsHeader(probeBuf.data() + i, flen)) continue;
+            if (pos + i + flen > fileSize) continue;
+            if (pos + i + flen == fileSize) {
+                pos += i;
+                found = true;
+                break;
+            }
+            // Következő keret szinkronjának igazolása téves találat ellen
+            if (i + flen + 7 <= probeBuf.size()) {
+                uint32_t flen2 = 0;
+                if (validAdtsHeader(probeBuf.data() + i + flen, flen2)) {
+                    pos += i;
+                    found = true;
+                    break;
+                }
+            } else {
+                uint8_t nextH[7] = {};
+                if (fileSeek64(file_, pos + i + flen, SEEK_SET) && std::fread(nextH, 1, 7, file_) == 7) {
+                    uint32_t flen2 = 0;
+                    if (validAdtsHeader(nextH, flen2)) {
+                        pos += i;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!found) return false;
+
+        // Végigugrálás az ADTS kereteken
+        packets_.clear();
+        while (pos + 7 <= fileSize) {
+            uint8_t h[7] = {};
+            if (!fileSeek64(file_, pos, SEEK_SET) || std::fread(h, 1, 7, file_) != 7) break;
+            uint32_t flen = 0;
+            if (!validAdtsHeader(h, flen) || pos + flen > fileSize) break;
+            packets_.push_back({ pos, flen, 1024, 0 });
+            pos += flen;
+            if (packets_.size() >= 2000000u) break;   // védelem
+        }
+        return !packets_.empty();
+    }
+
+    bool initAac() {
+        if (aac_) { NeAACDecClose(aac_); aac_ = nullptr; }
+        aac_ = NeAACDecOpen();
+        if (!aac_) return false;
+        NeAACDecConfigurationPtr cfg = NeAACDecGetCurrentConfiguration(aac_);
+        cfg->outputFormat = FAAD_FMT_FLOAT;
+        cfg->downMatrix = 1;
+        NeAACDecSetConfiguration(aac_, cfg);
+
+        std::vector<uint8_t> initBuf;
+        for (size_t i = 0; i < packets_.size() && initBuf.size() < 16384; ++i) {
+            const auto& p = packets_[i];
+            const size_t old = initBuf.size();
+            initBuf.resize(old + p.byteSize);
+            if (!fileSeek64(file_, p.fileOffset, SEEK_SET) ||
+                std::fread(initBuf.data() + old, 1, p.byteSize, file_) != p.byteSize) {
+                initBuf.resize(old);
+                break;
+            }
+        }
+        if (initBuf.size() < 7) return false;
+        unsigned long sr = 0;
+        unsigned char ch = 0;
+        if (NeAACDecInit(aac_, initBuf.data(), static_cast<unsigned long>(initBuf.size()), &sr, &ch) < 0) {
+            NeAACDecClose(aac_);
+            aac_ = nullptr;
+            return false;
+        }
+        return true;
+    }
+
+    bool decodePacket(size_t idx, uint32_t* outSr = nullptr, uint32_t* outCh = nullptr, size_t* outFrames = nullptr) {
+        if (idx >= packets_.size() || !file_ || !aac_) return false;
         const auto& pkt = packets_[idx];
-        std::fseek(file_, static_cast<long>(pkt.fileOffset), SEEK_SET);
+        if (!fileSeek64(file_, pkt.fileOffset, SEEK_SET)) return false;
         inBuf_.resize(pkt.byteSize);
         if (std::fread(inBuf_.data(), 1, pkt.byteSize, file_) != pkt.byteSize) return false;
-        BitBuffer bits;
-        BitBufferInit(&bits, inBuf_.data(), pkt.byteSize);
-        uint32_t outFrames = 0;
-        if (dec_.Decode(&bits, pcmRaw_.data(), 4096, channels_, &outFrames) != 0) return false;
-        bufFrames_ = outFrames;
-        if (bitDepth_ == 16) {
-            const int16_t* s16 = reinterpret_cast<const int16_t*>(pcmRaw_.data());
-            for (size_t i = 0; i < outFrames * channels_; ++i) packetBuf_[i] = s16[i] / 32768.0f;
-        } else if (bitDepth_ == 20 || bitDepth_ == 24) {
-            const uint8_t* p = pcmRaw_.data();
-            for (size_t i = 0; i < outFrames * channels_; ++i, p += 3) {
-                const int32_t s = (static_cast<int32_t>(static_cast<int8_t>(p[2])) << 16) | (static_cast<uint32_t>(p[1]) << 8) | p[0];
-                packetBuf_[i] = s / 8388608.0f;
+
+        NeAACDecFrameInfo fi{};
+        void* pcm = NeAACDecDecode(aac_, &fi, inBuf_.data(), static_cast<unsigned long>(inBuf_.size()));
+        if (fi.error != 0) return false;
+        if (!pcm || fi.samples == 0 || fi.channels == 0) {
+            bufFrames_ = 0;
+            if (outFrames) *outFrames = 0;
+            return true;
+        }
+        const size_t nFrames = fi.samples / fi.channels;
+        if (channels_ > 0 && fi.channels != channels_) {
+            packetBuf_.resize(nFrames * channels_, 0.0f);
+            const float* src = static_cast<const float*>(pcm);
+            const size_t copyCh = std::min<size_t>(fi.channels, channels_);
+            for (size_t f = 0; f < nFrames; ++f) {
+                for (size_t c = 0; c < copyCh; ++c) packetBuf_[f * channels_ + c] = src[f * fi.channels + c];
+                if (fi.channels == 1 && channels_ == 2) packetBuf_[f * 2 + 1] = src[f];
             }
-        } else if (bitDepth_ == 32) {
-            const int32_t* s32 = reinterpret_cast<const int32_t*>(pcmRaw_.data());
-            for (size_t i = 0; i < outFrames * channels_; ++i) packetBuf_[i] = s32[i] / 2147483648.0f;
+        } else {
+            const float* src = static_cast<const float*>(pcm);
+            packetBuf_.assign(src, src + fi.samples);
         }
-        return true;
-    }
-
-    bool parseCaf(uint64_t fileSize) {
-        if (fileSize < 12) return false;
-        uint8_t hdr[8];
-        if (std::fread(hdr, 1, 8, file_) != 8) return false;
-        std::vector<uint32_t> paktSizes;
-        uint64_t dataOffset = 0;
-        while (static_cast<uint64_t>(std::ftell(file_)) + 12 <= fileSize) {
-            uint8_t chdr[12];
-            if (std::fread(chdr, 1, 12, file_) != 12) break;
-            const uint32_t ctype = be32(chdr);
-            const int64_t csize = static_cast<int64_t>(be64(chdr + 4));
-            const long nextPos = std::ftell(file_) + static_cast<long>(csize < 0 ? 0 : csize);
-
-            if (ctype == 0x64657363 && csize >= 32) { // "desc"
-                uint8_t desc[32];
-                if (std::fread(desc, 1, 32, file_) == 32) {
-                    double sr = 0.0;
-                    uint64_t srBits = be64(desc);
-                    std::memcpy(&sr, &srBits, sizeof(double));
-                    sampleRate_ = static_cast<uint32_t>(sr);
-                    const uint32_t fmt = be32(desc + 8);
-                    if (fmt != 0x616c6163) return false;
-                    channels_ = be32(desc + 24);
-                    bitDepth_ = be32(desc + 28);
-                }
-            } else if (ctype == 0x6b756b69 && csize >= 24) { // "kuki"
-                cookie_.resize(static_cast<size_t>(csize));
-                if (std::fread(cookie_.data(), 1, cookie_.size(), file_) == cookie_.size()) {
-                    if (cookie_.size() >= 24) {
-                        bitDepth_ = cookie_[5];
-                        channels_ = cookie_[9];
-                        sampleRate_ = be32(cookie_.data() + 20);
-                    }
-                }
-            } else if (ctype == 0x70616b74 && csize >= 24) { // "pakt"
-                std::vector<uint8_t> pdata(static_cast<size_t>(csize));
-                if (std::fread(pdata.data(), 1, pdata.size(), file_) == pdata.size()) {
-                    const int64_t numPkts = static_cast<int64_t>(be64(pdata.data()));
-                    const int64_t validFrames = static_cast<int64_t>(be64(pdata.data() + 8));
-                    totalFrames_ = validFrames > 0 ? static_cast<uint64_t>(validFrames) : 0;
-                    size_t pos = 24;
-                    while (pos < pdata.size() && static_cast<int64_t>(paktSizes.size()) < numPkts) {
-                        uint32_t val = 0;
-                        while (pos < pdata.size()) {
-                            const uint8_t b = pdata[pos++];
-                            val = (val << 7) | (b & 0x7f);
-                            if ((b & 0x80) == 0) break;
-                        }
-                        paktSizes.push_back(val);
-                    }
-                }
-            } else if (ctype == 0x64617461) { // "data"
-                dataOffset = static_cast<uint64_t>(std::ftell(file_) + 4);
-            }
-            if (csize < 0) break;
-            std::fseek(file_, nextPos, SEEK_SET);
-        }
-
-        if (paktSizes.empty() || dataOffset == 0) return false;
-        uint64_t curOff = dataOffset;
-        uint64_t curFrame = 0;
-        uint64_t rem = totalFrames_;
-        for (size_t i = 0; i < paktSizes.size(); ++i) {
-            Packet p;
-            p.fileOffset = curOff;
-            p.byteSize = paktSizes[i];
-            p.frameCount = static_cast<uint32_t>(std::min<uint64_t>(4096, rem > 0 ? rem : 4096));
-            p.startFrame = curFrame;
-            curFrame += p.frameCount;
-            if (rem > p.frameCount) rem -= p.frameCount; else rem = 0;
-            curOff += p.byteSize;
-            packets_.push_back(p);
-        }
-        if (totalFrames_ == 0) totalFrames_ = curFrame;
-        return true;
-    }
-
-    void parseIlst(uint64_t endPos) {
-        while (static_cast<uint64_t>(std::ftell(file_)) + 8 <= endPos) {
-            const long boxStart = std::ftell(file_);
-            uint8_t hdr[8];
-            if (std::fread(hdr, 1, 8, file_) != 8) break;
-            const uint32_t boxSize = be32(hdr);
-            if (boxSize < 8) break;
-            const uint32_t tagCode = be32(hdr + 4);
-            const long nextBox = boxStart + static_cast<long>(boxSize);
-
-            while (static_cast<uint64_t>(std::ftell(file_)) + 8 <= static_cast<uint64_t>(nextBox)) {
-                const long dataStart = std::ftell(file_);
-                uint8_t dhdr[8];
-                if (std::fread(dhdr, 1, 8, file_) != 8) break;
-                const uint32_t dsz = be32(dhdr);
-                if (dsz < 16) break;
-                const uint32_t dtype = be32(dhdr + 4);
-                if (dtype == 0x64617461) { // "data"
-                    uint8_t flags[8];
-                    if (std::fread(flags, 1, 8, file_) == 8) {
-                        const uint32_t type = be32(flags);
-                        const size_t psize = dsz - 16;
-                        std::vector<uint8_t> pbuf(psize);
-                        if (std::fread(pbuf.data(), 1, psize, file_) == psize) {
-                            if (type == 1) { // UTF-8 text
-                                const std::string str(pbuf.begin(), pbuf.end());
-                                if (tagCode == 0xa96e616d && tags_.title.empty()) tags_.title = str;
-                                else if (tagCode == 0xa9415254 && tags_.artist.empty()) tags_.artist = str;
-                                else if (tagCode == 0x61415254 && tags_.albumArtist.empty()) tags_.albumArtist = str;
-                                else if (tagCode == 0xa9616c62 && tags_.album.empty()) tags_.album = str;
-                                else if (tagCode == 0xa9646179 && tags_.year == 0) tags_.year = detail::leadingNumber(str);
-                                else if (tagCode == 0xa967656e && tags_.genre.empty()) tags_.genre = detail::normalizeGenre(str);
-                            } else if (tagCode == 0x74726b6e && psize >= 6) { // trkn
-                                if (!tags_.track) tags_.track = (pbuf[2] << 8) | pbuf[3];
-                            } else if (tagCode == 0x6469736b && psize >= 6) { // disk
-                                if (!tags_.disc) tags_.disc = (pbuf[2] << 8) | pbuf[3];
-                            } else if (tagCode == 0x676e7265 && psize >= 2) { // gnre
-                                const int n = ((pbuf[0] << 8) | pbuf[1]) - 1;
-                                if (tags_.genre.empty()) tags_.genre = detail::id3v1Genre(n);
-                            } else if (tagCode == 0x636f7672 && psize > 0) { // covr
-                                const std::string mime = (type == 14) ? "image/png" : "image/jpeg";
-                                offerArt(tags_, artType_, 3, mime, pbuf.data(), psize);
-                            }
-                        }
-                    }
-                }
-                std::fseek(file_, dataStart + dsz, SEEK_SET);
-            }
-            std::fseek(file_, nextBox, SEEK_SET);
-        }
-    }
-
-    void walkMp4(uint64_t endPos, std::vector<uint32_t>& sampleSizes,
-                 std::vector<SttsEntry>& sttsTable, std::vector<StscEntry>& stscTable,
-                 std::vector<uint64_t>& chunkOffsets) {
-        while (static_cast<uint64_t>(std::ftell(file_)) + 8 <= endPos) {
-            const long boxStart = std::ftell(file_);
-            uint8_t hdr[8];
-            if (std::fread(hdr, 1, 8, file_) != 8) break;
-            const uint32_t sz32 = be32(hdr);
-            uint64_t boxSize = sz32;
-            uint32_t hdrLen = 8;
-            if (sz32 == 1) {
-                uint8_t hdr64[8];
-                if (std::fread(hdr64, 1, 8, file_) != 8) break;
-                boxSize = be64(hdr64);
-                hdrLen = 16;
-            } else if (sz32 == 0) {
-                boxSize = endPos - static_cast<uint64_t>(boxStart);
-            }
-            if (boxSize < hdrLen) break;
-            const uint32_t type = be32(hdr + 4);
-            const uint64_t payloadSize = boxSize - hdrLen;
-            const long nextBox = boxStart + static_cast<long>(boxSize);
-
-            if (type == 0x6d6f6f76 || type == 0x7472616b || type == 0x6d646961 ||
-                type == 0x6d696e66 || type == 0x75647461) {
-                walkMp4(static_cast<uint64_t>(nextBox), sampleSizes, sttsTable, stscTable, chunkOffsets);
-            } else if (type == 0x6d657461) {
-                std::fseek(file_, 4, SEEK_CUR);
-                walkMp4(static_cast<uint64_t>(nextBox), sampleSizes, sttsTable, stscTable, chunkOffsets);
-            } else if (type == 0x7374626c) {
-                walkMp4(static_cast<uint64_t>(nextBox), sampleSizes, sttsTable, stscTable, chunkOffsets);
-            } else if (type == 0x73747364) {
-                std::vector<uint8_t> buf(static_cast<size_t>(payloadSize));
-                if (std::fread(buf.data(), 1, buf.size(), file_) == buf.size() && buf.size() >= 8) {
-                    const uint32_t count = be32(buf.data() + 4);
-                    size_t pos = 8;
-                    for (uint32_t e = 0; e < count && pos + 8 <= buf.size(); ++e) {
-                        const uint32_t entrySize = be32(buf.data() + pos);
-                        const uint32_t fmt = be32(buf.data() + pos + 4);
-                        if (fmt == 0x616c6163 && pos + 36 <= buf.size()) {
-                            size_t childPos = pos + 36;
-                            while (childPos + 8 <= pos + entrySize && childPos + 8 <= buf.size()) {
-                                const uint32_t chSz = be32(buf.data() + childPos);
-                                const uint32_t chType = be32(buf.data() + childPos + 4);
-                                if (chType == 0x616c6163 && chSz >= 12) {
-                                    const size_t cookieLen = chSz - 12;
-                                    cookie_.assign(buf.data() + childPos + 12, buf.data() + childPos + 12 + cookieLen);
-                                    if (cookie_.size() >= 24) {
-                                        bitDepth_ = cookie_[5];
-                                        channels_ = cookie_[9];
-                                        sampleRate_ = be32(cookie_.data() + 20);
-                                    }
-                                    break;
-                                }
-                                if (chSz < 8) break;
-                                childPos += chSz;
-                            }
-                        }
-                        if (entrySize < 8) break;
-                        pos += entrySize;
-                    }
-                }
-            } else if (type == 0x73747473) {
-                std::vector<uint8_t> buf(static_cast<size_t>(payloadSize));
-                if (std::fread(buf.data(), 1, buf.size(), file_) == buf.size() && buf.size() >= 8) {
-                    const uint32_t count = be32(buf.data() + 4);
-                    size_t pos = 8;
-                    for (uint32_t i = 0; i < count && pos + 8 <= buf.size(); ++i, pos += 8) {
-                        sttsTable.push_back({ be32(buf.data() + pos), be32(buf.data() + pos + 4) });
-                    }
-                }
-            } else if (type == 0x73747363) {
-                std::vector<uint8_t> buf(static_cast<size_t>(payloadSize));
-                if (std::fread(buf.data(), 1, buf.size(), file_) == buf.size() && buf.size() >= 8) {
-                    const uint32_t count = be32(buf.data() + 4);
-                    size_t pos = 8;
-                    for (uint32_t i = 0; i < count && pos + 12 <= buf.size(); ++i, pos += 12) {
-                        stscTable.push_back({ be32(buf.data() + pos), be32(buf.data() + pos + 4), be32(buf.data() + pos + 8) });
-                    }
-                }
-            } else if (type == 0x7374737a) {
-                std::vector<uint8_t> buf(static_cast<size_t>(payloadSize));
-                if (std::fread(buf.data(), 1, buf.size(), file_) == buf.size() && buf.size() >= 12) {
-                    const uint32_t uniformSize = be32(buf.data() + 4);
-                    const uint32_t count = be32(buf.data() + 8);
-                    if (uniformSize != 0) {
-                        sampleSizes.assign(count, uniformSize);
-                    } else {
-                        size_t pos = 12;
-                        for (uint32_t i = 0; i < count && pos + 4 <= buf.size(); ++i, pos += 4) {
-                            sampleSizes.push_back(be32(buf.data() + pos));
-                        }
-                    }
-                }
-            } else if (type == 0x7374636f) {
-                std::vector<uint8_t> buf(static_cast<size_t>(payloadSize));
-                if (std::fread(buf.data(), 1, buf.size(), file_) == buf.size() && buf.size() >= 8) {
-                    const uint32_t count = be32(buf.data() + 4);
-                    size_t pos = 8;
-                    for (uint32_t i = 0; i < count && pos + 4 <= buf.size(); ++i, pos += 4) {
-                        chunkOffsets.push_back(be32(buf.data() + pos));
-                    }
-                }
-            } else if (type == 0x636f3634) {
-                std::vector<uint8_t> buf(static_cast<size_t>(payloadSize));
-                if (std::fread(buf.data(), 1, buf.size(), file_) == buf.size() && buf.size() >= 8) {
-                    const uint32_t count = be32(buf.data() + 4);
-                    size_t pos = 8;
-                    for (uint32_t i = 0; i < count && pos + 8 <= buf.size(); ++i, pos += 8) {
-                        chunkOffsets.push_back(be64(buf.data() + pos));
-                    }
-                }
-            } else if (type == 0x696c7374) {
-                parseIlst(static_cast<uint64_t>(nextBox));
-            }
-            std::fseek(file_, nextBox, SEEK_SET);
-        }
-    }
-
-    bool parseMp4(uint64_t fileSize) {
-        std::vector<uint32_t> sampleSizes;
-        std::vector<SttsEntry> sttsTable;
-        std::vector<StscEntry> stscTable;
-        std::vector<uint64_t> chunkOffsets;
-
-        walkMp4(fileSize, sampleSizes, sttsTable, stscTable, chunkOffsets);
-
-        if (sampleSizes.empty() || chunkOffsets.empty() || stscTable.empty()) return false;
-
-        std::vector<uint32_t> samplesPerChunk(chunkOffsets.size(), 0);
-        for (size_t i = 0; i < stscTable.size(); ++i) {
-            const uint32_t first = stscTable[i].firstChunk > 0 ? stscTable[i].firstChunk - 1 : 0;
-            const uint32_t last = (i + 1 < stscTable.size() && stscTable[i+1].firstChunk > 0)
-                ? (stscTable[i+1].firstChunk - 1)
-                : static_cast<uint32_t>(chunkOffsets.size());
-            for (uint32_t c = first; c < last && c < chunkOffsets.size(); ++c) {
-                samplesPerChunk[c] = stscTable[i].samplesPerChunk;
-            }
-        }
-
-        std::vector<uint32_t> packetFrames;
-        for (const auto& e : sttsTable) {
-            for (uint32_t i = 0; i < e.count; ++i) packetFrames.push_back(e.delta);
-        }
-
-        size_t pktIdx = 0;
-        uint64_t currentFrame = 0;
-        for (size_t c = 0; c < chunkOffsets.size(); ++c) {
-            uint64_t off = chunkOffsets[c];
-            const uint32_t count = samplesPerChunk[c];
-            for (uint32_t s = 0; s < count && pktIdx < sampleSizes.size(); ++s, ++pktIdx) {
-                Packet p;
-                p.fileOffset = off;
-                p.byteSize = sampleSizes[pktIdx];
-                p.frameCount = (pktIdx < packetFrames.size()) ? packetFrames[pktIdx] : 4096;
-                p.startFrame = currentFrame;
-                currentFrame += p.frameCount;
-                off += p.byteSize;
-                packets_.push_back(p);
-            }
-        }
-        totalFrames_ = currentFrame;
+        bufFrames_ = nFrames;
+        if (outSr) *outSr = static_cast<uint32_t>(fi.samplerate);
+        if (outCh) *outCh = fi.channels;
+        if (outFrames) *outFrames = nFrames;
         return true;
     }
 
     FILE* file_ = nullptr;
-    ALACDecoder dec_;
-    uint32_t sampleRate_ = 0, channels_ = 0, bitDepth_ = 0;
+    NeAACDecHandle aac_ = nullptr;
+    uint32_t sampleRate_ = 0, channels_ = 0;
     uint64_t totalFrames_ = 0;
+    size_t primePackets_ = 0;
     std::vector<Packet> packets_;
-    std::vector<uint8_t> cookie_;
-    std::vector<uint8_t> inBuf_, pcmRaw_;
+    std::vector<uint8_t> inBuf_;
     std::vector<float> packetBuf_;
     size_t currentPkt_ = 0;
     size_t bufOffset_ = 0;
     size_t bufFrames_ = 0;
     uint64_t currentFrame_ = 0;
-    uint32_t artType_ = 0;
 };
 
 class OpusDecoder : public AudioDecoder {
@@ -1378,7 +2049,7 @@ void parseId3v2(const uint8_t* data, size_t size, TrackTags& t) {
 bool isSupportedFile(const std::string& path) {
     const std::string e = lowerExt(path);
     return e == "flac" || e == "wav" || e == "mp3" || e == "ogg" || e == "oga" ||
-           e == "m4a" || e == "alac" || e == "caf" || e == "opus" || e == "wv" ||
+           e == "m4a" || e == "aac" || e == "alac" || e == "caf" || e == "opus" || e == "wv" ||
            e == "aif" || e == "aiff" || e == "aifc" || e == "dsf" || e == "dff";
 }
 
@@ -1397,7 +2068,18 @@ std::unique_ptr<AudioDecoder> openDecoder(const std::string& path, std::string* 
         if (dopus->open(path)) return dopus;
         return fail("Az Ogg fájl nem nyitható meg (nem Vorbis vagy Opus adatfolyam).");
     }
-    if (e == "m4a" || e == "alac" || e == "caf") { auto d = std::make_unique<AlacDecoder>(); if (d->open(path, probe)) return d; return fail("Az ALAC (M4A) fájl nem nyitható meg."); }
+    if (e == "m4a" || e == "alac" || e == "caf") {
+        auto d = std::make_unique<Mp4AudioDecoder>();
+        if (d->open(path, probe)) return d;
+        return fail("Az M4A / ALAC / AAC fájl nem nyitható meg.");
+    }
+    if (e == "aac") {
+        auto d = std::make_unique<AdtsAacDecoder>();
+        if (d->open(path, probe)) return d;
+        auto mp4 = std::make_unique<Mp4AudioDecoder>();
+        if (mp4->open(path, probe)) return mp4;
+        return fail("Az AAC fájl nem nyitható meg.");
+    }
     if (e == "opus") { auto d = std::make_unique<OpusDecoder>(); if (d->open(path)) return d; return fail("Az Opus fájl nem nyitható meg."); }
     if (e == "wv") { auto d = std::make_unique<WavpackDecoder>(); if (d->open(path, probe)) return d; return fail("A WavPack (.wv) fájl nem nyitható meg."); }
     if (e == "dsf" || e == "dff") {
@@ -1406,7 +2088,7 @@ std::unique_ptr<AudioDecoder> openDecoder(const std::string& path, std::string* 
         if (d->open(path, dsdErr, probe)) return d;
         return fail(dsdErr.empty() ? "A DSD fájl nem nyitható meg." : dsdErr.c_str());
     }
-    return fail("Nem támogatott formátum (FLAC, WAV, AIFF, MP3, Ogg Vorbis, ALAC, Opus, WavPack, DSF, DFF).");
+    return fail("Nem támogatott formátum (FLAC, WAV, AIFF, MP3, Ogg Vorbis, ALAC, AAC, Opus, WavPack, DSF, DFF).");
 }
 
 } // namespace ee_analyzer::player

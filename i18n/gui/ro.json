@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrected (R)",
   "rw.filterListLeft": "Left channel (L):",
   "rw.filterListRight": "Right channel (R):",
-  "rw.filterListNone": "(no bands)"
+  "rw.filterListNone": "(no bands)",
+  "library.errDenied": "Acces refuzat la acest dosar.",
+  "library.errNotFound": "Dosarul nu a fost găsit.",
+  "library.errNotDir": "Această cale nu este un dosar.",
+  "library.errTimeout": "Citirea dosarului a expirat.",
+  "library.errGeneric": "Eroare dosar: {err}",
+  "library.errSkipped": "{n} element(e) nu au putut fi citite sau decodate (omise).",
+  "library.errMacTccHint": "Pe macOS, permiteți Aqulify în Configurări sistem → Intimitate și securitate → Fișiere și dosare.",
+  "library.errBadgeDenied": "Acces refuzat",
+  "library.errBadgeNotFound": "Negăsit",
+  "library.errBadgeError": "Eroare"
 }

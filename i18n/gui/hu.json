@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Korrigált (Jobb)",
   "rw.filterListLeft": "Bal csatorna (L):",
   "rw.filterListRight": "Jobb csatorna (R):",
-  "rw.filterListNone": "(nincs sáv)"
+  "rw.filterListNone": "(nincs sáv)",
+  "library.errDenied": "Hozzáférés megtagadva ehhez a mappához.",
+  "library.errNotFound": "A mappa nem található.",
+  "library.errNotDir": "Ez az útvonal nem mappa.",
+  "library.errTimeout": "A mappa beolvasása időtúllépés miatt megszakadt.",
+  "library.errGeneric": "Mappahiba: {err}",
+  "library.errSkipped": "{n} elem nem volt olvasható vagy dekódolható (kihagyva).",
+  "library.errMacTccHint": "macOS-en engedélyezd az Aqulify-t itt: Rendszerbeállítások → Adatvédelem és biztonság → Fájlok és mappák.",
+  "library.errBadgeDenied": "Hozzáférés megtagadva",
+  "library.errBadgeNotFound": "Nem található",
+  "library.errBadgeError": "Hiba"
 }

@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrected (R)",
   "rw.filterListLeft": "Left channel (L):",
   "rw.filterListRight": "Right channel (R):",
-  "rw.filterListNone": "(no bands)"
+  "rw.filterListNone": "(no bands)",
+  "library.errDenied": "Отказано в доступе к этой папке.",
+  "library.errNotFound": "Папка не найдена.",
+  "library.errNotDir": "Этот путь не является папкой.",
+  "library.errTimeout": "Истекло время ожидания чтения папки.",
+  "library.errGeneric": "Ошибка папки: {err}",
+  "library.errSkipped": "Не удалось прочитать или декодировать элементов: {n} (пропущено).",
+  "library.errMacTccHint": "В macOS разрешите доступ Aqulify в Системные настройки → Конфиденциальность и безопасность → Файлы и папки.",
+  "library.errBadgeDenied": "Нет доступа",
+  "library.errBadgeNotFound": "Не найдена",
+  "library.errBadgeError": "Ошибка"
 }

@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corregido (D)",
   "rw.filterListLeft": "Canal izquierdo (L):",
   "rw.filterListRight": "Canal derecho (R):",
-  "rw.filterListNone": "(sin bandas)"
+  "rw.filterListNone": "(sin bandas)",
+  "library.errDenied": "Acceso denegado a esta carpeta.",
+  "library.errNotFound": "No se encontró la carpeta.",
+  "library.errNotDir": "Esta ruta no es una carpeta.",
+  "library.errTimeout": "Se agotó el tiempo de espera al leer la carpeta.",
+  "library.errGeneric": "Error de carpeta: {err}",
+  "library.errSkipped": "No se pudieron leer ni decodificar {n} elemento(s) (omitidos).",
+  "library.errMacTccHint": "En macOS, permite el acceso a Aqulify en Ajustes del Sistema → Privacidad y seguridad → Archivos y carpetas.",
+  "library.errBadgeDenied": "Acceso denegado",
+  "library.errBadgeNotFound": "No encontrada",
+  "library.errBadgeError": "Error"
 }

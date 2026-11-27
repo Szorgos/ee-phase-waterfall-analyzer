@@ -9,6 +9,7 @@
  */
 #import <Cocoa/Cocoa.h>
 #import <ServiceManagement/ServiceManagement.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <WebKit/WebKit.h>
 
 #include <sys/stat.h>
@@ -467,7 +468,7 @@ struct Core {
 // ======================================================================== alkalmazás
 
 @interface AppDelegate : NSObject <NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate, WKUIDelegate,
-                                   WKNavigationDelegate, WKScriptMessageHandler>
+                                   WKNavigationDelegate, WKScriptMessageHandler, WKScriptMessageHandlerWithReply>
 @end
 
 @implementation AppDelegate {
@@ -1141,6 +1142,14 @@ struct Core {
                                            "})();"
                             injectionTime:WKUserScriptInjectionTimeAtDocumentStart
                          forMainFrameOnly:YES]];
+    // Natív mappa- és hangfájl-választó a Zenei mappák ablakhoz (NSOpenPanel, Promise visszatéréssel)
+    [ucc addScriptMessageHandlerWithReply:self contentWorld:WKContentWorld.pageWorld name:@"aetherPickFolder"];
+    [ucc addScriptMessageHandlerWithReply:self contentWorld:WKContentWorld.pageWorld name:@"aetherPickAudioFile"];
+    [ucc addUserScript:[[WKUserScript alloc]
+                           initWithSource:@"window.aetherPickFolder = function () { return window.webkit.messageHandlers.aetherPickFolder.postMessage(null); };"
+                                           "window.aetherPickAudioFile = function () { return window.webkit.messageHandlers.aetherPickAudioFile.postMessage(null); };"
+                            injectionTime:WKUserScriptInjectionTimeAtDocumentStart
+                         forMainFrameOnly:YES]];
     cfg.userContentController = ucc;
     web_ = [[WKWebView alloc] initWithFrame:window_.contentView.bounds configuration:cfg];
     web_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
@@ -1202,6 +1211,8 @@ struct Core {
     [web.configuration.userContentController removeScriptMessageHandlerForName:@"aetherLog"];
     [web.configuration.userContentController removeScriptMessageHandlerForName:@"aetherTheme"];
     [web.configuration.userContentController removeScriptMessageHandlerForName:@"aetherClose"];
+    [web.configuration.userContentController removeScriptMessageHandlerForName:@"aetherPickFolder" contentWorld:WKContentWorld.pageWorld];
+    [web.configuration.userContentController removeScriptMessageHandlerForName:@"aetherPickAudioFile" contentWorld:WKContentWorld.pageWorld];
     closeAllowed_ = NO;
     closePending_ = NO;
     web.UIDelegate = nil;
@@ -1246,6 +1257,49 @@ struct Core {
     if (![message.name isEqualToString:@"aetherOpenUrl"] || ![message.body isKindOfClass:[NSString class]]) return;
     NSString* url = message.body;
     if (allowedExternalUrl(url)) [NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:url]];
+}
+
+- (void)userContentController:(WKUserContentController*)ucc
+      didReceiveScriptMessage:(WKScriptMessage*)message
+                 replyHandler:(void (^)(id _Nullable reply, NSString* _Nullable errorMessage))replyHandler {
+    const BOOL pickFolder = [message.name isEqualToString:@"aetherPickFolder"];
+    const BOOL pickAudio = [message.name isEqualToString:@"aetherPickAudioFile"];
+    if (!pickFolder && !pickAudio) {
+        replyHandler(@"", nil);
+        return;
+    }
+    NSOpenPanel* p = [NSOpenPanel openPanel];
+    p.canChooseDirectories = pickFolder;
+    p.canChooseFiles = pickAudio;
+    p.allowsMultipleSelection = NO;
+    p.canCreateDirectories = NO;
+    p.resolvesAliases = YES;
+    if (pickAudio) {
+        if (@available(macOS 11.0, *)) {
+            NSArray<NSString*>* exts = @[
+                @"flac", @"wav", @"wv", @"mp3", @"ogg", @"oga", @"opus",
+                @"m4a", @"aac", @"alac", @"caf", @"aiff", @"aif", @"aifc", @"dsf", @"dff"
+            ];
+            NSMutableArray<UTType*>* types = [NSMutableArray arrayWithCapacity:exts.count];
+            for (NSString* ext in exts) {
+                UTType* t = [UTType typeWithFilenameExtension:ext];
+                if (t) [types addObject:t];
+            }
+            if (types.count > 0) p.allowedContentTypes = types;
+        }
+    }
+    void (^finish)(NSModalResponse) = ^(NSModalResponse r) {
+        if (r == NSModalResponseOK && p.URL && p.URL.isFileURL) {
+            replyHandler(p.URL.path ?: @"", nil);
+        } else {
+            replyHandler(@"", nil);
+        }
+    };
+    if (window_) {
+        [p beginSheetModalForWindow:window_ completionHandler:finish];
+    } else {
+        finish([p runModal]);
+    }
 }
 
 - (void)webView:(WKWebView*)webView

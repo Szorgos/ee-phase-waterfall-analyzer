@@ -129,6 +129,8 @@ struct BridgeCallbacks {
     std::function<std::string(const std::string& type, const json::Value& msg, bool remote)> queueRequest;
     std::function<std::string()> queueStatus;
     std::function<std::string()> playlistsStatus;
+    /** 2.x zenetár összefoglaló állapota a status üzenethez (útvonalak nélkül). */
+    std::function<std::string()> libraryStatus;
     /** Internetrádió (radio_bridge.hpp): a "radio_*" üzenetek és az állapotüzenet "radio" mezője. */
     std::function<std::string(const std::string& type, const json::Value& msg, bool remote)> radioRequest;
     std::function<std::string()> radioStatus;
@@ -3242,6 +3244,10 @@ private:
         if (cb_.playlistsStatus) {
             const std::string p = cb_.playlistsStatus();
             if (!p.empty()) { s += ",\"playlists\":"; s += p; }
+        }
+        if (cb_.libraryStatus) {
+            const std::string l = cb_.libraryStatus();
+            if (!l.empty()) { s += ",\"library\":"; s += l; }
         }
         if (cb_.radioStatus) {
             const std::string r = cb_.radioStatus();

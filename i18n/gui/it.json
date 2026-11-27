@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrected (R)",
   "rw.filterListLeft": "Left channel (L):",
   "rw.filterListRight": "Right channel (R):",
-  "rw.filterListNone": "(no bands)"
+  "rw.filterListNone": "(no bands)",
+  "library.errDenied": "Accesso negato a questa cartella.",
+  "library.errNotFound": "Cartella non trovata.",
+  "library.errNotDir": "Questo percorso non è una cartella.",
+  "library.errTimeout": "Tempo scaduto durante la lettura della cartella.",
+  "library.errGeneric": "Errore cartella: {err}",
+  "library.errSkipped": "{n} elemento/i non leggibili o non decodificabili (ignorati).",
+  "library.errMacTccHint": "Su macOS, consenti Aqulify in Impostazioni di Sistema → Privacy e sicurezza → File e cartelle.",
+  "library.errBadgeDenied": "Accesso negato",
+  "library.errBadgeNotFound": "Non trovata",
+  "library.errBadgeError": "Errore"
 }

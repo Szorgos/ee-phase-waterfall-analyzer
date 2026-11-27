@@ -6117,6 +6117,8 @@ var qrcode = function() {
           <span class="module-dot active" style="margin-right:6px;"></span><span data-i18n="library.scanningText">Bejárás...</span>
         </span>
       </div>
+      <!-- Mappahiba / jogosultsági figyelmeztetés -->
+      <div id="libraryErrorBanner" role="alert" style="display:none; background:rgba(239,68,68,0.12); border:1px solid var(--aq-danger); border-radius:8px; padding:8px 12px; font-size:var(--aq-fs-sub); color:var(--aq-text); line-height:1.45;"></div>
 
       <!-- Mappák listája -->
       <div style="display:flex; flex-direction:column; gap:6px; flex:1; min-height:100px; max-height:220px; overflow-y:auto; padding-right:4px;">
@@ -6185,7 +6187,7 @@ var qrcode = function() {
 
       <!-- Alsó gombok -->
       <div style="display:flex; justify-content:flex-end; gap:8px; border-top:1px solid var(--aq-line); padding-top:10px;">
-        <button type="button" class="adw-btn" onclick="closeLibraryBrowser()" data-i18n="wn.cancel">Mégse</button>
+        <button type="button" class="adw-btn" onclick="closeLibraryBrowser()" data-i18n="common.cancel">Mégse</button>
         <button type="button" class="adw-btn primary" onclick="selectCurrentBrowsedFolder()" data-i18n="library.browseSelect">Kiválasztás</button>
       </div>
     </div>
@@ -14532,6 +14534,7 @@ function initPipewireBridge() {
           if (data.outputSinks) updatePhysicalSinkSelector(data.outputSinks, data.currentSink);
           if (typeof data.gr === "number") updateLimiterMeters(null, data.gr);
           updateMagicDiag(data.magic || null);
+          if (data.library) onLibraryStatusTick(data.library);
         } else if (data.type === "audio_levels" && data.samples) {
           livePipewireSamples = data.samples; // régi motorverzió kompatibilitás
         } else if (data.type === "library") {
@@ -15254,11 +15257,35 @@ function refreshDynamicTexts() {
     const fmt = document.getElementById("lblDetectedFormat");
     if (fmt && fmt.style.display === "block" && txtAutoEqInput.value.trim()) detectEqFormat(txtAutoEqInput.value);
   }
+  if (lastLibraryData) {
+    renderLibraryRootsList();
+    renderLibraryStats(lastLibraryData);
+    renderLibraryErrors(lastLibraryData);
+  }
 }
 var libraryRoots = [];
+var libraryRootErrors = [];
 var libraryScanning = false;
 var libraryPollTimer = null;
 var lastLibraryData = null;
+var lastLibraryStatusRev = -1;
+
+function isMacPlatform() {
+  try {
+    const p = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || "";
+    return /mac/i.test(p);
+  } catch (e) { return false; }
+}
+
+function formatLibraryErrorText(code) {
+  if (code === "denied" || code === "permission_denied") {
+    return t("library.errDenied") + (isMacPlatform() ? " " + t("library.errMacTccHint") : "");
+  }
+  if (code === "notfound" || code === "not_found") return t("library.errNotFound");
+  if (code === "not_directory") return t("library.errNotDir");
+  if (code === "timeout") return t("library.errTimeout");
+  return t("library.errGeneric", { err: code || "unknown" });
+}
 
 function updateLibraryCaps(hasLib) {
   const btn = document.getElementById("btnLibraryRoots");
@@ -15288,6 +15315,11 @@ function closeLibraryModal() {
     clearTimeout(libraryPollTimer);
     libraryPollTimer = null;
   }
+  // A Zenetár nézet az ablak bezárásakor frissüljön, akkor is, ha a bejárás még tart vagy épp befejeződött
+  if (aqMainView === "library" && aqLibrary) {
+    if (typeof aqLibrary.refresh === "function") aqLibrary.refresh();
+    else aqLibrary.show();
+  }
 }
 
 function requestLibraryInfo() {
@@ -15296,15 +15328,33 @@ function requestLibraryInfo() {
   }
 }
 
+function onLibraryStatusTick(st) {
+  if (!st) return;
+  const modal = document.getElementById("modalLibrary");
+  const modalOpen = modal && modal.style.display === "flex";
+  const revChanged = typeof st.rev === "number" && st.rev !== lastLibraryStatusRev;
+  if (typeof st.rev === "number") lastLibraryStatusRev = st.rev;
+  if (!modalOpen) return;
+  if (revChanged || (libraryScanning && !st.scanning)) {
+    requestLibraryInfo();
+  } else if (st.scanning) {
+    libraryScanning = true;
+    renderLibraryStats(Object.assign({}, lastLibraryData || {}, st));
+  }
+}
+
 function onLibraryDataReceived(data) {
   if (!data) return;
   lastLibraryData = data;
+  if (typeof data.rev === "number") lastLibraryStatusRev = data.rev;
   if (Array.isArray(data.roots)) {
     libraryRoots = data.roots.slice();
   }
+  libraryRootErrors = Array.isArray(data.errors) ? data.errors.slice() : [];
   libraryScanning = !!data.scanning;
   renderLibraryRootsList();
   renderLibraryStats(data);
+  renderLibraryErrors(data);
 
   if (libraryScanning) {
     if (!libraryPollTimer) {
@@ -15322,7 +15372,56 @@ function onLibraryDataReceived(data) {
 
 function onLibraryErrorReceived(data) {
   const err = (data && data.error) ? data.error : "unknown";
-  console.warn("[Zenetár hiba]", err);
+  console.warn("[Zenetár hiba]", err, data && data.path ? data.path : "");
+  const browserModal = document.getElementById("modalLibraryBrowser");
+  const isBrowseErr = (data && data.op === "library_browse") ||
+    (browserModal && browserModal.style.display === "flex" &&
+      (err === "denied" || err === "notfound" || err === "timeout" || err === "remote"));
+  if (isBrowseErr) {
+    const list = document.getElementById("browseFolderList");
+    if (list) {
+      list.innerHTML = "";
+      const box = document.createElement("div");
+      box.style.cssText = "font-size:0.82rem; color:var(--aq-danger); background:rgba(239,68,68,0.10); border:1px solid var(--aq-danger); border-radius:6px; padding:10px 12px; line-height:1.45;";
+      box.textContent = formatLibraryErrorText(err);
+      list.appendChild(box);
+    }
+  }
+}
+
+function renderLibraryErrors(data) {
+  const banner = document.getElementById("libraryErrorBanner");
+  if (!banner) return;
+  const errs = (data && Array.isArray(data.errors)) ? data.errors : [];
+  const skipped = (data && typeof data.skipped === "number") ? data.skipped : 0;
+  if (!errs.length && skipped <= 0) {
+    banner.style.display = "none";
+    banner.textContent = "";
+    return;
+  }
+  const lines = [];
+  let hasDenied = false;
+  errs.forEach(e => {
+    if (e.error === "permission_denied" || e.error === "denied") hasDenied = true;
+    const prefix = e.path ? (e.path + ": ") : "";
+    const msg = (e.error === "permission_denied" || e.error === "denied") ? t("library.errDenied")
+      : (e.error === "not_found" || e.error === "notfound") ? t("library.errNotFound")
+      : (e.error === "not_directory") ? t("library.errNotDir")
+      : t("library.errGeneric", { err: e.error || "error" });
+    lines.push(prefix + msg);
+  });
+  if (hasDenied && isMacPlatform()) {
+    lines.push(t("library.errMacTccHint"));
+  }
+  if (skipped > 0) {
+    lines.push(t("library.errSkipped", { n: skipped }));
+  }
+  banner.textContent = "";
+  lines.forEach((line, idx) => {
+    if (idx > 0) banner.appendChild(document.createElement("br"));
+    banner.appendChild(document.createTextNode(line));
+  });
+  banner.style.display = "block";
 }
 
 function renderLibraryStats(data) {
@@ -15351,13 +15450,30 @@ function renderLibraryRootsList() {
     return;
   }
   if (emptyEl) emptyEl.style.display = "none";
+  const errByPath = new Map();
+  libraryRootErrors.forEach(e => { if (e && e.path) errByPath.set(e.path, e.error); });
   libraryRoots.forEach((root, idx) => {
     const row = document.createElement("div");
-    row.style.cssText = "display:flex; align-items:center; justify-content:space-between; background:var(--aq-input); border:1px solid var(--aq-line); border-radius:6px; padding:6px 10px; font-size:var(--aq-fs-body);";
+    const rootErr = errByPath.get(root) || "";
+    row.style.cssText = "display:flex; align-items:center; justify-content:space-between; gap:8px; background:var(--aq-input); border:1px solid " +
+      (rootErr ? "var(--aq-danger)" : "var(--aq-line)") + "; border-radius:6px; padding:6px 10px; font-size:var(--aq-fs-body);";
+
+    const leftWrap = document.createElement("div");
+    leftWrap.style.cssText = "display:flex; align-items:center; gap:8px; flex:1; min-width:0; flex-wrap:wrap;";
 
     const pathSpan = document.createElement("span");
-    pathSpan.style.cssText = "font-family:var(--aq-mono); word-break:break-all; margin-right:8px; color:var(--aq-text);";
+    pathSpan.style.cssText = "font-family:var(--aq-mono); word-break:break-all; color:var(--aq-text);";
     pathSpan.textContent = root;
+    leftWrap.appendChild(pathSpan);
+
+    if (rootErr) {
+      const badge = document.createElement("span");
+      badge.style.cssText = "font-size:0.72rem; font-weight:600; color:var(--aq-danger); background:rgba(239,68,68,0.14); border:1px solid var(--aq-danger); border-radius:4px; padding:1px 6px; white-space:nowrap;";
+      badge.textContent = (rootErr === "permission_denied" || rootErr === "denied") ? t("library.errBadgeDenied")
+        : (rootErr === "not_found" || rootErr === "notfound" || rootErr === "not_directory") ? t("library.errBadgeNotFound")
+        : t("library.errBadgeError");
+      leftWrap.appendChild(badge);
+    }
 
     const delBtn = document.createElement("button");
     delBtn.className = "icon-btn";
@@ -15366,7 +15482,7 @@ function renderLibraryRootsList() {
     delBtn.innerHTML = '<svg class="aq-icon" aria-hidden="true"><use href="#i-trash"/></svg>';
     delBtn.onclick = () => removeLibraryRoot(idx);
 
-    row.appendChild(pathSpan);
+    row.appendChild(leftWrap);
     row.appendChild(delBtn);
     listEl.appendChild(row);
   });
@@ -15374,14 +15490,15 @@ function renderLibraryRootsList() {
 
 function addLibraryRoot() {
   const input = document.getElementById("inputNewLibraryRoot");
-  if (!input) return;
-  const val = input.value.trim();
-  if (!val) return;
+  if (!input) return false;
+  const val = normalizePastedOrPickedPath(input.value, false);
+  if (!val) return false;
   if (!libraryRoots.includes(val)) {
     libraryRoots.push(val);
     renderLibraryRootsList();
   }
   input.value = "";
+  return true;
 }
 
 function removeLibraryRoot(idx) {
@@ -15392,6 +15509,11 @@ function removeLibraryRoot(idx) {
 }
 
 function saveLibraryRoots() {
+  // Ha maradt begépelt útvonal a mezőben, Mentéskor ne vesszen el
+  const input = document.getElementById("inputNewLibraryRoot");
+  if (input && input.value.trim()) {
+    addLibraryRoot();
+  }
   if (pipewireWs && isPipewireConnected && pipewireWs.readyState === WebSocket.OPEN) {
     pipewireWs.send(JSON.stringify({
       type: "library_set_roots",
@@ -15945,20 +16067,32 @@ function renderCoverView() {
 }
 
 function normalizePastedOrPickedPath(rawPath, treatAsFile) {
-  let s = String(rawPath || "").trim().replace(/^["']+|["']+$/g, "").trim();
+  let s = String(rawPath || "").trim();
+  while (s.length >= 2 && ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'")))) {
+    s = s.slice(1, -1).trim();
+  }
   if (!s) return "";
   if (s.startsWith("file:///")) {
     try { s = decodeURIComponent(s.slice(8)); } catch (e) { s = s.slice(8); }
     if (!/^[A-Za-z]:/.test(s) && !s.startsWith("/")) s = "/" + s;
     if (/^[A-Za-z]:\//.test(s)) s = s.replace(/\//g, "\\");
   }
-  const hasAudioExt = /\.(flac|wav|wv|mp3|ogg|opus|m4a|aac|alac|aiff|aif|ape|dsf|dff)$/i.test(s);
+  // POSIX terminál / Finder escapelt szóközök és speciális karakterek feloldása (Windows útvonalat nem bántjuk)
+  if (!/^[A-Za-z]:\\/.test(s) && !s.startsWith("\\\\") && s.includes("\\")) {
+    s = s.replace(/\\([ '"()\[\]&;$\\])/g, "$1");
+  }
+  const hasAudioExt = /\.(flac|wav|wv|mp3|ogg|oga|opus|m4a|aac|alac|caf|aiff|aif|aifc|ape|dsf|dff)$/i.test(s);
   if (treatAsFile || hasAudioExt) {
     const lastSlash = Math.max(s.lastIndexOf("\\"), s.lastIndexOf("/"));
     if (lastSlash > 0) {
       s = s.slice(0, lastSlash);
       if (/^[A-Za-z]:$/.test(s)) s += "\\";
     }
+  }
+  // Fölösleges záró perjel eltávolítása (gyökerek megtartásával: "/" vagy "C:\")
+  while (s.length > 1 && (s.endsWith("/") || s.endsWith("\\"))) {
+    if (/^[A-Za-z]:[\\\/]$/.test(s)) break;
+    s = s.slice(0, -1);
   }
   return s;
 }
@@ -16023,6 +16157,12 @@ function browseNavigateTo(path) {
   }
   if (pipewireWs && pipewireWs.readyState === WebSocket.OPEN) {
     pipewireWs.send(JSON.stringify({ type: "library_browse", path: currentBrowsePath }));
+  } else if (list) {
+    list.innerHTML = "";
+    const errDiv = document.createElement("div");
+    errDiv.style.cssText = "font-size:0.82rem; color:var(--aq-danger); text-align:center; padding:12px;";
+    errDiv.textContent = formatLibraryErrorText("disconnected");
+    list.appendChild(errDiv);
   }
 }
 
@@ -16089,32 +16229,34 @@ function selectCurrentBrowsedFolder() {
 }
 
 async function browseLibraryFolder() {
-  openLibraryBrowser();
-  return;
-
-  try {
-    if (typeof window.aetherPickFolder === "function") {
+  const isRemoteTarget = typeof controlledTargetId !== "undefined" && !!controlledTargetId;
+  if (!isRemoteTarget && typeof window.aetherPickFolder === "function") {
+    try {
       const picked = await window.aetherPickFolder();
       if (picked && typeof picked === "string" && picked.trim()) {
         addAndSaveLibraryRootPath(picked, false);
       }
       return;
+    } catch (e) {
+      console.warn("[Zenei mappa választó]", e);
     }
-  } catch (e) {}
-  const p = prompt(t("library.promptFolderPath"), "");
-  if (p && p.trim()) addAndSaveLibraryRootPath(p, false);
+  }
+  openLibraryBrowser();
 }
 
 async function browseLibraryAudioFiles() {
-  try {
-    if (typeof window.aetherPickAudioFile === "function") {
+  const isRemoteTarget = typeof controlledTargetId !== "undefined" && !!controlledTargetId;
+  if (!isRemoteTarget && typeof window.aetherPickAudioFile === "function") {
+    try {
       const picked = await window.aetherPickAudioFile();
       if (picked && typeof picked === "string" && picked.trim()) {
         addAndSaveLibraryRootPath(picked, true);
       }
       return;
+    } catch (e) {
+      console.warn("[Zenefájl választó]", e);
     }
-  } catch (e) {}
+  }
   const p = prompt(t("library.promptFilePath"), "");
   if (p && p.trim()) addAndSaveLibraryRootPath(p, true);
 }

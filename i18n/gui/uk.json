@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrected (R)",
   "rw.filterListLeft": "Left channel (L):",
   "rw.filterListRight": "Right channel (R):",
-  "rw.filterListNone": "(no bands)"
+  "rw.filterListNone": "(no bands)",
+  "library.errDenied": "Доступ до цієї теки заборонено.",
+  "library.errNotFound": "Теку не знайдено.",
+  "library.errNotDir": "Цей шлях не є текою.",
+  "library.errTimeout": "Час очікування читання теки вичерпано.",
+  "library.errGeneric": "Помилка теки: {err}",
+  "library.errSkipped": "Не вдалося прочитати або декодувати елементів: {n} (пропущено).",
+  "library.errMacTccHint": "У macOS надайте дозвіл Aqulify в Системні параметри → Приватність і безпека → Файли та теки.",
+  "library.errBadgeDenied": "Доступ заборонено",
+  "library.errBadgeNotFound": "Не знайдено",
+  "library.errBadgeError": "Помилка"
 }

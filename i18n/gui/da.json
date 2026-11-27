@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrected (R)",
   "rw.filterListLeft": "Left channel (L):",
   "rw.filterListRight": "Right channel (R):",
-  "rw.filterListNone": "(no bands)"
+  "rw.filterListNone": "(no bands)",
+  "library.errDenied": "Adgang nægtet til denne mappe.",
+  "library.errNotFound": "Mappen blev ikke fundet.",
+  "library.errNotDir": "Denne sti er ikke en mappe.",
+  "library.errTimeout": "Læsning af mappen fik timeout.",
+  "library.errGeneric": "Mappefejl: {err}",
+  "library.errSkipped": "{n} element(er) kunne ikke læses eller afkodes (sprunget over).",
+  "library.errMacTccHint": "På macOS skal du tillade Aqulify under Systemindstillinger → Anonymitet og sikkerhed → Filer og mapper.",
+  "library.errBadgeDenied": "Adgang nægtet",
+  "library.errBadgeNotFound": "Ikke fundet",
+  "library.errBadgeError": "Fejl"
 }

@@ -312,6 +312,7 @@ inline void attachLibrary(BridgeCallbacks& cb, MusicLibrary& lib, player::PlayQu
         return "{\"rev\":" + std::to_string(lists.rev()) + ",\"count\":" + std::to_string(lists.count()) +
                ",\"stats\":" + std::to_string(stats.rev()) + "}";
     };
+    cb.libraryStatus = [&lib] { return lib.statusJson(); };
     cb.queueRequest = [&lib, &queue, &lists, &stats, phoneCache, &cb](const std::string& type, const json::Value& msg, bool) -> std::string {
         auto str = [&](const char* k) { const json::Value* v = msg.get(k); return v ? v->stringOr("") : std::string(); };
         auto idx = [&](const char* k) { const json::Value* v = msg.get(k); const double d = v ? v->numberOr(-1.0) : -1.0;
@@ -484,12 +485,17 @@ inline void attachLibrary(BridgeCallbacks& cb, MusicLibrary& lib, player::PlayQu
             if (saveRoots) saveRoots(rootsDoc(lib.roots()));
             return lib.infoJson(true);
         }
-                if (type == "library_browse") {
+        if (type == "library_browse") {
             if (remote) return err("remote");
             const std::string rawPath = str("path");
-            // Path traversal védelem: útvonal-elemként '..' vagy '%2e' nem engedélyezett
-            if (hasPathTraversal(rawPath)) {
-                return err("denied");
+            const std::string normPath = rawPath.empty() ? std::string() : MusicLibrary::normalizeRootPath(rawPath);
+            auto browseErr = [&](const char* what) {
+                return std::string("{\"type\":\"library_error\",\"op\":\"library_browse\",\"path\":\"") +
+                       media::jsonEscape(normPath.empty() ? rawPath : normPath) + "\",\"error\":\"" + what + "\"}";
+            };
+            // Path traversal védelem: útvonal-elemként '..' vagy '%2e' nem engedélyezett (sem nyersen, sem normalizálva)
+            if (hasPathTraversal(rawPath) || hasPathTraversal(normPath)) {
+                return browseErr("denied");
             }
 
             struct BrowseEntry {
@@ -498,7 +504,7 @@ inline void attachLibrary(BridgeCallbacks& cb, MusicLibrary& lib, player::PlayQu
             };
             std::vector<BrowseEntry> list;
 
-            if (rawPath.empty()) {
+            if (normPath.empty()) {
 #ifdef _WIN32
                 char driveBuf[512] = {0};
                 DWORD dLen = GetLogicalDriveStringsA(sizeof(driveBuf) - 1, driveBuf);
@@ -515,36 +521,48 @@ inline void attachLibrary(BridgeCallbacks& cb, MusicLibrary& lib, player::PlayQu
                 const char* home = std::getenv("HOME");
                 if (home && *home) {
                     std::error_code ec;
-                    if (std::filesystem::is_directory(home, ec)) list.push_back({ "Home", home });
+                    if (std::filesystem::is_directory(home, ec) && !ec) list.push_back({ "Home", home });
                 }
                 for (const char* p : { "/mnt", "/media" }) {
                     std::error_code ec;
-                    if (std::filesystem::is_directory(p, ec)) list.push_back({ p + 1, p });
+                    if (std::filesystem::is_directory(p, ec) && !ec) list.push_back({ p + 1, p });
                 }
                 const char* user = std::getenv("USER");
                 if (user && *user) {
                     std::string mediaUser = std::string("/media/") + user;
                     std::error_code ec;
-                    if (std::filesystem::is_directory(mediaUser, ec)) list.push_back({ std::string("media/") + user, mediaUser });
+                    if (std::filesystem::is_directory(mediaUser, ec) && !ec) list.push_back({ std::string("media/") + user, mediaUser });
                 }
 #ifdef __APPLE__
-                if (std::filesystem::is_directory("/Volumes")) list.push_back({ "Volumes", "/Volumes" });
+                {
+                    std::error_code ec;
+                    if (std::filesystem::is_directory("/Volumes", ec) && !ec) list.push_back({ "Volumes", "/Volumes" });
+                }
 #endif
 #endif
             } else {
                 std::error_code ec;
-                std::filesystem::path p = fromUtf8(rawPath);
-                if (!std::filesystem::exists(p, ec) || ec || !std::filesystem::is_directory(p, ec)) {
-                    return err("notfound");
+                std::filesystem::path p = fromUtf8(normPath);
+                const auto st = std::filesystem::status(p, ec);
+                if (ec) {
+                    const bool denied = (ec == std::errc::permission_denied || ec == std::errc::operation_not_permitted);
+                    return browseErr(denied ? "denied" : "notfound");
+                }
+                if (!std::filesystem::exists(st) || !std::filesystem::is_directory(st)) {
+                    return browseErr("notfound");
                 }
 
                 auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-                std::filesystem::directory_iterator it(p, std::filesystem::directory_options::skip_permission_denied, ec);
-                if (ec) return err("denied");
+                // skip_permission_denied nélkül nyitjuk meg magát a célmappát, hogy EACCES/EPERM (pl. macOS TCC) azonnal denied legyen
+                std::filesystem::directory_iterator it(p, ec);
+                if (ec) {
+                    const bool denied = (ec == std::errc::permission_denied || ec == std::errc::operation_not_permitted);
+                    return browseErr(denied ? "denied" : "notfound");
+                }
 
                 std::filesystem::directory_iterator end;
                 while (!ec && it != end) {
-                    if (std::chrono::steady_clock::now() > deadline) return err("timeout");
+                    if (std::chrono::steady_clock::now() > deadline) return browseErr("timeout");
                     std::error_code sec;
                     auto status = it->symlink_status(sec);
                     if (!sec && !std::filesystem::is_symlink(status) && std::filesystem::is_directory(status)) {
@@ -554,14 +572,14 @@ inline void attachLibrary(BridgeCallbacks& cb, MusicLibrary& lib, player::PlayQu
                         }
                     }
                     it.increment(ec);
-                    if (ec) { ec.clear(); }
+                    if (ec) break;
                 }
                 std::sort(list.begin(), list.end(), [](const BrowseEntry& a, const BrowseEntry& b) {
                     return a.name < b.name;
                 });
             }
 
-            std::string res = "{\"type\":\"library_browse\",\"path\":\"" + media::jsonEscape(rawPath) + "\",\"folders\":[";
+            std::string res = "{\"type\":\"library_browse\",\"path\":\"" + media::jsonEscape(normPath) + "\",\"folders\":[";
             for (size_t i = 0; i < list.size(); ++i) {
                 if (i) res += ",";
                 res += "{\"name\":\"" + media::jsonEscape(list[i].name) + "\",\"path\":\"" + media::jsonEscape(list[i].path) + "\"}";

@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrected (R)",
   "rw.filterListLeft": "Left channel (L):",
   "rw.filterListRight": "Right channel (R):",
-  "rw.filterListNone": "(no bands)"
+  "rw.filterListNone": "(no bands)",
+  "library.errDenied": "이 폴더에 대한 접근이 거부되었습니다.",
+  "library.errNotFound": "폴더를 찾을 수 없습니다.",
+  "library.errNotDir": "이 경로는 폴더가 아닙니다.",
+  "library.errTimeout": "폴더 읽기 시간이 초과되었습니다.",
+  "library.errGeneric": "폴더 오류: {err}",
+  "library.errSkipped": "{n}개 항목을 읽거나 디코딩할 수 없습니다(건너뜀).",
+  "library.errMacTccHint": "macOS에서는 시스템 설정 → 개인정보 보호 및 보안 → 파일 및 폴더에서 Aqulify를 허용해 주세요.",
+  "library.errBadgeDenied": "접근 거부",
+  "library.errBadgeNotFound": "찾을 수 없음",
+  "library.errBadgeError": "오류"
 }

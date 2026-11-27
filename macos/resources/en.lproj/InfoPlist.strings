@@ -1,3 +1,8 @@
 /* Rendszerhang-rögzítés (Core Audio Tap) */
 "NSAudioCaptureUsageDescription" = "Aqulify processes the system audio (EQ, crossfeed, convolver, limiter) and shows it in the analyzer. The audio never leaves this Mac.";
 "NSMicrophoneUsageDescription" = "Aqulify records from the microphone only during a room measurement that you start yourself, to measure your speakers in the room. At any other time it does not record from the microphone.";
+"NSDocumentsFolderUsageDescription" = "Aqulify reads audio files only from the music folders that you choose in Music Folders, to index and play your local library.";
+"NSDesktopFolderUsageDescription" = "Aqulify reads audio files only from the music folders that you choose in Music Folders, to index and play your local library.";
+"NSDownloadsFolderUsageDescription" = "Aqulify reads audio files only from the music folders that you choose in Music Folders, to index and play your local library.";
+"NSRemovableVolumesUsageDescription" = "Aqulify reads audio files from removable drives only when you add a folder from them in Music Folders, to index and play your local library.";
+"NSNetworkVolumesUsageDescription" = "Aqulify reads audio files from network shares only when you add a folder from them in Music Folders, to index and play your local library.";

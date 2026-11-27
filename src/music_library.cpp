@@ -12,8 +12,10 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iostream>
 #include <map>
 #include <set>
+#include <system_error>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -84,19 +86,83 @@ bool naturalLess(const std::string& a, const std::string& b) {
     return a.size() - i < b.size() - j;
 }
 
+bool isPermissionError(const std::error_code& ec) {
+    return ec == std::errc::permission_denied || ec == std::errc::operation_not_permitted;
+}
+
+int hexDigitVal(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+std::string percentDecode(const std::string& in) {
+    std::string out;
+    out.reserve(in.size());
+    for (size_t i = 0; i < in.size(); ++i) {
+        if (in[i] == '%' && i + 2 < in.size()) {
+            const int h1 = hexDigitVal(in[i + 1]), h2 = hexDigitVal(in[i + 2]);
+            if (h1 >= 0 && h2 >= 0) {
+                out.push_back(static_cast<char>((h1 << 4) | h2));
+                i += 2;
+                continue;
+            }
+        }
+        out.push_back(in[i]);
+    }
+    return out;
+}
+
+std::string homeDirUtf8() {
+#ifdef _WIN32
+    if (const char* up = std::getenv("USERPROFILE"); up && *up) return up;
+    const char* hd = std::getenv("HOMEDRIVE");
+    const char* hp = std::getenv("HOMEPATH");
+    if (hd && *hd && hp && *hp) return std::string(hd) + hp;
+    return {};
+#else
+    const char* home = std::getenv("HOME");
+    return (home && *home) ? std::string(home) : std::string();
+#endif
+}
+
+std::string unescapePosixShellPath(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '\\' && i + 1 < s.size()) {
+            const char nx = s[i + 1];
+            if (nx == ' ' || nx == '\'' || nx == '"' || nx == '(' || nx == ')' ||
+                nx == '[' || nx == ']' || nx == '&' || nx == ';' || nx == '$' || nx == '\\') {
+                out.push_back(nx);
+                ++i;
+                continue;
+            }
+        }
+        out.push_back(s[i]);
+    }
+    return out;
+}
+
 std::string coverIn(const fs::path& dir) {
     static const char* names[] = { "cover", "folder", "front", "album", "albumart" };
     static const char* exts[] = { ".jpg", ".jpeg", ".png" };
     std::error_code ec;
     std::map<std::string, std::string> found;   // kisbetűs név -> valódi útvonal
-    for (const auto& e : fs::directory_iterator(dir, fs::directory_options::skip_permission_denied, ec)) {
-        if (!e.is_regular_file(ec)) continue;
-        found.emplace(lower(utf8(e.path().filename())), utf8(e.path()));
+    fs::directory_iterator it(dir, fs::directory_options::skip_permission_denied, ec);
+    fs::directory_iterator end;
+    while (!ec && it != end) {
+        std::error_code stEc;
+        if (it->is_regular_file(stEc) && !stEc) {
+            found.emplace(lower(utf8(it->path().filename())), utf8(it->path()));
+        }
+        it.increment(ec);
     }
     for (const char* n : names)
         for (const char* x : exts) {
-            auto it = found.find(std::string(n) + x);
-            if (it != found.end()) return it->second;
+            auto itf = found.find(std::string(n) + x);
+            if (itf != found.end()) return itf->second;
         }
     return {};
 }
@@ -176,6 +242,67 @@ std::string MusicLibrary::defaultMusicDir() {
 #endif
 }
 
+std::string MusicLibrary::normalizeRootPath(const std::string& raw) {
+    auto trimWs = [](const std::string& in) -> std::string {
+        size_t a = 0, b = in.size();
+        while (a < b && (in[a] == ' ' || in[a] == '\t' || in[a] == '\r' || in[a] == '\n')) ++a;
+        while (b > a && (in[b - 1] == ' ' || in[b - 1] == '\t' || in[b - 1] == '\r' || in[b - 1] == '\n')) --b;
+        return in.substr(a, b - a);
+    };
+    std::string s = trimWs(raw);
+    if (s.empty()) return {};
+
+    // Külső páros idézőjelek levágása (pl. Finder / terminál / Intéző másolásból)
+    while (s.size() >= 2 && ((s.front() == '"' && s.back() == '"') || (s.front() == '\'' && s.back() == '\''))) {
+        s = trimWs(s.substr(1, s.size() - 2));
+    }
+    if (s.empty()) return {};
+
+    // file:/// URI kibontása
+    if (s.rfind("file:///", 0) == 0) {
+        s = percentDecode(s.substr(8));
+        const bool winDrive = s.size() >= 2 && std::isalpha(static_cast<unsigned char>(s[0])) && s[1] == ':';
+        if (!winDrive && (s.empty() || s.front() != '/')) s.insert(s.begin(), '/');
+        if (winDrive) {
+            for (char& c : s) if (c == '/') c = '\\';
+        }
+    }
+
+    // ~ vagy ~/... (~\\... Windowson) kibontása a felhasználó saját mappájára
+    if (s == "~" || s.rfind("~/", 0) == 0 || s.rfind("~\\", 0) == 0) {
+        const std::string home = homeDirUtf8();
+        if (!home.empty()) {
+            std::string h = home;
+            while (h.size() > 1 && (h.back() == '/' || h.back() == '\\')) h.pop_back();
+            s = h + s.substr(1);
+        }
+    }
+
+    // POSIX shell-escape (pl. /Users/nev/My\ Music) feloldása, ha a nyers útvonal nem létezik
+    if (s.find('\\') != std::string::npos) {
+        std::error_code ec;
+        const bool rawExists = fs::exists(fromUtf8(s), ec) && !ec;
+        if (!rawExists) {
+            const std::string unesc = unescapePosixShellPath(s);
+            if (unesc != s) {
+#ifdef _WIN32
+                std::error_code ec2;
+                if (fs::exists(fromUtf8(unesc), ec2) && !ec2) s = unesc;
+#else
+                s = unesc;
+#endif
+            }
+        }
+    }
+
+    // Fölösleges záró perjelek eltávolítása (gyökerek megtartásával: "/", "C:\", "\\server\share")
+    while (s.size() > 1 && (s.back() == '/' || s.back() == '\\')) {
+        if (s.size() == 3 && std::isalpha(static_cast<unsigned char>(s[0])) && s[1] == ':') break;
+        s.pop_back();
+    }
+    return s;
+}
+
 MusicLibrary::~MusicLibrary() { stopScan(); }
 
 void MusicLibrary::setCacheStorage(std::function<std::string()> loadCache, std::function<void(const std::string&)> saveCache) {
@@ -188,11 +315,14 @@ void MusicLibrary::setRoots(std::vector<std::string> roots) {
     stopScan();
     {
         std::lock_guard<std::mutex> lk(m_);
-        // ismétlődés és üres elem nélkül, a megadott sorrendben
+        // normalizálva, ismétlődés és üres elem nélkül, a megadott sorrendben
         std::vector<std::string> clean;
-        for (auto& r : roots)
-            if (!r.empty() && std::find(clean.begin(), clean.end(), r) == clean.end()) clean.push_back(std::move(r));
+        for (auto& r : roots) {
+            std::string norm = normalizeRootPath(r);
+            if (!norm.empty() && std::find(clean.begin(), clean.end(), norm) == clean.end()) clean.push_back(std::move(norm));
+        }
         roots_ = std::move(clean);
+        lastErrorLogSig_.clear();
 
         // Gyorsítótár azonnali betöltése induláskor
         if (loadCache_) {
@@ -210,6 +340,7 @@ void MusicLibrary::setRoots(std::vector<std::string> roots) {
             cached_ = false;
         }
     }
+    rev_.fetch_add(1);
     startScan();
 }
 
@@ -263,9 +394,29 @@ void MusicLibrary::startScan() {
             const auto r = roots();
             auto idx = scan(r);
             if (!cancel_.load()) {
-                std::lock_guard<std::mutex> lk(m_);
-                index_ = std::move(idx);
-                cached_ = false;
+                std::string errSig;
+                for (const auto& re : idx->errors) errSig += re.path + "|" + re.error + ";";
+                if (idx->skipped > 0) errSig += "skipped=" + std::to_string(idx->skipped);
+                bool logErr = false;
+                {
+                    std::lock_guard<std::mutex> lk(m_);
+                    if (errSig != lastErrorLogSig_) {
+                        lastErrorLogSig_ = errSig;
+                        logErr = !errSig.empty();
+                    }
+                    index_ = std::move(idx);
+                    cached_ = false;
+                }
+                if (logErr) {
+                    const auto snap = snapshot();
+                    for (const auto& re : snap->errors) {
+                        std::cerr << "[Zenetár] Mappa hiba (" << re.error << "): " << re.path
+                                  << (re.detail.empty() ? "" : (" — " + re.detail)) << "\n";
+                    }
+                    if (snap->skipped > 0) {
+                        std::cerr << "[Zenetár] Kihagyott (nem olvasható vagy hibás) elemek száma: " << snap->skipped << "\n";
+                    }
+                }
             }
             // A gyorsítótár mentése a „kész” jelzés előtt: aki a bejárás végére vár (waitIdle), már a mentett állapotot látja
             if (saveCache_ && !cancel_.load()) {
@@ -273,6 +424,7 @@ void MusicLibrary::startScan() {
                 saveCache_(serializeCache(*snap, roots()));
             }
             scanning_ = false;
+            rev_.fetch_add(1);
 
             // Időszakos ellenőrzés (10 perc) vagy kézi újrabejárás jelzése
             std::unique_lock<std::mutex> lk(cvMutex_);
@@ -305,119 +457,195 @@ static void buildAlbumsAndMaps(Index& idx);
 
 std::shared_ptr<Index> MusicLibrary::scan(const std::vector<std::string>& roots) {
     auto idx = std::make_shared<Index>();
-    std::set<std::string> seenRoots;
+    try {
+        std::set<std::string> seenRoots;
+        std::set<std::string> visitedDirs;   // kanonikus könyvtár-útvonalak a szimlink-hurkok kiszűrésére
 
-    std::unordered_map<std::string, const Track*> cachedByPath;
-    {
-        std::lock_guard<std::mutex> lk(m_);
-        if (index_) {
-            for (const auto& t : index_->tracks) {
-                if (t.size > 0 && t.mtime > 0) cachedByPath.emplace(t.path, &t);
-            }
-        }
-    }
-
-    // mappa bejárása (mélységi), a mappák és számok indexbe vétele; visszaadja a mappa indexét (vagy SIZE_MAX)
-    std::function<size_t(const fs::path&, const std::string&, int)> walk = [&](const fs::path& dir, const std::string& parentId,
-                                                                               int depth) -> size_t {
-        if (cancel_.load() || depth > kMaxDepth || idx->tracks.size() >= kMaxTracks) return SIZE_MAX;
-        Folder f;
-        f.path = utf8(dir);
-        f.id = idOf('f', f.path);
-        f.name = utf8(dir.filename());
-        if (f.name.empty()) f.name = f.path;
-        f.parentId = parentId;
-        const size_t self = idx->folders.size();
-        idx->folders.push_back(f);
-        std::vector<fs::path> dirs, files;
-        std::error_code ec;
-        for (const auto& e : fs::directory_iterator(dir, fs::directory_options::skip_permission_denied, ec)) {
-            const std::string name = utf8(e.path().filename());
-            if (name.empty() || name[0] == '.') continue;                 // rejtett
-            std::error_code ec2;
-            const auto st = e.symlink_status(ec2);
-            if (fs::is_symlink(st)) continue;                              // szimbolikus link: nem követjük (hurok, kilépés a mappából)
-            if (fs::is_directory(st)) dirs.push_back(e.path());
-            else if (fs::is_regular_file(st) && player::isSupportedFile(name)) files.push_back(e.path());
-        }
-        std::sort(dirs.begin(), dirs.end(), [](const fs::path& a, const fs::path& b) { return naturalLess(utf8(a.filename()), utf8(b.filename())); });
-        std::sort(files.begin(), files.end(), [](const fs::path& a, const fs::path& b) { return naturalLess(utf8(a.filename()), utf8(b.filename())); });
-        for (const auto& p : files) {
-            if (cancel_.load() || idx->tracks.size() >= kMaxTracks) break;
-            const std::string path = utf8(p);
-            std::error_code ecSz;
-            const uint64_t sz = fs::file_size(p, ecSz);
-            const int64_t mt = fileTime(p);
-            if (!ecSz) {
-                auto it = cachedByPath.find(path);
-                if (it != cachedByPath.end() && it->second->size == sz && it->second->mtime == mt) {
-                    Track t = *it->second;
-                    t.folderId = idx->folders[self].id;
-                    idx->folders[self].tracks.push_back(idx->tracks.size());
-                    idx->tracks.push_back(std::move(t));
-                    ++scanned_;
-                    continue;
+        std::unordered_map<std::string, const Track*> cachedByPath;
+        {
+            std::lock_guard<std::mutex> lk(m_);
+            if (index_) {
+                for (const auto& t : index_->tracks) {
+                    if (t.size > 0 && t.mtime > 0) cachedByPath.emplace(t.path, &t);
                 }
             }
-            auto dec = player::openDecoder(path, nullptr, true);
-            ++scanned_;
-            if (!dec) continue;
-            Track t;
-            t.path = path;
-            t.id = idOf('t', path);
-            t.file = utf8(p.filename());
-            t.size = sz;
-            t.mtime = mt;
-            t.added = mt;
-            const auto& tg = dec->tags();
-            t.title = tg.title.empty() ? utf8(p.stem()) : tg.title;
-            t.artist = tg.artist;
-            t.album = tg.album;
-            t.albumArtist = tg.albumArtist;
-            t.track = tg.track;
-            t.disc = tg.disc;
-            t.year = tg.year;
-            t.genre = tg.genre;
-            t.rate = dec->sampleRate();
-            t.channels = dec->channels();
-            t.duration = t.rate && dec->totalFrames() ? static_cast<double>(dec->totalFrames()) / t.rate : 0.0;
-            t.embeddedArt = !tg.art.empty();
-            t.folderId = idx->folders[self].id;
-            idx->folders[self].tracks.push_back(idx->tracks.size());
-            idx->tracks.push_back(std::move(t));
         }
-        if (!idx->folders[self].tracks.empty()) idx->folders[self].coverFile = coverIn(dir);
-        size_t total = idx->folders[self].tracks.size();
-        for (const auto& d : dirs) {
-            const size_t child = walk(d, idx->folders[self].id, depth + 1);
-            if (child == SIZE_MAX) continue;
-            idx->folders[self].folders.push_back(child);
-            total += idx->folders[child].totalTracks;
-        }
-        idx->folders[self].totalTracks = total;
-        return self;
-    };
 
-    for (const auto& r : roots) {
-        std::error_code ec;
-        const fs::path root = fs::weakly_canonical(fromUtf8(r), ec);
-        if (ec || !fs::is_directory(root, ec) || !seenRoots.insert(utf8(root)).second) continue;
-        const size_t i = walk(root, std::string(), 0);
-        if (i != SIZE_MAX) {
-            idx->folders[i].name = utf8(root.filename()).empty() ? utf8(root) : utf8(root.filename());
-            idx->roots.push_back(i);
+        // mappa bejárása (mélységi), a mappák és számok indexbe vétele; visszaadja a mappa indexét (vagy SIZE_MAX)
+        std::function<size_t(const fs::path&, const std::string&, int, bool, const std::string&)> walk =
+            [&](const fs::path& dir, const std::string& parentId, int depth, bool isRoot,
+                const std::string& rootDisplayPath) -> size_t {
+            if (cancel_.load() || depth > kMaxDepth || idx->tracks.size() >= kMaxTracks) return SIZE_MAX;
+
+            // Szimlink-hurok és duplikált bejárás elleni védelem a kanonikus cél alapján
+            std::error_code canonEc;
+            const fs::path canon = fs::canonical(dir, canonEc);
+            const std::string canonKey = canonEc ? utf8(dir) : utf8(canon);
+            if (!visitedDirs.insert(canonKey).second) {
+                return SIZE_MAX;
+            }
+
+            // A mappa megnyitása skip_permission_denied NÉLKÜL, hogy a gyökér/almappa jogosultsági hibája ne vesszen el
+            std::error_code openEc;
+            fs::directory_iterator it(dir, openEc);
+            if (openEc) {
+                if (isRoot) {
+                    idx->errors.push_back({ rootDisplayPath, isPermissionError(openEc) ? "permission_denied" : "error",
+                                            openEc.message() });
+                } else {
+                    ++idx->skipped;
+                }
+                return SIZE_MAX;
+            }
+
+            Folder f;
+            f.path = utf8(dir);
+            f.id = idOf('f', f.path);
+            f.name = utf8(dir.filename());
+            if (f.name.empty()) f.name = f.path;
+            f.parentId = parentId;
+            const size_t self = idx->folders.size();
+            idx->folders.push_back(f);
+
+            std::vector<fs::path> dirs, files;
+            fs::directory_iterator end;
+            while (!openEc && it != end) {
+                if (cancel_.load()) break;
+                const fs::path entryPath = it->path();
+                const std::string name = utf8(entryPath.filename());
+                if (!name.empty() && name[0] != '.') {   // rejtett elemek kihagyása
+                    std::error_code ecSym, ecSt;
+                    const auto symSt = it->symlink_status(ecSym);
+                    const bool isLink = !ecSym && fs::is_symlink(symSt);
+                    const auto st = isLink ? fs::status(entryPath, ecSt) : symSt;
+                    if (ecSym || (isLink && ecSt)) {
+                        // törött szimlink vagy olvasási / jogosultsági hiba egy elemen
+                        ++idx->skipped;
+                    } else if (fs::is_directory(st)) {
+                        dirs.push_back(entryPath);
+                    } else if (fs::is_regular_file(st) && player::isSupportedFile(name)) {
+                        files.push_back(entryPath);
+                    }
+                }
+                std::error_code incEc;
+                it.increment(incEc);
+                if (incEc) {
+                    ++idx->skipped;
+                    break;
+                }
+            }
+
+            std::sort(dirs.begin(), dirs.end(), [](const fs::path& a, const fs::path& b) { return naturalLess(utf8(a.filename()), utf8(b.filename())); });
+            std::sort(files.begin(), files.end(), [](const fs::path& a, const fs::path& b) { return naturalLess(utf8(a.filename()), utf8(b.filename())); });
+            for (const auto& p : files) {
+                if (cancel_.load() || idx->tracks.size() >= kMaxTracks) break;
+                const std::string path = utf8(p);
+                std::error_code ecSz;
+                const uint64_t sz = fs::file_size(p, ecSz);
+                const int64_t mt = fileTime(p);
+                if (!ecSz) {
+                    auto cit = cachedByPath.find(path);
+                    if (cit != cachedByPath.end() && cit->second->size == sz && cit->second->mtime == mt) {
+                        Track t = *cit->second;
+                        t.folderId = idx->folders[self].id;
+                        idx->folders[self].tracks.push_back(idx->tracks.size());
+                        idx->tracks.push_back(std::move(t));
+                        ++scanned_;
+                        continue;
+                    }
+                }
+                auto dec = player::openDecoder(path, nullptr, true);
+                ++scanned_;
+                if (!dec) {
+                    ++idx->skipped;
+                    continue;
+                }
+                Track t;
+                t.path = path;
+                t.id = idOf('t', path);
+                t.file = utf8(p.filename());
+                t.size = sz;
+                t.mtime = mt;
+                t.added = mt;
+                const auto& tg = dec->tags();
+                t.title = tg.title.empty() ? utf8(p.stem()) : tg.title;
+                t.artist = tg.artist;
+                t.album = tg.album;
+                t.albumArtist = tg.albumArtist;
+                t.track = tg.track;
+                t.disc = tg.disc;
+                t.year = tg.year;
+                t.genre = tg.genre;
+                t.rate = dec->sampleRate();
+                t.channels = dec->channels();
+                t.duration = t.rate && dec->totalFrames() ? static_cast<double>(dec->totalFrames()) / t.rate : 0.0;
+                t.embeddedArt = !tg.art.empty();
+                t.folderId = idx->folders[self].id;
+                idx->folders[self].tracks.push_back(idx->tracks.size());
+                idx->tracks.push_back(std::move(t));
+            }
+            if (!idx->folders[self].tracks.empty()) idx->folders[self].coverFile = coverIn(dir);
+            size_t total = idx->folders[self].tracks.size();
+            for (const auto& d : dirs) {
+                const size_t child = walk(d, idx->folders[self].id, depth + 1, false, rootDisplayPath);
+                if (child == SIZE_MAX) continue;
+                idx->folders[self].folders.push_back(child);
+                total += idx->folders[child].totalTracks;
+            }
+            idx->folders[self].totalTracks = total;
+            return self;
+        };
+
+        for (const auto& rawRoot : roots) {
+            if (cancel_.load()) break;
+            const std::string norm = normalizeRootPath(rawRoot);
+            if (norm.empty()) continue;
+            const fs::path p = fromUtf8(norm);
+            std::error_code ec;
+            const auto st = fs::status(p, ec);
+            if (ec) {
+                const std::string kind = isPermissionError(ec) ? "permission_denied"
+                    : (ec == std::errc::no_such_file_or_directory ? "not_found" : "error");
+                idx->errors.push_back({ norm, kind, ec.message() });
+                continue;
+            }
+            if (!fs::exists(st)) {
+                idx->errors.push_back({ norm, "not_found", {} });
+                continue;
+            }
+            if (!fs::is_directory(st)) {
+                idx->errors.push_back({ norm, "not_directory", {} });
+                continue;
+            }
+            fs::path root = fs::weakly_canonical(p, ec);
+            if (ec) {
+                ec.clear();
+                root = p;
+            }
+            if (!seenRoots.insert(utf8(root)).second) continue;
+            const size_t i = walk(root, std::string(), 0, true, norm);
+            if (i != SIZE_MAX) {
+                idx->folders[i].name = utf8(root.filename()).empty() ? utf8(root) : utf8(root.filename());
+                idx->roots.push_back(i);
+            }
         }
+
+        // üres részfák nem látszanak (a gyökér igen, hogy a felhasználó lássa a beállított mappát)
+        for (auto& f : idx->folders) {
+            std::vector<size_t> keep;
+            for (size_t c : f.folders)
+                if (idx->folders[c].totalTracks > 0) keep.push_back(c);
+            f.folders = std::move(keep);
+        }
+
+        buildAlbumsAndMaps(*idx);
+    } catch (const std::exception& ex) {
+        std::cerr << "[Zenetár] Váratlan kivétel a bejárás közben: " << ex.what() << "\n";
+        idx->errors.push_back({ {}, "error", ex.what() });
+    } catch (...) {
+        std::cerr << "[Zenetár] Ismeretlen kivétel a bejárás közben.\n";
+        idx->errors.push_back({ {}, "error", "unknown" });
     }
-
-    // üres részfák nem látszanak (a gyökér igen, hogy a felhasználó lássa a beállított mappát)
-    for (auto& f : idx->folders) {
-        std::vector<size_t> keep;
-        for (size_t c : f.folders)
-            if (idx->folders[c].totalTracks > 0) keep.push_back(c);
-        f.folders = std::move(keep);
-    }
-
-    buildAlbumsAndMaps(*idx);
     return idx;
 }
 
@@ -482,9 +710,11 @@ std::shared_ptr<Index> buildIndexFromTracks(const std::vector<std::string>& root
 
     std::map<std::string, size_t> folderByPath;
     for (const auto& r : roots) {
+        const std::string norm = MusicLibrary::normalizeRootPath(r);
+        if (norm.empty()) continue;
         std::error_code ec;
-        fs::path rp = fs::weakly_canonical(fromUtf8(r), ec);
-        if (ec) rp = fromUtf8(r);
+        fs::path rp = fs::weakly_canonical(fromUtf8(norm), ec);
+        if (ec) rp = fromUtf8(norm);
         std::string rPath = utf8(rp);
         if (folderByPath.find(rPath) != folderByPath.end()) continue;
 
@@ -498,10 +728,16 @@ std::shared_ptr<Index> buildIndexFromTracks(const std::vector<std::string>& root
         idx->roots.push_back(fi);
     }
 
-    auto ensureFolder = [&](const fs::path& dir) -> size_t {
+    std::function<size_t(const fs::path&, int)> ensureFolder = [&](const fs::path& dir, int depth) -> size_t {
         std::string dPath = utf8(dir);
         auto it = folderByPath.find(dPath);
         if (it != folderByPath.end()) return it->second;
+
+        // A köztes szülőmappák létrehozása a gyökérig (ha egy köztes mappában nincs közvetlen szám)
+        const fs::path parent = dir.parent_path();
+        if (depth < kMaxDepth && !parent.empty() && parent != dir) {
+            ensureFolder(parent, depth + 1);
+        }
 
         Folder f;
         f.path = dPath;
@@ -516,7 +752,7 @@ std::shared_ptr<Index> buildIndexFromTracks(const std::vector<std::string>& root
     for (const auto& t : tracks) {
         fs::path p = fromUtf8(t.path);
         fs::path dir = p.parent_path();
-        if (!dir.empty()) ensureFolder(dir);
+        if (!dir.empty()) ensureFolder(dir, 0);
     }
 
     for (size_t i = 0; i < idx->folders.size(); ++i) {
@@ -601,10 +837,21 @@ std::shared_ptr<Index> parseCache(const std::string& doc, const std::vector<std:
 
     const json::Value* rArr = rootVal.get("roots");
     if (!rArr || rArr->type != json::Value::Type::Array) return nullptr;
+    auto canonicalRootList = [](const std::vector<std::string>& in) {
+        std::vector<std::string> out;
+        out.reserve(in.size());
+        for (const auto& r : in) {
+            const std::string norm = MusicLibrary::normalizeRootPath(r);
+            std::error_code ec;
+            const fs::path wp = fs::weakly_canonical(fromUtf8(norm), ec);
+            out.push_back(ec ? norm : utf8(wp));
+        }
+        return out;
+    };
     std::vector<std::string> cachedRoots;
     for (const auto& r : rArr->arr)
         if (r.type == json::Value::Type::String) cachedRoots.push_back(r.str);
-    if (cachedRoots != roots) return nullptr;
+    if (canonicalRootList(cachedRoots) != canonicalRootList(roots)) return nullptr;
 
     const json::Value* tArr = rootVal.get("tracks");
     if (!tArr || tArr->type != json::Value::Type::Array) return nullptr;
@@ -650,18 +897,36 @@ std::shared_ptr<Index> parseCache(const std::string& doc, const std::vector<std:
 
 std::string MusicLibrary::infoJson(bool includeRoots) const {
     const auto idx = snapshot();
-    std::string s = "{\"type\":\"library\",\"scanning\":";
+    std::string s = "{\"type\":\"library\",\"rev\":" + std::to_string(rev_.load()) + ",\"scanning\":";
     s += scanning_.load() ? "true" : "false";
     s += ",\"scanned\":" + std::to_string(scanned_.load()) + ",\"tracks\":" + std::to_string(idx->tracks.size()) +
          ",\"albums\":" + std::to_string(idx->albums.size()) + ",\"folders\":" + std::to_string(idx->folders.size()) +
-         ",\"cached\":" + (cached_.load() ? "true" : "false");
+         ",\"cached\":" + (cached_.load() ? "true" : "false") +
+         ",\"skipped\":" + std::to_string(idx->skipped) +
+         ",\"errorCount\":" + std::to_string(idx->errors.size());
     if (includeRoots) {
         s += ",\"roots\":[";
         const auto r = roots();
         for (size_t i = 0; i < r.size(); ++i) s += (i ? "," : "") + q(r[i]);
+        s += "],\"errors\":[";
+        for (size_t i = 0; i < idx->errors.size(); ++i) {
+            if (i) s += ',';
+            s += "{\"path\":" + q(idx->errors[i].path) + ",\"error\":" + q(idx->errors[i].error) + "}";
+        }
         s += "]";
     }
     return s + "}";
+}
+
+std::string MusicLibrary::statusJson() const {
+    const auto idx = snapshot();
+    return "{\"rev\":" + std::to_string(rev_.load()) +
+           ",\"scanning\":" + (scanning_.load() ? "true" : "false") +
+           ",\"scanned\":" + std::to_string(scanned_.load()) +
+           ",\"tracks\":" + std::to_string(idx->tracks.size()) +
+           ",\"albums\":" + std::to_string(idx->albums.size()) +
+           ",\"errorCount\":" + std::to_string(idx->errors.size()) +
+           ",\"skipped\":" + std::to_string(idx->skipped) + "}";
 }
 
 std::string MusicLibrary::albumsJson(size_t offset, size_t limit) const {

@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrected (R)",
   "rw.filterListLeft": "Left channel (L):",
   "rw.filterListRight": "Right channel (R):",
-  "rw.filterListNone": "(no bands)"
+  "rw.filterListNone": "(no bands)",
+  "library.errDenied": "Access denied to this folder.",
+  "library.errNotFound": "Folder not found.",
+  "library.errNotDir": "This path is not a folder.",
+  "library.errTimeout": "Reading the folder timed out.",
+  "library.errGeneric": "Folder error: {err}",
+  "library.errSkipped": "{n} item(s) could not be read or decoded (skipped).",
+  "library.errMacTccHint": "On macOS, allow Aqulify in System Settings → Privacy & Security → Files & Folders.",
+  "library.errBadgeDenied": "Access denied",
+  "library.errBadgeNotFound": "Not found",
+  "library.errBadgeError": "Error"
 }

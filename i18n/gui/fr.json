@@ -1207,5 +1207,15 @@
   "rw.legendCorrectedR": "● Corrigé (D)",
   "rw.filterListLeft": "Canal gauche (L) :",
   "rw.filterListRight": "Canal droit (R) :",
-  "rw.filterListNone": "(aucune bande)"
+  "rw.filterListNone": "(aucune bande)",
+  "library.errDenied": "Accès refusé à ce dossier.",
+  "library.errNotFound": "Dossier introuvable.",
+  "library.errNotDir": "Ce chemin n'est pas un dossier.",
+  "library.errTimeout": "La lecture du dossier a expiré.",
+  "library.errGeneric": "Erreur de dossier : {err}",
+  "library.errSkipped": "{n} élément(s) n'ont pas pu être lus ou décodés (ignorés).",
+  "library.errMacTccHint": "Sur macOS, autorisez Aqulify dans Réglages Système → Confidentialité et sécurité → Fichiers et dossiers.",
+  "library.errBadgeDenied": "Accès refusé",
+  "library.errBadgeNotFound": "Introuvable",
+  "library.errBadgeError": "Erreur"
 }

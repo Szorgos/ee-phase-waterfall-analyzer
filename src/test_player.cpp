@@ -27,6 +27,9 @@
 #include "smart_lists.hpp"
 #ifdef _WIN32
 #include "../windows/engine/player_output_wasapi.hpp"
+#else
+#include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 using namespace ee_analyzer;
@@ -1654,18 +1657,19 @@ static void testErrors() {
     { std::ofstream f(bad); f << "nem hangfájl"; }
     std::string err1, err2, err3;
     const bool badOpen = openDecoder(bad, &err1) == nullptr;
-    const bool aacOpen = openDecoder("valami.aac", &err2) == nullptr;
+    const bool wmaOpen = openDecoder("valami.wma", &err2) == nullptr;
     auto* out = new FakeOutput;
     FilePlayer p{ std::unique_ptr<PlayerOutput>(out) };
     const bool playerFails = !p.open(bad, &err3);
-    CHECK(badOpen && !err1.empty() && aacOpen && !err2.empty() && playerFails && !p.hasTrack() && !out->opened,
-          "hibás FLAC: \"%s\"; .aac: \"%s\"; a lejátszó nem nyit hangfolyamot", err1.c_str(), err2.c_str());
+    CHECK(badOpen && !err1.empty() && wmaOpen && !err2.empty() && playerFails && !p.hasTrack() && !out->opened,
+          "hibás FLAC: \"%s\"; .wma: \"%s\"; a lejátszó nem nyit hangfolyamot", err1.c_str(), err2.c_str());
     CHECK(isSupportedFile("a/B.FLAC") && isSupportedFile("x.Mp3") && isSupportedFile("y.ogg") &&
-          isSupportedFile("m.M4A") && isSupportedFile("a.alac") && isSupportedFile("c.CAF") &&
+          isSupportedFile("m.M4A") && isSupportedFile("z.aac") && isSupportedFile("Z.AAC") &&
+          isSupportedFile("a.alac") && isSupportedFile("c.CAF") &&
           isSupportedFile("s.opus") && isSupportedFile("T.OPUS") &&
           isSupportedFile("song.wv") && isSupportedFile("TRACK.WV") &&
-          !isSupportedFile("z.aac") &&
-          !isSupportedFile("mappa.flac/fajl"), "kiterjesztés-felismerés (kis- és nagybetű, mappanév nem számít)");
+          !isSupportedFile("z.wma") &&
+          !isSupportedFile("mappa.flac/fajl"), "kiterjesztés-felismerés (kis- és nagybetű, AAC/M4A is, mappanév nem számít)");
     std::error_code ec;
     fs::remove(bad, ec);
 }
@@ -2549,12 +2553,482 @@ static void testFilterOnlyPlayer() {
     fs::remove(path, ec);
 }
 
+static std::vector<uint8_t> mp4Box(const char type[4], const std::vector<uint8_t>& body) {
+    std::vector<uint8_t> b;
+    be32(b, static_cast<uint32_t>(8 + body.size()));
+    b.insert(b.end(), type, type + 4);
+    b.insert(b.end(), body.begin(), body.end());
+    return b;
+}
+
+static std::vector<uint8_t> mp4IlstText(const char tag[4], const std::string& text) {
+    std::vector<uint8_t> dataBody;
+    be32(dataBody, 1);   // UTF-8 szöveg
+    be32(dataBody, 0);
+    dataBody.insert(dataBody.end(), text.begin(), text.end());
+    return mp4Box(tag, mp4Box("data", dataBody));
+}
+
+/** Valódi MP4 (.m4a) fájl összeállítása ADTS AAC keretekből (opcionálisan QuickTime v1+wave és 2. fejezet-trak). */
+static bool writeAacM4aFromAdts(const std::string& adtsPath, const std::string& outM4aPath, bool qtWaveV1) {
+    std::ifstream in(adtsPath, std::ios::binary);
+    if (!in) return false;
+    std::vector<uint8_t> adts((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    std::vector<std::vector<uint8_t>> rawPackets;
+    size_t pos = 0;
+    while (pos + 7 <= adts.size()) {
+        if (adts[pos] != 0xFF || (adts[pos + 1] & 0xF6u) != 0xF0u) break;
+        const size_t hdrLen = (adts[pos + 1] & 0x01u) ? 7u : 9u;
+        const size_t flen = ((adts[pos + 3] & 0x03u) << 11) | (adts[pos + 4] << 3) | ((adts[pos + 5] & 0xE0u) >> 5);
+        if (flen <= hdrLen || pos + flen > adts.size()) break;
+        rawPackets.emplace_back(adts.begin() + pos + hdrLen, adts.begin() + pos + flen);
+        pos += flen;
+    }
+    if (rawPackets.empty()) return false;
+
+    // ftyp
+    std::vector<uint8_t> ftypBody = { 'M', '4', 'A', ' ', 0, 0, 0, 0, 'M', '4', 'A', ' ', 'i', 's', 'o', 'm' };
+    auto ftyp = mp4Box("ftyp", ftypBody);
+
+    // mdat adat összeállítása
+    std::vector<uint8_t> mdatData;
+    for (const auto& pkt : rawPackets) mdatData.insert(mdatData.end(), pkt.begin(), pkt.end());
+    const uint32_t mdatOffset = static_cast<uint32_t>(ftyp.size() + 8);
+    auto mdat = mp4Box("mdat", mdatData);
+
+    // esds: ES_Descr(0x03) -> DecoderConfig(0x04, objType=0x40) -> DecSpecificInfo(0x05, ASC = 0x12 0x10: AAC-LC 44.1kHz stereo)
+    std::vector<uint8_t> esdsBody = {
+        0, 0, 0, 0,             // FullBox version/flags
+        0x03, 0x19,             // ES_DescrTag, len=25
+        0x00, 0x01, 0x00,       // ES_ID=1, flags=0
+        0x04, 0x11,             // DecoderConfigDescrTag, len=17
+        0x40, 0x15,             // objectTypeIndication=0x40 (MPEG-4 Audio), streamType=audio
+        0x00, 0x00, 0x00,       // bufferSizeDB
+        0x00, 0x01, 0xF4, 0x00, // maxBitrate
+        0x00, 0x01, 0xF4, 0x00, // avgBitrate
+        0x05, 0x02, 0x12, 0x10, // DecSpecificInfoTag, len=2, AudioSpecificConfig (AAC-LC 44100 Hz 2ch)
+        0x06, 0x01, 0x02        // SLConfigDescrTag
+    };
+    auto esds = mp4Box("esds", esdsBody);
+    auto childBox = qtWaveV1 ? mp4Box("wave", esds) : esds;
+
+    // mp4a sample entry (version 0: 28 bájt fejléc a box 8 bájtja után; version 1: 44 bájt)
+    std::vector<uint8_t> mp4aBody(qtWaveV1 ? 44 : 28, 0);
+    mp4aBody[7] = 1;                             // data_ref_index = 1
+    if (qtWaveV1) mp4aBody[9] = 1;               // version = 1
+    mp4aBody[17] = 2;                            // channelcount = 2
+    mp4aBody[19] = 16;                           // samplesize = 16
+    mp4aBody[24] = static_cast<uint8_t>((44100 >> 8) & 0xFF);
+    mp4aBody[25] = static_cast<uint8_t>(44100 & 0xFF);
+    mp4aBody.insert(mp4aBody.end(), childBox.begin(), childBox.end());
+    auto mp4a = mp4Box("mp4a", mp4aBody);
+
+    std::vector<uint8_t> stsdBody = { 0, 0, 0, 0, 0, 0, 0, 1 };
+    stsdBody.insert(stsdBody.end(), mp4a.begin(), mp4a.end());
+    auto stsd = mp4Box("stsd", stsdBody);
+
+    std::vector<uint8_t> sttsBody = { 0, 0, 0, 0, 0, 0, 0, 1 };
+    be32(sttsBody, static_cast<uint32_t>(rawPackets.size()));
+    be32(sttsBody, 1024);
+    auto stts = mp4Box("stts", sttsBody);
+
+    std::vector<uint8_t> stscBody = { 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1 };
+    be32(stscBody, static_cast<uint32_t>(rawPackets.size()));
+    be32(stscBody, 1);
+    auto stsc = mp4Box("stsc", stscBody);
+
+    std::vector<uint8_t> stszBody = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    be32(stszBody, static_cast<uint32_t>(rawPackets.size()));
+    for (const auto& pkt : rawPackets) be32(stszBody, static_cast<uint32_t>(pkt.size()));
+    auto stsz = mp4Box("stsz", stszBody);
+
+    std::vector<uint8_t> stcoBody = { 0, 0, 0, 0, 0, 0, 0, 1 };
+    be32(stcoBody, mdatOffset);
+    auto stco = mp4Box("stco", stcoBody);
+
+    std::vector<uint8_t> stblBody;
+    for (const auto& x : { stsd, stts, stsc, stsz, stco }) stblBody.insert(stblBody.end(), x.begin(), x.end());
+    auto stbl = mp4Box("stbl", stblBody);
+    auto minf = mp4Box("minf", stbl);
+
+    std::vector<uint8_t> mdhdBody(24, 0);
+    be32(mdhdBody, 0);   // extra helyet nem használunk, 12..15. bájtra írjuk a timescale-t
+    mdhdBody.resize(24);
+    mdhdBody[12] = (44100 >> 24) & 0xFF;
+    mdhdBody[13] = (44100 >> 16) & 0xFF;
+    mdhdBody[14] = (44100 >> 8) & 0xFF;
+    mdhdBody[15] = 44100 & 0xFF;
+    auto mdhd = mp4Box("mdhd", mdhdBody);
+
+    std::vector<uint8_t> mdiaBody = mdhd;
+    mdiaBody.insert(mdiaBody.end(), minf.begin(), minf.end());
+    auto audioTrak = mp4Box("trak", mp4Box("mdia", mdiaBody));
+
+    // Második (nem audio) fejezet-trak: ellenőrizzük, hogy nem keveredik bele a hang csomagtáblájába!
+    std::vector<uint8_t> fakeStsdBody = { 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 16, 't', 'e', 'x', 't', 0, 0, 0, 0, 0, 0, 0, 1 };
+    std::vector<uint8_t> fakeStszBody = { 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 2 };
+    std::vector<uint8_t> fakeStcoBody = { 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 16 };
+    std::vector<uint8_t> fakeStblBody;
+    for (const auto& x : { mp4Box("stsd", fakeStsdBody), mp4Box("stsz", fakeStszBody), mp4Box("stco", fakeStcoBody) })
+        fakeStblBody.insert(fakeStblBody.end(), x.begin(), x.end());
+    auto chapTrak = mp4Box("trak", mp4Box("mdia", mp4Box("minf", mp4Box("stbl", fakeStblBody))));
+
+    // ilst címkék + PNG borító
+    std::vector<uint8_t> ilstBody;
+    const char namTag[4] = { '\xa9', 'n', 'a', 'm' };
+    const char artTag[4] = { '\xa9', 'A', 'R', 'T' };
+    const char albTag[4] = { '\xa9', 'a', 'l', 'b' };
+    const char dayTag[4] = { '\xa9', 'd', 'a', 'y' };
+    const char genTag[4] = { '\xa9', 'g', 'e', 'n' };
+    auto append = [&](const std::vector<uint8_t>& x) { ilstBody.insert(ilstBody.end(), x.begin(), x.end()); };
+    append(mp4IlstText(namTag, "Sztereó AAC M4A"));
+    append(mp4IlstText(artTag, "Aqulify Teszt"));
+    append(mp4IlstText(albTag, "Szinuszok AAC"));
+    append(mp4IlstText(dayTag, "2026"));
+    append(mp4IlstText(genTag, "Jazz"));
+    {
+        std::vector<uint8_t> trkData = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 10, 0, 0 };
+        append(mp4Box("trkn", mp4Box("data", trkData)));
+    }
+    {
+        std::vector<uint8_t> covrData = { 0, 0, 0, 14, 0, 0, 0, 0, 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n', 1, 2, 3 };
+        append(mp4Box("covr", mp4Box("data", covrData)));
+    }
+    std::vector<uint8_t> metaBody = { 0, 0, 0, 0 };
+    auto ilst = mp4Box("ilst", ilstBody);
+    metaBody.insert(metaBody.end(), ilst.begin(), ilst.end());
+    auto udta = mp4Box("udta", mp4Box("meta", metaBody));
+
+    std::vector<uint8_t> moovBody;
+    for (const auto& x : { chapTrak, audioTrak, udta }) moovBody.insert(moovBody.end(), x.begin(), x.end());
+    auto moov = mp4Box("moov", moovBody);
+
+    std::ofstream out(outM4aPath, std::ios::binary);
+    if (!out) return false;
+    out.write(reinterpret_cast<const char*>(ftyp.data()), static_cast<std::streamsize>(ftyp.size()));
+    out.write(reinterpret_cast<const char*>(mdat.data()), static_cast<std::streamsize>(mdat.size()));
+    out.write(reinterpret_cast<const char*>(moov.data()), static_cast<std::streamsize>(moov.size()));
+    return static_cast<bool>(out);
+}
+
+static void testAacLocalDecoders() {
+    std::printf("[1b] Helyi AAC (.aac ADTS és .m4a MP4-AAC) dekódolás, tekerés, címkék, több-sávos MP4, indexelés\n");
+    const std::string adtsFile = kData + "/player_stereo44.aac";
+    const fs::path tmpDir = fs::temp_directory_path() / "aq_aac_local_test";
+    std::error_code ec;
+    fs::remove_all(tmpDir, ec);
+    fs::create_directories(tmpDir, ec);
+    const auto u8s = [](const fs::path& p) { const auto s = p.u8string(); return std::string(s.begin(), s.end()); };
+
+    // 1. Nyers ADTS .aac (bal 440 Hz, jobb 880 Hz, -6 dBFS = 0.5)
+    {
+        std::string err;
+        auto probe = openDecoder(adtsFile, &err, true);
+        auto full = openDecoder(adtsFile, &err, false);
+        CHECK(probe && full && probe->sampleRate() == 44100 && probe->channels() == 2 &&
+              full->sampleRate() == 44100 && full->channels() == 2 && full->bitsPerSample() == 0 &&
+              full->totalFrames() >= 40000,
+              "ADTS .aac megnyitás és probe: %u Hz, %u ch, %llu keret (%s)",
+              full ? full->sampleRate() : 0, full ? full->channels() : 0,
+              full ? static_cast<unsigned long long>(full->totalFrames()) : 0ull, err.c_str());
+        if (full) {
+            const auto pcm = decodeAll(*full);
+            const size_t from = 11025, n = 11025;
+            const double l440 = 20 * std::log10(toneAmp(pcm, 2, 0, from, n, 440, 44100) / 0.5 + 1e-12);
+            const double r880 = 20 * std::log10(toneAmp(pcm, 2, 1, from, n, 880, 44100) / 0.5 + 1e-12);
+            const double lLeak = 20 * std::log10(toneAmp(pcm, 2, 0, from, n, 880, 44100) / 0.5 + 1e-12);
+            const double rLeak = 20 * std::log10(toneAmp(pcm, 2, 1, from, n, 440, 44100) / 0.5 + 1e-12);
+            CHECK(std::abs(l440) < 1.0 && std::abs(r880) < 1.0 && lLeak < -30 && rLeak < -30,
+                  "ADTS .aac szinuszjel: bal 440 Hz %+.2f dB, jobb 880 Hz %+.2f dB, áthallás %.0f / %.0f dB",
+                  l440, r880, lLeak, rLeak);
+
+            auto seeker = openDecoder(adtsFile, &err, false);
+            std::vector<float> part(2048 * 2);
+            const uint64_t at = 22050;
+            const bool sok = seeker && seeker->seek(at);
+            const size_t got = sok ? seeker->read(part.data(), 2048) : 0;
+            double maxDiff = 0;
+            for (size_t i = 0; i < got * 2 && at * 2 + i < pcm.size(); ++i)
+                maxDiff = std::max(maxDiff, static_cast<double>(std::abs(part[i] - pcm[at * 2 + i])));
+            CHECK(sok && got == 2048 && maxDiff < 0.05, "ADTS .aac tekerés (%llu): legnagyobb eltérés %.2e",
+                  static_cast<unsigned long long>(at), maxDiff);
+        }
+    }
+
+    // 2. ID3v2 címkés ADTS .aac
+    {
+        const std::string taggedAac = u8s(tmpDir / "tagged.aac");
+        std::vector<uint8_t> tTit = { 3 };
+        const std::string tStr = "ADTS Címke";
+        tTit.insert(tTit.end(), tStr.begin(), tStr.end());
+        auto id3 = id3Tag23({ id3Frame23("TIT2", tTit), id3Frame23("APIC", apic(3, "borito-aac")) });
+        std::ifstream src(adtsFile, std::ios::binary);
+        std::vector<uint8_t> body((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
+        std::ofstream dst(taggedAac, std::ios::binary);
+        dst.write(reinterpret_cast<const char*>(id3.data()), static_cast<std::streamsize>(id3.size()));
+        dst.write(reinterpret_cast<const char*>(body.data()), static_cast<std::streamsize>(body.size()));
+        dst.close();
+        auto d = openDecoder(taggedAac, nullptr, true);
+        CHECK(d && d->tags().title == "ADTS Címke" && d->tags().art == "borito-aac",
+              "ADTS .aac ID3v2 címke és borító olvasása");
+    }
+
+    // 3. MP4 AAC .m4a (szabványos ISO esds + QuickTime v1 wave/esds, 2. fejezet-trakkal együtt)
+    const std::string isoM4a = u8s(tmpDir / "aac_iso.m4a");
+    const std::string qtM4a = u8s(tmpDir / "aac_qt.m4a");
+    CHECK(writeAacM4aFromAdts(adtsFile, isoM4a, false) && writeAacM4aFromAdts(adtsFile, qtM4a, true),
+          "AAC .m4a tesztfájlok előállítása (ISO és QuickTime wave v1)");
+
+    for (const auto& pair : std::vector<std::pair<const char*, std::string>>{ { "ISO", isoM4a }, { "QT-v1-wave", qtM4a } }) {
+        std::string err;
+        auto probe = openDecoder(pair.second, &err, true);
+        auto full = openDecoder(pair.second, &err, false);
+        CHECK(probe && full && probe->sampleRate() == 44100 && probe->channels() == 2 &&
+              full->sampleRate() == 44100 && full->channels() == 2 && full->bitsPerSample() == 0 &&
+              full->totalFrames() >= 40000,
+              "MP4 AAC .m4a (%s): %u Hz, %u ch, %llu keret (%s)", pair.first,
+              full ? full->sampleRate() : 0, full ? full->channels() : 0,
+              full ? static_cast<unsigned long long>(full->totalFrames()) : 0ull, err.c_str());
+        if (full) {
+            const auto pcm = decodeAll(*full);
+            const size_t from = 11025, n = 11025;
+            const double l440 = 20 * std::log10(toneAmp(pcm, 2, 0, from, n, 440, 44100) / 0.5 + 1e-12);
+            const double r880 = 20 * std::log10(toneAmp(pcm, 2, 1, from, n, 880, 44100) / 0.5 + 1e-12);
+            const double lLeak = 20 * std::log10(toneAmp(pcm, 2, 0, from, n, 880, 44100) / 0.5 + 1e-12);
+            const double rLeak = 20 * std::log10(toneAmp(pcm, 2, 1, from, n, 440, 44100) / 0.5 + 1e-12);
+            CHECK(std::abs(l440) < 1.0 && std::abs(r880) < 1.0 && lLeak < -30 && rLeak < -30,
+                  "MP4 AAC .m4a (%s) szinuszjel: bal 440 Hz %+.2f dB, jobb 880 Hz %+.2f dB", pair.first, l440, r880);
+
+            auto seeker = openDecoder(pair.second, &err, false);
+            std::vector<float> part(2048 * 2);
+            const uint64_t at = 16000;
+            const bool sok = seeker && seeker->seek(at);
+            const size_t got = sok ? seeker->read(part.data(), 2048) : 0;
+            double maxDiff = 0;
+            for (size_t i = 0; i < got * 2 && at * 2 + i < pcm.size(); ++i)
+                maxDiff = std::max(maxDiff, static_cast<double>(std::abs(part[i] - pcm[at * 2 + i])));
+            CHECK(sok && got == 2048 && maxDiff < 0.05, "MP4 AAC .m4a (%s) tekerés (%llu): max eltérés %.2e",
+                  pair.first, static_cast<unsigned long long>(at), maxDiff);
+
+            const auto& tg = full->tags();
+            CHECK(tg.title == "Sztereó AAC M4A" && tg.artist == "Aqulify Teszt" && tg.album == "Szinuszok AAC" &&
+                  tg.year == 2026 && tg.track == 3 && tg.genre == "Jazz" && tg.artMime == "image/png" && !tg.art.empty(),
+                  "MP4 AAC .m4a (%s) ilst címkék és PNG borító", pair.first);
+        }
+    }
+
+    // 4. Zenetár-indexelés vegyesen ALAC .m4a + AAC .m4a + .aac fájlokkal
+    fs::copy_file(kData + "/player_stereo44.m4a", tmpDir / "alac.m4a", fs::copy_options::overwrite_existing, ec);
+    library::MusicLibrary lib;
+    lib.setRoots({ u8s(tmpDir) });
+    const bool done = lib.waitIdle(15000);
+    auto snap = lib.snapshot();
+    CHECK(done && snap->tracks.size() == 4,
+          "Zenetár indexeli az ALAC .m4a + ISO AAC .m4a + QT AAC .m4a + ADTS .aac fájlokat (talált: %zu, várt: 4)",
+          snap->tracks.size());
+
+    fs::remove_all(tmpDir, ec);
+}
+
+static void testLibraryHardening() {
+    std::printf("[8c] Zenetár hibatűrés: ~ kibontás, escapelt útvonal, hibaállapotok, szimlinkek, hurokvédelem, jogosultság\n");
+    const auto u8s = [](const fs::path& p) { const auto s = p.u8string(); return std::string(s.begin(), s.end()); };
+    const fs::path base = fs::temp_directory_path() / "aq_lib_harden_test";
+    std::error_code ec;
+    fs::remove_all(base, ec);
+    fs::create_directories(base, ec);
+
+    // 1. Útvonal-normalizálás: idézőjel, záró perjel, file:/// URI, ~, POSIX escapelt szóköz
+    {
+        CHECK(library::MusicLibrary::normalizeRootPath("  \"/tmp/a/b/\"  ") == "/tmp/a/b",
+              "normalizeRootPath: külső idézőjelek és záró perjel levágása");
+        CHECK(library::MusicLibrary::normalizeRootPath("file:///tmp/my%20music/") == "/tmp/my music",
+              "normalizeRootPath: file:/// URI százalék-dekódolása");
+        const std::string tilde = library::MusicLibrary::normalizeRootPath("~/Zene/");
+        CHECK(!tilde.empty() && tilde[0] != '~' && tilde.find("Zene") != std::string::npos,
+              "normalizeRootPath: ~ kibontása (%s)", tilde.c_str());
+#ifndef _WIN32
+        CHECK(library::MusicLibrary::normalizeRootPath("/nonexistent/My\\ Music\\ (2026)/") == "/nonexistent/My Music (2026)",
+              "normalizeRootPath: POSIX escapelt szóközök és zárójelek feloldása");
+#endif
+    }
+
+    // 2. Nem létező gyökérmappa és fájl gyökérként: explicit hibaállapot + útvonal-adatvédelem távoli kliensnél
+    {
+        const fs::path missing = base / "nem-letezo-mappa";
+        const fs::path regularFile = base / "csak_fajl.txt";
+        { std::ofstream f(regularFile); f << "x"; }
+
+        library::MusicLibrary lib;
+        lib.setRoots({ u8s(missing), u8s(regularFile) });
+        const bool ok = lib.waitIdle(5000);
+        const std::string localInfo = lib.infoJson(true);
+        const std::string remoteInfo = lib.infoJson(false);
+        const std::string st = lib.statusJson();
+        CHECK(ok && lib.rev() >= 2 &&
+              localInfo.find("\"errorCount\":2") != std::string::npos &&
+              localInfo.find("\"error\":\"not_found\"") != std::string::npos &&
+              localInfo.find("\"error\":\"not_directory\"") != std::string::npos &&
+              remoteInfo.find("\"errorCount\":2") != std::string::npos &&
+              remoteInfo.find("\"errors\"") == std::string::npos &&
+              remoteInfo.find("nem-letezo-mappa") == std::string::npos &&
+              st.find("\"errorCount\":2") != std::string::npos &&
+              st.find("nem-letezo-mappa") == std::string::npos,
+              "not_found és not_directory explicit hibaállapot, távoli/status JSON útvonalszivárgás nélkül");
+    }
+
+    // 3. Szimlinkelt almappa, szimlinkelt fájl, törött szimlink, körkörös hurok + cache köztes mappa
+    {
+        const fs::path root = base / "sym_root";
+        const fs::path extDir = base / "ext_music";
+        fs::create_directories(root / "SubDir", ec);
+        fs::create_directories(root / "Koztes" / "Mely", ec);
+        fs::create_directories(extDir, ec);
+        fs::copy_file(kData + "/player_stereo44.flac", root / "SubDir" / "inner.flac", fs::copy_options::overwrite_existing, ec);
+        fs::copy_file(kData + "/player_mono48.flac", root / "Koztes" / "Mely" / "deep.flac", fs::copy_options::overwrite_existing, ec);
+        fs::copy_file(kData + "/player_stereo44.ogg", extDir / "ext_song.ogg", fs::copy_options::overwrite_existing, ec);
+
+        bool symDirOk = false, symFileOk = false, brokenOk = false;
+        fs::create_directory_symlink(extDir, root / "LinkSub", ec);
+        if (!ec) symDirOk = true;
+        ec.clear();
+        fs::create_symlink(extDir / "ext_song.ogg", root / "LinkTrack.ogg", ec);
+        if (!ec) symFileOk = true;
+        ec.clear();
+        fs::create_symlink(root / "nem_letezik.flac", root / "Broken.flac", ec);
+        if (!ec) brokenOk = true;
+        ec.clear();
+        fs::create_directory_symlink(root, root / "LoopSelf", ec);
+        ec.clear();
+        fs::create_directory_symlink(root, root / "SubDir" / "LoopParent", ec);
+        ec.clear();
+
+        std::string savedCache;
+        library::MusicLibrary lib;
+        lib.setCacheStorage([] { return std::string(); }, [&](const std::string& d) { savedCache = d; });
+        lib.setRoots({ u8s(root) });
+        const bool ok = lib.waitIdle(15000);
+        auto snap = lib.snapshot();
+        const size_t expected = 2 + (symDirOk ? 1 : 0) + (symFileOk ? 1 : 0);
+        CHECK(ok && snap->tracks.size() == expected,
+              "szimlinkek + körkörös hurokvédelem: %zu szám (várt %zu, symDir=%d, symFile=%d)",
+              snap->tracks.size(), expected, symDirOk ? 1 : 0, symFileOk ? 1 : 0);
+        if (brokenOk) {
+            CHECK(snap->skipped >= 1, "törött szimlink nem állítja le a bejárást (skipped=%zu)", snap->skipped);
+        }
+
+        const uint64_t revBefore = lib.rev();
+        lib.rescan();
+        lib.waitIdle(15000);
+        CHECK(lib.rev() > revBefore, "rescan után a rev számláló növekszik (%llu -> %llu)",
+              static_cast<unsigned long long>(revBefore), static_cast<unsigned long long>(lib.rev()));
+
+        // Gyorsítótár-visszatöltésnél a köztes, közvetlen szám nélküli 'Koztes' mappa nem veszhet el
+        auto restored = library::parseCache(savedCache, { u8s(root) });
+        bool hasKoztes = false;
+        if (restored && !restored->roots.empty()) {
+            const auto& rf = restored->folders[restored->roots[0]];
+            for (size_t ci : rf.folders) {
+                if (restored->folders[ci].name == "Koztes" && restored->folders[ci].totalTracks == 1) hasKoztes = true;
+            }
+        }
+        CHECK(restored && hasKoztes, "gyorsítótár-visszatöltés: köztes almappa ('Koztes') megmarad a mappafában");
+    }
+
+#ifndef _WIN32
+    // 4. POSIX ~ tényleges bejárás és library_browse (ideiglenes HOME-mal, visszaállítva)
+    {
+        const fs::path fakeHome = base / "fake_home";
+        fs::create_directories(fakeHome / "Zene" / "Album1", ec);
+        fs::copy_file(kData + "/player_stereo44.flac", fakeHome / "Zene" / "Album1" / "t.flac", fs::copy_options::overwrite_existing, ec);
+        const char* origHome = std::getenv("HOME");
+        const std::string savedHome = origHome ? origHome : "";
+        setenv("HOME", u8s(fakeHome).c_str(), 1);
+
+        library::MusicLibrary lib;
+        lib.setRoots({ "~/Zene" });
+        const bool ok = lib.waitIdle(10000);
+        auto snap = lib.snapshot();
+
+        player::FilePlayer fp{ std::unique_ptr<PlayerOutput>(new FakeOutput) };
+        player::PlayQueue pq(fp, [&](const std::string&, std::string&) { return false; });
+        player::PlaylistStore pls([](const std::string&) {});
+        player::PlayStats pstats;
+        BridgeCallbacks cb;
+        library::attachLibrary(cb, lib, pq, pls, pstats, [](const std::string&) {});
+        json::Value reqTilde, reqTrav;
+        json::parse("{\"type\":\"library_browse\",\"path\":\"~/Zene\"}", reqTilde);
+        json::parse("{\"type\":\"library_browse\",\"path\":\"~/../etc\"}", reqTrav);
+        const std::string resTilde = cb.libraryRequest("library_browse", reqTilde, false);
+        const std::string resTrav = cb.libraryRequest("library_browse", reqTrav, false);
+
+        if (origHome) setenv("HOME", savedHome.c_str(), 1);
+        else unsetenv("HOME");
+
+        CHECK(ok && snap->tracks.size() == 1 && resTilde.find("\"name\":\"Album1\"") != std::string::npos &&
+              resTrav.find("\"error\":\"denied\"") != std::string::npos,
+              "~ kibontás élő bejárásban és library_browse-ban (~ /../etc továbbra is denied)");
+    }
+
+    // 5. Tiltott / olvashatatlan mappa (chmod 0000; root felhasználónál a kernel megkerüli a jogokat)
+    if (geteuid() != 0) {
+        const fs::path lockedRoot = base / "locked_root";
+        const fs::path mixedRoot = base / "mixed_root";
+        const fs::path lockedSub = mixedRoot / "LockedSub";
+        const fs::path okSub = mixedRoot / "OkSub";
+        fs::create_directories(lockedRoot, ec);
+        fs::create_directories(lockedSub, ec);
+        fs::create_directories(okSub, ec);
+        fs::copy_file(kData + "/player_stereo44.flac", okSub / "ok.flac", fs::copy_options::overwrite_existing, ec);
+
+        chmod(u8s(lockedRoot).c_str(), 0000);
+        chmod(u8s(lockedSub).c_str(), 0000);
+
+        library::MusicLibrary libLocked;
+        libLocked.setRoots({ u8s(lockedRoot) });
+        const bool okL = libLocked.waitIdle(10000);
+        const std::string infoL = libLocked.infoJson(true);
+
+        player::FilePlayer fp{ std::unique_ptr<PlayerOutput>(new FakeOutput) };
+        player::PlayQueue pq(fp, [&](const std::string&, std::string&) { return false; });
+        player::PlaylistStore pls([](const std::string&) {});
+        player::PlayStats pstats;
+        BridgeCallbacks cb;
+        library::attachLibrary(cb, libLocked, pq, pls, pstats, [](const std::string&) {});
+        json::Value reqLocked;
+        json::parse("{\"type\":\"library_browse\",\"path\":\"" + media::jsonEscape(u8s(lockedRoot)) + "\"}", reqLocked);
+        const std::string resLocked = cb.libraryRequest("library_browse", reqLocked, false);
+
+        library::MusicLibrary libMixed;
+        libMixed.setRoots({ u8s(mixedRoot) });
+        const bool okM = libMixed.waitIdle(10000);
+        auto snapM = libMixed.snapshot();
+
+        chmod(u8s(lockedRoot).c_str(), 0755);
+        chmod(u8s(lockedSub).c_str(), 0755);
+
+        CHECK(okL && infoL.find("\"error\":\"permission_denied\"") != std::string::npos,
+              "olvashatatlan gyökérmappa: nincs kivétel, explicit permission_denied hibaállapot");
+        CHECK(resLocked.find("\"type\":\"library_error\"") != std::string::npos &&
+              resLocked.find("\"op\":\"library_browse\"") != std::string::npos &&
+              resLocked.find("\"error\":\"denied\"") != std::string::npos,
+              "library_browse olvashatatlan mappára: op=library_browse, error=denied");
+        CHECK(okM && snapM->tracks.size() == 1 && snapM->skipped >= 1,
+              "olvashatatlan almappa mellett a többi almappa indexelődik (tracks=%zu, skipped=%zu)",
+              snapM->tracks.size(), snapM->skipped);
+    }
+#endif
+
+    fs::remove_all(base, ec);
+}
+
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);   // hiba esetén se vesszen el a kimenet (pl. CI, átirányítás)
     std::printf("========================================================\n");
     std::printf(" Aqulify 2.x – beépített lejátszó\n");
     std::printf("========================================================\n");
     testDecoders();
+    testAacLocalDecoders();
     testSeek();
     testTags();
     testReplayGain();
@@ -2563,6 +3037,7 @@ int main() {
     testOutputLatency();
     testLibrary();
     testLibraryBrowse();
+    testLibraryHardening();
     testLibraryCache();
     testQueue();
     testQueueEdits();
